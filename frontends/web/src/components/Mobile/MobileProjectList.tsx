@@ -10,8 +10,9 @@
  * repo-clone flow with more surface than a phone screen hosts well, and
  * onboarding creates the first project.
  *
- * A tap navigates at once and never waits on the switch (see `handleSelect`),
- * and skips the desktop workspace restore (`restoreWorkspace: false`).
+ * The choice lives in the URL, the chat list's `?projects=<id>|all`
+ * (components/Mobile/mobileScope.ts): a tap only navigates there, and the
+ * stores follow (MobileScopeSync).
  *
  * Each row's second line is where the project lives (hidden for a cloud
  * machine's checkout, which is the same path for every project), the third its
@@ -20,10 +21,8 @@
 
 import { useNavigate } from "@tanstack/react-router";
 import { Check, FolderGit2, Layers, Loader2 } from "lucide-react";
-import { useProjectStore } from "../../store/projectStore";
-import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useProjects } from "../../hooks/project-queries";
-import { logger } from "../../lib/logger";
+import { shellScopeSearch } from "../Layout/shellScopeNav";
 import { isCloudProjectPath } from "../Projects/picker/format";
 import { PROJECT_DEFINITION_SHORT } from "../Projects/projectCopy";
 import { relativeTime } from "./relativeTime";
@@ -37,6 +36,7 @@ import {
   MobileScreenHeader,
 } from "./MobileChrome";
 import { mobileChatsPath } from "@/lib/paths";
+import { useMobileChatScope } from "./mobileScope";
 
 /** The scope a row stands for: a project id, or null for All projects. */
 type Scope = string | null;
@@ -44,27 +44,15 @@ type Scope = string | null;
 export function MobileProjectList() {
   const navigate = useNavigate();
   const { projects, isLoading } = useProjects();
-  const filterId = useWorkspaceStateStore((s) => s.projectFilterId);
-  const setProjectFilter = useProjectStore((s) => s.setProjectFilter);
+  const filterId = useMobileChatScope();
 
-  // Navigate at once; never wait on the switch. setProjectFilter sets the
-  // filter (and, through selectProject, the context project) synchronously,
-  // before its first await, and the chat list scopes its own query by it — so
-  // the list renders (with its own loading state) while the rest of the switch
-  // runs. Awaiting it held the user on this screen behind a row spinner for
-  // every serial RPC the switch made, with no timeout on any of them: on a
-  // phone network, or a connection the OS had quietly dropped, the tap looked
-  // like a frozen app.
-  //
-  // restoreWorkspace: false — the desktop workspace restore (last worktree,
-  // last active chat) is not this surface's state; see SelectProjectOptions.
+  // The pick is the URL's (`?projects=<id>|all`): a push, so Back undoes it,
+  // and a reload or a shared link keeps it. The list scopes its own query by
+  // the URL, and MobileScopeSync moves the context project after it, so the
+  // tap navigates at once and never waits on a switch.
   const handleSelect = (scope: Scope) => {
-    if (scope !== filterId) {
-      setProjectFilter(scope, { restoreWorkspace: false }).catch((error: unknown) => {
-        logger.warn("[MobileProjectList] Project filter switch failed", { scope, error });
-      });
-    }
-    void navigate({ to: mobileChatsPath() });
+    const shown = shellScopeSearch(scope ? { mode: "one", projectId: scope } : { mode: "all" });
+    void navigate({ to: mobileChatsPath(), search: ((prev: Record<string, unknown>) => ({ ...prev, ...shown })) as never });
   };
 
   const trailing = (scope: Scope) =>

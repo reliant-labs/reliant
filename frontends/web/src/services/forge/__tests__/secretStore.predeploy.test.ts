@@ -33,6 +33,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { transport } from "@/lib/connect";
 
 const ensureEnvironmentRpc = vi.fn();
 const setSecretRpc = vi.fn();
@@ -80,7 +81,7 @@ describe("the secret store has no ensure path of its own", () => {
   });
 
   it("writes only against an environment id the caller already has", async () => {
-    await setSecret({ environmentId: "denv_existing", name: "API_KEY", value: "v", cas: 0 });
+    await setSecret(transport, { environmentId: "denv_existing", name: "API_KEY", value: "v", cas: 0 });
 
     expect(setSecretRpc).toHaveBeenCalledTimes(1);
     expect(setSecretRpc.mock.calls[0][0].environmentId).toBe("denv_existing");
@@ -145,7 +146,7 @@ describe("Register is the single writer of the environment's kind", () => {
     expect(candidate.ok).toBe(true);
     if (!candidate.ok) return;
 
-    const id = await registerEnvironment(candidate.candidate);
+    const id = await registerEnvironment(transport, candidate.candidate);
 
     expect(id).toBe("denv_created");
     expect(ensureEnvironmentRpc).toHaveBeenCalledTimes(1);

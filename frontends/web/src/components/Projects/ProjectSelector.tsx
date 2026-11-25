@@ -109,6 +109,13 @@ export interface ProjectSelectorPanelProps {
   leadItems?: readonly ProjectSelectorLeadItem[];
   /** A hint or a disabled reason per project row (a new chat on a picked machine). */
   rowState?: (row: ProjectCatalogRow) => ProjectRowState | undefined;
+  /** Project ids left out of the list (a chat's projects, when adding another). */
+  excludeKeys?: readonly string[];
+  /**
+   * Order inside each group: lower first, the catalog's order among equals
+   * (a chat's machine's projects before the ones it would set up there).
+   */
+  rowRank?: (row: ProjectCatalogRow) => number;
   /** App mode: names to list even when the catalog does not (the URL's app, a list read elsewhere). */
   extraApps?: readonly string[];
   /** The New project / Add an app footer (default on). */
@@ -166,9 +173,11 @@ export function buildItems(args: {
   query: string;
   leadItems?: readonly ProjectSelectorLeadItem[];
   rowState?: (row: ProjectCatalogRow) => ProjectRowState | undefined;
+  excludeKeys?: readonly string[];
+  rowRank?: (row: ProjectCatalogRow) => number;
   extraApps?: readonly string[];
 }): Item[] {
-  const { mode, catalog, prefs, query, leadItems = [], rowState, extraApps = [] } = args;
+  const { mode, catalog, prefs, query, leadItems = [], rowState, excludeKeys = [], rowRank, extraApps = [] } = args;
   const searching = query.trim() !== "";
   const items: Item[] = [];
   for (const lead of leadItems) {
@@ -202,9 +211,15 @@ export function buildItems(args: {
     return items;
   }
 
+  const excluded = new Set(excludeKeys);
+  const rank = (l: ListedRow) => (rowRank && l.row.kind === "project" ? rowRank(l.row) : 0);
   for (const group of catalogGroups(listed, { searching })) {
+    const rows = group.rows.filter((l) => !excluded.has(l.row.key));
+    if (rows.length === 0) continue;
+    // Array.prototype.sort is stable: equals keep the catalog's order.
+    if (rowRank) rows.sort((a, b) => rank(a) - rank(b));
     items.push(headerItem(group.id, group.label));
-    for (const l of group.rows) {
+    for (const l of rows) {
       items.push({ type: "row", key: l.row.key, listed: l, state: l.row.kind === "project" ? rowState?.(l.row) : undefined });
     }
   }
@@ -258,6 +273,8 @@ export function ProjectSelectorPanel({
   onSelect,
   leadItems,
   rowState,
+  excludeKeys,
+  rowRank,
   extraApps,
   footer = true,
   notice,
@@ -277,8 +294,8 @@ export function ProjectSelectorPanel({
   const listId = useId();
 
   const items = useMemo(
-    () => buildItems({ mode, catalog, prefs, query, leadItems, rowState, extraApps }),
-    [mode, catalog, prefs, query, leadItems, rowState, extraApps],
+    () => buildItems({ mode, catalog, prefs, query, leadItems, rowState, excludeKeys, rowRank, extraApps }),
+    [mode, catalog, prefs, query, leadItems, rowState, excludeKeys, rowRank, extraApps],
   );
 
   // The active option, by key so it survives the list refetching: the one

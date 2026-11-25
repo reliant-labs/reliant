@@ -52,7 +52,7 @@ func (s *Service) PreviewProjectOrgMove(
 ) (*connect.Response[pb.PreviewProjectOrgMoveResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	projectID, to := req.Msg.GetProjectId(), req.Msg.GetToOrgId()
-	project, err := s.deps.Repo.GetProject(ctx, projectID)
+	project, err := s.deps.ProjectRows.GetProject(ctx, projectID)
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the project"))
 	}

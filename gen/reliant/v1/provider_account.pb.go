@@ -1857,9 +1857,9 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"!PROVIDER_ACCOUNT_FUNDING_PERSONAL\x10\x01\x12$\n" +
 	" PROVIDER_ACCOUNT_FUNDING_ORG_KEY\x10\x02\x12%\n" +
 	"!PROVIDER_ACCOUNT_FUNDING_ORG_SEAT\x10\x03\x12'\n" +
-	"#PROVIDER_ACCOUNT_FUNDING_ORG_WALLET\x10\x042\xe4\f\n" +
-	"\x16ProviderAccountService\x12k\n" +
-	"\x14ListProviderAccounts\x12'.reliant.v1.ListProviderAccountsRequest\x1a(.reliant.v1.ListProviderAccountsResponse\"\x00\x12\xbc\x01\n" +
+	"#PROVIDER_ACCOUNT_FUNDING_ORG_WALLET\x10\x042\xed\f\n" +
+	"\x16ProviderAccountService\x12n\n" +
+	"\x14ListProviderAccounts\x12'.reliant.v1.ListProviderAccountsRequest\x1a(.reliant.v1.ListProviderAccountsResponse\"\x03\x90\x02\x01\x12\xbc\x01\n" +
 	"\x15UpdateProviderAccount\x12(.reliant.v1.UpdateProviderAccountRequest\x1a).reliant.v1.UpdateProviderAccountResponse\"N\xa2\xbb\x18J:H\n" +
 	"\x06update\x126\n" +
 	"\x10provider_account\x12\n" +
@@ -1872,9 +1872,9 @@ const file_reliant_v1_provider_account_proto_rawDesc = "" +
 	"\x11AddProviderAPIKey\x12$.reliant.v1.AddProviderAPIKeyRequest\x1a%.reliant.v1.AddProviderAPIKeyResponse\"V\xa2\xbb\x18R:P\n" +
 	"\x03add\x12?\n" +
 	"\x10provider_account\x12\x13response.account.id\x1a\x16response.account.label*\bprovider\x12\xdb\x01\n" +
-	"\x1bRefreshProviderAccountUsage\x12..reliant.v1.RefreshProviderAccountUsageRequest\x1a/.reliant.v1.RefreshProviderAccountUsageResponse\"[\xa2\xbb\x18W:U:Sre-reads usage from the provider (throttled); changes only the cached usage windows\x12q\n" +
-	"\x16GetChatProviderAccount\x12).reliant.v1.GetChatProviderAccountRequest\x1a*.reliant.v1.GetChatProviderAccountResponse\"\x00\x12\xaa\x01\n" +
-	"\x1aGetPersonalFundingQuestion\x12-.reliant.v1.GetPersonalFundingQuestionRequest\x1a..reliant.v1.GetPersonalFundingQuestionResponse\"-\xa2\xbb\x18):':%reads the chat's own pending question\x12\xd9\x01\n" +
+	"\x1bRefreshProviderAccountUsage\x12..reliant.v1.RefreshProviderAccountUsageRequest\x1a/.reliant.v1.RefreshProviderAccountUsageResponse\"[\xa2\xbb\x18W:U:Sre-reads usage from the provider (throttled); changes only the cached usage windows\x12t\n" +
+	"\x16GetChatProviderAccount\x12).reliant.v1.GetChatProviderAccountRequest\x1a*.reliant.v1.GetChatProviderAccountResponse\"\x03\x90\x02\x01\x12\xad\x01\n" +
+	"\x1aGetPersonalFundingQuestion\x12-.reliant.v1.GetPersonalFundingQuestionRequest\x1a..reliant.v1.GetPersonalFundingQuestionResponse\"0\xa2\xbb\x18):':%reads the chat's own pending question\x90\x02\x01\x12\xd9\x01\n" +
 	"\x1cResolvePersonalFundingChoice\x12/.reliant.v1.ResolvePersonalFundingChoiceRequest\x1a0.reliant.v1.ResolvePersonalFundingChoiceResponse\"V\xa2\xbb\x18R:P:Nanswers the chat's own question; the chat's transcript notice records the moveB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (

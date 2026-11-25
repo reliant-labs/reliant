@@ -50,6 +50,7 @@ var userScopedReads = map[string]string{
 	"GetWorkflowDraftByName":   readRepoChecks,
 	"GetWorkflowDraftBySlug":   readRepoChecks,
 	"GetWorkflowDraftsBySlugs": readRepoChecks,
+	// Deprecated forwarders still decide visibility through workflowdrafts.
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
 	"ListArchivedChats":        readCallersFilter,
@@ -60,7 +61,6 @@ var userScopedReads = map[string]string{
 	"ListTriggers":             readCallersFilter,
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
-	"ListPendingTriggerOffers": readCallersFilter,
 	// The inbox's P11 notices (inbox_automation_notices.go): each row is the
 	// caller's own, decided by CanReadTrigger, or one of an org they
 	// administer (control-plane's live answer).
@@ -99,7 +99,6 @@ var userScopedReads = map[string]string{
 	"GetPresetBySlug":             readPersonal,
 	"GetSetting":                  readPersonal,
 	"GetSettingValue":             readPersonal,
-	"ListCommandFavorites":        readPersonal,
 	"ListLLMUsageDaily":           readPersonal,
 	"ListLLMUsageDetail":          readPersonal,
 	"ListSettings":                readPersonal,

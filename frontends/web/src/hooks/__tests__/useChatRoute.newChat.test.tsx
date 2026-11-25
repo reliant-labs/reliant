@@ -7,9 +7,11 @@
  *     still shows the last project (the draft mirror waits for the apply)
  *   - the shell stays mounted across chat ⇄ new-chat moves, and Back to
  *     either page applies it again
+ *   - `?with=` is the draft's attached projects: applied in order (ids the
+ *     person cannot see dropped), and every change mirrored back
  */
 
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -28,6 +30,7 @@ import { markNewChatApplied } from "@/lib/chatRoute";
 import type { ChatRouteData } from "@/lib/chatRouteResolve";
 import { chatViewSearchSchema, newChatSearchSchema } from "@/routeSchemas";
 import { useChatStore } from "@/store/chatStore";
+import { getNewChatAttachedProjects, setNewChatAttachedProjects } from "@/store/newChatProjectsStore";
 import { applyNewChat } from "@/store/openChat";
 import { useProjectStore } from "@/store/projectStore";
 import { useWorktreeStore } from "@/store/worktreeStore";
@@ -214,5 +217,42 @@ describe("Back across chat and new-chat, the shell kept mounted", () => {
     await waitFor(() => expect(shown().active).toBeNull());
     expect(applyNewChat).toHaveBeenCalledTimes(2);
     expect(mounts).toBe(1);
+  });
+});
+
+describe("the draft's attached projects in `?with=`", () => {
+  beforeEach(() => setNewChatAttachedProjects(null, []));
+
+  it("applies them in the order added, and a reload keeps them", async () => {
+    await open("/new?project=p-a&with=p-c,p-b");
+    await waitFor(() => expect(getNewChatAttachedProjects("p-a")).toEqual(["p-c", "p-b"]));
+    await settle();
+    expect(search()).toEqual({ project: "p-a", with: "p-c,p-b" });
+    // A reload: a fresh page and tab state, the same URL.
+    cleanup();
+    setNewChatAttachedProjects(null, []);
+    markNewChatApplied({ project: "(none)" });
+    await open("/new?project=p-a&with=p-c,p-b");
+    await waitFor(() => expect(getNewChatAttachedProjects("p-a")).toEqual(["p-c", "p-b"]));
+  });
+
+  it("drops a project the person cannot see, and says so in the URL", async () => {
+    await open("/new?project=p-a&with=p-gone,p-b");
+    await waitFor(() => expect(getNewChatAttachedProjects("p-a")).toEqual(["p-b"]));
+    await waitFor(() => expect(search()).toEqual({ project: "p-a", with: "p-b" }));
+  });
+
+  it("mirrors a change of the chips with a replace", async () => {
+    await open("/new?project=p-a");
+    await waitFor(() => expect(applyNewChat).toHaveBeenCalledTimes(1));
+    await settle();
+    const entries = router.history.length;
+    await act(async () => setNewChatAttachedProjects("p-a", ["p-b", "p-c"]));
+    await waitFor(() => expect(search()).toEqual({ project: "p-a", with: "p-b,p-c" }));
+    await act(async () => setNewChatAttachedProjects("p-a", []));
+    await waitFor(() => expect(search()).toEqual({ project: "p-a" }));
+    expect(router.history.length).toBe(entries);
+    // The mirror's own writes are the view's: nothing applied them again.
+    expect(applyNewChat).toHaveBeenCalledTimes(1);
   });
 });

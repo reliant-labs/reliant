@@ -11,6 +11,7 @@
  * org-wide ones), optionally environments.
  */
 
+import type { Transport } from "@connectrpc/connect";
 import { ActivityActorKind, ActivityService, type ActivityEvent as WireEvent } from "@/gen/controlplane/services/activity/v1/activity_pb";
 
 import { getControlPlaneClient } from "../client";
@@ -72,8 +73,8 @@ export function mapActivityEvent(e: WireEvent): ActivityEvent {
 }
 
 /** One page of the scope's activity, newest first. */
-export async function listActivity(req: ListActivityRequest): Promise<ActivityList> {
-  const res = await getControlPlaneClient(ActivityService).listActivity({
+export async function listActivity(req: ListActivityRequest, transport?: Transport): Promise<ActivityList> {
+  const res = await getControlPlaneClient(ActivityService, transport).listActivity({
     scope: { orgId: req.orgId, projectId: req.projectId || undefined, envIds: req.envIds },
     targetKind: req.targetKind || undefined,
     targetId: req.targetId || undefined,

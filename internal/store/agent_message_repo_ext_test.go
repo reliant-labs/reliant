@@ -58,6 +58,62 @@ func requireSameMail(t *testing.T, label string, got, want *core.AgentMessage) {
 	}
 }
 
+// A queued human message keeps its author through the mailbox
+// (chat-collaboration.md §6.1): both enqueue paths write author_user_id, both
+// reads return it, and an owner's (nil) author stays nil, never "".
+func TestAgentMessageAuthorRoundTrip(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	seedMailbox(t, env, "au-chat", "au-main")
+	base := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	dana := "u-dana"
+
+	byCollab := mailMsg("au-1", "au-chat", "au-main", "au-main", core.AgentMessageKindHumanMessage, base)
+	byCollab.AuthorUserID = &dana
+	byOwner := mailMsg("au-2", "au-chat", "au-main", "au-main", core.AgentMessageKindHumanMessage, base.Add(time.Second))
+	byCollabOnce := mailMsg("au-3", "au-chat", "au-main", "au-main", core.AgentMessageKindHumanMessage, base.Add(2*time.Second))
+	byCollabOnce.AuthorUserID = &dana
+	byOwnerOnce := mailMsg("au-4", "au-chat", "au-main", "au-main", core.AgentMessageKindHumanMessage, base.Add(3*time.Second))
+
+	for _, m := range []*core.AgentMessage{byCollab, byOwner} {
+		if err := store.EnqueueAgentMessage(ctx, env.ORM, m); err != nil {
+			t.Fatalf("EnqueueAgentMessage(%s): %v", m.ID, err)
+		}
+	}
+	for _, m := range []*core.AgentMessage{byCollabOnce, byOwnerOnce} {
+		inserted, err := store.EnqueueAgentMessageOnce(ctx, env.ORM, m)
+		if err != nil || !inserted {
+			t.Fatalf("EnqueueAgentMessageOnce(%s) = %v, %v; want inserted", m.ID, inserted, err)
+		}
+	}
+
+	want := map[string]*string{"au-1": &dana, "au-2": nil, "au-3": &dana, "au-4": nil}
+	check := func(label string, got *core.AgentMessage) {
+		t.Helper()
+		w := want[got.ID]
+		switch {
+		case w == nil && got.AuthorUserID != nil:
+			t.Fatalf("%s %s: author %q, want nil (the owner)", label, got.ID, *got.AuthorUserID)
+		case w != nil && (got.AuthorUserID == nil || *got.AuthorUserID != *w):
+			t.Fatalf("%s %s: author %v, want %q", label, got.ID, got.AuthorUserID, *w)
+		}
+	}
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, env.ORM, "au-main")
+	if err != nil || len(queued) != len(want) {
+		t.Fatalf("ListQueuedAgentMessagesForThread = %d rows, %v; want %d", len(queued), err, len(want))
+	}
+	for _, m := range queued {
+		check("queued read", m)
+	}
+	for id := range want {
+		got, err := store.GetAgentMessage(ctx, env.ORM, id)
+		if err != nil {
+			t.Fatalf("GetAgentMessage(%s): %v", id, err)
+		}
+		check("ORM read", got)
+	}
+}
+
 func TestAgentMessageDrain(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
@@ -70,7 +126,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err := store.EnqueueAgentMessage(ctx, env.ORM, m2); err != nil {
 		t.Fatalf("EnqueueAgentMessage: %v", err)
 	}
-	if err := env.Repo.EnqueueAgentMessage(ctx, mailMsg("m-1", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindMessage, base)); err != nil {
+	if err := store.EnqueueAgentMessage(ctx, env.Repo.ORM(), mailMsg("m-1", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindMessage, base)); err != nil {
 		t.Fatalf("Repo.EnqueueAgentMessage: %v", err)
 	}
 	if err := store.EnqueueAgentMessage(ctx, env.ORM, mailMsg("m-3", "mb-chat", "mb-child", "mb-parent", core.AgentMessageKindMessage, base)); err != nil {
@@ -80,7 +136,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListQueuedAgentMessagesForThread: %v", err)
 	}
-	twin, err := env.Repo.ListQueuedAgentMessagesForThread(ctx, "mb-child")
+	twin, err := store.ListQueuedAgentMessagesForThread(ctx, env.Repo.ORM(), "mb-child")
 	if err != nil {
 		t.Fatalf("Repo.ListQueuedAgentMessagesForThread: %v", err)
 	}
@@ -105,7 +161,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if n, err := store.MarkQueuedAgentMessagesPreempting(ctx, env.ORM, "mb-child", base); err != nil || n != 2 {
 		t.Fatalf("MarkQueuedAgentMessagesPreempting = %d, %v; want 2", n, err)
 	}
-	if n, err := env.Repo.MarkQueuedAgentMessagesPreempting(ctx, "mb-child", base); err != nil || n != 0 {
+	if n, err := store.MarkQueuedAgentMessagesPreempting(ctx, env.Repo.ORM(), "mb-child", base); err != nil || n != 0 {
 		t.Fatalf("MarkQueuedAgentMessagesPreempting(again) = %d, %v; want 0", n, err)
 	}
 
@@ -117,7 +173,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(claimed, []string{"m-1", "m-2"}) {
 		t.Fatalf("MarkAgentMessagesDelivered = %v, %v; want [m-1 m-2]", claimed, err)
 	}
-	if again, err := env.Repo.MarkAgentMessagesDelivered(ctx, []string{"m-1", "m-2"}, deliveredAt, ""); err != nil || again != nil {
+	if again, err := store.MarkAgentMessagesDelivered(ctx, env.Repo.ORM(), []string{"m-1", "m-2"}, deliveredAt, ""); err != nil || again != nil {
 		t.Fatalf("second drain claimed %v, %v; want nothing", again, err)
 	}
 	if got, err := store.MarkAgentMessagesDelivered(ctx, env.ORM, nil, deliveredAt, ""); err != nil || got != nil {
@@ -133,7 +189,7 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err := store.SetAgentMessagesDeliveredMessageID(ctx, env.ORM, claimed, "mb-envelope"); err != nil {
 		t.Fatalf("SetAgentMessagesDeliveredMessageID: %v", err)
 	}
-	delivered, err := env.Repo.GetAgentMessage(ctx, "m-1")
+	delivered, err := store.GetAgentMessage(ctx, env.Repo.ORM(), "m-1")
 	if err != nil || delivered.Status != core.AgentMessageStatusDelivered || !delivered.DeliveredAt.Equal(deliveredAt) ||
 		delivered.DeliveredMessageID == nil || *delivered.DeliveredMessageID != "mb-envelope" {
 		t.Fatalf("Repo.GetAgentMessage after drain = %+v, %v", delivered, err)
@@ -159,13 +215,13 @@ func TestAgentMessageDrain(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(orphans, []string{"mb-child"}) {
 		t.Fatalf("ListThreadsWithOrphanedAgentMessages = %v, %v; want [mb-child]", orphans, err)
 	}
-	if twinOrphans, err := env.Repo.ListThreadsWithOrphanedAgentMessages(ctx); err != nil || !reflect.DeepEqual(twinOrphans, orphans) {
+	if twinOrphans, err := store.ListThreadsWithOrphanedAgentMessages(ctx, env.Repo.ORM()); err != nil || !reflect.DeepEqual(twinOrphans, orphans) {
 		t.Fatalf("Repo.ListThreadsWithOrphanedAgentMessages = %v, %v", twinOrphans, err)
 	}
 	if n, err := store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, env.ORM, "mb-child"); err != nil || n != 1 {
 		t.Fatalf("MarkQueuedAgentMessagesUndeliveredForThread = %d, %v; want 1 (m-4 only)", n, err)
 	}
-	if n, err := env.Repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, "mb-child"); err != nil || n != 0 {
+	if n, err := store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, env.Repo.ORM(), "mb-child"); err != nil || n != 0 {
 		t.Fatalf("MarkQueuedAgentMessagesUndeliveredForThread(again) = %d, %v; want 0", n, err)
 	}
 	if got := mustMail(t, env, "m-1"); got.Status != core.AgentMessageStatusDelivered {
@@ -183,16 +239,16 @@ func TestAgentMessageDrain(t *testing.T) {
 	if inserted, err := store.EnqueueAgentMessageOnce(ctx, env.ORM, mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || !inserted {
 		t.Fatalf("EnqueueAgentMessageOnce(reused id) = %v, %v; want inserted", inserted, err)
 	}
-	if inserted, err := env.Repo.EnqueueAgentMessageOnce(ctx, mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || inserted {
-		t.Fatalf("Repo.EnqueueAgentMessageOnce(taken id) = %v, %v; want false", inserted, err)
+	if inserted, err := store.EnqueueAgentMessageOnce(ctx, env.Repo.ORM(), mailMsg("m-4", "mb-chat", "mb-parent", "mb-child", core.AgentMessageKindHumanMessage, base)); err != nil || inserted {
+		t.Fatalf("store.EnqueueAgentMessageOnce(taken id, Repo.ORM()) = %v, %v; want false", inserted, err)
 	}
 }
 
 func mustMail(t *testing.T, env *storetest.Env, id string) *core.AgentMessage {
 	t.Helper()
-	m, err := env.Repo.GetAgentMessage(context.Background(), id)
+	m, err := store.GetAgentMessage(context.Background(), env.Repo.ORM(), id)
 	if err != nil || m == nil {
-		t.Fatalf("Repo.GetAgentMessage(%s) = %v, %v", id, m, err)
+		t.Fatalf("store.GetAgentMessage(%s, Repo.ORM()) = %v, %v", id, m, err)
 	}
 	return m
 }
@@ -212,7 +268,7 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 		if i%2 == 0 {
 			err = store.EnqueueAgentMessage(ctx, env.ORM, m)
 		} else {
-			err = env.Repo.EnqueueAgentMessage(ctx, m)
+			err = store.EnqueueAgentMessage(ctx, env.Repo.ORM(), m)
 		}
 		if err != nil {
 			t.Fatalf("enqueue %s: %v", m.ID, err)
@@ -225,8 +281,8 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 	if ok, err := store.CancelQueuedAgentMessage(ctx, env.ORM, "h-3", "cl-chat"); err != nil || !ok {
 		t.Fatalf("CancelQueuedAgentMessage = %v, %v; want true", ok, err)
 	}
-	if ok, err := env.Repo.CancelQueuedAgentMessage(ctx, "h-3", "cl-chat"); err != nil || ok {
-		t.Fatalf("Repo.CancelQueuedAgentMessage(gone) = %v, %v; want false", ok, err)
+	if ok, err := store.CancelQueuedAgentMessage(ctx, env.Repo.ORM(), "h-3", "cl-chat"); err != nil || ok {
+		t.Fatalf("store.CancelQueuedAgentMessage(gone, Repo.ORM()) = %v, %v; want false", ok, err)
 	}
 
 	// Claim one, then the rest of the human queue: oldest first, and never
@@ -255,7 +311,7 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 		if i%2 == 0 {
 			err = store.EnqueueAgentMessage(ctx, env.ORM, m)
 		} else {
-			err = env.Repo.EnqueueAgentMessage(ctx, m)
+			err = store.EnqueueAgentMessage(ctx, env.Repo.ORM(), m)
 		}
 		if err != nil {
 			t.Fatalf("enqueue %s: %v", id, err)
@@ -283,8 +339,8 @@ func TestAgentMessageSpawnReports(t *testing.T) {
 	if inserted, err := store.EnqueueAgentMessageIfAbsent(ctx, env.ORM, report("ph-1", "sr-child", true)); err != nil || !inserted {
 		t.Fatalf("EnqueueAgentMessageIfAbsent = %v, %v; want inserted", inserted, err)
 	}
-	if inserted, err := env.Repo.EnqueueAgentMessageIfAbsent(ctx, report("ph-2", "sr-child", true)); err != nil || inserted {
-		t.Fatalf("Repo.EnqueueAgentMessageIfAbsent(same spawn) = %v, %v; want false, no error", inserted, err)
+	if inserted, err := store.EnqueueAgentMessageIfAbsent(ctx, env.Repo.ORM(), report("ph-2", "sr-child", true)); err != nil || inserted {
+		t.Fatalf("store.EnqueueAgentMessageIfAbsent(same spawn, Repo.ORM()) = %v, %v; want false, no error", inserted, err)
 	}
 	if _, err := store.EnqueueAgentMessageIfAbsent(ctx, env.ORM, report("ph-3", "sr-other", true)); !errors.Is(err, core.ErrSpawnReportSlotTaken) {
 		t.Fatalf("EnqueueAgentMessageIfAbsent(other spawn) err = %v, want ErrSpawnReportSlotTaken", err)
@@ -307,8 +363,8 @@ func TestAgentMessageSpawnReports(t *testing.T) {
 	}
 	// A retry of the same real report is already reported; another spawn's
 	// is refused; a placeholder never overwrites a real report.
-	if outcome, err := env.Repo.EnqueueSpawnReport(ctx, report("real-2", "sr-child", false)); err != nil || outcome != core.SpawnReportAlreadyReported {
-		t.Fatalf("Repo.EnqueueSpawnReport(retry) = %v, %v; want already reported", outcome, err)
+	if outcome, err := store.EnqueueSpawnReport(ctx, env.Repo.ORM(), report("real-2", "sr-child", false)); err != nil || outcome != core.SpawnReportAlreadyReported {
+		t.Fatalf("store.EnqueueSpawnReport(retry, Repo.ORM()) = %v, %v; want already reported", outcome, err)
 	}
 	if _, err := store.EnqueueSpawnReport(ctx, env.ORM, report("real-3", "sr-other", false)); !errors.Is(err, core.ErrSpawnReportSlotTaken) {
 		t.Fatalf("EnqueueSpawnReport(other spawn) err = %v, want ErrSpawnReportSlotTaken", err)

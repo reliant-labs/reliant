@@ -62,7 +62,7 @@ const ROWS: LegacyRow[] = [
   // The console's entries and the app by name.
   { url: "/forge", lands: "/forge", leaf: /\/forge$/ },
   { url: "/forge?project=x", lands: "/forge?project=x", leaf: /\/forge$/ },
-  { url: "/forge/p/shop", lands: "/forge/p/shop", leaf: /\/forge\/p\/\$project\/$/ },
+  { url: "/forge/p/shop", lands: "/forge/p/shop", leaf: /\/(forge\/p|apps)\/\$project\/$/ },
   { url: "/forge/p/shop/releases", lands: "/forge/p/shop/releases", leaf: /\/releases$/ },
   { url: "/forge/p/shop/observability/logs", lands: "/forge/p/shop/observability/logs", leaf: /\/observability\/\$view$/ },
   // Observability's own Overview (U6e): a page now, no longer a redirect to the project Overview.
@@ -112,7 +112,10 @@ describe.each(HOSTS)("the %s host", (host) => {
       const { pathname, searchStr } = h.router.state.location as { pathname: string; searchStr: string };
       // Sorted, so the row does not depend on the order a redirect wrote the keys in.
       const query = [...new URLSearchParams(searchStr).entries()].sort(([a], [b]) => a.localeCompare(b));
-      const [landsPath, landsQuery = ""] = lands.split("?");
+      // The org console retired Settings into Usage; the org-less console
+      // still uses its original billing destination.
+      const destination = flag && url === "/forge/p/shop/settings" ? "/usage" : lands;
+      const [landsPath, landsQuery = ""] = destination.split("?");
       expect(orgFreePath(pathname)).toBe(landsPath);
       expect(query).toEqual([...new URLSearchParams(landsQuery).entries()].sort(([a], [b]) => a.localeCompare(b)));
       // An org URL stays in its org; an org-less one moves into the person's only where the flag forwards it.

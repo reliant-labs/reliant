@@ -74,7 +74,7 @@ func TestCallLLM_DeltaIdentity(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	hub := &captureHub{}
-	activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	preallocatedID := uuid.NewString()
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
@@ -122,7 +122,7 @@ func TestCallLLM_DeltaIdentity_NoPreallocatedID(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	hub := &captureHub{}
-	activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	var output CallLLMOutput
 	err := h.ExecuteActivity(activityInstance.Execute, callLLMInput(chat.ID, chat.ID, "mock-model"), &output)
@@ -243,7 +243,7 @@ func TestCallLLM_CancelledStreamPersistsPartialTurn(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 	hub := &captureHub{}
-	activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: hub, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
 	runCancelled := func(actCtx context.Context, input ActivityInput) (*CallLLMOutput, error) {
@@ -320,7 +320,7 @@ func TestCallLLM_CancelledStreamReportsInterrupted(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")
 	runCancelled := func(actCtx context.Context, input ActivityInput) (*CallLLMOutput, error) {
@@ -363,7 +363,7 @@ func TestCallLLM_CompletedStreamDoesNotReportInterrupted(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
+	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil})
 
 	var output CallLLMOutput
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,

@@ -20,6 +20,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -181,7 +182,9 @@ func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),
 			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Temporal: temporal,
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+			Temporal:      temporal,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
@@ -198,7 +201,7 @@ func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
 	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID),
 		"SendMessage must not duplicate call_llm's mailbox delivery")
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2, "queued messages must remain for the run's first call_llm drain")
 	assert.Equal(t, "queued first", remaining[0].Body)
@@ -224,7 +227,9 @@ func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),
 			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Temporal: temporal,
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+			Temporal:      temporal,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
@@ -243,7 +248,7 @@ func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2, "a running agent's mailbox must be left for its own drain boundary")
 	assert.Equal(t, "queued for the live agent", remaining[0].Body)
@@ -272,7 +277,7 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 	temporal := &wakeTestTemporalClient{absorbTestTemporalClient: absorbTestTemporalClient{
 		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}}
-	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
 
 	req := sendMessageRequest(t, fx.chatID, "one more thing")
 	clientID := uuid.NewString()
@@ -282,7 +287,7 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 
 	assert.NotContains(t, transcriptBodies(t, ctx, repo, fx.chatID), "one more thing",
 		"a message written into history now would be ordered before the in-flight reply")
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, "one more thing", queued[0].Body)
@@ -305,7 +310,7 @@ func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
 	temporal := &wakeTestTemporalClient{absorbTestTemporalClient: absorbTestTemporalClient{
 		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
 	}}
-	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal}, runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
+	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil})}
 
 	req := sendMessageRequest(t, fx.chatID, "steer")
 	bad := "not-a-uuid"
@@ -314,7 +319,7 @@ func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a refused send must not queue anything")
 }
@@ -336,12 +341,14 @@ func TestSendMessage_LeavesEveryMailboxKindQueued(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),
 			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Temporal: temporal,
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+			Temporal:      temporal,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, &db.AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), &db.AgentMessage{
 		ID:           uuid.NewString(),
 		ChatID:       fx.chatID,
 		FromThreadID: fx.rootThreadID,
@@ -359,7 +366,7 @@ func TestSendMessage_LeavesEveryMailboxKindQueued(t *testing.T) {
 
 	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID))
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2, "both mailbox kinds must stay queued for call_llm")
 	assert.Equal(t, core.AgentMessageKindMessage, remaining[0].Kind)
@@ -389,7 +396,9 @@ func TestSendMessage_PausedResumeLeavesMailboxForCallLLM(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()),
 			Questions:   store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Temporal: temporal,
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
+			Temporal:      temporal,
 		},
 		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: succeedingPauseController{}}),
 	}
@@ -404,7 +413,7 @@ func TestSendMessage_PausedResumeLeavesMailboxForCallLLM(t *testing.T) {
 	assert.Empty(t, only(transcriptBodies(t, ctx, repo, fx.chatID), "queued while paused", "resume now"),
 		"neither the queued message nor the new one is written into history by SendMessage")
 
-	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	remaining, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Len(t, remaining, 2)
 	assert.Equal(t, "queued while paused", remaining[0].Body)

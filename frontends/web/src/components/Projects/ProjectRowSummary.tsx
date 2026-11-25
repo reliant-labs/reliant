@@ -84,7 +84,7 @@ export function ProjectRowSummary({ row, pinned = false, interactiveChips = fals
       {shown.length > 0 ? (
         <span className={cn("flex min-w-0 shrink items-center justify-end gap-1", chipsClassName)}>
           {shown.map((app) => (
-            <AppChip key={`${app.repoId ?? ""}/${app.subpath ?? ""}/${app.name}`} app={app} interactive={interactiveChips} />
+            <AppChip key={`${app.repoId ?? ""}/${app.subpath ?? ""}/${app.name}`} app={app} interactive={interactiveChips} projectId={row.kind === "project" ? row.key : undefined} />
           ))}
           {more > 0 ? <span className="shrink-0 text-meta text-muted-foreground">+{more}</span> : null}
         </span>

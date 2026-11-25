@@ -274,6 +274,84 @@ edges:
 	require.NotNil(t, e, "%v", messages(errs))
 	assert.Contains(t, strings.Join(e.Path, "."), "inline.nodes.[0](get).with.owner")
 	assert.Nil(t, findingContaining(errs, "undefined field 'start'"), "one finding per cause: %v", messages(errs))
+	// The advice must name a path that works: an inline body never receives
+	// its node's args (it runs with the enclosing workflow's inputs), so
+	// "set it in the loop's args" sent authors to a "no such key" at run time.
+	assert.Contains(t, e.Suggestion, "iter.item")
+	assert.Contains(t, e.Suggestion, "ref:")
+	assert.NotContains(t, e.Suggestion, "set it in the loop or workflow node's args")
+}
+
+// args, passthrough and presets on a node with an inline body are ignored at
+// run time (core.InputPolicyInlineInheritParentInputs), so the body's
+// inputs.<name> read fails "no such key". The validator says so (a warning:
+// such definitions always ran, with the fields ignored), for loop and
+// workflow nodes, nested ones included, and not for a ref: body.
+func TestInlineBodyIgnoresArgsPassthroughAndPresets(t *testing.T) {
+	t.Parallel()
+	wf, err := wfyaml.ParseWorkflow([]byte(`
+name: probe
+entry: [plan]
+inputs:
+  big: {type: object}
+nodes:
+  - id: plan
+    type: compute
+    outputs: {big: {a: AAA}}
+  - id: seq
+    type: loop
+    items: "{{ ['a', 'b'] }}"
+    while: "iter.iteration < 2"
+    args: {big: "{{ nodes.plan.big }}"}
+    inline:
+      entry: [row]
+      nodes:
+        - id: row
+          type: compute
+          outputs: {rows: "{{ [iter.item] }}"}
+  - id: wrap
+    type: workflow
+    passthrough: [big]
+    inline:
+      entry: [inner]
+      nodes:
+        - id: inner
+          type: loop
+          items: "{{ ['a'] }}"
+          parallel: true
+          args: {x: "1"}
+          inline:
+            entry: [r]
+            nodes:
+              - {id: r, type: compute, outputs: {v: "{{ iter.item }}"}}
+  - id: byref
+    type: loop
+    ref: builtin://agent
+    items: "{{ ['a'] }}"
+    parallel: true
+    args: {prompt: "hi"}
+edges:
+  - {from: plan, to: seq}
+  - {from: seq, to: wrap}
+  - {from: wrap, to: byref}
+`))
+	require.NoError(t, err)
+	result := StaticAnalysis(wf, nil)
+
+	var got []string
+	for _, w := range result.Warnings() {
+		if strings.Contains(w.Message, "ignored on an inline body") {
+			got = append(got, strings.Join(w.Path, ".")+"."+w.Field)
+			assert.Contains(t, w.Suggestion, "iter.item")
+		}
+	}
+	assert.Len(t, got, 3, "seq.args, wrap.passthrough and wrap's inner.args; never byref: %v", got)
+	assert.Contains(t, strings.Join(got, " "), "(seq).args")
+	assert.Contains(t, strings.Join(got, " "), "(wrap).passthrough")
+	assert.Contains(t, strings.Join(got, " "), "(inner).args")
+	for _, e := range result.Errors() {
+		assert.NotContains(t, e.Message, "ignored on an inline body", "a warning, never an error")
+	}
 }
 
 // The same read at top level is legal, and a body's read of its own nodes is

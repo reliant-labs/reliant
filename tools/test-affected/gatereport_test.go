@@ -148,9 +148,16 @@ func TestMergeGateCoverageAndWiring(t *testing.T) {
 			t.Errorf("merge missing %s", s)
 		}
 	}
-	for _, s := range []string{"task generate:docs:check", "task build:web:verify", "task test -- $pkgs", "task test:web", "task test:electron", "task test:integration", "cmd_assemble", "PARTS=(static lint go web)", "task test:e2e", "go build ./...", "go vet ./...", "STEPS=(npm generate docs lint build webbuild", "missing_steps"} {
+	for _, s := range []string{"task generate:docs:check", "task build:web:verify", "task test -- $pkgs", "task test:web", "task test:electron", "task test:integration", "cmd_assemble", "PARTS=(static lint go web)", "task test:e2e", "go build ./...", "go vet ./...", "STEPS=(npm generate docs lint build webbuild", "missing_steps", "demo-size) task demo:bundle-size", `[webbuild]="npm webbuild demo-size"`, `[static]="npm generate docs build webbuild demo-size typecheck vet"`} {
 		if !strings.Contains(release, s) {
 			t.Errorf("release missing %s", s)
+		}
+	}
+	// The demo bundle's size budget gates releases only: a pull request
+	// reports it (dev-docs/demo-inventory.md, "Bundle size").
+	for _, s := range []string{"demo:bundle-size", "demo-bundle-size", "bundle-size.mjs"} {
+		if strings.Contains(merge, s) {
+			t.Errorf("the merge gate runs %s; the demo size budget is the release gate's alone", s)
 		}
 	}
 	pl := &Plan{Go: GoPlan{Packages: []string{"./internal/x"}}}

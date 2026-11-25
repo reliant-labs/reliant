@@ -17,8 +17,34 @@ import (
 	projectaccess "github.com/reliant-labs/reliant/internal/projectaccess"
 )
 
+// forge:section MockProjectReader
+// forge:hash=f9b4085c70c8d6169fcb271bef837b5099665899a29a3c69622f2265067c12e6
+
+// MockProjectReader is a test mock for the ProjectReader interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectReader.<Method>Func not set" error.
+type MockProjectReader struct {
+	contractkit.Recorder
+	GetProjectFunc func(context.Context, string) (*db.Project, error)
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockProjectReader) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReader", "GetProject")
+}
+
+// Compile-time check.
+var _ ProjectReader = (*MockProjectReader)(nil)
+
 // forge:section MockRepository
-// forge:hash=7397ed53896dcd9d550c246d62a922eff0cda41c9fe49e2e16f05693c377ed2c
+// forge:hash=b9c11b501509543f6aef313036242d42ed118fba2451c468784be3fce610fccc
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -28,20 +54,10 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetProjectFunc                   func(context.Context, string) (*db.Project, error)
 	ListProjectsFunc                 func(context.Context, db.ProjectFilters) ([]*db.Project, error)
 	EmitUserRefetchFunc              func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	GetDaemonFunc                    func(context.Context, string) (*db.Daemon, error)
 	ListProjectDaemonsForProjectFunc func(context.Context, string) ([]*core.ProjectDaemon, error)
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
 }
 
 // ListProjects records the call and delegates to ListProjectsFunc when set.

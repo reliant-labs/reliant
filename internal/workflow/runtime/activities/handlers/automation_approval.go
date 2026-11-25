@@ -22,7 +22,7 @@ type AutomationApprovalActivity struct {
 }
 
 func (a *AutomationApprovalActivity) WithExecutionStore(repo ExecuteToolsStore, rows WorkspaceRows) *AutomationApprovalActivity {
-	a.executor = NewExecuteToolsActivity(repo, rows, nil, nil)
+	a.executor = NewExecuteToolsActivity(ExecuteToolsDeps{Store: repo, Rows: rows})
 	return a
 }
 

@@ -28,6 +28,11 @@ type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	// ListDaemonsByUserID lists the user's machines for ListProcesses.
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
+}
+
+// Favorites keeps a user's favorite commands of a project.
+// store.CommandFavoriteExtStore satisfies it.
+type Favorites interface {
 	ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error)
 	AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
 	RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error

@@ -80,7 +80,7 @@
  */
 
 import type { DeclaredAlertRoute, DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 import type { JsonObject } from "@bufbuild/protobuf";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
@@ -952,9 +952,9 @@ export function hasLiveControlPlane(): boolean {
  * An empty list is an EMPTY LIST, never an error: a project nobody has
  * deployed yet is a normal state.
  */
-export async function getLiveView(project: string, orgId: string | null): Promise<LiveEnv[]> {
+export async function getLiveView(transport: Transport, project: string, orgId: string | null): Promise<LiveEnv[]> {
   // Read in `orgId` (null: none), named in the request so the cached answer is that org's.
-  const res = await getControlPlaneClient(DeployService).getLiveView(orgRequest({ project }, orgId));
+  const res = await getControlPlaneClient(DeployService, transport).getLiveView(orgRequest({ project }, orgId));
   return (res.environments ?? [])
     .map(toLiveEnv)
     .filter((env): env is LiveEnv => env !== null && env.project === project)
@@ -971,8 +971,8 @@ export async function getLiveView(project: string, orgId: string | null): Promis
  * for a real environment, read only by the pages that show one environment's
  * secrets, workloads or alerts.
  */
-export async function getEnvironmentShape(environmentId: string, orgId: string | null): Promise<LiveShape | null> {
-  const res = await getControlPlaneClient(DeployService).getEnvironmentShape(orgRequest({ environmentId }, orgId));
+export async function getEnvironmentShape(transport: Transport, environmentId: string, orgId: string | null): Promise<LiveShape | null> {
+  const res = await getControlPlaneClient(DeployService, transport).getEnvironmentShape(orgRequest({ environmentId }, orgId));
   return toLiveShape(res.declaredShape);
 }
 
@@ -1001,10 +1001,11 @@ export function toLiveConvergence(msg: DeployConvergence): LiveConvergence {
  * error and never blocks the rest of Live.
  */
 export async function listEnvironmentConvergences(
+  transport: Transport,
   environmentId: string,
   orgId: string | null,
   limit = 25
 ): Promise<LiveConvergence[]> {
-  const res = await getControlPlaneClient(DeployService).listConvergences(orgRequest({ environmentId, limit }, orgId));
+  const res = await getControlPlaneClient(DeployService, transport).listConvergences(orgRequest({ environmentId, limit }, orgId));
   return (res.convergences ?? []).map(toLiveConvergence);
 }

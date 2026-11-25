@@ -269,6 +269,12 @@ type daemonConnection struct {
 	// error has been logged. Only the inbound state worker touches it.
 	machineStats machineStatsState
 
+	// Resource-stats bookkeeping (see recordResourceStats): when the
+	// heartbeat's resource reading was last stored on the lease. Zero after a
+	// re-created lease, so the next heartbeat writes it again. Only the
+	// inbound state worker touches it.
+	resourcesWrittenAt time.Time
+
 	// Local-model relay (see localmodel_gateway.go). Guarded by localModelMu.
 	localModelMu sync.Mutex
 	// localModelRelays maps request_id -> the bridge's chunk consumer.

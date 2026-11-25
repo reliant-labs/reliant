@@ -582,7 +582,7 @@ func (s *Service) resolveCreateTarget(ctx context.Context, userID, pinned string
 		logging.InfoContext(ctx, "No daemon resolvable for new project; will rely on pending-command + reconcile", "error", err)
 		return createTarget{}, nil
 	}
-	machine, err := s.deps.Repo.GetDaemon(ctx, id)
+	machine, err := s.deps.Machines.GetDaemon(ctx, id)
 	switch {
 	case err != nil && !svcerr.IsNotFound(err):
 		return createTarget{}, svcerr.WrapOr(err, svcerr.Internal("failed to read the machine the project would be created on"))

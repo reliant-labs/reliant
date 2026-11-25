@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -117,6 +119,11 @@ func (a *LoadWorkflowActivity) Execute(ctx context.Context, input LoadWorkflowIn
 
 	validationResult := validation.StaticAnalysisWithOptions(loaded.Workflow, validateOpts)
 	if validationResult != nil && validationResult.HasErrors() {
+		// A child or preset the loaders could not READ is not one the tree
+		// lacks: retry the load rather than fail the run as invalid.
+		if unreadable := wfCtx.readFailure(ctx); unreadable != nil {
+			return nil, fmt.Errorf("workflow %s: %w", input.WorkflowName, unreadable)
+		}
 		return nil, fmt.Errorf("workflow tree validation failed for %s:\n%s", input.WorkflowName, validationResult.Error())
 	}
 
@@ -176,7 +183,60 @@ type workflowContext struct {
 	// catalogPin is the project catalog the run started with
 	// (workflowsource.Options.CatalogPin).
 	catalogPin string
+	// unreadable is the first child workflow or preset tree validation
+	// could not read (a store error, not an absent one): Execute retries
+	// such a load instead of reporting the tree invalid.
+	unreadable error
 }
+
+// recordUnreadable keeps err when it is a failure to read the catalog
+// (workflowsource.StoreError), or the activity's context ended under it.
+func (c *workflowContext) recordUnreadable(ctx context.Context, err error) {
+	if c == nil || c.unreadable != nil || err == nil {
+		return
+	}
+	var storeErr *workflowsource.StoreError
+	if errors.As(err, &storeErr) || ctx.Err() != nil {
+		c.unreadable = err
+	}
+}
+
+// readFailure is why this load could not read what tree validation needed,
+// as a retryable error, or nil when every read answered. A context that
+// ended counts even when no loader saw it: a read it cut short may have
+// been reported as an absence.
+func (c *workflowContext) readFailure(ctx context.Context) error {
+	switch {
+	case c != nil && c.unreadable != nil:
+		return &catalogUnreadableError{cause: c.unreadable}
+	case ctx.Err() != nil:
+		return &catalogUnreadableError{cause: context.Cause(ctx)}
+	}
+	return nil
+}
+
+// catalogUnreadableErrType is the Temporal error type of a workflow load
+// that could not read a child workflow or preset its tree names.
+const catalogUnreadableErrType = "WorkflowCatalogUnreadable"
+
+// catalogUnreadableError is a workflow load whose tree validation could not
+// READ a child workflow or preset (the store failed, or the worker shut down
+// mid-read). It says nothing about whether the tree is valid, so it must
+// retry, never fail the run as "preset not found". It is a selfSchedulingRetry
+// of the runtime's (on the step's own backoff), which also keeps its text,
+// whatever the store's error said, away from the terminal-pattern match.
+type catalogUnreadableError struct{ cause error }
+
+func (e *catalogUnreadableError) Error() string {
+	return fmt.Sprintf("could not read the workflows and presets it uses (temporary, retrying): %v", e.cause)
+}
+
+func (e *catalogUnreadableError) Unwrap() error { return e.cause }
+
+// RetryAfter retries on the step's own retry policy (a zero delay).
+func (e *catalogUnreadableError) RetryAfter() (time.Duration, bool) { return 0, true }
+
+func (e *catalogUnreadableError) TemporalErrorType() string { return catalogUnreadableErrType }
 
 // sourceOptions is whose workflows, in which project, a ref resolves against.
 func (c *workflowContext) sourceOptions() workflowsource.Options {
@@ -269,7 +329,9 @@ func loadBuiltinWorkflowWithRaw(name string) ([]byte, *loadedWorkflow, error) {
 // createWorkflowLoader creates a validation.WorkflowLoader for tree validation.
 func (a *LoadWorkflowActivity) createWorkflowLoader(ctx context.Context, wfCtx *workflowContext) validation.WorkflowLoader {
 	return func(workflowName string) (*reliantv1.Workflow, error) {
-		return a.loadWorkflowByName(ctx, workflowName, wfCtx)
+		wf, err := a.loadWorkflowByName(ctx, workflowName, wfCtx)
+		wfCtx.recordUnreadable(ctx, err)
+		return wf, err
 	}
 }
 
@@ -282,6 +344,16 @@ func (a *LoadWorkflowActivity) createPresetLoader(ctx context.Context, wfCtx *wo
 		// One column, not the whole config row (see GetProjectPresetsJSON).
 		if wfCtx.projectID != "" && a.repo != nil {
 			presets, err := projectPresets(ctx, a.repo, wfCtx.projectID, wfCtx.daemonID, wfCtx.catalogPin)
+			// A preset the store could not read is not a missing one:
+			// report the read, never "preset not found", and let Execute
+			// retry the load. Any other error (a pin that is gone, a
+			// catalog that does not parse) falls back to builtins as before.
+			var storeErr *workflowsource.StoreError
+			if err != nil && (errors.As(err, &storeErr) || ctx.Err() != nil) {
+				err = fmt.Errorf("read preset %s of project %s: %w", presetName, wfCtx.projectID, err)
+				wfCtx.recordUnreadable(ctx, err)
+				return nil, err
+			}
 			if err == nil {
 				if sp := cfg.FindStoredPresetByName(presets, presetName); sp != nil {
 					p, err := preset.ParsePreset([]byte(sp.YAMLContent), presetName)

@@ -306,8 +306,24 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		info.CommitTimeUnix = att.Build.CommitTimeUnix
 		info.ForgeVersion = att.Build.ForgeVersion
 		info.Health = machineHealthToProto(att.Health)
+		info.Resources = resourceStatsToProto(att.ResourceStats)
 	}
 	return info
+}
+
+// resourceStatsToProto decodes the attachment's stored resource reading; nil
+// when the session has reported none. A value that does not decode (written
+// by a newer gateway with fields this one discards, or damaged) degrades to
+// what decodes, or to nil, rather than failing the daemon list.
+func resourceStatsToProto(stored string) *reliantv1.DaemonResourceStats {
+	if stored == "" {
+		return nil
+	}
+	out := &reliantv1.DaemonResourceStats{}
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal([]byte(stored), out); err != nil {
+		return nil
+	}
+	return out
 }
 
 // machineHealthToProto is an attached daemon's health. One whose heartbeats

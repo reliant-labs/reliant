@@ -64,7 +64,7 @@ const NAV_CALLS = new Set(["navigate", "redirect", "hardNavigate", "pushState", 
 /** String methods (and predicates) whose argument is matched against, not navigated to. */
 const MATCH_METHODS = new Set(["startsWith", "endsWith", "includes", "indexOf", "lastIndexOf", "match", "test", "split", "replace", "replaceAll", "has", "get"]);
 
-const SKIPPED_DIRS = new Set(["gen", "__tests__", "__preview__", "__fixtures__", "demoData", "test", "mocks", "node_modules"]);
+const SKIPPED_DIRS = new Set(["gen", "__tests__", "__preview__", "__fixtures__", "fixtures", "test", "mocks", "node_modules"]);
 
 /** Properties whose value declares a route, when the object is a route's own options (`createRoute({ path })`). */
 const DECLARATION_KEYS = new Set(["path", "id"]);

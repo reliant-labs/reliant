@@ -681,9 +681,9 @@ const file_reliant_v1_usage_proto_rawDesc = "" +
 	"\x14LLMUsageCompleteness\x12&\n" +
 	"\"LLM_USAGE_COMPLETENESS_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fLLM_USAGE_COMPLETENESS_COMPLETE\x10\x01\x12\"\n" +
-	"\x1eLLM_USAGE_COMPLETENESS_PARTIAL\x10\x022\xa2\x01\n" +
-	"\fUsageService\x12\x91\x01\n" +
-	"\vGetLLMUsage\x12\x1e.reliant.v1.GetLLMUsageRequest\x1a\x1f.reliant.v1.GetLLMUsageResponse\"A\xa2\xbb\x18=:;:9read-only: the caller's own usage totals; changes nothingB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x1eLLM_USAGE_COMPLETENESS_PARTIAL\x10\x022\xa5\x01\n" +
+	"\fUsageService\x12\x94\x01\n" +
+	"\vGetLLMUsage\x12\x1e.reliant.v1.GetLLMUsageRequest\x1a\x1f.reliant.v1.GetLLMUsageResponse\"D\xa2\xbb\x18=:;:9read-only: the caller's own usage totals; changes nothing\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_usage_proto_rawDescOnce sync.Once

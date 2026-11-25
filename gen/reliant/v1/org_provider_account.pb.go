@@ -1670,9 +1670,9 @@ const file_reliant_v1_org_provider_account_proto_rawDesc = "" +
 	"'ORG_PROVIDER_ACCOUNT_ACCESS_UNSPECIFIED\x10\x00\x12'\n" +
 	"#ORG_PROVIDER_ACCOUNT_ACCESS_MEMBERS\x10\x01\x12&\n" +
 	"\"ORG_PROVIDER_ACCOUNT_ACCESS_ADMINS\x10\x02\x12(\n" +
-	"$ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED\x10\x032\xe1\x10\n" +
-	"\x19OrgProviderAccountService\x12t\n" +
-	"\x17ListOrgProviderAccounts\x12*.reliant.v1.ListOrgProviderAccountsRequest\x1a+.reliant.v1.ListOrgProviderAccountsResponse\"\x00\x12\xe1\x01\n" +
+	"$ORG_PROVIDER_ACCOUNT_ACCESS_SELECTED\x10\x032\xe7\x10\n" +
+	"\x19OrgProviderAccountService\x12w\n" +
+	"\x17ListOrgProviderAccounts\x12*.reliant.v1.ListOrgProviderAccountsRequest\x1a+.reliant.v1.ListOrgProviderAccountsResponse\"\x03\x90\x02\x01\x12\xe1\x01\n" +
 	"\x14AddOrgProviderAPIKey\x12'.reliant.v1.AddOrgProviderAPIKeyRequest\x1a(.reliant.v1.AddOrgProviderAPIKeyResponse\"v\xa2\xbb\x18r:p\n" +
 	"\x03add\x12O\n" +
 	"\x10provider_account\x12\x1bresponse.account.account.id\x1a\x1eresponse.account.account.label\"\x06org_id*\bprovider*\x06access\x12\xca\x01\n" +
@@ -1695,8 +1695,8 @@ const file_reliant_v1_org_provider_account_proto_rawDesc = "" +
 	"\x18DeleteOrgProviderAccount\x12+.reliant.v1.DeleteOrgProviderAccountRequest\x1a,.reliant.v1.DeleteOrgProviderAccountResponse\"6\xa2\xbb\x182:0\n" +
 	"\x06delete\x12\x1e\n" +
 	"\x10provider_account\x12\n" +
-	"account_id\"\x06org_id\x12z\n" +
-	"\x19ListOrgProviderWorkspaces\x12,.reliant.v1.ListOrgProviderWorkspacesRequest\x1a-.reliant.v1.ListOrgProviderWorkspacesResponse\"\x00\x12\x86\x02\n" +
+	"account_id\"\x06org_id\x12}\n" +
+	"\x19ListOrgProviderWorkspaces\x12,.reliant.v1.ListOrgProviderWorkspacesRequest\x1a-.reliant.v1.ListOrgProviderWorkspacesResponse\"\x03\x90\x02\x01\x12\x86\x02\n" +
 	"\x18BindOrgProviderWorkspace\x12+.reliant.v1.BindOrgProviderWorkspaceRequest\x1a,.reliant.v1.BindOrgProviderWorkspaceResponse\"\x8e\x01\xa2\xbb\x18\x89\x01:\x86\x01\n" +
 	"\x04bind\x12Y\n" +
 	"\x12provider_workspace\x12\"response.workspace.external_org_id\x1a\x1fresponse.workspace.display_name\"\x06org_id*\x1bresponse.workspace.provider\x12\xc4\x01\n" +

@@ -34,6 +34,7 @@ service CoverageSourceService {
   // to show. Every unavailable reason is a normal answer: the coverage page
   // then shows line numbers and hit counts with one line saying why.
   rpc GetCoverageSource(GetCoverageSourceRequest) returns (GetCoverageSourceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       activity: {none: "read-only: one covered file's source from GitHub; changes nothing"}
     };

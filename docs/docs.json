@@ -28,6 +28,7 @@
             "group": "Get started",
             "pages": [
               "index",
+              "getting-started/deploy-your-app",
               "getting-started/why-reliant",
               "getting-started/quick-start",
               "getting-started/installation",

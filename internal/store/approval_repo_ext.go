@@ -246,6 +246,8 @@ func approvalFromCore(a *core.Approval) *Approval {
 		TemporalWorkflowID: a.TemporalWorkflowID,
 		ThreadID:           a.ThreadID,
 		BatchID:            a.BatchID,
+		DecidedBy:          a.DecidedBy,
+		MinRole:            a.MinRole,
 	}
 }
 
@@ -265,6 +267,8 @@ func approvalToCore(row *Approval) *core.Approval {
 		ResolvedAt:         row.ResolvedAt,
 		ThreadID:           row.ThreadID,
 		BatchID:            row.BatchID,
+		DecidedBy:          row.DecidedBy,
+		MinRole:            row.MinRole,
 	}
 }
 

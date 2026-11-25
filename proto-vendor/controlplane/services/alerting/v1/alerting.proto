@@ -4,6 +4,7 @@ package controlplane.v1;
 
 import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/alerting/v1;alertingv1";
@@ -38,6 +39,7 @@ service AlertingService {
 
   // ListReceivers returns the org's receivers. Never a secret value.
   rpc ListReceivers(ListReceiversRequest) returns (ListReceiversResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -90,6 +92,7 @@ service AlertingService {
 
   // ListSilences returns the org's silences (active and pending by default).
   rpc ListSilences(ListSilencesRequest) returns (ListSilencesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -113,6 +116,7 @@ service AlertingService {
 
   // ListAlerts returns the org's pending and firing alert instances.
   rpc ListAlerts(ListAlertsRequest) returns (ListAlertsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -121,6 +125,7 @@ service AlertingService {
 
   // ListAlertHistory returns state transitions, newest first.
   rpc ListAlertHistory(ListAlertHistoryRequest) returns (ListAlertHistoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -129,6 +134,7 @@ service AlertingService {
 
   // ListNotifications returns in-app notifications, newest first.
   rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -365,6 +371,13 @@ message ListAlertHistoryRequest {
   int32 limit = 4 [(buf.validate.field).int32 = {
     gte: 0
     lte: 1000
+  }];
+  // The history of the last `lookback` before the server's now, instead of a
+  // fixed since: a client that polls "the last day" sends the same request
+  // every time. Ignored when since is set. At most 366 days.
+  google.protobuf.Duration lookback = 5 [(buf.validate.field).duration = {
+    gt: {}
+    lte: {seconds: 31622400}
   }];
 }
 

@@ -13,44 +13,62 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // CatalogService provides discovery endpoints for models, tools, and activities
 service CatalogService {
   // ListModels returns all available models filtered by user's configured API keys
-  rpc ListModels(ListModelsRequest) returns (ListModelsResponse) {}
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListModelsByProvider returns all models for a specific provider
-  rpc ListModelsByProvider(ListModelsByProviderRequest) returns (ListModelsByProviderResponse) {}
+  rpc ListModelsByProvider(ListModelsByProviderRequest) returns (ListModelsByProviderResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListAvailableModels returns the models available to the caller across every
   // configured provider, carrying per-account availability (enabled) so a picker
   // can render which models the user's account may actually use.
-  rpc ListAvailableModels(ListAvailableModelsRequest) returns (ListAvailableModelsResponse) {}
+  rpc ListAvailableModels(ListAvailableModelsRequest) returns (ListAvailableModelsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListTools returns all available tools
-  rpc ListTools(ListToolsRequest) returns (ListToolsResponse) {}
+  rpc ListTools(ListToolsRequest) returns (ListToolsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListNodes returns all workflow nodes available for the workflow builder
-  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse) {}
+  rpc ListNodes(ListNodesRequest) returns (ListNodesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetCELCompletions returns CEL expression completion data for the workflow builder
-  rpc GetCELCompletions(GetCELCompletionsRequest) returns (GetCELCompletionsResponse) {}
+  rpc GetCELCompletions(GetCELCompletionsRequest) returns (GetCELCompletionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SearchCatalog searches the integration catalog: every action and trigger
   // type of every embedded integration manifest, ranked for the query and
   // marked with whether the caller can use it now. It returns lightweight
   // entries one page at a time and never the whole catalog; GetCatalogEntry
   // returns one entry's schemas.
-  rpc SearchCatalog(SearchCatalogRequest) returns (SearchCatalogResponse) {}
+  rpc SearchCatalog(SearchCatalogRequest) returns (SearchCatalogResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // GetCatalogEntry returns one action or trigger type in full: its
   // description, its params and output (or trigger payload) JSON Schemas, and
   // what a connection to its integration requires. An unknown ref is
   // NOT_FOUND.
-  rpc GetCatalogEntry(GetCatalogEntryRequest) returns (GetCatalogEntryResponse) {}
+  rpc GetCatalogEntry(GetCatalogEntryRequest) returns (GetCatalogEntryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListCatalogIntegrations browses the catalog by integration: one row per
   // integration that has an entry of the requested kinds, the ones the caller
   // can use now first. It is paged like SearchCatalog, so a picker browsing
   // hundreds of integrations holds only what it has scrolled to;
   // SearchCatalog with `integration` set lists one integration's entries.
-  rpc ListCatalogIntegrations(ListCatalogIntegrationsRequest) returns (ListCatalogIntegrationsResponse) {}
+  rpc ListCatalogIntegrations(ListCatalogIntegrationsRequest) returns (ListCatalogIntegrationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListInputOptions lists the values a picker can offer for an
   // integration-defined input type (`github.repository`): it runs the type's

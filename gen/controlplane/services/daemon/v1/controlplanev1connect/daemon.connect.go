@@ -143,12 +143,14 @@ func NewDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DaemonServiceGetDaemonProcedure,
 			connect.WithSchema(daemonServiceMethods.ByName("GetDaemon")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listDaemons: connect.NewClient[v1.ListDaemonsRequest, v1.ListDaemonsResponse](
 			httpClient,
 			baseURL+DaemonServiceListDaemonsProcedure,
 			connect.WithSchema(daemonServiceMethods.ByName("ListDaemons")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateDaemon: connect.NewClient[v1.UpdateDaemonRequest, v1.UpdateDaemonResponse](
@@ -203,6 +205,7 @@ func NewDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+DaemonServiceListPortAccessRulesProcedure,
 			connect.WithSchema(daemonServiceMethods.ByName("ListPortAccessRules")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setDefaultPortAccess: connect.NewClient[v1.SetDefaultPortAccessRequest, v1.SetDefaultPortAccessResponse](
@@ -356,12 +359,14 @@ func NewDaemonServiceHandler(svc DaemonServiceHandler, opts ...connect.HandlerOp
 		DaemonServiceGetDaemonProcedure,
 		svc.GetDaemon,
 		connect.WithSchema(daemonServiceMethods.ByName("GetDaemon")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	daemonServiceListDaemonsHandler := connect.NewUnaryHandler(
 		DaemonServiceListDaemonsProcedure,
 		svc.ListDaemons,
 		connect.WithSchema(daemonServiceMethods.ByName("ListDaemons")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	daemonServiceUpdateDaemonHandler := connect.NewUnaryHandler(
@@ -416,6 +421,7 @@ func NewDaemonServiceHandler(svc DaemonServiceHandler, opts ...connect.HandlerOp
 		DaemonServiceListPortAccessRulesProcedure,
 		svc.ListPortAccessRules,
 		connect.WithSchema(daemonServiceMethods.ByName("ListPortAccessRules")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	daemonServiceSetDefaultPortAccessHandler := connect.NewUnaryHandler(

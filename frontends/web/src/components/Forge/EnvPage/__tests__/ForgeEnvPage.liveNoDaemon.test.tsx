@@ -247,9 +247,9 @@ const SHAPES: Record<string, unknown> = {
 };
 vi.mock("@/services/forge/live", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/live")>()),
-  getLiveView: (project: string) => getLiveView(project),
-  getEnvironmentShape: (id: string) => Promise.resolve(SHAPES[id] ?? null),
-  listEnvironmentConvergences: (id: string) => listEnvironmentConvergences(id),
+  getLiveView: (_transport: unknown, project: string) => getLiveView(project),
+  getEnvironmentShape: (_transport: unknown, id: string) => Promise.resolve(SHAPES[id] ?? null),
+  listEnvironmentConvergences: (_transport: unknown, id: string) => listEnvironmentConvergences(id),
 }));
 
 const STATUS: CloudEnvStatus = {
@@ -286,8 +286,8 @@ const listEnvironmentPromotions = vi.fn((environmentId: string) =>
 );
 vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/cloudEnvs")>()),
-  getEnvironmentStatus: (id: string) => getEnvironmentStatus(id),
-  listEnvironmentPromotions: (id: string) => listEnvironmentPromotions(id),
+  getEnvironmentStatus: (_transport: unknown, id: string) => getEnvironmentStatus(id),
+  listEnvironmentPromotions: (_transport: unknown, id: string) => listEnvironmentPromotions(id),
   // The Environments page's kept-databases card: none kept.
   listRetainedDatabases: () => Promise.resolve([]),
 }));
@@ -327,8 +327,8 @@ const listSecrets = vi.fn((_environmentId: string) =>
 const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 4 }));
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (environmentId: string) => listSecrets(environmentId),
-  setSecret: (input: unknown) => setSecret(input),
+  listSecrets: (_transport: unknown, environmentId: string) => listSecrets(environmentId),
+  setSecret: (_transport: unknown, input: unknown) => setSecret(input),
   getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
 }));
 

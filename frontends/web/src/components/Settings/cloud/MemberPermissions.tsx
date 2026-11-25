@@ -62,6 +62,13 @@ import { SettingsPageHeader } from "../SettingsPageHeader";
 // (invite, roles, lock, password-set codes) — their own product, deliberately
 // not implied by deploy:write.
 //
+// vuln:read and tests:read are not implied by deploy:read (forge
+// pkg/accesstoken/scope.go): a vulnerability list is an attack map and a
+// test's failure output can quote config, so each is granted on its own.
+// tests:write uploads a test run and nothing else. changes:launch shifts
+// production traffic and implies changes:write, which drafts and stops a
+// change.
+//
 // reliant:api, daemon:connect, llm:invoke, proxy:port and mcp:connector are
 // deliberately absent: they are every user's ordinary authority over their own
 // resources, never granted per-org. Showing them would imply a gate that does
@@ -78,6 +85,11 @@ const ORG_PERMISSIONS = [
   "db:query",
   "storage:read",
   "obs:write",
+  "vuln:read",
+  "tests:read",
+  "tests:write",
+  "changes:write",
+  "changes:launch",
   "billing:read",
   "cluster:manage",
   "token:read",

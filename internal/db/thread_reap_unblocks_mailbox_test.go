@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestReapOrphanedThreads_UnblocksOrphanedMailboxSweep is the second-order
@@ -43,7 +45,7 @@ func TestReapOrphanedThreads_UnblocksOrphanedMailboxSweep(t *testing.T) {
 
 	// A repair report addressed to that dead thread, still queued: exactly
 	// the undeliverable row repairStrandedBackgroundSpawns leaves behind.
-	require.NoError(t, repo.EnqueueAgentMessage(ctx, &AgentMessage{
+	require.NoError(t, store.EnqueueAgentMessage(ctx, repo.ORM(), &AgentMessage{
 		ID:           uuid.New().String(),
 		ChatID:       chatID,
 		FromThreadID: chatID,
@@ -56,7 +58,7 @@ func TestReapOrphanedThreads_UnblocksOrphanedMailboxSweep(t *testing.T) {
 
 	// BEFORE: the sweep cannot see it. The thread is at running (2), and the
 	// query matches only terminal statuses.
-	before, err := repo.ListThreadsWithOrphanedAgentMessages(ctx)
+	before, err := store.ListThreadsWithOrphanedAgentMessages(ctx, repo.ORM())
 	require.NoError(t, err)
 	require.NotContains(t, before, strandedThread,
 		"precondition: a thread stranded at running hides its own orphaned mailbox from the sweep — this is the bug")
@@ -67,7 +69,7 @@ func TestReapOrphanedThreads_UnblocksOrphanedMailboxSweep(t *testing.T) {
 
 	// AFTER: the thread is terminal, so the sweep that exists to resolve
 	// this mailbox can finally reach it.
-	after, err := repo.ListThreadsWithOrphanedAgentMessages(ctx)
+	after, err := store.ListThreadsWithOrphanedAgentMessages(ctx, repo.ORM())
 	require.NoError(t, err)
 	require.Contains(t, after, strandedThread,
 		"once the thread carries its workflow's terminal status, its orphaned mailbox becomes visible to the sweep")

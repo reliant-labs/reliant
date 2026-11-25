@@ -447,6 +447,11 @@ func runHelper() int {
 	if err := dieWithParent(); err != nil {
 		return fail("%v", err)
 	}
+	// Not on a terminal: an interactive shell is not a step, and the line
+	// would sit above its prompt on every terminal an org's policy opens.
+	if !s.Plan.Terminal {
+		noticeDeprecatedReadable(s.Plan.DeprecatedReadable)
+	}
 	code := superviseCommand(s)
 	if s.RunDir != "" {
 		reportDiscarded(s.Plan, runDir)
@@ -711,6 +716,22 @@ func overlayWithPassthrough(dir, work string, pass []string) error {
 		}
 	}
 	return nil
+}
+
+// noticeDeprecatedReadable writes DeprecatedReadableNotice for the paths that
+// exist in the command's view on its stderr, so the step's output says which
+// sign-ins the next minor hides from it. Its stdout, which a step may parse,
+// is untouched.
+func noticeDeprecatedReadable(paths []string) {
+	var existing []string
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			existing = append(existing, p)
+		}
+	}
+	if msg := DeprecatedReadableNotice(existing); msg != "" {
+		_, _ = os.Stderr.WriteString(msg)
+	}
 }
 
 // reportDiscarded tells the command, on its stderr, what it wrote under each

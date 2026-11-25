@@ -111,8 +111,34 @@ const EXPECTED_CODES: ReadonlySet<Code> = new Set([
  * Unimplemented). For these ANY Unimplemented is the answer the caller is
  * waiting for, not a defect: the route may be unmounted (the app is newer than
  * the server, so not version skew) or mounted as forge's scaffold stub.
+ *
+ * control-plane's TestsService and VulnerabilityService answer Unimplemented
+ * ("test runs are not configured on this deployment") when the deployment
+ * runs without their stores (internal/handlers/tests requireReads). The Tests
+ * and Security pages render that as "this control plane doesn't store test
+ * runs / report vulnerabilities yet", and the Overview and release surfaces
+ * hide their tiles (tests/errors.ts, vulnerabilities/errors.ts
+ * "not-configured"). Reported, every visit to a project on such a deployment
+ * was an error issue (reliant-web 49ea1812, fbb60d59, f0caae13, fb613140,
+ * 366f42eb, 2026-11-23..24).
  */
-const PROBED_SERVICES: ReadonlySet<string> = new Set(["reliant.v1.ProviderAccountService"]);
+const PROBED_SERVICES: ReadonlySet<string> = new Set([
+  "reliant.v1.ProviderAccountService",
+  "controlplane.v1.TestsService",
+  "controlplane.v1.VulnerabilityService",
+]);
+
+/**
+ * The same, per procedure, on a service the server does serve: the chat's
+ * attached projects (hooks/useChatProjects.ts). An older server answers them
+ * with Unimplemented, and the composer then shows the primary project only.
+ * That is not an app older than the server, so no update prompt.
+ */
+const PROBED_PROCEDURES: ReadonlySet<string> = new Set([
+  "reliant.v1.ChatService/ListChatProjects",
+  "reliant.v1.ChatService/AttachProjectToChat",
+  "reliant.v1.ChatService/DetachProjectFromChat",
+]);
 
 /**
  * Deletes for which NotFound means "already gone" — the state the caller asked
@@ -196,6 +222,12 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   }
   if (EXPECTED_CODES.has(error.code)) return "expected";
   if (error.code === Code.Unimplemented && PROBED_SERVICES.has(ctx.serviceTypeName)) {
+    return "expected";
+  }
+  if (
+    error.code === Code.Unimplemented &&
+    PROBED_PROCEDURES.has(`${ctx.serviceTypeName}/${ctx.methodName ?? ""}`)
+  ) {
     return "expected";
   }
   if (error.code === Code.Unavailable && isDaemonConnectingError(error)) {

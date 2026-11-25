@@ -36,7 +36,7 @@ func (s *Service) GetCommandFavorites(
 	}
 
 	// Get favorites from database
-	commandKeys, err := s.deps.Repo.ListCommandFavorites(ctx, userID, projectID)
+	commandKeys, err := s.deps.Favorites.ListCommandFavorites(ctx, userID, projectID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list command favorites"))
 	}

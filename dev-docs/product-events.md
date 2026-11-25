@@ -259,6 +259,23 @@ prod control plane (its release must contain the commit named in
 A failure in 1-2 is a release regression (fix forward); a failure in 3 is a
 privacy defect: roll the release back.
 
+## Setup Guide (the floating checklist)
+
+The Setup Guide (`frontends/web/src/components/Onboarding/OnboardingChecklist.tsx`)
+lists the app's first steps; its items and what completes each are in
+`Onboarding/checklistItems.ts`. Two web events, both carrying `step_id` (the
+item's stable id), `step_name`, `steps_completed` and `total_steps`:
+
+- `checklist_step_completed`: once per item per person, when the item's real
+  signal is first met (a machine in the daemon list, a deployed app in the
+  catalog, a second member in the org, …), from `onboardingChecklistStore`.
+  Before 2026-11 it was sent when the item's button was clicked, with the
+  chat-only guide's ids: `use-custom-workflow` and `create-workflow` are now
+  `run-workflow`, and `create-workspace`, `create-preset`, `install-mcp` and
+  `read-docs` were retired.
+- `checklist_step_clicked`: each click on an item in the guide (where it
+  leads, not that it was done).
+
 ## Claim funnel (the `/claim` page)
 
 A claimable deploy is handed to a human as `…/claim#rcl_<token>`

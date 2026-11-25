@@ -19,7 +19,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 service WorkflowService {
   // ListWorkflows returns all available workflows from DB + builtins
   // forge:custom — merges builtin, project and the caller's own workflow definitions for one project
-  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse) {}
+  rpc ListWorkflows(ListWorkflowsRequest) returns (ListWorkflowsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // SaveWorkflow creates or updates a workflow in the database.
   // A draft is stored as-is (validation findings are returned, not enforced);
@@ -43,7 +45,9 @@ service WorkflowService {
 
   // GetWorkflow returns a specific workflow by slug
   // forge:custom — resolves a workflow definition by slug across builtin, project and user sources
-  rpc GetWorkflow(GetWorkflowRequest) returns (GetWorkflowResponse) {}
+  rpc GetWorkflow(GetWorkflowRequest) returns (GetWorkflowResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // DeleteWorkflow deletes a workflow from the database
   // forge:custom — deletes the caller's workflow draft by the slug of its name
