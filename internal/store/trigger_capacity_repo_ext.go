@@ -41,6 +41,37 @@ func lockTriggerCapacity(ctx context.Context, db orm.Context, scope TriggerCapac
 	return err
 }
 
+// ErrTriggerCapacityScopeMoved refuses enrolling a firing in a capacity scope
+// whose project is no longer its trigger's: the trigger moved (MergeProjects)
+// after the fire read it. Nothing is written; the fire fails and is retried,
+// and the retry reads the trigger, and so the scope, again.
+var ErrTriggerCapacityScopeMoved = errors.New("the trigger moved to another project since its firing read it; the fire is retried")
+
+// fenceTriggerCapacityScope holds the event's trigger FOR SHARE for the rest of
+// the enrollment and refuses a scope that is not the trigger's project now
+// (ErrTriggerCapacityScopeMoved). The share lock conflicts with the trigger
+// lock MergeProjects takes before it counts the source's queued firings, so an
+// enrollment either commits before that count (which then sees it and refuses
+// the merge) or waits for the merge and finds the trigger moved; a firing is
+// never admitted to a bucket its trigger has left. Taken before the capacity
+// advisory lock: row lock, then advisory, the order a launch takes them in.
+// An event with no trigger (ad hoc kinds), or whose trigger is gone, is not
+// fenced.
+func fenceTriggerCapacityScope(ctx context.Context, db orm.Context, ev *core.TriggerEvent, scope TriggerCapacityScope) error {
+	if ev.TriggerID == nil || *ev.TriggerID == "" {
+		return nil
+	}
+	var project []*string
+	if err := db.Bun().NewRaw(`SELECT project_id FROM triggers WHERE id = ? FOR SHARE`, *ev.TriggerID).
+		Scan(ctx, &project); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("lock the firing's trigger: %w", err)
+	}
+	if len(project) == 1 && (project[0] == nil || *project[0] != scope.ProjectID) {
+		return ErrTriggerCapacityScopeMoved
+	}
+	return nil
+}
+
 // TriggerCapacitySuperseded is the outcome_detail of a waiting event that a
 // newer event of the same concurrency key replaced (`waiting: latest`). The
 // event is settled skipped: superseding is the policy working, not a failure.
@@ -71,6 +102,9 @@ func EnqueueTriggerCapacitySuperseding(ctx context.Context, db orm.Context, ev *
 	}
 	err := db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
 		superseded = nil // a retried transaction starts over
+		if err := fenceTriggerCapacityScope(ctx, db, ev, scope); err != nil {
+			return err
+		}
 		if err := lockTriggerCapacity(ctx, db, scope); err != nil {
 			return err
 		}

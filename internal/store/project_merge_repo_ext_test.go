@@ -167,6 +167,23 @@ func (f *mergeFixture) chat(id, project string, worktree any) {
 		VALUES ($1, $1, $2, $3, $4, $5, $5, $5)`, id, project, mergeOwner, worktree, mergeNow)
 }
 
+// sourceTrigger seeds the source's trigger t-src, once.
+func (f *mergeFixture) sourceTrigger() {
+	f.exec(`INSERT INTO triggers (id, user_id, project_id, name, kind, workflow) VALUES ('t-src', $1, $2, 't-src', 'schedule', 'agent')
+		ON CONFLICT (id) DO NOTHING`, mergeOwner, mergeSource)
+}
+
+// enrolledFiring seeds a firing of t-src enrolled in the source's capacity
+// bucket, with outcome ("pending": waiting; "launched": holding a slot).
+func (f *mergeFixture) enrolledFiring(id, outcome string) {
+	f.sourceTrigger()
+	f.exec(enrolledFiringSQL, id, mergeOwner, mergeNow, outcome, mergeSource)
+}
+
+const enrolledFiringSQL = `INSERT INTO trigger_events (id, trigger_id, user_id, kind, dedupe_key, occurred_at, outcome,
+	capacity_project_id, capacity_workflow_ref, capacity_order)
+	VALUES ($1, 't-src', $2, 'schedule', $1, $3, $4, $5, 'project://agent', nextval('trigger_capacity_order_seq'))`
+
 func (f *mergeFixture) merge() (*core.ProjectMergeResult, error) {
 	return store.MergeProjects(context.Background(), f.env.ORM, core.ProjectMerge{
 		SourceID: mergeSource, TargetID: mergeTarget, ActorUserID: mergeOwner,
@@ -436,6 +453,20 @@ func TestMergeProjectsRefuses(t *testing.T) {
 			wantBlock: core.ProjectMergeRunningWork,
 			wantID:    "c-tgt-run",
 		},
+		{
+			// Waiting for a capacity slot in the source's bucket: moving
+			// its trigger would drop it ("scope changed").
+			name:      "a source trigger firing waiting for capacity",
+			setup:     func(f *mergeFixture) { f.enrolledFiring("ev-wait", "pending") },
+			wantErr:   core.ErrProjectMergeBlocked,
+			wantBlock: core.ProjectMergeRunningWork,
+		},
+		{
+			name:      "a source trigger firing holding a capacity slot",
+			setup:     func(f *mergeFixture) { f.enrolledFiring("ev-run", "launched") },
+			wantErr:   core.ErrProjectMergeBlocked,
+			wantBlock: core.ProjectMergeRunningWork,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -468,6 +499,96 @@ func TestMergeProjectsRefuses(t *testing.T) {
 				t.Errorf("a refused merge scheduled the source's deletion")
 			}
 		})
+	}
+}
+
+// [B1] An enrollment of a source trigger's firing in flight when the merge
+// starts (it holds the trigger FOR SHARE, as fenceTriggerCapacityScope takes
+// it, and has written its event but not committed) is seen by the merge,
+// which waits for it on the trigger lock it takes before its blocker check:
+// the merge is refused, and the firing is not stranded in the bucket of a
+// project whose trigger moved away.
+func TestMergeProjectsWaitsForAnEnrollmentInFlight(t *testing.T) {
+	f := newMergeFixture(t, nil, nil)
+	f.sourceTrigger()
+	ctx := context.Background()
+	enroll, err := f.env.SQL.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = enroll.Rollback() }()
+	if _, err := enroll.ExecContext(ctx, `SELECT project_id FROM triggers WHERE id = 't-src' FOR SHARE`); err != nil {
+		t.Fatalf("lock the trigger: %v", err)
+	}
+	if _, err := enroll.ExecContext(ctx, enrolledFiringSQL, "ev-inflight", mergeOwner, mergeNow, "pending", mergeSource); err != nil {
+		t.Fatalf("enroll: %v", err)
+	}
+
+	type outcome struct {
+		result *core.ProjectMergeResult
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := f.merge()
+		done <- outcome{result, err}
+	}()
+	// Commit only once the merge waits on the enrollment's lock: before its
+	// blocker check, it must; a merge that checked first would pass it here.
+	deadline := time.Now().Add(30 * time.Second)
+	for f.count(`SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+		WHERE NOT l.granted AND a.datname = current_database()`) == 0 {
+		select {
+		case got := <-done:
+			t.Fatalf("the merge finished (%v) while an enrollment of the source's trigger was in flight", got.err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the merge never waited for the in-flight enrollment")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := enroll.Commit(); err != nil {
+		t.Fatalf("commit the enrollment: %v", err)
+	}
+	got := <-done
+	if !errors.Is(got.err, core.ErrProjectMergeBlocked) {
+		t.Fatalf("merge err = %v, want ErrProjectMergeBlocked", got.err)
+	}
+	assertMergeBlocker(t, "merge", got.result.Blockers, core.ProjectMergeRunningWork, "")
+	if p := f.str(`SELECT project_id FROM triggers WHERE id = 't-src'`); p != mergeSource {
+		t.Errorf("the trigger moved to %s under its queued firing", p)
+	}
+}
+
+// [B1] An enrollment whose scope names a project its trigger has left (the
+// fire read the trigger before a merge moved it) writes nothing and fails
+// with ErrTriggerCapacityScopeMoved, so the fire retries with the trigger's
+// project now; an enrollment in the trigger's own project goes through.
+func TestEnqueueTriggerCapacityRefusesATriggerThatMoved(t *testing.T) {
+	f := newMergeFixture(t, nil, nil)
+	f.sourceTrigger()
+	f.exec(`UPDATE triggers SET project_id = $1 WHERE id = 't-src'`, mergeTarget)
+	ctx := context.Background()
+	trigger := "t-src"
+	event := func(id string) *core.TriggerEvent {
+		return &core.TriggerEvent{ID: id, UserID: mergeOwner, TriggerID: &trigger, Kind: core.TriggerEventKindSchedule,
+			DedupeKey: id, Outcome: core.TriggerEventPending, OccurredAt: mergeNow, CreatedAt: mergeNow}
+	}
+	stale := store.TriggerCapacityScope{UserID: mergeOwner, ProjectID: mergeSource, WorkflowRef: "project://agent"}
+	if err := store.EnqueueTriggerCapacity(ctx, f.env.ORM, event("ev-stale"), stale); !errors.Is(err, store.ErrTriggerCapacityScopeMoved) {
+		t.Fatalf("stale scope: err = %v, want ErrTriggerCapacityScopeMoved", err)
+	}
+	if n := f.count(`SELECT count(*) FROM trigger_events WHERE id = 'ev-stale'`); n != 0 {
+		t.Fatalf("a refused enrollment wrote %d event rows", n)
+	}
+	fresh := stale
+	fresh.ProjectID = mergeTarget
+	if err := store.EnqueueTriggerCapacity(ctx, f.env.ORM, event("ev-fresh"), fresh); err != nil {
+		t.Fatalf("the trigger's own scope: %v", err)
+	}
+	if p := f.str(`SELECT capacity_project_id FROM trigger_events WHERE id = 'ev-fresh'`); p != mergeTarget {
+		t.Fatalf("enrolled in %s, want %s", p, mergeTarget)
 	}
 }
 

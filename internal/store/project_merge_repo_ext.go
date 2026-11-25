@@ -49,7 +49,10 @@ import (
 // ReadCommitted, under the locks a project move takes (MoveProjectOrg), in
 // its order: the owner's org lock, then both project rows FOR UPDATE in id
 // order, then every chat of both FOR NO KEY UPDATE in id order, then the
-// source's triggers. FOR UPDATE on a project conflicts with the key share
+// source's triggers FOR NO KEY UPDATE in id order — all of them before the
+// blocker check. The trigger locks fence capacity enrollment, which holds a
+// firing's trigger FOR SHARE (fenceTriggerCapacityScope): no firing joins
+// the source's capacity bucket between the check and the commit. FOR UPDATE on a project conflicts with the key share
 // every write that adds to it takes (a chat, worktree, run, trigger, repo,
 // checkout, config or catalog row: the foreign keys and the
 // project_delete_admission triggers), and the chat locks are the ones a run's
@@ -469,6 +472,19 @@ func mergeProjects(ctx context.Context, db orm.Context, m core.ProjectMerge) (*c
 		m.SourceID, m.TargetID).Exec(ctx); err != nil {
 		return nil, fmt.Errorf("lock the projects' chats: %w", err)
 	}
+	// The source's triggers, in id order, BEFORE the queued-firings check
+	// below: enrolling a firing in a trigger's capacity scope holds its
+	// trigger FOR SHARE (fenceTriggerCapacityScope), so this lock waits for
+	// any enrollment in flight, whose firing the check then sees, and every
+	// later enrollment waits for the merge and then finds its trigger moved:
+	// no firing is admitted to the source's capacity bucket
+	// (capacity_project_id is immutable) once the check has passed.
+	// mergeProjectTriggers takes the same locks again, a no-op.
+	if _, err := db.Bun().NewRaw(`SELECT count(*) FROM (
+		SELECT id FROM triggers WHERE project_id = ?0 ORDER BY id FOR NO KEY UPDATE) locked`,
+		m.SourceID).Exec(ctx); err != nil {
+		return nil, fmt.Errorf("lock the project's triggers: %w", err)
+	}
 	blockers, err := projectMergeBlockers(ctx, db, source, target)
 	if err != nil {
 		return nil, err
@@ -605,13 +621,17 @@ FROM s JOIN t ON t.daemon_id = s.daemon_id
 LEFT JOIN daemons d ON d.id = s.daemon_id
 ORDER BY s.daemon_id`
 
-// projectMergeQueuedFiringsSQL counts the source's trigger firings that hold
-// or wait for a capacity slot (trigger_capacity): queued work, admitted to
-// the source's capacity bucket, which a merge cannot re-key
-// (capacity_project_id is immutable).
+// projectMergeQueuedFiringsSQL counts the source's trigger firings enrolled
+// in its capacity bucket (trigger_capacity) that hold a slot (launched, not
+// released, parked or not) or wait for one (pending): work a merge cannot
+// re-key (capacity_project_id is immutable), and a waiting one would be
+// dropped as "scope changed" once its trigger is the target's. Read after
+// MergeProjects locked the source's triggers, it is complete: no enrollment
+// can commit between it and the merge's commit (fenceTriggerCapacityScope).
 const projectMergeQueuedFiringsSQL = `
 SELECT count(*) FROM trigger_events
-WHERE capacity_project_id = ?0 AND capacity_order IS NOT NULL AND outcome = 'launched' AND NOT capacity_released`
+WHERE capacity_project_id = ?0 AND capacity_order IS NOT NULL
+  AND (outcome = 'pending' OR (outcome = 'launched' AND NOT capacity_released))`
 
 // projectMergeBlockers reads what refuses merging source into target now:
 // running work in either (the org move's quiescence predicate, an open org
