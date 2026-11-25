@@ -151,15 +151,16 @@ func TestSquashRejectsBadInput(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, map[string]map[string]string{"pr": {"a.txt": "a2\n"}}, nil)
 	ctx := t.Context()
-	if _, err := f.local.Squash(ctx, gitport.SquashInput{Base: "origin/main", Head: "origin/pr"}); err == nil {
-		t.Fatal("a squash without a title succeeded")
+	// Each refusal must name its own cause, so none passes on an unrelated error.
+	if _, err := f.local.Squash(ctx, gitport.SquashInput{Base: "origin/main", Head: "origin/pr"}); err == nil || !strings.Contains(err.Error(), "title") {
+		t.Fatalf("a squash without a title = %v, want a title refusal", err)
 	}
-	if _, err := f.local.Squash(ctx, gitport.SquashInput{Base: "origin/main", Head: "origin/nope", Title: "x"}); err == nil {
-		t.Fatal("a squash of a missing head succeeded")
+	if _, err := f.local.Squash(ctx, gitport.SquashInput{Base: "origin/main", Head: "origin/nope", Title: "x"}); err == nil || !strings.Contains(err.Error(), `"origin/nope" is not a commit`) {
+		t.Fatalf("a squash of a missing head = %v, want origin/nope refused", err)
 	}
 	if _, err := f.local.Squash(ctx, gitport.SquashInput{Base: "origin/main", Head: "origin/pr", Title: "x",
-		Trailer: []gitport.Trailer{{Key: "Bad Key", Value: "v"}}}); err == nil {
-		t.Fatal("a trailer key with a space was accepted")
+		Trailer: []gitport.Trailer{{Key: "Bad Key", Value: "v"}}}); err == nil || !strings.Contains(err.Error(), `trailer key "Bad Key"`) {
+		t.Fatalf("a trailer key with a space = %v, want it refused", err)
 	}
 }
 
@@ -197,7 +198,6 @@ func TestRevertOntoLaterWork(t *testing.T) {
 	f := newFixture(t, map[string]map[string]string{
 		"pr":    {"a.txt": "a2\n"},
 		"other": {"b.txt": "b2\n"},
-		"clash": {"a.txt": "a3\n"},
 	}, nil)
 	ctx := t.Context()
 	s1, err := f.local.Squash(ctx, gitport.SquashInput{Base: "origin/main", Head: "origin/pr", Title: "pr"})
@@ -212,18 +212,56 @@ func TestRevertOntoLaterWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := f.git(t, "show", rv.Commit+":a.txt") + f.git(t, "show", rv.Commit+":b.txt"); got != "a\nb2\n" {
-		t.Fatalf("revert of s1 onto s2 = %q, want a reverted and b kept", got)
+	if got := strings.TrimSpace(f.git(t, "rev-parse", rv.Commit+"^@")); got != s2.Commit {
+		t.Fatalf("revert parents = %q, want only s2 %s", got, s2.Commit)
+	}
+	// s1 undone and s2 kept is exactly main's base plus b2: origin/other's tree.
+	want, err := f.local.TreeOf(ctx, "origin/other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rv.Tree != want {
+		t.Fatalf("revert of s1 onto s2: tree %s, want origin/other's %s (a.txt %q, b.txt %q)",
+			rv.Tree, want, f.git(t, "show", rv.Commit+":a.txt"), f.git(t, "show", rv.Commit+":b.txt"))
+	}
+}
+
+func TestRevertConflictsWithLaterWorkOnTheSameLine(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, map[string]map[string]string{"pr": {"a.txt": "a2\n"}}, nil)
+	ctx := t.Context()
+	s1, err := f.local.Squash(ctx, gitport.SquashInput{Base: "origin/main", Head: "origin/pr", Title: "pr"})
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	// A later change to the same lines makes the revert conflict.
-	s3, err := f.local.Squash(ctx, gitport.SquashInput{Base: s1.Commit, Head: "origin/clash", Title: "clash"})
-	if err == nil {
-		_, err = f.local.Revert(ctx, gitport.RevertInput{Commit: s1.Commit, Onto: s3.Commit})
+	// Later work directly on top of s1 changes a.txt's line again: land s1 on
+	// the remote, commit there, and fetch it back. The setup must succeed, so
+	// the conflict asserted below can only come from Revert.
+	if err := f.local.Push(ctx, f.remote.URL(), gitport.PushInput{SHA: s1.Commit, Ref: "refs/heads/landed", ExpectedOld: strings.Repeat("0", 40)}); err != nil {
+		t.Fatalf("push s1: %v", err)
 	}
+	later := f.remote.Commit("landed", "later", map[string]string{"a.txt": "a3\n"})
+	if err := f.local.Fetch(ctx, f.remote.URL(), "+refs/heads/*:refs/remotes/origin/*"); err != nil {
+		t.Fatalf("fetch: %v", err)
+	}
+	if got := strings.TrimSpace(f.git(t, "rev-parse", later+"^@")); got != s1.Commit {
+		t.Fatalf("later's parents = %q, want only s1 %s", got, s1.Commit)
+	}
+	if got := f.git(t, "show", later+":a.txt"); got != "a3\n" {
+		t.Fatalf("later's a.txt = %q, want a3", got)
+	}
+
+	rv, err := f.local.Revert(ctx, gitport.RevertInput{Commit: s1.Commit, Onto: later})
 	var ce *gitport.ConflictError
-	if !errors.As(err, &ce) || !slices.Equal(ce.Paths, []string{"a.txt"}) {
-		t.Fatalf("err = %v, want a conflict on a.txt", err)
+	if !errors.As(err, &ce) || !errors.Is(err, gitport.ErrConflict) {
+		t.Fatalf("Revert = %+v, %v; want a conflict", rv, err)
+	}
+	if ce.Op != "revert" || !slices.Equal(ce.Paths, []string{"a.txt"}) || ce.Tree == "" {
+		t.Fatalf("conflict = %+v, want op revert on a.txt with a tree", ce)
+	}
+	if rv != (gitport.Result{}) {
+		t.Fatalf("a conflicting revert returned a commit: %+v", rv)
 	}
 }
 
