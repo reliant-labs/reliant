@@ -158,7 +158,7 @@ new `forge.ai.*` name on its own: that namespace is forge's to extend.
 | `reliant.integration.*` | `integration_attrs.go` (#3286) | An integration call. |
 | `reliant.trigger.*` | `trigger_attrs.go` (#3289) | A trigger firing, and the join from a run back to it. |
 | `reliant.observe.*` | `observe_attrs.go` | What a node's `observe:` block declared, on its `workflow.node` span. The keys after the prefix are the author's ([Observed attributes](#observed-attributes-a-nodes-observe-block)). |
-| `reliant.node.*` | `observe_attrs.go` | How the node's own record went: today `reliant.node.observe.errors` and `.truncated`. |
+| `reliant.node.*` | `observe_attrs.go` | How the node's own record went: `reliant.node.observe.errors` and `.truncated`, and `reliant.node.recorded` on a span opened only to record a node the workflow completed itself. |
 
 `reliant.cost_usd` and `reliant.model_id` and `reliant.tool_calls` on the `chat`
 span are older, flat `reliant.*` names, kept as they are. forge reads
@@ -319,9 +319,19 @@ that supplies defaults (`docs/reference/nodes.mdx`; the design is
 [`design/workflow-observe.md`](design/workflow-observe.md)). For a node that
 dispatches an activity, the worker evaluates the block after the node's
 `save_message` and puts what it produced on this span
-(`internal/workflow/observe`, `Annotate`). Nodes the workflow completes itself
-(`compute`, `join`, `router`, `loop`, `workflow`) are not observed yet; that is
-the design's next step.
+(`internal/workflow/observe`, `Annotate`).
+
+A node the workflow completes itself (`compute`, `join`, `router`, `loop`,
+`workflow`, `approval`, `ask_question`, a tool batch with spawn or `ask_user`
+calls, which the workflow assembles, and a tolerated failure) runs no activity,
+so it had no `workflow.node` span. The workflow hands it to the
+`RecordNodeObservation` local activity, and the run-scope interceptor opens a
+`workflow.node <id>` span around that, exactly as for an activity (Temporal
+gives worker interceptors to local activities too). That span carries
+`reliant.node.recorded=true`: its duration is the recording's, not the node's.
+The node's own duration is `node.duration_ms` in the block's expressions, 0 for
+`join`, `router`, `loop`, `workflow` and `approval`, which the workflow does
+not time.
 
 | Attribute or event | Type | Meaning |
 |---|---|---|
@@ -329,6 +339,7 @@ the design's next step.
 | span event `<name>` | event | One per event the block emitted (`each:` emits one per element), with the author's event name and attribute keys, unprefixed. `decision` (attributes `name`, `value`, `reason`) is the recommended convention; nothing enforces it. |
 | `reliant.node.observe.errors` | int | How many of the block's expressions failed. Set only when one did. The messages are in the stored row, never on the span. |
 | `reliant.node.observe.truncated` | bool | A cap cut the block: a count, the 50 ms evaluation budget, or the stored row's 8 KiB. Set only when true. |
+| `reliant.node.recorded` | bool | This span was opened to record a node the workflow completed itself, so its duration is the recording's (a few milliseconds), not the node's. Set only when true. |
 
 An author's expression can produce anything, so the values are held to the
 rules at one choke point, `wfobserve.SafeForExport`: a bool or a number goes as it

@@ -290,6 +290,17 @@ type RunningStep struct {
 	// ProviderPinsKey identifies the dispatch routing epoch; an old in-flight
 	// call completing after a switch must not acknowledge the new cleanup.
 	ProviderPinsKey string
+	// ObserveDelegated records the dispatch-time decision that the executing
+	// activity observes this node: its result is the node's, and the node's
+	// observe request (if it has a block) rode on its input. When false, the
+	// workflow completed or assembled the output itself (compute,
+	// ask_question, a batch with spawn/ask_user calls) and observes the node
+	// on completion (workflow_observe.go). A tolerated failure is observed by
+	// the workflow either way: a failed activity observed nothing.
+	ObserveDelegated bool
+	// StartedAt is when the step was started, by workflow time: the
+	// node.duration_ms of a node the workflow observes.
+	StartedAt time.Time
 }
 
 func (e *StepExecutor) providerPinsKey() string {
@@ -393,6 +404,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	var future workflow.Future
 	var activityName string
 	saveDelegated := false
+	observeDelegated := false
 
 	// Delta identity: mint the assistant message id BEFORE dispatching a
 	// call_llm activity so retries re-stream under the same id. Gated on
@@ -457,7 +469,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		activityName = "InlineWorkflowError"
 
 	case model.NodeTypeRun:
-		future, activityName, saveDelegated = e.startRun(node, evalResult)
+		future, activityName, saveDelegated, observeDelegated = e.startRun(node, evalResult)
 
 	case model.NodeTypeApproval:
 		// NOTE: approval nodes are now handled inline by InlineWorkflowExecutor.
@@ -478,7 +490,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
-			future, activityName, saveDelegated = e.startAction(node, evalResult, preallocatedMessageID, event, settleInterrupted)
+			future, activityName, saveDelegated, observeDelegated = e.startAction(node, evalResult, preallocatedMessageID, event, settleInterrupted)
 		} else {
 			e.logger.Error("[StepExecutor] Unknown step type", "stepType", stepType, "stepID", node.GetId())
 			future = e.executeFailActivity(node, "unknown step type: "+stepType)
@@ -499,6 +511,10 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		ThreadInterruptEpoch:  threadInterruptEpoch,
 		SaveDelegated:         saveDelegated,
 		ProviderPinsKey:       e.providerPinsKey(),
+		ObserveDelegated:      observeDelegated,
+	}
+	if e.ctx != nil {
+		running.StartedAt = workflow.Now(e.ctx)
 	}
 	if (activityName == "CallLLM" || activityName == "Compact") && e.pauseCtrl.activeManualFallback(e.ctx, e.GetThread()) {
 		// This dispatch did not use or clean up the saved provider's pins.
@@ -573,8 +589,10 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// A node that tolerates failure is optional: its failure becomes outputs
 	// the graph routes on, instead of ending or pausing the run
 	// (tolerate_failure.go). Not once the run has given up: it is ending.
+	tolerated := false
 	if stepEvent != nil && stepEvent.Error != nil && e.pauseCtrl.gaveUp() == nil {
 		if out, ok := toleratedFailure(running.Node, stepEvent.Error); ok {
+			tolerated = true
 			logToleratedFailure(e.logger, running.StepID, stepEvent.Error)
 			// A failure decided here, after the activity succeeded (the
 			// repeated-tool-error breaker), has no failed attempt yet.
@@ -588,7 +606,27 @@ func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 		}
 	}
 
+	// The node's observe block is recorded by whoever produced its output.
+	// An activity that succeeded observed its own node; the workflow
+	// observes what it completed or assembled itself, and a tolerated
+	// failure of an activity that failed (which observed nothing). A failure
+	// decided after the activity succeeded (the breaker above) was already
+	// observed as the activity's success.
+	if stepEvent != nil && stepEvent.Error == nil &&
+		(!running.ObserveDelegated || (tolerated && activityFailed)) {
+		e.observeCompleted(running.Node, stepEvent.Data, e.stepDurationMs(running))
+	}
+
 	return stepEvent
+}
+
+// stepDurationMs is how long running was held, by workflow time: the
+// node.duration_ms of a node the workflow observes.
+func (e *StepExecutor) stepDurationMs(running *RunningStep) int64 {
+	if e.ctx == nil || running.StartedAt.IsZero() {
+		return 0
+	}
+	return workflow.Now(e.ctx).Sub(running.StartedAt).Milliseconds()
 }
 
 // handleActivityCompletion processes a completed regular activity.
@@ -936,8 +974,8 @@ func (e *StepExecutor) startAction(
 	preallocatedMessageID string,
 	event *core.WorkflowEvent,
 	settleInterrupted bool,
-) (workflow.Future, string, bool) {
-	activityName := nodeTypeToActivityName(node.GetType())
+) (future workflow.Future, activityName string, saveDelegated, observeDelegated bool) {
+	activityName = nodeTypeToActivityName(node.GetType())
 
 	// Special handling for ExecuteTools - intercept "spawn" tool calls
 	if node.GetType() == model.NodeTypeExecuteTools {
@@ -1003,14 +1041,15 @@ func (e *StepExecutor) startAction(
 		// workflow is the executor of that output and saves it itself; any
 		// other batch's result IS the ExecuteTools activity's result.
 		delegated := false
+		observed := false
 		if !toolBatchAssembledByWorkflow(evalResult) {
 			rtx.SaveMessage = e.saveMessageRequest(node)
 			delegated = rtx.SaveMessage != nil
 			// The same rule observes it: the activity's result is the
-			// node's. A batch the workflow assembles is observed
-			// workflow-side (not yet: dev-docs/design/workflow-observe.md,
-			// section 15, PR 3).
+			// node's. A batch the workflow assembles is observed by the
+			// workflow when it completes (workflow_observe.go).
 			rtx.Observe = e.observeRequest(node)
+			observed = true
 		}
 
 		logging.Debug("[StepExecutor] startAction ExecuteTools",
@@ -1023,7 +1062,7 @@ func (e *StepExecutor) startAction(
 		// Always set, nil included: a spawn dispatched from this batch runs
 		// on a context derived from this one and must not inherit it.
 		toolsCtx := withToolBatchHandoff(e.ctx, e.askUserHandoff.forBatch(node.GetId(), event, e.nodeOutputs))
-		future := executeToolsWithSpawnSupport(
+		future = executeToolsWithSpawnSupport(
 			toolsCtx,
 			e.activityOptions(node),
 			rtx,
@@ -1033,7 +1072,7 @@ func (e *StepExecutor) startAction(
 			e.makeThreadPauseCtrl,
 			e.makeThreadInterrupt,
 		)
-		return future, activityName, delegated
+		return future, activityName, delegated, observed
 	}
 
 	// Build structured input: pass the proto Node directly for proper protojson roundtrip
@@ -1044,8 +1083,8 @@ func (e *StepExecutor) startAction(
 	rtx.Observe = e.observeRequest(node)
 	input := types.ActivityInput{Runtime: rtx, Node: evalResult}
 
-	future := workflow.ExecuteActivity(e.activityOptions(node), activityName, input)
-	return future, activityName, rtx.SaveMessage != nil
+	future = workflow.ExecuteActivity(e.activityOptions(node), activityName, input)
+	return future, activityName, rtx.SaveMessage != nil, true
 }
 
 // startAskQuestion runs the signal-backed ask_question node flow.
@@ -1130,7 +1169,7 @@ func (e *StepExecutor) runDaemonSelector(node *reliantv1.Node) map[string]interf
 }
 
 // startRun starts a run (shell command) activity.
-func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string, bool) {
+func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node) (workflow.Future, string, bool, bool) {
 	runArgs, _ := model.NodeArgsAsMap(evalResult)
 	runInputs := copyMap(runArgs)
 	runInputs["command"] = model.NodeCommand(evalResult)
@@ -1186,7 +1225,7 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		runInputs["timeout"] = int(timeout / time.Millisecond)
 	}
 	future := workflow.ExecuteActivity(e.activityOptionsWithSlack(node, types.RunStepMachineWaitBudget+types.RunStepSendOverhead), "ExecuteRunStep", runInputs)
-	return future, "ExecuteRunStep", saveReq != nil
+	return future, "ExecuteRunStep", saveReq != nil, true
 }
 
 // nodeTimeout is the node's own `timeout`, when it sets a positive one.

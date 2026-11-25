@@ -2432,6 +2432,12 @@ func (r *ActivityRegistry) RegisterWithWorker(w worker.Worker) {
 		// it chose; the SDK's own echo of it is a duplicate.
 		rtemporal.DeclareSelfReportingActivity(name)
 	}
+	// Not wrapped: it records a node the workflow already completed, and the
+	// wrapper would write a step row and node events for it as if it were
+	// the node's own execution (workflow_observe.go).
+	w.RegisterActivityWithOptions(r.recordNodeObservation, activity.RegisterOptions{
+		Name: activitytypes.RecordNodeObservationActivityName,
+	})
 }
 
 // Get retrieves a registered activity by name

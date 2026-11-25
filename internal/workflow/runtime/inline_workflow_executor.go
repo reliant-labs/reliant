@@ -904,6 +904,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		// Process join events first
 		events = processJoinEvents(events, joinState, e.subWorkflow, e.workflowID, e.chatID, e.subWorkflowName, subNodeOutputs, e.logger, nil, func(joinID string) {
 			recordJoinSatisfied(e.ctx, joinNodePath(e.nodePath(), joinID))
+			observeJoin(executor, e.subWorkflow, joinID, subNodeOutputs)
 		}, workflow.Now(e.ctx))
 
 		// Find triggered steps
@@ -996,6 +997,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					loopOutputMap = toleratedLoop
 				}
 				subNodeOutputs[nid] = loopOutputMap
+				executor.observeCompleted(node, loopOutputMap, 0)
 				loopEvent := &core.WorkflowEvent{
 					ID:           fmt.Sprintf("%s-loop-%s", uniqueActivityIDBase, nid),
 					WorkflowID:   e.workflowID,
@@ -1067,6 +1069,8 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						return nil, fmt.Errorf("save_message for nested workflow %s: %w", nid, err)
 					}
 				}
+				// A workflow or router node (a tolerated failure too).
+				executor.observeCompleted(node, inlineOutput, 0)
 
 				nestedEvent := &core.WorkflowEvent{
 					ID:           fmt.Sprintf("%s-nested-%s", uniqueActivityIDBase, nid),
@@ -1088,6 +1092,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				}
 				nid := node.GetId()
 				subNodeOutputs[nid] = approvalOutput
+				executor.observeCompleted(node, approvalOutput, 0)
 				approvalEvent := &core.WorkflowEvent{
 					ID:           fmt.Sprintf("%s-approval-%s", uniqueActivityIDBase, nid),
 					WorkflowID:   e.workflowID,
@@ -1108,6 +1113,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				}
 				nid := node.GetId()
 				subNodeOutputs[nid] = questionOutput
+				executor.observeCompleted(node, questionOutput, 0)
 				questionEvent := &core.WorkflowEvent{
 					ID:           fmt.Sprintf("ask-question-%s-%s", nid, uniqueActivityIDBase),
 					WorkflowID:   e.workflowID,

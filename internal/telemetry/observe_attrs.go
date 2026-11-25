@@ -24,6 +24,12 @@ const (
 	// AttrNodeObserveTruncated reports a block cut by a cap: a count, the
 	// evaluation budget, or the stored row's size.
 	AttrNodeObserveTruncated = "reliant.node.observe.truncated"
+	// AttrNodeRecorded marks a workflow.node span that was opened to record
+	// the observation of a node the workflow completed itself (compute,
+	// join, router, loop, workflow, ...): such a node runs no activity, so
+	// this span's duration is the recording's, not the node's. Its `node`
+	// namespace carries the node's own duration where the workflow timed it.
+	AttrNodeRecorded = "reliant.node.recorded"
 )
 
 // MetricObservedPrefix prefixes every metric an observe block declares:

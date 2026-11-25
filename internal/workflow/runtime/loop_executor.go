@@ -1545,6 +1545,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 		// Process join events
 		events = processJoinEvents(events, joinState, e.subWorkflow, e.workflowID, e.chatID, e.workflowIdentity(), iterNodeOutputs, e.logger, nil, func(joinID string) {
 			recordJoinSatisfied(e.ctx, joinNodePath(e.nodePath(), joinID))
+			observeJoin(iterExecutor, e.subWorkflow, joinID, iterNodeOutputs)
 		}, workflow.Now(e.ctx))
 		// Find triggered steps
 		backfillNodeOutputsFromEvents(events, iterNodeOutputs)
@@ -1651,6 +1652,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 
 				// Store nested loop output
 				iterNodeOutputs[step.Node.GetId()] = nestedOutputMap
+				iterExecutor.observeCompleted(step.Node, nestedOutputMap, 0)
 
 				// Create completion event
 				// No timestamp - loopID + iteration + nodeID is deterministically unique
@@ -1871,6 +1873,8 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 						return nil, fmt.Errorf("save_message for inline workflow %s: %w", step.Node.GetId(), err)
 					}
 				}
+				// The workflow completed the node (a tolerated failure too).
+				iterExecutor.observeCompleted(step.Node, inlineOutput, 0)
 
 				e.logger.Debug("[InlineLoop] Stored workflow output",
 					"loopID", e.loopID,
@@ -1912,6 +1916,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 					return nil, fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
 				}
 				iterNodeOutputs[step.Node.GetId()] = approvalOutput
+				iterExecutor.observeCompleted(step.Node, approvalOutput, 0)
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("loop-%s-iter%d-approval-%s", e.loopID, e.iteration, step.Node.GetId()),
 					WorkflowID:   e.workflowID,

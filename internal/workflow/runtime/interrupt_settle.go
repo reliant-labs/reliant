@@ -100,14 +100,17 @@ func (e *StepExecutor) takeInterruptedTurn(nodeID string) bool {
 // may not read; the activity reads it, keeps a finished call's real result,
 // and records every other call Cancelled with the result the model is shown,
 // so the transcript, the tool_calls rows and the UI agree.
-func (e *StepExecutor) startSettleInterrupted(node, evalResult *reliantv1.Node, rtx types.RuntimeContext) (workflow.Future, string, bool) {
+func (e *StepExecutor) startSettleInterrupted(node, evalResult *reliantv1.Node, rtx types.RuntimeContext) (workflow.Future, string, bool, bool) {
 	rtx.InterruptedTurn = true
 	rtx.SaveMessage = e.saveMessageRequest(node)
+	// The settled batch is the node's result, so the activity observes it,
+	// as it does a batch that ran (the request is not compared on replay).
+	rtx.Observe = e.observeRequest(node)
 	e.logger.Info("[StepExecutor] Settling the tool batch an interrupt cancelled, without running it",
 		"stepID", node.GetId(),
 		"toolCalls", len(evalResult.GetExecuteTools().GetResolvedToolCalls()),
 	)
 	activityName := nodeTypeToActivityName(node.GetType())
 	future := workflow.ExecuteActivity(e.activityOptions(node), activityName, types.ActivityInput{Runtime: rtx, Node: evalResult})
-	return future, activityName, rtx.SaveMessage != nil
+	return future, activityName, rtx.SaveMessage != nil, true
 }
