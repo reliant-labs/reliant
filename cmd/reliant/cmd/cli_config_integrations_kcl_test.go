@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/kcleval"
@@ -11,13 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestIntegrationsLoadsCLIConfigThroughKCL pins `reliant integrations` as one of CLIConfig's
-// subtrees on the path a workload takes, as TestProvidersLoadsCLIConfigThroughKCL
-// does for providers: deploy/kcl's reliantProcessEnvMap (generated from
-// cli_config.proto) projects the CLI connection into a `reliant integrations`
-// process's env, and refuses one declared without cli_config. Dropping integrations
-// from the subtrees fails both. The Cobra side is
-// TestIntegrationsListDialsTheServer.
+// TestIntegrationsLoadsCLIConfigThroughKCL checks explicit CLI connection values and default
+// projection when the optional CLIConfig instance is omitted.
 func TestIntegrationsLoadsCLIConfigThroughKCL(t *testing.T) {
 	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
@@ -28,9 +22,9 @@ func TestIntegrationsLoadsCLIConfigThroughKCL(t *testing.T) {
 	require.Equal(t, "https://api.example.test", env["RELIANT_SERVER_URL"], "integrations' env carries CLIConfig: %v", env)
 	require.Equal(t, "https://gateway.example.test", env["RELIANT_GATEWAY_URL"])
 
-	var refused map[string]any
-	err := kcleval.Select(context.Background(), "deploy/kcl/testdata/cli_config_integrations_missing.k", "missing_cli_config", &refused, project)
-	require.Error(t, err, "an integrations workload with no cli_config must be refused")
-	require.True(t, strings.Contains(err.Error(), "reliant integrations") && strings.Contains(err.Error(), "cli_config"),
-		"the refusal names the command and the missing config: %v", err)
+	var defaults map[string]any
+	require.NoError(t, kcleval.Select(context.Background(), "deploy/kcl/testdata/cli_config_integrations_missing.k", "missing_cli_config", &defaults, project))
+	require.Equal(t, "https://api.reliantapi.com", defaults["RELIANT_SERVER_URL"])
+	require.Equal(t, "https://gateway.reliantapi.com", defaults["RELIANT_GATEWAY_URL"])
+	require.NotContains(t, defaults, "RELIANT_TOKEN", "omitting CLIConfig must not select a credential")
 }

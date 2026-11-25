@@ -3,7 +3,6 @@ package cmd
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/kcleval"
@@ -11,14 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestModelsLoadsCLIConfigThroughKCL pins `reliant models` as one of
-// CLIConfig's subtrees on the path a workload takes: deploy/kcl's
-// reliantProcessEnvMap (generated from cli_config.proto) projects the CLI
-// connection into a `reliant models` process's env, refuses one declared
-// without cli_config, and leaves a command outside every subtree without it.
-// Dropping models from the subtrees fails the first and second cases; the
-// Cobra side (the command loads the config it is given) is
-// TestCLIGroupsConfigureTheMachine.
+// TestModelsLoadsCLIConfigThroughKCL checks explicit CLI connection values and default
+// projection when the optional CLIConfig instance is omitted.
 func TestModelsLoadsCLIConfigThroughKCL(t *testing.T) {
 	testkit.Slow(t, "evaluates deploy/kcl through `forge kcl eval`",
 		testkit.Inputs("deploy/kcl/**"))
@@ -35,9 +28,9 @@ func TestModelsLoadsCLIConfigThroughKCL(t *testing.T) {
 	_, has := outside["RELIANT_SERVER_URL"]
 	require.False(t, has, "a command outside CLIConfig's subtrees carries none of it: %v", outside)
 
-	var refused map[string]any
-	err := kcleval.Select(context.Background(), "deploy/kcl/testdata/cli_config_models_missing.k", "missing_cli_config", &refused, project)
-	require.Error(t, err, "a models workload with no cli_config must be refused")
-	require.True(t, strings.Contains(err.Error(), "reliant models") && strings.Contains(err.Error(), "cli_config"),
-		"the refusal names the command and the missing config: %v", err)
+	var defaults map[string]any
+	require.NoError(t, kcleval.Select(context.Background(), "deploy/kcl/testdata/cli_config_models_missing.k", "missing_cli_config", &defaults, project))
+	require.Equal(t, "https://api.reliantapi.com", defaults["RELIANT_SERVER_URL"])
+	require.Equal(t, "https://gateway.reliantapi.com", defaults["RELIANT_GATEWAY_URL"])
+	require.NotContains(t, defaults, "RELIANT_TOKEN", "omitting CLIConfig must not select a credential")
 }

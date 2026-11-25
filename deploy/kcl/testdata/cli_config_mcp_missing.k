@@ -1,9 +1,4 @@
-# Fixture for cmd/reliant/cmd TestMCPLoadsCLIConfigThroughKCL: a `reliant mcp`
-# workload declared with no cli_config. The mcp group loads CLIConfig, so
-# reliantProcessEnvMap refuses it rather than render a process with no
-# connection. Kept apart from cli_config_mcp.k because the refusal fails the
-# whole file's evaluation.
-#
+# Missing optional CLIConfig projects its default connection without credentials.
 # Not an environment: there is no main.k here, and nothing imports this file.
 
 import config_gen
