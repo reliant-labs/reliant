@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -113,11 +114,21 @@ func decodeDocument(data []byte) (*Config, error) {
 	}
 
 	// The version decides which schema the rest is read against, so a file
-	// for another version reports only that.
+	// for another version reports only that. A version written twice is
+	// ambiguous about which schema that is, so it too is reported alone.
+	var versionKeys []*yaml.Node
+	for i := 0; i+1 < len(root.Content); i += 2 {
+		if k := root.Content[i]; k.Kind == yaml.ScalarNode && k.ShortTag() == "!!str" && k.Value == "version" {
+			versionKeys = append(versionKeys, k)
+		}
+	}
+	if len(versionKeys) > 1 {
+		return nil, Errors{duplicateKey("version", versionKeys[0], versionKeys[1])}
+	}
 	if vn := mappingValue(root, "version"); vn != nil && !isNull(vn) {
 		var v int
 		switch {
-		case vn.Kind != yaml.ScalarNode || vn.Tag != "!!int" || vn.Decode(&v) != nil:
+		case vn.Kind != yaml.ScalarNode || vn.ShortTag() != "!!int" || vn.Decode(&v) != nil:
 			return nil, Errors{{Path: "version", Line: vn.Line, Column: vn.Column,
 				Msg: fmt.Sprintf("must be the integer %d, got %s", SupportedVersion, describe(vn))}}
 		case v != SupportedVersion:
@@ -136,9 +147,11 @@ func decodeDocument(data []byte) (*Config, error) {
 	return cfg, nil
 }
 
+// mappingValue is the value of key in m, or nil. A key written twice is
+// reported by the decoder; this reads the first.
 func mappingValue(m *yaml.Node, key string) *yaml.Node {
 	for i := 0; i+1 < len(m.Content); i += 2 {
-		if m.Content[i].Value == key {
+		if k := m.Content[i]; k.Kind == yaml.ScalarNode && k.ShortTag() == "!!str" && k.Value == key {
 			return m.Content[i+1]
 		}
 	}
@@ -161,8 +174,22 @@ func joinPath(path, key string) string {
 }
 
 func isNull(n *yaml.Node) bool {
-	return n.Kind == yaml.ScalarNode && n.Tag == "!!null"
+	return n.Kind == yaml.ScalarNode && n.ShortTag() == "!!null"
 }
+
+func isString(n *yaml.Node) bool {
+	return n.Kind == yaml.ScalarNode && n.ShortTag() == "!!str"
+}
+
+// shorthand is implemented by the types written as a string or a mapping.
+// Null is neither, so decode reports it rather than reading it as absent.
+type shorthand interface {
+	nodeDecoder
+	// emptyHint completes "is empty: …" for a null value.
+	emptyHint() string
+}
+
+var shorthandType = reflect.TypeFor[shorthand]()
 
 func (d *decoder) decode(n *yaml.Node, path string, v reflect.Value) {
 	if n.Kind == yaml.AliasNode && n.Alias != nil {
@@ -170,6 +197,13 @@ func (d *decoder) decode(n *yaml.Node, path string, v reflect.Value) {
 	}
 	d.pos[path] = position{n.Line, n.Column}
 	if isNull(n) {
+		t := v.Type()
+		if t.Kind() == reflect.Pointer {
+			t = t.Elem()
+		}
+		if reflect.PointerTo(t).Implements(shorthandType) {
+			d.errorf(n, path, "is empty: %s", reflect.New(t).Interface().(shorthand).emptyHint())
+		}
 		return
 	}
 	if v.CanAddr() {
@@ -196,25 +230,77 @@ func (d *decoder) decode(n *yaml.Node, path string, v reflect.Value) {
 		}
 		v.Set(s)
 	case reflect.Map:
-		if n.Kind != yaml.MappingNode {
-			d.errorf(n, path, "must be a mapping, got %s", describe(n))
-			return
-		}
-		m := reflect.MakeMapWithSize(v.Type(), len(n.Content)/2)
-		for i := 0; i+1 < len(n.Content); i += 2 {
-			k, val := n.Content[i], n.Content[i+1]
-			if k.Kind != yaml.ScalarNode {
-				d.errorf(k, path, "keys must be strings")
-				continue
-			}
-			elem := reflect.New(v.Type().Elem()).Elem()
-			d.decode(val, joinPath(path, k.Value), elem)
-			m.SetMapIndex(reflect.ValueOf(k.Value).Convert(v.Type().Key()), elem)
-		}
-		v.Set(m)
+		d.decodeMap(n, path, v, d.decode)
 	default:
 		d.decodeScalar(n, path, v)
 	}
+}
+
+// keyValue is one entry of a mapping whose key passed [decoder.pairs].
+type keyValue struct{ key, value *yaml.Node }
+
+// pairs returns the entries of the mapping n in document order. It reports
+// and drops every key that is not a string (`true:`, `1:`, `~:`, a list, a
+// merge key) and every key written a second time, so no mapping in the file
+// can coerce a key or silently replace an earlier value with a later one.
+func (d *decoder) pairs(n *yaml.Node, path string) []keyValue {
+	seen := map[string]*yaml.Node{}
+	out := make([]keyValue, 0, len(n.Content)/2)
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		k, val := n.Content[i], n.Content[i+1]
+		if k.Kind == yaml.AliasNode && k.Alias != nil {
+			k = k.Alias
+		}
+		switch {
+		case k.Kind != yaml.ScalarNode:
+			d.errorf(n.Content[i], path, "keys must be strings, got %s", describe(k))
+			continue
+		case k.ShortTag() == "!!merge":
+			d.errorf(n.Content[i], joinPath(path, k.Value), "merge keys (<<) are not supported: write the keys out")
+			continue
+		case k.ShortTag() != "!!str":
+			d.errorf(n.Content[i], joinPath(path, k.Value), "keys must be strings, got %s%s", describe(k), quoteHint(k))
+			continue
+		}
+		if first, ok := seen[k.Value]; ok {
+			d.errs = append(d.errs, duplicateKey(joinPath(path, k.Value), first, n.Content[i]))
+			continue
+		}
+		seen[k.Value] = n.Content[i]
+		out = append(out, keyValue{k, val})
+	}
+	return out
+}
+
+func duplicateKey(path string, first, again *yaml.Node) *FieldError {
+	_, key := splitLast(path)
+	return &FieldError{Path: path, Line: again.Line, Column: again.Column,
+		Msg: fmt.Sprintf("key %q is written twice, on lines %d and %d: keep one", key, first.Line, again.Line)}
+}
+
+// splitLast splits a YAML path at its last key.
+func splitLast(path string) (parent, key string) {
+	if i := strings.LastIndexByte(path, '.'); i >= 0 {
+		return path[:i], path[i+1:]
+	}
+	return "", path
+}
+
+// decodeMap decodes a free mapping (playbooks, gate.env) into the map v,
+// each value with elem.
+func (d *decoder) decodeMap(n *yaml.Node, path string, v reflect.Value, elem func(*yaml.Node, string, reflect.Value)) {
+	if n.Kind != yaml.MappingNode {
+		d.errorf(n, path, "must be a mapping, got %s", describe(n))
+		return
+	}
+	kvs := d.pairs(n, path)
+	m := reflect.MakeMapWithSize(v.Type(), len(kvs))
+	for _, kv := range kvs {
+		e := reflect.New(v.Type().Elem()).Elem()
+		elem(kv.value, joinPath(path, kv.key.Value), e)
+		m.SetMapIndex(reflect.ValueOf(kv.key.Value).Convert(v.Type().Key()), e)
+	}
+	v.Set(m)
 }
 
 func (d *decoder) decodeStruct(n *yaml.Node, path string, v reflect.Value) {
@@ -223,18 +309,17 @@ func (d *decoder) decodeStruct(n *yaml.Node, path string, v reflect.Value) {
 		return
 	}
 	fields := yamlFields(v.Type())
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		k, val := n.Content[i], n.Content[i+1]
-		idx, ok := fields[k.Value]
-		if !ok || k.Kind != yaml.ScalarNode {
+	for _, kv := range d.pairs(n, path) {
+		idx, ok := fields[kv.key.Value]
+		if !ok {
 			where := "the top level"
 			if path != "" {
 				where = path
 			}
-			d.errorf(k, joinPath(path, k.Value), "unknown key %q: %s takes %s", k.Value, where, knownKeys(fields))
+			d.errorf(kv.key, joinPath(path, kv.key.Value), "unknown key %q: %s takes %s", kv.key.Value, where, knownKeys(fields))
 			continue
 		}
-		d.decode(val, joinPath(path, k.Value), v.Field(idx))
+		d.decode(kv.value, joinPath(path, kv.key.Value), v.Field(idx))
 	}
 }
 
@@ -245,18 +330,24 @@ func (d *decoder) decodeScalar(n *yaml.Node, path string, v reflect.Value) {
 	}
 	switch v.Kind() {
 	case reflect.String:
+		// A string field takes only a string: `run: 42` or `pool: true` is
+		// an error, never the text "42" or "true".
+		if !isString(n) {
+			d.errorf(n, path, "must be a string, got %s%s", describe(n), quoteHint(n))
+			return
+		}
 		v.SetString(n.Value)
 	case reflect.Int:
 		var i int
-		if n.Tag != "!!int" || n.Decode(&i) != nil {
-			d.errorf(n, path, "must be an integer, got %s", describeScalar(n))
+		if n.ShortTag() != "!!int" || n.Decode(&i) != nil {
+			d.errorf(n, path, "must be an integer, got %s", describe(n))
 			return
 		}
 		v.SetInt(int64(i))
 	case reflect.Bool:
 		var b bool
-		if n.Tag != "!!bool" || n.Decode(&b) != nil {
-			d.errorf(n, path, "must be true or false, got %s", describeScalar(n))
+		if n.ShortTag() != "!!bool" || n.Decode(&b) != nil {
+			d.errorf(n, path, "must be true or false, got %s", describe(n))
 			return
 		}
 		v.SetBool(b)
@@ -342,65 +433,146 @@ func describe(n *yaml.Node) string {
 		return "a mapping"
 	case yaml.SequenceNode:
 		return "a list"
+	}
+	switch n.ShortTag() {
+	case "!!str":
+		return strconv.Quote(n.Value)
+	case "!!int":
+		return "the integer " + n.Value
+	case "!!float":
+		return "the number " + n.Value
+	case "!!bool":
+		return "the boolean " + n.Value
+	case "!!null":
+		return "null"
+	case "!!timestamp":
+		return "the timestamp " + n.Value
 	default:
-		return describeScalar(n)
+		return fmt.Sprintf("a value tagged %s", n.ShortTag())
 	}
 }
 
-func describeScalar(n *yaml.Node) string {
-	if n.Kind != yaml.ScalarNode {
-		return describe(n)
+// quoteHint suggests quoting a scalar YAML read as a number, boolean or
+// timestamp, when the text was meant.
+func quoteHint(n *yaml.Node) string {
+	switch n.ShortTag() {
+	case "!!int", "!!float", "!!bool", "!!timestamp":
+		return fmt.Sprintf("; quote it (%q) to write the text", n.Value)
 	}
-	return strconv.Quote(n.Value)
+	return ""
+}
+
+// shorthandString reads the string form of a string-or-mapping field. Only a
+// YAML string is that form: `gate: 42` and `gate: true` are errors, never
+// the commands "42" and "true".
+func (d *decoder) shorthandString(n *yaml.Node, path, what string) (string, bool) {
+	if !isString(n) {
+		d.errorf(n, path, "must be %s or a mapping, got %s%s", what, describe(n), quoteHint(n))
+		return "", false
+	}
+	return n.Value, true
+}
+
+func (g *Gate) emptyHint() string {
+	return "name the full suite main must always pass, e.g. `gate: \"npm test\"`"
 }
 
 func (g *Gate) decodeNode(d *decoder, n *yaml.Node, path string) {
 	if n.Kind == yaml.ScalarNode {
-		g.Run = n.Value
+		g.Run, _ = d.shorthandString(n, path, "a command")
 		return
 	}
 	d.decodeStruct(n, path, reflect.ValueOf(g).Elem())
 }
 
+func (c *Check) emptyHint() string {
+	return "write a command or {run, checks}, or remove the key for no check tier"
+}
+
 func (c *Check) decodeNode(d *decoder, n *yaml.Node, path string) {
 	if n.Kind == yaml.ScalarNode {
-		c.Run = n.Value
+		c.Run, _ = d.shorthandString(n, path, "a command")
 		return
 	}
 	d.decodeStruct(n, path, reflect.ValueOf(c).Elem())
+}
+
+func (c *SweepCheck) emptyHint() string {
+	return "write a built-in check name or {name, run}"
 }
 
 func (c *SweepCheck) decodeNode(d *decoder, n *yaml.Node, path string) {
 	if n.Kind == yaml.ScalarNode {
-		c.Name = n.Value
+		c.Name, _ = d.shorthandString(n, path, "a built-in check name")
 		return
 	}
-	d.decodeStruct(n, path, reflect.ValueOf(c).Elem())
-	if c.Run == "" {
-		d.errorf(n, joinPath(path, "run"), "a command check needs run; name a built-in check as a bare string")
-	}
+	namedCommand(d, n, path, reflect.ValueOf(c).Elem(), &c.Name, &c.Run, "check", SweepBuiltins)
+}
+
+func (p *Probe) emptyHint() string {
+	return "write a built-in probe name or {name, run}"
 }
 
 func (p *Probe) decodeNode(d *decoder, n *yaml.Node, path string) {
 	if n.Kind == yaml.ScalarNode {
-		p.Name = n.Value
+		p.Name, _ = d.shorthandString(n, path, "a built-in probe name")
 		return
 	}
-	d.decodeStruct(n, path, reflect.ValueOf(p).Elem())
-	if p.Run == "" {
-		d.errorf(n, joinPath(path, "run"), "a command probe needs run; name a built-in probe as a bare string")
+	namedCommand(d, n, path, reflect.ValueOf(p).Elem(), &p.Name, &p.Run, "probe", ProbeBuiltins)
+}
+
+// namedCommand decodes the mapping form of a sweep check or a probe. Without
+// run, `{name: <built-in>}` is the built-in, the same as the bare name; with
+// run it is a repo command, whose name the validator keeps off the built-in
+// names. The JSON schema states the same rule.
+func namedCommand[B ~string](d *decoder, n *yaml.Node, path string, v reflect.Value, name, run *string, what string, builtins []B) {
+	before := len(d.errs)
+	d.decodeStruct(n, path, v)
+	if len(d.errs) > before {
+		return
+	}
+	_, hasRun := d.pos[joinPath(path, "run")]
+	switch {
+	case hasRun && *run == "":
+		d.errorf(n, joinPath(path, "run"), "is empty: write the command, or remove run to name a built-in %s", what)
+	case hasRun:
+		// A repo command: the validator checks its name and command.
+	case *name == "":
+		d.errorf(n, joinPath(path, "name"), "is required: a built-in %s (%s), or {name, run} for a command %s", what, list(builtins), what)
+	case !slices.Contains(builtins, B(*name)):
+		d.errorf(n, joinPath(path, "run"), "a command %s needs run: %q is not a built-in %s (the built-ins are %s)", what, *name, what, list(builtins))
 	}
 }
 
 func (dur *Duration) decodeNode(d *decoder, n *yaml.Node, path string) {
-	if n.Kind != yaml.ScalarNode || n.Tag != "!!str" {
+	if !isString(n) {
 		d.errorf(n, path, "must be a duration with a unit, such as 60m or 1h30m; got %s", describe(n))
 		return
 	}
 	parsed, err := time.ParseDuration(n.Value)
 	if err != nil {
-		d.errorf(n, path, "must be a duration with a unit, such as 60m or 1h30m; got %s", describeScalar(n))
+		d.errorf(n, path, "must be a duration with a unit, such as 60m or 1h30m; got %s", describe(n))
 		return
 	}
 	*dur = Duration(parsed)
+}
+
+// decodeNode reads gate.env: a mapping of names to scalar values. A number
+// or boolean is kept as written (`PORT: 8080` is "8080"); null, a list or a
+// mapping is an error.
+func (e *EnvVars) decodeNode(d *decoder, n *yaml.Node, path string) {
+	d.decodeMap(n, path, reflect.ValueOf(e).Elem(), func(val *yaml.Node, vpath string, v reflect.Value) {
+		if val.Kind == yaml.AliasNode && val.Alias != nil {
+			val = val.Alias
+		}
+		d.pos[vpath] = position{val.Line, val.Column}
+		switch {
+		case isNull(val):
+			d.errorf(val, vpath, "is empty: write \"\" for an empty value, or remove the variable")
+		case val.Kind != yaml.ScalarNode:
+			d.errorf(val, vpath, "must be a string, a number or true/false, got %s", describe(val))
+		default:
+			v.SetString(val.Value)
+		}
+	})
 }

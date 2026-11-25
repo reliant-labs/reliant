@@ -17,7 +17,8 @@ import (
 const CandidatePlaceholder = "{candidate}"
 
 // replacePlaceholders calls fn for each `{token}` not preceded by `$`. fn
-// returns the replacement and whether to replace at all.
+// returns the replacement and whether to replace at all. On any error it
+// returns no command, so a caller can never run a partly substituted one.
 func replacePlaceholders(s string, fn func(tok string) (string, bool, error)) (string, error) {
 	var b strings.Builder
 	var errs []error
@@ -39,8 +40,11 @@ func replacePlaceholders(s string, fn func(tok string) (string, bool, error)) (s
 		b.WriteString(repl)
 		last = end
 	}
+	if len(errs) > 0 {
+		return "", errors.Join(errs...)
+	}
 	b.WriteString(s[last:])
-	return b.String(), errors.Join(errs...)
+	return b.String(), nil
 }
 
 // BumpCommand returns the pin's bump command with each repository

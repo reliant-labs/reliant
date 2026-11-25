@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 )
@@ -56,6 +57,56 @@ func TestParseRejects(t *testing.T) {
 		{"unknown queue key", base + "queue: {batchmax: 3}\n", "queue.batchmax", "queue takes batch_max, speculate, rerun_on_red, preempt", 3},
 		{"unknown nested list key", base + "release:\n  envs:\n    - {name: prod, soaks: 1m}\n", "release.envs[0].soaks", "unknown key", 5},
 		{"unknown gate key", "version: 1\ngate: {run: x, command: y}\n", "gate.command", "unknown key", 2},
+
+		// shorthands take only a YAML string
+		{"gate integer", "version: 1\ngate: 42\n", "gate", `must be a command or a mapping, got the integer 42; quote it ("42")`, 2},
+		{"gate float", "version: 1\ngate: 4.5\n", "gate", "got the number 4.5", 2},
+		{"gate boolean", "version: 1\ngate: true\n", "gate", "got the boolean true", 2},
+		{"gate explicit null", "version: 1\ngate: null\n", "gate", "is empty", 2},
+		{"gate timestamp", "version: 1\ngate: 2026-11-25\n", "gate", "got the timestamp 2026-11-25", 2},
+		{"check integer", base + "check: 7\n", "check", "must be a command or a mapping, got the integer 7", 3},
+		{"check boolean", base + "check: false\n", "check", "got the boolean false", 3},
+		{"check null", base + "check:\n", "check", "is empty: write a command or {run, checks}, or remove the key", 3},
+		{"sweep check integer", base + "sweep: {checks: [stale_pr, 42]}\n", "sweep.checks[1]", "must be a built-in check name or a mapping, got the integer 42", 3},
+		{"sweep check boolean", base + "sweep: {checks: [true]}\n", "sweep.checks[0]", "got the boolean true", 3},
+		{"sweep check float", base + "sweep: {checks: [1.5]}\n", "sweep.checks[0]", "got the number 1.5", 3},
+		{"sweep check null", base + "sweep: {checks: [null]}\n", "sweep.checks[0]", "is empty: write a built-in check name or {name, run}", 3},
+		{"probe integer", base + "release: {envs: [{name: prod, probes: [1]}]}\n", "release.envs[0].probes[0]", "must be a built-in probe name or a mapping, got the integer 1", 3},
+		{"probe boolean", base + "release: {envs: [{name: prod, probes: [false]}]}\n", "release.envs[0].probes[0]", "got the boolean false", 3},
+		{"probe null", base + "release: {envs: [{name: prod, probes: [~]}]}\n", "release.envs[0].probes[0]", "is empty", 3},
+
+		// string fields take only a YAML string
+		{"run integer", "version: 1\ngate: {run: 42}\n", "gate.run", `must be a string, got the integer 42; quote it ("42")`, 2},
+		{"pool integer", "version: 1\ngate: {run: x, pool: 1}\n", "gate.pool", "must be a string, got the integer 1", 2},
+		{"check name integer", base + "check: {checks: [1]}\n", "check.checks[0]", "must be a string", 3},
+		{"sweep command name integer", base + "sweep: {checks: [{name: 42, run: x}]}\n", "sweep.checks[0].name", "must be a string, got the integer 42", 3},
+		{"recurring name integer", base + "recurring: [{name: 1, schedule: \"0 3 * * 1\", run: x}]\n", "recurring[0].name", "must be a string", 3},
+		{"env value null", "version: 1\ngate: {run: x, env: {A: null}}\n", "gate.env.A", "is empty", 2},
+
+		// {name: <built-in>} is the built-in; a command needs run
+		{"sweep command empty run", base + "sweep: {checks: [{name: licenses, run: \"\"}]}\n", "sweep.checks[0].run", "is empty", 3},
+		{"sweep empty mapping", base + "sweep: {checks: [{}]}\n", "sweep.checks[0].name", "is required", 3},
+		{"sweep builtin by name twice", base + "sweep: {checks: [stale_pr, {name: stale_pr}]}\n", "sweep.checks[1]", "listed twice", 3},
+		{"probe empty mapping", base + "release: {envs: [{name: prod, probes: [{}]}]}\n", "release.envs[0].probes[0].name", "is required", 3},
+
+		// keys are strings
+		{"top-level boolean key", base + "true: x\n", "true", `keys must be strings, got the boolean true; quote it ("true")`, 3},
+		{"top-level integer key", base + "1: x\n", "1", "keys must be strings, got the integer 1", 3},
+		{"queue integer key", base + "queue: {1: 2}\n", "queue.1", "keys must be strings", 3},
+		{"playbooks boolean key", base + "playbooks: {true: p.md}\n", "playbooks.true", "keys must be strings, got the boolean true", 3},
+		{"playbooks null key", base + "playbooks: {~: p.md}\n", "playbooks.~", "keys must be strings, got null", 3},
+		{"env integer key", "version: 1\ngate: {run: x, env: {1: a}}\n", "gate.env.1", "keys must be strings, got the integer 1", 2},
+		{"env boolean key", "version: 1\ngate:\n  run: x\n  env:\n    false: a\n", "gate.env.false", "keys must be strings", 5},
+		{"list key", base + "queue:\n  ? [a]\n  : 1\n", "queue", "keys must be strings, got a list", 4},
+		{"merge key", base + "q: &q {batch_max: 2}\nqueue:\n  <<: *q\n", "queue.<<", "merge keys", 5},
+
+		// keys are written once
+		{"duplicate top-level key", base + "queue: {}\ngate: \"go test ./...\"\n", "gate", `key "gate" is written twice, on lines 2 and 4`, 4},
+		{"duplicate version", "version: 1\ngate: x\nversion: 2\n", "version", `key "version" is written twice, on lines 1 and 3`, 3},
+		{"duplicate nested key", base + "queue:\n  batch_max: 2\n  batch_max: 3\n", "queue.batch_max", "written twice, on lines 4 and 5", 5},
+		{"duplicate list item key", base + "release: {envs: [{name: prod, soak: 1m, soak: 2m}]}\n", "release.envs[0].soak", "written twice", 3},
+		{"duplicate playbook", base + "playbooks:\n  main: a.md\n  main: b.md\n", "playbooks.main", "written twice, on lines 4 and 5", 5},
+		{"duplicate env var", "version: 1\ngate:\n  run: x\n  env: {A: x, A: y}\n", "gate.env.A", "written twice", 4},
 
 		// types
 		{"int as word", base + "queue: {batch_max: four}\n", "queue.batch_max", `must be an integer, got "four"`, 3},
@@ -298,5 +349,44 @@ func TestValidateConfigBuiltInCode(t *testing.T) {
 	}
 	if r.Gate.Run != "go test ./..." || r.Gate.Pool != DefaultGatePool {
 		t.Errorf("Resolve() gate = %+v", r.Gate)
+	}
+}
+
+func TestParseShorthandForms(t *testing.T) {
+	// A quoted number is a string, so it is a command.
+	r, err := Load([]byte("version: 1\ngate: \"42\"\ncheck: !!str true\n"))
+	if err != nil || r.Gate.Run != "42" || r.Check == nil || r.Check.Run != "true" {
+		t.Fatalf("Load = %+v, %v", r, err)
+	}
+	// {name: <built-in>} is the built-in, the same as the bare name.
+	bare, err := Parse([]byte(base + "sweep: {checks: [stale_pr]}\nrelease: {envs: [{name: prod, probes: [health]}]}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	named, err := Parse([]byte(base + "sweep: {checks: [{name: stale_pr}]}\nrelease: {envs: [{name: prod, probes: [{name: health}]}]}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bare.Sweep.Checks[0] != named.Sweep.Checks[0] || !named.Sweep.Checks[0].Builtin() ||
+		bare.Release.Envs[0].Probes[0] != named.Release.Envs[0].Probes[0] || !named.Release.Envs[0].Probes[0].Builtin() {
+		t.Errorf("bare %+v %+v, named %+v %+v", bare.Sweep.Checks, bare.Release.Envs[0].Probes, named.Sweep.Checks, named.Release.Envs[0].Probes)
+	}
+	// gate.env keeps a number or boolean as written.
+	r, err = Load([]byte("version: 1\ngate: {run: x, env: {PORT: 8080, DEBUG: true, HEX: 0x1F, NAME: \"y\"}}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"PORT": "8080", "DEBUG": "true", "HEX": "0x1F", "NAME": "y"}; !maps.Equal(r.Gate.Env, want) {
+		t.Errorf("env = %v, want %v", r.Gate.Env, want)
+	}
+}
+
+func TestParseDuplicateKeyNamesBothLines(t *testing.T) {
+	errs := parseErrors(t, "version: 1\ngate:\n  run: npm test\n  run: rm -rf build\n")
+	if len(errs) != 1 {
+		t.Fatalf("got %v, want one error", errs)
+	}
+	if got, want := errs[0].Error(), `gate.run (line 4): key "run" is written twice, on lines 3 and 4: keep one`; got != want {
+		t.Errorf("Error() = %q, want %q", got, want)
 	}
 }

@@ -101,7 +101,10 @@ func TestResolve(t *testing.T) {
 				t.Errorf("check = %+v", r.Check)
 			}
 		}},
-		{"null sections are absent", base + "check:\nqueue:\nsweep:\n", func(t *testing.T, r Resolved) {
+		// check: null is an error (it is a string-or-mapping shorthand,
+		// and null is neither); the sections that are only mappings read
+		// null as absent.
+		{"null sections are absent", base + "queue:\nsweep:\n", func(t *testing.T, r Resolved) {
 			if r.Check != nil || r.Queue != Defaults().Queue || r.Sweep.Schedule.Cron != DefaultSweepSchedule {
 				t.Errorf("got check %+v queue %+v sweep %+v", r.Check, r.Queue, r.Sweep)
 			}

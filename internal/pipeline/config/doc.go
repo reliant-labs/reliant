@@ -29,9 +29,21 @@
 // `version` other than 1 is reported alone, because the rest of such a file is
 // written against a schema this build does not know.
 //
+// Every mapping key must be a YAML string written once: a key such as
+// `true:` or `1:` is never coerced to text, and a key written twice (at any
+// level, in a struct or a free map such as `playbooks`) is an error naming
+// both lines rather than letting the later value win. A string field takes
+// only a YAML string: `run: 42` is an error that suggests quoting, never the
+// command "42". gate.env values are the one exception, taking any scalar but
+// null (`PORT: 8080` is "8080").
+//
 // Several fields take a string shorthand for their object form: `gate` and
-// `check` (a string is `{run: <string>}`) and each `sweep.checks` entry (a
-// string names a built-in check).
+// `check` (a string is `{run: <string>}`), each `sweep.checks` entry and each
+// release env's `probes` entry (a string names a built-in). The shorthand is
+// a YAML string only, so `gate: 42`, `gate: true` and `check: null` are
+// errors. For a sweep check or a probe, `{name: <built-in>}` is the built-in,
+// the same as the bare name; `{name, run}` is a repo command, whose name may
+// not be a built-in's.
 //
 // # Defaults
 //
@@ -58,8 +70,11 @@
 // [JSONSchema] returns a JSON Schema (draft 2020-12) of the same format for
 // editor completion and validation. Parse is the authority; the schema
 // mirrors it as far as JSON Schema can express (it cannot compile a regular
-// expression, parse a cron line or a CEL expression, or check uniqueness of a
-// field across list entries), and a test holds the two to the same keys.
+// expression, parse a cron line or a CEL expression, check uniqueness of a
+// field across list entries, or see a duplicate or non-string YAML key).
+// Tests hold the two to the same keys and closed sets, and drive one corpus
+// of string-or-mapping and key inputs through both, failing on any
+// accept/reject disagreement.
 //
 // Nothing imports this package yet: the projector (pipeline build plan task
 // R8) is its first reader.

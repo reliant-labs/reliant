@@ -119,6 +119,12 @@ func TestPinBumpCommand(t *testing.T) {
 	if _, err := pin.BumpCommand(map[string]string{"reliant-labs/forge": "f00"}); err == nil || !strings.Contains(err.Error(), "no sha given for reliant-labs/reliant") {
 		t.Errorf("missing sha: err = %v", err)
 	}
+	// One bad placeholder among good ones yields no command at all, never
+	// a partly substituted one.
+	two := Pin{Repo: "a/b", LockstepWith: []string{"c/d"}, Bump: "x {a/b} {c/d} {a/b}"}
+	if got, err := two.BumpCommand(map[string]string{"a/b": "1"}); err == nil || got != "" {
+		t.Errorf("missing one of two shas: BumpCommand = %q, %v; want no command and an error", got, err)
+	}
 	if _, err := (Pin{Repo: "a/b"}).BumpCommand(nil); err == nil {
 		t.Error("a pin with no bump must not produce a command")
 	}

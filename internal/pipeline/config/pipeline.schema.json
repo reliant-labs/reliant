@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Reliant .reliant/pipeline.yaml, version 1",
-  "description": "The Reliant pipeline configuration, read only from the repository's base branch. Reliant's parser is the authority: this schema mirrors it for editors, and cannot check uniqueness across entries, duration and count bounds, cron lines, regular expressions or CEL syntax.",
+  "description": "The Reliant pipeline configuration, read only from the repository's base branch. Reliant's parser is the authority: this schema mirrors it for editors, and cannot check uniqueness across entries, duration and count bounds, cron lines, regular expressions or CEL syntax. Nor can it see YAML keys: Reliant refuses a key written twice in any mapping and a key that is not a string (true:, 1:, null:), which JSON cannot express.",
   "type": "object",
   "additionalProperties": false,
   "required": ["version", "gate"],
@@ -243,12 +243,15 @@
     "Probe": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "run"],
-      "description": "A repo command probe: exit 0 when the env is healthy.",
+      "required": ["name"],
+      "description": "{name: <built-in>} is that built-in probe, the same as the bare name. {name, run} is a repo command probe (exit 0 when the env is healthy), whose name is not a built-in's.",
       "properties": {
-        "name": { "$ref": "#/$defs/name", "not": { "$ref": "#/$defs/probeBuiltin" } },
+        "name": { "type": "string" },
         "run": { "$ref": "#/$defs/command" }
-      }
+      },
+      "if": { "required": ["run"] },
+      "then": { "properties": { "name": { "$ref": "#/$defs/name", "not": { "$ref": "#/$defs/probeBuiltin" } } } },
+      "else": { "properties": { "name": { "$ref": "#/$defs/probeBuiltin" } } }
     },
     "Strategy": {
       "type": "object",
@@ -308,12 +311,15 @@
     "SweepCheck": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "run"],
-      "description": "A repo command check whose JSON output lists findings.",
+      "required": ["name"],
+      "description": "{name: <built-in>} is that built-in check, the same as the bare name. {name, run} is a repo command check whose JSON output lists findings, and whose name is not a built-in's.",
       "properties": {
-        "name": { "$ref": "#/$defs/name", "not": { "$ref": "#/$defs/sweepBuiltin" } },
+        "name": { "type": "string" },
         "run": { "$ref": "#/$defs/command" }
-      }
+      },
+      "if": { "required": ["run"] },
+      "then": { "properties": { "name": { "$ref": "#/$defs/name", "not": { "$ref": "#/$defs/sweepBuiltin" } } } },
+      "else": { "properties": { "name": { "$ref": "#/$defs/sweepBuiltin" } } }
     }
   }
 }

@@ -27,22 +27,63 @@ func resolvedSchema(t *testing.T) *jsonschema.Resolved {
 }
 
 // asJSON turns a YAML document into the value a JSON Schema validator
-// sees: the same document, read back from its JSON encoding.
+// sees, typed by the same YAML tags the parser reads: a plain 42 is a
+// number, "42" a string. JSON has only string keys, so every key becomes
+// its text (`true:` is the key "true"), and a later duplicate key replaces
+// the earlier one, as an editor's YAML-to-JSON reading does.
 func asJSON(t *testing.T, data []byte) any {
 	t.Helper()
-	var v any
-	if err := yaml.Unmarshal(data, &v); err != nil {
+	var doc yaml.Node
+	if err := yaml.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("yaml: %v", err)
 	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("json: %v", err)
+	if doc.Kind == yaml.DocumentNode && len(doc.Content) == 1 {
+		return nodeJSON(t, doc.Content[0])
 	}
-	var out any
-	if err := json.Unmarshal(b, &out); err != nil {
-		t.Fatalf("json: %v", err)
+	return nil
+}
+
+func nodeJSON(t *testing.T, n *yaml.Node) any {
+	t.Helper()
+	if n.Kind == yaml.AliasNode {
+		n = n.Alias
 	}
-	return out
+	switch n.Kind {
+	case yaml.MappingNode:
+		m := map[string]any{}
+		for i := 0; i+1 < len(n.Content); i += 2 {
+			k := n.Content[i]
+			if k.Kind == yaml.AliasNode {
+				k = k.Alias
+			}
+			m[k.Value] = nodeJSON(t, n.Content[i+1])
+		}
+		return m
+	case yaml.SequenceNode:
+		out := make([]any, len(n.Content))
+		for i, item := range n.Content {
+			out[i] = nodeJSON(t, item)
+		}
+		return out
+	}
+	switch n.ShortTag() {
+	case "!!int", "!!float":
+		var f float64
+		if err := n.Decode(&f); err != nil {
+			t.Fatalf("yaml number %q: %v", n.Value, err)
+		}
+		return f
+	case "!!bool":
+		var b bool
+		if err := n.Decode(&b); err != nil {
+			t.Fatalf("yaml boolean %q: %v", n.Value, err)
+		}
+		return b
+	case "!!null":
+		return nil
+	default:
+		return n.Value
+	}
 }
 
 func testdataFiles(t *testing.T, dir string) map[string][]byte {
@@ -218,5 +259,131 @@ func TestSchemaEnumsMatchClosedSets(t *testing.T) {
 		if !slices.Equal(c.got, c.want) {
 			t.Errorf("schema %s enum = %v, Go closed set = %v", c.where, c.got, c.want)
 		}
+	}
+}
+
+// TestParserAndSchemaAgree pins the parser and the editor schema to one
+// contract for every field written as a string or a mapping (gate, check,
+// sweep checks, probes), for scalar types and for keys: each input is
+// accepted by both or refused by both. A case marked parserOnly is a rule
+// JSON Schema cannot state, so only the parser is held to it: a duplicate
+// key (JSON has no such thing; an editor sees the last value), a non-string
+// key whose text is a valid key (JSON keys are all strings, so `true:` and
+// `"true":` look alike to it), and uniqueness across list entries.
+func TestParserAndSchemaAgree(t *testing.T) {
+	rs := resolvedSchema(t)
+	const head = "version: 1\n"
+	env := func(s string) string { return head + "gate: {run: x, env: " + s + "}\n" }
+	sweep := func(s string) string { return base + "sweep: {checks: [" + s + "]}\n" }
+	probes := func(s string) string { return base + "release: {envs: [{name: prod, probes: [" + s + "]}]}\n" }
+	cases := []struct {
+		name       string
+		doc        string
+		accept     bool
+		parserOnly string
+	}{
+		// gate: a command string or a mapping.
+		{"gate string", head + "gate: npm test\n", true, ""},
+		{"gate quoted number", head + "gate: \"42\"\n", true, ""},
+		{"gate integer", head + "gate: 42\n", false, ""},
+		{"gate float", head + "gate: 4.5\n", false, ""},
+		{"gate boolean", head + "gate: true\n", false, ""},
+		{"gate null", head + "gate: null\n", false, ""},
+		{"gate empty", head + "gate:\n", false, ""},
+		{"gate list", head + "gate: [a]\n", false, ""},
+		{"gate mapping", head + "gate: {run: x}\n", true, ""},
+		{"gate run integer", head + "gate: {run: 42}\n", false, ""},
+		{"gate run boolean", head + "gate: {run: false}\n", false, ""},
+		{"gate pool integer", head + "gate: {run: x, pool: 1}\n", false, ""},
+		{"gate pool quoted", head + "gate: {run: x, pool: \"p1\"}\n", true, ""},
+		{"gate checks integer", head + "gate: {run: x, checks: [1]}\n", false, ""},
+		{"gate tagged string", head + "gate: !!str 42\n", true, ""},
+
+		// gate.env: any scalar but null.
+		{"env scalars", env("{PORT: 8080, DEBUG: true, NAME: x, RATIO: 1.5}"), true, ""},
+		{"env null value", env("{A: null}"), false, ""},
+		{"env list value", env("{A: [x]}"), false, ""},
+		{"env integer key", env("{1: x}"), false, ""},
+		{"env boolean key", env("{true: x}"), false, "the key's text, true, is a valid name"},
+		{"env null key", env("{null: x}"), false, "the key's text, null, is a valid name"},
+		{"env duplicate key", env("{A: x, A: y}"), false, "duplicate key"},
+
+		// check: a command string or a mapping.
+		{"check string", base + "check: npm run lint\n", true, ""},
+		{"check quoted number", base + "check: \"42\"\n", true, ""},
+		{"check integer", base + "check: 42\n", false, ""},
+		{"check float", base + "check: 1.5\n", false, ""},
+		{"check boolean", base + "check: false\n", false, ""},
+		{"check null", base + "check: null\n", false, ""},
+		{"check empty", base + "check:\n", false, ""},
+		{"check mapping", base + "check: {checks: [Lint]}\n", true, ""},
+		{"check checks integer", base + "check: {checks: [1]}\n", false, ""},
+
+		// sweep.checks: a built-in name, or {name: <built-in>}, or a
+		// repo command {name, run} whose name is not a built-in.
+		{"sweep builtin", sweep("stale_pr"), true, ""},
+		{"sweep builtin quoted", sweep("\"pin_drift\""), true, ""},
+		{"sweep unknown builtin", sweep("stale"), false, ""},
+		{"sweep integer", sweep("42"), false, ""},
+		{"sweep float", sweep("1.5"), false, ""},
+		{"sweep boolean", sweep("true"), false, ""},
+		{"sweep null", sweep("null"), false, ""},
+		{"sweep builtin by name", sweep("{name: stale_pr}"), true, ""},
+		{"sweep unknown by name", sweep("{name: licenses}"), false, ""},
+		{"sweep probe name", sweep("{name: health}"), false, ""},
+		{"sweep command", sweep("{name: licenses, run: task licenses}"), true, ""},
+		{"sweep command shadows builtin", sweep("{name: stale_pr, run: x}"), false, ""},
+		{"sweep command empty run", sweep("{name: licenses, run: \"\"}"), false, ""},
+		{"sweep command null run", sweep("{name: licenses, run: null}"), false, ""},
+		{"sweep command integer run", sweep("{name: licenses, run: 42}"), false, ""},
+		{"sweep command integer name", sweep("{name: 42, run: x}"), false, ""},
+		{"sweep command without name", sweep("{run: x}"), false, ""},
+		{"sweep empty mapping", sweep("{}"), false, ""},
+		{"sweep builtin twice", sweep("stale_pr, {name: stale_pr}"), false, "uniqueness across entries"},
+
+		// probes: the same rules over the probe built-ins.
+		{"probe builtin", probes("health"), true, ""},
+		{"probe integer", probes("42"), false, ""},
+		{"probe boolean", probes("true"), false, ""},
+		{"probe null", probes("null"), false, ""},
+		{"probe builtin by name", probes("{name: synthetic}"), true, ""},
+		{"probe unknown by name", probes("{name: smoke}"), false, ""},
+		{"probe sweep name", probes("{name: stale_pr}"), false, ""},
+		{"probe command", probes("{name: smoke, run: task smoke}"), true, ""},
+		{"probe command shadows builtin", probes("{name: health, run: x}"), false, ""},
+		{"probe command empty run", probes("{name: smoke, run: \"\"}"), false, ""},
+		{"probe command integer name", probes("{name: 7, run: x}"), false, ""},
+		{"probe empty mapping", probes("{}"), false, ""},
+
+		// Other string fields take only strings.
+		{"regen integer", base + "generated: [a]\nregen: 42\n", false, ""},
+		{"generated integer", base + "generated: [1]\n", false, ""},
+		{"recurring name integer", base + "recurring: [{name: 1, schedule: \"0 3 * * 1\", run: x}]\n", false, ""},
+		{"recurring name quoted", base + "recurring: [{name: \"1\", schedule: \"0 3 * * 1\", run: x}]\n", true, ""},
+
+		// Keys.
+		{"top-level boolean key", base + "true: x\n", false, ""},
+		{"top-level integer key", base + "1: x\n", false, ""},
+		{"queue integer key", base + "queue: {1: 2}\n", false, ""},
+		{"playbooks boolean key", base + "playbooks: {true: p.md}\n", false, ""},
+		{"playbooks string key", base + "playbooks: {main: p.md}\n", true, ""},
+		{"duplicate top-level key", base + "gate: \"go test ./...\"\n", false, "duplicate key"},
+		{"duplicate nested key", base + "queue: {batch_max: 2, batch_max: 3}\n", false, "duplicate key"},
+		{"duplicate playbook", base + "playbooks: {main: a.md, main: b.md}\n", false, "duplicate key"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, perr := Load([]byte(tc.doc))
+			if got := perr == nil; got != tc.accept {
+				t.Errorf("Parse accepted = %v, want %v (error: %v)\n%s", got, tc.accept, perr, tc.doc)
+			}
+			if tc.parserOnly != "" {
+				return
+			}
+			serr := rs.Validate(asJSON(t, []byte(tc.doc)))
+			if got := serr == nil; got != tc.accept {
+				t.Errorf("the JSON schema accepted = %v, want %v (error: %v)\n%s", got, tc.accept, serr, tc.doc)
+			}
+		})
 	}
 }

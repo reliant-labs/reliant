@@ -81,7 +81,7 @@ type Gate struct {
 	// Env holds non-secret variables for the gate's environment. The file is
 	// in git: never put a secret here. Names starting RELIANT_ are reserved.
 	// Machine runner only.
-	Env map[string]string `yaml:"env"`
+	Env EnvVars `yaml:"env"`
 	// InfraPatterns are regular expressions (Go RE2) over failing step logs;
 	// a match makes the failure infra (unproven), never red.
 	InfraPatterns []string `yaml:"infra_patterns"`
@@ -90,6 +90,11 @@ type Gate struct {
 	// commit as this file.
 	InfraPatternsFile string `yaml:"infra_patterns_file"`
 }
+
+// EnvVars is gate.env: variable names to values. A value may be written as
+// any YAML scalar but null; a number or boolean is kept as written
+// (`PORT: 8080` is "8080").
+type EnvVars map[string]string
 
 // Check is the optional `check` tier. The string form `check: "<cmd>"` is
 // `check: {run: "<cmd>"}`. At least one of Run and Checks is set.
