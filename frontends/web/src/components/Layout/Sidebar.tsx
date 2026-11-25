@@ -550,6 +550,12 @@ interface WorktreeGroupComponentProps {
   onToggle: () => void;
   renderChat: (chat: ChatWithActivity) => ReactNode;
   onNewChat?: () => void;
+  /**
+   * What New chat says. A workspace's own by default; the heading of a
+   * project's main checkout says the project's, since that one `+` is the
+   * project's New chat too (one `+` per heading, owner 2026-11-25).
+   */
+  newChatLabel?: { tooltip: string; ariaLabel: string };
   onArchiveWorktree?: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
   emptyState?: {
@@ -586,6 +592,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
   onToggle,
   renderChat,
   onNewChat,
+  newChatLabel,
   onArchiveWorktree,
   onContextMenu,
   emptyState,
@@ -612,10 +619,10 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
     onNewChat || onArchiveWorktree || extraActions ? (
       <>
         {onNewChat && (
-          <Tooltip content="New chat in this workspace" side="left" delay={300}>
+          <Tooltip content={newChatLabel?.tooltip ?? "New chat in this workspace"} side="left" delay={300}>
             <button
               type="button"
-              aria-label={`New chat in ${title}`}
+              aria-label={newChatLabel?.ariaLabel ?? `New chat in ${title}`}
               onClick={(e) => {
                 e.stopPropagation();
                 onNewChat();
@@ -697,6 +704,16 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
     </div>
   );
 });
+
+/**
+ * Which of a project's workspace headings stands for the project itself (its
+ * New chat is the project's): the main checkout, else the chats with no known
+ * workspace (they run in the main checkout), else none (-1).
+ */
+function projectHomeIndex(workspaces: readonly ChatGroup[]): number {
+  const main = workspaces.findIndex((w) => w.isMain && !w.worktreeId.startsWith("no-worktree"));
+  return main !== -1 ? main : workspaces.findIndex((w) => w.worktreeId.startsWith("no-worktree"));
+}
 
 /** How many of one project's chats the Chats accordion lists before "All chats". */
 const CHATS_CAP = 8;
@@ -1560,10 +1577,20 @@ function SidebarComponent({
 
   // `layout`: a workspace inside a project section is nested under it, and
   // the project's only workspace, its main one, has no header of its own.
+  // `projectHome`: the heading stands for the project's main checkout, so its
+  // one New chat is the project's (the project's controls add no second `+`).
   const renderWorktreeGroup = useCallback(
     (
       group: ChatGroup,
-      layout: { nested?: boolean; hideHeader?: boolean; projectName?: string; headingTrail?: ReactNode; extraActions?: ReactNode; testId?: string } = {},
+      layout: {
+        nested?: boolean;
+        hideHeader?: boolean;
+        projectName?: string;
+        projectHome?: boolean;
+        headingTrail?: ReactNode;
+        extraActions?: ReactNode;
+        testId?: string;
+      } = {},
     ) => {
       // Handle main branch (no worktree) special case
       const isNoWorktree = group.worktreeId.startsWith("no-worktree");
@@ -1579,12 +1606,23 @@ function SidebarComponent({
         }
       };
 
-      // Handlers for worktree actions
-      const handleNewChat = isNoWorktree
-        ? undefined
-        : () => {
+      // Handlers for worktree actions. The main checkout's New chat names its
+      // workspace, so it starts there even when the open chat is on a branch.
+      // Chats with no known workspace stand for the main checkout only when
+      // the project has no main workspace to name.
+      const handleNewChat = !isNoWorktree
+        ? () => {
             void handleSwitchToWorktreeNewChat(group.worktreeId, group.projectId);
-          };
+          }
+        : layout.projectHome
+          ? () => {
+              void openNewChat({ projectId: group.projectId });
+            }
+          : undefined;
+      const newChatLabel =
+        layout.projectHome && layout.projectName
+          ? { tooltip: "New chat in this project", ariaLabel: `New chat in ${layout.projectName}` }
+          : undefined;
 
       const handleArchiveWorktree = (isNoWorktree || group.isMain)
         ? undefined
@@ -1639,6 +1677,7 @@ function SidebarComponent({
             />
           )}
           onNewChat={handleNewChat}
+          newChatLabel={newChatLabel}
           onArchiveWorktree={handleArchiveWorktree}
           onContextMenu={handleWorktreeMenu}
           emptyState={emptyState}
@@ -1723,21 +1762,11 @@ function SidebarComponent({
           )}
         </>
       ) : undefined;
+    // The project's menu only: its New chat is the main checkout's heading's
+    // one `+` (projectHome below), never a second `+` beside it (owner,
+    // 2026-11-25: "reliant-labs · main" showed `+ + …`).
     const projectControls = (
       <>
-        <Tooltip content="New chat in this project" side="left" delay={300}>
-          <button
-            type="button"
-            aria-label={`New chat in ${group.projectName}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              void openNewChat({ projectId: group.projectId });
-            }}
-            className={SIDEBAR_ICON_BUTTON}
-          >
-            <Plus className="size-3.5" aria-hidden="true" />
-          </button>
-        </Tooltip>
         <DropdownMenu
           align="right"
           density="compact"
@@ -1758,14 +1787,16 @@ function SidebarComponent({
         />
       </>
     );
+    const homeIndex = projectHomeIndex(group.workspaces);
     return (
       <section key={group.projectId} aria-label={group.projectName} data-testid={`sidebar-project-${group.projectId}`} className="space-y-0.5">
         {group.workspaces.map((workspace, i) =>
           renderWorktreeGroup(workspace, {
             nested: true,
             projectName: group.projectName,
+            projectHome: i === homeIndex,
             headingTrail: i === 0 ? trail : undefined,
-            // The main workspace's own New chat is the project's; the project's controls ride its first heading.
+            // The main workspace's own New chat is the project's; the project's menu rides its first heading.
             extraActions: i === 0 ? projectControls : undefined,
             testId: i === 0 ? `sidebar-project-header-${group.projectId}` : undefined,
           }),
@@ -1989,7 +2020,13 @@ function SidebarComponent({
                         projectFilterId ? (
                           shownGroups.length > 0 && (
                             <div className="space-y-0.5">
-                              {shownGroups.map((group) => renderWorktreeGroup(group, { nested: true, projectName: projectNameOf(group.projectId) }))}
+                              {shownGroups.map((group) =>
+                                renderWorktreeGroup(group, {
+                                  nested: true,
+                                  projectName: projectNameOf(group.projectId),
+                                  projectHome: group === shownGroups[projectHomeIndex(shownGroups)],
+                                }),
+                              )}
                             </div>
                           )
                         ) : (
