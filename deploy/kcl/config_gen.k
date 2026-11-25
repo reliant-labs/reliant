@@ -24,8 +24,15 @@ schema ApiServerConfigOrgs:
     # Let orgs bind provider workspaces and pay for members' sign-ins in them as seats
     provider_workspace_seats_enabled: bool = False
 
+# forge:section schema ApiServerConfigChatCollaboration
+# forge:hash=8a58598f1c1a29e915ea81e61514bec1608c8abc541e39379a4aec7d2a234d73
+# ApiServerConfigChatCollaboration is the chat_collaboration block (ChatCollaborationConfig) — author its values in config.k as `chat_collaboration.<field> = ...`.
+schema ApiServerConfigChatCollaboration:
+    # Let chat owners and managers grant people view, reply or manage on a chat
+    enabled: bool = False
+
 # forge:section schema ApiServerConfig
-# forge:hash=ed6c730e5ddd820ad33ecc05660188f76f44577527fb01e219650d121901269a
+# forge:hash=b02ad5e8366d87108a11f3d789fb7f51115c518859230b12d049844470f4fd94
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -109,6 +116,8 @@ schema ApiServerConfig:
     readiness_paths: str = "/ready,/readyz"
     # orgs config block (OrgsConfig). Set its fields as `orgs.<field> = ...`.
     orgs: ApiServerConfigOrgs = ApiServerConfigOrgs {}
+    # chat_collaboration config block (ChatCollaborationConfig). Set its fields as `chat_collaboration.<field> = ...`.
+    chat_collaboration: ApiServerConfigChatCollaboration = ApiServerConfigChatCollaboration {}
 
     check:
         jwt_signing_method != "", "jwt_signing_method = \"\" cannot reach the process: an empty JWT_SIGNING_METHOD counts as unset, so it would load the default \"RS256\" — set a value, or pass --jwt-signing-method= in the workload's args to make it empty"
@@ -239,6 +248,10 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED" = "true" if c.orgs.provider_accounts_enabled else "false"
         "RELIANT_ORGS_PROJECT_MOVES_ENABLED" = "true" if c.orgs.project_moves_enabled else "false"
         "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED" = "true" if c.orgs.provider_workspace_seats_enabled else "false"
+
+        # forge:section apiServerConfigEnvMap values chat_collaboration
+        # forge:hash=9d5a48d18189f5ffa38880550f528bbddb25a42a614391c2accb388a02181435
+        "RELIANT_CHAT_COLLABORATION_ENABLED" = "true" if c.chat_collaboration.enabled else "false"
 
         # forge:section apiServerConfigEnvMap values (end)
         # forge:hash=32b348156db484a6bfc9026984d82fa5308a88b0f1b77cb5e31845597dd30b46
@@ -1970,7 +1983,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=a91a29c60424b7b2ef544d3087267d772420544fbe3d9622bb2a2178ef1d65f6
+# forge:hash=7de625ed40fbd6d5d8e9c212aaff96a06110702898c8d2f10a2032e375b6cd0a
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -2081,22 +2094,587 @@ schema RootFamily:
 ROOTS: {str: Root} = {
     "api" = Root {
         args = ["server", "api"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "RELIANT_IDLE_RECLAIM", "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE", "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE", "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE", "JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELIANT_JWKS_URL", "SUPABASE_JWT_ISSUER", "SUPABASE_JWT_AUDIENCE", "JWT_ISSUER", "JWT_AUDIENCE", "JWT_JWKS_URL", "JWT_SIGNING_METHOD", "JWT_ROLES_CLAIM", "JWT_JWKS_SNAPSHOT_FILE", "JWT_JWKS_SNAPSHOT_MAX_AGE", "ALLOWED_EMAIL_DOMAINS", "RELIANT_DISABLE_FORGE_API", "GRPC_PORT", "HEALTH_PORT", "PPROF_PORT", "BIND_ADDRESS", "CORS_ALLOWED_ORIGINS", "AUTH_MODE", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MCP_OAUTH_SCOPES", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE", "RELIANT_WORKTREE_LANDED_IDLE", "RELIANT_WORKTREE_RECLAIM_QUIET", "RELIANT_WORKTREE_RECLAIM_GRACE", "RELIANT_WORKTREE_LIVE_SHED_IDLE", "RELIANT_AUTH_URL", "RELIANT_AUTH_KEY", "RELIANT_PAYLOAD_BLOB_GC_HORIZON", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_ORGS_CONNECTIONS_ENABLED", "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED", "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED", "RELIANT_ORGS_PROJECT_MOVES_ENABLED", "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "RELIANT_PR_RECORD_REPOSITORIES", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
-        secrets = ["JWT_JWKS_SNAPSHOT", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET", "DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
-        required_secrets = ["DATABASE_URL", "NATS_URL"]
+        env = [
+            # forge:section root api env log
+            # forge:hash=5ccf1452265460a2885a7d70faa9ebc1e38cf154ccb9f23435105d8f8952bc7b
+            "RELIANT_LOG_LEVEL",
+            "LOG_FORMAT",
+
+            # forge:section root api env runtime
+            # forge:hash=c87aa4b10858b6cf7cee2fb9c7a84360b04364ac64ebd725c415f9cae1d26af2
+            "RELIANT_ENV",
+
+            # forge:section root api env storage_reaper
+            # forge:hash=8dd99e4272507825bbda6459a73453eaf3887789e454e5286f39d2813a82c6ba
+            "RELIANT_STORAGE_REAPER",
+            "RELIANT_STORAGE_REAPER_INTERVAL",
+            "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL",
+            "FORGE_STORAGE_POLICY",
+            "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL",
+
+            # forge:section root api env transcript
+            # forge:hash=d974e49d94e3aee273f1f3f6c56d55ca4d8a76acff6c4edad569b3f50954a34f
+            "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS",
+
+            # forge:section root api env worktree_reclaim
+            # forge:hash=e4d94025ab2fbdee1969eb1cd1e15e3c7545c5c11be1e2aa892d2fbf1b815717
+            "RELIANT_WORKTREE_RECLAIM",
+            "RELIANT_WORKTREE_RECLAIM_ROOTS",
+            "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE",
+            "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE",
+
+            # forge:section root api env machine_org
+            # forge:hash=20cd0d122cc069d3d0b02868699b2a171dff10db8c0c3fd01372b643fc7b93f9
+            "RELIANT_MACHINE_ORG_CLEANUP",
+
+            # forge:section root api env idle_reclaim
+            # forge:hash=2018ba99128ec8fa938fe90ff1c47c7f2ffea6152eb4c224f4290e593cae318e
+            "RELIANT_IDLE_RECLAIM",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
+            "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
+
+            # forge:section root api env (root)
+            # forge:hash=a06ffa2bc71de2e9597f7186c871eda017f2b74927d8f7ccbf6244488a057d08
+            "JWT_PUBLIC_KEY",
+            "JWT_PUBLIC_KEY_FILE",
+            "RELIANT_JWKS_URL",
+            "SUPABASE_JWT_ISSUER",
+            "SUPABASE_JWT_AUDIENCE",
+            "JWT_ISSUER",
+            "JWT_AUDIENCE",
+            "JWT_JWKS_URL",
+            "JWT_SIGNING_METHOD",
+            "JWT_ROLES_CLAIM",
+            "JWT_JWKS_SNAPSHOT_FILE",
+            "JWT_JWKS_SNAPSHOT_MAX_AGE",
+            "ALLOWED_EMAIL_DOMAINS",
+            "RELIANT_DISABLE_FORGE_API",
+            "GRPC_PORT",
+            "HEALTH_PORT",
+            "PPROF_PORT",
+            "BIND_ADDRESS",
+            "CORS_ALLOWED_ORIGINS",
+            "AUTH_MODE",
+            "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM",
+            "RELIANT_AUTHORIZATION_SERVER",
+            "MCP_OAUTH_ISSUERS",
+            "MCP_OAUTH_SCOPES",
+            "MAX_UPLOAD_SIZE",
+            "RELIANT_WORKTREE_AUTO_ARCHIVE",
+            "RELIANT_WORKTREE_LANDED_IDLE",
+            "RELIANT_WORKTREE_RECLAIM_QUIET",
+            "RELIANT_WORKTREE_RECLAIM_GRACE",
+            "RELIANT_WORKTREE_LIVE_SHED_IDLE",
+            "RELIANT_AUTH_URL",
+            "RELIANT_AUTH_KEY",
+            "RELIANT_PAYLOAD_BLOB_GC_HORIZON",
+            "PRE_STOP_DELAY",
+            "SHUTDOWN_TIMEOUT",
+            "LIVENESS_PATHS",
+            "READINESS_PATHS",
+
+            # forge:section root api env orgs
+            # forge:hash=5da7d7eef288cb51c06d96bdc858b53b0077769d1d04086ac6f08785b199e1cb
+            "RELIANT_ORGS_CONNECTIONS_ENABLED",
+            "RELIANT_ORGS_GITHUB_INSTALLATION_TRIGGERS_ENABLED",
+            "RELIANT_ORGS_PROVIDER_ACCOUNTS_ENABLED",
+            "RELIANT_ORGS_PROJECT_MOVES_ENABLED",
+            "RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED",
+
+            # forge:section root api env chat_collaboration
+            # forge:hash=cbc82a94dea7cbff8d8b3de9ad7fb7a6194ab045a3e50a62e4a4fa13b35eabf7
+            "RELIANT_CHAT_COLLABORATION_ENABLED",
+
+            # forge:section root api env (root) #2
+            # forge:hash=88feb0d879ca0a87d6568e51505644e6f0f3af3872fee134526807dd1156aa57
+            "DATABASE_DRIVER",
+            "RELIANT_DB_MAX_OPEN_CONNS",
+            "RELIANT_DB_MAX_IDLE_CONNS",
+            "DB_CONNECT_TIMEOUT",
+            "RELIANT_DB_SCHEMA_WAIT_SECONDS",
+
+            # forge:section root api env control_plane
+            # forge:hash=c2b8c40c7c1f2c407a78589643e58773115138629ae5560d2e6cf5462b670b14
+            "RELIANT_CONTROL_PLANE_URL",
+            "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG",
+
+            # forge:section root api env nats
+            # forge:hash=79d28b1134c1949a81e41353281e740fb6f37d24258bf6703e10af4efb1e3d36
+            "NATS_USER",
+
+            # forge:section root api env temporal
+            # forge:hash=9748233efcf2260df2f838ad151139775d5b2d439ce0ed900e44f6afe2d7afa5
+            "TEMPORAL_HOST",
+            "TEMPORAL_PORT",
+            "TEMPORAL_NAMESPACE",
+
+            # forge:section root api env tls
+            # forge:hash=9210fbeb7a2b4ea5ee02bc9fc25af7ed6f889ba4d554444712f9709a28f0e34c
+            "TLS_CERT_FILE",
+            "TLS_KEY_FILE",
+            "DISABLE_TLS",
+
+            # forge:section root api env (root) #3
+            # forge:hash=2a9f4cfd3b8587f7fe25b3c0f680e9fbd51ea01c19be88b62f7a9cbd894dace1
+            "DATA_DIR",
+            "STREAMING_DRIVER",
+
+            # forge:section root api env integrations
+            # forge:hash=e3b287bb38d7458408697985c9ff52ff7de75e5eee1eb89eb31020952cc6431d
+            "PUBLIC_URL",
+            "RELIANT_GITHUB_APP_SLUG",
+            "RELIANT_GITHUB_BOT_USER_ID",
+            "RELIANT_GITHUB_BOT_LOGIN",
+            "RELIANT_PR_RECORD_REPOSITORIES",
+
+            # forge:section root api env observability
+            # forge:hash=ffe0524897cf142f5f5adb2f2d538ee40256d252bc2997b8dd2b60ea54d33d2d
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "OTEL_ENABLED",
+            "PROMETHEUS_ENABLED",
+            "ENVIRONMENT",
+
+            # forge:section root api env analytics
+            # forge:hash=883f3505dd2338ad444f282e9c0ed0735603518c796ddaf9f15226d18c3ae9f3
+            "RELIANT_ANALYTICS_DISABLED",
+
+            # forge:section root api env llm
+            # forge:hash=5aae59ca293ac18a340a9f8480dd797d172362c0b488bc7df3dae56903a77199
+            "RELIANT_API_BASE_URL",
+            "VERTEXAI_PROJECT",
+            "VERTEXAI_LOCATION",
+            "RELIANT_LLM_STREAM_IDLE_TIMEOUT",
+            "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT",
+            "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT",
+            "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT",
+            "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT",
+            "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS",
+
+            # forge:section root api env preview
+            # forge:hash=3a387a13449fb50de1c9ce705a09131ba5d7cb1689e3b3df9ad57d66cd1dcb53
+            "PROXY_HOST",
+            "WORKSPACE_BASE_DOMAIN",
+            "WORKSPACE_URL_SCHEME",
+            "WORKSPACE_URL_PORT",
+
+            # forge:section root api env network
+            # forge:hash=88ca6b178fd94e1e21c0849210bc27a11223d644342577f2ea8d170d550b1941
+            "RELIANT_ALLOW_PRIVATE_EGRESS",
+
+            # forge:section root api env org_policy_enforcement
+            # forge:hash=77463166815641457d47007dc4e2693feb9a0c2d69e93bc1433b080058324217
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS",
+
+            # forge:section root api env client_versions
+            # forge:hash=4129c90d691280841147d7735f2df0bd3a00ba8f32a0900e252a24ac51c8b0e4
+            "RELIANT_MIN_WEB_VERSION",
+            "RELIANT_WEB_UPGRADE_URL",
+            "RELIANT_WEB_UPGRADE_COMMAND",
+            "RELIANT_MIN_DESKTOP_VERSION",
+            "RELIANT_DESKTOP_UPGRADE_URL",
+            "RELIANT_DESKTOP_UPGRADE_COMMAND",
+            "RELIANT_MIN_DAEMON_VERSION",
+            "RELIANT_DAEMON_UPGRADE_URL",
+            "RELIANT_DAEMON_UPGRADE_COMMAND",
+            "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX",
+            "RELIANT_MIN_CLI_VERSION",
+            "RELIANT_CLI_UPGRADE_URL",
+            "RELIANT_CLI_UPGRADE_COMMAND",
+            "RELIANT_MIN_SDK_GO_VERSION",
+            "RELIANT_SDK_GO_UPGRADE_URL",
+            "RELIANT_SDK_GO_UPGRADE_COMMAND",
+            "RELIANT_MIN_SDK_TS_VERSION",
+            "RELIANT_SDK_TS_UPGRADE_URL",
+            "RELIANT_SDK_TS_UPGRADE_COMMAND",
+            "RELIANT_CLIENT_VERSION_ENFORCE",
+            "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED",
+            "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED",
+
+            # forge:section root api env (end)
+            # forge:hash=7cce70f80c7f09e7d6d0f6dadef2f51be26ee5e885d6331fc33ef3bad4a54a1a
+        ]
+        secrets = [
+            # forge:section root api secrets (root)
+            # forge:hash=d5bfeac0241c1b7783ae333403f41e7ab28a615e22e217c23be1f4ab82fa7264
+            "JWT_JWKS_SNAPSHOT",
+            "AUTH_API_KEY",
+            "AUTH_DEV_JWT_SECRET",
+            "DATABASE_URL",
+            "DATABASE_DIRECT_URL",
+
+            # forge:section root api secrets control_plane
+            # forge:hash=548c516b9839cacaf7db99c0997cd5bf75b27797ed799e39218d1159fde12583
+            "INTERNAL_SERVICE_SECRET",
+
+            # forge:section root api secrets nats
+            # forge:hash=580e20878f3edb44f0ae28070d321997f83b8f5f25f549d5cee99abc021bed96
+            "NATS_URL",
+            "NATS_PASSWORD",
+
+            # forge:section root api secrets integrations
+            # forge:hash=36c0423e1715ba45484395cb0d8c50525fa673490f57a31656949ae124efe28b
+            "RELIANT_VAULT_KEY",
+            "RELIANT_SLACK_SIGNING_SECRET",
+            "RELIANT_GITHUB_WEBHOOK_SECRET",
+            "RELIANT_TEST_INTEGRATION_SECRET",
+
+            # forge:section root api secrets (end)
+            # forge:hash=51508a9c3d2d78952b193ba57b93e4722f3b40806cc9fe70a9e5e1a9d74571e5
+        ]
+        required_secrets = [
+            # forge:section root api required_secrets (root)
+            # forge:hash=b5efe90aa9427ec972d8ed51dc1a3ce80806bacd37499d2885c2a0398ea243ba
+            "DATABASE_URL",
+
+            # forge:section root api required_secrets nats
+            # forge:hash=e7b2b60792ed5aa076159ddcbea0d428c2c51868c6c39c2abbba5d4605a7a53d
+            "NATS_URL",
+
+            # forge:section root api required_secrets (end)
+            # forge:hash=a577a8452ceeb87ca7f4d836faa39510355093c9757c615da75dd4e4b08b8544
+        ]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]
     }
     "gateway" = Root {
         args = ["server", "gateway"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "RELIANT_IDLE_RECLAIM", "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE", "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE", "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "TOOLS_DAEMON_PORT", "HEALTH_PORT", "BIND_ADDRESS", "PPROF_ADDR", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "MACHINE_STATS_ORGS", "MACHINE_STATS_LABEL", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TLS_CERT_FILE", "TLS_KEY_FILE", "DISABLE_TLS", "DATA_DIR", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_MIN_WEB_VERSION", "RELIANT_WEB_UPGRADE_URL", "RELIANT_WEB_UPGRADE_COMMAND", "RELIANT_MIN_DESKTOP_VERSION", "RELIANT_DESKTOP_UPGRADE_URL", "RELIANT_DESKTOP_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_VERSION", "RELIANT_DAEMON_UPGRADE_URL", "RELIANT_DAEMON_UPGRADE_COMMAND", "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX", "RELIANT_MIN_CLI_VERSION", "RELIANT_CLI_UPGRADE_URL", "RELIANT_CLI_UPGRADE_COMMAND", "RELIANT_MIN_SDK_GO_VERSION", "RELIANT_SDK_GO_UPGRADE_URL", "RELIANT_SDK_GO_UPGRADE_COMMAND", "RELIANT_MIN_SDK_TS_VERSION", "RELIANT_SDK_TS_UPGRADE_URL", "RELIANT_SDK_TS_UPGRADE_COMMAND", "RELIANT_CLIENT_VERSION_ENFORCE", "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED", "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED"]
-        secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD"]
-        required_secrets = ["DATABASE_URL", "NATS_URL"]
+        env = [
+            # forge:section root gateway env log
+            # forge:hash=b7162342e1bb19b0125d41b578a0e8e7d62e37840dfa0dea9e782ba058151b13
+            "RELIANT_LOG_LEVEL",
+            "LOG_FORMAT",
+
+            # forge:section root gateway env runtime
+            # forge:hash=5c6868b4042f9f34fa32ec302325df56cdfc83425369769d65253369a22ecdb7
+            "RELIANT_ENV",
+
+            # forge:section root gateway env storage_reaper
+            # forge:hash=0fee963a80ea4e725c8ff4d64f0300d16a5b3765893568d2d3df12d99264cafd
+            "RELIANT_STORAGE_REAPER",
+            "RELIANT_STORAGE_REAPER_INTERVAL",
+            "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL",
+            "FORGE_STORAGE_POLICY",
+            "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL",
+
+            # forge:section root gateway env transcript
+            # forge:hash=55209d548436a92152f44de531d03dec931c8551b7e00a35f1a5869f0563b390
+            "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS",
+
+            # forge:section root gateway env worktree_reclaim
+            # forge:hash=5cf4d93d64c3f5fc5d02a992c181cab8ac99e6fc2e64f81a37d51e35d618de93
+            "RELIANT_WORKTREE_RECLAIM",
+            "RELIANT_WORKTREE_RECLAIM_ROOTS",
+            "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE",
+            "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE",
+
+            # forge:section root gateway env machine_org
+            # forge:hash=2b44a18a4f8d2fc1f4633e5cb58c7fcc875e4ec0dd8b40c363d51601e56e4941
+            "RELIANT_MACHINE_ORG_CLEANUP",
+
+            # forge:section root gateway env idle_reclaim
+            # forge:hash=5e47e625fc2c7a408c61b410b06f71875a8e59390c1136f9b93f266530dfd31a
+            "RELIANT_IDLE_RECLAIM",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
+            "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
+
+            # forge:section root gateway env (root)
+            # forge:hash=751acacff603d412b87b85659d2724d1b9ea693dd4d7863993d4f5276f14383d
+            "DATABASE_DRIVER",
+            "RELIANT_DB_MAX_OPEN_CONNS",
+            "RELIANT_DB_MAX_IDLE_CONNS",
+            "DB_CONNECT_TIMEOUT",
+            "RELIANT_DB_SCHEMA_WAIT_SECONDS",
+            "TOOLS_DAEMON_PORT",
+            "HEALTH_PORT",
+            "BIND_ADDRESS",
+            "PPROF_ADDR",
+            "PRE_STOP_DELAY",
+            "SHUTDOWN_TIMEOUT",
+            "LIVENESS_PATHS",
+            "READINESS_PATHS",
+            "MACHINE_STATS_ORGS",
+            "MACHINE_STATS_LABEL",
+
+            # forge:section root gateway env control_plane
+            # forge:hash=34ed4a7a45395dcc94e4614ba28a406b9b390755ba94e07fb069c8a3e4440263
+            "RELIANT_CONTROL_PLANE_URL",
+            "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG",
+
+            # forge:section root gateway env nats
+            # forge:hash=f95f9537835196f164932e1bc954f4f4e1adeb94dfe318455239a24e82d08dbf
+            "NATS_USER",
+
+            # forge:section root gateway env tls
+            # forge:hash=bce97afb823c688d2c3c1b12946a4ab40792f18016f5c8a57f9dea5f15b4df85
+            "TLS_CERT_FILE",
+            "TLS_KEY_FILE",
+            "DISABLE_TLS",
+
+            # forge:section root gateway env (root) #2
+            # forge:hash=e03c921b99e32b2aada50ae403bba6750226074448fb085168c50751eeb8a597
+            "DATA_DIR",
+
+            # forge:section root gateway env observability
+            # forge:hash=fcc76068e46ed06bb2719989507ac5f2b01bf7a3a15c1ea1b85e67e4777cabac
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "OTEL_ENABLED",
+            "PROMETHEUS_ENABLED",
+            "ENVIRONMENT",
+
+            # forge:section root gateway env org_policy_enforcement
+            # forge:hash=3f5f34214adee39958d3ec991e57fa53579381046b689685744c9235543f6250
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS",
+
+            # forge:section root gateway env client_versions
+            # forge:hash=1a26bf81833f90e8ddbe2a41eebf16761fa10c8c86288d5bcd42116ee8ac4085
+            "RELIANT_MIN_WEB_VERSION",
+            "RELIANT_WEB_UPGRADE_URL",
+            "RELIANT_WEB_UPGRADE_COMMAND",
+            "RELIANT_MIN_DESKTOP_VERSION",
+            "RELIANT_DESKTOP_UPGRADE_URL",
+            "RELIANT_DESKTOP_UPGRADE_COMMAND",
+            "RELIANT_MIN_DAEMON_VERSION",
+            "RELIANT_DAEMON_UPGRADE_URL",
+            "RELIANT_DAEMON_UPGRADE_COMMAND",
+            "RELIANT_MIN_DAEMON_COMMIT_TIME_UNIX",
+            "RELIANT_MIN_CLI_VERSION",
+            "RELIANT_CLI_UPGRADE_URL",
+            "RELIANT_CLI_UPGRADE_COMMAND",
+            "RELIANT_MIN_SDK_GO_VERSION",
+            "RELIANT_SDK_GO_UPGRADE_URL",
+            "RELIANT_SDK_GO_UPGRADE_COMMAND",
+            "RELIANT_MIN_SDK_TS_VERSION",
+            "RELIANT_SDK_TS_UPGRADE_URL",
+            "RELIANT_SDK_TS_UPGRADE_COMMAND",
+            "RELIANT_CLIENT_VERSION_ENFORCE",
+            "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED",
+            "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED",
+
+            # forge:section root gateway env (end)
+            # forge:hash=7376a153bc04c136aa661594f92ab9f2c2eba3f0b6aece22c25b9e2fba3fe39f
+        ]
+        secrets = [
+            # forge:section root gateway secrets (root)
+            # forge:hash=3866495ae5fbd45cadcb97c8b7bb9534a83959306fa1959040054cc1a5c95342
+            "DATABASE_URL",
+            "DATABASE_DIRECT_URL",
+
+            # forge:section root gateway secrets control_plane
+            # forge:hash=dfc26396a390953f2d8a4f1f9fabf6175a4fd7160dc311e58316f8210c182505
+            "INTERNAL_SERVICE_SECRET",
+
+            # forge:section root gateway secrets nats
+            # forge:hash=2246cc02c17a1882317aa1225652d3e459491483bc04e28e436d704ca761f3d0
+            "NATS_URL",
+            "NATS_PASSWORD",
+
+            # forge:section root gateway secrets (end)
+            # forge:hash=10cf4e7f6e7b9657b9468359f8aaa5315a86f5d3938f1171f12c739803d60a6b
+        ]
+        required_secrets = [
+            # forge:section root gateway required_secrets (root)
+            # forge:hash=bcc61e5d2700b773bb7644c29c35f9f52c94619226eafc2cc35148abb7bcbb13
+            "DATABASE_URL",
+
+            # forge:section root gateway required_secrets nats
+            # forge:hash=3badf6296fe6b12a6273b5d7ca11a5abc5946d994d4ee911fcd9d6db97fe3973
+            "NATS_URL",
+
+            # forge:section root gateway required_secrets (end)
+            # forge:hash=c62a4b05df6e86d706c921f6de9b365b43ffbb23520d5e133b6a22e51de7af1c
+        ]
     }
     "worker" = Root {
         args = ["server", "worker"]
-        env = ["RELIANT_LOG_LEVEL", "LOG_FORMAT", "RELIANT_ENV", "RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS", "RELIANT_WORKTREE_RECLAIM", "RELIANT_WORKTREE_RECLAIM_ROOTS", "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE", "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE", "RELIANT_MACHINE_ORG_CLEANUP", "RELIANT_IDLE_RECLAIM", "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE", "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE", "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE", "DATABASE_DRIVER", "RELIANT_DB_MAX_OPEN_CONNS", "RELIANT_DB_MAX_IDLE_CONNS", "DB_CONNECT_TIMEOUT", "RELIANT_DB_SCHEMA_WAIT_SECONDS", "RELIANT_CONTROL_PLANE_URL", "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG", "NATS_USER", "TEMPORAL_HOST", "TEMPORAL_PORT", "TEMPORAL_NAMESPACE", "DATA_DIR", "STREAMING_DRIVER", "PUBLIC_URL", "RELIANT_GITHUB_APP_SLUG", "RELIANT_GITHUB_BOT_USER_ID", "RELIANT_GITHUB_BOT_LOGIN", "RELIANT_PR_RECORD_REPOSITORIES", "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_ENABLED", "PROMETHEUS_ENABLED", "ENVIRONMENT", "RELIANT_ANALYTICS_DISABLED", "RELIANT_API_BASE_URL", "VERTEXAI_PROJECT", "VERTEXAI_LOCATION", "RELIANT_LLM_STREAM_IDLE_TIMEOUT", "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT", "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS", "PROXY_HOST", "WORKSPACE_BASE_DOMAIN", "WORKSPACE_URL_SCHEME", "WORKSPACE_URL_PORT", "RELIANT_ALLOW_PRIVATE_EGRESS", "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS", "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS", "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES", "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP", "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS", "RELIANT_WORKER_HOSTED_ACTIONS_URL", "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE", "HEALTH_PORT", "PPROF_PORT", "PRE_STOP_DELAY", "SHUTDOWN_TIMEOUT", "LIVENESS_PATHS", "READINESS_PATHS", "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS", "RELIANT_WORKER_EGRESS_REPLICAS", "RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST", "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL", "RELIANT_WORKER_CHAT_UPDATE_RETENTION", "RELIANT_WORKER_STEP_EXECUTION_RETENTION", "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY"]
-        secrets = ["DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"]
-        required_secrets = ["DATABASE_URL", "NATS_URL"]
+        env = [
+            # forge:section root worker env log
+            # forge:hash=e8504054133af8293158656c8360fc4f521f93be0b29d4522127f3e85b64c3f1
+            "RELIANT_LOG_LEVEL",
+            "LOG_FORMAT",
+
+            # forge:section root worker env runtime
+            # forge:hash=043fed656b99bac56e0eed813375cf796cea0778a4c42415b48c83e3c3d60f96
+            "RELIANT_ENV",
+
+            # forge:section root worker env storage_reaper
+            # forge:hash=a5d89534adb977e04a276b3c92b10b6d8f84e904067a8cad6c67996bd03b9839
+            "RELIANT_STORAGE_REAPER",
+            "RELIANT_STORAGE_REAPER_INTERVAL",
+            "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL",
+            "FORGE_STORAGE_POLICY",
+            "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL",
+
+            # forge:section root worker env transcript
+            # forge:hash=79d98933ac7dc233d0dc62cd236f18af8ce00c6ce986c28a40b6213c7ae7d6c1
+            "RELIANT_TRANSCRIPT_TOOL_BODY_STUBS",
+
+            # forge:section root worker env worktree_reclaim
+            # forge:hash=17ba2872d112039614d39899898c72c080ad71c67786baa886faa16f71bdb340
+            "RELIANT_WORKTREE_RECLAIM",
+            "RELIANT_WORKTREE_RECLAIM_ROOTS",
+            "RELIANT_WORKTREE_RECLAIM_CLEAN_IDLE",
+            "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE",
+
+            # forge:section root worker env machine_org
+            # forge:hash=f0a3e223537d73d37fc1c1379179d7b0040b192d461d77a0f3a943695a057686
+            "RELIANT_MACHINE_ORG_CLEANUP",
+
+            # forge:section root worker env idle_reclaim
+            # forge:hash=01e8ef2e70a1f5d1dc473f769f3bc8c77445bdd01717bc69cd338168fd3208cf
+            "RELIANT_IDLE_RECLAIM",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
+            "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
+
+            # forge:section root worker env (root)
+            # forge:hash=84aaf81e7e16a419f918f4ddcce4e4a5c2fb7ca9a2e408ffd246c84e9dc5f6f3
+            "DATABASE_DRIVER",
+            "RELIANT_DB_MAX_OPEN_CONNS",
+            "RELIANT_DB_MAX_IDLE_CONNS",
+            "DB_CONNECT_TIMEOUT",
+            "RELIANT_DB_SCHEMA_WAIT_SECONDS",
+
+            # forge:section root worker env control_plane
+            # forge:hash=eeb2889cb10bf74f13346d7c93a94e60799feaa409fe33adebd2a15f15243aa7
+            "RELIANT_CONTROL_PLANE_URL",
+            "RELIANT_CONTROL_PLANE_MANAGED_KEYS_PER_ORG",
+
+            # forge:section root worker env nats
+            # forge:hash=4fdceee79e212b3794261c64b5136dd109fe3d88f8266fe7ddaee11dd29f1955
+            "NATS_USER",
+
+            # forge:section root worker env temporal
+            # forge:hash=bd0b70ee5758fab235934964aa6de5643249c37305e453dd5c4db8240b10ee53
+            "TEMPORAL_HOST",
+            "TEMPORAL_PORT",
+            "TEMPORAL_NAMESPACE",
+
+            # forge:section root worker env (root) #2
+            # forge:hash=e2deb03d065a38e9e2f1f0adf5f46c80e084ec00eae0dbc3c5614e1d9443682d
+            "DATA_DIR",
+            "STREAMING_DRIVER",
+
+            # forge:section root worker env integrations
+            # forge:hash=ab48ab8c9f56f79b3c64b496a406b4b09fb53590355a5cf43563324f234965fa
+            "PUBLIC_URL",
+            "RELIANT_GITHUB_APP_SLUG",
+            "RELIANT_GITHUB_BOT_USER_ID",
+            "RELIANT_GITHUB_BOT_LOGIN",
+            "RELIANT_PR_RECORD_REPOSITORIES",
+
+            # forge:section root worker env observability
+            # forge:hash=661a50bbf1d5dec0da27392fdc3c6169c2124b7f0aa5ed1bd784dd505d8ec404
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "OTEL_ENABLED",
+            "PROMETHEUS_ENABLED",
+            "ENVIRONMENT",
+
+            # forge:section root worker env analytics
+            # forge:hash=3a9ee4da646ddff38dd16ed5441722444bdcc0912cc167a8f6883874585d5421
+            "RELIANT_ANALYTICS_DISABLED",
+
+            # forge:section root worker env llm
+            # forge:hash=22a677bf9bd3eb41ea1ed3605e196eec1a2fa81774bcc280f30c9542d118cb20
+            "RELIANT_API_BASE_URL",
+            "VERTEXAI_PROJECT",
+            "VERTEXAI_LOCATION",
+            "RELIANT_LLM_STREAM_IDLE_TIMEOUT",
+            "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT",
+            "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT",
+            "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT",
+            "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT",
+            "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS",
+
+            # forge:section root worker env preview
+            # forge:hash=7ffdb75b8dc99628eead43a085c240f490ae9ed58812f79e201aacd04dbf06d8
+            "PROXY_HOST",
+            "WORKSPACE_BASE_DOMAIN",
+            "WORKSPACE_URL_SCHEME",
+            "WORKSPACE_URL_PORT",
+
+            # forge:section root worker env network
+            # forge:hash=1b58fe74a08d46697715fcafa8656d29e7beba2fd9544ee06f102a4291fb877f
+            "RELIANT_ALLOW_PRIVATE_EGRESS",
+
+            # forge:section root worker env org_policy_enforcement
+            # forge:hash=759d8fd7a3a4049812dac94488442ab3af6601ed270b5e6e05ecdd71339362c6
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_APPROVALS",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP",
+            "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS",
+
+            # forge:section root worker env (root) #3
+            # forge:hash=33186553e2570e695146dbb443e158dedd4a02085ce6b22ae7db9558e2cda91a
+            "RELIANT_WORKER_HOSTED_ACTIONS_URL",
+            "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE",
+            "HEALTH_PORT",
+            "PPROF_PORT",
+            "PRE_STOP_DELAY",
+            "SHUTDOWN_TIMEOUT",
+            "LIVENESS_PATHS",
+            "READINESS_PATHS",
+            "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS",
+            "RELIANT_WORKER_WORKFLOW_TASK_POLLERS",
+            "RELIANT_WORKER_EGRESS_REPLICAS",
+            "RELIANT_WORKER_EGRESS_USER_PER_MINUTE",
+            "RELIANT_WORKER_EGRESS_USER_BURST",
+            "RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT",
+            "RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT",
+            "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL",
+            "RELIANT_WORKER_CHAT_UPDATE_RETENTION",
+            "RELIANT_WORKER_STEP_EXECUTION_RETENTION",
+            "RELIANT_WORKER_LEDGER_RETENTION_START_DELAY",
+
+            # forge:section root worker env (end)
+            # forge:hash=870d2e1cb19ff2c9d8d3359b10e1fe506b0ea907940a4ad023f3f6bc6b0cdf3d
+        ]
+        secrets = [
+            # forge:section root worker secrets (root)
+            # forge:hash=41bc290c3090c98a4ba10fd8f412e3482f979a8b4c92b99d2a328ed5d8e86740
+            "DATABASE_URL",
+            "DATABASE_DIRECT_URL",
+
+            # forge:section root worker secrets control_plane
+            # forge:hash=b32cf1aa8082e26672afc930f88abfe182899aeddcd377984948a03b746e13eb
+            "INTERNAL_SERVICE_SECRET",
+
+            # forge:section root worker secrets nats
+            # forge:hash=b8b8c07007678915c51d5e0a99c82bc3664b82e08d55bc6a34d7303a2248d183
+            "NATS_URL",
+            "NATS_PASSWORD",
+
+            # forge:section root worker secrets integrations
+            # forge:hash=62be97f89fd7f0be9795ed41c7097671ba89ca495adf2e8dee7c7c44c8e4800d
+            "RELIANT_VAULT_KEY",
+            "RELIANT_SLACK_SIGNING_SECRET",
+            "RELIANT_GITHUB_WEBHOOK_SECRET",
+            "RELIANT_TEST_INTEGRATION_SECRET",
+
+            # forge:section root worker secrets (end)
+            # forge:hash=edcab42e181091b2db15b9c6ce9c0fc7d7517adfa83aff3ab74182a177bb91cf
+        ]
+        required_secrets = [
+            # forge:section root worker required_secrets (root)
+            # forge:hash=9cdff438db50d20e0f8da9fa99618e161fd5dff70dfa12e236a7b675dcc5922c
+            "DATABASE_URL",
+
+            # forge:section root worker required_secrets nats
+            # forge:hash=24d3224d17aacbb3fd4942accb4d0e28051d876e5987d0e507f520ead86058f6
+            "NATS_URL",
+
+            # forge:section root worker required_secrets (end)
+            # forge:hash=8e67589db1a87f063908fd4a1f80c1a406a5d200d1bee1157bd2171a4e54425c
+        ]
         families = [RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_ID"}, RootFamily {prefix = "RELIANT_OAUTH_", suffix = "_CLIENT_SECRET", sensitive = True}]
     }
 }

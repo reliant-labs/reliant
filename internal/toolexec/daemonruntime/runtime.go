@@ -396,7 +396,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// one journaled, then journal this one's (shell/background_journal.go).
 	// Only after the claim above, so a second daemon that is about to be
 	// refused never rewrites the incumbent's records.
-	installBackgroundJournal(ctx, opts.BootstrapConfig.DataDir)
+	// A daemon that installs releases by exec'ing them in place hands its
+	// background processes to the next image (shell/background_survive.go).
+	restartsInPlace := !opts.Host.Managed() && opts.SelfUpdate != nil && opts.SelfUpdate.AutoUpdate()
+	installBackgroundJournal(ctx, opts.BootstrapConfig.DataDir, restartsInPlace)
 	// Checkout removes and reclones the server acknowledged by op id
 	// (checkout_teardown.go): loaded before the first command can arrive, and
 	// after the claim for the same reason as the background journal.

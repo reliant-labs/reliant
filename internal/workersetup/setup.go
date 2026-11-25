@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -271,7 +272,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	// Create threads service
-	threadsService := threads.New(threads.Deps{Repo: cfg.Database, Messages: store.NewMessageExtStore(cfg.Database.ORM()), Senders: store.NewThreadExtStore(cfg.Database.ORM())})
+	threadsService := threads.New(threads.Deps{Repo: cfg.Database, Chats: chataccess.NewFromORM(cfg.Database.ORM()), Messages: store.NewMessageExtStore(cfg.Database.ORM()), Senders: store.NewThreadExtStore(cfg.Database.ORM())})
 
 	// Create activity dependencies
 	activityDeps := v2activities.NewActivities(

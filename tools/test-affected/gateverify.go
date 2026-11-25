@@ -72,6 +72,13 @@ func verifyGate(planPath, dir string) []string {
 	obliged := map[string]string{
 		"build": "every gate builds",
 		"test":  "every gate runs the affected tests",
+		// Seconds on a warm build cache, and red-producing wherever the diff
+		// is: a required field or signature change breaks a fixture in a test
+		// package no affected rule selects (#3489), and the whole-project
+		// lanes judge files the diff did not touch (#3483's unreachable
+		// provider, #3397/#3480's buf format, #3382's closed set).
+		"testbuild":   "every gate compiles every test package",
+		"projectlint": "every gate runs forge lint's whole-project lanes (graph, closed-sets, proto-format)",
 	}
 	if pl.ForgeGen.Full {
 		obliged["generate"] = "the plan selected the forge-generate lane"
@@ -88,16 +95,11 @@ func verifyGate(planPath, dir string) []string {
 	if pl.WebBuild.Full {
 		obliged["webbuild"] = "the plan selected the renderer's release build"
 	}
-	var migration, closedSets, subdir, web, goFile bool
+	var migration, subdir, web, goFile bool
 	for _, f := range pl.Files {
 		p := f.Path
-		switch {
-		case strings.HasPrefix(p, "db/migrations/"):
-			migration, closedSets = true, true
-		case p == "forge.yaml":
-			migration, closedSets = true, true
-		case p == "go.mod":
-			closedSets = true
+		if strings.HasPrefix(p, "db/migrations/") || p == "forge.yaml" {
+			migration = true
 		}
 		if strings.HasPrefix(p, "frontends/web/") {
 			web = true
@@ -138,9 +140,6 @@ func verifyGate(planPath, dir string) []string {
 	}
 	if migration {
 		obliged["migsafety"] = "a migration or forge.yaml changed"
-	}
-	if closedSets {
-		obliged["closedsets"] = "a migration, go.mod or forge.yaml changed: a forge:closed-set CHECK must list the pinned forge's set"
 	}
 	// Lint is scoped to the changed directories. A diff that moves only a pin
 	// at the root (go.mod, go.sum, forge.yaml) has none: its whole-module

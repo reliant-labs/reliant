@@ -392,3 +392,24 @@ func TestDerivation_ReapFailureIsNotFatal(t *testing.T) {
 		t.Fatalf("Start returned err: %v", err)
 	}
 }
+
+// The registry consumes the upgrade event without error and without writing
+// anything: the gateway holding the stream keeps the upgrade state itself.
+func TestDerivation_UpgradeEventIsAcceptedAndWritesNothing(t *testing.T) {
+	repo := newFakeRepo()
+	repo.seedDaemon(&db.Daemon{ID: "d-1", UserID: "u-1"})
+	d := NewDerivation(nil, repo, repo)
+	err := d.dispatch(context.Background(), daemonwire.Event{
+		DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventUpgrade, At: time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC),
+		Upgrade: &daemonwire.Upgrade{State: daemonwire.UpgradeStateDrained},
+	})
+	if err != nil {
+		t.Fatalf("dispatch(upgrade) = %v", err)
+	}
+	if n := repo.lifecycleCallCount(); n != 0 {
+		t.Errorf("lifecycle applications = %d, want 0", n)
+	}
+	if n := repo.deleteCount(); n != 0 {
+		t.Errorf("deletes = %d, want 0", n)
+	}
+}

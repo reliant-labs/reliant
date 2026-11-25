@@ -196,7 +196,10 @@ var backgroundCommands = map[string]bool{
 	"git.recovery_verify":  true,
 	// The server settling a remove/reclone it is no longer waiting on: a
 	// read (plus a tombstone), never work anyone asked for.
-	"git.teardown_status":        true,
+	"git.teardown_status": true,
+	// What a set-up elsewhere would leave behind (PreviewProjectMachineMove):
+	// a read the server is only allowed to send to a connected machine.
+	"git.unmoved_work":           true,
 	"worktree.recovery_observe":  true,
 	"worktree.recovery_capture":  true,
 	"worktree.recovery_finalize": true,

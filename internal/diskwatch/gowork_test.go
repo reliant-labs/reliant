@@ -76,6 +76,38 @@ func TestTrimGoWorkDirs_RemovesOnlyProvenDead(t *testing.T) {
 	}
 }
 
+// An unreadable service manager prevents proving any daemon root dead.
+func TestTrimGoWorkDirs_UnreadableManagerKeepsRoots(t *testing.T) {
+	m := newTrimMachine(t, 100*GiB, CacheTrimConfig{})
+	births := map[string]time.Time{}
+	base := commandGoTmpBasePrefix + itoa(os.Getuid())
+	mk := func(rel string, born time.Duration) string {
+		t.Helper()
+		p := filepath.Join(m.tmpdir, base, rel)
+		writeFile(t, filepath.Join(p, "go-build9", "b001", "a.out"), 4096, m.now.Add(-born))
+		births[p] = m.now.Add(-born)
+		return p
+	}
+	older := mk("gotmp-1-1", time.Hour)
+	younger := mk("gotmp-1-2", 20*time.Minute)
+	m.w.trim.birth = func(p string) time.Time { return births[p] }
+	m.w.trim.procs = func() (procSnapshot, error) {
+		return procSnapshot{}, errors.New("pid 20256 (systemd): permission denied")
+	}
+
+	m.w.TrimCaches(context.Background(), false)
+	if !exists(older) || !exists(younger) {
+		t.Errorf("roots removed despite unreadable manager: older=%v younger=%v", exists(older), exists(younger))
+	}
+	a := lastWorkDirAudit(t, m.w)
+	if a.Removed != 0 || a.Error == "" {
+		t.Errorf("audit = %+v, want an incomplete scan that removed nothing", a)
+	}
+	if len(a.ExplainedUnreadable) != 0 {
+		t.Errorf("audit excused unreadable references: %q", a.ExplainedUnreadable)
+	}
+}
+
 // lastWorkDirAudit is the newest go_work_dirs entry in the trim audit log.
 func lastWorkDirAudit(t *testing.T, w *Watcher) workDirAudit {
 	t.Helper()

@@ -83,7 +83,7 @@ func WorkspaceDaemon(ctx context.Context, r WorkspaceReader, userID, projectID, 
 		return Workspace{}, fmt.Errorf("load chat %s: %w", chatID, err)
 	case chat == nil:
 		return Workspace{DaemonID: owner}, nil
-	case !authz.CanWriteChat(ctx, userID, chat):
+	case !authz.CanOwnChat(ctx, userID, chat):
 		return Workspace{}, ErrForeignChat
 	case projectID != "" && chat.ProjectID != projectID:
 		return Workspace{DaemonID: owner}, nil

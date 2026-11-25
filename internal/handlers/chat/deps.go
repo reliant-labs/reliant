@@ -85,9 +85,6 @@ type Repository interface {
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
 	// Ownership and the chat's own columns, from the chats row alone.
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
-	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
-	// The chat with its activity-derived fields, for a handler that reads one.
-	GetChatWithUserCheck(ctx context.Context, id, userID string) (*db.Chat, error)
 	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
 	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error)
 	DeleteChat(ctx context.Context, id string) error

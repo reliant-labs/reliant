@@ -65,7 +65,7 @@ func (s *Service) BranchChat(
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get source chat"))
 	}
-	if !authz.CanWriteChat(ctx, userID, sourceChat) {
+	if !authz.CanOwnChat(ctx, userID, sourceChat) {
 		return nil, svcerr.NotFound("message")
 	}
 
@@ -155,7 +155,7 @@ func (s *Service) BranchChat(
 	// use the requesting chat's worktree as the default instead of the message's original chat's worktree.
 	if req.Msg.ChatId != "" && req.Msg.ChatId != sourceChatID {
 		requestingChat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
-		if err == nil && authz.CanWriteChat(ctx, userID, requestingChat) {
+		if err == nil && authz.CanOwnChat(ctx, userID, requestingChat) {
 			worktreeID = requestingChat.WorktreeID
 			fromChat = requestingChat
 		}
