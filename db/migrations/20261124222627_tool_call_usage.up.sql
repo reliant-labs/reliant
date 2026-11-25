@@ -1,7 +1,14 @@
 -- forge:backward-compatible — adds a new table, its indexes and a write-admission trigger; the previous release never reads or writes the table.
+-- forge:replaces 20261124202455_tool_call_usage.up.sql
 
 -- Migration: tool_call_usage
--- Created: 2026-11-24T20:24:55Z
+-- Created: 2026-11-24T20:24:55Z, re-versioned 2026-11-24T22:26:27Z
+--
+-- Re-versioned: #3483 merged this as 20261124202455, below #3482's
+-- 20261124204326 (merged first), so a database that had run 20261124204326
+-- never applied it and reliant's migrator refused to start. No release carried
+-- 20261124202455; a dev database that already ran it runs this copy as a no-op,
+-- which is why every statement is re-runnable (IF NOT EXISTS, OR REPLACE).
 --
 -- tool_call_usage: the count-only service record of every tool call a run
 -- makes, a model's (execute_tools) or a workflow node's (invoke_tool). Written
@@ -40,7 +47,7 @@
 -- Rows are deleted after the retention period (90 days, llmusage.Retention).
 -- There is no foreign key: account deletion (internal/accountpurge) and
 -- project deletion (internal/store/project_delete.go) delete them by hand.
-CREATE TABLE tool_call_usage (
+CREATE TABLE IF NOT EXISTS tool_call_usage (
     id             text NOT NULL,
     attempt        integer NOT NULL,
     user_id        text NOT NULL,
@@ -78,14 +85,14 @@ CREATE TABLE tool_call_usage (
 
 -- Retention deletes by created_at; a user's own usage reads by (user_id,
 -- created_at); project deletion deletes by chat.
-CREATE INDEX tool_call_usage_created_at_idx ON tool_call_usage (created_at);
-CREATE INDEX tool_call_usage_user_created_at_idx ON tool_call_usage (user_id, created_at);
-CREATE INDEX tool_call_usage_chat_id_idx ON tool_call_usage (chat_id);
+CREATE INDEX IF NOT EXISTS tool_call_usage_created_at_idx ON tool_call_usage (created_at);
+CREATE INDEX IF NOT EXISTS tool_call_usage_user_created_at_idx ON tool_call_usage (user_id, created_at);
+CREATE INDEX IF NOT EXISTS tool_call_usage_chat_id_idx ON tool_call_usage (chat_id);
 
 -- A tool call in flight when its chat's project is deleted finishes afterwards:
 -- the chat_write_admission protocol (20261114221537_chat_purge_write_admission)
 -- refuses its row once the chat is purged, as it does every other table keyed by
 -- chat with no foreign key. Account deletion fences it as it fences the model
 -- calls' ledger (llm_usage_purged_users, store.RecordToolCallUsage).
-CREATE TRIGGER chat_write_admission BEFORE INSERT ON tool_call_usage
+CREATE OR REPLACE TRIGGER chat_write_admission BEFORE INSERT ON tool_call_usage
   FOR EACH ROW EXECUTE FUNCTION chat_write_admission();

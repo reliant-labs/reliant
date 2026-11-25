@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -90,7 +91,7 @@ func TestSpawnSend_ToRunningChild_QueuesHonestReceipt(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "  Status check  ", Message: "status check"})
@@ -98,7 +99,7 @@ func TestSpawnSend_ToRunningChild_QueuesHonestReceipt(t *testing.T) {
 	require.Contains(t, resp.Content, "Queued for delivery")
 	require.Contains(t, resp.Content, "It has NOT been read yet")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), childID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.Equal(t, "status check", queued[0].Body)
@@ -118,7 +119,7 @@ func TestSpawnSend_RejectsBadSubject(t *testing.T) {
 	createTestChat(t, repo, chatID)
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	for name, tc := range map[string]struct{ subject, wantErr string }{
@@ -131,7 +132,7 @@ func TestSpawnSend_RejectsBadSubject(t *testing.T) {
 		require.Contains(t, resp.Content, tc.wantErr, name)
 	}
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), childID)
 	require.NoError(t, err)
 	require.Empty(t, queued, "a refused send queues nothing")
 }
@@ -166,14 +167,14 @@ func TestSpawnSend_ChildToParent_RingsMailboxDoorbell(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
 	notifier := &recordingAgentMessageNotifier{}
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
 	// The CHILD is the caller here, messaging its parent.
 	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: parentID, Subject: "Status", Message: "found the root cause"})
 	require.False(t, resp.IsError, "response: %+v", resp)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), parentID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.Equal(t, childID, queued[0].FromThreadID)
@@ -198,7 +199,7 @@ func TestSpawnSend_RefusedSend_DoesNotRingDoorbell(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
 	notifier := &recordingAgentMessageNotifier{}
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "are you there?"})
@@ -219,13 +220,13 @@ func TestSpawnSend_NilNotifier_StillQueues(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "still queued"})
 	require.False(t, resp.IsError, "response: %+v", resp)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), childID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 }
@@ -242,12 +243,12 @@ func TestSpawnSend_ParentAlias(t *testing.T) {
 	createTestChat(t, repo, chatID)
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 
 	resp := runSpawnSend(t, tool, rctx.NewToolContext(ctx, chatID, childID, nil, nil),
 		SpawnSendParams{AgentID: " Parent ", Subject: "Blocked", Message: "need the DB URL"})
 	require.False(t, resp.IsError, "response: %+v", resp)
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), parentID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.Equal(t, childID, queued[0].FromThreadID)
@@ -271,7 +272,7 @@ func TestSpawnSend_ToFinishedAgent_FailsWithGuidance(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "are you still there?"})
@@ -279,7 +280,7 @@ func TestSpawnSend_ToFinishedAgent_FailsWithGuidance(t *testing.T) {
 	require.Contains(t, resp.Content, "spawn(agent_id=")
 	require.Contains(t, resp.Content, "already finished")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), childID)
 	require.NoError(t, err)
 	require.Empty(t, queued, "no message may be enqueued for a finished agent — a silent no-op is exactly what the spec forbids")
 }
@@ -299,7 +300,7 @@ func TestSpawnSend_ToFailedChild_ResumesIt(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusFailed)
 
 	notifier := &recordingAgentMessageNotifier{}
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "use the other provider and carry on"})
@@ -307,7 +308,7 @@ func TestSpawnSend_ToFailedChild_ResumesIt(t *testing.T) {
 	require.Contains(t, resp.Content, "resum", "the receipt must say the message resumes the agent")
 	require.Contains(t, resp.Content, "It has NOT been read yet")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), childID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.Equal(t, "use the other provider and carry on", queued[0].Body)
@@ -328,14 +329,14 @@ func TestSpawnSend_ToFailedChild_WithoutDoorbell_FailsWithGuidance(t *testing.T)
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusFailed)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "carry on"})
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "spawn(agent_id=")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), childID)
 	require.NoError(t, err)
 	require.Empty(t, queued)
 }
@@ -352,7 +353,7 @@ func TestSpawnSend_ToCancelledChild_FailsWithGuidance(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCancelled)
 
 	notifier := &recordingAgentMessageNotifier{}
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "carry on"})
@@ -379,7 +380,7 @@ func TestSpawnSend_ToSibling_Rejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: otherID, Subject: "Status", Message: "hello"})
@@ -399,14 +400,14 @@ func TestSpawnSend_ChildToParent_Allowed(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	// Called FROM the child thread, addressed TO the parent.
 	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: parentID, Subject: "Status", Message: "I need clarification"})
 	require.False(t, resp.IsError, "response: %+v", resp)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), parentID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	require.Equal(t, childID, queued[0].FromThreadID)

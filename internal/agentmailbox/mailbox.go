@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -69,6 +70,21 @@ func validate(msg *db.AgentMessage) error {
 	return nil
 }
 
+func validateTerminal(msg *db.AgentMessage) error {
+	if err := validate(msg); err != nil {
+		return err
+	}
+	if msg.ToolCallID == nil || *msg.ToolCallID == "" {
+		return fmt.Errorf("tool call ID is required")
+	}
+	switch msg.Kind {
+	case core.AgentMessageKindCompletion, core.AgentMessageKindCancelled, core.AgentMessageKindFailed:
+		return nil
+	default:
+		return fmt.Errorf("kind must be a terminal kind (completion, cancelled, or failed), got %d", msg.Kind)
+	}
+}
+
 // EnqueueAgentMessage queues msg.
 func (m *Mailbox) EnqueueAgentMessage(ctx context.Context, msg *db.AgentMessage) error {
 	if err := validate(msg); err != nil {
@@ -98,4 +114,47 @@ func (m *Mailbox) EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMess
 		m.announce(ctx, msg.ChatID)
 	}
 	return inserted, nil
+}
+
+// EnqueueAgentMessageIfAbsent is EnqueueAgentMessage's conditional sibling,
+// used only by the stranded-background-spawn reconciler sweep to write
+// synthesized placeholders (a real report later supersedes them via
+// EnqueueSpawnReport): msg.Kind must be a terminal kind (completion,
+// cancelled or failed), and msg.ToolCallID must be set, because those are
+// exactly the rows the unique constraint
+// (idx_agent_messages_one_terminal_report_per_chat_spawn) applies to.
+func (m *Mailbox) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error) {
+	if err := validateTerminal(msg); err != nil {
+		return false, err
+	}
+	inserted, err := m.store.EnqueueAgentMessageIfAbsent(ctx, msg)
+	if err != nil {
+		return false, err
+	}
+	if inserted {
+		m.announce(ctx, msg.ChatID)
+	}
+	return inserted, nil
+}
+
+// EnqueueSpawnReport writes a real terminal spawn report: it inserts,
+// supersedes a reconciler-synthesized placeholder, or no-ops when a real report
+// already exists.
+func (m *Mailbox) EnqueueSpawnReport(ctx context.Context, msg *db.AgentMessage) (db.SpawnReportOutcome, error) {
+	if err := validateTerminal(msg); err != nil {
+		return 0, err
+	}
+	if msg.Synthesized {
+		return 0, fmt.Errorf("a synthesized report cannot supersede; use EnqueueAgentMessageIfAbsent")
+	}
+	outcome, err := m.store.EnqueueSpawnReport(ctx, msg)
+	if err != nil {
+		return 0, err
+	}
+	// A superseded placeholder is a visible change too: the strip was showing
+	// the synthesized body and now has the real report to show.
+	if outcome != core.SpawnReportAlreadyReported {
+		m.announce(ctx, msg.ChatID)
+	}
+	return outcome, nil
 }

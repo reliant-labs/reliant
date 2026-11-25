@@ -61,7 +61,7 @@ func TestSendAgentMessage_ResumesSubAgentThatStoppedOnAFailure(t *testing.T) {
 	require.True(t, resp.Msg.Success, "a sub-agent that failed must be resumable by a message, got: %s", resp.Msg.Message)
 	assert.Contains(t, resp.Msg.Message, "resum", "the receipt must say the message resumes the agent")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, "switched you to another provider; carry on", queued[0].Body)
@@ -148,7 +148,7 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 	require.True(t, resp.Msg.Success, "STRANDED: a stopped agent of an idle chat must be resumable by a message, got: %s", resp.Msg.Message)
 	assert.Contains(t, resp.Msg.Message, "restarted where it stopped")
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the message waits in the agent's mailbox for its first turn")
 	assert.Equal(t, "the limit has reset; carry on", queued[0].Body)
@@ -225,7 +225,7 @@ func TestSendAgentMessage_StoppedSubAgentThatCannotBeWokenIsNotLeftQueued(t *tes
 	require.NoError(t, err)
 	assert.False(t, resp.Msg.Success)
 
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "a message nothing will deliver must not stay queued")
 }

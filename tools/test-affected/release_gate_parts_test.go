@@ -27,12 +27,13 @@ func TestReleaseGateAssemblesEitherPartition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	steps := map[string][]string{
-		"static": {"npm", "generate", "docs", "build", "webbuild", "typecheck", "vet"},
-		"lint":   {"npm", "lint"}, "go": {"npm", "test-go"},
-		"web":      {"npm", "test-web", "test-electron", "integration", "e2e"},
-		"generate": {"npm", "generate", "docs"}, "webbuild": {"npm", "webbuild"},
-		"compile": {"npm", "build", "typecheck", "vet"},
+	// Each part's steps come from the script's own PART_STEPS, so a step added
+	// to the gate (demo-size, #3491) cannot leave this fixture behind.
+	steps := releaseGatePartSteps(t, string(script))
+	for _, p := range []string{"static", "lint", "go", "web", "generate", "webbuild", "compile"} {
+		if len(steps[p]) == 0 {
+			t.Fatalf("release-gate.sh's PART_STEPS has no part %q", p)
+		}
 	}
 	type part struct{ name, shard, split, result string }
 	ci := func(split2 string) []part {
@@ -127,6 +128,21 @@ func TestReleaseGateAssemblesEitherPartition(t *testing.T) {
 			}
 		})
 	}
+}
+
+// releaseGatePartSteps parses release-gate.sh's `declare -A PART_STEPS=(...)`
+// into part name -> steps.
+func releaseGatePartSteps(t *testing.T, script string) map[string][]string {
+	t.Helper()
+	block := regexp.MustCompile(`(?s)\ndeclare -A PART_STEPS=\((.*?)\n\)`).FindStringSubmatch(script)
+	if block == nil {
+		t.Fatal("release-gate.sh has no `declare -A PART_STEPS=(...)`")
+	}
+	steps := map[string][]string{}
+	for _, m := range regexp.MustCompile(`(?m)^\s*\[([a-z-]+)\]="([^"]*)"`).FindAllStringSubmatch(block[1], -1) {
+		steps[m[1]] = strings.Fields(m[2])
+	}
+	return steps
 }
 
 // go_package_seconds reads `go test` output: ok and FAIL lines with a time,

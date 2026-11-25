@@ -19,16 +19,14 @@
  */
 
 import type { ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowRight } from "lucide-react";
 
-import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { useActiveOrg } from "@/hooks/useOrgs";
 import { useComputeSubscription, useWalletAutoRecharge } from "@/hooks/useCloudBillingQueries";
 import { useObsBillingLimits } from "@/hooks/observability-billing-queries";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
+import { useGetCurrentUserUsageBilling } from "@/hooks/controlplane/billing-service-hooks_gen";
 import { formatCents } from "./usage/usageModel";
-import { hostingBillingKeys, isUnimplemented } from "./usage/hostingBillingQueries";
+import { isUnimplemented } from "./usage/hostingBillingQueries";
 import type { VisibleBillingTab } from "@/routeSchemas";
 
 export interface LimitRow {
@@ -102,9 +100,7 @@ export function LimitsStrip({ onOpen }: { onOpen: (target: LimitRow["target"]) =
   const orgId = org.activeOrgId ?? "";
   const orgScope = `Organization · ${org.active?.name || "this organization"}`;
 
-  const hosting = useQuery({
-    queryKey: hostingBillingKeys.agreement(orgId),
-    queryFn: () => getControlPlaneClient(BillingService).getCurrentUserUsageBilling({ orgId }),
+  const hosting = useGetCurrentUserUsageBilling({ orgId }, {
     enabled: !!orgId,
     staleTime: 10_000,
     retry: (failures, error) => !isUnimplemented(error) && failures < 2,

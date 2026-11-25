@@ -49,7 +49,7 @@ func (r *Reconciler) markStrandedStarts(ctx context.Context, stats *passStats) (
 	cutoff := time.Now().Add(-strandedStartBound)
 	stranded, err := r.repo.ListStrandedWorkflowStarts(ctx, cutoff, strandedStartBatch)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Reconciler] Failed to list stranded workflow starts", "error", err)
+		logPassFailure(ctx, "[Reconciler] Failed to list stranded workflow starts", err)
 		return 0, fmt.Errorf("failed to list stranded workflow starts: %w", err)
 	}
 
@@ -91,4 +91,17 @@ func (r *Reconciler) markStrandedStarts(ctx context.Context, stats *passStats) (
 		}
 	}
 	return settled, nil
+}
+
+// logPassFailure logs a pass step that could not read what it sweeps: at
+// ERROR, unless the pass itself was cancelled or timed out. A pass cut off by
+// shutdown (or its own deadline) fails every query it still had in flight,
+// and that is no fault to page on; the next pass, in this process or the
+// next, runs the step again.
+func logPassFailure(ctx context.Context, msg string, err error) {
+	if ctx.Err() != nil {
+		logging.InfoContext(ctx, msg+" (pass cancelled)", "error", err, "cause", context.Cause(ctx))
+		return
+	}
+	logging.ErrorContext(ctx, msg, "error", err)
 }

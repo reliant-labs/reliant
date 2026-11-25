@@ -264,6 +264,9 @@ export function NavRenderer({ config, ctx, slots, onNavigate, flat = false }: Na
           onNavigate(back, { drill: true });
         }}
         data-testid="nav-back"
+        // The drill-in's tour anchor: on an area's routes the nav draws no `nav-top` and no area row,
+        // so a step that rings the nav there points here (Onboarding/JOURNEYS.md "Anchors").
+        data-tour="nav-drill-in"
         aria-label={`Back from ${area.label}`}
         className="no-color mx-2 mb-1 flex h-[var(--row-h)] shrink-0 items-center gap-1.5 rounded-md px-2 text-ui font-medium text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >

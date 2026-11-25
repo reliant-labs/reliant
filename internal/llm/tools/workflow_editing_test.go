@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -75,7 +77,7 @@ func TestWriteWorkflow_RequiresID(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	ctx := createTestContext(t, "")
 
 	t.Run("writes workflow content to draft", func(t *testing.T) {
@@ -166,7 +168,7 @@ func TestWriteWorkflow_UpdateExisting(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	ctx := createTestContext(t, "")
 
 	// First create a draft
@@ -247,7 +249,7 @@ func TestWriteWorkflow_ConflictDetection(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	ctx := createTestContext(t, "")
 
 	// Create a draft
@@ -323,7 +325,7 @@ func TestWriteWorkflow_ValidationErrors(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	ctx := createTestContext(t, "")
 
 	// Helper to create a draft with unique name
@@ -422,7 +424,7 @@ func TestWriteWorkflow_ResponseStructure(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	ctx := createTestContext(t, "")
 
 	// First create a draft
@@ -485,7 +487,7 @@ func TestCreateWorkflow_DefaultTemplate(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
+	tool := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	// Create with no args — should use default template and random name
@@ -515,7 +517,7 @@ func TestCreateWorkflow_WithName(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
+	tool := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	name := "my-custom-workflow"
@@ -542,7 +544,7 @@ func TestCreateWorkflow_WithContent(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
+	tool := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	content := validWorkflowYAML
@@ -569,7 +571,7 @@ func TestCreateWorkflow_WithInvalidContent(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
+	tool := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM()))
 	ctx := createTestContext(t, "")
 
 	// Does not parse as a workflow: rejected even as a draft.
@@ -589,7 +591,7 @@ func TestCreateWorkflow_WithInvalidContent(t *testing.T) {
 // racingDraftStore runs another write just before the first versioned save,
 // as a second edit_workflow call issued in the same turn does.
 type racingDraftStore struct {
-	*db.Repo
+	WorkflowDrafts
 	race func()
 }
 
@@ -598,7 +600,7 @@ func (s *racingDraftStore) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Co
 		s.race = nil
 		race()
 	}
-	return s.Repo.UpdateWorkflowDraftDefinitionAtVersion(ctx, id, version, name, slug, definition, status)
+	return s.WorkflowDrafts.UpdateWorkflowDraftDefinitionAtVersion(ctx, id, version, name, slug, definition, status)
 }
 
 // Two edits of non-overlapping regions that both read one version must both
@@ -618,15 +620,15 @@ func TestEditWorkflow_ConcurrentEditsBothApply(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateWorkflowDraft(context.Background(), draft))
 
-	edit := func(store workflowWriteStore, oldS, newS string) ToolResponse {
+	edit := func(drafts writeWorkflowDrafts, oldS, newS string) ToolResponse {
 		in, _ := json.Marshal(EditWorkflowParams{ID: draft.ID, OldString: oldS, NewString: newS})
-		resp, err := NewEditWorkflowTool(store).Run(ctx, ToolCall{ID: "e", Name: EditWorkflowToolName, Input: string(in)})
+		resp, err := NewEditWorkflowTool(repo, drafts).Run(ctx, ToolCall{ID: "e", Name: EditWorkflowToolName, Input: string(in)})
 		require.NoError(t, err)
 		return resp
 	}
-	store := &racingDraftStore{Repo: repo}
+	store := &racingDraftStore{WorkflowDrafts: workflowdraftstest.New(t, repo)}
 	store.race = func() {
-		resp := edit(repo, "description: one", "description: two")
+		resp := edit(workflowdraftstest.New(t, repo), "description: one", "description: two")
 		require.False(t, resp.IsError, resp.Content)
 	}
 	resp := edit(store, "model: mock", "model: other")
@@ -654,11 +656,12 @@ func TestEditWorkflow_PinnedVersionConflictsInsteadOfRetrying(t *testing.T) {
 	read, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
 	require.NoError(t, err)
 
-	store := &racingDraftStore{Repo: repo, race: func() {
-		require.NoError(t, repo.UpdateWorkflowDraftDefinition(context.Background(), draft.ID, read.Name, read.Slug, strings.Replace(validWorkflowYAML, "edges: []", "edges: []\n", 1), db.WorkflowDraftStatusDraft))
+	drafts := workflowdraftstest.New(t, repo)
+	store := &racingDraftStore{WorkflowDrafts: drafts, race: func() {
+		require.NoError(t, drafts.UpdateWorkflowDraftDefinition(context.Background(), draft.ID, read.Name, read.Slug, strings.Replace(validWorkflowYAML, "edges: []", "edges: []\n", 1), db.WorkflowDraftStatusDraft))
 	}}
 	in, _ := json.Marshal(EditWorkflowParams{ID: draft.ID, OldString: "model: mock", NewString: "model: other", ExpectedVersion: &read.Version})
-	resp, err := NewEditWorkflowTool(store).Run(ctx, ToolCall{ID: "e", Name: EditWorkflowToolName, Input: string(in)})
+	resp, err := NewEditWorkflowTool(repo, store).Run(ctx, ToolCall{ID: "e", Name: EditWorkflowToolName, Input: string(in)})
 	require.NoError(t, err)
 	assert.True(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "was not applied")
