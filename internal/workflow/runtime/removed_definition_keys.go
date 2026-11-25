@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // v1.29.0 shipped two workflow keys that were later removed: a workflow's
@@ -90,7 +91,7 @@ func dropRemovedDefinitionKeys(raw map[string]interface{}) {
 func dropRunLLMGateway(v interface{}) {
 	switch t := v.(type) {
 	case map[string]interface{}:
-		if t["type"] == "run" {
+		if t["type"] == model.NodeTypeRun {
 			delete(t, "llm_gateway")
 			if args, ok := t["args"].(map[string]interface{}); ok {
 				delete(args, "llm_gateway")
