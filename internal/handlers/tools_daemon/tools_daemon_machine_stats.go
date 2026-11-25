@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/encoding/protojson"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -113,7 +115,7 @@ func (s *Service) logMachineStatsLines(ctx context.Context, conn *daemonConnecti
 	}
 	health, volumes := machinehealth.HeartbeatLines(machinehealth.Identity{
 		Machine: name, DaemonID: conn.daemonID, OrgID: org,
-	}, hb.GetMachineStats(), hb.GetDisk(), now)
+	}, hb, now)
 	s.logMachineStats(ctx, machinehealth.HealthMessage, health...)
 	for _, v := range volumes {
 		s.logMachineStats(ctx, machinehealth.VolumeMessage, v...)
@@ -167,4 +169,34 @@ func (s *Service) machineStatsSelected(ctx context.Context, conn *daemonConnecti
 	}
 	st.selected, st.org = true, org
 	return org, true
+}
+
+// resourceStatsRefresh is how often a heartbeat's resource reading is stored
+// on the lease: the machine settings page reads it, and a minute old is
+// current enough for it without a write per 15s heartbeat.
+const resourceStatsRefresh = time.Minute
+
+// recordResourceStats stores hb's machine, process and cgroup readings on
+// conn's lease (DaemonInfo.resources), at most every resourceStatsRefresh. A
+// heartbeat with none of them (a daemon that predates them) writes nothing,
+// so the column keeps reading as "not reported".
+func (s *Service) recordResourceStats(ctx context.Context, conn *daemonConnection, hb *reliantv1.DaemonHeartbeat, now time.Time) {
+	if s.deps.Attachments == nil || hb == nil || (hb.MachineStats == nil && hb.ProcessStats == nil && hb.CgroupStats == nil) {
+		return
+	}
+	if !conn.resourcesWrittenAt.IsZero() && now.Sub(conn.resourcesWrittenAt) < resourceStatsRefresh {
+		return
+	}
+	data, err := protojson.Marshal(&reliantv1.DaemonResourceStats{
+		Machine: hb.MachineStats, Process: hb.ProcessStats, Cgroup: hb.CgroupStats,
+	})
+	if err != nil {
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to encode daemon resource stats", "error", err, "daemonID", conn.daemonID)
+		return
+	}
+	if err := s.deps.Attachments.SetDaemonAttachmentResources(ctx, conn.daemonID, string(data)); err != nil {
+		logging.WarnContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon resource stats", "error", err, "daemonID", conn.daemonID)
+		return
+	}
+	conn.resourcesWrittenAt = now
 }

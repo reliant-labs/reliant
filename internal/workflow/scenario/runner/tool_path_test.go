@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -104,7 +106,7 @@ func writeScenario(t *testing.T, repo *db.Repo, draft *db.WorkflowDraft, chatID,
 	input, err := json.Marshal(tools.WriteScenarioParams{ID: draft.ID, Name: name, Content: content})
 	require.NoError(t, err)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
-	resp, err := tools.NewWriteScenarioTool(repo, store.NewWorkflowScenarioExtStore(repo.ORM()), RunScenario).Run(
+	resp, err := tools.NewWriteScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM()), RunScenario).Run(
 		rctx.NewToolContext(ctx, chatID, chatID, nil, nil),
 		tools.ToolCall{ID: "c1", Input: string(input)})
 	require.NoError(t, err)

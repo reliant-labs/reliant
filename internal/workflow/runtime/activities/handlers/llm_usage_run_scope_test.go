@@ -226,7 +226,7 @@ func TestCallLLM_LedgerRowCarriesTheTurnsRunScope(t *testing.T) {
 	project := h.CreateTestProject(ctx, "proj-turn-scope", "user-turn-scope")
 	chat := h.CreateTestChat(ctx, "chat-turn-scope", project.ID, project.UserID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
-	callLLM := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: &captureHub{}, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver}).
+	callLLM := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Hub: &captureHub{}, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver}).
 		WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 
 	input := callLLMInput(chat.ID, chat.ID, "mock-model")

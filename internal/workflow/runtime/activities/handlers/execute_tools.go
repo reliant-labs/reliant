@@ -282,6 +282,7 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	preemption   MailboxPreempter
 	rows         WorkspaceRows
 	toolCalls    ToolCalls
 	toolExecutor toolexec.ToolExecutor
@@ -360,14 +361,43 @@ func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteTo
 	return a
 }
 
-// NewExecuteToolsActivity creates a new ExecuteToolsActivity; toolCalls is the
-// tool-call records it reads and writes (NewToolCalls).
-func NewExecuteToolsActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
+// NewExecuteToolsActivity creates a new ExecuteToolsActivity; deps.ToolCalls is
+// the tool-call records it reads and writes (NewToolCalls).
+// NewExecuteToolsActivity accepts explicit dependencies or the original
+// store, rows, tool calls and executor arguments.
+// Deprecated: use NewExecuteToolsActivityWithDeps.
+func NewExecuteToolsActivity(storeOrDeps any, legacy ...any) *ExecuteToolsActivity {
+	if deps, ok := storeOrDeps.(ExecuteToolsDeps); ok {
+		return NewExecuteToolsActivityWithDeps(deps)
+	}
+	var deps ExecuteToolsDeps
+	if storeOrDeps != nil {
+		deps.Store = storeOrDeps.(ExecuteToolsStore)
+		deps.Preemption, _ = storeOrDeps.(MailboxPreempter)
+	}
+	if len(legacy) != 3 {
+		panic("NewExecuteToolsActivity requires store, rows, tool calls and executor")
+	}
+	if legacy[0] != nil {
+		deps.Rows = legacy[0].(WorkspaceRows)
+	}
+	if legacy[1] != nil {
+		deps.ToolCalls = legacy[1].(ToolCalls)
+	}
+	if legacy[2] != nil {
+		deps.ToolExecutor = legacy[2].(toolexec.ToolExecutor)
+	}
+	return NewExecuteToolsActivityWithDeps(deps)
+}
+
+// NewExecuteToolsActivityWithDeps creates a tool activity with explicit dependencies.
+func NewExecuteToolsActivityWithDeps(deps ExecuteToolsDeps) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
-		repo:         repo,
-		rows:         rows,
-		toolCalls:    toolCalls,
-		toolExecutor: toolExecutor,
+		repo:         deps.Store,
+		rows:         deps.Rows,
+		toolCalls:    deps.ToolCalls,
+		preemption:   deps.Preemption,
+		toolExecutor: deps.ToolExecutor,
 	}
 }
 
@@ -489,7 +519,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 
 	// Mail for the thread ends the batch's waits early; see
 	// execute_tools_preemption.go.
-	ctx = withBatchPreemption(ctx, newBatchPreemption(a.repo, rtx.Thread, a.preemptionPoll))
+	ctx = withBatchPreemption(ctx, newBatchPreemption(a.preemption, rtx.Thread, a.preemptionPoll))
 
 	// Each call's row in the tool usage ledger (tool_usage_record.go).
 	meter := newToolUsageMeter(a.usage, a.repo, rtx.ChatID, rtx.Thread)
