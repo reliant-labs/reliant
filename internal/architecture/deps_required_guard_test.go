@@ -39,8 +39,8 @@ import (
 // Deps struct is required unless it is marked `// forge:optional-dep` (forge's
 // convention: an optional dep's consumer handles nil) or listed in
 // depsFieldsNotEverywhere below. Every composite literal of a Deps type
-// outside its own package, and every one passed straight to its package's
-// New inside it, must name each required field. A literal inside the
+// outside its own package, and every one passed to a call inside it (directly
+// or through local variable bindings), must name each required field. A literal inside the
 // package that builds a Service by hand (`&Service{deps: Deps{Repo: r}}`) is
 // a unit test of one method and is not judged.
 //
@@ -58,6 +58,47 @@ import (
 // pull request introduces: wire it everywhere, or mark it
 // `// forge:optional-dep`.
 var depsFieldsNotEverywhere = map[string][]string{
+	// Existing local-variable and wrapper constructions, newly covered by B1.
+	"cmd/reliant/cmd.Cmd":                                {"cmd/reliant/cmd"},
+	"internal/handlers/account.Purger":                   {"internal/handlers/account"},
+	"internal/handlers/background.Logger":                {"internal/handlers/background"},
+	"internal/handlers/background.Config":                {"internal/handlers/background"},
+	"internal/handlers/chat.Chats":                       {"internal/handlers/chat"},
+	"internal/handlers/connector.Logger":                 {"internal/handlers/connector"},
+	"internal/handlers/connector.Config":                 {"internal/handlers/connector"},
+	"internal/handlers/connector.Tokens":                 {"internal/handlers/connector"},
+	"internal/handlers/connector.Integrations":           {"internal/handlers/connector"},
+	"internal/handlers/daemon.Logger":                    {"internal/handlers/daemon"},
+	"internal/handlers/daemon.Config":                    {"internal/handlers/daemon"},
+	"internal/handlers/mcp.Repo":                         {"internal/handlers/mcp"},
+	"internal/handlers/mcp.Projects":                     {"internal/handlers/mcp"},
+	"internal/handlers/mcp.ProjectConfigs":               {"internal/handlers/mcp"},
+	"internal/handlers/package_commands.Repo":            {"internal/handlers/package_commands"},
+	"internal/handlers/package_commands.Projects":        {"internal/handlers/package_commands"},
+	"internal/handlers/preset.Logger":                    {"internal/handlers/preset"},
+	"internal/handlers/preset.Config":                    {"internal/handlers/preset"},
+	"internal/handlers/project.Repo":                     {"internal/handlers/project"},
+	"internal/handlers/project.Projects":                 {"internal/handlers/project"},
+	"internal/handlers/question.Mailbox":                 {"internal/handlers/question"},
+	"internal/handlers/settings.Repo":                    {"internal/handlers/settings"},
+	"internal/handlers/settings.Refetch":                 {"internal/handlers/settings"},
+	"internal/handlers/settings.Privacy":                 {"internal/handlers/settings"},
+	"internal/handlers/settings.PollCopilotDevice":       {"internal/handlers/settings"},
+	"internal/handlers/streaming.ChatRows":               {"internal/handlers/streaming"},
+	"internal/handlers/terminal.Logger":                  {"internal/handlers/terminal"},
+	"internal/handlers/terminal.Config":                  {"internal/handlers/terminal"},
+	"internal/handlers/token.Logger":                     {"internal/handlers/token"},
+	"internal/handlers/token.Config":                     {"internal/handlers/token"},
+	"internal/handlers/token.ControlPlane":               {"internal/handlers/token"},
+	"internal/handlers/tools_daemon.Refetch":             {"internal/handlers/tools_daemon"},
+	"internal/handlers/tools_daemon.Projects":            {"internal/handlers/tools_daemon"},
+	"internal/handlers/tools_daemon.Installs":            {"internal/handlers/tools_daemon"},
+	"internal/handlers/tools_daemon.Checkouts":           {"internal/handlers/tools_daemon"},
+	"internal/handlers/tools_daemon.Pools":               {"internal/handlers/tools_daemon"},
+	"internal/handlers/trigger.Repo":                     {"internal/handlers/trigger"},
+	"internal/handlers/trigger.Projects":                 {"internal/handlers/trigger"},
+	"internal/handlers/worktree_reclaim.Logger":          {"internal/handlers/worktree_reclaim"},
+	"internal/handlers/worktree_reclaim.Config":          {"internal/handlers/worktree_reclaim"},
 	"internal/accesstokenclient.HTTPClient":              {"internal/accesstokenclient", "internal/handlers/approval", "internal/llm/drivers", "internal/orgcredentials", "internal/tokenauthority"},
 	"internal/changetools.Session":                       {"internal/app"},
 	"internal/chatprlinks.Chats":                         {"internal/chatprlinks"},
@@ -249,7 +290,7 @@ var depsFieldsNotEverywhere = map[string][]string{
 	"internal/handlers/tool_call.Config":                 {"internal/handlers/tool_call"},
 	"internal/handlers/tool_call.Logger":                 {"internal/handlers/tool_call"},
 	"internal/handlers/tool_call.Workflows":              {"internal/handlers/tool_call"},
-	"internal/handlers/tools_daemon.MachineStats":        {"internal/grpc", "internal/handlers/project", "internal/servergateway", "internal/workersetup"},
+	"internal/handlers/tools_daemon.MachineStats":        {"internal/grpc", "internal/handlers/project", "internal/handlers/tools_daemon", "internal/servergateway", "internal/workersetup"},
 	"internal/handlers/trigger.Chats":                    {"internal/handlers/trigger"},
 	"internal/handlers/trigger.Config":                   {"internal/handlers/trigger"},
 	"internal/handlers/trigger.Firings":                  {"internal/handlers/trigger"},
@@ -359,8 +400,8 @@ var depsFieldsNotEverywhere = map[string][]string{
 	"internal/workflow/reconciliation.Mailbox":           {"internal/workflow/reconciliation"},
 	"internal/workflow/reconciliation.Orphans":           {"internal/workflow/reconciliation"},
 	"internal/workflow/reconciliation.Workflows":         {"internal/workflow/reconciliation"},
-	"internal/workflowcheck.GitHub":                      {"internal/app", "internal/workersetup"},
-	"internal/workflowcheck.RunURL":                      {"internal/app", "internal/triggers", "internal/workersetup"},
+	"internal/workflowcheck.GitHub":                      {"internal/app", "internal/workersetup", "internal/workflowcheck"},
+	"internal/workflowcheck.RunURL":                      {"internal/app", "internal/triggers", "internal/workersetup", "internal/workflowcheck"},
 	"internal/workflowdrafts.Config":                     {"internal/db", "internal/workflowdrafts", "internal/workflowdraftstest"},
 	"internal/workflowdrafts.Drafts":                     {"internal/workflowdrafts"},
 	"internal/workflowdrafts.Locks":                      {"internal/workflowdrafts"},
@@ -483,7 +524,7 @@ func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, e
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		f, err := parser.ParseFile(fset, name, files[name], parser.ParseComments|parser.SkipObjectResolution)
+		f, err := parser.ParseFile(fset, name, files[name], parser.ParseComments)
 		if err != nil {
 			return nil, fmt.Errorf("parse %s: %w", name, err)
 		}
@@ -536,23 +577,41 @@ func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, e
 			}
 			imports[local] = p
 		}
-		// Literals passed straight to New: the constructions the rule judges
-		// inside the declaring package.
-		toNew := map[*ast.CompositeLit]bool{}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if id, ok := call.Fun.(*ast.Ident); !ok || id.Name != "New" {
-				return true
-			}
-			for _, arg := range call.Args {
-				if u, ok := arg.(*ast.UnaryExpr); ok {
-					arg = u.X
+		// Follow local bindings to literals supplied to any call (including
+		// constructor wrappers), not just literals written directly in New.
+		// Object identity keeps shadowed variables separate.
+		toCall := map[*ast.CompositeLit]bool{}
+		seen := map[*ast.Object]bool{}
+		var follow func(ast.Expr)
+		follow = func(expr ast.Expr) {
+			switch e := expr.(type) {
+			case *ast.CompositeLit:
+				toCall[e] = true
+			case *ast.UnaryExpr:
+				follow(e.X)
+			case *ast.ParenExpr:
+				follow(e.X)
+			case *ast.Ident:
+				if e.Obj == nil || seen[e.Obj] {
+					return
 				}
-				if lit, ok := arg.(*ast.CompositeLit); ok {
-					toNew[lit] = true
+				seen[e.Obj] = true
+				switch d := e.Obj.Decl.(type) {
+				case *ast.AssignStmt:
+					for _, rhs := range d.Rhs {
+						follow(rhs)
+					}
+				case *ast.ValueSpec:
+					for _, value := range d.Values {
+						follow(value)
+					}
+				}
+			}
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			if call, ok := n.(*ast.CallExpr); ok {
+				for _, arg := range call.Args {
+					follow(arg)
 				}
 			}
 			return true
@@ -565,7 +624,7 @@ func missingDepsFields(module string, files map[string][]byte) ([]depsFinding, e
 			var decl string
 			switch typ := lit.Type.(type) {
 			case *ast.Ident:
-				if typ.Name != "Deps" || !toNew[lit] {
+				if typ.Name != "Deps" || !toCall[lit] {
 					return true
 				}
 				decl = self
@@ -715,6 +774,16 @@ var _ = launch.New(launch.Deps{Store: repo, Chats: chats})
 var a = New(Deps{Store: s, Chats: c, internal: 1})
 var b = New(Deps{Chats: c})
 var c = &Launcher{deps: Deps{Store: s}}
+func variable() {
+	d := Deps{Store: s}
+	New(d)
+}
+func wrapper(d Deps) { New(d) }
+var wrapped = wrapper(Deps{Store: s})
+func wiredVariable() {
+	d := Deps{Store: s, Chats: c, internal: 1}
+	New(d)
+}
 `),
 	}
 	findings, err := missingDepsFields(module, files)
@@ -729,6 +798,8 @@ var c = &Launcher{deps: Deps{Store: s}}
 		"internal/reconciliation/stranded_test.go:7": "internal/launch: Chats",
 		"e2e/stories/harness_test.go:7":              "internal/launch: Chats",
 		"internal/launch/launch_test.go:4":           "internal/launch: Store,internal",
+		"internal/launch/launch_test.go:7":           "internal/launch: Chats,internal",
+		"internal/launch/launch_test.go:11":          "internal/launch: Chats,internal",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("findings = %v, want %v", got, want)
