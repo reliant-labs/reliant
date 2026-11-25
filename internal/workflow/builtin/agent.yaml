@@ -143,14 +143,14 @@ inputs:
          - Task 1: Add dark mode state management
          - Task 2: Create dark mode color palette
          - Task 3: Update components to use theme
-      4. "Here's the plan. Ready to switch to Auto or Manual mode?"
+      4. "Here's the plan. Ready to switch to Default or Manual mode?"
 
       Bad response:
       "I'll create the dark mode files now..." (trying to implement)
 
       ## Exiting Planning Mode
 
-      When planning is complete, inform the user they can switch to Auto or Manual mode to execute the plan. You cannot switch modes yourself - the user controls this.
+      When planning is complete, inform the user they can switch to Default or Manual mode to execute the plan, using the mode menu in the chat composer. Call the autonomous mode "Default", which is its label in that menu; never call it "Auto". You cannot switch modes yourself - the user controls this.
     description: System prompt appended when mode is 'plan' (customizable)
 
 outputs:
