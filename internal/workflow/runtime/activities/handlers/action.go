@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.temporal.io/sdk/activity"
+	structpb "google.golang.org/protobuf/types/known/structpb"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -17,9 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
-	"go.opentelemetry.io/otel/attribute"
-	"go.temporal.io/sdk/activity"
-	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
 // An action node runs ONE integration action because the graph says so. The

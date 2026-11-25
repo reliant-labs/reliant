@@ -27,6 +27,12 @@ CREATE TABLE project_daemon_repos (
     -- running the clone it was sent (the clone's own timeout, with a
     -- margin), so a claim is never taken over while that clone may run.
     lease_until TIMESTAMPTZ,
+    -- The set-up was planned again while a claim's lease still held: the
+    -- machine may still be running that clone, so the claim and its lease
+    -- are kept (no second clone of the same target can start), and the row
+    -- goes back to pending when that claim settles, its outcome belonging to
+    -- the previous plan. A claim taken over after the lease ran out clears it.
+    replan_pending BOOLEAN NOT NULL DEFAULT false,
     PRIMARY KEY (project_id, daemon_id, repo_id),
     FOREIGN KEY (project_id, daemon_id) REFERENCES project_daemons (project_id, daemon_id) ON DELETE CASCADE
 );

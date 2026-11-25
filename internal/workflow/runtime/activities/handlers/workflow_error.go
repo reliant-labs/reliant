@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/reliant-labs/reliant/internal/db"
 )
 

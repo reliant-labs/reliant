@@ -36,13 +36,6 @@ const mocks = vi.hoisted(() => ({
   search: {} as Record<string, string>,
 }))
 
-// The machines gate reads compute eligibility from the server rather than
-// deriving it from the subscription, so this module must be mocked for the
-// section to render at all.
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: mocks.getComputeEligibility,
-}))
-
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -112,9 +105,10 @@ import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_regi
 import { MachineHealthState } from '@/gen/reliant/v1/tools_daemon_pb'
 import { setTransport } from '@/lib/connect'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
 
 // The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() }, eligibilityHandlers(() => mocks.getComputeEligibility()))))
 afterEach(() => setTransport(null))
 
 function renderSection() {

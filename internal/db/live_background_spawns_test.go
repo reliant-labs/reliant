@@ -53,7 +53,7 @@ func TestListLiveBackgroundSpawns(t *testing.T) {
 	if _, err := repo.CreateThread(ctx, &Thread{ID: child3, ChatID: chatID, CreatedAt: time.Now()}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := repo.EnqueueAgentMessage(ctx, &AgentMessage{
+	if err := store.EnqueueAgentMessage(ctx, repo.ORM(), &AgentMessage{
 		ID: "am-3", ChatID: chatID, FromThreadID: child3, ToThreadID: root,
 		Kind: core.AgentMessageKindCompletion, Body: "done", ToolCallID: &tc3,
 		Status: core.AgentMessageStatusQueued, CreatedAt: time.Now().UTC(),

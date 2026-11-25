@@ -40,12 +40,30 @@ type Questions interface {
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 }
 
+// Mailbox writes the placeholder report the stranded-background-spawn sweep
+// leaves for a spawn whose report never arrived, and announces it to the
+// chat's clients. *agentmailbox.Mailbox satisfies it.
+type Mailbox interface {
+	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)
+}
+
+// Orphans resolves the queued mail of threads that are already terminal.
+// store.AgentMessageExtStore satisfies it.
+type Orphans interface {
+	ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error)
+	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
+}
+
 // Deps is what a Reconciler is built from.
 type Deps struct {
 	// Store is everything a reconcile pass reads and writes.
 	Store ReconcilerStore
 	// Questions lists the chat's pending questions.
 	Questions Questions
+	// Mailbox writes the sweep's placeholder reports.
+	Mailbox Mailbox
+	// Orphans resolves the mail a finished thread left queued.
+	Orphans Orphans
 	// Temporal is the Temporal client the drift scan and the resets use.
 	Temporal client.Client
 	// Config holds the pass's thresholds; nil, or a zero field, is the
@@ -100,11 +118,6 @@ type ReconcilerStore interface {
 	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error)
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
-
-	// The agent-message mailbox.
-	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *db.AgentMessage) (bool, error)
-	ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error)
-	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
 
 	// GetChat, GetToolCall and SaveMessageToThread are called directly too;
 	// the roles below already declare them.

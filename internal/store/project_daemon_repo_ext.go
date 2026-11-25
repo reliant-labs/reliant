@@ -380,9 +380,15 @@ func projectDaemonReposToCore(rows []projectDaemonRepoRow) []*core.ProjectDaemon
 // project's checkout on the machine, once its root clone lands: each of
 // repoIDs pending (again, for one that cloned or failed before: a set-up
 // that is run again clones every one again, and an existing clone is kept
-// by the daemon), and every other row of the pair removed. Planning again
-// drops every claim, so a pass still cloning the old plan settles nothing
-// (SettleProjectDaemonRepo is fenced on its claim). The pair's
+// by the daemon), and every other row of the pair removed.
+//
+// A row whose claim's lease still holds keeps its claim and lease: the
+// machine may still be running that clone, and resetting it would let a
+// second pass send a clone of the same target while the first runs (the
+// daemon's clone sweeps the target's staging directories). It is marked
+// replan_pending instead, and goes back to pending when that claim settles
+// (SettleProjectDaemonRepo), or is cleared by the claim that takes it over
+// once the lease runs out. Every other row's claim is dropped. The pair's
 // project_daemons row must exist. Run it in the transaction that queues the
 // root clone.
 func PlanProjectDaemonRepos(ctx context.Context, db orm.Context, projectID, daemonID string, repoIDs []string) error {
@@ -400,14 +406,23 @@ func PlanProjectDaemonRepos(ctx context.Context, db orm.Context, projectID, daem
 	for _, repoID := range repoIDs {
 		if _, err := db.Bun().NewRaw(`INSERT INTO project_daemon_repos (project_id, daemon_id, repo_id, state, error, state_changed_at)
 VALUES (?0, ?1, ?2, 'pending', '', now())
-ON CONFLICT (project_id, daemon_id, repo_id) DO UPDATE SET state = 'pending', error = '', state_changed_at = now(),
-	claim_id = '', lease_until = NULL`,
+ON CONFLICT (project_id, daemon_id, repo_id) DO UPDATE SET
+	state = CASE WHEN `+liveClaim+` THEN 'cloning' ELSE 'pending' END,
+	error = '',
+	state_changed_at = CASE WHEN `+liveClaim+` THEN project_daemon_repos.state_changed_at ELSE now() END,
+	claim_id = CASE WHEN `+liveClaim+` THEN project_daemon_repos.claim_id ELSE '' END,
+	lease_until = CASE WHEN `+liveClaim+` THEN project_daemon_repos.lease_until ELSE NULL END,
+	replan_pending = `+liveClaim,
 			projectID, daemonID, repoID).Exec(ctx); err != nil {
 			return fmt.Errorf("plan nested repository %s: %w", repoID, err)
 		}
 	}
 	return nil
 }
+
+// liveClaim is true of a project_daemon_repos row (in an ON CONFLICT update)
+// whose claim's lease still holds: the machine may still be running its clone.
+const liveClaim = `(project_daemon_repos.state = 'cloning' AND project_daemon_repos.lease_until IS NOT NULL AND project_daemon_repos.lease_until >= now())`
 
 type nestedRepoClaimRow struct {
 	projectDaemonRepoRow
@@ -447,7 +462,7 @@ func ClaimNextProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, 
 	LIMIT 1
 	FOR UPDATE OF c SKIP LOCKED
 ), claimed AS (
-	UPDATE project_daemon_repos u SET state = 'cloning', error = '', claim_id = ?2,
+	UPDATE project_daemon_repos u SET state = 'cloning', error = '', claim_id = ?2, replan_pending = false,
 		lease_until = now() + make_interval(secs => ?3), state_changed_at = now()
 	FROM candidate
 	WHERE u.project_id = ?0 AND u.daemon_id = ?1 AND u.repo_id = candidate.repo_id
@@ -475,8 +490,11 @@ FROM claimed c JOIN repos r ON r.id = c.repo_id`, projectID, daemonID, claimID, 
 // SettleProjectDaemonRepo records how the clone of a nested repository the
 // pass claimID claimed went: installed when installErr is empty, else failed
 // with it. It is fenced on the claim: a row no longer held by that claim
-// (taken over after its lease ran out, or planned again meanwhile) is left
-// alone, and settled reports false.
+// (taken over after its lease ran out) is left alone, and settled reports
+// false. A row planned again while this claim ran (replan_pending) goes back
+// to pending instead, its outcome belonging to the previous plan: the new
+// plan clones it again now that this clone has ended (a clone that landed is
+// kept by the daemon). settled reports true then too: the claim is released.
 func SettleProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, daemonID, repoID, claimID, installErr string) (bool, error) {
 	if claimID == "" {
 		return false, fmt.Errorf("claim ID cannot be empty")
@@ -485,8 +503,10 @@ func SettleProjectDaemonRepo(ctx context.Context, db orm.Context, projectID, dae
 	if installErr != "" {
 		state = core.NestedRepoFailed
 	}
-	res, err := db.Bun().NewRaw(`UPDATE project_daemon_repos SET state = ?3, error = ?4, state_changed_at = now(),
-	claim_id = '', lease_until = NULL
+	res, err := db.Bun().NewRaw(`UPDATE project_daemon_repos SET
+	state = CASE WHEN replan_pending THEN 'pending' ELSE ?3 END,
+	error = CASE WHEN replan_pending THEN '' ELSE ?4 END,
+	state_changed_at = now(), claim_id = '', lease_until = NULL, replan_pending = false
 WHERE project_id = ?0 AND daemon_id = ?1 AND repo_id = ?2 AND state = 'cloning' AND claim_id = ?5`,
 		projectID, daemonID, repoID, string(state), installErr, claimID).Exec(ctx)
 	if err != nil {

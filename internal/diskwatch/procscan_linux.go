@@ -187,9 +187,13 @@ func (p *procInfo) read(dir string, euid int) error {
 	p.cmdline = cmdline
 	p.refs.addRefs(string(cmdline))
 	if own {
-		if p.exe, err = readRefs(&p.refs, dir); err != nil {
+		exe, err := readRefs(&p.refs, dir)
+		if err != nil {
+			// Extra capabilities can explain a denial, but cannot prove
+			// this process holds no work directories. Keep the scan incomplete.
 			return fmt.Errorf("(%s): %w", p.comm, err)
 		}
+		p.exe = exe
 	}
 	return nil
 }

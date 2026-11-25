@@ -116,9 +116,17 @@ func resolveFiles(ctx context.Context, workspace, dir string, repos, paths []str
 // fix. The command then runs in the same directory of filesTop's worktree
 // (its root, when that worktree lacks the directory).
 //
-// A dir outside any repository, in another repository, or containing
-// filesTop keeps the command where it was asked to run: there the caller
-// chose the directory ("cd sub && go test" from the project root).
+// The same holds for a dir outside any repository (a multi-repo project
+// root, the default dir) when filesTop is not inside it: a branch worktree
+// made elsewhere (~/.reliant/worktrees, a scratch directory). Nothing the
+// command can name relative to dir reaches that checkout, so run in dir it
+// fails to build or tests the main checkout, and both runs share a verdict
+// that says nothing about the fix. The command runs at filesTop's root.
+//
+// A dir containing filesTop, or in another repository, keeps the command
+// where it was asked to run: there the caller chose the directory ("cd sub
+// && go test" from the project root, a sibling repository that replaces the
+// module the fix is in).
 func commandDir(ctx context.Context, dir, filesTop string) (string, bool) {
 	realDir, err := filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -129,7 +137,8 @@ func commandDir(ctx context.Context, dir, filesTop string) (string, bool) {
 	}
 	out, err := runGit(ctx, realDir, "rev-parse", "--show-toplevel")
 	if err != nil {
-		return dir, false
+		// Outside any repository, and filesTop is not under it (above).
+		return filesTop, true
 	}
 	dirTop, err := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
 	if err != nil || dirTop == filesTop {

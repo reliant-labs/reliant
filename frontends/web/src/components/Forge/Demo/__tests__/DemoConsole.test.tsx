@@ -1,8 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * `/forge/demo` through its real route (createForgeDemoRoute, as the demo
- * shell mounts it): it renders the console and every Observability view the
+ * `/forge/demo` through its real route (createForgeDemoRoute, under the demo's
+ * providers, as the demo shell mounts it): it renders the console's page bar
+ * and every Observability view the
  * forge journey visits on fixture data, and the whole walk — a trace, its
  * logs, its flamegraph, an issue, its Ask-an-agent sheet, the firing alert —
  * touches no fetch, no project list and no chat. The console's real client
@@ -51,6 +52,7 @@ import { tourEvents } from "@/components/Onboarding/tourEvents";
 import { createShopTransport } from "@/fixtures/shop";
 import { setTransport } from "@/lib/connect";
 import { resetShellForTests } from "@/lib/shell";
+import { DemoConsoleProviders } from "@/demoBundle/DemoConsoleProviders";
 import { ObsReadOnlyProvider } from "../../Observability/obsReadOnly";
 
 import { FIXTURE_TRACE_ID } from "../../Observability/__fixtures__/fixtureApi";
@@ -66,13 +68,16 @@ function shopTransport(calls: string[]): Transport {
 }
 
 function renderDemo(path: string) {
-  // The demo shell's root: one query client, every write control off (demoShellRoutes.tsx).
+  // The demo shell's root: one query client, every write control off, and its
+  // console layout's providers (demoShellRoutes.tsx).
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } });
   const rootRoute = createRootRoute({
     component: () => (
       <QueryClientProvider client={queryClient}>
         <ObsReadOnlyProvider value={{ readOnly: true, reason: "Read-only demo" }}>
-          <Outlet />
+          <DemoConsoleProviders>
+            <Outlet />
+          </DemoConsoleProviders>
         </ObsReadOnlyProvider>
       </QueryClientProvider>
     ),
@@ -119,16 +124,14 @@ describe("the forge demo console", () => {
     expect(startAskReliantChat).not.toHaveBeenCalled();
   };
 
-  it("renders the console's overview on fixture data, every nav row on the sample app's console", async () => {
+  it("renders the console's overview on fixture data, under the console's page bar and no frame of its own", async () => {
     renderDemo("/forge/demo?view=overview");
     expect(await screen.findByTestId("obs-overview", {}, { timeout: 15_000 })).toBeInTheDocument();
-    // The console's nav (the journey's first spotlight): every row opens shop's console page.
-    const nav = document.querySelector<HTMLElement>("[data-tour='forge-console'] aside");
-    expect(nav).not.toBeNull();
-    expect(within(nav!).getByRole("link", { name: /Overview/ })).toHaveAttribute("href", "/forge/p/shop");
-    // Releases sits in the shell's Deployments group (Console/groupedNav.tsx), folded until opened.
-    await userEvent.setup().click(within(nav!).getByRole("button", { name: /Deployments/ }));
-    expect(within(nav!).getByRole("link", { name: /Releases/ })).toHaveAttribute("href", "/forge/p/shop/releases");
+    // A page of the shell (the nav is the shell's: DemoNav): the console's bar, with the breadcrumb and the scope.
+    expect(screen.getByTestId("forge-console-header")).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByText("shop")).toBeInTheDocument();
+    expect(screen.queryByTestId("forge-shell")).toBeNull();
+    expect(document.querySelector("[data-tour='forge-console']")).toBeNull();
     expectNothingTouched();
   }, 30_000);
 
@@ -241,24 +244,22 @@ describe("the forge demo console", () => {
   }, 30_000);
 
   describe("its own pages", () => {
-    it("draws no banner (the action row says it once), and lists How it was built as a nav row", async () => {
+    it("draws no banner (the action row says it once)", async () => {
       renderDemo("/forge/demo?view=overview");
       expect(await screen.findByTestId("obs-overview", {}, { timeout: 15_000 })).toBeInTheDocument();
-      const row = screen.getByRole("link", { name: "How it was built" });
-      expect(row).toHaveAttribute("href", "/forge/demo?section=built");
+      expect(screen.queryByTestId("forge-demo-banner")).toBeNull();
       // The overview's reads went to the shop pack, through the console's real client.
       expect(shopCalls).toEqual(expect.arrayContaining(["controlplane.v1.ObservabilityService/GetServiceOverview"]));
       expect(fixtureCalls.map((c) => c.rpc)).toContain("GetServiceOverview");
       expectNothingTouched();
     }, 30_000);
 
-    it("names the build page in the breadcrumb and nav, not Overview", async () => {
+    it("names the build page in the breadcrumb, not Overview", async () => {
       renderDemo("/forge/demo?section=built");
       expect(await screen.findByTestId("how-built", {}, { timeout: 15_000 })).toBeInTheDocument();
       const crumbs = screen.getByRole("navigation", { name: "Breadcrumb" });
       expect(within(crumbs).getByText("How it was built")).toHaveAttribute("aria-current", "page");
       expect(within(crumbs).queryByText("Overview")).toBeNull();
-      expect(screen.getByRole("link", { name: "How it was built" })).toHaveAttribute("aria-current", "page");
     }, 30_000);
 
     it("orders the environments dev, staging, prod, then All", async () => {

@@ -41,10 +41,6 @@ const mocks = vi.hoisted(() => ({
 // The Add machine sheet (billing checkout, catalog) is not under test here.
 vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () => null }))
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: mocks.getComputeEligibility,
-}))
-
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -89,6 +85,7 @@ import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_regi
 import { ConnectorExecMode } from '@/gen/reliant/v1/connector_pb'
 import { setTransport } from '@/lib/connect'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
 import { serviceHandlers } from '@/test/serviceTransport'
 
 // The daemon list and the grants are read through connectClient
@@ -97,13 +94,16 @@ beforeEach(() =>
   setTransport(
     daemonRegistryTransport(
       { listDaemons: () => mocks.listDaemons() },
-      serviceHandlers('ConnectorService', {
-        listConnectors: (req) => mocks.listConnectors(req),
-        listAvailableTools: (req) => mocks.listAvailableTools(req),
-        listConnectorActivity: (req) => mocks.listConnectorActivity(req),
-        createConnector: (req) => mocks.createConnector(req),
-        revokeConnector: (req) => mocks.revokeConnector(req),
-      }),
+      {
+        ...eligibilityHandlers(() => mocks.getComputeEligibility()),
+        ...serviceHandlers('ConnectorService', {
+          listConnectors: (req) => mocks.listConnectors(req),
+          listAvailableTools: (req) => mocks.listAvailableTools(req),
+          listConnectorActivity: (req) => mocks.listConnectorActivity(req),
+          createConnector: (req) => mocks.createConnector(req),
+          revokeConnector: (req) => mocks.revokeConnector(req),
+        }),
+      },
     ),
   ),
 )
