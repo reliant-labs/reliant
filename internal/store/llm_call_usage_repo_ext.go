@@ -103,7 +103,8 @@ type LLMCallUsageRecord struct {
 	// the org the account is attributed to. "" when no org is known to have
 	// paid (a person's own account, or the org-less managed key, whose wallet
 	// is the person's default org rather than necessarily the chat's). Only
-	// what an org is known to have paid for reaches that org's rollup.
+	// what an org is known to have paid for reaches that org's rollup. Stored
+	// as llm_call_usage.funding_org_id, NULL when "".
 	FundingOrgID string
 
 	// What the call was part of (agent-analytics.md §3.2), from the run
@@ -188,16 +189,17 @@ func RecordLLMCallUsage(ctx context.Context, db orm.Context, rec LLMCallUsageRec
 	res, err := db.Bun().NewRaw(`INSERT INTO llm_call_usage (id, user_id, org_id, chat_id, run_id, provider, model, auth_mode, purpose,
 		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, outcome, error_class, latency_ms, attempt, created_at,
 		account_id, funding, workflow_id, thread_id, workflow_name, node_id, preset, project_id, ai_run_id, ai_root_run_id,
-		provider_request_id, ttft_ms, cost_usd_nanos, cost_basis, insights_folded)
+		provider_request_id, ttft_ms, cost_usd_nanos, cost_basis, insights_folded, funding_org_id)
 		VALUES (?0, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19,
-		?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, true)
+		?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, true, ?32)
 		ON CONFLICT (id, attempt) DO NOTHING`,
 		rec.ID, rec.UserID, rec.OrgID, rec.ChatID, rec.RunID, rec.Provider, rec.Model, rec.AuthMode, rec.Purpose,
 		rec.InputTokens, rec.OutputTokens, rec.CacheReadTokens, rec.CacheWriteTokens, rec.Outcome, rec.ErrorClass,
 		rec.LatencyMs, rec.Attempt, rec.CreatedAt, rec.AccountID, rec.Funding,
 		emptyToNil(rec.WorkflowID), emptyToNil(rec.ThreadID), emptyToNil(rec.WorkflowName), emptyToNil(rec.NodeID),
 		emptyToNil(rec.Preset), emptyToNil(rec.ProjectID), emptyToNil(rec.AIRunID), emptyToNil(rec.AIRootRunID),
-		emptyToNil(rec.ProviderRequestID), rec.TTFTMs, rec.CostUSDNanos, emptyToNil(rec.CostBasis)).Exec(ctx)
+		emptyToNil(rec.ProviderRequestID), rec.TTFTMs, rec.CostUSDNanos, emptyToNil(rec.CostBasis),
+		emptyToNil(rec.FundingOrgID)).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("insert llm call usage %s: %w", rec.ID, err)
 	}

@@ -117,8 +117,8 @@ func TestLLMCallUsage_ConcurrentDuplicatesCountOnce(t *testing.T) {
 func insightsModelColumns(member bool) map[string]string {
 	cols := map[string]string{
 		"org_id": "text", "day": "date", "project_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
-		"provider": "text", "model": "text", "auth_mode": "text", "funding": "text", "purpose": "text", "outcome": "text",
-		"error_class": "text", "calls": "bigint", "retried_calls": "bigint", "input_tokens": "bigint", "output_tokens": "bigint",
+		"provider": "text", "model": "text", "auth_mode": "text", "funding": "text", "paid_by_org": "boolean", "purpose": "text",
+		"outcome": "text", "error_class": "text", "calls": "bigint", "retried_calls": "bigint", "input_tokens": "bigint", "output_tokens": "bigint",
 		"cache_read_tokens": "bigint", "cache_write_tokens": "bigint", "latency_ms_total": "bigint", "latency_ms_hist": "ARRAY",
 		"ttft_calls": "bigint", "ttft_ms_total": "bigint", "ttft_ms_hist": "ARRAY", "reported_calls": "bigint",
 		"reported_cost_usd_nanos": "bigint", "estimated_calls": "bigint", "estimated_cost_usd_nanos": "bigint",
@@ -165,8 +165,9 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			"workflow_id": "text", "thread_id": "text", "workflow_name": "text", "node_id": "text", "preset": "text",
 			"project_id": "text", "ai_run_id": "text", "ai_root_run_id": "text", "provider_request_id": "text",
 			"ttft_ms": "bigint", "cost_usd_nanos": "bigint", "cost_basis": "text",
-			// Whether the insights rollups count the row (agent-analytics.md §3.1).
-			"insights_folded": "boolean",
+			// Whether the insights rollups count the row (agent-analytics.md §3.1),
+			// and the org that paid for it, an opaque id.
+			"insights_folded": "boolean", "funding_org_id": "text",
 		},
 		"llm_call_usage_daily": {
 			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",

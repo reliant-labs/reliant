@@ -1,4 +1,4 @@
--- forge:backward-compatible — adds a boolean with a constant default the previous release never names (its inserts take false, "not folded yet", which this release's backfill folds), three functions, two aggregates and four new tables only this release reads and writes.
+-- forge:backward-compatible — adds a boolean with a constant default and a nullable column the previous release never names (its inserts take false, "not folded yet", which this release's backfill folds, and NULL, "payer org unknown", which no org's spend counts), three functions, two aggregates and four new tables only this release reads and writes.
 
 -- Migration: insights_rollups
 -- Created: 2026-11-25T00:27:42Z
@@ -41,9 +41,20 @@
 -- one definition; store.InsightsLatencyBucket mirrors it and a test holds the
 -- two equal.
 --
--- Cost: the team model table counts cost only for calls an org paid for
--- (funding org_key, org_seat, org_wallet); a member's own subscription or key
--- is never in an org's spend (§3.6, D6), which the CHECK below enforces. The
+-- Cost: the team model table counts a call's cost only when the org the row
+-- belongs to is the org that paid for it: funding is org_key, org_seat or
+-- org_wallet AND the ledger's funding_org_id (added below) is the row's
+-- org_id. Who the work was for (org_id) and who paid (funding_org_id) are
+-- separate: the org-less managed key bills the person's default org, which is
+-- not necessarily the chat's, so it records funding org_wallet with no known
+-- payer. A NULL payer (that key, a personal account, or any row written
+-- before this column) is unknown and is never counted as an org's spend; the
+-- call is still counted, without cost. A member's own subscription or key is
+-- never in an org's spend (§3.6, D6). paid_by_org, a key column of both model
+-- tables, says which rows the row's org paid for (computed when the call is
+-- folded); a team row's cost is zero unless it is set, which the CHECKs below
+-- enforce, and a reader of a member row filters on it for the org's spend,
+-- without the table naming any other org. The
 -- member table keeps the member's cost whatever paid, so their own view can
 -- show it. Reported and estimated cost are separate columns and are never
 -- summed together (§4); unpriced_calls are calls with no per-call price.
@@ -68,7 +79,7 @@
 --     "SELECT (SELECT count(*) FROM llm_call_usage WHERE NOT insights_folded),
 --             (SELECT count(*) FROM tool_call_usage WHERE NOT insights_folded)"
 --
--- Rollback: none needed. The previous release never names the new column,
+-- Rollback: none needed. The previous release never names the new columns,
 -- functions or tables; its inserts leave insights_folded false, and rolling
 -- forward again folds them. Its own pruning ignores the flag, so a row it
 -- prunes before it is folded is lost to the rollup (only rows already past
@@ -79,6 +90,11 @@ SET LOCAL lock_timeout = '5s';
 ALTER TABLE llm_call_usage ADD COLUMN insights_folded boolean NOT NULL DEFAULT false;
 ALTER TABLE tool_call_usage ADD COLUMN insights_folded boolean NOT NULL DEFAULT false;
 COMMENT ON COLUMN llm_call_usage.insights_folded IS 'Whether the row is counted in the insights rollups. False for a row written before them or by a release that does not write them; the retention job folds it.';
+-- The org that paid for the call (store.LLMCallUsageRecord.FundingOrgID):
+-- the org that owns the serving account or that it is attributed to. NULL
+-- when no org is known to have paid. No default, so this is a catalog change.
+ALTER TABLE llm_call_usage ADD COLUMN funding_org_id text;
+COMMENT ON COLUMN llm_call_usage.funding_org_id IS 'The org that paid for the call (owns the serving account, or it is attributed to). NULL when no org is known to have paid: a person''s own account, the org-less managed key, or a row written before the column. Never the same thing as org_id, the org the work was for.';
 COMMENT ON COLUMN tool_call_usage.insights_folded IS 'Whether the row is counted in the insights rollups. False for a row written before them or by a release that does not write them; the retention job folds it.';
 
 -- The histogram bucket of a duration in ms (see above). k >= 1 is
@@ -140,6 +156,7 @@ CREATE TABLE insights_model_calls_daily (
     model                    text NOT NULL,
     auth_mode                text NOT NULL,
     funding                  text NOT NULL DEFAULT '',
+    paid_by_org              boolean NOT NULL DEFAULT false,
     purpose                  text NOT NULL,
     outcome                  text NOT NULL,
     error_class              text NOT NULL DEFAULT '',
@@ -160,7 +177,7 @@ CREATE TABLE insights_model_calls_daily (
     estimated_cost_usd_nanos bigint NOT NULL DEFAULT 0,
     unpriced_calls           bigint NOT NULL DEFAULT 0,
     updated_at               timestamp with time zone NOT NULL DEFAULT now(),
-    PRIMARY KEY (org_id, day, project_id, workflow_name, node_id, preset, provider, model, auth_mode, funding, purpose, outcome, error_class),
+    PRIMARY KEY (org_id, day, project_id, workflow_name, node_id, preset, provider, model, auth_mode, funding, paid_by_org, purpose, outcome, error_class),
     CONSTRAINT insights_model_calls_daily_org_check CHECK (org_id <> ''),
     CONSTRAINT insights_model_calls_daily_hist_check CHECK (
         cardinality(latency_ms_hist) = 48 AND cardinality(ttft_ms_hist) = 48),
@@ -171,9 +188,12 @@ CREATE TABLE insights_model_calls_daily (
         AND reported_calls >= 0 AND reported_cost_usd_nanos >= 0 AND estimated_calls >= 0
         AND estimated_cost_usd_nanos >= 0 AND unpriced_calls >= 0
         AND reported_calls + estimated_calls + unpriced_calls <= calls),
-    -- An org's spend is what it paid for: a member's own account never.
-    CONSTRAINT insights_model_calls_daily_cost_is_org_funded CHECK (
-        funding IN ('org_key', 'org_seat', 'org_wallet')
+    -- An org's spend is what it paid for itself: never a member's own
+    -- account, another org's payment, or a payer that is not known.
+    CONSTRAINT insights_model_calls_daily_paid_by_org_is_org_funded CHECK (
+        NOT paid_by_org OR funding IN ('org_key', 'org_seat', 'org_wallet')),
+    CONSTRAINT insights_model_calls_daily_cost_is_paid_by_org CHECK (
+        paid_by_org
         OR (reported_calls = 0 AND reported_cost_usd_nanos = 0 AND estimated_calls = 0 AND estimated_cost_usd_nanos = 0))
 );
 COMMENT ON TABLE insights_model_calls_daily IS 'forge:no-entity';
@@ -192,6 +212,7 @@ CREATE TABLE insights_model_calls_member_daily (
     model                    text NOT NULL,
     auth_mode                text NOT NULL,
     funding                  text NOT NULL DEFAULT '',
+    paid_by_org              boolean NOT NULL DEFAULT false,
     purpose                  text NOT NULL,
     outcome                  text NOT NULL,
     error_class              text NOT NULL DEFAULT '',
@@ -212,7 +233,9 @@ CREATE TABLE insights_model_calls_member_daily (
     estimated_cost_usd_nanos bigint NOT NULL DEFAULT 0,
     unpriced_calls           bigint NOT NULL DEFAULT 0,
     updated_at               timestamp with time zone NOT NULL DEFAULT now(),
-    PRIMARY KEY (user_id, day, org_id, project_id, workflow_name, node_id, preset, provider, model, auth_mode, funding, purpose, outcome, error_class),
+    PRIMARY KEY (user_id, day, org_id, project_id, workflow_name, node_id, preset, provider, model, auth_mode, funding, paid_by_org, purpose, outcome, error_class),
+    CONSTRAINT insights_model_calls_member_daily_paid_by_org_is_org_funded CHECK (
+        NOT paid_by_org OR funding IN ('org_key', 'org_seat', 'org_wallet')),
     CONSTRAINT insights_model_calls_member_daily_hist_check CHECK (
         cardinality(latency_ms_hist) = 48 AND cardinality(ttft_ms_hist) = 48),
     CONSTRAINT insights_model_calls_member_daily_counts_nonnegative CHECK (

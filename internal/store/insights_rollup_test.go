@@ -103,7 +103,7 @@ type insightsTableShape struct {
 }
 
 var (
-	modelRunKey   = []string{"day", "project_id", "workflow_name", "node_id", "preset", "provider", "model", "auth_mode", "funding", "purpose", "outcome", "error_class"}
+	modelRunKey   = []string{"day", "project_id", "workflow_name", "node_id", "preset", "provider", "model", "auth_mode", "funding", "paid_by_org", "purpose", "outcome", "error_class"}
 	modelMeasures = []string{"calls", "retried_calls", "input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens",
 		"latency_ms_total", "ttft_calls", "ttft_ms_total", "reported_calls", "reported_cost_usd_nanos", "estimated_calls",
 		"estimated_cost_usd_nanos", "unpriced_calls", "latency_ms_hist", "ttft_ms_hist"}
@@ -193,13 +193,16 @@ func joinInts(v []int64) string {
 	return strings.Join(s, ",")
 }
 
-func orgFunded(funding string) bool {
-	return funding == "org_key" || funding == "org_seat" || funding == "org_wallet"
+// paidByTheOrg is whether a team row of org counts the call's cost: an org
+// paid for it, and that org is org itself, not merely the work's org.
+func paidByTheOrg(r store.LLMCallUsageRecord, org string) bool {
+	orgFunded := r.Funding == "org_key" || r.Funding == "org_seat" || r.Funding == "org_wallet"
+	return orgFunded && r.FundingOrgID != "" && r.FundingOrgID == org
 }
 
 // expectModels sums the model calls the way the rollups must: one row per
 // (id, attempt), the first write winning; the team tables only for an org,
-// with cost only for calls the org paid for.
+// with cost only for calls that org itself paid for.
 func expectModels(recs []store.LLMCallUsageRecord) (team, member map[string]string) {
 	teamSums, memberSums := map[string]*insightsSum{}, map[string]*insightsSum{}
 	seen := map[string]bool{}
@@ -209,8 +212,9 @@ func expectModels(recs []store.LLMCallUsageRecord) (team, member map[string]stri
 			continue
 		}
 		seen[id] = true
+		paid := paidByTheOrg(r, r.OrgID)
 		run := strings.Join([]string{r.CreatedAt.UTC().Format("2006-01-02"), r.ProjectID, r.WorkflowName, r.NodeID, r.Preset,
-			r.Provider, r.Model, r.AuthMode, r.Funding, r.Purpose, r.Outcome, r.ErrorClass}, "|")
+			r.Provider, r.Model, r.AuthMode, r.Funding, map[bool]string{true: "t", false: "f"}[paid], r.Purpose, r.Outcome, r.ErrorClass}, "|")
 		add := func(sums map[string]*insightsSum, key string, costed bool) {
 			s := sums[key]
 			if s == nil {
@@ -244,7 +248,7 @@ func expectModels(recs []store.LLMCallUsageRecord) (team, member map[string]stri
 			}
 		}
 		if r.OrgID != "" {
-			add(teamSums, r.OrgID+"|"+run, orgFunded(r.Funding))
+			add(teamSums, r.OrgID+"|"+run, paid)
 		}
 		add(memberSums, r.UserID+"|"+r.OrgID+"|"+run, true)
 	}
@@ -311,8 +315,10 @@ func randomModelCalls(r *rand.Rand, prefix string, n int) []store.LLMCallUsageRe
 			UserID: pick(r, "alice", "bob", "carol"), OrgID: pick(r, "", "org-1", "org-2"),
 			ChatID: pick(r, "chat-1", "chat-2"), Provider: pick(r, "reliant", "anthropic"), Model: pick(r, "m-small", "m-large"),
 			AuthMode: pick(r, "managed", "byok", "subscription", "local"), Purpose: pick(r, "chat", "compaction", "title"),
-			Funding:   pick(r, "", "org_key", "org_seat", "org_wallet", "personal", "local"),
-			ProjectID: pick(r, "", "proj-a", "proj-b"), WorkflowName: pick(r, "", "agent", "get-it-right"),
+			Funding: pick(r, "", "org_key", "org_seat", "org_wallet", "personal", "local"),
+			// The payer: unknown, the work's org, or another org.
+			FundingOrgID: pick(r, "", "org-1", "org-2"),
+			ProjectID:    pick(r, "", "proj-a", "proj-b"), WorkflowName: pick(r, "", "agent", "get-it-right"),
 			NodeID: pick(r, "", "call_llm", "review"), Preset: pick(r, "", "researcher"),
 			InputTokens: r.Int64N(5000), OutputTokens: r.Int64N(2000), CacheReadTokens: r.Int64N(3000), CacheWriteTokens: r.Int64N(100),
 			LatencyMs: pick(r, insightsDurations...),
@@ -752,11 +758,11 @@ func TestSweepTakesInsightsMemberRowsOfAGoneProject(t *testing.T) {
 		t.Fatalf("sweep: %v", err)
 	}
 	team := f.read(modelTeam)
-	if len(team) != 2 || !strings.HasPrefix(team["org-1|2026-11-20|||||p|m|byok||chat|success|"], "5|") ||
-		!strings.HasPrefix(team["org-1|2026-11-20|||||p|m2|byok||chat|success|"], "4|") {
+	if len(team) != 2 || !strings.HasPrefix(team["org-1|2026-11-20|||||p|m|byok||f|chat|success|"], "5|") ||
+		!strings.HasPrefix(team["org-1|2026-11-20|||||p|m2|byok||f|chat|success|"], "4|") {
 		t.Errorf("team rows after the sweep: %v, want the gone project's merged into the no-project rows (5 and 4 calls)", team)
 	}
-	if got := team["org-1|2026-11-20|||||p|m|byok||chat|success|"]; !strings.HasSuffix(strings.Split(got, "|")[14], ",2") {
+	if got := team["org-1|2026-11-20|||||p|m|byok||f|chat|success|"]; !strings.HasSuffix(strings.Split(got, "|")[14], ",2") {
 		t.Errorf("merged latency histogram %q, want each bucket summed (2)", got)
 	}
 	for _, table := range insightsMemberTableNames {
@@ -900,4 +906,69 @@ func (f *insightsFixture) readProject(table insightsTableShape, projectID string
 		}
 	}
 	return out
+}
+
+// TestInsightsTeamCostCountsOnlyThePayerOrg: a team row counts a call's cost
+// only when the org it belongs to is the org that paid. The work's org and the
+// payer are separate: org-funded work in org A whose payer is unknown (the
+// org-less managed key, or a row from before funding_org_id) or is org B is
+// counted as calls in A without cost, and never lands in B's rows either;
+// only a call A paid for is A's spend. The member row keeps the cost, which
+// is the member's own view.
+func TestInsightsTeamCostCountsOnlyThePayerOrg(t *testing.T) {
+	t.Parallel()
+	f := newInsightsFixture(t)
+	call := func(id, payer string, cost int64) store.LLMCallUsageRecord {
+		return store.LLMCallUsageRecord{ID: id, Attempt: 1, UserID: "alice", OrgID: "org-a", ChatID: "c", Provider: "reliant",
+			Model: id, AuthMode: "managed", Purpose: "chat", Funding: "org_wallet", FundingOrgID: payer,
+			Outcome: store.LLMOutcomeSuccess, CostUSDNanos: &cost, CostBasis: store.LLMCostBasisReported, CreatedAt: insightsAt}
+	}
+	f.model(call("unknown-payer", "", 100))
+	f.model(call("paid-by-b", "org-b", 200))
+	f.model(call("paid-by-a", "org-a", 400))
+	// A row from before funding_org_id, folded by the backfill: unknown too.
+	f.model(call("historical", "org-a", 800))
+	f.exec(`UPDATE llm_call_usage SET funding_org_id = NULL, insights_folded = false WHERE id = 'historical'`)
+	f.exec(`DELETE FROM insights_model_calls_daily WHERE model = 'historical'`)
+	f.exec(`DELETE FROM insights_model_calls_member_daily WHERE model = 'historical'`)
+	f.fold()
+
+	for _, c := range []struct {
+		model               string
+		reportedCalls, cost int64
+	}{{"unknown-payer", 0, 0}, {"paid-by-b", 0, 0}, {"paid-by-a", 1, 400}, {"historical", 0, 0}} {
+		var calls, reported, cost int64
+		if err := f.env.SQL.QueryRow(`SELECT calls, reported_calls, reported_cost_usd_nanos FROM insights_model_calls_daily
+			WHERE org_id = 'org-a' AND model = $1`, c.model).Scan(&calls, &reported, &cost); err != nil {
+			t.Fatalf("%s: team row: %v", c.model, err)
+		}
+		if calls != 1 || reported != c.reportedCalls || cost != c.cost {
+			t.Errorf("%s: org-a's team row calls=%d reported_calls=%d cost=%d, want 1, %d, %d",
+				c.model, calls, reported, cost, c.reportedCalls, c.cost)
+		}
+		var memberCost int64
+		var paid bool
+		if err := f.env.SQL.QueryRow(`SELECT reported_cost_usd_nanos, paid_by_org FROM insights_model_calls_member_daily
+			WHERE user_id = 'alice' AND model = $1`, c.model).Scan(&memberCost, &paid); err != nil {
+			t.Fatalf("%s: member row: %v", c.model, err)
+		}
+		if memberCost == 0 {
+			t.Errorf("%s: the member's own row lost the call's cost", c.model)
+		}
+		// A reader of member rows (an admin's drill-down) finds the org's
+		// spend by paid_by_org, never by the funding class alone.
+		if want := c.reportedCalls == 1; paid != want {
+			t.Errorf("%s: member row paid_by_org = %v, want %v", c.model, paid, want)
+		}
+	}
+	if n := f.count(`SELECT count(*) FROM insights_model_calls_daily WHERE org_id = 'org-b'`); n != 0 {
+		t.Errorf("org-b paid for work in org-a and got %d team rows; the work is org-a's", n)
+	}
+	var payer *string
+	if err := f.env.SQL.QueryRow(`SELECT funding_org_id FROM llm_call_usage WHERE id = 'paid-by-b'`).Scan(&payer); err != nil {
+		t.Fatal(err)
+	}
+	if payer == nil || *payer != "org-b" {
+		t.Errorf("llm_call_usage.funding_org_id = %v, want the payer org-b kept in the ledger", payer)
+	}
 }

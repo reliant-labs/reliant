@@ -50,9 +50,16 @@ func InsightsLatencyBucketBounds(k int) (lower, upper float64) {
 	return math.Pow(2, float64(k-1)/2), math.Pow(2, float64(k)/2)
 }
 
-// The team tables count cost only for what an org paid for
-// (insights_model_calls_daily_cost_is_org_funded).
-const insightsOrgFunded = `funding IN ('org_key', 'org_seat', 'org_wallet')`
+// insightsPaidByTheOrg is when a call was paid for by the org its rollup row
+// belongs to (paid_by_org, a key column of both model tables; a team row
+// counts cost only then): an org paid for it AND that org is the row's org. org_id is who the work was for and
+// funding_org_id who paid, and they differ: the org-less managed key records
+// org_wallet funding with no known payer (it bills the person's default org).
+// A NULL payer, which every row written before funding_org_id has, is
+// unknown, and NULL = org_id is never true, so it is never counted as the
+// org's spend. The CHECK insights_model_calls_daily_cost_is_org_funded holds
+// the funding half in the schema.
+const insightsPaidByTheOrg = `coalesce(funding IN ('org_key', 'org_seat', 'org_wallet') AND funding_org_id = org_id, false)`
 
 // insightsTable is one rollup table: its name, the columns that name whose
 // totals a row holds (org_id, or user_id and org_id), and which ledger rows
@@ -70,7 +77,7 @@ type insightsTable struct {
 
 var (
 	insightsModelTeam = insightsTable{name: "insights_model_calls_daily", owner: []string{"org_id"},
-		filter: `org_id <> ''`, costScope: insightsOrgFunded, team: true}
+		filter: `org_id <> ''`, costScope: "paid_by_org", team: true}
 	insightsModelMember = insightsTable{name: "insights_model_calls_member_daily", owner: []string{"user_id", "org_id"},
 		filter: insightsMemberProject, costScope: "true"}
 	insightsToolTeam = insightsTable{name: "insights_tool_calls_daily", owner: []string{"org_id"},
@@ -110,9 +117,10 @@ var insightsRunScope = []string{"project_id", "workflow_name", "node_id", "prese
 
 var llmInsights = insightsSource{
 	ledger: "llm_call_usage",
-	dims:   append(slices.Clone(insightsRunScope), "provider", "model", "auth_mode", "funding", "purpose", "outcome", "error_class"),
+	dims:   append(slices.Clone(insightsRunScope), "provider", "model", "auth_mode", "funding", "paid_by_org", "purpose", "outcome", "error_class"),
 	columns: `provider, model, auth_mode, funding, purpose, outcome, error_class, attempt,
-		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, latency_ms, ttft_ms, cost_basis, cost_usd_nanos`,
+		input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, latency_ms, ttft_ms, cost_basis, cost_usd_nanos,
+		` + insightsPaidByTheOrg + ` AS paid_by_org`,
 	measures: []insightsMeasure{
 		{column: "calls", agg: `count(*)`},
 		{column: "retried_calls", agg: `count(*) FILTER (WHERE attempt > 1)`},
