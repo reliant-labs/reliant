@@ -2182,6 +2182,7 @@ reliant forge ci gate [checks|test|integration|all|<lane>] [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--base` | `string` | - | Ref a branch's changes are measured from for affected unit tests (default origin/<default branch>; a stacked branch names its parent; also CI_BASE) |
 | `--event` | `string` | - | Pick the tier from a GitHub event name: pull_request, merge_group, push, schedule, workflow_dispatch (an action suffix such as pull_request.synchronize is ignored) |
+| `--files` | `stringSlice` | `[]` | With --plan: judge these changed files instead of the diff against the base (a what-if) |
 | `--full` | `bool` | - | Run the whole unit suite on a branch instead of the affected packages (also CI_FULL=1) |
 | `--groups` | `bool` | - | Print each check's output in a GitHub Actions ::group:: (automatic under GITHUB_ACTIONS) |
 | `--jobs` | `int` | `0` | Light checks to run at once (default: half the CPUs, 2-8); heavy checks are bounded by host slots |
@@ -2189,6 +2190,7 @@ reliant forge ci gate [checks|test|integration|all|<lane>] [flags]
 | `--list` | `bool` | - | Print the checks of the selected lanes (lane, group, name, scheduling) and exit |
 | `--no-cache` | `bool` | - | Run every check even when this tree already passed it (also CI_NO_CACHE=1) |
 | `--only` | `stringSlice` | `[]` | Checks or groups to run, in addition to CI_ONLY (plus what they depend on) |
+| `--plan` | `bool` | - | Print the affected-mode decision (packages, build set, why each, per changed file) and exit without running anything |
 | `--report` | `string` | - | Also write the Markdown summary to this file (also CI_REPORT) |
 | `--skip` | `stringSlice` | `[]` | Check names to skip, in addition to CI_SKIP (still listed, as SKIPPED) |
 | `--tier` | `string` | - | Run the gate as one CI event's tier: pr, queue (alias merge), main or full (see Tiers above) |
