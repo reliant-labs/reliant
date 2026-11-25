@@ -184,7 +184,7 @@ func (r *failingLookups) GetChat(ctx context.Context, id string) (*db.Chat, erro
 	if r.failChat {
 		return nil, errors.New("connection reset by peer")
 	}
-	return store.GetChat(ctx, r.Repo.ORM(), id)
+	return store.GetChat(ctx, r.ORM(), id)
 }
 
 func (r *failingLookups) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*core.WorkflowDraft, error) {

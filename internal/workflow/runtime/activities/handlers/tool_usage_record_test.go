@@ -95,7 +95,7 @@ func TestExecuteTools_RecordsEachCallsOutcomeAndClassPerToolKind(t *testing.T) {
 	executor.results[offline] = &toolexec.ToolResult{Success: false, IsError: true, Content: "Error: " + daemonoffline.ErrorSubstring}
 	executor.errors[cancelled] = context.Canceled
 	usage := &captureToolUsage{}
-	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), executor).WithToolUsage(usage)
+	activity := NewExecuteToolsActivity(tools.WithChats(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), executor).WithToolUsage(usage)
 
 	var output ExecuteToolsOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
@@ -171,7 +171,7 @@ func TestExecuteTools_AReplayedCallIsNotRecordedAgain(t *testing.T) {
 	recordHandlerSpans(t)
 	h, chatID := newValidationChat(t)
 	usage := &captureToolUsage{}
-	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)
+	activity := NewExecuteToolsActivity(tools.WithChats(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)
 	call := message.ToolCall{ID: "toolu_replay_" + uuid.NewString()[:8], Name: tools.ToolView, Input: `{"file_path":"/tmp/x"}`}
 	in := ExecuteToolsInput{
 		ChatID: chatID, Thread: chatID, ToolCalls: []message.ToolCall{call},
@@ -190,7 +190,7 @@ func TestExecuteTools_AReplayedCallIsNotRecordedAgain(t *testing.T) {
 func TestInvokeTool_RecordsTheCall(t *testing.T) {
 	h, chatID := newValidationChat(t)
 	usage := &captureToolUsage{}
-	activity := NewInvokeToolActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)
+	activity := NewInvokeToolActivity(tools.WithChats(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), newMockToolExecutor()).WithToolUsage(usage)
 
 	var out reliantv1.InvokeToolOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, ActivityInput{
