@@ -1,0 +1,19 @@
+package items
+
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	pb "example.com/v2app/gen/services/items/v1"
+)
+
+// Ping implements the Ping RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=items.Ping
+func (s *Service) Ping(
+	ctx context.Context,
+	req *pb.PingRequest,
+) (*pb.PingResponse, error) {
+	return nil, svcerr.Wrap(svcerr.ScaffoldStub("Ping"))
+}

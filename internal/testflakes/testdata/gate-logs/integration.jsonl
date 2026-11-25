@@ -1,0 +1,5 @@
+{"Action":"run","Package":"example.com/m/internal/e","Test":"TestStream"}
+{"Action":"output","Package":"example.com/m/internal/e","Test":"TestStream","Output":"=== RUN   TestStream\n"}
+{"Action":"output","Package":"example.com/m/internal/e","Test":"TestStream","Output":"    stream_test.go:9: boom\n"}
+{"Action":"fail","Package":"example.com/m/internal/e","Test":"TestStream","Elapsed":0.1}
+{"Action":"fail","Package":"example.com/m/internal/e","Elapsed":0.2}

@@ -1,0 +1,181 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// VerifyEmailForm — the /auth/verify page a "confirm your address" email
+// opens. Like the magic-link page it is inert until the button is pressed,
+// so a mail scanner opening the link spends nothing.
+//
+// Confirming issues no session by itself. An account created without a
+// password (where passkeys are offered) may add one right here; anyone else
+// signs in as usual. If the password chosen at sign-up could not be saved,
+// the server says so and hands this browser a reset code, so the person
+// chooses another here instead of being told to sign in with none.
+
+import { useState } from "react";
+
+import { AuthAlert, AuthCard, AuthLink } from "@/components/auth-ui";
+import { ResetPasswordForm } from "@/components/reset-password-form";
+import Button from "@/components/ui/button";
+import { AuthError, passkeySignIn, registerPasskey, verifyEmail } from "@/lib/auth/native-login";
+
+export interface VerifyEmailFormProps {
+  userID: string | null;
+  code: string | null;
+  signInHref: string;
+  /** The "Forgot password" page, offered when earlier sign-in methods were removed. */
+  forgotHref: string;
+  onSignedIn: () => void | Promise<void>;
+}
+
+// "password": the sign-up password was not saved and a reset code came back;
+// "noPassword": it was not saved and none did.
+type VerifyState = "ready" | "verified" | "enroll" | "password" | "noPassword";
+
+export function VerifyEmailForm({
+  userID,
+  code,
+  signInHref,
+  forgotHref,
+  onSignedIn,
+}: VerifyEmailFormProps) {
+  const [state, setState] = useState<VerifyState>("ready");
+  const [reset, setReset] = useState<{ userID: string; code: string } | null>(null);
+  // Methods set from another browser before the address was confirmed were
+  // removed: nothing proved they were the owner's.
+  const [removed, setRemoved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  if (!userID || !code) {
+    return (
+      <AuthCard
+        title="Confirm your email"
+        footer={<AuthLink href={signInHref}>Go to sign in</AuthLink>}
+      >
+        <AuthAlert tone="error" className="mt-6">
+          This link is incomplete. Open the link from the email again, or ask for a new one from the
+          sign-in screen.
+        </AuthAlert>
+      </AuthCard>
+    );
+  }
+
+  async function act(action: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+    } catch (err) {
+      setError(err instanceof AuthError ? err.message : "That did not work. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (state === "password" && reset) {
+    return (
+      <>
+        <AuthAlert tone="info" className="mb-4">
+          Your email is confirmed, but your password could not be saved. Choose a password to
+          finish.
+        </AuthAlert>
+        <ResetPasswordForm
+          userID={reset.userID}
+          code={reset.code}
+          signInHref={signInHref}
+          forgotHref={signInHref}
+          onDone={(signedIn) => (signedIn ? void onSignedIn() : window.location.assign(signInHref))}
+        />
+      </>
+    );
+  }
+
+  return (
+    <AuthCard
+      title="Confirm your email"
+      description={
+        state === "ready" ? "Press the button to confirm this address belongs to you." : undefined
+      }
+      footer={<AuthLink href={signInHref}>Go to sign in</AuthLink>}
+    >
+      {state === "ready" ? (
+        <Button
+          type="button"
+          size="xl"
+          fullWidth
+          loading={busy}
+          className="mt-6 h-11"
+          onClick={() =>
+            void act(async () => {
+              const result = await verifyEmail(userID, code);
+              setRemoved(result.credentialsReset === true);
+              if (result.password === "not_set") {
+                setReset(result.reset ?? null);
+                setState(result.reset ? "password" : "noPassword");
+                return;
+              }
+              setState(result.enroll ? "enroll" : "verified");
+            })
+          }
+        >
+          Confirm my email
+        </Button>
+      ) : null}
+
+      {state === "verified" && !removed ? (
+        <AuthAlert tone="success" className="mt-6">
+          Your email is confirmed. You can sign in now.
+        </AuthAlert>
+      ) : null}
+
+      {(state === "verified" || state === "enroll") && removed ? (
+        <AuthAlert tone="info" className="mt-6">
+          <p>
+            Your email is confirmed. For your security, sign-in methods set before it was confirmed
+            have been removed.
+          </p>
+          <p>
+            <AuthLink href={forgotHref}>Choose a password</AuthLink>
+            {state === "enroll" ? ", or create a passkey below." : "."}
+          </p>
+        </AuthAlert>
+      ) : null}
+
+      {state === "noPassword" ? (
+        <AuthAlert tone="error" className="mt-6">
+          Your email is confirmed, but your password could not be saved. Use &ldquo;Forgot your
+          password?&rdquo; on the sign-in screen to choose one.
+        </AuthAlert>
+      ) : null}
+
+      {state === "enroll" ? (
+        <>
+          {removed ? null : (
+            <AuthAlert tone="success" className="mt-6">
+              Your email is confirmed. Create a passkey to sign in with this device.
+            </AuthAlert>
+          )}
+          <Button
+            type="button"
+            size="xl"
+            fullWidth
+            loading={busy}
+            className="mt-6 h-11"
+            onClick={() =>
+              void act(async () => {
+                await registerPasskey();
+                await passkeySignIn();
+                await onSignedIn();
+              })
+            }
+          >
+            Create a passkey
+          </Button>
+        </>
+      ) : null}
+
+      {error ? <AuthAlert tone="error">{error}</AuthAlert> : null}
+    </AuthCard>
+  );
+}

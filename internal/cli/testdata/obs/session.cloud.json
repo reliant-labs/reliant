@@ -1,0 +1,115 @@
+{
+  "schema": "forge.obs.session/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-22T11:44:06.285Z",
+    "to": "2026-10-22T11:47:18.1Z"
+  },
+  "query_mode": "structured",
+  "session": {
+    "id": "91b955b313a1a86644ea53730a92deab",
+    "service": "reliant-web",
+    "version": "3f9c0e",
+    "user_id": "user-42",
+    "entry_path": "/",
+    "started": "2026-10-22T11:44:06.285Z",
+    "ended": "2026-10-22T11:47:18.1Z",
+    "duration_ms": 191815,
+    "page_views": 5,
+    "interactions": 12,
+    "errors": 2,
+    "has_replay": true
+  },
+  "timeline": [
+    {
+      "time": "2026-10-22T11:44:06.285Z",
+      "offset_ms": 0,
+      "kind": "navigation",
+      "name": "documentLoad",
+      "path": "/",
+      "service": "reliant-web"
+    },
+    {
+      "time": "2026-10-22T11:44:10.485Z",
+      "offset_ms": 4200,
+      "kind": "navigation",
+      "name": "routeChange",
+      "path": "/jobs/new",
+      "props": {
+        "from": "/"
+      },
+      "service": "reliant-web"
+    },
+    {
+      "time": "2026-10-22T11:44:18.685Z",
+      "offset_ms": 12400,
+      "kind": "click",
+      "name": "click",
+      "path": "/jobs/new",
+      "selector": "//*[@id=\"save\"]",
+      "element": "button",
+      "service": "reliant-web"
+    },
+    {
+      "time": "2026-10-22T11:44:18.785Z",
+      "offset_ms": 12500,
+      "kind": "request_failed",
+      "name": "POST",
+      "path": "/api.v1.JobService/CreateJob",
+      "method": "POST",
+      "status": 500,
+      "trace_id": "0af7651916cd43dd8448eb211c80319c",
+      "span_id": "00f067aa0ba902b7",
+      "duration_ms": 230.5,
+      "service": "reliant-web"
+    },
+    {
+      "time": "2026-10-22T11:44:18.885Z",
+      "offset_ms": 12600,
+      "kind": "error",
+      "name": "onerror",
+      "path": "/jobs/new",
+      "error_type": "TypeError",
+      "message": "Cannot read properties of undefined",
+      "fingerprint": "0123456789abcdef",
+      "issue_id": "ISS-ab12",
+      "trace_id": "0af7651916cd43dd8448eb211c80319c",
+      "span_id": "b7ad6b7169203331",
+      "service": "reliant-web"
+    },
+    {
+      "time": "2026-10-22T11:44:36.285Z",
+      "offset_ms": 30000,
+      "kind": "event",
+      "name": "checkout_started",
+      "path": "/jobs/new",
+      "props": {
+        "plan": "pro",
+        "seats": "3"
+      },
+      "service": "reliant-web"
+    },
+    {
+      "time": "2026-10-22T11:44:47.285Z",
+      "offset_ms": 41000,
+      "kind": "request_failed",
+      "name": "GET",
+      "path": "/api.v1.JobService/ListJobs",
+      "method": "GET",
+      "error_type": "network",
+      "trace_id": "b7ad6b7169203331b7ad6b7169203331",
+      "span_id": "1111111111111111",
+      "service": "reliant-web"
+    }
+  ],
+  "truncated": false,
+  "suggested": [
+    "forge obs issue ISS-ab12 prod",
+    "forge obs trace 0af7651916cd43dd8448eb211c80319c prod",
+    "forge obs trace b7ad6b7169203331b7ad6b7169203331 prod"
+  ]
+}

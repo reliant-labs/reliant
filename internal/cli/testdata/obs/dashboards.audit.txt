@@ -1,0 +1,18 @@
+prod dashboards audit  window as the console opens each dashboard (its defaultRange, else 1h; a panel with a minStep is widened)  ending 2026-10-22T12:00:00Z  probe 7d
+1 dashboard(s), 5 panel(s): 1 error, 2 empty, 1 partial, 1 ok, 0 n/a
+
+STATUS   PANEL              KIND  DATA                        STEP  REASON
+error    d1/denied          line  -                           -     auth
+empty    d1/outside-window  line  0 series, 0 row(s)          30s   data_outside_window
+empty    d1/metric-gone     line  0 series, 0 row(s)          30s   metric_never_seen
+partial  d1/daily-bucket    line  1 series, 1/1 pts non-zero  1h    single_bucket
+
+why:
+  d1/denied: the control plane refused the credential (HTTP 403; needs obs:read): an auth/scope problem, not evidence the data is missing; ask an org admin for the scope
+  d1/outside-window: the data exists: the panel has points over the last 7d, newest 2026-10-22T11:31:00Z, but none in the last 1h; the window is shorter than the signal's cadence, or the emitter went quiet
+  d1/metric-gone: no data in any env over 7d, and the metric catalog has no such metric (rpc.server.calls): a misspelt name, a metric the collector drops, or an emitter that has not shipped
+  d1/daily-bucket: the answer holds one bucket (step 1h over 1h), and a line needs two to draw; widen the window or lower the step
+
+1 ok or n/a panel(s) not listed (--all lists them)
+suggested: forge obs dashboards audit prod --dashboard d1 --panel outside-window --since 168h
+suggested: forge obs metrics describe prod rpc.server.calls --since 168h

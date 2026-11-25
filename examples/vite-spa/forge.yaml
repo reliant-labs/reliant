@@ -1,0 +1,8 @@
+# Forge project manifest — see https://github.com/reliant-labs/forge.
+# A static site: the frontend at this directory's root and its deploy envs
+# (deploy/kcl/<env>/main.k). There is no Go module, so there is no
+# module_path (it is required again once the project has a go.mod).
+# Everything else is derived from the tree.
+
+name: vite-spa
+forge_version: v1.11.0
