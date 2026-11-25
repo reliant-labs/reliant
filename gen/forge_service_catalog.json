@@ -57992,6 +57992,32 @@
     },
     {
       "consumer": "Chat",
+      "field": "ChatRows",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ChatRows",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "ChatViews",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ChatViews",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/chataccess.Service",
       "methods": [],

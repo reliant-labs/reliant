@@ -89,7 +89,7 @@ func (s *Service) SetChatDaemon(
 	}
 
 	// Re-fetch chat with updated daemon
-	updatedChat, err := s.deps.Repo.GetChat(ctx, chat.ID)
+	updatedChat, err := s.chatViews().GetChat(ctx, chat.ID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to reload chat"))
 	}
