@@ -4,6 +4,13 @@ import { toast } from '../lib/toast-manager';
 import { deleteAttachment, uploadAttachment, type Attachment } from '../hooks/attachment-queries';
 import { logger } from '../lib/logger';
 import { getAttachmentType, isFileTypeSupported, getUnsupportedFileMessage } from '../lib/filetypes';
+import type { MarkupDoc } from '../components/Chat/imageMarkup/model';
+
+/** An image's un-annotated original plus the editable annotations drawn over it. */
+export interface AttachmentMarkup {
+  source: Blob;
+  doc: MarkupDoc;
+}
 
 interface AttachmentStore {
   attachments: Map<string, Attachment[]>;
@@ -23,6 +30,19 @@ interface AttachmentStore {
    * connect-src does not admit `blob:`, so fetching one fails.
    */
   localFiles: Map<string, Blob>;
+  /**
+   * Image uploads' original bytes this session, by attachment id, so the image
+   * editor can re-edit without a server round trip. Memory only; a draft
+   * restored after a reload has none (callers fall back to fetching the bytes).
+   * Kept apart from `localFiles`, whose readers assume text.
+   */
+  localImages: Map<string, Blob>;
+  /**
+   * Editable markup per image attachment id, memory only: never persisted, and
+   * not restored by a reload. `source` is the un-annotated original, so a
+   * re-edit starts from it rather than from the flattened upload.
+   */
+  markups: Map<string, AttachmentMarkup>;
 
   attachFile: (sessionId: string, file: File) => Promise<Attachment>;
   /**
@@ -30,13 +50,25 @@ interface AttachmentStore {
    * draft, then delete the old one. Attachments are immutable on the server,
    * so this is how a draft attachment is edited. Resolves undefined when the
    * old attachment left the draft (removed or sent) while the upload ran; the
-   * new upload is then deleted rather than resurrected.
+   * new upload is then deleted rather than resurrected (and no markup is set).
+   *
+   * The old id's markup is always dropped. `opts.markup` (an object) is set on
+   * the new id; `null` or an omitted `opts` carries nothing over: `null` is
+   * "revert to original" (re-upload the source), omitted is the text flow.
    */
-  replaceAttachment: (sessionId: string, attachmentId: string, file: File) => Promise<Attachment | undefined>;
+  replaceAttachment: (
+    sessionId: string,
+    attachmentId: string,
+    file: File,
+    opts?: { markup?: AttachmentMarkup | null },
+  ) => Promise<Attachment | undefined>;
   removeAttachment: (sessionId: string, attachmentId: string) => void;
   getAttachments: (sessionId: string) => Attachment[];
   clearAttachments: (sessionId: string) => void;
   getBlobUrl: (attachmentId: string) => string | undefined;
+  getMarkup: (attachmentId: string) => AttachmentMarkup | undefined;
+  /** The bytes the editor should start from: the markup's original, else this session's upload. */
+  getImageSource: (attachmentId: string) => Blob | undefined;
   reset: () => void;
 }
 
@@ -53,17 +85,28 @@ function localFile(file: File): Blob | undefined {
   return getAttachmentType(file.name) === 'file_reference' ? file : undefined;
 }
 
+function localImage(file: File): Blob | undefined {
+  return getAttachmentType(file.name) === 'image' ? file : undefined;
+}
+
 /** The local maps without `ids`, their blob URLs revoked. */
-function withoutLocal(state: Pick<AttachmentStore, 'blobUrls' | 'localFiles'>, ids: string[]) {
+function withoutLocal(
+  state: Pick<AttachmentStore, 'blobUrls' | 'localFiles' | 'localImages' | 'markups'>,
+  ids: string[],
+) {
   const blobUrls = new Map(state.blobUrls);
   const localFiles = new Map(state.localFiles);
+  const localImages = new Map(state.localImages);
+  const markups = new Map(state.markups);
   for (const id of ids) {
     const url = blobUrls.get(id);
     if (url) URL.revokeObjectURL(url);
     blobUrls.delete(id);
     localFiles.delete(id);
+    localImages.delete(id);
+    markups.delete(id);
   }
-  return { blobUrls, localFiles };
+  return { blobUrls, localFiles, localImages, markups };
 }
 
 const PERSIST_KEY = 'reliant-composer-attachments';
@@ -114,6 +157,8 @@ export const useAttachmentStore = create<AttachmentStore>()(
           inFlight: 0,
           blobUrls: new Map(),
           localFiles: new Map(),
+          localImages: new Map(),
+          markups: new Map(),
 
           attachFile: async (sessionId: string, file: File) => {
             // Check if file type is supported
@@ -137,6 +182,9 @@ export const useAttachmentStore = create<AttachmentStore>()(
               const newLocalFiles = new Map(get().localFiles);
               const local = localFile(file);
               if (local) newLocalFiles.set(attachment.id, local);
+              const newLocalImages = new Map(get().localImages);
+              const image = localImage(file);
+              if (image) newLocalImages.set(attachment.id, image);
 
               // Add to attachments for this session
               const currentAttachments = get().attachments.get(sessionId) || [];
@@ -147,6 +195,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
                 attachments: newAttachments,
                 blobUrls: newBlobUrls,
                 localFiles: newLocalFiles,
+                localImages: newLocalImages,
               });
               endUpload();
 
@@ -163,7 +212,7 @@ export const useAttachmentStore = create<AttachmentStore>()(
             }
           },
 
-          replaceAttachment: async (sessionId: string, attachmentId: string, file: File) => {
+          replaceAttachment: async (sessionId, attachmentId, file, opts) => {
             beginUpload();
             let attachment: Attachment;
             try {
@@ -195,6 +244,9 @@ export const useAttachmentStore = create<AttachmentStore>()(
             if (blobUrl) local.blobUrls.set(attachment.id, blobUrl);
             const text = localFile(file);
             if (text) local.localFiles.set(attachment.id, text);
+            const image = localImage(file);
+            if (image) local.localImages.set(attachment.id, image);
+            if (opts?.markup) local.markups.set(attachment.id, opts.markup);
 
             set({ attachments: newAttachments, ...local });
             endUpload();
@@ -247,6 +299,14 @@ export const useAttachmentStore = create<AttachmentStore>()(
             return get().blobUrls.get(attachmentId);
           },
 
+          getMarkup: (attachmentId: string) => {
+            return get().markups.get(attachmentId);
+          },
+
+          getImageSource: (attachmentId: string) => {
+            return get().markups.get(attachmentId)?.source ?? get().localImages.get(attachmentId);
+          },
+
           reset: () => {
             // Revoke all blob URLs to free memory
             const { blobUrls } = get();
@@ -260,6 +320,8 @@ export const useAttachmentStore = create<AttachmentStore>()(
               inFlight: 0,
               blobUrls: new Map(),
               localFiles: new Map(),
+              localImages: new Map(),
+              markups: new Map(),
             });
           },
         };

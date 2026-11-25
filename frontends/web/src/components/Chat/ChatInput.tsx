@@ -26,6 +26,8 @@ import { useActiveChatId } from "../../store/chatStoreHooks";
 import { useModels } from "../../store/globalDataStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { AttachmentPreview, ComposerChip, UploadChip } from "./AttachmentPreview";
+import type { ImageMarkupResult } from "./ImagePreviewModal";
+import { formatCommentsBlock, insertCommentsBlock, replaceCommentsBlock } from "./imageMarkup/comments";
 import { WorkflowSelector } from "./WorkflowSelector";
 import { ChatTextArea } from "./ChatTextArea";
 import { useCodeContexts, extractMarkers } from "./useCodeContexts";
@@ -1737,6 +1739,52 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       await replaceAttachment(attachmentSessionId, attachmentId, new File([text], filename, { type }));
     };
 
+    // The comments block each marked-up image last wrote into the draft, by
+    // attachment id, so saving that image again swaps its block in place
+    // instead of adding a second one. Memory only: after a reload, or once
+    // the user has edited the block by hand, a save inserts a fresh one.
+    const imageCommentBlocksRef = useRef(new Map<string, string>());
+
+    /** Swap image `fromId`'s comments block for `block` (written under `toId`), or insert it at the cursor. */
+    const writeImageComments = (fromId: string, toId: string, block: string) => {
+      const blocks = imageCommentBlocksRef.current;
+      const previous = blocks.get(fromId) ?? "";
+      blocks.delete(fromId);
+      const current = latestInputRef.current;
+      let next = replaceCommentsBlock(current, previous, block);
+      if (next === null && block !== "") {
+        const cursor = textareaRef.current?.selectionStart ?? current.length;
+        next = insertCommentsBlock(current, block, cursor).text;
+      }
+      if (next !== null && next !== current) replaceInput(next);
+      if (block !== "") blocks.set(toId, block);
+    };
+
+    const handleSaveImageAttachment = async (attachmentId: string, result: ImageMarkupResult) => {
+      if (sendingRef.current || queueingRef.current) throw new Error("A message is being sent");
+      const replaced = await replaceAttachment(attachmentSessionId, attachmentId, result.file, {
+        markup: { source: result.source, doc: result.doc },
+      });
+      // Gone from the draft while uploading (removed or sent): nothing to annotate.
+      if (!replaced) return;
+      writeImageComments(attachmentId, replaced.id, formatCommentsBlock(replaced.filename, result.comments));
+    };
+
+    const handleRevertImageAttachment = async (attachmentId: string) => {
+      if (sendingRef.current || queueingRef.current) throw new Error("A message is being sent");
+      const source = useAttachmentStore.getState().getMarkup(attachmentId)?.source;
+      if (!source) return;
+      const current = attachments.find((attachment) => attachment.id === attachmentId);
+      const name =
+        source instanceof File
+          ? source.name
+          : (current?.filename ?? "image.png").replace(/-marked(\.[^.]+)$/, "$1");
+      const file = source instanceof File ? source : new File([source], name, { type: source.type || "image/png" });
+      const replaced = await replaceAttachment(attachmentSessionId, attachmentId, file, { markup: null });
+      if (!replaced) return;
+      writeImageComments(attachmentId, replaced.id, "");
+    };
+
     const handleInsertTextAttachment = (attachmentId: string, text: string) => {
       if (sendingRef.current || queueingRef.current) return;
       const el = textareaRef.current;
@@ -2030,6 +2078,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           onRemove={handleRemoveAttachment}
                           onSave={sending || queueing ? undefined : handleSaveTextAttachment}
                           onInsert={sending || queueing ? undefined : handleInsertTextAttachment}
+                          onSaveImage={sending || queueing ? undefined : handleSaveImageAttachment}
+                          onRevertImage={sending || queueing ? undefined : handleRevertImageAttachment}
                         />
                         {threadBorderColor && (
                           <ComposerChip

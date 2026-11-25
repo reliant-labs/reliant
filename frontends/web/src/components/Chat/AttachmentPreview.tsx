@@ -1,8 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { RotateCw, X } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { logger } from '../../lib/logger';
+import { fetchAttachmentBlob } from '../../hooks/attachment-queries';
 import { FileIcon } from '../FileBrowser/FileIcon';
-import { ImagePreviewModal } from './ImagePreviewModal';
+import { ImagePreviewModal, type ImageMarkupResult } from './ImagePreviewModal';
 import { TextAttachmentModal, isTextAttachment } from './TextAttachmentModal';
 import { isImageMimeType, useAttachmentBlobUrls } from './useAttachmentBlobUrls';
 import { useAttachmentStore } from '../../store/attachmentStore';
@@ -102,15 +104,19 @@ export function ComposerChip({
  * row with uploads, file references, the thread and the preset; with no
  * attachments it renders nothing and takes no space.
  */
-export function AttachmentPreview({ attachments, onRemove, onSave, onInsert }: {
+export function AttachmentPreview({ attachments, onRemove, onSave, onInsert, onSaveImage, onRevertImage }: {
   attachments: Attachment[];
   onRemove: (id: string) => void;
   /** Replace a text attachment with edited text. Absent: text opens read-only. */
   onSave?: (id: string, filename: string, text: string) => Promise<void>;
   /** Put a text attachment's text into the message in its place. */
   onInsert?: (id: string, text: string) => void;
+  /** Replace an image attachment with its marked-up copy. Absent: images open read-only. */
+  onSaveImage?: (id: string, result: ImageMarkupResult) => Promise<void>;
+  /** Put a marked-up image's original back. */
+  onRevertImage?: (id: string) => Promise<void>;
 }) {
-  const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ id: string; url: string; filename: string } | null>(null);
   const [openText, setOpenText] = useState<Attachment | null>(null);
   const localBlobUrls = useAttachmentStore((state) => state.blobUrls);
   const localFiles = useAttachmentStore((state) => state.localFiles);
@@ -125,6 +131,7 @@ export function AttachmentPreview({ attachments, onRemove, onSave, onInsert }: {
 
   // The open attachment can be replaced (Save) or sent while open; follow it out.
   const openTextAttachment = openText && attachments.some((a) => a.id === openText.id) ? openText : null;
+  const openImage = previewImage && attachments.some((a) => a.id === previewImage.id) ? previewImage : null;
 
   return (
     <>
@@ -145,24 +152,31 @@ export function AttachmentPreview({ attachments, onRemove, onSave, onInsert }: {
             label={attachment.filename}
             onOpen={
               isImage && imageUrl
-                ? () => setPreviewImage({ url: imageUrl, filename: attachment.filename })
+                ? () => setPreviewImage({ id: attachment.id, url: imageUrl, filename: attachment.filename })
                 : isText
                   ? () => setOpenText(attachment)
                   : undefined
             }
-            openLabel={isImage || isText ? `${isText && onSave ? 'Open' : 'Preview'} ${attachment.filename}` : undefined}
+            openLabel={
+              isImage || isText
+                ? `${(isText && onSave) || (isImage && onSaveImage) ? 'Open' : 'Preview'} ${attachment.filename}`
+                : undefined
+            }
             onRemove={() => onRemove(attachment.id)}
             removeLabel={`Remove ${attachment.filename}`}
           />
         );
       })}
 
-      {previewImage && (
-        <ImagePreviewModal
-          isOpen={true}
+      {openImage && (
+        <DraftImagePreview
+          key={openImage.id}
+          attachmentId={openImage.id}
+          imageUrl={openImage.url}
+          filename={openImage.filename}
           onClose={() => setPreviewImage(null)}
-          imageUrl={previewImage.url}
-          filename={previewImage.filename}
+          onSave={onSaveImage && ((result) => onSaveImage(openImage.id, result))}
+          onRevert={onRevertImage && (() => onRevertImage(openImage.id))}
         />
       )}
 
@@ -180,6 +194,61 @@ export function AttachmentPreview({ attachments, onRemove, onSave, onInsert }: {
         />
       )}
     </>
+  );
+}
+
+/**
+ * A draft image's preview, editable while `onSave` is given. The editor works
+ * on the un-annotated original: the bytes kept from this session's upload or
+ * an earlier markup, else (a draft restored after a reload) the attachment's
+ * bytes from the server. Until those are in hand the preview is read-only.
+ */
+function DraftImagePreview({ attachmentId, imageUrl, filename, onClose, onSave, onRevert }: {
+  attachmentId: string;
+  imageUrl: string;
+  filename: string;
+  onClose: () => void;
+  onSave?: (result: ImageMarkupResult) => Promise<void>;
+  onRevert?: () => Promise<void>;
+}) {
+  const markup = useAttachmentStore((state) => state.markups.get(attachmentId));
+  const localSource = useAttachmentStore(
+    (state) => state.markups.get(attachmentId)?.source ?? state.localImages.get(attachmentId),
+  );
+  const [fetchedSource, setFetchedSource] = useState<Blob>();
+  const source = localSource ?? fetchedSource;
+
+  useEffect(() => {
+    if (!onSave || localSource) return;
+    let cancelled = false;
+    fetchAttachmentBlob(attachmentId).then(
+      (blob) => {
+        if (!cancelled) setFetchedSource(blob);
+      },
+      (error) => logger.warn('Could not load the image to edit; it opens read-only:', attachmentId, error),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [attachmentId, localSource, onSave]);
+
+  return (
+    <ImagePreviewModal
+      isOpen={true}
+      onClose={onClose}
+      imageUrl={imageUrl}
+      filename={filename}
+      edit={
+        onSave && source
+          ? {
+              source,
+              initialDoc: markup?.doc,
+              onSave,
+              onRevert: markup && onRevert ? onRevert : undefined,
+            }
+          : undefined
+      }
+    />
   );
 }
 
