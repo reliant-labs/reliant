@@ -3,6 +3,7 @@ package diskwatch
 
 import (
 	"errors"
+	"fmt"
 	"go/build"
 	"io"
 	"os"
@@ -237,6 +238,65 @@ func TestScanProcRoot_UnreadableProcessFailsTheScan(t *testing.T) {
 			}
 			if !tc.otherUserOK && err == nil {
 				t.Fatal("a process whose stat or fd entry could not be read was skipped as exited")
+			}
+		})
+	}
+}
+
+// A process of this user's that holds capabilities the scanner lacks (a
+// `systemd --user`, which keeps CAP_WAKE_ALARM) has its references withheld
+// by the kernel, EACCES. The scan treats it like a non-dumpable process and
+// still proves; an EACCES from a process with no such capabilities, or whose
+// capabilities cannot be read, still fails it.
+func TestScanProcRoot_ProcessWithMoreCapabilitiesIsWithheldNotUnreadable(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root reads a mode-000 file, so EACCES cannot be made here")
+	}
+	mine, ok := callerCapPrm()
+	if !ok {
+		t.Skip("this process's capabilities are not readable from /proc/self/status")
+	}
+	extra := ^mine & (1<<41 - 1)
+	if extra == 0 {
+		t.Skip("this process holds every capability")
+	}
+	for _, tc := range []struct {
+		name   string
+		status string // "" writes no status file
+		ok     bool
+	}{
+		{"more capabilities", fmt.Sprintf("Name:\tsystemd\nCapInh:\t%016x\nCapPrm:\t%016x\n", extra, extra), true},
+		{"no more capabilities", fmt.Sprintf("Name:\tsleep\nCapPrm:\t%016x\n", mine), false},
+		{"capabilities unreadable", "", false},
+		{"malformed capabilities", "Name:\tsystemd\nCapPrm:\tzz\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			fakeProc(t, root, 10, "go", "/tmp/go-build1")
+			dir := fakeProc(t, root, 11, "systemd", "/")
+			if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("/usr/lib/systemd/systemd\x00--user\x00/tmp/go-build2\x00"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(filepath.Join(dir, "environ"), 0); err != nil {
+				t.Fatal(err)
+			}
+			if tc.status != "" {
+				if err := os.WriteFile(filepath.Join(dir, "status"), []byte(tc.status), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			s, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0))
+			if !tc.ok {
+				if err == nil {
+					t.Fatal("a scan that could not read one of this user's processes succeeded")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("a process withheld for its capabilities failed the scan: %v", err)
+			}
+			if !s.names["go-build1"] || !s.names["go-build2"] || len(s.goStarts) != 1 {
+				t.Fatalf("scan = %+v, want go-build1 and go-build2 (its command line) referenced and one go command", s)
 			}
 		})
 	}
