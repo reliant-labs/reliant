@@ -1,0 +1,862 @@
+{
+  "output": {
+    "applier": null,
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane": {
+      "endpoint": "https://admin.reliantapi.com",
+      "registry_host": "registry.reliantapi.com",
+      "token_env": "FORGE_CONTROL_PLANE_TOKEN",
+      "type": "control_plane"
+    },
+    "control_plane_secrets": [],
+    "databases": [
+      {
+        "cluster": null,
+        "dialect": "postgres",
+        "migrations": {
+          "dir": "db/migrations",
+          "driver": "forge"
+        },
+        "name": "db",
+        "namespace": null,
+        "orm": {
+          "package": "internal/db"
+        },
+        "runtime": "hosted",
+        "spec": {
+          "deletionPolicy": "retain",
+          "engine": "postgres",
+          "instances": 1,
+          "storageGiB": 10
+        }
+      }
+    ],
+    "env": "prod",
+    "external_secrets_operators": [],
+    "frontends": [
+      {
+        "asset_dir": "assets",
+        "base_path": null,
+        "bundle": [],
+        "cache_control": [],
+        "config": null,
+        "dev_runner": "npm",
+        "env_file": null,
+        "env_vars": [],
+        "image": "ghcr.io/acme/web",
+        "name": "web",
+        "path": "frontends/web",
+        "port": 3000,
+        "public_dir": "dist",
+        "runtime": {
+          "type": "hosted"
+        },
+        "runtime_config": {},
+        "runtime_config_spec": {
+          "API_URL": {
+            "workloadURL": {
+              "name": "api"
+            }
+          },
+          "OTEL_ENDPOINT": {
+            "value": "/_otel"
+          }
+        },
+        "source": null,
+        "type": "vite"
+      }
+    ],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "stable",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifest_owners": [],
+    "manifests": [],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "secret_provider": {
+      "type": "hosted"
+    },
+    "telemetry": [
+      {
+        "address": "",
+        "attachment": "manageddatabase",
+        "checks": [
+          {
+            "interval": "30s",
+            "kind": "tcp",
+            "name": "",
+            "path": "/",
+            "port": 0,
+            "port_name": "postgres",
+            "scheme": "http"
+          }
+        ],
+        "cluster": "",
+        "container": "postgres",
+        "dashboard": {
+          "enabled": true,
+          "title": ""
+        },
+        "dashboards": [
+          {
+            "description": "The CloudNativePG instances of the managed database db: availability, connections, size, throughput, replication, WAL archiving and backups. Its logs, scrape health and resources are on its system dashboard.",
+            "filters": [
+              {
+                "field": "deployment.environment.name",
+                "id": "env",
+                "label": "deployment.environment.name"
+              }
+            ],
+            "group": "platform",
+            "id": "db-postgres",
+            "panels": [
+              {
+                "description": "1 while the instance accepts queries, 0 when it does not. One line per instance.",
+                "groupBy": [
+                  "resource.attr.service.instance.id"
+                ],
+                "height": 7,
+                "id": "up",
+                "kind": "line",
+                "section": "health",
+                "series": [
+                  {
+                    "agg": "min",
+                    "field": "cnpg_collector_up",
+                    "label": "up",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Postgres up",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Backends by state (active, idle, idle in transaction). Idle in transaction holds locks and blocks vacuum.",
+                "groupBy": [
+                  "metric.attr.state"
+                ],
+                "height": 7,
+                "id": "connections",
+                "kind": "line",
+                "section": "health",
+                "series": [
+                  {
+                    "agg": "sum",
+                    "field": "cnpg_backends_total",
+                    "label": "backends",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Connections by state",
+                "unit": "count",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Queries blocked behind another backend's lock.",
+                "height": 7,
+                "id": "waiting",
+                "kind": "line",
+                "section": "health",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_backends_waiting_total",
+                    "label": "waiting",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Backends waiting on locks",
+                "unit": "count",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "The oldest transaction still open. Long ones hold back vacuum and bloat the tables.",
+                "height": 7,
+                "id": "longest-tx",
+                "kind": "line",
+                "section": "health",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_backends_max_tx_duration_seconds",
+                    "label": "seconds",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Longest open transaction",
+                "unit": "s",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Disk used by each database.",
+                "groupBy": [
+                  "metric.attr.datname"
+                ],
+                "height": 7,
+                "id": "size",
+                "kind": "line",
+                "section": "load",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_pg_database_size_bytes",
+                    "label": "size",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Database size",
+                "unit": "bytes",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Commits and rollbacks per second, all databases.",
+                "height": 7,
+                "id": "transactions",
+                "kind": "line",
+                "section": "load",
+                "series": [
+                  {
+                    "agg": "rate",
+                    "field": "cnpg_pg_stat_database_xact_commit",
+                    "label": "commits",
+                    "metricType": "sum"
+                  },
+                  {
+                    "agg": "rate",
+                    "field": "cnpg_pg_stat_database_xact_rollback",
+                    "label": "rollbacks",
+                    "metricType": "sum"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Transactions / s",
+                "unit": "count",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Deadlocks Postgres detected and broke by cancelling a transaction.",
+                "groupBy": [
+                  "metric.attr.datname"
+                ],
+                "height": 7,
+                "id": "deadlocks",
+                "kind": "line",
+                "section": "load",
+                "series": [
+                  {
+                    "agg": "rate",
+                    "field": "cnpg_pg_stat_database_deadlocks",
+                    "label": "deadlocks",
+                    "metricType": "sum"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Deadlocks / s",
+                "unit": "count",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Transactions since each database's oldest unfrozen XID. Postgres stops accepting writes near 2 billion; autovacuum should keep it far below.",
+                "groupBy": [
+                  "metric.attr.datname"
+                ],
+                "height": 7,
+                "id": "xid-age",
+                "kind": "line",
+                "section": "load",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_pg_database_xid_age",
+                    "label": "xid age",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Transaction ID age",
+                "unit": "count",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "How far each replica's replay is behind the primary. 0 on the primary.",
+                "groupBy": [
+                  "resource.attr.service.instance.id"
+                ],
+                "height": 7,
+                "id": "replication-lag",
+                "kind": "line",
+                "section": "durability",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_pg_replication_lag",
+                    "label": "lag",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Replication lag",
+                "unit": "s",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Replicas streaming from the primary.",
+                "height": 7,
+                "id": "replicas",
+                "kind": "line",
+                "section": "durability",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_pg_replication_streaming_replicas",
+                    "label": "replicas",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Streaming replicas",
+                "unit": "count",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "The size of pg_wal. It grows when archiving or a replica falls behind.",
+                "groupBy": [
+                  "resource.attr.service.instance.id"
+                ],
+                "height": 7,
+                "id": "wal-size",
+                "kind": "line",
+                "section": "durability",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_collector_pg_wal",
+                    "label": "wal",
+                    "metricType": "gauge",
+                    "where": [
+                      {
+                        "field": "metric.attr.value",
+                        "op": "eq",
+                        "value": "size"
+                      }
+                    ]
+                  }
+                ],
+                "signal": "metrics",
+                "title": "WAL on disk",
+                "unit": "bytes",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Segments marked ready but not yet archived. A growing count means archiving is failing or slow.",
+                "groupBy": [
+                  "resource.attr.service.instance.id"
+                ],
+                "height": 7,
+                "id": "wal-ready",
+                "kind": "line",
+                "section": "durability",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_collector_pg_wal_archive_status",
+                    "label": "ready",
+                    "metricType": "gauge",
+                    "where": [
+                      {
+                        "field": "metric.attr.value",
+                        "op": "eq",
+                        "value": "ready"
+                      }
+                    ]
+                  }
+                ],
+                "signal": "metrics",
+                "title": "WAL waiting to be archived",
+                "unit": "count",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Failed attempts to archive a WAL segment to the backup store.",
+                "height": 7,
+                "id": "archive-failures",
+                "kind": "line",
+                "section": "durability",
+                "series": [
+                  {
+                    "agg": "rate",
+                    "field": "cnpg_pg_stat_archiver_failed_count",
+                    "label": "failed",
+                    "metricType": "sum"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "WAL archive failures / s",
+                "unit": "count",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Seconds since a WAL segment was last archived. -1 before the first.",
+                "height": 7,
+                "id": "archive-age",
+                "kind": "line",
+                "section": "durability",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "cnpg_pg_stat_archiver_seconds_since_last_archival",
+                    "label": "seconds",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Time since last archived WAL",
+                "unit": "s",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 12
+              },
+              {
+                "description": "Unix time of the newest base backup in the store, as the Barman Cloud plugin reports it (the instance's own series on older operators). It steps up at every scheduled backup; a flat line is a backup that stopped.",
+                "height": 7,
+                "id": "last-backup",
+                "kind": "line",
+                "section": "durability",
+                "series": [
+                  {
+                    "agg": "max",
+                    "field": "barman_cloud_cloudnative_pg_io_last_available_backup_timestamp",
+                    "label": "plugin",
+                    "metricType": "gauge"
+                  },
+                  {
+                    "agg": "max",
+                    "field": "cnpg_collector_last_available_backup_timestamp",
+                    "label": "instance",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Last backup",
+                "unit": "s",
+                "where": [
+                  {
+                    "field": "service.name",
+                    "op": "eq",
+                    "value": "db-postgres"
+                  }
+                ],
+                "width": 24
+              }
+            ],
+            "sections": [
+              {
+                "id": "health",
+                "title": "Health"
+              },
+              {
+                "id": "load",
+                "title": "Load"
+              },
+              {
+                "id": "durability",
+                "title": "Replication, WAL and backups"
+              }
+            ],
+            "tags": [
+              "postgres",
+              "database"
+            ],
+            "title": "Postgres: db"
+          }
+        ],
+        "default_alerts": true,
+        "isolated": false,
+        "logs": {
+          "body": "record.message",
+          "drop": [],
+          "format": "json",
+          "regex": "",
+          "rules": [
+            {
+              "body_match": "",
+              "field": "level",
+              "from_severity": "",
+              "severity": "error",
+              "value_match": "^error$"
+            },
+            {
+              "body_match": "",
+              "field": "level",
+              "from_severity": "",
+              "severity": "warn",
+              "value_match": "^warning$"
+            },
+            {
+              "body_match": "",
+              "field": "level",
+              "from_severity": "",
+              "severity": "debug",
+              "value_match": "^(debug|trace)$"
+            }
+          ],
+          "severity": {
+            "field": "record.error_severity",
+            "mapping": {
+              "debug": [
+                "DEBUG1",
+                "DEBUG2",
+                "DEBUG3",
+                "DEBUG4",
+                "DEBUG5"
+              ],
+              "error": [
+                "ERROR"
+              ],
+              "fatal": [
+                "FATAL",
+                "PANIC"
+              ],
+              "info": [
+                "LOG",
+                "INFO",
+                "NOTICE"
+              ],
+              "warn": [
+                "WARNING"
+              ]
+            }
+          },
+          "span_id": "",
+          "timestamp": {
+            "field": "ts",
+            "layout": "rfc3339"
+          },
+          "trace_id": ""
+        },
+        "metrics": [
+          {
+            "allow": "cnpg_collector_(up|postgres_version|last_collection_error|pg_wal|pg_wal_archive_status|wal_bytes|wal_records|wal_buffers_full|fencing_on|manual_switchover_required|replica_mode|nodes_used|sync_replicas|last_available_backup_timestamp|last_failed_backup_timestamp|first_recoverability_point)|cnpg_backends_(total|max_tx_duration_seconds|waiting_total)|cnpg_pg_database_(size_bytes|xid_age|mxid_age)|cnpg_pg_postmaster_start_time|cnpg_pg_replication_(lag|in_recovery|is_wal_receiver_up|streaming_replicas)|cnpg_pg_stat_archiver_(archived_count|failed_count|seconds_since_last_archival|seconds_since_last_failure)|cnpg_pg_stat_database_(xact_commit|xact_rollback|deadlocks|blks_hit|blks_read|temp_bytes|conflicts)|barman_cloud_cloudnative_pg_io_(last_available_backup_timestamp|last_failed_backup_timestamp|first_recoverability_point)",
+            "bearer_token": null,
+            "counters": "",
+            "deny": "",
+            "drop_labels": [],
+            "interval": "30s",
+            "label_limit": 30,
+            "label_value_length_limit": 256,
+            "name": "",
+            "params": {},
+            "path": "/metrics",
+            "port": 0,
+            "port_name": "metrics",
+            "sample_limit": 2000,
+            "scheme": "http",
+            "timeout": "10s",
+            "tls": null
+          }
+        ],
+        "namespaces": [],
+        "origin": "default",
+        "otlp": null,
+        "ports": {
+          "metrics": 9187,
+          "postgres": 5432
+        },
+        "profiles": [],
+        "runtime": "hosted",
+        "scope": "project",
+        "selector": {
+          "cnpg.io/cluster": "db"
+        },
+        "service_name": "db-postgres",
+        "source": "manageddatabase:db"
+      }
+    ],
+    "uptime_checks": [
+      {
+        "interval_seconds": 60,
+        "method": "GET",
+        "name": "api",
+        "source": "default",
+        "target": "api",
+        "timeout_seconds": 10
+      },
+      {
+        "interval_seconds": 60,
+        "method": "GET",
+        "name": "web",
+        "source": "default",
+        "target": "web",
+        "timeout_seconds": 10
+      }
+    ],
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "ghcr.io/acme/acme",
+        "image": "ghcr.io/acme/acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "platform": "amd64",
+          "type": "hosted"
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "LOG_LEVEL",
+              "value": "info"
+            },
+            {
+              "managedSecret": {
+                "name": "API_KEY",
+                "optional": true
+              },
+              "name": "API_KEY"
+            },
+            {
+              "databaseRef": {
+                "name": "db"
+              },
+              "name": "DATABASE_URL"
+            },
+            {
+              "name": "CORS_ORIGINS",
+              "workloadURL": {
+                "name": "web"
+              }
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "ghcr.io/acme/acme",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "ghcr.io/acme/acme",
+        "image": "ghcr.io/acme/acme",
+        "kind": "job",
+        "name": "migrate",
+        "release_inputs": {},
+        "runtime": {
+          "platform": "amd64",
+          "type": "hosted"
+        },
+        "spec": {
+          "args": [
+            "db",
+            "migrate",
+            "up"
+          ],
+          "before": [
+            "*"
+          ],
+          "env": [
+            {
+              "databaseRef": {
+                "name": "db"
+              },
+              "name": "DATABASE_URL"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "migrate"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "ghcr.io/acme/acme",
+          "kind": "job",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

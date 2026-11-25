@@ -1,0 +1,64 @@
+{
+  "name": "@reliantlabs/forge",
+  "version": "1.10.0",
+  "description": "Guardrails for apps in any agent harness. Deploy with no account: a live URL plus a claim link. Forge is an open-source CLI and MCP server for Claude Code, Codex, Cursor or a harness you wrote: run `npx -y @reliantlabs/forge@latest env deploy prod --claimable` in a Vite, Next.js or Dockerfile app.",
+  "keywords": [
+    "forge",
+    "reliant",
+    "cli",
+    "mcp",
+    "mcp-server",
+    "modelcontextprotocol",
+    "deploy",
+    "deployment",
+    "hosting",
+    "static-site-hosting",
+    "no-signup",
+    "claimable",
+    "ai-agents",
+    "coding-agent",
+    "claude",
+    "claude-code",
+    "codex",
+    "cursor",
+    "gemini-cli",
+    "guardrails",
+    "lint",
+    "migrations",
+    "golang",
+    "react",
+    "vite",
+    "nextjs",
+    "vercel-alternative"
+  ],
+  "license": "Apache-2.0",
+  "mcpName": "io.github.reliant-labs/forge",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reliant-labs/forge.git",
+    "directory": "npm"
+  },
+  "homepage": "https://github.com/reliant-labs/forge#install",
+  "bugs": {
+    "url": "https://github.com/reliant-labs/forge/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "bin": {
+    "forge": "bin/forge.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node --test test/install.test.js"
+  }
+}

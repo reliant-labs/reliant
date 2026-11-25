@@ -1,0 +1,636 @@
+{
+  "output": {
+    "applier": null,
+    "cluster_target": {
+      "cluster": "k3d-acme",
+      "connected_cluster": null,
+      "domain": null,
+      "image_pull_secrets": [],
+      "namespace": "acme-dev",
+      "platform": null
+    },
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "databases": [],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [
+      {
+        "data_dir": null,
+        "database": "postgres",
+        "engine": "nats",
+        "idp_database": "zitadel",
+        "idp_database_port": null,
+        "idp_masterkey": "MasterkeyNeedsToHave32Characters",
+        "idp_pat_path": ".forge/idp/pat.txt",
+        "idp_steps_file": "idp-steps.yaml",
+        "name": "nats",
+        "nats_monitor_port": 8222,
+        "password": "postgres",
+        "port": 4222,
+        "temporal_namespaces": null,
+        "temporal_ui_port": null,
+        "user": "postgres",
+        "version": null
+      }
+    ],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifest_owners": [
+      {
+        "cluster": "k3d-acme",
+        "name": "clickhouse"
+      }
+    ],
+    "manifests": [
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev",
+            "pod-security.kubernetes.io/audit": "restricted",
+            "pod-security.kubernetes.io/enforce": "restricted",
+            "pod-security.kubernetes.io/warn": "restricted"
+          },
+          "name": "acme-dev"
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "temporal",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "temporal",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "temporal"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "OTEL_PROFILES_EXPORTER",
+              "value": "none"
+            },
+            {
+              "name": "OTEL_TRACES_SAMPLER",
+              "value": "parentbased_traceidratio"
+            },
+            {
+              "name": "OTEL_TRACES_SAMPLER_ARG",
+              "value": "0.25"
+            },
+            {
+              "name": "TEMPORAL_OTEL_EXPORTER",
+              "value": "otlp"
+            },
+            {
+              "name": "TEMPORAL_OTEL_ENDPOINT",
+              "value": "otel-agent.platform-otel.svc:4317"
+            },
+            {
+              "name": "TEMPORAL_SERVICE",
+              "value": "temporal"
+            }
+          ],
+          "image": "docker.io/temporalio/server:1.26.2",
+          "kind": "service",
+          "ports": [
+            {
+              "name": "grpc",
+              "port": 7233,
+              "protocol": "tcp"
+            },
+            {
+              "name": "metrics",
+              "port": 9090,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ],
+    "network_policy": null,
+    "observability": {
+      "agent": {
+        "image": "ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.162.0@sha256:39923a8e431bd1f57be82411999d389fcfe40857492e4365456d97a4c1f74be6",
+        "memory_limit_mib": 256,
+        "namespace": "forge-observability"
+      },
+      "alertmanager_port": null,
+      "alerts": {
+        "defaults": {},
+        "receivers": [],
+        "routes": [],
+        "rules": [
+          {
+            "alert": "TemporalErrors",
+            "annotations": {},
+            "enabled": true,
+            "expr": "SELECT 1 AS value",
+            "for": "5m",
+            "interval": "1m",
+            "keep_firing_for": null,
+            "labels": {
+              "service": "temporal",
+              "severity": "warning"
+            }
+          }
+        ]
+      },
+      "alerts_port": null,
+      "destination": null,
+      "dev_telemetry": "auto",
+      "enabled": true,
+      "local_endpoint": "http://127.0.0.1:4318",
+      "local_port": 4318,
+      "policy": {
+        "disabled": [],
+        "enabled": true,
+        "opt_in": []
+      },
+      "profiles_endpoint": null,
+      "retention": {
+        "browser_days": 0,
+        "errors_days": 30,
+        "logs_days": 0,
+        "metrics_days": 0,
+        "overrides": [],
+        "product_events_days": 90,
+        "replay_days": 14,
+        "traces_days": 0
+      },
+      "sampling": {
+        "destination_tail_samples": false,
+        "errors_always": false,
+        "traces_ratio": 1
+      },
+      "signals": {
+        "browser": true,
+        "logs": true,
+        "metadata": true,
+        "metrics": true,
+        "profiles": false,
+        "replay": false,
+        "traces": true
+      }
+    },
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "telemetry": [
+      {
+        "address": "",
+        "attachment": "workload",
+        "checks": [
+          {
+            "interval": "30s",
+            "kind": "tcp",
+            "name": "",
+            "path": "/",
+            "port": 0,
+            "port_name": "grpc",
+            "scheme": "http"
+          }
+        ],
+        "cluster": "k3d-acme",
+        "container": "",
+        "dashboard": {
+          "enabled": true,
+          "title": ""
+        },
+        "dashboards": [],
+        "default_alerts": true,
+        "isolated": false,
+        "logs": {
+          "body": "msg",
+          "drop": [],
+          "format": "regex",
+          "regex": "^(?P\u003cts\u003e\\S+) (?P\u003clvl\u003e[A-Z]+) (?P\u003cmsg\u003e.*)$",
+          "rules": [
+            {
+              "body_match": "^history size exceeds",
+              "field": "",
+              "from_severity": "error",
+              "severity": "warn",
+              "value_match": ""
+            }
+          ],
+          "severity": {
+            "field": "lvl",
+            "mapping": {
+              "error": [
+                "ERROR"
+              ],
+              "info": [
+                "INFO"
+              ],
+              "warn": [
+                "WARN"
+              ]
+            }
+          },
+          "span_id": "",
+          "timestamp": {
+            "field": "ts",
+            "layout": "rfc3339"
+          },
+          "trace_id": ""
+        },
+        "metrics": [
+          {
+            "allow": "service_(requests|errors|latency_(bucket|sum|count))",
+            "bearer_token": null,
+            "counters": "service_requests",
+            "deny": "",
+            "drop_labels": [
+              "workflowType"
+            ],
+            "interval": "30s",
+            "label_limit": 0,
+            "label_value_length_limit": 0,
+            "name": "",
+            "params": {},
+            "path": "/metrics",
+            "port": 0,
+            "port_name": "metrics",
+            "sample_limit": 5000,
+            "scheme": "http",
+            "timeout": "10s",
+            "tls": null
+          }
+        ],
+        "namespaces": [
+          "acme-dev"
+        ],
+        "otlp": {
+          "env": {
+            "TEMPORAL_OTEL_ENDPOINT": {
+              "ref": "grpc_address",
+              "value": "otel-agent.platform-otel.svc:4317"
+            },
+            "TEMPORAL_OTEL_EXPORTER": {
+              "value": "otlp"
+            },
+            "TEMPORAL_SERVICE": {
+              "ref": "service_name",
+              "value": "temporal"
+            }
+          },
+          "protocol": "grpc",
+          "sampler_ratio": 0.25,
+          "signals": [
+            "traces"
+          ]
+        },
+        "ports": {
+          "grpc": 7233,
+          "metrics": 9090
+        },
+        "profiles": [
+          {
+            "bearer_token": null,
+            "cpu_seconds": 5,
+            "interval": "5m",
+            "path_prefix": "/debug/pprof",
+            "port": 7936,
+            "scheme": "http",
+            "tls": null,
+            "types": [
+              "cpu",
+              "heap",
+              "goroutine"
+            ]
+          }
+        ],
+        "runtime": "cluster",
+        "scope": "project",
+        "selector": {
+          "app.kubernetes.io/name": "temporal"
+        },
+        "service_name": "temporal",
+        "source": "workload:temporal"
+      },
+      {
+        "address": "127.0.0.1",
+        "attachment": "hostinfra",
+        "checks": [],
+        "cluster": "",
+        "container": "",
+        "dashboard": {
+          "enabled": true,
+          "title": ""
+        },
+        "dashboards": [],
+        "default_alerts": true,
+        "isolated": false,
+        "logs": null,
+        "metrics": [
+          {
+            "allow": "nats_.*",
+            "bearer_token": null,
+            "counters": "",
+            "deny": "",
+            "drop_labels": [],
+            "interval": "30s",
+            "label_limit": 30,
+            "label_value_length_limit": 256,
+            "name": "",
+            "params": {},
+            "path": "/varz",
+            "port": 0,
+            "port_name": "monitor",
+            "sample_limit": 5000,
+            "scheme": "http",
+            "timeout": "10s",
+            "tls": null
+          }
+        ],
+        "namespaces": [],
+        "otlp": null,
+        "ports": {
+          "monitor": 8222,
+          "server": 4222
+        },
+        "profiles": [],
+        "runtime": "host",
+        "scope": "project",
+        "selector": {},
+        "service_name": "nats",
+        "source": "hostinfra:nats"
+      },
+      {
+        "address": "",
+        "attachment": "manifests",
+        "checks": [
+          {
+            "interval": "30s",
+            "kind": "http",
+            "name": "",
+            "path": "/ping",
+            "port": 8123,
+            "scheme": "http"
+          }
+        ],
+        "cluster": "k3d-acme",
+        "container": "",
+        "dashboard": {
+          "enabled": true,
+          "title": ""
+        },
+        "dashboards": [
+          {
+            "id": "clickhouse-parts",
+            "panels": [
+              {
+                "id": "parts",
+                "kind": "line",
+                "series": [
+                  {
+                    "agg": "last",
+                    "field": "ClickHouseMetrics_PartsActive",
+                    "label": "parts",
+                    "metricType": "gauge"
+                  }
+                ],
+                "signal": "metrics",
+                "title": "Active parts"
+              }
+            ],
+            "title": "ClickHouse parts"
+          }
+        ],
+        "default_alerts": true,
+        "isolated": true,
+        "logs": null,
+        "metrics": [
+          {
+            "allow": "ClickHouseMetrics_.*",
+            "bearer_token": {
+              "key": "token",
+              "secret": "ch-metrics"
+            },
+            "counters": "",
+            "deny": "",
+            "drop_labels": [],
+            "interval": "30s",
+            "label_limit": 30,
+            "label_value_length_limit": 256,
+            "name": "",
+            "params": {},
+            "path": "/metrics",
+            "port": 9363,
+            "sample_limit": 5000,
+            "scheme": "https",
+            "timeout": "10s",
+            "tls": {
+              "ca": {
+                "key": "ca.crt",
+                "secret": "ch-ca"
+              },
+              "insecure_skip_verify": false,
+              "server_name": ""
+            }
+          }
+        ],
+        "namespaces": [
+          "observability"
+        ],
+        "network_policy": true,
+        "otlp": null,
+        "ports": {},
+        "profiles": [],
+        "runtime": "cluster",
+        "scope": "platform",
+        "selector": {
+          "app": "clickhouse"
+        },
+        "service_name": "clickhouse",
+        "source": "manifests:clickhouse"
+      },
+      {
+        "address": "",
+        "attachment": "observability",
+        "checks": [],
+        "cluster": "k3d-acme",
+        "container": "",
+        "dashboard": {
+          "enabled": true,
+          "title": ""
+        },
+        "dashboards": [],
+        "default_alerts": true,
+        "isolated": false,
+        "logs": {
+          "body": "",
+          "drop": [],
+          "format": "json",
+          "regex": "",
+          "rules": [],
+          "severity": {
+            "field": "v",
+            "mapping": {
+              "debug": [
+                "3",
+                "4",
+                "5"
+              ],
+              "info": [
+                "0",
+                "1",
+                "2"
+              ]
+            }
+          },
+          "span_id": "",
+          "timestamp": null,
+          "trace_id": ""
+        },
+        "metrics": [
+          {
+            "allow": "certmanager_certificate_.*",
+            "bearer_token": null,
+            "counters": "",
+            "deny": "",
+            "drop_labels": [],
+            "interval": "30s",
+            "label_limit": 30,
+            "label_value_length_limit": 256,
+            "name": "",
+            "params": {},
+            "path": "/metrics",
+            "port": 9402,
+            "sample_limit": 5000,
+            "scheme": "http",
+            "timeout": "10s",
+            "tls": null
+          }
+        ],
+        "namespaces": [
+          "cert-manager"
+        ],
+        "otlp": null,
+        "ports": {},
+        "profiles": [],
+        "runtime": "cluster",
+        "scope": "platform",
+        "selector": {
+          "app.kubernetes.io/name": "cert-manager"
+        },
+        "service_name": "cert-manager",
+        "source": "observability"
+      }
+    ],
+    "telemetry_collector": {
+      "namespace": "platform-otel",
+      "pod_labels": {
+        "app.kubernetes.io/name": "otel-agent"
+      }
+    },
+    "workloads": [
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "service",
+        "name": "temporal",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "k3d-acme",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-dev",
+          "platform": null,
+          "type": "cluster"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "temporal"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "OTEL_PROFILES_EXPORTER",
+              "value": "none"
+            },
+            {
+              "name": "OTEL_TRACES_SAMPLER",
+              "value": "parentbased_traceidratio"
+            },
+            {
+              "name": "OTEL_TRACES_SAMPLER_ARG",
+              "value": "0.25"
+            },
+            {
+              "name": "TEMPORAL_OTEL_EXPORTER",
+              "value": "otlp"
+            },
+            {
+              "name": "TEMPORAL_OTEL_ENDPOINT",
+              "value": "otel-agent.platform-otel.svc:4317"
+            },
+            {
+              "name": "TEMPORAL_SERVICE",
+              "value": "temporal"
+            }
+          ],
+          "image": "docker.io/temporalio/server:1.26.2",
+          "kind": "service",
+          "ports": [
+            {
+              "name": "grpc",
+              "port": 7233,
+              "protocol": "tcp"
+            },
+            {
+              "name": "metrics",
+              "port": 9090,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}
