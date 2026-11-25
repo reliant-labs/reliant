@@ -2,23 +2,21 @@
 
 /**
  * The public demo's pack on the fixture transport: it survives the wire
- * (checkFixturePack over every handler), it answers no write from fixtures
- * (`answers` is for app-layer and harness packs only), and the one path that
- * mixes it with live traffic (createShopTransport's passthrough, the demo's
- * DEMO_DATA_SOURCE=remote) refuses a pack that does.
+ * (checkFixturePack over every handler), it answers from fixtures no rpc but
+ * DEMO_PACK_ANSWERS (held by shop/__tests__/demoPackAnswers.test.ts), and the
+ * one path that mixes it with live traffic (createShopTransport's
+ * passthrough, the demo's DEMO_DATA_SOURCE=remote) honours none of them:
+ * forge's mock transport, `readOnly: true`, NO_SIDE_EFFECTS only.
  */
 
-import { createRouterTransport } from "@connectrpc/connect";
+import { createClient, createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, it, vi } from "vitest";
 
-import { createShopTransport, shopPack } from "../shop";
-import { assertPureFixturePack, checkFixturePack, defineFixturePack, fixturePackAnswers } from "../transport";
-import { allServices } from "./allServices";
+import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 
-vi.mock("../transport", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../transport")>();
-  return { ...actual, assertPureFixturePack: vi.fn(actual.assertPureFixturePack) };
-});
+import { createShopTransport, DEMO_PACK_ANSWERS, SHOP_READ_ONLY_MESSAGE, shopPack } from "../shop";
+import { checkFixturePack, defineFixturePack, fixturePackAnswers } from "../transport";
+import { allServices } from "./allServices";
 
 const FIXED_NOW = Date.parse("2026-11-18T15:30:00Z");
 
@@ -38,12 +36,17 @@ describe("the shop pack (the public demo's)", () => {
     ]);
   });
 
-  it("answers no write from fixtures, in any layer it extends", () => {
-    expect(fixturePackAnswers(pack)).toEqual([]);
+  it("answers from fixtures no rpc but DEMO_PACK_ANSWERS, in any layer it extends", () => {
+    const listed = DEMO_PACK_ANSWERS.map((a) => `${a.method.parent.typeName}/${a.method.name}`);
+    for (const key of fixturePackAnswers(pack)) expect(listed, key).toContain(key);
   });
 
-  it("is checked on the passthrough path, which can reach the live gateway", () => {
-    createShopTransport({ passthrough: { fallback: createRouterTransport(() => {}) } });
-    expect(assertPureFixturePack).toHaveBeenCalledWith(expect.objectContaining({ name: "shop" }), "createShopTransport({ passthrough })");
+  it("refuses an undeclared read on the passthrough path before the live gateway sees it", async () => {
+    const gateway = vi.fn();
+    const fallback = createRouterTransport((router) => router.service(UserService, { getCurrentUser: gateway }));
+    const transport = createShopTransport({ passthrough: { fallback } });
+    // GetCurrentUser writes on read, so it declares no NO_SIDE_EFFECTS.
+    await expect(createClient(UserService, transport).getCurrentUser({})).rejects.toThrow(SHOP_READ_ONLY_MESSAGE);
+    expect(gateway).not.toHaveBeenCalled();
   });
 });

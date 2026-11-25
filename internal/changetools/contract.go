@@ -8,7 +8,8 @@
 // It is the outbound adapter to the control plane (the ChangesService rpcs in
 // Connect JSON, and DeployService for environment names). Its contract is the
 // consumer's, tools.ChangeController in internal/llm/tools: Service embeds it
-// and adds nothing, so the two cannot drift.
+// and adds nothing, so the two cannot drift. The graph node is internal/app's
+// NewChangeController provider, an optional component (nil when self-hosted).
 //
 //forge:provided
 package changetools

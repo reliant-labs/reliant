@@ -64,6 +64,9 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.SharingService/SetChatVisibility":    Dedicated,
 	"reliant.v1.SharingService/SetProjectVisibility": Dedicated,
 	"reliant.v1.SharingService/ListSharedChats":      Dedicated,
+	"reliant.v1.SharingService/SetChatMember":        Dedicated,
+	"reliant.v1.SharingService/RemoveChatMember":     Dedicated,
+	"reliant.v1.SharingService/ListChatMembers":      Dedicated,
 
 	// Everything else: a viewer is an outsider. Tool results
 	// (GetToolResult), the run's live inputs
@@ -168,6 +171,7 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.ProjectService/InitializeProject":              AsOutsider,
 	"reliant.v1.ProjectService/MarkProjectInstalled":           AsOutsider,
 	"reliant.v1.ProjectService/MoveProjectToOrg":               AsOutsider,
+	"reliant.v1.ProjectService/PreviewProjectMachineMove":      AsOutsider,
 	"reliant.v1.ProjectService/PreviewProjectOrgMove":          AsOutsider,
 	"reliant.v1.ProjectService/PullProjectOnDaemon":            AsOutsider,
 	"reliant.v1.ProjectService/PurgeProjectNow":                AsOutsider,

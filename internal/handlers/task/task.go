@@ -41,7 +41,7 @@ func (s *Service) writableChatOfPlan(ctx context.Context, userID, planID string)
 	if err != nil {
 		return nil, err
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("task")
 	}
 	return chat, nil

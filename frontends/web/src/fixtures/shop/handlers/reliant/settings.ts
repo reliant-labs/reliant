@@ -61,6 +61,9 @@ export function settingsHandlers() {
     ...serve(SettingsService, {
       listSettings: () => ({ settings: SAVED_SETTINGS.map(([key, value]) => setting(key, value)), total: SAVED_SETTINGS.length }),
       getPrivacySettings: () => ({ analyticsEnabled: false, crashReportingEnabled: false }),
+      // Alex's config is healthy. (The server heals a stale legacy key as it reads, so the rpc
+      // declares no NO_SIDE_EFFECTS: it is one of the app pack's named `answers`, app.ts.)
+      getConfigHealth: () => ({ errors: [], errorCount: 0, warningCount: 0 }),
       getProviderStatuses: () => ({
         providers: [
           { provider: "anthropic", configured: true, displayName: "Anthropic", outputModalities: ["text"], accountCount: 1 },

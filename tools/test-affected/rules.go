@@ -75,6 +75,11 @@ var forgeInputs = []string{
 	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml",
 	"proto/**", "db/**",
 	"**/contract.go", "**/doc.go", "internal/handlers/**",
+	// The composition root: forge reads compose.go and the providers into
+	// internal/app/graph_gen.go, routes_gen.go and gen/forge_service_catalog.json.
+	// #3499 changed only internal/app's wiring and main's generate check went
+	// red on the catalog (control-plane#3571).
+	"internal/app/**",
 	// Every forge output, as the merge gate's gen_re names them: a changed
 	// generated file runs generate, which re-renders it before build and
 	// test judge it (a merge with main can leave one a step behind, and
@@ -137,7 +142,9 @@ var forgeHookOf = map[string]string{
 // longer exists (a warning, never a write). The tests it generates
 // (*_gen_test.go) stay inputs: a hand edit to one is drift. A handler test
 // fix selected the whole forge generate, ~5 minutes on the loaded host.
-var forgeInputsExcept = []string{"internal/handlers/**/*_test.go"}
+// internal/app's hand-written tests are the same: forge reads its providers
+// and compose.go, never its tests.
+var forgeInputsExcept = []string{"internal/handlers/**/*_test.go", "internal/app/**/*_test.go"}
 
 func isForgeInput(p string) bool {
 	if strings.HasSuffix(p, "_gen_test.go") {

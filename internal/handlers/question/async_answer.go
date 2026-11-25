@@ -105,7 +105,7 @@ func (s *Service) resolveAsyncQuestion(
 		logging.WarnContext(ctx, "[Question] Failed to emit question update", "error", err)
 	}
 	// Answered, it leaves the user's inbox; no chat activity change says so.
-	if err := s.deps.Repo.EmitUserRefetch(ctx, chat.UserID, db.RefetchInbox, db.RefetchOpts{ChatID: &chat.ID}); err != nil {
+	if err := s.deps.Refetch.EmitUserRefetch(ctx, chat.UserID, core.RefetchInbox, core.RefetchOpts{ChatID: &chat.ID}); err != nil {
 		logging.WarnContext(ctx, "[Question] Failed to announce an answered async question to the inbox", "error", err)
 	}
 

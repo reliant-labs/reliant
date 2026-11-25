@@ -220,7 +220,8 @@ describe("?journey=forge on the forge brand", () => {
     useAuthStore.setState({ user: SIGNED_IN });
     arriveWith("?journey=forge");
     const router = renderShell("/apps?journey=forge");
-    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/demo"));
+    // Signed in, the journey walks the sample app inside the shell.
+    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/sample_shop"));
     expect(searchOf(router).tour).toBe("forge:fg-intro");
     expect(trackEvent.mock.calls.filter(([name]) => name === "journey_selected")).toHaveLength(1);
   });
@@ -235,7 +236,7 @@ describe("?journey=forge on the forge brand", () => {
     // The sign-in screen signs them in and returns them to the shell.
     act(() => useAuthStore.setState({ user: SIGNED_IN }));
     await act(() => router.navigate({ to: "/apps" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/demo"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/forge/p/sample_shop"));
     expect(searchOf(router).tour).toBe("forge:fg-intro");
   });
 

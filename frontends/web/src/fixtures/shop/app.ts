@@ -21,7 +21,10 @@ import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
+import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { MCPService } from "@/gen/reliant/v1/mcp_pb";
 import { ProjectService } from "@/gen/reliant/v1/project_pb";
+import { SettingsService } from "@/gen/reliant/v1/settings_pb";
 import { StreamingService } from "@/gen/reliant/v1/streaming_pb";
 import { WorktreeService } from "@/gen/reliant/v1/worktree_pb";
 
@@ -46,29 +49,60 @@ import { shopPack, type ShopPackOptions } from "./index";
  *                                  project-opened analytics event
  *   WorktreeService/ListWorktrees  creates the project's main worktree row
  *                                  when it has none
+ *   SettingsService/GetConfigHealth
+ *                                  replaces a stale legacy Reliant LLM key as
+ *                                  it reads (drivers.HealReliantKey)
  *   UserService/GetCurrentUser,    write on read, per cp#3513's audit
  *   BillingService/GetCurrentUserWalletOverview,
  *   BillingService/GetCurrentUserReliantOverview
+ *
+ * Three are ForgeService reports relayed from the daemon, which the fixture
+ * answers from the story (handlers/reliant/forge.ts) and runs nothing for:
+ *
+ *   ForgeService/GetTopology       stores the project's forge name and
+ *                                  refreshes its forge apps as it reads
+ *   ForgeService/GetEnvStatus,     run a forge CLI command on the machine,
+ *   ForgeService/GetEnvShape       not yet pinned to a read-only argv
+ *
+ * Three are reads kept POST-only because the response carries a secret or a
+ * bearer link, and the fixture's are fake (`.invalid`, or none):
+ *
+ *   MCPService/ListServers         each server's config headers and env as
+ *                                  stored (reliant#3466); the Connectors
+ *                                  page's MCP tab reads it. The fixture's one
+ *                                  server has an `.invalid` URL and a header
+ *                                  that says it is not a secret
+ *
+ *   BillingService/ListCurrentUserInvoices            Stripe's hosted-invoice
+ *                                                     and PDF URLs
+ *   BillingService/GetCurrentUserComputeSubscription  a management URL
  *
  * The fixture never runs any of those effects: it only answers the read.
  * None of the twelve machine-waking reads (FileSystemService, the
  * WorktreeService git reads) is answered here.
  *
  * They are the app pack's `answers`, so a read-only fixture transport lets
- * exactly these five through without the deprecated isDemoRead classifier.
+ * exactly these through, with no name heuristic.
  * Only a pure fixture transport honours them (fixture mode is one; the
  * demo's gateway passthrough is not, and never serves this pack).
  */
 export const APP_LAYER_ANSWERS = [
   "reliant.v1.ProjectService/GetProject",
   "reliant.v1.WorktreeService/ListWorktrees",
+  "reliant.v1.SettingsService/GetConfigHealth",
+  "reliant.v1.ForgeService/GetTopology",
+  "reliant.v1.ForgeService/GetEnvStatus",
+  "reliant.v1.ForgeService/GetEnvShape",
+  "reliant.v1.MCPService/ListServers",
   "controlplane.v1.UserService/GetCurrentUser",
   "controlplane.v1.BillingService/GetCurrentUserWalletOverview",
   "controlplane.v1.BillingService/GetCurrentUserReliantOverview",
+  "controlplane.v1.BillingService/ListCurrentUserInvoices",
+  "controlplane.v1.BillingService/GetCurrentUserComputeSubscription",
 ] as const;
 
 /** The services APP_LAYER_ANSWERS names, so the transport checks each name against the proto. */
-const ANSWERED_SERVICES = [ProjectService, WorktreeService, UserService, BillingService];
+const ANSWERED_SERVICES = [ProjectService, WorktreeService, SettingsService, ForgeService, MCPService, UserService, BillingService];
 
 /** The app layer's own answers, "pkg.Service/Method" keyed. */
 export function appLayerScenarioHandlers(): MockHandlers {

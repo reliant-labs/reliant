@@ -41,7 +41,7 @@ func (s *Service) writableChatOfThread(ctx context.Context, userID, threadID str
 	if err != nil {
 		return nil, err
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("plan")
 	}
 	return chat, nil

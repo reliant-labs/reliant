@@ -9,6 +9,9 @@ import "reliant/v1/chat.proto";
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // AttachmentService handles file attachment operations
+// Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+// the attachment rpcs took forge's native CRUD shapes (timestamps and the
+// Get/Upload response layouts changed). Clients built before it must upgrade.
 service AttachmentService {
   // UploadAttachment uploads a new binary file attachment (for images)
   rpc UploadAttachment(UploadAttachmentRequest) returns (UploadAttachmentResponse) {

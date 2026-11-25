@@ -43,6 +43,11 @@ type GoPlan struct {
 	// (the release gate).
 	Reach    string   `json:"reach"`
 	Deferred []string `json:"deferred,omitempty"`
+	// ReachCap is the transitive budget a "direct" plan was made with
+	// (-go-reach-cap): when the packages "all" would add number at most
+	// this, they are selected too and Reach is "all"; above it they stay
+	// Deferred. 0: no budget, "direct" is direct.
+	ReachCap int `json:"reach_cap,omitempty"`
 	// Build are the packages whose own build (not their tests') contains a
 	// changed package, at every reach: the merge gate's build phase
 	// compiles exactly these. Every other package is unchanged and already
@@ -237,6 +242,7 @@ func (r *reasons) why(key string) string {
 type classifier struct {
 	g         *Graph
 	reachMode string
+	reachCap  int // ReachDirect: select the transitive dependents too when they number at most this
 	pl        *Plan
 
 	full map[lane][]string
@@ -278,8 +284,19 @@ func Classify(changes []Change, g *Graph) *Plan { return ClassifyReach(changes, 
 // ClassifyReach is Classify with the Go lane's reach chosen (ReachAll or
 // ReachDirect).
 func ClassifyReach(changes []Change, g *Graph, reachMode string) *Plan {
+	return ClassifyReachCap(changes, g, reachMode, 0)
+}
+
+// ClassifyReachCap is ClassifyReach with a transitive budget for ReachDirect:
+// when the Go packages ReachAll would add beyond the direct cut number at
+// most goCap, they are selected too (GoPlan.ReachCap). A leaf or mid-sized
+// change then runs every test binary it reaches; a hub change keeps the
+// direct cut, and every test package still compiles in the merge gate's
+// testbuild phase.
+func ClassifyReachCap(changes []Change, g *Graph, reachMode string, goCap int) *Plan {
 	c := &classifier{
 		reachMode: reachMode,
+		reachCap:  goCap,
 		g:         g,
 		pl:        &Plan{},
 		full:      map[lane][]string{},
@@ -786,7 +803,19 @@ func (c *classifier) selectGo() {
 	}
 	gp.Reach = ReachAll
 	if c.reachMode == ReachDirect {
-		gp.Reach = ReachDirect
+		gp.Reach, gp.ReachCap = ReachDirect, c.reachCap
+		if len(deferred) > 0 && len(deferred) <= c.reachCap {
+			// Within the transitive budget: every test binary the change
+			// reaches runs, as under ReachAll.
+			gp.Reach = ReachAll
+			for _, p := range deferred {
+				rp := dot(p)
+				gp.Packages = append(gp.Packages, rp)
+				gp.Why[rp] = reach(g.TestDeps[p], c.code, c.embed) + fmt.Sprintf(", transitively (within the %d-package budget)", c.reachCap)
+			}
+			slices.Sort(gp.Packages)
+			deferred = nil
+		}
 		for _, p := range deferred {
 			gp.Deferred = append(gp.Deferred, dot(p))
 		}

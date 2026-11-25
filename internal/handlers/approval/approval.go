@@ -32,7 +32,7 @@ func (s *Service) chatBelongsToUser(ctx context.Context, chatID string) error {
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return svcerr.NotFound("approval")
 	}
 	return nil

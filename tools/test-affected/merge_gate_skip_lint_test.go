@@ -71,7 +71,7 @@ func TestMergeGateSkipLint(t *testing.T) {
 		extract(`if [ "$skip_lint" = 1 ]; then echo skip-lint >"$L/tier"`, "\n# The pinned forge"),
 		// As the gate computes it: the working tree against the base.
 		`files=$( { git diff --name-only "$base"; git ls-files --others --exclude-standard; } | sort -u)`,
-		extract("if [ \"$fail\" = 0 ]; then\n  phase build build_check", "\n# Every launched phase is waited for"),
+		extract("if [ \"$fail\" = 0 ]; then\n  # Every test package compiles", "\n# Every launched phase is waited for"),
 		`wait`,
 		`echo "$base" >"$L/base"`,
 	}, "\n")
@@ -90,19 +90,19 @@ func TestMergeGateSkipLint(t *testing.T) {
 		smallHost  bool   // under MG_GEN_ALONE_GIB: the vite builds run after the wait (run_bundles)
 		pinOnly    bool   // the last commit moves go.mod instead of adding a migration
 	}{
-		{"merge tier", true, nil, "", []string{"build", "test", "golangci", "lint", "vet", "proto", "migsafety", "closedsets", "migorder"}, []string{"demo"}, "0", false, false, false, false, false},
+		{"merge tier", true, nil, "", []string{"build", "testbuild", "test", "golangci", "lint", "vet", "proto", "migsafety", "projectlint", "migorder"}, []string{"demo"}, "0", false, false, false, false, false},
 		{"merge tier in its own slot drops golangci's lock", false, nil, "", []string{"golangci"}, nil, "0", false, false, true, false, false},
-		{"merge tier without a Go change skips golangci", true, nil, "", []string{"build", "test", "lint", "proto", "migsafety", "closedsets", "migorder"}, []string{"golangci"}, "0", false, true, false, false, false},
-		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety", "closedsets", "migorder"}, []string{"vet", "lint"}, "0", false, false, false, false, false},
-		{"skip-lint without a Go change skips golangci", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "proto"}, []string{"vet", "lint", "golangci"}, "0", false, true, false, false, false},
-		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "test", "golangci", "proto", "migsafety", "closedsets"}, []string{"vet", "lint"}, "0", false, false, false, false, false},
-		{"queue", true, []string{"--queue"}, "queue", []string{"build", "test", "lint", "proto", "migsafety", "closedsets", "migorder"}, []string{"vet", "golangci"}, "1", false, false, false, false, false},
-		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "migsafety", "closedsets"}, []string{"vet", "proto", "golangci"}, "1", false, false, false, false, false},
-		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "demo"}, []string{"vet", "golangci"}, "1", true, false, false, false, false},
-		{"queue on a small host defers the demo bundle", false, []string{"--queue"}, "queue", []string{"build", "test", "lint"}, []string{"demo", "vet", "golangci"}, "1", true, false, false, true, false},
-		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "test"}, []string{"vet", "lint", "golangci"}, "1", false, false, false, false, false},
-		{"skip-golangci", true, []string{"--skip-golangci"}, "", []string{"build", "test", "lint", "vet", "proto"}, []string{"golangci"}, "0", false, false, false, false, false},
-		{"a pin move without a migration still runs closedsets", false, []string{"--queue"}, "queue", []string{"build", "test", "lint", "closedsets"}, []string{"vet", "golangci", "migsafety", "migorder"}, "1", false, false, false, false, true},
+		{"merge tier without a Go change skips golangci", true, nil, "", []string{"build", "testbuild", "test", "lint", "proto", "migsafety", "projectlint", "migorder"}, []string{"golangci"}, "0", false, true, false, false, false},
+		{"skip-lint", true, []string{"--skip-lint"}, "skip-lint", []string{"build", "testbuild", "test", "golangci", "proto", "migsafety", "projectlint", "migorder"}, []string{"vet", "lint"}, "0", false, false, false, false, false},
+		{"skip-lint without a Go change skips golangci", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "testbuild", "test", "proto"}, []string{"vet", "lint", "golangci"}, "0", false, true, false, false, false},
+		{"skip-lint keeps buf lint without a proto change", false, []string{"--skip-lint"}, "skip-lint", []string{"build", "testbuild", "test", "golangci", "proto", "migsafety", "projectlint"}, []string{"vet", "lint"}, "0", false, false, false, false, false},
+		{"queue", true, []string{"--queue"}, "queue", []string{"build", "testbuild", "test", "lint", "proto", "migsafety", "projectlint", "migorder"}, []string{"vet", "golangci"}, "1", false, false, false, false, false},
+		{"queue skips buf lint without a proto change", false, []string{"--queue"}, "queue", []string{"build", "testbuild", "test", "lint", "migsafety", "projectlint"}, []string{"vet", "proto", "golangci"}, "1", false, false, false, false, false},
+		{"queue builds a selected demo bundle", false, []string{"--queue"}, "queue", []string{"build", "testbuild", "test", "lint", "demo"}, []string{"vet", "golangci"}, "1", true, false, false, false, false},
+		{"queue on a small host defers the demo bundle", false, []string{"--queue"}, "queue", []string{"build", "testbuild", "test", "lint"}, []string{"demo", "vet", "golangci"}, "1", true, false, false, true, false},
+		{"queue with --skip-lint lints nothing", false, []string{"--queue", "--skip-lint"}, "skip-lint", []string{"build", "testbuild", "test"}, []string{"vet", "lint", "golangci"}, "1", false, false, false, false, false},
+		{"skip-golangci", true, []string{"--skip-golangci"}, "", []string{"build", "testbuild", "test", "lint", "vet", "proto"}, []string{"golangci"}, "0", false, false, false, false, false},
+		{"a pin move without a migration still runs projectlint (closed-sets)", false, []string{"--queue"}, "queue", []string{"build", "testbuild", "test", "lint", "projectlint"}, []string{"vet", "golangci", "migsafety", "migorder"}, "1", false, false, false, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo, mergeBase := branchWithMergeOfMain(t, tc.proto, !tc.noGo, tc.pinOnly)
@@ -171,6 +171,27 @@ func TestMergeGateSkipLint(t *testing.T) {
 				}
 				if args != want {
 					t.Errorf("golangci runs %q, want %q", args, want)
+				}
+			}
+			// The queue also judges migration order against HEAD^ (main plus
+			// the entries ahead); a PR branch's HEAD^ is just its last commit.
+			if args, ok := phases["migorder"]; ok {
+				if q := slices.Contains(tc.flags, "--queue"); strings.Contains(args, "-also HEAD^") != q {
+					t.Errorf("migorder runs %q; -also HEAD^ wanted only under --queue (queue=%v)", args, q)
+				}
+			}
+			// testbuild skips what the test phase compiles itself.
+			if args, ok := phases["testbuild"]; ok && !strings.Contains(args, "scripts/test-build.sh -p 2 --exclude "+filepath.Join(logs, "tested.txt")) {
+				t.Errorf("testbuild runs %q, want scripts/test-build.sh with the test phase's packages excluded", args)
+			}
+			if b, err := os.ReadFile(filepath.Join(logs, "tested.txt")); err != nil || strings.TrimSpace(string(b)) != "./internal/x" {
+				t.Errorf("tested.txt = %q (%v), want the plan's go.packages", b, err)
+			}
+			if args, ok := phases["projectlint"]; ok {
+				for _, lane := range []string{"--graph", "--closed-sets", "--proto-format"} {
+					if !strings.Contains(args, " "+lane) {
+						t.Errorf("projectlint runs %q, without %s", args, lane)
+					}
 				}
 			}
 			for _, n := range []string{"proto", "migsafety"} {

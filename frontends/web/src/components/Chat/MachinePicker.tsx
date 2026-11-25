@@ -16,7 +16,7 @@
  * offers a project/machine pair that would fail.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertCircle, Check, ChevronDown, CloudOff, Download, Loader2, Monitor } from "lucide-react";
 import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,11 @@ export interface MachinePickerProject {
   onUseFolder?: (daemonId: string) => void;
   /** A failed set-up, in words; the caller owns the copy (describeCloneError). */
   describeError?: (err: unknown, machineName: string) => string;
+  /**
+   * Shown above the machines it can be set up on, before any is: what a
+   * set-up leaves on the machine the project is on now (StaysOnMachineList).
+   */
+  setUpNote?: ReactNode;
 }
 
 interface MachinePickerProps {
@@ -313,6 +318,7 @@ export function MachinePicker({
                         {project?.name} is a folder on another machine, so it can&apos;t be cloned here.
                       </p>
                     )}
+                    {project?.onSetUp && project.setUpNote && <div className="px-3 pb-1.5">{project.setUpNote}</div>}
                     {sections.notSetUp.map(renderNotSetUp)}
                   </div>
                 )}

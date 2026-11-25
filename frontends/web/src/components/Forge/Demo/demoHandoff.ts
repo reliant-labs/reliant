@@ -8,6 +8,9 @@
  * where the demo shell opens the console page the step names.
  *
  * The desktop app opens the demo in the browser and stays on its home.
+ *
+ * That is the signed-out path. Signed in, the app's tree sends both to the
+ * sample app inside the shell instead (Forge/Sample/ForgeDemoEntry.ts).
  */
 
 import { createRoute, redirect, type AnyRoute } from "@tanstack/react-router";
@@ -35,9 +38,17 @@ export function leaveForDemo({ location }: { location: { searchStr: string } }):
   throw redirect({ href, replace: true });
 }
 
-export function createForgeDemoHandoffRoutes<TParent extends AnyRoute>(getParentRoute: () => TParent) {
+type Entry = (ctx: { location: { search: unknown; searchStr: string } }) => unknown;
+
+/**
+ * `/forge/demo` and `/demo` on `getParentRoute`, each running `enter`: by
+ * default it leaves for the demo bundle; the app's tree passes
+ * Forge/Sample/ForgeDemoEntry.ts, which first sends a signed-in person to the
+ * sample app in the shell.
+ */
+export function createForgeDemoHandoffRoutes<TParent extends AnyRoute>(getParentRoute: () => TParent, enter: Entry = leaveForDemo) {
   return [
-    createRoute({ getParentRoute, path: FORGE_DEMO_PATH, beforeLoad: leaveForDemo }),
-    createRoute({ getParentRoute, path: "/demo", beforeLoad: leaveForDemo }),
+    createRoute({ getParentRoute, path: FORGE_DEMO_PATH, beforeLoad: enter }),
+    createRoute({ getParentRoute, path: "/demo", beforeLoad: enter }),
   ] as const;
 }

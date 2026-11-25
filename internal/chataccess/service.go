@@ -24,7 +24,7 @@ func (s *service) GetChatRowWithUserCheck(ctx context.Context, id, userID string
 	if err != nil {
 		return nil, err
 	}
-	if chat == nil || !authz.CanWriteChat(ctx, userID, chat) {
+	if chat == nil || !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 	}
 	return chat, nil
@@ -38,7 +38,7 @@ func (s *service) GetChatWithUserCheck(ctx context.Context, id, userID string) (
 	if err != nil {
 		return nil, err
 	}
-	if chat == nil || !authz.CanWriteChat(ctx, userID, chat) {
+	if chat == nil || !authz.CanOwnChat(ctx, userID, chat) {
 		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 	}
 	return chat, nil

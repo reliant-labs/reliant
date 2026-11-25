@@ -11,7 +11,6 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { activeArea, childrenOf, flattenIds, hrefOf, hybridNav, isCurrent, visibleItems, type NavCtx } from "../../../Layout/sidebar/navConfig";
 import { consoleNavEntries } from "../../Console/consoleNavRegistry";
-import { buildGroupedConsoleNav } from "../../Console/groupedNav";
 import { consolePageOf, orgPageOf } from "../../Console/paths";
 import { registerSecurityNav } from "../registerSecurityNav";
 
@@ -75,23 +74,6 @@ describe("Security ▾", () => {
     expect(lit("/forge/p/shopfront/secrets")).toEqual({ group: false, rows: [] });
     // The Security pages are top-level pages, not a drill-in.
     expect(activeArea(hybridNav, ctxAt(VULNS))).toBeNull();
-  });
-
-  it("lists both rows in the grouped nav's Security group too, before Configure", () => {
-    unregister = registerSecurityNav();
-    const items = buildGroupedConsoleNav({ project: "shopfront", page: { kind: "sboms" }, env: "prod", envs: [{ name: "prod", preview: false }] }).items;
-    const labels = items.map((item) => item.label);
-    expect(labels.indexOf("Security")).toBe(labels.indexOf("Configure") - 1);
-    const group = items.find((item) => item.label === "Security")!;
-    expect(group.children!.map((child) => [child.label, child.href, child.active])).toEqual([
-      ["Vulnerabilities", `${VULNS}?env=prod`, false],
-      ["SBOMs", `${SBOMS}?env=prod`, true],
-    ]);
-  });
-
-  it("draws no Security group in the grouped nav until the rows register", () => {
-    const items = buildGroupedConsoleNav({ project: "shopfront", page: { kind: "overview" }, env: "prod", envs: [{ name: "prod", preview: false }] }).items;
-    expect(items.map((item) => item.label)).not.toContain("Security");
   });
 
   it("is registered by the module that mounts the console's routes", async () => {

@@ -24,6 +24,7 @@ import { CatalogService } from "@/gen/reliant/v1/catalog_pb";
 import { ChatService, ListMessagesResponseSchema } from "@/gen/reliant/v1/chat_pb";
 import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { MCPService } from "@/gen/reliant/v1/mcp_pb";
 import { ListProjectsWithAppsResponseSchema, ProjectService } from "@/gen/reliant/v1/project_pb";
 import { QuestionService } from "@/gen/reliant/v1/question_pb";
 import { RunService } from "@/gen/reliant/v1/run_pb";
@@ -40,9 +41,9 @@ import loadTest from "../data/transcripts/load-test.json?raw";
 import stripeSdk from "../data/transcripts/stripe-sdk.json?raw";
 import subAgents from "../data/transcripts/sub-agents.json?raw";
 import taxRates from "../data/transcripts/tax-rates.json?raw";
-import { isDemoRead } from "../../readOnly";
 import { createFixtureTransport } from "../../transport";
 import { APP_LAYER_ANSWERS, appLayerScenarioHandlers, shopAppPack } from "../app";
+import { FAKE_MCP_HEADER } from "../handlers/reliant/mcp";
 import { chatStreamEvents, streamingImpl } from "../handlers/reliant/streaming";
 import { SHOP_READ_ONLY_MESSAGE, shopScenario } from "../index";
 import { DATA_ANCHOR, decodeFixtureJson, packJson } from "../packJson";
@@ -52,7 +53,7 @@ import { CHAT_IDS, PROJECT_IDS, WORKTREE_IDS } from "../workspace";
 const FIXED_NOW = Date.UTC(2026, 10, 18, 15, 30);
 
 const SERVICES: DescService[] = [
-  ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ForgeService, ProjectService, QuestionService, RunService,
+  ApprovalService, AttachmentService, CatalogService, ChatService, DaemonRegistryService, ForgeService, MCPService, ProjectService, QuestionService, RunService,
   SettingsService, StreamingService, TriggerService, WorkflowService, WorktreeService, BillingService, UserService, ObservabilityBillingService,
 ];
 const METHODS = new Map<string, DescMethod>(SERVICES.flatMap((s) => s.methods.map((m) => [`${s.typeName}/${m.name}`, m] as const)));
@@ -61,9 +62,9 @@ const METHODS = new Map<string, DescMethod>(SERVICES.flatMap((s) => s.methods.ma
 const RELIANT_KEYS = [
   "ApprovalService/ListApprovalsByChat", "AttachmentService/GetAttachment", "CatalogService/ListAvailableModels", "CatalogService/ListModels",
   "ChatService/GetChat", "ChatService/GetWorkflowExecutions", "ChatService/ListArchivedChats", "ChatService/ListChats", "ChatService/ListMessages",
-  "DaemonRegistryService/ListDaemons", "ForgeService/GetEnvShape", "ForgeService/GetEnvStatus", "ForgeService/GetTopology", "ProjectService/GetProject", "ProjectService/ListProjects", "ProjectService/ListProjectsWithApps",
+  "DaemonRegistryService/ListDaemons", "MCPService/ListRecommended", "MCPService/ListServers", "ForgeService/GetEnvShape", "ForgeService/GetEnvStatus", "ForgeService/GetTopology", "ProjectService/GetProject", "ProjectService/ListProjects", "ProjectService/ListProjectsWithApps",
   "QuestionService/ListAsyncQuestions", "QuestionService/ListPendingQuestions", "RunService/LastRunPerWorkflow", "RunService/ListRuns",
-  "SettingsService/GetPrivacySettings", "SettingsService/GetProviderStatuses", "SettingsService/ListSettings",
+  "SettingsService/GetConfigHealth", "SettingsService/GetPrivacySettings", "SettingsService/GetProviderStatuses", "SettingsService/ListSettings",
   "StreamingService/StreamChatUpdates", "StreamingService/StreamUserUpdates", "TriggerService/ListTriggers", "WorkflowService/ListWorkflows",
   "WorktreeService/GetWorktree", "WorktreeService/ListWorktrees",
 ].map((k) => `reliant.v1.${k}`);
@@ -93,7 +94,7 @@ const REQUESTS: Record<string, Record<string, unknown>> = {
 };
 
 /** The app pack, served as fixture mode serves it (today's read-only classifier, the pack clock). */
-const appTransport = (): Transport => createFixtureTransport({ pack: shopAppPack({ now: FIXED_NOW }), now: demoNow, readOnly: isDemoRead, readOnlyMessage: SHOP_READ_ONLY_MESSAGE });
+const appTransport = (): Transport => createFixtureTransport({ pack: shopAppPack({ now: FIXED_NOW }), now: demoNow, readOnly: true, readOnlyMessage: SHOP_READ_ONLY_MESSAGE });
 
 /** A message survives the wire: binary out and back in is the same message. */
 function expectWireSafe(schema: DescMessage, message: unknown) {
@@ -111,7 +112,7 @@ describe("the app layer", () => {
     const keys = Object.keys(appLayerScenarioHandlers()).sort();
     expect(keys).toEqual([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].sort());
     for (const key of keys) expect(METHODS.has(key), key).toBe(true);
-    expect(RELIANT_KEYS).toHaveLength(29);
+    expect(RELIANT_KEYS).toHaveLength(32);
   });
 
   it.each([...RELIANT_KEYS, ...CONTROL_PLANE_KEYS].filter((k) => METHODS.get(k)?.methodKind === "unary"))("%s answers a schema-valid, wire-safe message", async (key) => {
@@ -145,7 +146,7 @@ describe("the app layer", () => {
     expect(Object.keys(shopScenario().handlers).length).toBeGreaterThan(0);
   });
 
-  it("answers its five side-effecting reads under readOnly: true, and refuses a write", async () => {
+  it("answers its named side-effecting and bearer-link reads under readOnly: true, and refuses a write", async () => {
     const strict = createFixtureTransport({ pack: shopAppPack({ now: FIXED_NOW }), now: demoNow, readOnly: true, readOnlyMessage: SHOP_READ_ONLY_MESSAGE });
     for (const key of APP_LAYER_ANSWERS) {
       const method = METHODS.get(key)!;
@@ -164,6 +165,27 @@ describe("the app layer", () => {
     expect(snapshot.case === "snapshot" && snapshot.value.otherUpdates).toHaveLength(2);
     const sub = await client.listMessages({ chatId: CHAT_IDS.cartTotals, threadId: "th-review-1" });
     expect(sub.messages.map((m) => m.thread)).toEqual(["th-review-1"]);
+  });
+
+  it("answers the bearer-link reads with obviously fake links", async () => {
+    const billing = createClient(BillingService, appTransport());
+    const { invoices } = await billing.listCurrentUserInvoices({});
+    expect(invoices.length).toBeGreaterThan(0);
+    for (const invoice of invoices) {
+      for (const url of [invoice.hostedInvoiceUrl, invoice.pdfUrl]) expect(new URL(url).hostname.endsWith(".invalid"), url).toBe(true);
+    }
+    const { subscription } = await billing.getCurrentUserComputeSubscription({});
+    for (const url of JSON.stringify(subscription ?? {}, (_k, v: unknown) => (typeof v === "bigint" ? String(v) : v)).match(/https?:\/\/[^"]+/g) ?? []) expect(new URL(url).hostname.endsWith(".invalid"), url).toBe(true);
+  });
+
+  it("answers MCP ListServers with obviously fake config", async () => {
+    const { servers } = await createClient(MCPService, appTransport()).listServers({ projectId: PROJECT_IDS.shop });
+    expect(servers.length).toBeGreaterThan(0);
+    for (const server of servers) {
+      if (server.config?.url) expect(new URL(server.config.url).hostname.endsWith(".invalid"), server.config.url).toBe(true);
+      for (const value of Object.values(server.config?.headers ?? {})) expect(value).toContain(FAKE_MCP_HEADER);
+      for (const entry of server.config?.env ?? []) expect(entry).toContain(FAKE_MCP_HEADER);
+    }
   });
 
   it("names its read-only exceptions by real rpcs it answers", () => {

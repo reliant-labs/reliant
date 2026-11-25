@@ -17,10 +17,12 @@ import (
 //
 // A decline is the only thing standing between a forge bump and these files
 // reappearing: the pinned forge scaffolds them into every project that has no
-// record for them. reliant's dev stack runs no containers, no local ClickStack
-// and no Zitadel IdP (docker-compose.yml was deleted on purpose in #1539), so
-// the observability collector configs, the compose file and the IdP steps would
-// be dead files that read as live deployment configuration. Dropping a record —
+// record for them. reliant's dev stack runs no containers and no local
+// ClickStack (docker-compose.yml was deleted on purpose in #1539), so the
+// observability collector configs and the compose file would be dead files
+// that read as live deployment configuration. idp-steps.yaml is not declined:
+// the dev stack runs the managed identity's Zitadel as a host process
+// (deploy/kcl/dev/main.k), which boots from it. Dropping a record —
 // a merge that loses it, a `forge project rescaffold` — must fail here, not
 // surface as new files on the next `forge generate`.
 var declinedScaffolds = []string{
@@ -31,7 +33,6 @@ var declinedScaffolds = []string{
 	"deploy/observability/profiles-schema.sql",
 	"docker-compose.yml",
 	"frontends/web/eslint.config.mjs",
-	"idp-steps.yaml",
 	// forge's CRUD lifecycle test creates a plan or task with no chat, and
 	// reliant authorizes every create through the caller's chat; each
 	// package's tenant_isolation_test.go covers the CRUD rpcs on a real

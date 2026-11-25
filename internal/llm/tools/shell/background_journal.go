@@ -84,6 +84,21 @@ type journalRecord struct {
 	ThreadID       string     `json:"thread_id,omitempty"`
 	KeepAlive      bool       `json:"keep_alive,omitempty"`
 	GrantID        string     `json:"grant_id,omitempty"`
+
+	// StartTicks and PGID identify the process across pid reuse
+	// (osutil.ProcessIdentity: its start time and process group); Cgroup is
+	// its proctree cgroup. FileOutput marks a file-backed process, whose
+	// output is in <id>.stdout and <id>.stderr (background_fileoutput.go).
+	StartTicks uint64 `json:"start_ticks,omitempty"`
+	PGID       int    `json:"pgid,omitempty"`
+	Cgroup     string `json:"cgroup,omitempty"`
+	FileOutput bool   `json:"file_output,omitempty"`
+	// HandedOff marks a running process an image handed to the next one
+	// across a self-update's exec, to be read on from the offsets
+	// (background_survive.go).
+	HandedOff    bool  `json:"handed_off,omitempty"`
+	StdoutOffset int64 `json:"stdout_offset,omitempty"`
+	StderrOffset int64 `json:"stderr_offset,omitempty"`
 }
 
 // BackgroundJournal persists background-process records to a directory.
@@ -127,8 +142,49 @@ func (j *BackgroundJournal) Callback() *PersistenceCallback {
 			}
 			return nil
 		},
+		OnHandOff: j.recordHandOff,
 	}
 }
+
+// recordHandOff marks a running record handed off to the next image, with
+// the output offsets it reads on from. The error is the handoff's: a record
+// that cannot say so is not adopted, so the process is stopped instead.
+func (j *BackgroundJournal) recordHandOff(id string, offsets [2]int64) error {
+	if !journalIDPattern.MatchString(id) {
+		return fmt.Errorf("unjournalable process id %q", id)
+	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	rec, err := j.readRecordLocked(id)
+	if err != nil {
+		return err
+	}
+	if rec.Status != "running" {
+		return fmt.Errorf("process %s already %s", id, rec.Status)
+	}
+	if !rec.FileOutput {
+		return fmt.Errorf("process %s has no output files", id)
+	}
+	rec.HandedOff, rec.StdoutOffset, rec.StderrOffset = true, offsets[0], offsets[1]
+	return j.writeRecordLocked(rec)
+}
+
+// Install restores the journal into m (Restore), makes the journal m's
+// persistence, and then starts the processes Restore adopted from the
+// previous image: only once their status changes reach the journal.
+func (j *BackgroundJournal) Install(m *BackgroundManager, restartedAt time.Time) (int, error) {
+	restored, err := j.Restore(m, restartedAt)
+	if err != nil {
+		return restored, err
+	}
+	m.SetPersistenceCallback(j.Callback())
+	m.resumeAdopted()
+	return restored, nil
+}
+
+// Dir is the journal's directory: where file-backed processes write their
+// output too (BackgroundManager.EnableFileOutput).
+func (j *BackgroundJournal) Dir() string { return j.dir }
 
 func (j *BackgroundJournal) recordPath(id string) string { return filepath.Join(j.dir, id+".json") }
 func (j *BackgroundJournal) outputPath(id string) string { return filepath.Join(j.dir, id+".out") }
@@ -155,6 +211,10 @@ func (j *BackgroundJournal) recordStart(process *BackgroundProcess) error {
 		ThreadID:       process.ThreadID,
 		KeepAlive:      process.KeepAlive,
 		GrantID:        process.GrantID,
+		StartTicks:     process.identity.Start,
+		PGID:           process.identity.PGID,
+		Cgroup:         process.tree.Cgroup(),
+		FileOutput:     process.fileOut != nil,
 	}
 	process.outputMu.RUnlock()
 
@@ -244,7 +304,8 @@ func (j *BackgroundJournal) writeRecordLocked(rec journalRecord) error {
 }
 
 func (j *BackgroundJournal) removeLocked(id string) {
-	for _, p := range []string{j.recordPath(id), j.outputPath(id), j.outputPath(id) + ".1"} {
+	files := outputFilePaths(j.dir, id)
+	for _, p := range []string{j.recordPath(id), j.outputPath(id), j.outputPath(id) + ".1", files[0], files[1]} {
 		if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			logging.Warn("Background journal: could not remove", "path", p, "error", err)
 		}
@@ -292,6 +353,11 @@ func (j *BackgroundJournal) loadRecordsLocked(protectRunning bool) ([]journalRec
 	for _, e := range entries {
 		name := e.Name()
 		base := strings.TrimSuffix(strings.TrimSuffix(name, ".1"), ".out")
+		for _, suffix := range []string{stdoutFileSuffix, stderrFileSuffix} {
+			if b, ok := strings.CutSuffix(name, suffix); ok {
+				base = b
+			}
+		}
 		if base == name || !journalIDPattern.MatchString(base) {
 			continue
 		}
@@ -310,18 +376,21 @@ func (j *BackgroundJournal) loadRecordsLocked(protectRunning bool) ([]journalRec
 		}
 		return records[a].ID < records[b].ID
 	})
+	// A handed-off record is always protected: its process is alive, handed
+	// to this very image to adopt (background_survive.go).
+	protected := func(rec journalRecord) bool {
+		return rec.Status == "running" && (protectRunning || rec.HandedOff)
+	}
 	room := journalMaxRecords
-	if protectRunning {
-		for _, rec := range records {
-			if rec.Status == "running" {
-				room--
-			}
+	for _, rec := range records {
+		if protected(rec) {
+			room--
 		}
 	}
 	kept := records[:0]
 	for _, rec := range records {
 		switch {
-		case protectRunning && rec.Status == "running":
+		case protected(rec):
 		case room > 0:
 			room--
 		default:
@@ -385,9 +454,31 @@ func (j *BackgroundJournal) Restore(m *BackgroundManager, restartedAt time.Time)
 
 	restored := 0
 	for _, rec := range records {
+		if m.holds(rec.ID) {
+			// This process's runtime started again (a self-update whose
+			// exec failed): the process is live in m, not lost.
+			continue
+		}
 		lines, rotated := j.readOutputLocked(rec.ID)
+		// A record the previous image handed off across its exec, whose
+		// process is still here and still this process's own, is adopted
+		// as it is: running, same id, output read on where it was.
+		var adopted *adoption
+		if rec.Status == "running" && rec.HandedOff {
+			a, err := adoptable(rec, j.dir)
+			if err != nil {
+				logging.Warn("Background journal: a handed-off process cannot be adopted", "id", rec.ID, "pid", rec.PID, "error", err)
+			}
+			adopted = a
+			// Adopted or not, the handoff is spent.
+			rec.HandedOff = false
+			if err := j.writeRecordLocked(rec); err != nil {
+				logging.Warn("Background journal: could not record an adoption", "id", rec.ID, "error", err)
+			}
+		}
 		var notes []string
-		if rec.Status == "running" {
+		if rec.Status == "running" && adopted == nil {
+			stopOrphan(rec)
 			notes = append(notes, fmt.Sprintf(
 				"[reliant] The daemon restarted at %s while this command was running, so it lost track of it: "+
 					"its exit status and any later output are unknown. Re-run it if you still need its result.",
@@ -428,11 +519,25 @@ func (j *BackgroundJournal) Restore(m *BackgroundManager, restartedAt time.Time)
 			}}, lines...)
 		}
 
+		if adopted != nil {
+			if m.adopt(rec, adopted, lines, seq) {
+				restored++
+			}
+			continue
+		}
 		if m.restoreRecord(rec, lines, seq) {
 			restored++
 		}
 	}
 	return restored, nil
+}
+
+// holds reports whether m has a process with id.
+func (m *BackgroundManager) holds(id string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.processes[id]
+	return ok
 }
 
 // appendOutputLocked appends lines to id's output file, rotating it first
@@ -464,6 +569,18 @@ func (j *BackgroundJournal) appendOutputLocked(id string, lines []OutputLineWith
 // registry. It has no command or process tree: it can be listed, read and
 // waited on (it has ended), never killed. False if m already has the id.
 func (m *BackgroundManager) restoreRecord(rec journalRecord, lines []OutputLineWithSeq, seq int64) bool {
+	process := restoredProcess(rec, lines, seq)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.processes[rec.ID]; exists {
+		return false
+	}
+	m.processes[rec.ID] = process
+	return true
+}
+
+// restoredProcess is rec as an ended process, its output lines up to seq.
+func restoredProcess(rec journalRecord, lines []OutputLineWithSeq, seq int64) *BackgroundProcess {
 	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	for _, line := range lines {
 		buf := stdout
@@ -500,11 +617,5 @@ func (m *BackgroundManager) restoreRecord(rec journalRecord, lines []OutputLineW
 	if process.combinedOutput == nil {
 		process.combinedOutput = make([]OutputLineWithSeq, 0)
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, exists := m.processes[rec.ID]; exists {
-		return false
-	}
-	m.processes[rec.ID] = process
-	return true
+	return process
 }

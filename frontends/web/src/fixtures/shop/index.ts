@@ -23,19 +23,20 @@
  * src/fixtures/scope.tsx): the same pack, never a copy of it.
  */
 
-import type { DescService } from "@bufbuild/protobuf";
+import type { DescMethod, DescService } from "@bufbuild/protobuf";
 import type { Transport } from "@connectrpc/connect";
 import { createMockTransport, type MockScenario } from "@reliantlabs/forge-web-runtime/mock-transport";
 
+import { AppDatabaseService } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import { StorageBrowserService } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 import { VulnerabilityService } from "@/gen/controlplane/services/vulnerability/v1/vulnerability_pb";
 import { CoverageSourceService } from "@/gen/reliant/v1/coverage_source_pb";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
-import { isDemoRead } from "../readOnly";
-import { assertPureFixturePack, createFixtureTransport, defineFixturePack, type CreateFixtureTransportOptions, type FixturePack } from "../transport";
+import { createFixtureTransport, defineFixturePack, type CreateFixtureTransportOptions, type FixturePack } from "../transport";
 import { configScenarioHandlers } from "./handlers/config";
 import { consoleScenarioHandlers } from "./handlers/console";
 import { coverageSourceHandlers } from "./handlers/coverageSource";
@@ -60,7 +61,7 @@ export const SHOP_READ_ONLY_MESSAGE = "This is a demo. Changes are turned off.";
  * over the shop pack takes these (createShopTransport, the dev previews'
  * `<FixturePreview serve={SHOP_SERVE}>`).
  */
-export const SHOP_SERVE = { now: demoNow, readOnly: isDemoRead, readOnlyMessage: SHOP_READ_ONLY_MESSAGE } satisfies Omit<CreateFixtureTransportOptions, "pack">;
+export const SHOP_SERVE = { now: demoNow, readOnly: true, readOnlyMessage: SHOP_READ_ONLY_MESSAGE } satisfies Omit<CreateFixtureTransportOptions, "pack">;
 
 /**
  * Every service the pack answers: the console's (DEMO_DEFAULT_SERVICES) and
@@ -95,6 +96,39 @@ export function shopScenario(fixtures?: ObservabilityApi, { scope = DEMO_SCOPE, 
   return { name: "shop", handlers: withIdPrefix(scoped, SHOP_PACK_SERVICES, idPrefix, new Set([scope.app])) as unknown as MockScenario["handlers"] };
 }
 
+/** One rpc the demo pack answers although its proto does not declare NO_SIDE_EFFECTS, and why that is safe. */
+export interface DemoPackAnswer {
+  method: DescMethod;
+  /** Why answering it from a fixture is safe: the side effect the server has, and that a fixture has none. */
+  reason: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEMO_PACK_ANSWERS: the demo pack's read-only exceptions (owner-approved,
+// 2026-11-24). Exactly control-plane#3523's seven data-browser reads, whose
+// only side effect is server-side: an audit_log row per call, and for
+// PreviewObject a minted presigned URL. A fixture writes no row and mints no
+// URL, so the Data and Storage pages read the shop pack through them.
+//
+// To keep the demo pack's `answers` empty instead, delete the one `answers:`
+// line in shopPack below: the demo then refuses all seven once
+// control-plane#3523 is re-vendored, and its Data and Storage pages show no
+// sample data.
+//
+// Never add a machine-waking read (FileSystemService, the WorktreeService git
+// reads) or anything outside these seven: __tests__/demoPackAnswers.test.ts
+// fails on either, and on an entry without a reason.
+// ─────────────────────────────────────────────────────────────────────────────
+export const DEMO_PACK_ANSWERS: readonly DemoPackAnswer[] = [
+  { method: StorageBrowserService.method.previewObject, reason: "server writes an audit row and mints a presigned URL per call; a fixture writes none and returns inline sample bytes or a fake same-origin URL" },
+  { method: StorageBrowserService.method.listObjects, reason: "server writes an audit row (and an activity event on open) per call; a fixture writes none" },
+  { method: StorageBrowserService.method.getObjectMetadata, reason: "server writes an audit row per call; a fixture writes none" },
+  { method: AppDatabaseService.method.browseTable, reason: "server writes an audit row per call; a fixture writes none" },
+  { method: AppDatabaseService.method.describeDatabase, reason: "server writes an audit row and an activity event per call; a fixture writes none" },
+  { method: AppDatabaseService.method.queryDatabase, reason: "server writes an audit row per call; a fixture writes none" },
+  { method: AppDatabaseService.method.queryDatabasePanel, reason: "server writes an audit row per call; a fixture writes none" },
+];
+
 export interface ShopPackOptions {
   /** The instant the story is told at (epoch ms). Default: the page load (the clock's first read). */
   now?: number;
@@ -121,12 +155,20 @@ function scenarioOptions({ app = DEMO_PROJECT, org = DEMO_SCOPE.org, idPrefix = 
 /**
  * The pack, its clock pinned to `now` when given, which must happen before
  * anything reads it (shopStory.ts pinClock). Serve it with the pack clock:
- * `createFixtureTransport({ pack: shopPack(), now: demoNow, readOnly })`.
+ * `createFixtureTransport({ pack: shopPack(), now: demoNow, readOnly: true })`.
+ *
+ * Its `answers` are DEMO_PACK_ANSWERS, so only a pure fixture transport may
+ * serve it (createShopTransport's passthrough serves shopScenario instead).
  */
 export function shopPack(options: ShopPackOptions = {}): FixturePack {
   if (options.now !== undefined) pinClock(options.now);
   const scenario = scenarioOptions(options);
-  return defineFixturePack({ name: "shop", scenario: () => shopScenario(undefined, scenario) });
+  return defineFixturePack({
+    name: "shop",
+    scenario: () => shopScenario(undefined, scenario),
+    // DEMO_PACK_ANSWERS, wired. Delete this one line to keep the demo pack's `answers` empty.
+    answers: DEMO_PACK_ANSWERS.map((a) => a.method),
+  });
 }
 
 export interface ShopTransportOptions extends ShopPackOptions {
@@ -142,15 +184,19 @@ export interface ShopTransportOptions extends ShopPackOptions {
   };
 }
 
-/** A transport serving the shop pack, read-only. */
+/**
+ * A transport serving the shop pack, read-only: only an rpc whose proto
+ * declares NO_SIDE_EFFECTS answers, plus DEMO_PACK_ANSWERS on the pure
+ * fixture path.
+ */
 export function createShopTransport({ passthrough, ...pack }: ShopTransportOptions = {}): Transport {
+  if (!passthrough) return createFixtureTransport({ ...SHOP_SERVE, pack: shopPack(pack) });
   const readOnly = { readOnly: SHOP_SERVE.readOnly, readOnlyMessage: SHOP_SERVE.readOnlyMessage };
-  const served = shopPack(pack);
-  if (!passthrough) return createFixtureTransport({ ...SHOP_SERVE, pack: served });
   // A fixture transport never reaches a backend (forge's neither), so the gateway rides forge's
-  // mock transport, over the same scenario. That path reaches live traffic, so a pack that answers
-  // writes from fixtures (`answers`) is refused on it.
-  assertPureFixturePack(served, "createShopTransport({ passthrough })");
+  // mock transport, over the same scenario, with forge's `readOnly: true` (NO_SIDE_EFFECTS only).
+  // That path reaches live traffic, so it serves the scenario WITHOUT DEMO_PACK_ANSWERS: the
+  // gateway never sees a read the proto does not declare side-effect free.
+  if (pack.now !== undefined) pinClock(pack.now);
   return createMockTransport({
     scenario: { ...shopScenario(undefined, scenarioOptions(pack)), passthrough: "first" },
     fallback: passthrough.fallback,

@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.10.1-0.20261125015708-6064bd5c9761
+forge_version: v1.10.1-0.20261125040729-73664c6256d3
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -227,6 +227,20 @@ ci:
         # control-plane #3282), and control-plane's weekly refresh writes
         # cmd/reliant/default.pgo, so a reliant pgo-refresh.yml would duplicate it.
         pgo-refresh: false
+        # Declined: reliant never deploys from Actions. control-plane deploys
+        # the reliant server images, and rc-train tags releases that
+        # release.yml builds (Electron, CLI).
+        deploy: false
+        # Declined: e2e runs in the release gate (`task test:e2e`, from
+        # scripts/release-gate.sh), not in a separate workflow.
+        e2e: false
+        # Declined: buf breaking runs in the merge gate
+        # (scripts/check-compat.sh proto, from scripts/merge-gate.sh).
+        proto-breaking: false
+        # Declined: reliant has no dependency-bump bot (no Dependabot, no
+        # Renovate). Bumps are hand-made PRs (the forge pin by
+        # dev-docs/forge-upgrade.md); ci.yml's vuln scan reports known CVEs.
+        dependabot: false
     vuln_scan:
         # Exemptions only: no scanner is named, so the derived default scanners
         # still run (forge's CIVulnConfig.UsesDefaultScanners).

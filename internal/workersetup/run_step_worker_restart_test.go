@@ -33,6 +33,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	userconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	reliantgrpc "github.com/reliant-labs/reliant/internal/grpc"
@@ -165,7 +166,7 @@ func newRestartRig(t *testing.T) *restartRig {
 	require.True(t, srv.ReadyForConnections(5*time.Second))
 	rig.natsURL = srv.ClientURL()
 	gatewayNATS := rig.connectNATS(t)
-	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{
+	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(rig.repo.ORM(), rig.repo, nil),
 		Logger: slog.Default(), Config: &typedconfig.Config{}, Projects: store.NewProjectExtStore(rig.repo.ORM()), Installs: store.NewProjectDaemonExtStore(rig.repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(rig.repo.ORM()), LocalModels: store.NewDaemonExtStore(rig.repo.ORM()), Repo: rig.repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(rig.repo.ORM()), Pools: store.NewMachinePoolExtStore(rig.repo.ORM()),
 		ResultPublisher: toolexec.NewToolResultPublisher(gatewayNATS),
 	})

@@ -395,6 +395,41 @@ func installStateToProto(state core.ProjectInstallState) reliantv1.ProjectInstal
 	}
 }
 
+// attachNestedRepos sets each checkout's nested_repos from rows (any order).
+func attachNestedRepos(checkouts []*reliantv1.ProjectDaemon, rows []*core.ProjectDaemonRepo) {
+	if len(rows) == 0 {
+		return
+	}
+	byPair := map[[2]string][]*reliantv1.ProjectDaemonNestedRepo{}
+	for _, r := range rows {
+		if r == nil {
+			continue
+		}
+		key := [2]string{r.ProjectID, r.DaemonID}
+		byPair[key] = append(byPair[key], nestedRepoToProto(r))
+	}
+	for _, pd := range checkouts {
+		pd.NestedRepos = byPair[[2]string{pd.ProjectId, pd.DaemonId}]
+	}
+}
+
+func nestedRepoToProto(r *core.ProjectDaemonRepo) *reliantv1.ProjectDaemonNestedRepo {
+	state := reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLING
+	switch r.State {
+	case core.NestedRepoInstalled:
+		state = reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_INSTALLED
+	case core.NestedRepoFailed:
+		state = reliantv1.ProjectInstallState_PROJECT_INSTALL_STATE_FAILED
+	}
+	return &reliantv1.ProjectDaemonNestedRepo{
+		RepoId:       r.RepoID,
+		Name:         r.Name,
+		RelativePath: r.RelativePath,
+		InstallState: state,
+		InstallError: r.Error,
+	}
+}
+
 // resolveProjectDaemonRow loads the project_daemons row for (project_id,
 // daemon_id) and the parent project, enforcing user ownership. Returns
 // NotFound when there's no clone of that project on that daemon.

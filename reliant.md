@@ -42,7 +42,7 @@ Every log — backend, browser console, Electron — is under `.forge/logs/dev/`
 
 ## Merging to main: GitHub's native merge queue
 
-Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, `go build`, scoped `forge lint`, generate/docs checks when their inputs changed), before you ask for a merge; the **release gate**, `task release:gate`, before every release.
+Two local gates (`dev-docs/merge-and-release-gates.md`): the **merge gate**, `task ci:merge` (`scripts/merge-gate.sh`: affected tests `-short` with direct importers, and transitive ones when they add at most 20 packages, `go build`, a compile of every test package, scoped `forge lint` plus its whole-project graph/closed-sets/proto-format lanes, generate/docs checks when their inputs changed), before you ask for a merge; the **release gate**, `task release:gate`, before every release.
 
 `main` merges only through GitHub's merge queue (ruleset "main: CI result +
 merge queue"; never bypass it, no `--admin`). It requires the `CI result` check,
@@ -121,9 +121,10 @@ Never run the unscoped `npx vitest` for a quick check: ~750 files, minutes under
   never the unscoped `task test` as a quick check (the whole module, web and
   electron).
 - **Two gate tiers.** The merge gate (and the merge queue's CI) runs only what the diff
-  reaches, `-short`, direct importers only. The release gate on main runs
+  reaches, `-short`: direct importers, plus the transitive ones when they add at
+  most 20 packages, and it compiles every test package. The release gate on main runs
   everything in full: `-race`, every slow test, integration, e2e. So a slow
-  test, or a package two imports away from your change, runs only there: when
+  test, or a package two imports away from a hub you changed, runs only there: when
   you touch code one covers, run its package with `task test -- ./<pkg>/...`.
   New and changed tests run 3x (`task test:flake`): a NEW test that fails on a
   repeat does not merge. A red main opens a `ci:main-red` issue. Details:

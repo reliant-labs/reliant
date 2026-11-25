@@ -103,6 +103,10 @@ func NewDBRepo(d DBRepoDeps) (*DBRepo, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 	logging.Info("Database initialized", "driver", driver)
+	// Every decision this process makes reads a caller's grants on a chat
+	// (chat_members) from this database, uncached, whichever edge it came
+	// through: its requests, its activities and its background alike.
+	authz.SetProcessGrants(store.NewChatMemberExtStore(repo.ORM()))
 	return &DBRepo{Repo: repo}, nil
 }
 
