@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
@@ -28,7 +29,7 @@ func (m liveIn) IsMember(_ context.Context, _, orgID string) (bool, bool, error)
 // records one failure and pauses the trigger, which matches nothing after.
 func TestDispatch_PausesATriggerWhoseCreatorLeftItsOrg(t *testing.T) {
 	f := newFixture(t)
-	f.dispatcher.WithAutoPause(triggers.NewAutoPause(f.repo, nil))
+	f.dispatcher.WithAutoPause(triggers.NewAutoPause(store.NewTriggerWritesExtStore(f.repo.ORM()), nil))
 	config, err := json.Marshal(Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
 	require.NoError(t, err)
 	acme, now := "acme", time.Now().UTC()
@@ -55,7 +56,7 @@ func TestDispatch_PausesATriggerWhoseCreatorLeftItsOrg(t *testing.T) {
 	// Paused, it no longer listens: the next finished run is not even
 	// recorded as an event for it.
 	chatID := f.humanRun("code-review")
-	created, err := runevents.EmitTerminal(ctx, f.repo, runevents.Terminal{
+	created, err := runevents.EmitTerminal(ctx, runevents.NewStore(f.repo.ORM()), runevents.Terminal{
 		ChatID: chatID, WorkflowID: chatID, WorkflowName: "code-review", RunID: "run-" + uuid.NewString(),
 		Outcome: core.RunEventFinished, Summary: "all done",
 	}, time.Now().UTC())

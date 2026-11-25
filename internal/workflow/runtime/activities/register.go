@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -256,11 +257,13 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	var approvals handlers.ApprovalResolveStore
+	var runEvents runevents.Store
 	if deps.Repo != nil {
 		approvals = approvalclose.NewFromRepo(deps.Repo)
+		runEvents = runevents.NewStore(deps.Repo.ORM())
 	}
 
-	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(handlers.ApprovalCreateDeps{Repo: deps.Repo, Approvals: approvalsLookup}))
+	v2.RegisterActivity(registry, handlers.NewApprovalCreateActivity(handlers.ApprovalCreateDeps{Repo: deps.Repo, Approvals: approvalsLookup, RunEvents: runEvents}))
 	v2.RegisterActivity(registry, handlers.NewAutomationApprovalActivity(deps.ToolsFactory).WithExecutionStore(deps.Repo, workspaceRows))
 	v2.RegisterActivity(registry, handlers.NewApprovalResolveActivity(approvals))
 
@@ -268,7 +271,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// QUESTION ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo, questionWriter, questionsByStep))
+	v2.RegisterActivity(registry, handlers.NewQuestionCreateActivity(deps.Repo, questionWriter, questionsByStep, runEvents))
 	v2.RegisterActivity(registry, handlers.NewQuestionResolveActivity(deps.Repo, questionWriter))
 
 	// ========================================================================
@@ -297,10 +300,12 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 
 	var runRecords handlers.RunRecords
 	var attention handlers.AttentionRecorder
+	var pauser handlers.TriggerPauser
 	var checkpoints handlers.WorkflowCheckpointStore
 	if deps.Repo != nil {
 		runRecords = handlers.NewRunRecords(deps.Repo.ORM())
 		attention = handlers.NewAttentionRecorder(deps.Repo.ORM())
+		pauser = store.NewTriggerWritesExtStore(deps.Repo.ORM())
 		checkpoints = store.NewWorkflowCheckpointExtStore(deps.Repo.ORM())
 	}
 	v2.RegisterActivity(registry, handlers.NewLoadWorkflowActivity(deps.Repo, workspaceRows))
@@ -308,7 +313,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, workspaceRows, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
-	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns, Attention: attention}))
+	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns, Attention: attention, RunEvents: runEvents, Pauser: pauser}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: deps.Repo, Mailbox: mailboxStore.resolver}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(handlers.UsageLimitWaitDeps{Store: deps.Repo, Waits: deps.ProviderBackoff, Threads: deps.Threads}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(handlers.TriggerCapacitySlotDeps{Slots: capacitySlots}))

@@ -120,7 +120,7 @@ func (p *AutoPause) RefuseNoOrgAccount(ctx context.Context, history FiringHistor
 	if !again {
 		return detail, nil
 	}
-	paused, err := p.store.PauseTrigger(ctx, t.ID, core.TriggerPausedNoOrgAccount)
+	paused, err := p.store.SystemPauseTrigger(ctx, t.ID, core.TriggerPausedNoOrgAccount)
 	if err != nil {
 		return "", fmt.Errorf("pause trigger %s that no organization account can run: %w", t.ID, err)
 	}
@@ -186,7 +186,7 @@ func (p *AutoPause) Refuse(ctx context.Context, t *core.Trigger) (core.TriggerEv
 	if p == nil {
 		return core.TriggerEventFailed, creatorLeftOrgNoPause, nil
 	}
-	paused, err := p.store.PauseTrigger(ctx, t.ID, core.TriggerPausedCreatorLeftOrg)
+	paused, err := p.store.SystemPauseTrigger(ctx, t.ID, core.TriggerPausedCreatorLeftOrg)
 	if err != nil {
 		return "", "", fmt.Errorf("pause trigger %s whose creator left its organization: %w", t.ID, err)
 	}
@@ -220,7 +220,7 @@ func (p *AutoPause) RefusePolicy(ctx context.Context, t *core.Trigger, refused *
 	if p == nil {
 		return detail, nil
 	}
-	paused, err := p.store.PauseTrigger(ctx, t.ID, core.TriggerPausedOrgPolicy)
+	paused, err := p.store.SystemPauseTrigger(ctx, t.ID, core.TriggerPausedOrgPolicy)
 	if err != nil {
 		return "", fmt.Errorf("pause trigger %s whose run its organization's policy refused: %w", t.ID, err)
 	}
@@ -264,7 +264,7 @@ func (p *AutoPause) IntegrationRefused(ctx context.Context, t *core.Trigger, int
 	if p == nil {
 		return true, nil
 	}
-	paused, err := p.store.PauseTrigger(ctx, t.ID, core.TriggerPausedOrgPolicy)
+	paused, err := p.store.SystemPauseTrigger(ctx, t.ID, core.TriggerPausedOrgPolicy)
 	if err != nil {
 		return true, fmt.Errorf("pause trigger %s whose integration its organization's policy does not allow: %w", t.ID, err)
 	}

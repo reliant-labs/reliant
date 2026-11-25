@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // countedOrgs is an OrgResolver for an org whose live-member count is
@@ -206,7 +207,7 @@ func TestAdoptAs_RestampsUnattendedFunding(t *testing.T) {
 	e.configure(t, func(d *Deps) { d.Orgs = members })
 	old, _ := e.made(t, e.definition(nil))
 	require.Equal(t, core.UnattendedFundingAny, old.UnattendedFunding, "made while the org was solo")
-	_, err := e.repo.PauseTrigger(context.Background(), old.ID, core.TriggerPausedCreatorLeftOrg)
+	_, err := store.NewTriggerWritesExtStore(e.repo.ORM()).SystemPauseTrigger(context.Background(), old.ID, core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 	old = e.row(t, old.ID)
 

@@ -189,7 +189,7 @@ func (f *fixture) finish(chatID string, outcome core.RunEventOutcome) *core.RunE
 	if chat.WorkflowName != nil {
 		name = *chat.WorkflowName
 	}
-	created, err := runevents.EmitTerminal(ctx, f.repo, runevents.Terminal{
+	created, err := runevents.EmitTerminal(ctx, runevents.NewStore(f.repo.ORM()), runevents.Terminal{
 		ChatID: chatID, WorkflowID: chatID, WorkflowName: name, RunID: "run-" + uuid.NewString(),
 		Outcome: outcome, Summary: "all done",
 	}, time.Now().UTC())

@@ -128,7 +128,7 @@ func TestDispatchWorkflowRunsTheActivityForItsEvent(t *testing.T) {
 func emitFinished(ctx context.Context, f *fixture, chatID string) (*core.RunEvent, error) {
 	f.t.Helper()
 	runID := "run-" + chatID
-	if _, err := runevents.EmitTerminal(ctx, f.repo, runevents.Terminal{
+	if _, err := runevents.EmitTerminal(ctx, runevents.NewStore(f.repo.ORM()), runevents.Terminal{
 		ChatID: chatID, WorkflowID: chatID, WorkflowName: "code-review", RunID: runID, Outcome: core.RunEventFinished,
 	}, time.Now().UTC()); err != nil {
 		return nil, err
