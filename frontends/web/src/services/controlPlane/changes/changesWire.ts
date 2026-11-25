@@ -310,7 +310,7 @@ export function deliveryStatusOf(v: unknown): ChangesDeliveryStatus {
     revision: num(r.revision),
     targets: arr(r.targets).map((x) => {
       const t = obj(x);
-      return { kind: DELIVERY_KINDS[str(t.kind)] ?? "unknown", name: str(t.name), location: str(t.location), revision: num(t.revision), deliveredAt: date(t.deliveredAt) };
+      return { kind: DELIVERY_KINDS[str(t.kind)] ?? "unknown", name: str(t.name), location: str(t.location), revision: num(t.revision), deliveredAt: date(t.deliveredAt), current: t.current === true };
     }),
   };
 }

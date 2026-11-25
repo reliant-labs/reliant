@@ -5,7 +5,7 @@
  * Whether a change's saved revision reached the environment's apps
  * (changeModel.ts deliveryStateOf), from GetChangesDeliveryStatus as the
  * wire reader hands it over (changesWire.ts deliveryStatusOf): the targets'
- * written revisions against the ENVIRONMENT's snapshot revision.
+ * authoritative current-snapshot ETag matches, not revision ordering.
  */
 
 import { describe, expect, it } from "vitest";
@@ -20,6 +20,7 @@ const target = (overrides: Partial<ChangeDeliveryTarget> = {}): ChangeDeliveryTa
   name: "shop-web",
   location: "/_forge/changes.json",
   revision: 42,
+  current: true,
   deliveredAt: new Date("2026-11-20T10:00:00Z"),
   ...overrides,
 });
@@ -36,7 +37,7 @@ describe("a change's delivery state", () => {
   });
 
   it("waits while any target has an older snapshot than the environment renders", () => {
-    expect(deliveryStateOf(status(42, [target(), target({ kind: "config-map", name: "env/reliant-forge-changes", revision: 41 })]))).toEqual({
+    expect(deliveryStateOf(status(42, [target(), target({ kind: "config-map", name: "env/reliant-forge-changes", revision: 41, current: false })]))).toEqual({
       kind: "waiting",
       delivered: 1,
       targets: 2,
@@ -53,9 +54,14 @@ describe("a change's delivery state", () => {
     expect(deliveryStateOf(status(42, [target({ deliveredAt: null })]))).toEqual({ kind: "delivered", targets: 1, at: null });
   });
 
-  it("compares with the environment's snapshot revision, never a change's own", () => {
-    // A target at revision 7 is behind an environment whose snapshot is at 42, whatever one change's revision is.
-    expect(deliveryStateOf(status(42, [target({ revision: 7 })])).kind).toBe("waiting");
+  it("waits for an ETag match even with an equal or higher target revision", () => {
+    for (const revision of [7, 42, 43]) {
+      expect(deliveryStateOf(status(42, [target({ revision, current: false })]))).toEqual({ kind: "waiting", delivered: 0, targets: 1 });
+    }
+  });
+
+  it("trusts a current ETag match rather than revision ordering", () => {
+    expect(deliveryStateOf(status(42, [target({ revision: 7 })])).kind).toBe("delivered");
   });
 
   it("reads the wire's protojson: int64 as strings, kinds by name, timestamps as RFC 3339", () => {
@@ -73,8 +79,8 @@ describe("a change's delivery state", () => {
       revision: 42,
       targets: [
         target(),
-        { kind: "config-map", name: "ns/reliant-forge-changes", location: "", revision: 41, deliveredAt: null },
-        { kind: "unknown", name: "", location: "", revision: 0, deliveredAt: null },
+        { kind: "config-map", name: "ns/reliant-forge-changes", location: "", revision: 41, deliveredAt: null, current: false },
+        { kind: "unknown", name: "", location: "", revision: 0, deliveredAt: null, current: false },
       ],
     });
     expect(deliveryStatusOf({})).toEqual({ revision: 0, targets: [] });

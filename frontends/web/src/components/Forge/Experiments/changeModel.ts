@@ -104,8 +104,9 @@ export function agoOf(since: Date | null, now: number = Date.now()): string {
  *               write. A page applies it on its next load; a pod after the
  *               ConfigMap sync plus the SDK's re-read. Not "seen".
  *
- * The comparison is with the ENVIRONMENT's snapshot revision, never the
- * change's own. A later edit to another change in the environment moves it
+ * The server's `current` flag compares each target's ETag with the
+ * ENVIRONMENT's current snapshot, never the change's own revision.
+ * A later edit to another change in the environment moves it
  * on, so "waiting" can outlast this change's own delivery: it says only that
  * the environment's latest changes are not everywhere yet.
  */
@@ -116,15 +117,15 @@ export type ChangeDeliveryState =
   | { kind: "delivered"; targets: number; at: Date | null };
 
 /** Whether one target has the environment's current snapshot. */
-export function targetDelivered(status: ChangesDeliveryStatus, target: ChangeDeliveryTarget): boolean {
-  return target.revision >= status.revision;
+export function targetDelivered(target: ChangeDeliveryTarget): boolean {
+  return target.current;
 }
 
 export function deliveryStateOf(status: ChangesDeliveryStatus | undefined): ChangeDeliveryState {
   if (!status) return { kind: "saved" };
   const targets = status.targets.length;
   if (targets === 0) return { kind: "no-targets" };
-  const reached = status.targets.filter((target) => targetDelivered(status, target));
+  const reached = status.targets.filter((target) => targetDelivered(target));
   if (reached.length < targets) return { kind: "waiting", delivered: reached.length, targets };
   const at = reached.reduce<Date | null>((latest, target) => (target.deliveredAt && (!latest || target.deliveredAt > latest) ? target.deliveredAt : latest), null);
   return { kind: "delivered", targets, at };

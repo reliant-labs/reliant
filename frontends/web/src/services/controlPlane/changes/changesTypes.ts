@@ -176,6 +176,8 @@ export interface ChangeDeliveryTarget {
   revision: number;
   /** When that content was first written there. */
   deliveredAt: Date | null;
+  /** Whether the target's ETag matches the environment's current snapshot. */
+  current: boolean;
 }
 
 /**

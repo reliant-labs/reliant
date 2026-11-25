@@ -8,7 +8,7 @@
  */
 
 import type { ReactNode } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -39,7 +39,13 @@ function fakeService(handlers: Record<string, FakeHandler>) {
   return installed;
 }
 
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-20T12:00:00Z"));
+});
+
 afterEach(() => {
+  vi.useRealTimers();
   installed?.restore();
   installed = null;
 });
@@ -53,6 +59,7 @@ const site = (revision: string, deliveredAt = minutesAgo(3)) => ({
   location: "/_forge/changes.json",
   revision,
   deliveredAt,
+  current: revision === "42" || revision === "43",
 });
 const workloads = (revision: string, deliveredAt = minutesAgo(5)) => ({
   kind: "CHANGE_DELIVERY_TARGET_KIND_CONFIG_MAP",
@@ -60,6 +67,7 @@ const workloads = (revision: string, deliveredAt = minutesAgo(5)) => ({
   location: "/etc/forge/changes/changes.json",
   revision,
   deliveredAt,
+  current: revision === "42" || revision === "43",
 });
 
 function renderCard() {
@@ -92,6 +100,14 @@ describe("a change's Delivery card", () => {
     const behind = screen.getByTestId("delivery-target-shop-prod/reliant-forge-changes");
     expect(within(behind).getByText("Waiting")).toBeInTheDocument();
     expect(behind).toHaveTextContent("Last written 5m ago");
+  });
+
+  it("shows Waiting on the card and target even when a non-current target has a higher revision", async () => {
+    fakeService({ GetChangesDeliveryStatus: () => ({ revision: "42", targets: [{ ...site("43"), current: false }] }) });
+    renderCard();
+
+    await waitFor(() => expect(screen.getByTestId("change-delivery-state")).toHaveTextContent("Waiting for delivery"));
+    expect(within(screen.getByTestId("delivery-target-shop-web")).getByText("Waiting")).toBeInTheDocument();
   });
 
   it("says no hosted app receives it when the environment has none", async () => {

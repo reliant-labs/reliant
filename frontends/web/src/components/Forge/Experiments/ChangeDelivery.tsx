@@ -107,7 +107,7 @@ function TargetList({ status }: { status: ChangesDeliveryStatus }) {
   return (
     <ul className="divide-y divide-border-subtle" aria-label="Delivery targets">
       {status.targets.map((target) => {
-        const delivered = targetDelivered(status, target);
+        const delivered = targetDelivered(target);
         return (
           <li key={`${target.kind}:${target.name}`} className="flex flex-wrap items-center gap-x-3 gap-y-0.5 py-1.5 text-ui" data-testid={`delivery-target-${target.name}`}>
             <Status tone={delivered ? "success" : "neutral"} label={delivered ? "Delivered" : "Waiting"} />
