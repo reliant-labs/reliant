@@ -5,6 +5,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -467,7 +469,7 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	}
 
 	// Load chat configuration
-	chat, err := a.repo.GetChat(ctx, rtx.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, rtx.ChatID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chat: %w", err)
 	}

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"github.com/reliant-labs/reliant/internal/projectcheckout"
@@ -306,7 +308,7 @@ func shellOutputTruncated(metadata string) bool {
 
 // resolveRunExecutorContext loads the IDs needed for remote execution from the DB.
 func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore, rows ProjectWorktreeReader, chatID string) (RunExecutorContext, error) {
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := chatviews.Of(repo).GetChat(ctx, chatID)
 	if err != nil {
 		return RunExecutorContext{}, fmt.Errorf("failed to get chat: %w", err)
 	}

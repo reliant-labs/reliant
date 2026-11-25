@@ -16,11 +16,9 @@ import (
 func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
 	wantErr := errors.New("attention storage unavailable")
 	calls := 0
-	store := &MockWorkflowStatusStore{
-		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
-			return &db.Chat{ID: "actual", LaunchKind: string(core.TriggerEventKindSchedule)}, nil
-		},
-	}
+	store := withChatWorkflowStatus{GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+		return &db.Chat{ID: "actual", LaunchKind: string(core.TriggerEventKindSchedule)}, nil
+	}, MockWorkflowStatusStore: &MockWorkflowStatusStore{}}
 	attention := &MockAttentionRecorder{
 		ApplyAttentionUpdateFunc: func(_ context.Context, u core.AttentionUpdate) (core.AttentionResult, error) {
 			calls++
