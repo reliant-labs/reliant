@@ -398,14 +398,26 @@ function MobileNewChatDraft({
     Boolean(runsOnDaemonId) &&
     canSetUpElsewhere(currentProject) &&
     ["absent", "failed"].includes(placement.stateOn(runsOnDaemonId ?? ""));
-  // What a set-up leaves on the machine the project is on now (an online one
-  // first), and how the chosen machine's nested repositories are landing.
-  const moveSourceId = canSetUpHere && currentProject
-    ? moveSourceDaemonIds(installRows, currentProject.id, runsOnDaemonId, (id) => {
-        const status = daemons.find((d) => d.daemonId === id)?.status;
-        return status === DaemonStatus.ACTIVE || status === DaemonStatus.IDLE;
-      })[0]
-    : undefined;
+  // What a set-up onto runsOnDaemonId leaves on the machine the project is
+  // on now (an online one first). Source and target are one pair: the source
+  // is chosen for this target, never another, and pinned when the set-up
+  // starts (setUpHere), so while the clone runs the list stays on the machine
+  // the clone leaves, not on whichever machine is online first by then.
+  const isOnlineDaemon = (id: string) => {
+    const status = daemons.find((d) => d.daemonId === id)?.status;
+    return status === DaemonStatus.ACTIVE || status === DaemonStatus.IDLE;
+  };
+  const [pinnedMove, setPinnedMove] = useState<{ projectId: string; targetId: string; sourceId: string } | null>(null);
+  const settingUpHere =
+    Boolean(runsOnDaemonId) && canSetUpElsewhere(currentProject) && placement.stateOn(runsOnDaemonId ?? "") === "setting_up";
+  const moveSourceId =
+    currentProject && runsOnDaemonId && (canSetUpHere || settingUpHere)
+      ? pinnedMove?.projectId === currentProject.id && pinnedMove.targetId === runsOnDaemonId
+        ? pinnedMove.sourceId
+        : canSetUpHere
+          ? moveSourceDaemonIds(installRows, currentProject.id, runsOnDaemonId, isOnlineDaemon)[0]
+          : undefined
+      : undefined;
   const runsOnNestedRepos = runsOnDaemonId
     ? installRows.find((row) => row.project_id === currentProject?.id && row.daemon_id === runsOnDaemonId)?.nested_repos
     : undefined;
@@ -440,6 +452,8 @@ function MobileNewChatDraft({
       return;
     }
     const { project } = choice;
+    const sourceId = moveSourceDaemonIds(installRows, project.id, setUpTarget.daemonId, isOnlineDaemon)[0];
+    setPinnedMove(sourceId ? { projectId: project.id, targetId: setUpTarget.daemonId, sourceId } : null);
     setSettingUpProject({ name: project.name, machine: setUpTarget.name });
     setError("");
     try {
@@ -461,6 +475,8 @@ function MobileNewChatDraft({
 
   const setUpHere = async () => {
     if (!currentProject || !runsOnDaemonId || settingUp) return;
+    // The list keeps showing what this set-up leaves, on this source.
+    setPinnedMove(moveSourceId ? { projectId: currentProject.id, targetId: runsOnDaemonId, sourceId: moveSourceId } : null);
     setSettingUp(true);
     setError("");
     try {

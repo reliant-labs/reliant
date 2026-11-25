@@ -42,6 +42,24 @@ describe("stayBehind", () => {
     );
   });
 
+  // Review B2: git reporting no change does not make the checkout clean when
+  // a repository with no remote, or a branch workspace, stays behind.
+  it("never says nothing is left behind while a no-remote repository or a branch workspace stays", () => {
+    const noRemote = stayBehind(
+      preview({ daemonName: "laptop", repos: [repo(), repo({ repoId: "n", name: "notes", relativePath: "notes", clonable: false })] }),
+      "x",
+    );
+    expect(noRemote.summary).toBe("Every repository's work is committed and pushed, but these stay on laptop:");
+    expect(noRemote.items.map((i) => i.text)).toEqual(["notes/: no remote, so it isn't cloned"]);
+
+    const workspace = stayBehind(
+      preview({ daemonName: "laptop", workspaces: [{ worktreeId: "w1", name: "fix-login", branch: "fix-login" } as never] }),
+      "x",
+    );
+    expect(workspace.summary).not.toMatch(/Nothing is left behind/);
+    expect(workspace.items.map((i) => i.text)).toEqual(["Branch workspace fix-login stays here with its chats"]);
+  });
+
   it("words each kind of left-behind work, per repository", () => {
     const { items } = stayBehind(
       preview({

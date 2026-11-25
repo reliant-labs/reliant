@@ -93,10 +93,12 @@ describe("StaysOnMachineList", () => {
     expect(screen.queryByRole("list")).toBeNull();
   });
 
-  it("still lists the workspaces when nothing else stays", () => {
+  // Review B2: a branch workspace stays, so the checkout is not "nothing left".
+  it("lists the workspaces, and never says nothing is left, when nothing else stays", () => {
     answer({ workspaces: [{ worktreeId: "w1", name: "spike", branch: "spike" } as never] });
     renderList();
-    expect(screen.getByTestId("stays-on-machine")).toHaveTextContent("Nothing is left behind on laptop");
+    expect(screen.getByTestId("stays-on-machine")).toHaveTextContent("Every repository's work is committed and pushed, but these stay on laptop:");
+    expect(screen.getByTestId("stays-on-machine")).not.toHaveTextContent("Nothing is left behind");
     expect(screen.getByRole("list")).toHaveTextContent("Branch workspace spike stays here with its chats");
   });
 

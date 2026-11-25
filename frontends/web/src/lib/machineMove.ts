@@ -115,10 +115,15 @@ export function stayBehind(preview: PreviewProjectMachineMoveResponse, fallbackN
   switch (preview.check) {
     case ProjectMachineMoveCheck.CHECKED:
       return {
+        // "Nothing is left behind" only when nothing is: a repository with no
+        // remote and a branch workspace stay too, even when git reports no
+        // change in any repository.
         summary:
-          changes.length === 0
+          items.length === 0
             ? `Nothing is left behind on ${machine}: every repository is committed and pushed.`
-            : `The clone takes what's pushed. These stay on ${machine}:`,
+            : changes.length === 0
+              ? `Every repository's work is committed and pushed, but these stay on ${machine}:`
+              : `The clone takes what's pushed. These stay on ${machine}:`,
         items,
       };
     case ProjectMachineMoveCheck.MACHINE_OFFLINE:
