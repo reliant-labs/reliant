@@ -953,11 +953,12 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 	return nil, &handlers.HostedDisabledError{Reason: d.reason}
 }
 
-// serverActions is the worker's Reliant server actions: on only when the
-// pipeline switch is, with the handlers this worker binds (none yet: each
-// pipeline task binds its own here). The dispatcher's resolver is
-// workersetup's, over the worker's database.
-func serverActions(pipeline *configv1.PipelineConfig) serveraction.Config {
+// WorkerServerActions is the worker's Reliant server actions, as
+// NewTemporalWorker hands them to workersetup: on only when the pipeline
+// switch is, with the handlers this worker binds (none yet: each pipeline
+// task binds its own here). The dispatcher's resolver is workersetup's, over
+// the worker's database.
+func WorkerServerActions(pipeline *configv1.PipelineConfig) serveraction.Config {
 	enabled := pipeline.GetEnabled()
 	if enabled {
 		slog.Default().Info("Reliant server actions are ON (pipeline.enabled)")
@@ -1006,7 +1007,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
-		ServerActions:          serverActions(d.Pipeline),
+		ServerActions:          WorkerServerActions(d.Pipeline),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},

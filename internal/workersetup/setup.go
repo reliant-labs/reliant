@@ -491,6 +491,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	out := newWorker(w, fatal)
+	out.serverActions = activityDeps.ServerActions
 	// Rejected org keys whose notice never started (a Temporal outage at the
 	// rejection), and paused automations whose email was never delivered, are
 	// started here, where the notices' workflows run.
