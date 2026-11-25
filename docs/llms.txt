@@ -12,7 +12,7 @@ Every page below is markdown: each link ends in `.md`, and appending `.md` to an
 - [Reliant quick start: run your first AI agent workflow](https://docs.reliantlabs.io/getting-started/quick-start.md): Sign in to Reliant, set up a machine and a model, chat with the default agent, run a built-in multi-agent workflow and write your own in YAML.
 - [Forge quick start: build and deploy a Go + React app](https://docs.reliantlabs.io/forge/quick-start.md): Build a Go and React app with Reliant and Forge, run it locally and deploy it to a URL on Reliant hosting. No account needed with forge env deploy --claimable.
 - [Reliant hosting: services, workers, static sites and Postgres](https://docs.reliantlabs.io/hosting/overview.md): What Reliant hosting runs for a forge project, what it costs, what a queued deploy means, and what it refuses
-- [Limits: what Reliant hosting does and does not do](https://docs.reliantlabs.io/hosting/limits.md): Every limit in one place: the no-account claimable deploy (72 hours, one service, 125m CPU), the free static site (1 GiB), what needs billing, no autoscaling, no hosted cron, one region (us-central1), Next.js static export only, and telemetry retention.
+- [Limits: what Reliant hosting does and does not do](https://docs.reliantlabs.io/hosting/limits.md): Every limit in one place: the no-account claimable deploy (72 hours, one service, 125m CPU), free static hosting (any number of sites in one organization per person, 1 GiB each, 10 GiB in total), what needs billing, no autoscaling, no hosted cron, one region (us-central1), Next.js static export only, and telemetry retention.
 
 ## Forge: start here
 

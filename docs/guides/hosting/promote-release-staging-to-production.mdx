@@ -12,7 +12,7 @@ This works because a forge release records the digest of every artifact once, an
 ## Before you begin
 
 - A forge project with `staging` and `prod` both bound to [Reliant hosting](/hosting/overview), and a release already deployed to `prod` once. [Deploy a Go API with managed Postgres](/guides/hosting/deploy-go-api-managed-postgres) gets you there.
-- Billing on your organization. One static site is free, and each environment's site counts, so a second hosted environment needs billing. Without it the deploy is queued with exit 7 and prints the billing link.
+- An organization that can host both environments. Static sites are free, any number of them, in your free hosting organization (one per person); a backend or database, or a site in another organization, needs app hosting billing. Without it the deploy is queued with exit 7 and prints the billing link.
 - Forge v1.6.1 or later (`reliant forge --version` inside the project).
 
 <Steps>
