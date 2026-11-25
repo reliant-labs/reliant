@@ -227,7 +227,7 @@ A [deploy without an account](/forge/deploy-without-an-account) tells our server
 - **Its auth mode**, `managed` when the app declares Reliant's managed sign-in and `none` otherwise.
 - **The forge install ID**, only while forge telemetry is on. It is the same random ID the CLI events above carry, which lets us connect a deploy to the install that made it.
 
-We record these with that deploy's funnel events (started, live, claim page viewed, claimed, suspended, expired) in our own product-events store, for up to 400 days. These are fixed values, never the app's name, files or code. Turning forge telemetry off leaves the install ID out; the template kind and auth mode are still part of a no-account deploy.
+We record these with that deploy's funnel events (started, live, claim page viewed, claimed, suspended, expired) in our own product-events store, for up to 90 days. These are fixed values, never the app's name, files or code. Turning forge telemetry off leaves the install ID out; the template kind and auth mode are still part of a no-account deploy.
 
 ### Visitors to apps you host with us
 
@@ -333,8 +333,8 @@ Go to **Settings → Account → Delete account**, or email support@reliantlabs.
 | Insights daily totals per member | Until you delete your account, or the project they belong to |
 | Insights daily totals per organization (no account IDs) | As long as the organization uses Reliant |
 | Analytics events | Up to 90 days |
-| Funnel events of no-account (`--claimable`) deploys, with the template kind, auth mode and forge install ID | Up to 400 days |
-| forge CLI usage events (first run, refused no-account deploy), with the random install ID | Up to 400 days |
+| Funnel events of no-account (`--claimable`) deploys, with the template kind, auth mode and forge install ID | Up to 90 days |
+| forge CLI usage events (first run, refused no-account deploy), with the random install ID | Up to 90 days |
 | Usage data about the visitors to a hosted app, including the daily visitor code | Up to 90 days by default, or the shorter period the app is set to |
 | A day's random value for the daily visitor code | Held in memory only and deleted shortly after its day ends (never more than 48 hours). Never written to disk or to a backup |
 | Crash and error data in our telemetry store | 30 days |
