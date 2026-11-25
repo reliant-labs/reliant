@@ -389,6 +389,8 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Config:        d.Config,
 		Repo:          d.DB,
 		Chats:         chataccess.NewFromORM(d.DB.ORM()),
+		ChatRows:      store.NewChatExtStore(d.DB.ORM()),
+		ChatViews:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
 		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),

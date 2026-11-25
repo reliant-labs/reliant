@@ -216,6 +216,21 @@ type Service interface {
 	// control-plane's code (unavailable: no catalog could be read).
 	GetModelListPrices(ctx context.Context, refs []ModelRef) ([]ModelListPrice, time.Time, error)
 
+	// GetConversationTrace reads one page of a chat's spans from control-plane's
+	// ConversationTraceInternalService (tenant zero's span store;
+	// dev-docs/design/agent-analytics.md §2.3): the spans whose org.id is
+	// q.OrgID and whose gen_ai.conversation.id is q.ConversationID, started in
+	// [q.Start, q.End), oldest first, allowlisted attributes only. Signed with
+	// this process's internal-service identity; control-plane checks nothing
+	// about people, so the caller MUST have decided the person may read the
+	// chat (authz.ReadChatAccess) and pass only that chat's own id and org.
+	// Errors: ErrConversationTraceUnsupported when the control plane has no
+	// such service or this adapter cannot sign; otherwise a
+	// *ProjectOrgMoveError carrying control-plane's code
+	// (resource_exhausted: rate limited; unavailable / failed_precondition:
+	// no span store there).
+	GetConversationTrace(ctx context.Context, q ConversationTraceQuery) (ConversationTrace, error)
+
 	// HasCoverageBlob asks whether a retained coverage report of the forge
 	// project names the git blob (TestsService.HasCoverageBlob), as the
 	// caller: token is their own bearer, so control-plane's tests:read and
