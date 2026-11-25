@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -43,8 +42,7 @@ func scanProcesses() (procSnapshot, error) {
 // its age rule rather than judge from a partial picture. Another user's
 // process cannot create this user's work directories and its descriptors are
 // not ours to read; nor are a non-dumpable process's, which the kernel hands
-// to root (go, the toolchain and what they build and run are dumpable), or
-// those of one holding capabilities we lack (withheldByCapabilities). Such
+// to root (go, the toolchain and what they build and run are dumpable). Such
 // a process contributes what /proc shows everyone: its command line and,
 // when it is a go command or a linker, its start time.
 //
@@ -189,59 +187,15 @@ func (p *procInfo) read(dir string, euid int) error {
 	p.cmdline = cmdline
 	p.refs.addRefs(string(cmdline))
 	if own {
-		if p.exe, err = readRefs(&p.refs, dir); err != nil && !withheldByCapabilities(dir, err) {
+		exe, err := readRefs(&p.refs, dir)
+		if err != nil {
+			// Extra capabilities can explain a denial, but cannot prove
+			// this process holds no work directories. Keep the scan incomplete.
 			return fmt.Errorf("(%s): %w", p.comm, err)
 		}
+		p.exe = exe
 	}
 	return nil
-}
-
-// withheldByCapabilities reports whether err is the kernel withholding a
-// process of this user's references because the process holds capabilities
-// this one lacks: reading another process's cwd, environ or descriptors needs
-// ptrace read access, which also requires the target's permitted set to be
-// within the reader's. Such a process is treated like a non-dumpable one: it
-// contributes its command line. It did not come from a command the daemon ran
-// (those inherit its capabilities), and every host running a `systemd --user`
-// has one: the user manager keeps CAP_WAKE_ALARM, so reading its cwd is
-// EACCES. Failing the scan on it meant no pass on such a host ever proved a
-// work directory dead (ovh-build-1, 2026-11-24: every go_work_dirs pass
-// "unproven" on `pid 20256: (systemd): reading cwd: permission denied`, while
-// the daemon's GOTMPDIR roots grew past 24 GiB).
-//
-// Anything else, including a capability set that cannot be read, is still a
-// /proc the scan cannot trust.
-func withheldByCapabilities(dir string, err error) bool {
-	if !errors.Is(err, fs.ErrPermission) {
-		return false
-	}
-	mine, ok := callerCapPrm()
-	if !ok {
-		return false
-	}
-	theirs, ok := readCapPrm(filepath.Join(dir, "status"))
-	return ok && theirs&^mine != 0
-}
-
-// callerCapPrm is this process's permitted capability set.
-var callerCapPrm = sync.OnceValues(func() (uint64, bool) {
-	return readCapPrm(filepath.Join(procRoot, "self", "status"))
-})
-
-// readCapPrm reads the permitted capability set (CapPrm) from a
-// /proc/<pid>/status file, which every user can read.
-func readCapPrm(status string) (uint64, bool) {
-	b, err := os.ReadFile(status)
-	if err != nil {
-		return 0, false
-	}
-	for _, line := range strings.Split(string(b), "\n") {
-		if v, ok := strings.CutPrefix(line, "CapPrm:"); ok {
-			caps, err := strconv.ParseUint(strings.TrimSpace(v), 16, 64)
-			return caps, err == nil
-		}
-	}
-	return 0, false
 }
 
 // readRefs adds every reference one of this user's processes holds to s: its

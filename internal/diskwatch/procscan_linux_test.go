@@ -3,9 +3,9 @@ package diskwatch
 
 import (
 	"errors"
-	"fmt"
 	"go/build"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -243,62 +243,49 @@ func TestScanProcRoot_UnreadableProcessFailsTheScan(t *testing.T) {
 	}
 }
 
-// A process of this user's that holds capabilities the scanner lacks (a
-// `systemd --user`, which keeps CAP_WAKE_ALARM) has its references withheld
-// by the kernel, EACCES. The scan treats it like a non-dumpable process and
-// still proves; an EACCES from a process with no such capabilities, or whose
-// capabilities cannot be read, still fails it.
-func TestScanProcRoot_ProcessWithMoreCapabilitiesIsWithheldNotUnreadable(t *testing.T) {
+// Capability masks explain a refusal, not the absence of work references.
+// Even a process with extra capabilities must fail an incomplete scan.
+func TestScanProcRoot_CapabilitiesDoNotExcuseUnreadableReferences(t *testing.T) {
 	if os.Geteuid() == 0 {
-		t.Skip("root reads a mode-000 file, so EACCES cannot be made here")
-	}
-	mine, ok := callerCapPrm()
-	if !ok {
-		t.Skip("this process's capabilities are not readable from /proc/self/status")
-	}
-	extra := ^mine & (1<<41 - 1)
-	if extra == 0 {
-		t.Skip("this process holds every capability")
+		t.Skip("root reads a mode-000 directory, so the refusal cannot be staged")
 	}
 	for _, tc := range []struct {
-		name   string
-		status string // "" writes no status file
-		ok     bool
+		name, theirs string
 	}{
-		{"more capabilities", fmt.Sprintf("Name:\tsystemd\nCapInh:\t%016x\nCapPrm:\t%016x\n", extra, extra), true},
-		{"no more capabilities", fmt.Sprintf("Name:\tsleep\nCapPrm:\t%016x\n", mine), false},
-		{"capabilities unreadable", "", false},
-		{"malformed capabilities", "Name:\tsystemd\nCapPrm:\tzz\n", false},
+		{"permitted extra capabilities", "ffffffffffffffff"},
+		{"permitted no capabilities", "0000000000000000"},
+		{"no readable status", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
 			fakeProc(t, root, 10, "go", "/tmp/go-build1")
 			dir := fakeProc(t, root, 11, "systemd", "/")
-			if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte("/usr/lib/systemd/systemd\x00--user\x00/tmp/go-build2\x00"), 0o644); err != nil {
+			if tc.theirs != "" {
+				writeStatus(t, filepath.Join(dir, "status"), tc.theirs)
+			}
+			fd := filepath.Join(dir, "fd")
+			if err := os.Chmod(fd, 0); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Chmod(filepath.Join(dir, "environ"), 0); err != nil {
-				t.Fatal(err)
-			}
-			if tc.status != "" {
-				if err := os.WriteFile(filepath.Join(dir, "status"), []byte(tc.status), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
+			t.Cleanup(func() { _ = os.Chmod(fd, 0o755) })
+
 			s, err := scanProcRoot(root, os.Geteuid(), time.Unix(0, 0))
-			if !tc.ok {
-				if err == nil {
-					t.Fatal("a scan that could not read one of this user's processes succeeded")
-				}
-				return
+			if !errors.Is(err, fs.ErrPermission) {
+				t.Fatalf("scan error = %v, want permission denied", err)
 			}
-			if err != nil {
-				t.Fatalf("a process withheld for its capabilities failed the scan: %v", err)
-			}
-			if !s.names["go-build1"] || !s.names["go-build2"] || len(s.goStarts) != 1 {
-				t.Fatalf("scan = %+v, want go-build1 and go-build2 (its command line) referenced and one go command", s)
+			if len(s.names) != 0 || len(s.goStarts) != 0 {
+				t.Fatalf("incomplete scan returned partial snapshot: %+v", s)
 			}
 		})
+	}
+}
+
+// writeStatus writes a /proc status file permitting the capabilities in mask.
+func writeStatus(t *testing.T, path, mask string) {
+	t.Helper()
+	body := "Name:\tx\nCapInh:\t0000000000000000\nCapPrm:\t" + mask + "\nCapEff:\t" + mask + "\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

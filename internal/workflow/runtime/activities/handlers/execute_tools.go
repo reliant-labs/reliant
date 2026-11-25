@@ -139,6 +139,13 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 
 	// Load worktree (defaults to project path if not set or not found)
 	wt, threadBound, err := a.loadWorktreeInfo(ctx, chat, project, thread)
+	if errors.Is(err, errThreadWorkspaceArchived) && !tools.NeedsMachine(toolName) {
+		// A tool that never touches the machine (spawn_send, report_bug,
+		// load_tool, the GitHub tools) has no use for the workspace, so an
+		// agent resumed after its workspace was archived can still report
+		// and message its parent. It runs as an unbound thread would.
+		wt, threadBound, err = &rctx.WorktreeInfo{}, false, nil
+	}
 	if err != nil {
 		return nil, err.Error()
 	}
@@ -153,6 +160,10 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 
 	return tec, ""
 }
+
+// errThreadWorkspaceArchived: the thread is bound to a workspace that was
+// archived. Machine tools are refused; the rest run without it.
+var errThreadWorkspaceArchived = errors.New("workspace archived")
 
 // loadWorktreeInfo loads the call's branch worktree, if it runs in one.
 //
@@ -182,7 +193,7 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 		return &rctx.WorktreeInfo{}, false, nil
 	}
 	if threadBound && worktree.DeletedAt != nil {
-		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there", worktree.Name)
+		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there: %w", worktree.Name, errThreadWorkspaceArchived)
 	}
 
 	// The main row mirrors projects.path: no path here. A thread bound to

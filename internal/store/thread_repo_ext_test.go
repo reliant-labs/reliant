@@ -286,3 +286,56 @@ func TestThreadCascadeAndReap(t *testing.T) {
 		t.Fatalf("after Repo cascade failed = %v, want mid and leaf (a paused stop is not terminal)", failed)
 	}
 }
+
+// A sub-agent whose spawn row completed can be given a turn by its live
+// parent run: a message to it revives the thread, and the root drives the
+// turn without reviving the spawn's row. The reaper must not end that thread
+// while any ancestor is live (prod 179b8343); once the ancestors have ended,
+// it reaps as before.
+func TestReapOrphanedThreadsWaitsForLiveAncestors(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	if err := store.InsertChat(ctx, env.ORM, convChat("live-anc", at)); err != nil {
+		t.Fatalf("InsertChat: %v", err)
+	}
+	// root (active) -> mid (completed) -> leaf (completed), each with a
+	// running thread: the leaf's thread was revived for a turn the root runs.
+	for _, w := range []struct{ id, parent string }{{"la-root", ""}, {"la-mid", "la-root"}, {"la-leaf", "la-mid"}} {
+		var parent any
+		if w.parent != "" {
+			parent = w.parent
+		}
+		mustExecConv(t, env, `INSERT INTO workflows (id, parent_id, chat_id, workflow_name, thread, created_at) VALUES ($1, $2, 'live-anc', 'wf', $1, NOW())`, w.id, parent)
+		if _, err := store.InsertThread(ctx, env.ORM, &core.Thread{ID: "t-" + w.id, ChatID: "live-anc", WorkflowID: convStr(w.id), CreatedAt: at}); err != nil {
+			t.Fatalf("InsertThread(%s): %v", w.id, err)
+		}
+	}
+	mustExecConv(t, env, `UPDATE workflows SET state = 2 WHERE id = 'la-root'`)
+	mustExecConv(t, env, `UPDATE workflows SET state = 3, stop_reason = 1 WHERE id IN ('la-mid', 'la-leaf')`)
+
+	for _, rootState := range []string{"state = 2", "state = 3, stop_reason = 3"} {
+		mustExecConv(t, env, `UPDATE workflows SET `+rootState+` WHERE id = 'la-root'`)
+		reaped, err := store.ReapOrphanedThreads(ctx, env.ORM)
+		if err != nil {
+			t.Fatalf("ReapOrphanedThreads (root %s): %v", rootState, err)
+		}
+		if len(reaped) != 0 {
+			t.Fatalf("ReapOrphanedThreads (root %s) = %+v, want none: the root is live", rootState, reaped)
+		}
+	}
+
+	mustExecConv(t, env, `UPDATE workflows SET state = 3, stop_reason = 4 WHERE id = 'la-root'`)
+	reaped, err := store.ReapOrphanedThreads(ctx, env.ORM)
+	if err != nil {
+		t.Fatalf("ReapOrphanedThreads: %v", err)
+	}
+	got := map[string]core.ThreadStatus{}
+	for _, r := range reaped {
+		got[r.ThreadID] = r.Status
+	}
+	want := map[string]core.ThreadStatus{"t-la-root": core.ThreadStatusCancelled, "t-la-mid": core.ThreadStatusCompleted, "t-la-leaf": core.ThreadStatusCompleted}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ReapOrphanedThreads once the root ended = %v, want %v", got, want)
+	}
+}
