@@ -60,7 +60,7 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces: string[] }> = {
   'reliant.v1.ProjectService/TouchProject': {
     why: 'projectStore touches the selected project on every selection, fire-and-forget (hooks/project-queries touchProject; reliant#3458)',
     surfaces: [
-      'home-sidebar', 'chat-detailed', 'chat-filter-heading', 'chat-list', 'chat', 'chat-tools', 'chat-failure',
+      'home-sidebar', 'chat-detailed', 'chat-filter-heading', 'chat-list', 'chat', 'chat-tools', 'chat-failure', 'chat-agents',
       'mobile-new-chat', 'workflows', 'runs', 'shell-workflows', 'shell-connectors-mcp', 'shell-agents-no-sandbox',
       'shell-setup-guide',
     ],
