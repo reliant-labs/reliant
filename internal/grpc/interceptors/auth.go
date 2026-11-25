@@ -12,7 +12,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -144,29 +143,28 @@ func NewAuthInterceptor(settings auth.Settings, publicProcedures map[string]stru
 
 // authenticateRequest validates the auth token and returns the authenticated context and claims.
 // Returns an error if authentication fails.
-func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure string, header func(string) string) (context.Context, *auth.JWTClaims, error) {
+func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure string, header http.Header) (context.Context, *auth.JWTClaims, error) {
 	// Check if this method is public
 	if _, public := i.publicProcedures[procedure]; public {
 		return ctx, nil, nil
 	}
 
-	// Extract token from Authorization header
-	authHeader := header("Authorization")
+	// The Authorization header when the request has one, else the sign-in
+	// session cookie (auth.CredentialFromHeader).
+	tokenString, channel := i.authenticator.CredentialFrom(header)
 	// Rejections log at DEBUG: forge's LoggingInterceptor already records the
 	// Unauthenticated RPC ("rpc failed", procedure, request_id) once at WARN.
-	if authHeader == "" {
+	if tokenString == "" {
+		if channel == authn.ChannelAuthorization {
+			logging.DebugContext(ctx, "[gRPC Auth] Invalid authorization header format",
+				"procedure", procedure)
+			return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid authorization header format"))
+		}
 		logging.DebugContext(ctx, "[gRPC Auth] Missing authorization token",
 			"procedure", procedure)
 		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("missing authorization token"))
 	}
-
-	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-	if tokenString == authHeader {
-		logging.DebugContext(ctx, "[gRPC Auth] Invalid authorization header format",
-			"procedure", procedure)
-		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid authorization header format"))
-	}
-	return i.authenticateCredential(ctx, procedure, tokenString, authn.ChannelAuthorization)
+	return i.authenticateCredential(ctx, procedure, tokenString, channel)
 }
 
 // authenticateCredential checks credential, which arrived on channel, and
@@ -178,8 +176,10 @@ func (i *AuthInterceptor) authenticateCredential(ctx context.Context, procedure,
 	// RPC is refused by that handler (TokenService.CreateToken), not here.
 	isAccessToken := auth.IsAccessTokenFormat(tokenString)
 	var verified *auth.Verified
-	var err error
-	if isAccessToken {
+	err := i.authenticator.CheckChannel(tokenString, channel)
+	switch {
+	case err != nil:
+	case isAccessToken:
 		if i.accessTokens == nil {
 			logging.WarnContext(ctx, "[gRPC Auth] access token presented but access-token auth is not enabled",
 				"procedure", procedure)
@@ -191,7 +191,7 @@ func (i *AuthInterceptor) authenticateCredential(ctx context.Context, procedure,
 		if err == nil {
 			verified = auth.VerifiedAccessToken(claims, principal, channel)
 		}
-	} else {
+	default:
 		verified, err = i.authenticator.Verify(ctx, tokenString, channel)
 	}
 	if err != nil {
@@ -260,11 +260,11 @@ func (i *AuthInterceptor) AuthenticateHTTP(r *http.Request) (string, error) {
 	procedure := "http:" + r.URL.Path
 	var ctx context.Context
 	var err error
-	if r.Header.Get("Authorization") == "" && r.URL.Query().Get("token") != "" {
+	if tok, ch := i.authenticator.CredentialFrom(r.Header); tok == "" && ch != authn.ChannelAuthorization && r.URL.Query().Get("token") != "" {
 		// A query parameter is no header: where it came from is unknown.
 		ctx, _, err = i.authenticateCredential(r.Context(), procedure, r.URL.Query().Get("token"), authn.ChannelUnknown)
 	} else {
-		ctx, _, err = i.authenticateRequest(r.Context(), procedure, r.Header.Get)
+		ctx, _, err = i.authenticateRequest(r.Context(), procedure, r.Header)
 	}
 	if err != nil {
 		return "", err
@@ -298,7 +298,7 @@ func (i *AuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		procedure := req.Spec().Procedure
 
-		ctx, claims, err := i.authenticateRequest(ctx, procedure, req.Header().Get)
+		ctx, claims, err := i.authenticateRequest(ctx, procedure, req.Header())
 		if err != nil {
 			return nil, err
 		}
@@ -347,7 +347,7 @@ func (i *AuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		procedure := conn.Spec().Procedure
 
-		ctx, claims, err := i.authenticateRequest(ctx, procedure, conn.RequestHeader().Get)
+		ctx, claims, err := i.authenticateRequest(ctx, procedure, conn.RequestHeader())
 		if err != nil {
 			return err
 		}

@@ -64,3 +64,27 @@ RETURNING id, project_id, daemon_id, workflows_json, presets_json, user_workflow
 	}
 	return &row, nil
 }
+
+// HasWorkflowCatalogSnapshot checks existence without loading the catalog bytes.
+// Cached content must still respect deletion and the caller's transaction view.
+func HasWorkflowCatalogSnapshot(ctx context.Context, db orm.Context, id string) (bool, error) {
+	var found bool
+	err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM workflow_catalog_snapshots WHERE id = ?)`, id).Scan(ctx, &found)
+	if err != nil {
+		return false, fmt.Errorf("failed to check workflow catalog snapshot %s: %w", id, err)
+	}
+	return found, nil
+}
+
+// TouchWorkflowCatalogSnapshot marks a pinned catalog used now without
+// reading it back, reporting whether one of that id is stored: the bump a
+// reader holding the catalog already (db.Repo's pinned catalog cache) owes
+// the retention prune.
+func TouchWorkflowCatalogSnapshot(ctx context.Context, db orm.Context, id string, now time.Time) (bool, error) {
+	res, err := db.Exec(ctx, `UPDATE workflow_catalog_snapshots SET last_used_at = $1 WHERE id = $2`, now, id)
+	if err != nil {
+		return false, fmt.Errorf("failed to mark workflow catalog snapshot %s used: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}

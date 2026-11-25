@@ -35,7 +35,7 @@ func (s *Service) ListAsyncQuestions(
 	// Serves viewers of a shared chat, as read-only cards.
 	ctx = authz.WithViewerReads(ctx)
 
-	chat, err := s.deps.Repo.GetChatRow(ctx, req.Msg.ChatId)
+	chat, err := s.deps.ChatRows.GetChatRow(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
