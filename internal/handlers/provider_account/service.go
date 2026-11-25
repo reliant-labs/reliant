@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
@@ -36,7 +37,6 @@ type Accounts interface {
 
 // Store is the slice of the repository this service uses; *db.Repo satisfies it.
 type Store interface {
-	GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*db.ChatRow, error)
 	GetRootThread(ctx context.Context, chatID string) (*db.Thread, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
@@ -56,6 +56,9 @@ type Deps struct {
 	Config *config.Config
 	// Store holds the chat and settings reads and the refetch a write pushes.
 	Store Store
+	// Chats reads a chat the caller may write, the owner and org checks in one
+	// call (chataccess).
+	Chats chataccess.Service
 	// Accounts holds accounts, their limit state and thread assignments
 	// (credentials/provideraccounts).
 	Accounts Accounts

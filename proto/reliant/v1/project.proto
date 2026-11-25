@@ -1254,8 +1254,10 @@ message ProjectOrgMoveEffects {
   // Triggers that will stay paused until someone sets them up again in the
   // target organization.
   repeated ProjectOrgMoveTriggerSetup triggers_needing_setup = 5;
-  // The project and chats shared with the source organization: each is made
-  // private, and its viewers there lose it. Share again in the target.
+  // The project and chats shared with the source organization, and the
+  // people granted access to one of its chats: each share is made private and
+  // each grant removed, so its viewers and members there lose it. Share again
+  // in the target.
   int32 shares_to_clear = 6;
   // Triggers bound to one of the source organization's connections (its
   // Slack bot, say): the binding is cleared, never carried.

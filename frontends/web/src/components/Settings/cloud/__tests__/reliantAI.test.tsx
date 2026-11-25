@@ -20,14 +20,6 @@ vi.mock('@/services/controlPlane/reliantAI', () => ({
   get reliantAIAvailable() {
     return mocks.available
   },
-  // Async wrappers — never invoked because the hooks are mocked, but present
-  // so the import surface matches the real module.
-  listLLMKeys: vi.fn(),
-  listAvailableModels: vi.fn(),
-  getLLMSpend: vi.fn(),
-  createManagedLLMKey: vi.fn(),
-  revokeLLMKey: vi.fn(),
-  rotateLLMKey: vi.fn(),
 }))
 
 const query = (data?: unknown) => ({

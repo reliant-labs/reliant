@@ -5311,8 +5311,10 @@ type ProjectOrgMoveEffects struct {
 	// Triggers that will stay paused until someone sets them up again in the
 	// target organization.
 	TriggersNeedingSetup []*ProjectOrgMoveTriggerSetup `protobuf:"bytes,5,rep,name=triggers_needing_setup,json=triggersNeedingSetup,proto3" json:"triggers_needing_setup,omitempty"`
-	// The project and chats shared with the source organization: each is made
-	// private, and its viewers there lose it. Share again in the target.
+	// The project and chats shared with the source organization, and the
+	// people granted access to one of its chats: each share is made private and
+	// each grant removed, so its viewers and members there lose it. Share again
+	// in the target.
 	SharesToClear int32 `protobuf:"varint,6,opt,name=shares_to_clear,json=sharesToClear,proto3" json:"shares_to_clear,omitempty"`
 	// Triggers bound to one of the source organization's connections (its
 	// Slack bot, say): the binding is cleared, never carried.

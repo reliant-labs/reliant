@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
+	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	reliantconfig "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
@@ -106,6 +107,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/providerusage"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llmusage"
+	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/privacy"
@@ -588,23 +590,43 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		ConnectionVault:  g.CredentialsConnectionvault(),
-		Network:          g.ServerProcessConfig.GetNetwork(),
-		Temporal:         g.TemporalClient(),
-		AgentRuns:        g.AgentRuns(),
-		Triggers:         g.WorkerTrigger(),
-		Credentials:      g.WorkerIntegrationCredentials(),
-		WriteLedger:      g.IntegrationsWriteledger(),
-		CatalogSearch:    g.WorkerCatalogSearch(),
-		Router:           g.WorkerDaemonRouter(),
-		DB:               g.Database(),
-		Membership:       g.OrgResolver(),
-		Logger:           g.Log,
-		Config:           g.Cfg,
-		Backoff:          g.Providerbackoff(),
-		ChangeController: g.ChangeController(),
-		Mirror:           g.Daemonmirror(),
-		WorkflowDrafts:   g.Workflowdrafts(),
+		ConnectionVault:   g.CredentialsConnectionvault(),
+		Network:           g.ServerProcessConfig.GetNetwork(),
+		Temporal:          g.TemporalClient(),
+		AgentRuns:         g.AgentRuns(),
+		Triggers:          g.WorkerTrigger(),
+		Credentials:       g.WorkerIntegrationCredentials(),
+		WriteLedger:       g.IntegrationsWriteledger(),
+		CatalogSearch:     g.WorkerCatalogSearch(),
+		Router:            g.WorkerDaemonRouter(),
+		DB:                g.Database(),
+		Membership:        g.OrgResolver(),
+		Logger:            g.Log,
+		Config:            g.Cfg,
+		Backoff:           g.Providerbackoff(),
+		ChangeController:  g.ChangeController(),
+		MachineController: g.MachineController(),
+		WorkflowDrafts:    g.Workflowdrafts(),
+	})
+}
+
+func (g *Graph) newMachineController() (tools.MachineController, error) {
+	return NewMachineController(MachineControllerDeps{
+		DB:     g.Database(),
+		Router: g.WorkerDaemonRouter(),
+		Mirror: g.Daemonmirror(),
+		Logger: g.Log,
+		Config: g.Cfg,
+	})
+}
+
+func (g *Graph) newOrgMoves() (orgmove.Service, error) {
+	return NewOrgMoves(OrgMovesDeps{
+		DB:           g.Database(),
+		Router:       g.WorkerDaemonRouter(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Triggers:     g.WorkerTrigger(),
+		Membership:   g.OrgResolver(),
 	})
 }
 
@@ -661,7 +683,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Membership: g.OrgResolver(),
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies: g.OrgPolicyResolver(),
-		Triggers: g.WorkerTrigger(),
+		OrgMoves: g.OrgMoves(),
 	})
 }
 
@@ -1142,6 +1164,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:        g.Log,
 		Config:        g.Cfg,
 		Repo:          g.Database(),
+		Chats:         chataccess.NewFromORM(g.Database().ORM()),
 		Workflows:     store.NewWorkflowExtStore(g.Database().ORM()),
 		Worktrees:     store.NewWorktreeExtStore(g.Database().ORM()),
 		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
@@ -1452,6 +1475,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
+		Chats:       chataccess.NewFromORM(g.Database().ORM()),
 		Accounts:    g.CredentialsProvideraccounts(),
 		Funding:     store.NewChatPersonalFundingExtStore(g.Database().ORM()),
 		ValidateKey: keyvalidate.Validate,
@@ -1673,8 +1697,11 @@ func (g *Graph) newSharing() (*sharing.Service, error) {
 		Projects:       store.NewProjectExtStore(o),
 		WorkflowDrafts: g.Workflowdrafts(),
 		Shares:         store.NewShareEventExtStore(o),
+		Members:        store.NewChatMemberExtStore(o),
 		Tx:             o,
 		Orgs:           g.OrgResolver(),
+		// SetChatMember grants only with chat_collaboration.enabled.
+		Collaboration: g.ApiServerConfig.GetChatCollaboration(),
 	})
 }
 

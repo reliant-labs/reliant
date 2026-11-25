@@ -33,7 +33,7 @@ func (s *Service) CreateTask(
 		if chat, err = s.chatOfPlanID(ctx, req.Msg.PlanId); err != nil {
 			return err
 		}
-		if !authz.CanWriteChat(ctx, userID, chat) {
+		if !authz.CanOwnChat(ctx, userID, chat) {
 			return svcerr.PermissionDenied("access denied")
 		}
 
