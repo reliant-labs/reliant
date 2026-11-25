@@ -186,7 +186,7 @@ func waitForLaunched(t *testing.T, repo *db.Repo, userID, triggerID string) *cor
 	launched := core.TriggerEventLaunched
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(context.Background(), triggerID, &launched)
+		ev, err := store.GetLatestTriggerEvent(context.Background(), repo.ORM(), triggerID, &launched)
 		if err == nil && ev != nil && ev.ChatID != nil {
 			return ev
 		}

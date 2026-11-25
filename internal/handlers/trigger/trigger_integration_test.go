@@ -135,7 +135,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	var launched *core.TriggerEvent
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(ctx, triggerID, &launchedOutcome)
+		ev, err := store.GetLatestTriggerEvent(ctx, repo.ORM(), triggerID, &launchedOutcome)
 		if err == nil && ev != nil {
 			launched = ev
 			break
@@ -291,7 +291,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	var launched *core.TriggerEvent
 	deadline := time.Now().Add(75 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(ctx, triggerID, &launchedOutcome)
+		ev, err := store.GetLatestTriggerEvent(ctx, repo.ORM(), triggerID, &launchedOutcome)
 		if err == nil && ev != nil {
 			launched = ev
 			break
@@ -384,7 +384,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	var launched *core.TriggerEvent
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(ctx, triggerID, &launchedOutcome)
+		ev, err := store.GetLatestTriggerEvent(ctx, repo.ORM(), triggerID, &launchedOutcome)
 		if err == nil && ev != nil {
 			launched = ev
 			break
