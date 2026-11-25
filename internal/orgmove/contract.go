@@ -15,8 +15,6 @@
 // (providers_worker.go), an optional component: nil on a worker without a
 // control plane signed as the internal service (or without the trigger
 // service).
-//
-//forge:provided
 package orgmove
 
 import (
