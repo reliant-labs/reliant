@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Reliant Labs
 
+import type { Transport } from "@connectrpc/connect";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -45,8 +46,8 @@ const GROUP_BY: Record<UsageGroupBy, OrganizationUsageGroupBy> = {
 };
 
 /** Scoped to the organization; the server re-checks billing:read on every call. */
-export async function listOrganizationUsage(req: OrganizationUsageRequest): Promise<OrganizationUsage> {
-  return getControlPlaneClient(BillingService).listOrganizationUsage({
+export async function listOrganizationUsage(req: OrganizationUsageRequest, transport?: Transport): Promise<OrganizationUsage> {
+  return getControlPlaneClient(BillingService, transport).listOrganizationUsage({
     orgId: req.orgId,
     start: timestampFromMs(req.startMs),
     end: timestampFromMs(req.endMs),

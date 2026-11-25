@@ -50,6 +50,7 @@ var userScopedReads = map[string]string{
 	"GetWorkflowDraftByName":   readRepoChecks,
 	"GetWorkflowDraftBySlug":   readRepoChecks,
 	"GetWorkflowDraftsBySlugs": readRepoChecks,
+	// Deprecated forwarders still decide visibility through workflowdrafts.
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
 	"ListArchivedChats":        readCallersFilter,

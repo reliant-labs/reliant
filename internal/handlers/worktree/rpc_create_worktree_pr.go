@@ -86,6 +86,16 @@ func (s *Service) CreateWorktreePR(
 		return nil, svcerr.Internal(errMsg)
 	}
 
+	// The pull request exists now; linking it to the worktree's chats is
+	// analytics (cost per merged PR), so a failure is logged and the caller
+	// still gets their pull request.
+	if s.deps.PRLinks != nil && prResp.PRURL != "" {
+		if _, err := s.deps.PRLinks.LinkWorktreePR(ctx, userID, worktree.ID, prResp.PRURL); err != nil {
+			s.deps.Logger.WarnContext(ctx, "create worktree PR: could not link the pull request to its chats",
+				"worktree_id", worktree.ID, "error", err)
+		}
+	}
+
 	// Build informative message
 	message := "Pull request created successfully"
 	if prResp.AutoCommitted && prResp.AutoPushed {

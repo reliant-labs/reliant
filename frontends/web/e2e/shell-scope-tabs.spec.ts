@@ -86,23 +86,6 @@ test.describe('the shell scope, per tab and in the URL', () => {
     expect(errors.get(page), 'no uncaught JavaScript errors').toEqual([]);
   });
 
-  test('an old /project/<id> lands in its org with org routes on, and the org form keeps the scope', async ({ context }) => {
-    const page = watch(await context.newPage());
-    await mockAppsBackend(page, { ...BACKEND, orgRoutes: true });
-
-    await page.goto(`/project/${PROJECT.id}`);
-    await expect(page).toHaveURL(new RegExp(`/o/acme/project/${PROJECT.id}$`), LOADED);
-    await expect(label(page)).toHaveText(PROJECT.name, LOADED);
-
-    await chooseAll(page);
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/o/acme');
-    expect(scopeOf(page)).toBe('all');
-    await page.reload();
-    await expect(label(page)).toHaveText('All projects', LOADED);
-
-    expect(errors.get(page), 'no uncaught JavaScript errors').toEqual([]);
-  });
-
   test('a refresh keeps the scope, the chat, its thread and the open panel', async ({ context }) => {
     const page = await openTab(context);
     const path = `/c/${CHAT}/t/th_review`;

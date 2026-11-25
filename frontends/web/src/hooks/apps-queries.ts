@@ -31,6 +31,8 @@ import {
   type CloudEnv,
 } from "@/services/forge/cloudEnvs";
 
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 
 import { forgeCloudKeys, useCloudEnvStatuses } from "./forge-queries";
@@ -54,13 +56,14 @@ export interface AppsState {
 /** Every hosted environment in the tab's org, read in it and keyed by it (lib/orgScope). */
 export function useOrgEnvironments() {
   const org = useOrgScope();
+  const transport = useTransport(appTransport);
   return useQuery<OrgEnvsResult>(
     withOrgFailure(
       {
         queryKey: forgeCloudKeys.orgEnvs(org.orgId),
         queryFn: async () => {
           try {
-            return { availability: "available" as const, envs: await listOrgEnvironments(org.orgId), detail: "" };
+            return { availability: "available" as const, envs: await listOrgEnvironments(transport, org.orgId), detail: "" };
           } catch (err) {
             return { availability: cloudAvailabilityFromError(err), envs: [], detail: cloudErrorDetail(err) };
           }

@@ -254,9 +254,10 @@ export const forgeJourney: Journey = {
       title: "A Forge app's console",
       description:
         "Every Forge project gets this console: environments, releases, domains, secrets and observability, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
-      // The console's sections: in the one shell, the open app's rows in the left nav (Layout/sidebar/AppsNavSection);
-      // in the demo's own frame, forge-ui SidebarLayout's one <aside> inside ConsoleShell (its id is generated).
-      target: "[data-tour='forge-console-nav'], [data-tour='forge-console'] aside",
+      // The console's sections: the open app's rows in the shell's left nav (NavRenderer's `nav-top`), on the
+      // demo host too, which runs in the same shell. The step is on the Overview, never in a drill-in: a step
+      // that rings the nav on an Observability route points at `nav-drill-in` (the drill-in's header) instead.
+      target: "[data-tour='forge-console-nav']",
       tooltipPosition: "right",
       get route() {
         return stop({ view: "overview", ...CLOSED });

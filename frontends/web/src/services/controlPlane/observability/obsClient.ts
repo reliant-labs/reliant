@@ -19,7 +19,7 @@
  */
 
 import type { DescService } from "@bufbuild/protobuf";
-import type { Client } from "@connectrpc/connect";
+import type { Client, Transport } from "@connectrpc/connect";
 
 import { getControlPlaneClient } from "../client";
 import { isBackgroundRead, obsReadScheduler, type ReadPriority } from "./readScheduler";
@@ -30,8 +30,14 @@ export { NO_READ_SLOT_RPCS, READ_SLOT_RPCS } from "./readSlots";
 
 type Options = { headers?: Record<string, string>; signal?: AbortSignal };
 
-export function obsClient<S extends DescService>(service: S): Client<S> {
-  const base = getControlPlaneClient(service);
+/**
+ * `transport` is the caller's TransportScope's (lib/transportScope.tsx), as
+ * getControlPlaneClient takes it; none, or the app's, is today's client. The
+ * poll header and the read queue apply on either: a scope's reads share the
+ * page's slots like any other.
+ */
+export function obsClient<S extends DescService>(service: S, transport?: Transport): Client<S> {
+  const base = getControlPlaneClient(service, transport);
   return new Proxy(base, {
     get(target, prop, receiver) {
       const member = Reflect.get(target, prop, receiver) as unknown;

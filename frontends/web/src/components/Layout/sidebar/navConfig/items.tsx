@@ -172,8 +172,19 @@ export const auth: NavRow = {
   available: hasApp,
 };
 
-/** Inbox: a top-level row with its count, under Overview (owner, 15:02Z); the one place it is. */
+/**
+ * Inbox: a top-level row with its count, under Overview (owner, 15:02Z), and
+ * again inside Agents › (agentsInbox, owner 2026-11-24), so a chat's drill-in
+ * reaches it in one click. The Inbox page is not an Agents route: on /inbox
+ * the nav is the top level and this row is the one lit.
+ */
 export const inbox: NavSlot = slot("inbox");
+/**
+ * Agents' Inbox row: the same slot (row, count, route) under its own id, ids
+ * being unique within a config. The two never draw together: the top level
+ * and the Agents drill-in replace one another.
+ */
+export const agentsInbox: NavSlot = { kind: "slot", id: "slot-agents-inbox", slot: "inbox" };
 /** Its href and match, for the slot's row and the tests. */
 export const inboxRow: NavRow = { kind: "row", id: "inbox", label: "Inbox", icon: icon(Inbox), href: () => inboxPath(), match: (ctx) => isAtOrBelow(ctx.pathname, inboxPath()) };
 export const activity = consoleRow("activity", "Activity", { kind: "activity" }, icon(Activity), ["activity"]);
@@ -495,7 +506,8 @@ export const isAgentsRoute = (ctx: NavCtx): boolean =>
 
 /** Agents' rows; the chat list last, so in the drill-in it takes the rest of the column. */
 // AI providers left Agents (U6e, owner): it lives in Settings only.
-const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, connectors, slot("chat-list")];
+// Inbox joined it under New chat (owner, 2026-11-24); it stays at the top level too.
+const agentsChildren: readonly NavItem[] = [slot("new-chat"), agentsInbox, workflowsGroup, sandboxes, connectors, slot("chat-list")];
 
 /** Agents › — one of the two drill-ins; its mark is Reliant's, to set it apart. */
 export const agentsArea: NavArea = {
@@ -521,8 +533,13 @@ export const usageBilling: NavRow = {
   match: (ctx) => isAt(ctx.pathname, usageBillingPath()),
 };
 
-/** The routes that are Settings (its sections take the column there: navConfig/settings.tsx). */
-export const isSettingsRoute = (ctx: NavCtx) => isAtOrBelow(ctx.pathname, settingsPath());
+/**
+ * Settings' sections take the column here (navConfig/settings.tsx), except
+ * Agent sandboxes: Agents owns that page and must be the only area lit there.
+ * Keep this matcher independent of Settings' modules for the public demo.
+ */
+export const isSettingsRoute = (ctx: NavCtx) =>
+  isAtOrBelow(ctx.pathname, settingsPath()) && !isAtOrBelow(ctx.pathname, sandboxesPath());
 
 /** Settings: a plain link (U6d, owner); bare /settings opens the section last visited. */
 export const settings: NavRow = {

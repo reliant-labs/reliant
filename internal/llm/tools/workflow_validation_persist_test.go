@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -92,7 +94,7 @@ func TestEditWorkflow_CompleteWorkflowRejectsInvalidEdit(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewEditWorkflowTool(repo)
+	tool := NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo))
 
 	t.Run("an edit that breaks a complete workflow is not saved", func(t *testing.T) {
 		draft := createValidPersistDraft(t, repo)
@@ -162,7 +164,7 @@ func TestEditWorkflow_DraftIteratesThenCompleteGates(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewEditWorkflowTool(repo)
+	tool := NewEditWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	draft := createPersistDraft(t, repo, db.WorkflowDraftStatusDraft)
 
 	broken := runWorkflowTool(t, tool, EditWorkflowToolName, EditWorkflowParams{
@@ -204,7 +206,7 @@ func TestWriteWorkflow_CompleteWorkflowRejectsInvalidContent(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	draft := createValidPersistDraft(t, repo)
 
 	invalidWorkflow := "name: " + draft.Name + "\nnodes:\n  - id: agent\n    type: call_llm\n"
@@ -220,7 +222,7 @@ func TestCreateWorkflow_DefaultsToDraftAndCompleteGates(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewCreateWorkflowTool(repo, store.NewWorkflowDraftExtStore(repo.ORM()))
+	tool := NewCreateWorkflowTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowDraftExtStore(repo.ORM()))
 
 	name := "created-" + uuid.NewString()[:8]
 	invalid := "name: " + name + "\nnodes:\n  - id: agent\n    type: call_llm\n"
@@ -251,7 +253,7 @@ func TestWriteWorkflow_TypeChecksRefOutputs(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	draft := createValidPersistDraft(t, repo)
 
 	content := "name: " + draft.Name + `
@@ -281,7 +283,7 @@ func TestWriteWorkflow_RefToDraftIsAnError(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	child := createPersistDraft(t, repo, db.WorkflowDraftStatusDraft)
 	parent := createPersistDraft(t, repo, db.WorkflowDraftStatusDraft)
 
@@ -302,7 +304,7 @@ func TestWriteWorkflow_ReturnsWarnings(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
-	tool := NewWriteWorkflowTool(repo)
+	tool := NewWriteWorkflowTool(repo, workflowdraftstest.New(t, repo))
 	draft := createValidPersistDraft(t, repo)
 
 	// A conditional run node read unguarded: the field exists either way (the
