@@ -259,11 +259,8 @@ message InjectConfig {
     description: "UI display style for injected message; defaults to hidden"
     enum_values: "info|warning|success|hidden"
   }];
-  // Deprecated: use repeated attachments field (5) instead.
-  CelString legacy_attachments = 3 [
-    deprecated = true,
-    (reliant) = {hidden: true}
-  ];
+  reserved 3;
+  reserved "legacy_attachments";
   // Attachments to include in the injected message.
   repeated InjectAttachment attachments = 5 [(reliant) = {description: "Attachments to include"}];
 }
@@ -740,16 +737,9 @@ message ExecuteToolsArgs {
   // recorded no set (a run that predates it, or tool calls not from an LLM).
   // See research/TOOL_CAPABILITIES.md.
   ToolCapabilities capabilities = 6 [(reliant) = {hidden: true}];
-  // Deprecated: the integration action approval prompt that set this was
-  // removed. Only the replay branch that keeps runs recorded before the
-  // removal working still sets it (runtime/action_approval_legacy.go): a call
-  // the person attending denied, keyed by tool call id, with the reason the
-  // model is told; the activity records each FAILED with it. Reserve the tag
-  // when that branch and its version gate are retired.
-  map<string, string> refused_tool_calls = 7 [
-    deprecated = true,
-    (reliant) = {hidden: true}
-  ];
+  // The removed integration action approval prompt's refusals.
+  reserved 7;
+  reserved "refused_tool_calls";
 }
 
 // InvokeToolArgs configures an invoke_tool node — invokes ONE tool directly from the graph,
@@ -2062,13 +2052,9 @@ message ToolCapabilities {
   // exactly (not through a tag, a glob or "*"), sorted: an unattended run keeps
   // them. Only set when unattended is.
   repeated string unattended_opt_in = 11;
-  // Deprecated: never written. It listed the offered tools whose calls asked
-  // the person attending before they ran — the integration action approval
-  // prompt, since removed. A call_llm output recorded before the removal still
-  // carries it, and the replay branch that keeps those runs working reads it
-  // (runtime/action_approval_legacy.go). Reserve the tag when that branch and
-  // its version gate are retired.
-  repeated string approval_required = 12 [deprecated = true];
+  // The removed integration action approval prompt's gated tools.
+  reserved 12;
+  reserved "approval_required";
   // SpawnDepthExhausted: the agent is a sub-agent whose spawn depth has
   // reached the maximum, so it is never offered spawn. load_tool and the
   // execution refusal say so instead of "not found".

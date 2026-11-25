@@ -11,6 +11,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { create } from "@bufbuild/protobuf";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
 vi.mock("@/services/controlPlane/config", () => ({
@@ -18,6 +19,7 @@ vi.mock("@/services/controlPlane/config", () => ({
   hasControlPlane: true,
 }));
 
+import { ListMembersResponseSchema } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import {
@@ -27,8 +29,6 @@ import {
   inviteMember,
   isTerminalInviteRefusal,
   leaveOrganization,
-  listInvitations,
-  listMembers,
   listMembershipActivity,
   memberErrorMessage,
   memberNamesBySubject,
@@ -36,6 +36,7 @@ import {
   revokeInvitation,
   seatSummary,
   seatsFull,
+  toMemberPage,
   updateMemberRole,
 } from "../members";
 
@@ -49,9 +50,7 @@ afterEach(() => setTransport(null));
 
 describe("org-acting rpcs name their org", () => {
   it.each([
-    ["ListMembers", () => listMembers(ORG), { seats: { members: 1, limit: 3 } }],
     ["InviteMember", () => inviteMember(ORG, " bob@example.com ", "admin"), {}],
-    ["ListInvitations", () => listInvitations(ORG), {}],
     ["RevokeInvitation", () => revokeInvitation(ORG, "inv_1"), {}],
     ["RemoveMember", () => removeMember(ORG, "u_bob"), {}],
     ["LeaveOrganization", () => leaveOrganization(ORG), {}],
@@ -79,19 +78,17 @@ describe("org-acting rpcs name their org", () => {
 });
 
 describe("wire mapping", () => {
-  it("maps the roster and its seats", async () => {
-    setTransport(
-      mockTransport({
-        "OrganizationService.ListMembers": {
-          response: {
-            members: [{ userId: "u_ada", email: "ada@example.com", name: "Ada", role: "owner", isFounder: true, joinedAt: timestampFromDate(JOINED) }],
-            nextPageToken: "p2",
-            seats: { members: 1, pendingInvitations: 2, limit: 3 },
-          },
-        },
+  // The roster and invitation reads run on the generated hooks
+  // (cloud/members/useMembers.ts), whose requests name the org themselves
+  // (orgScopedQueries.guard.test.ts); these are their `select` mappings.
+  it("maps the roster and its seats", () => {
+    const page = toMemberPage(
+      create(ListMembersResponseSchema, {
+        members: [{ userId: "u_ada", email: "ada@example.com", name: "Ada", role: "owner", isFounder: true, joinedAt: timestampFromDate(JOINED) }],
+        nextPageToken: "p2",
+        seats: { members: 1, pendingInvitations: 2, limit: 3 },
       }),
     );
-    const page = await listMembers(ORG);
     expect(page.members).toEqual([
       { userId: "u_ada", email: "ada@example.com", name: "Ada", avatarUrl: "", role: "owner", joinedAt: JOINED, isFounder: true, externalId: "" },
     ]);
@@ -102,21 +99,16 @@ describe("wire mapping", () => {
   // A shared chat names its owner by their sign-in subject: the roster must
   // carry externalId from the wire into the model, and the lookup keyed by it
   // must find them. A member with no externalId is named by nobody.
-  it("carries each member's sign-in subject through to the shared-chat owner lookup", async () => {
-    setTransport(
-      mockTransport({
-        "OrganizationService.ListMembers": {
-          response: {
-            members: [
-              { userId: "u_ada", externalId: "sub-ada", email: "ada@example.com", name: "Ada", role: "owner" },
-              { userId: "u_lee", externalId: "sub-lee", email: "lee@example.com", name: "", role: "member" },
-              { userId: "u_old", email: "old@example.com", name: "Old", role: "member" },
-            ],
-          },
-        },
+  it("carries each member's sign-in subject through to the shared-chat owner lookup", () => {
+    const page = toMemberPage(
+      create(ListMembersResponseSchema, {
+        members: [
+          { userId: "u_ada", externalId: "sub-ada", email: "ada@example.com", name: "Ada", role: "owner" },
+          { userId: "u_lee", externalId: "sub-lee", email: "lee@example.com", name: "", role: "member" },
+          { userId: "u_old", email: "old@example.com", name: "Old", role: "member" },
+        ],
       }),
     );
-    const page = await listMembers(ORG);
     expect(page.members.map((m) => m.externalId)).toEqual(["sub-ada", "sub-lee", ""]);
 
     const names = memberNamesBySubject(page.members);

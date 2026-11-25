@@ -41,7 +41,7 @@ import {
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useArchiveChat, usePermanentlyDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
-import { useAdoptRun, useUnadoptRun } from "../../hooks/run-queries";
+import { useAdoptRun, useUnadoptRun, type LiveRunsScope } from "../../hooks/run-queries";
 import { useTriggerName } from "../../hooks/trigger-queries";
 import { isAdoptedAutomation, isRun, withOpenChatPinned } from "../../lib/sidebarChatList";
 import { useSidebarPinStore } from "../../store/sidebarPinStore";
@@ -846,6 +846,18 @@ function SidebarComponent({
   // The rows the list renders: a run counted here has its own row, so the
   // automation pill does not count it again.
   const listedChatIds = useMemo(() => new Set(chats.map((chat) => chat.id)), [chats]);
+  // The Workflows row's live count is about the projects the nav shows.
+  const liveRunsScope = useMemo(
+    (): LiveRunsScope =>
+      severalProjects
+        ? { kind: "projects", projectIds: severalProjects }
+        : shell.mode === "all"
+          ? { kind: "all" }
+          : projectFilterId
+            ? { kind: "projects", projectIds: [projectFilterId] }
+            : { kind: "none" },
+    [severalProjects, shell.mode, projectFilterId],
+  );
   // Where each place is, in the form the links use (lib/paths), and whether
   // its page is the one on screen.
   // New chat starts in the shell's one project; across several, wherever openNewChat would.
@@ -2124,7 +2136,7 @@ function SidebarComponent({
         )}
       </div>
     ),
-    "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} />,
+    "workflows-pill": () => <AutomationActivityPill listedChatIds={listedChatIds} onOpenRuns={onOpenRuns} scope={liveRunsScope} />,
     "chats-need-you": () =>
       chatsNeedYou > 0 ? (
         <span role="img" aria-label="A chat needs you" title="A chat needs you" className="size-2 rounded-full bg-warning" />

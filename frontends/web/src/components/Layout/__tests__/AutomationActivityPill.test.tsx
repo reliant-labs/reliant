@@ -20,8 +20,8 @@ import { summarizeLiveAutomations, LIVE_AUTOMATION_LIMIT } from "../../../hooks/
 const listRuns = vi.fn<(request: ListRunsRequest) => unknown>();
 
 /** One ListRuns row, as the server sends it. */
-function protoRun(chatId: string, launchKind: string, displayState: RunDisplayState) {
-  return { id: `wf-${chatId}`, sessionId: chatId, title: chatId, launchKind, displayState };
+function protoRun(chatId: string, launchKind: string, displayState: RunDisplayState, projectId = "p1") {
+  return { id: `wf-${chatId}`, sessionId: chatId, title: chatId, launchKind, displayState, projectId };
 }
 
 function run(chatId: string, launchKind: string, displayState: RunDisplayState): RunSummary {
@@ -113,8 +113,74 @@ describe("AutomationActivityPill", () => {
     expect(running).toHaveAccessibleName("2 automations running. Open live runs");
     expect(screen.queryByTestId("automation-activity-pill-needs-you")).toBeNull();
 
+    // Every time, so a long-running automation is listed; the projects are
+    // the nav's, which Runs follows (useWorkflowsScope).
     fireEvent.click(running);
-    expect(onOpenRuns).toHaveBeenCalledWith({ state: ["live"], allProjects: true, range: "all" });
+    expect(onOpenRuns).toHaveBeenCalledWith({ state: ["live"], range: "all" });
+  });
+
+  // The bug of 2026-11-24: beside a nav scoped to some projects, the count
+  // was every project's live runs in the org.
+  it("counts only the projects the nav shows: one, or several", async () => {
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+    const { unmount } = renderWithQuery(
+      <AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "projects", projectIds: ["p1", "p2"] }} />,
+    );
+    await screen.findByTestId("automation-activity-pill");
+    expect(listRuns.mock.calls[0]![0].projectIds).toEqual(["p1", "p2"]);
+    unmount();
+
+    listRuns.mockClear();
+    renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "projects", projectIds: ["p1"] }} />);
+    await screen.findByTestId("automation-activity-pill");
+    expect(listRuns.mock.calls[0]![0].projectIds).toEqual(["p1"]);
+  });
+
+  it("counts none of another project's runs, even from a server that ignores project_ids", async () => {
+    listRuns.mockResolvedValue({
+      runs: [
+        protoRun("mine", "schedule", RunDisplayState.RUNNING, "p1"),
+        protoRun("other", "schedule", RunDisplayState.RUNNING, "p9"),
+      ],
+      nextPageToken: "",
+    });
+    renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "projects", projectIds: ["p1"] }} />);
+    expect(await screen.findByTestId("automation-activity-pill-running")).toHaveTextContent("1 running");
+  });
+
+  it("reads every project's only when the nav shows every project", async () => {
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+    renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "all" }} />);
+    await screen.findByTestId("automation-activity-pill");
+    expect(listRuns.mock.calls[0]![0].projectIds).toEqual([]);
+    expect(listRuns.mock.calls[0]![0].projectId).toBeUndefined();
+  });
+
+  it("reads nothing while the nav shows an app with no code here", () => {
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+    const { queryClient } = renderWithQuery(<AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "none" }} />);
+    // An enabled query starts its fetch on mount; this one is registered and idle.
+    const pillQuery = queryClient.getQueryCache().find({ queryKey: runServiceKeys.all, exact: false });
+    expect(pillQuery?.state.fetchStatus).toBe("idle");
+    expect(queryClient.isFetching()).toBe(0);
+    expect(listRuns).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("automation-activity-pill")).toBeNull();
+  });
+
+  // Every project's request names no project, as the empty scope's would:
+  // the two share a cache entry, and a disabled query still returns its data.
+  it("drops every project's count when the nav moves to an app with no code here", async () => {
+    listRuns.mockResolvedValue({ runs: [protoRun("a", "schedule", RunDisplayState.RUNNING)], nextPageToken: "" });
+    const { queryClient, rerender } = renderWithQuery(
+      <AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "all" }} />,
+    );
+    await screen.findByTestId("automation-activity-pill");
+    expect(listRuns).toHaveBeenCalledTimes(1);
+
+    rerender(<AutomationActivityPill listedChatIds={new Set()} scope={{ kind: "none" }} />);
+    expect(screen.queryByTestId("automation-activity-pill")).toBeNull();
+    expect(queryClient.isFetching()).toBe(0);
+    expect(listRuns).toHaveBeenCalledTimes(1);
   });
 
   // "Needs you" is the Inbox's job (§8): its sidebar badge is the one count,

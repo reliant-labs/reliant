@@ -492,6 +492,18 @@ func deleteProjectRow(ctx context.Context, db orm.Context, id, userID string) (b
 		if _, err := db.Bun().NewRaw(`DELETE FROM projects WHERE id = ?0 AND user_id = ?1`, id, userID).Exec(ctx); err != nil {
 			return err
 		}
+		// The insights rows that name the project (no foreign key). Here,
+		// after the row's delete: a usage write folding into them holds a key
+		// share on the project, so the FOR UPDATE above waited for it and its
+		// rows are seen, and a later one finds no project. The member rows go;
+		// the org's team rows move to the no-project bucket, so its totals
+		// stay whole and keep no trace of the project's id.
+		if err := deleteInsightsMemberRowsOfProject(ctx, db, id); err != nil {
+			return err
+		}
+		if err := mergeInsightsTeamRowsOfProject(ctx, db, id); err != nil {
+			return err
+		}
 		deleted = true
 		return nil
 	})

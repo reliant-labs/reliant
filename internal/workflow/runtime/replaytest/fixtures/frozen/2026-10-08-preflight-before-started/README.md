@@ -27,3 +27,8 @@ chats that ran the old code).
 
 Retire this set only together with the gate, once no run started before the
 gate's deploy can still be open.
+
+`action_approval.json` (the removed integration action approval prompt, in
+this startup order) left this set together with its gate,
+`actionApprovalRemovedChangeID`, and the `2026-10-11-integration-action-approval`
+set: a run open since before that prompt's removal (#664) no longer replays.

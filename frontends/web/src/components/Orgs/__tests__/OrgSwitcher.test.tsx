@@ -20,17 +20,14 @@ import { useAuthStore } from "@/store/authStore";
 
 const listMyOrganizations = vi.fn();
 const setDefaultOrganization = vi.fn();
-vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
-  listMyOrganizations: () => listMyOrganizations(),
-  setDefaultOrganization: (id: string) => setDefaultOrganization(id),
-}));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 vi.mock("@/lib/toast-manager", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { Code, ConnectError } from "@connectrpc/connect";
 import { setTransport } from "@/lib/connect";
-import { mockTransport } from "@/lib/test-utils";
+import { mockTransport, type MockHandlers } from "@/lib/test-utils";
+import { orgKeys } from "@/services/controlPlane/orgs";
+import { myOrgsHandlers } from "@/test/orgsTransport";
 
 import { ActiveOrgBinding } from "../ActiveOrgBinding";
 import { OrgSwitcher } from "../OrgSwitcher";
@@ -40,6 +37,16 @@ const org = (id: string, name: string, over: Record<string, unknown> = {}) => ({
 });
 const ACME = org("org-a", "Acme", { isDefault: true });
 const SIDE = org("org-b", "Side Project", { role: "member", isOwner: false });
+
+/** The membership list and its default, beside any other OrganizationService answers a test adds. */
+const orgsTransport = (extra: MockHandlers = {}) =>
+  mockTransport({
+    ...myOrgsHandlers({
+      listMyOrganizations: () => listMyOrganizations(),
+      setDefaultOrganization: (id) => setDefaultOrganization(id),
+    }),
+    ...extra,
+  });
 
 function Harness({ variant, fallback }: { variant?: "sidebar" | "sidebar-top" | "list"; fallback?: React.ReactNode }) {
   return (
@@ -58,7 +65,7 @@ beforeEach(() => {
   useAuthStore.setState({ user: { id: "alice" } as never });
   // Unbound, so the binding loads what each test saved before it renders.
   useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
-  setTransport(null);
+  setTransport(orgsTransport());
 });
 
 describe("OrgSwitcher", () => {
@@ -91,7 +98,7 @@ describe("OrgSwitcher", () => {
   it("creating an organization makes it the org the app acts in", async () => {
     listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
     const create = vi.fn((_req: unknown) => ({ organization: { id: "org-new", name: "New Co", slug: "new-co", role: "owner", isOwner: true } }));
-    setTransport(mockTransport({ "OrganizationService.CreateOrganization": create }));
+    setTransport(orgsTransport({ "OrganizationService.CreateOrganization": create }));
     // The app's one client: switching re-reads the membership list through it.
     const { queryClient } = await import("@/lib/query-client");
     queryClient.clear();
@@ -114,7 +121,7 @@ describe("OrgSwitcher", () => {
   it("a refused create says why in words", async () => {
     listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
     setTransport(
-      mockTransport({
+      orgsTransport({
         "OrganizationService.CreateOrganization": {
           error: new ConnectError("prose", Code.ResourceExhausted, { "x-forge-error-reason": "owned_org_limit" }),
         },
@@ -132,7 +139,7 @@ describe("OrgSwitcher", () => {
   it("the phone list still needs a choice to show", async () => {
     listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
     const { container, queryClient } = renderWithQuery(<Harness variant="list" />);
-    await waitFor(() => expect(queryClient.getQueryData(["orgs", "mine"])).toBeTruthy());
+    await waitFor(() => expect(queryClient.getQueryData(orgKeys.mine)).toBeTruthy());
     expect(container.querySelector('[data-testid="org-list"]')).toBeNull();
   });
 
@@ -262,7 +269,7 @@ describe("OrgSwitcher", () => {
     // They are removed from Side Project elsewhere; the list is re-read.
     listMyOrganizations.mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
     await act(async () => {
-      await queryClient.refetchQueries({ queryKey: ["orgs", "mine"] });
+      await queryClient.refetchQueries({ queryKey: orgKeys.mine });
     });
     await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
   });

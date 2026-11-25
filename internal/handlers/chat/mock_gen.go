@@ -225,7 +225,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=de7bdcf0cb50b96ea6ae82b8a9296e4e78666fe0f1b4a22a3b2ac558db7b3bfa
+// forge:hash=2586c697756afdbc6715208c185b0f15706cdfb9a0d1b4412f9385d855015f2a
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -261,7 +261,6 @@ type MockRepository struct {
 	ThreadAwaitsReplyFunc                                    func(context.Context, string) (bool, error)
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
 	ClaimUserActivationFunc                                  func(context.Context, string, string, string) (bool, error)
-	CountMessagesInChatOutsideThreadFunc                     func(context.Context, string, string) (int, error)
 	ListTranscriptSiblingMessagesInRangeFunc                 func(context.Context, string, string, int64, *int64, int) ([]*db.Message, error)
 	GetWorkflowByThreadFunc                                  func(context.Context, string, string) (*db.Workflow, error)
 	ListWorkflowsByChatFunc                                  func(context.Context, string) ([]*db.Workflow, error)
@@ -607,15 +606,6 @@ func (m *MockRepository) ClaimUserActivation(ctx context.Context, userID string,
 		return m.ClaimUserActivationFunc(ctx, userID, chatID, messageID)
 	}
 	return false, contractkit.MockNotSet("MockRepository", "ClaimUserActivation")
-}
-
-// CountMessagesInChatOutsideThread records the call and delegates to CountMessagesInChatOutsideThreadFunc when set.
-func (m *MockRepository) CountMessagesInChatOutsideThread(ctx context.Context, chatID string, threadID string) (int, error) {
-	m.Recorder.Record("CountMessagesInChatOutsideThread", ctx, chatID, threadID)
-	if m.CountMessagesInChatOutsideThreadFunc != nil {
-		return m.CountMessagesInChatOutsideThreadFunc(ctx, chatID, threadID)
-	}
-	return 0, contractkit.MockNotSet("MockRepository", "CountMessagesInChatOutsideThread")
 }
 
 // ListTranscriptSiblingMessagesInRange records the call and delegates to ListTranscriptSiblingMessagesInRangeFunc when set.

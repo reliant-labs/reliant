@@ -16,10 +16,27 @@ func retirementMatchesPath(*retirementTree, string) (bool, error) {
 type retirementTree struct {
 	bytes  int64
 	newest time.Time
+	path   string
+}
+
+type parkedTree struct{}
+
+func (*parkedTree) close()            {}
+func (*parkedTree) files() []*os.File { return nil }
+func (*parkedTree) forget()           {}
+func (t *retirementTree) park(string) (*parkedTree, error) {
+	return nil, errors.New("mount-safe retirement unsupported")
+}
+func (t *retirementTree) unpark(*parkedTree) error {
+	return errors.New("mount-safe retirement unsupported")
 }
 
 func inspectRetirementTree(context.Context, string) (*retirementTree, error) {
 	return nil, errors.New("mount-safe retirement unsupported on this platform")
+}
+
+func inspectScratchTree(ctx context.Context, path string) (*retirementTree, error) {
+	return inspectRegenerableTree(ctx, path)
 }
 
 func inspectRegenerableTree(context.Context, string) (*retirementTree, error) {
@@ -31,5 +48,9 @@ func (t *retirementTree) validate(context.Context) error {
 	return errors.New("mount-safe retirement unsupported")
 }
 func (t *retirementTree) remove(context.Context, func() error) error {
+	return errors.New("mount-safe retirement unsupported")
+}
+
+func renameNoReplace(string, string) error {
 	return errors.New("mount-safe retirement unsupported")
 }

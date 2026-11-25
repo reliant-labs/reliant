@@ -1406,6 +1406,12 @@ message Workload {
   // declared replicas; unset when neither is known (then render ready alone).
   // Narrowed to dev instances: ready is the instances' pods reporting, and
   // desired is unset (an instance declares no replica count).
+  //
+  // A Job or CronJob has no replica claim: ready is its pods running now and
+  // desired is always unset, and its health is judged on its runs (the
+  // latest run in jobs, else the ledger), never on its replicas. A completed
+  // run with no pod running is HEALTHY; a failed one DEGRADED; one running
+  // now PENDING; one with no run on record UNKNOWN.
   optional int32 ready_replicas = 13;
   optional int32 desired_replicas = 14;
   // The release this workload is running, e.g. "v1.7.44". Empty when it cannot
@@ -1446,6 +1452,11 @@ message Workload {
   // an older forge, a hand-written manifest) and on a read narrowed to dev
   // instances: fall back to kind.
   string forge_kind = 23;
+  // A CronJob's next scheduled run, from the schedule its environment's
+  // recorded bundle declares (DeclaredWorkload.schedule). Unset for any other
+  // kind, for a CronJob that is suspended, whose schedule is not recorded or
+  // cannot be read, and on a read narrowed to dev instances.
+  google.protobuf.Timestamp next_run_at = 24;
 }
 
 // WorkloadHealthChange is one transition of a workload's health, derived from

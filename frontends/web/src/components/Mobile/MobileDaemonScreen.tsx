@@ -18,7 +18,6 @@ import { Link, useNavigate, useParams } from "@tanstack/react-router";
 import { AlertTriangle, ChevronLeft, Loader2, Pause, Play, Trash2 } from "lucide-react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { useQuery } from "@tanstack/react-query";
 import {
   useDaemonList,
   useDeleteDaemon,
@@ -27,7 +26,7 @@ import {
 } from "@/hooks/useOnboardingQueries";
 import type { DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import { capabilities } from "@/services/controlPlane/capabilities";
-import { getDaemon } from "@/services/controlPlane/environments";
+import { useGetDaemon } from "@/hooks/controlplane/daemon-service-hooks_gen";
 import { cn } from "../../lib/utils";
 import { canResume, canSuspend, lastSeenMs, sizeLabel } from "./daemonPresentation";
 import { DaemonStatusPill } from "./MobileDaemonList";
@@ -225,9 +224,7 @@ export function MobileDaemonScreen() {
   const { data: daemons, isLoading } = useDaemonList({ refetchInterval });
   const daemon = daemons?.find((d) => d.daemonId === daemonId);
 
-  const { data: cpDetail } = useQuery({
-    queryKey: ["controlPlane", "daemon", daemonId],
-    queryFn: () => getDaemon(daemonId as string),
+  const { data: cpDetail } = useGetDaemon({ daemonId: daemonId ?? "" }, {
     enabled: !!daemonId && capabilities.cloudDaemons,
     refetchInterval,
   });

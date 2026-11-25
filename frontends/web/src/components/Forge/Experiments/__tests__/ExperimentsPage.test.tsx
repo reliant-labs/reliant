@@ -1,26 +1,25 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Experiments page against a fake ChangesService: the real ChangesApi
- * (and its protojson reading) over an in-memory call function, so what is
- * asserted is what the page sends on the wire and what it does with each
- * answer — the list, the empty and not-available states, a new change, the
+ * The Experiments page against a fake ChangesService behind the app's
+ * transport (fakeChangesService.ts): the generated hooks and the page's
+ * readers over an in-memory Connect router, so what is asserted is what the
+ * page sends on the wire (protojson) and what it does with each answer — the list, the empty and not-available states, a new change, the
  * approval-code flow, a revision conflict, and Stop.
  */
 
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { renderWithQuery } from "@/test/renderWithQuery";
 import { useRouteOrgScope } from "@/lib/routeOrg";
-import { ChangesApiProvider } from "@/services/controlPlane/changes/ChangesApiContext";
-import { createChangesApi } from "@/services/controlPlane/changes/changesApi";
 
 import { ChangeDetail } from "../ChangeDetail";
 import { ExperimentsPage } from "../ExperimentsPage";
+import { installFakeChangesService, type FakeChangesService, type FakeHandler } from "./fakeChangesService";
 
 const state = vi.hoisted(() => ({
   console: {} as Record<string, unknown>,
@@ -28,6 +27,10 @@ const state = vi.hoisted(() => ({
   search: {} as Record<string, unknown>,
 }));
 
+vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
+  currentOrgId: async () => "org-1",
+}));
 vi.mock("../../Console/consoleContext", () => ({ useForgeConsole: () => state.console }));
 vi.mock("@/components/forge-ui/link", () => ({
   default: ({ href, children, className }: { href: string; children: ReactNode; className?: string }) => (
@@ -78,19 +81,19 @@ function wireChange(overrides: Record<string, unknown> = {}) {
   };
 }
 
-type Handler = (body: Record<string, unknown>) => unknown;
+let installed: FakeChangesService | null = null;
 
 /** The fake service: one handler per method, every call recorded. */
-function fakeService(handlers: Record<string, Handler>) {
-  const calls: { method: string; body: Record<string, unknown> }[] = [];
-  const call = vi.fn(async (method: string, body: Record<string, unknown>) => {
-    calls.push({ method, body });
-    const handler = handlers[method];
-    if (!handler) throw new ConnectError(`no handler for ${method}`, Code.Unimplemented);
-    return handler(body);
-  });
-  return { api: createChangesApi(call, async () => "org-1"), calls, of: (method: string) => calls.filter((c) => c.method === method) };
+function fakeService(handlers: Record<string, FakeHandler>) {
+  installed?.restore();
+  installed = installFakeChangesService(handlers);
+  return installed;
 }
+
+afterEach(() => {
+  installed?.restore();
+  installed = null;
+});
 
 const reason = (r: string, code: Code, message = r) => new ConnectError(message, code, new Headers({ "x-forge-error-reason": r }));
 
@@ -103,20 +106,12 @@ function roster() {
   };
 }
 
-function renderPage(service: ReturnType<typeof fakeService>) {
-  return renderWithQuery(
-    <ChangesApiProvider api={service.api}>
-      <ExperimentsPage />
-    </ChangesApiProvider>
-  );
+function renderPage(_service: FakeChangesService) {
+  return renderWithQuery(<ExperimentsPage />);
 }
 
-function renderDetail(service: ReturnType<typeof fakeService>) {
-  return renderWithQuery(
-    <ChangesApiProvider api={service.api}>
-      <ChangeDetail changeId="chg-1" envs={ENVS} backHref="/forge/p/shop/experiments" />
-    </ChangesApiProvider>
-  );
+function renderDetail(_service: FakeChangesService) {
+  return renderWithQuery(<ChangeDetail changeId="chg-1" envs={ENVS} backHref="/forge/p/shop/experiments" />);
 }
 
 beforeEach(() => {
@@ -224,7 +219,7 @@ describe("ExperimentsPage", () => {
     await userEvent.click(screen.getByTestId("new-change-submit"));
 
     await waitFor(() => expect(service.of("CreateChange")).toHaveLength(1));
-    expect(service.of("CreateChange")[0]!.body).toEqual({ environmentId: "env-staging", key: "pricing-page", description: "", unit: "CHANGE_UNIT_USER" });
+    expect(service.of("CreateChange")[0]!.body).toEqual({ environmentId: "env-staging", key: "pricing-page", unit: "CHANGE_UNIT_USER" });
     await waitFor(() => expect(state.navigate).toHaveBeenCalledWith({ href: "/forge/p/shop/experiments/chg-new?who=compare" }));
   });
 });

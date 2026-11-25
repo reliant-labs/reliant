@@ -294,8 +294,8 @@ var noMCPServers = toolexec.MCPContextBinderFunc(func(tc *rctx.ToolContext) *rct
 // one the trigger service re-owns an orphaned trigger through.
 func triggerOwners(t *testing.T, repo *db.Repo) triggerowner.Service {
 	t.Helper()
-	stores := triggerowner.NewStores(repo.ORM())
-	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	owned, trigs := store.NewTriggerOwnerExtStore(repo.ORM()), store.NewTriggerExtStore(repo.ORM())
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: repo.ORM(), Locks: owned, Triggers: trigs, Adoptions: owned, Offers: owned, OrgReads: owned})
 	require.NoError(t, err, "trigger owner service")
 	return svc
 }
@@ -439,6 +439,8 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},
 		Repo:      s.Repo,
+		ChatRows:  store.NewChatExtStore(s.Repo.ORM()),
+		ChatViews: store.NewChatsWithActivityExtStore(s.Repo.ORM()),
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
 		Signals:   pause,
@@ -458,6 +460,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Logger:         slog.Default(),
 		Config:         &typedconfig.Config{},
 		Repo:           s.Repo,
+		Chats:          store.NewChatExtStore(s.Repo.ORM()),
 		Owners:         triggerOwners(t, s.Repo),
 		Firings:        store.NewTriggerEventExtStore(s.Repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()),
