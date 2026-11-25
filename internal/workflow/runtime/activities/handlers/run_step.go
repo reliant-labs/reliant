@@ -54,6 +54,13 @@ type ExecuteRunStepInput struct {
 	// starts in. A relative one is relative to the run's checkout; empty is
 	// the checkout itself.
 	WorkDir string `json:"work_dir,omitempty"`
+	// LegacyLLMGateway is a run node's removed `llm_gateway`, as a step
+	// scheduled by a release that still had it carries it, or as the workflow
+	// passes it for a node a run recorded then declared
+	// (runtime/removed_definition_keys.go). Never set otherwise. Such a
+	// command was to run only with a gateway step key, which is no longer
+	// minted, so it is refused rather than run without one.
+	LegacyLLMGateway json.RawMessage `json:"llm_gateway,omitempty"`
 	// SaveMessage delegates the run node's save_message to the ActivityWrapper
 	// (see types.SaveMessageRequest). The handler never reads it.
 	SaveMessage *activitytypes.SaveMessageRequest `json:"save_message,omitempty" reliant:"-"`
@@ -215,6 +222,16 @@ func (a *ExecuteRunStepActivity) execute(ctx context.Context, input ExecuteRunSt
 				// 48b45b13).
 				Category: temporal.ApplicationErrorCategoryBenign,
 			})
+	}
+
+	// A command declared with the removed llm_gateway never runs without its
+	// step key. A retry only reattaches to what its first attempt sent, so it
+	// carries on; that key, no longer revoked here, lapses at its expiry.
+	if !retry && hasLegacyLLMGateway(input.LegacyLLMGateway) {
+		logging.WarnContext(ctx, "[RunStep] refused a step declared with the removed llm_gateway; the command was not run",
+			"chat_id", input.ChatID, "step_id", input.StepID)
+		return ExecuteRunStepOutput{Stderr: legacyLLMGatewayRefusal, Output: legacyLLMGatewayRefusal, ExitCode: -1,
+			Duration: time.Since(startTime).Milliseconds()}, nil
 	}
 
 	// Set default timeout if not provided (5 minutes)
@@ -986,4 +1003,17 @@ func runCommandDir(checkout, workDir string) string {
 	default:
 		return filepath.Join(checkout, workDir)
 	}
+}
+
+// legacyLLMGatewayRefusal is a step declared with the removed llm_gateway's
+// verdict: exit -1, its command not run.
+const legacyLLMGatewayRefusal = "Error: this run node sets llm_gateway, which was removed (it shipped in v1.29.0): " +
+	"the command was meant to run only with an LLM gateway step key, which Reliant no longer issues, so it was not run. " +
+	"Remove llm_gateway from the node and run the workflow again"
+
+// hasLegacyLLMGateway reports whether raw is a set llm_gateway (not absent
+// or null).
+func hasLegacyLLMGateway(raw json.RawMessage) bool {
+	v := strings.TrimSpace(string(raw))
+	return v != "" && v != "null"
 }

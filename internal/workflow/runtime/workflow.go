@@ -1197,6 +1197,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 		ctx = withCatalogPin(ctx, loadedWf.CatalogPin)
 	}
+	// A run recorded before llm_gateway's removal: its run nodes that set it
+	// refuse their command rather than run without the step key.
+	ctx = withLegacyLLMGateway(ctx, recordedLLMGatewayNodes(loadedWf.WorkflowJSON))
 	nameRunOrg(ctx, loadedWf.OrgID)
 
 	// Parse the placeholder-resolved workflow to get input schemas

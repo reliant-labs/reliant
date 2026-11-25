@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -111,4 +112,41 @@ func TestDropRunLLMGatewayReachesNestedNodes(t *testing.T) {
 	assert.NotContains(t, sugared, "llm_gateway")
 	assert.Contains(t, sugared, "command")
 	assert.Contains(t, other["args"], "llm_gateway")
+}
+
+func TestRecordedLLMGatewayNodes(t *testing.T) {
+	// The shape ActivityLoadWorkflow records: protojson, nested graphs included.
+	nodes := recordedLLMGatewayNodes([]byte(`{"name":"b","nodes":[
+		{"id":"bench","type":"run","run":{"command":{"expr":"x"},"llmGateway":{"cli":"claude-code","budgetUsd":2}}},
+		{"id":"plain","type":"run","run":{"command":{"expr":"y"}}},
+		{"id":"each","type":"loop","loop":{"inline":{"nodes":[{"id":"inner","type":"run","run":{"llmGateway":{"cli":"claude-code"}}}]}}}]}`))
+	assert.Len(t, nodes, 2)
+	assert.JSONEq(t, `{"cli":"claude-code","budgetUsd":2}`, string(nodes["bench"]))
+	assert.Contains(t, nodes, "inner")
+	assert.Nil(t, recordedLLMGatewayNodes([]byte(`{"nodes":[{"id":"a","type":"run","run":{}}]}`)))
+	assert.Nil(t, recordedLLMGatewayNodes(nil))
+}
+
+// The recorded nodes ride the workflow context to the step executor, merged
+// with an enclosing definition's.
+func TestLegacyLLMGatewayRidesTheContext(t *testing.T) {
+	probe := func(ctx workflow.Context) ([]string, error) {
+		ctx = withLegacyLLMGateway(ctx, map[string]json.RawMessage{"outer": json.RawMessage(`{}`)})
+		ctx = withLegacyLLMGateway(ctx, map[string]json.RawMessage{"inner": json.RawMessage(`{}`)})
+		ctx = withLegacyLLMGateway(ctx, nil)
+		var found []string
+		for _, id := range []string{"outer", "inner", "other"} {
+			if _, ok := legacyLLMGateway(ctx, id); ok {
+				found = append(found, id)
+			}
+		}
+		return found, nil
+	}
+	env := newRequirementsEnv()
+	env.RegisterWorkflow(probe)
+	env.ExecuteWorkflow(probe)
+	require.NoError(t, env.GetWorkflowError())
+	var found []string
+	require.NoError(t, env.GetWorkflowResult(&found))
+	assert.Equal(t, []string{"outer", "inner"}, found)
 }

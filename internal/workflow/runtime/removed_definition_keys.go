@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"bytes"
 	"encoding/json"
 
 	"go.temporal.io/sdk/workflow"
@@ -98,4 +99,87 @@ func dropRunLLMGateway(v interface{}) {
 			dropRunLLMGateway(child)
 		}
 	}
+}
+
+// legacyLLMGatewayKey holds, on the workflow context, the run nodes whose
+// recorded definition set the removed llm_gateway (by node id). A run
+// recorded while it existed may not have reached such a node yet; its
+// definition re-parses without the key, so ExecuteRunStep is told
+// explicitly (ExecuteRunStepInput.LegacyLLMGateway) and refuses the command
+// rather than run it without the step key it was declared with. The
+// activity is scheduled either way, so the command sequence is unchanged.
+type legacyLLMGatewayKey struct{}
+
+// withLegacyLLMGateway records nodes on ctx, beside any an enclosing
+// definition recorded. ctx itself when there are none.
+func withLegacyLLMGateway(ctx workflow.Context, nodes map[string]json.RawMessage) workflow.Context {
+	if len(nodes) == 0 {
+		return ctx
+	}
+	merged := make(map[string]json.RawMessage, len(nodes))
+	if outer, ok := ctx.Value(legacyLLMGatewayKey{}).(map[string]json.RawMessage); ok {
+		for id, gw := range outer {
+			merged[id] = gw
+		}
+	}
+	for id, gw := range nodes {
+		merged[id] = gw
+	}
+	return workflow.WithValue(ctx, legacyLLMGatewayKey{}, merged)
+}
+
+// legacyLLMGateway is the removed llm_gateway a recorded definition set on
+// run node nodeID, if any.
+func legacyLLMGateway(ctx workflow.Context, nodeID string) (json.RawMessage, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	nodes, _ := ctx.Value(legacyLLMGatewayKey{}).(map[string]json.RawMessage)
+	gw, ok := nodes[nodeID]
+	return gw, ok
+}
+
+// recordedLLMGatewayNodes reads, from a definition's protojson, every run
+// node (at any depth) that set llm_gateway: field 7 of RunArgs, now
+// reserved, so the generated type no longer decodes it.
+func recordedLLMGatewayNodes(workflowJSON []byte) map[string]json.RawMessage {
+	if len(workflowJSON) == 0 || !bytes.Contains(workflowJSON, []byte("lmGateway")) && !bytes.Contains(workflowJSON, []byte("llm_gateway")) {
+		return nil
+	}
+	var def interface{}
+	if err := json.Unmarshal(workflowJSON, &def); err != nil {
+		return nil
+	}
+	var out map[string]json.RawMessage
+	var walk func(v interface{})
+	walk = func(v interface{}) {
+		switch t := v.(type) {
+		case map[string]interface{}:
+			if id, ok := t["id"].(string); ok {
+				if run, ok := t["run"].(map[string]interface{}); ok {
+					gw, set := run["llmGateway"]
+					if !set {
+						gw, set = run["llm_gateway"]
+					}
+					if set && gw != nil {
+						if raw, err := json.Marshal(gw); err == nil {
+							if out == nil {
+								out = map[string]json.RawMessage{}
+							}
+							out[id] = raw
+						}
+					}
+				}
+			}
+			for _, child := range t {
+				walk(child)
+			}
+		case []interface{}:
+			for _, child := range t {
+				walk(child)
+			}
+		}
+	}
+	walk(def)
+	return out
 }
