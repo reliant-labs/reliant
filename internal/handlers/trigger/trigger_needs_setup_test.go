@@ -18,6 +18,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
@@ -97,7 +98,7 @@ func (e *needsSetupEnv) seedUnfinished(t *testing.T, enabled bool) *core.Trigger
 	require.NoError(t, err)
 	row.Params = map[string]any{}
 	row.Enabled = enabled
-	require.NoError(t, e.repo.UpdateTrigger(context.Background(), row))
+	require.NoError(t, triggertest.Update(context.Background(), e.repo, row))
 	return row
 }
 

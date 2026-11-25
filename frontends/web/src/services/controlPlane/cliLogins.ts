@@ -9,12 +9,15 @@
  * Both rpcs answer a person signed in to the web app only; the server refuses
  * a CLI login and every machine credential (reliant#1831, control-plane#2448).
  * They are the person's, not an organization's, so they carry no org.
+ *
+ * Both run on the generated hooks
+ * (hooks/controlplane/access-token-service-hooks_gen.ts); this module maps
+ * their answers for the page.
  */
 
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 
-import { AccessTokenService, type CLILogin as CLILoginPb } from "@/gen/controlplane/services/access_token/v1/access_token_pb";
-import { getControlPlaneClient } from "./client";
+import type { CLILogin as CLILoginPb, ListMyCLILoginsResponse } from "@/gen/controlplane/services/access_token/v1/access_token_pb";
 
 export interface CliLogin {
   id: string;
@@ -51,16 +54,13 @@ function toCliLogin(l: CLILoginPb): CliLogin {
   };
 }
 
-/** The caller's live CLI logins, most recently used first. */
-export async function listCliLogins(nowMs = Date.now()): Promise<CliLogin[]> {
-  const res = await getControlPlaneClient(AccessTokenService).listMyCLILogins({});
+/**
+ * The caller's live CLI logins in a ListMyCLILogins answer, most recently used
+ * first: the `select` of `useListMyCLILogins`.
+ */
+export function liveCliLogins(res: ListMyCLILoginsResponse, nowMs = Date.now()): CliLogin[] {
   return res.logins
     .filter((l) => !l.revokedAt && !(l.expiresAt && timestampDate(l.expiresAt).getTime() <= nowMs))
     .map(toCliLogin)
     .sort((a, b) => (b.lastUsedAt ?? b.createdAt ?? new Date(0)).getTime() - (a.lastUsedAt ?? a.createdAt ?? new Date(0)).getTime());
-}
-
-/** Ends one of the caller's CLI logins: its next request is refused. Idempotent. */
-export async function revokeCliLogin(id: string): Promise<void> {
-  await getControlPlaneClient(AccessTokenService).revokeMyCLILogin({ id });
 }

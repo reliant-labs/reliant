@@ -13,12 +13,13 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 func feedTrigger(t *testing.T, repo *Repo, id string) *core.Trigger {
 	t.Helper()
 	tr := newTestTrigger(id, "test-user", "test-project", id)
-	require.NoError(t, repo.CreateTrigger(context.Background(), tr))
+	require.NoError(t, triggertest.Create(context.Background(), repo, tr))
 	return tr
 }
 
@@ -215,10 +216,10 @@ func TestTriggerNamesJoined(t *testing.T) {
 	require.NoError(t, repo.UpsertDaemon(ctx, &Daemon{ID: "daemon-named", UserID: "test-user", Hostname: &host}))
 	named := newTestTrigger("trg-named", "test-user", "test-project", "named")
 	named.DaemonID = "daemon-named"
-	require.NoError(t, repo.CreateTrigger(ctx, named))
+	require.NoError(t, triggertest.Create(ctx, repo, named))
 	// No daemon row at all: the trigger must still be listed, with an empty name.
 	orphan := newTestTrigger("trg-orphan", "test-user", "test-project", "orphan")
-	require.NoError(t, repo.CreateTrigger(ctx, orphan))
+	require.NoError(t, triggertest.Create(ctx, repo, orphan))
 	// Someone else's daemon row under the same id must not lend its name.
 	otherHost := "not-yours"
 	require.NoError(t, repo.UpsertDaemon(ctx, &Daemon{ID: orphan.DaemonID, UserID: "someone-else", Hostname: &otherHost}))
@@ -294,14 +295,14 @@ func TestTrigger_NotifyOnCompleteRoundTrips(t *testing.T) {
 	ctx := context.Background()
 	tr := newTestTrigger("trg-notify", "test-user", "test-project", "notify")
 	tr.NotifyOnComplete = true
-	require.NoError(t, repo.CreateTrigger(ctx, tr))
+	require.NoError(t, triggertest.Create(ctx, repo, tr))
 
 	got, err := repo.GetTrigger(ctx, tr.ID)
 	require.NoError(t, err)
 	assert.True(t, got.NotifyOnComplete)
 
 	got.NotifyOnComplete = false
-	require.NoError(t, repo.UpdateTrigger(ctx, got))
+	require.NoError(t, triggertest.Update(ctx, repo, got))
 	got, err = repo.GetTrigger(ctx, tr.ID)
 	require.NoError(t, err)
 	assert.False(t, got.NotifyOnComplete)

@@ -4,10 +4,14 @@ syntax = "proto3";
 package reliant.v1;
 
 import "forge/v1/forge.proto";
+import "reliant/v1/chat.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // AttachmentService handles file attachment operations
+// Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+// the attachment rpcs took forge's native CRUD shapes (timestamps and the
+// Get/Upload response layouts changed). Clients built before it must upgrade.
 service AttachmentService {
   // UploadAttachment uploads a new binary file attachment (for images)
   rpc UploadAttachment(UploadAttachmentRequest) returns (UploadAttachmentResponse) {
@@ -24,39 +28,16 @@ service AttachmentService {
   }
 
   // GetAttachment retrieves an attachment by ID (includes file content)
-  // forge:custom — scoped to the caller: another user's attachment answers NotFound
   rpc GetAttachment(GetAttachmentRequest) returns (GetAttachmentResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
   // DeleteAttachment removes an attachment by ID
-  // forge:custom — checks the caller owns the attachment before it deletes, answering NotFound otherwise
   rpc DeleteAttachment(DeleteAttachmentRequest) returns (DeleteAttachmentResponse) {
     option (forge.v1.method) = {
       activity: {none: "removes an attachment staged for the composer: draft state of a message not yet sent"}
     };
   }
-}
-
-// ============================================
-// Extended Attachment Info (includes DB fields not in chat.proto Attachment)
-// ============================================
-
-// AttachmentInfo contains full attachment metadata including storage details
-message AttachmentInfo {
-  string id = 1;
-  string user_id = 2;
-  string filename = 3;
-  int64 size = 4;
-  string mime_type = 5;
-  optional string file_hash = 6;
-  string file_path = 7;
-  string created_at = 8;
-  string updated_at = 9;
-  // URL for frontend compatibility (constructed from ID)
-  string url = 10;
-  // Type of attachment: "image" (binary uploaded) or "file_reference" (path to local file)
-  string attachment_type = 11;
 }
 
 // ============================================
@@ -74,7 +55,7 @@ message UploadAttachmentRequest {
 
 message UploadAttachmentResponse {
   // The created attachment with metadata
-  AttachmentInfo attachment = 1;
+  Attachment attachment = 1;
 }
 
 // ============================================
@@ -82,12 +63,12 @@ message UploadAttachmentResponse {
 // ============================================
 
 message GetAttachmentRequest {
-  string attachment_id = 1;
+  string id = 1;
 }
 
 message GetAttachmentResponse {
   // Attachment metadata
-  AttachmentInfo attachment = 1;
+  Attachment attachment = 1;
   // File content as bytes (base64 encoded in JSON transport)
   bytes content = 2;
 }
@@ -97,7 +78,7 @@ message GetAttachmentResponse {
 // ============================================
 
 message DeleteAttachmentRequest {
-  string attachment_id = 1;
+  string id = 1;
 }
 
 message DeleteAttachmentResponse {
@@ -119,5 +100,5 @@ message CreateFileReferenceRequest {
 
 message CreateFileReferenceResponse {
   // The created file reference with metadata
-  AttachmentInfo attachment = 1;
+  Attachment attachment = 1;
 }

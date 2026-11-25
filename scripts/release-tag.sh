@@ -262,7 +262,8 @@ fi
 # and it is the difference between a release that can be described by
 # `git describe` and one that cannot.
 # --rc: the RC train tags the set's reliant commit R' = a main commit plus ONE pin commit
-# and any fix commits (scripts/rc-shape.sh), kept on origin as the head of
+# and any fix commits, pushed or merged from a branch made from the RC branch
+# (scripts/rc-shape.sh), kept on origin as the head of
 # release/vX.Y.Z-rc.N. It is held to exactly that shape.
 RC_BRANCH=""
 if [[ "$RC_MODE" == "true" ]]; then
@@ -280,7 +281,8 @@ fi
 if [[ -n "$RC_BRANCH" ]] && ! git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main; then
     if ! rc_shaped "$RELEASE_COMMIT" origin/main; then
         echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} heads ${RC_BRANCH#refs/heads/} but is not main + the train's pin commit + fix commits${NC}" >&2
-        echo -e "${YELLOW}  An RC commit is a main commit, one pin commit (RC-Set: trailer), then linear fix commits.${NC}" >&2
+        echo -e "${YELLOW}  ${RC_SHAPE_WHY}${NC}" >&2
+        echo -e "${YELLOW}  An RC commit is a main commit, one pin commit (RC-Set: trailer), then fix commits (a merged fix branch must be made from the RC branch).${NC}" >&2
         exit 1
     fi
     echo -e "${YELLOW}ℹ️  ${RELEASE_COMMIT:0:9} heads ${RC_BRANCH#refs/heads/}, cut off origin/main (--rc)${NC}"

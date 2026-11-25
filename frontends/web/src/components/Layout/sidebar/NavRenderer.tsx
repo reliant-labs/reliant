@@ -70,6 +70,10 @@ function allGroups(items: readonly NavItem[], ctx: NavCtx): NavItem[] {
 
 function Badge({ badge }: { badge: NavBadge }) {
   if (badge.type === "dot") return <span role="img" aria-label={badge.label} className="size-2 rounded-full bg-warning" />;
+  if (badge.type === "label") {
+    // A stage, not a status: a quiet outline, never a fill or a status hue.
+    return <span className="rounded-md border border-border px-1.5 text-meta leading-4 text-muted-foreground">{badge.text}</span>;
+  }
   return (
     <span className={cn("tabular-nums", badge.tone === "danger" && "font-medium text-destructive-ink")}>
       {badge.value}

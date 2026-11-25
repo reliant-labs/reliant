@@ -2766,13 +2766,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
 }
 
-// CreateTrigger inserts t with no org reads, in its own transaction.
-func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		return store.CreateTriggerInOrg(ctx, r.ORM(), t)
-	})
-}
-
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	if id == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
@@ -2785,14 +2778,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
-}
-
-// UpdateTrigger replaces the trigger's definition with no org reads, in its
-// own transaction: a write back of a row as it was (restoreActivation).
-func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		return store.UpdateTriggerInOrg(ctx, r.ORM(), t)
-	})
 }
 
 func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {

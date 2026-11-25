@@ -10,11 +10,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// AttachmentStore stores attachments and their bytes.
+// AttachmentStore stores new attachments. store.AttachmentExtStore satisfies
+// it. Get and Delete run on Deps.DB through the generated ops.
 type AttachmentStore interface {
 	InsertAttachment(ctx context.Context, a *core.Attachment) error
-	GetAttachment(ctx context.Context, id string) (*core.Attachment, error)
-	RemoveAttachment(ctx context.Context, id string) error
 }
 
 // ContentReader reads an attachment for AttachmentContentHandler. It is the

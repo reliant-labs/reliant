@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // The integration access and write-ledger ports (P5b lane L5). Each ext query
@@ -183,7 +184,7 @@ func TestListIntegrationTriggerOwners(t *testing.T) {
 	mk := func(userID, integration string, enabled bool) {
 		cfg, err := json.Marshal(core.IntegrationConfig{Integration: integration, Events: []string{"issues.opened"}})
 		require.NoError(t, err)
-		require.NoError(t, env.Repo.CreateTrigger(ctx, &core.Trigger{
+		require.NoError(t, triggertest.Create(ctx, env.Repo, &core.Trigger{
 			ID: uuid.NewString(), UserID: userID, ProjectID: storetest.SeedProjectID, Name: "t-" + uuid.NewString()[:6],
 			Kind: core.TriggerKindIntegration, Enabled: enabled, Workflow: "builtin://agent", Message: "go",
 			DaemonID: "d", Config: cfg, CreatedAt: now, UpdatedAt: now,

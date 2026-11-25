@@ -32,6 +32,7 @@ import { changeErrorKind, describeChangeError } from "@/services/controlPlane/ch
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { ENV_ALL } from "../Console/envScope";
+import { BetaTag } from "./BetaTag";
 import { ChangeDetail } from "./ChangeDetail";
 import { ageOf, deliveryPhrase, MODE_LABELS } from "./changeModel";
 import { NewChangeDialog, type NewChangeEnv } from "./NewChangeDialog";
@@ -42,6 +43,7 @@ function PageFrame({ children, onNew, canCreate }: { children: ReactNode; onNew?
       <PageHeader
         density="compact"
         title="Experiments"
+        titleAccessory={<BetaTag />}
         subtitle="Change what your app does for some or all of your users without a deploy, and compare versions to see which works better."
         className="mb-0"
         actions={
