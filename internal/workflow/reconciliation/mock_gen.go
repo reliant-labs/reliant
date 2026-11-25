@@ -164,6 +164,32 @@ func (m *MockOrphans) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Co
 // Compile-time check.
 var _ Orphans = (*MockOrphans)(nil)
 
+// forge:section MockChats
+// forge:hash=31c2cd871f3d0a9b0fca72ff139635fd6accae1d2080b86d6656595bde427c7d
+
+// MockChats is a test mock for the Chats interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChats.<Method>Func not set" error.
+type MockChats struct {
+	contractkit.Recorder
+	GetChatFunc func(context.Context, string) (*db.Chat, error)
+}
+
+// GetChat records the call and delegates to GetChatFunc when set.
+func (m *MockChats) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	m.Recorder.Record("GetChat", ctx, id)
+	if m.GetChatFunc != nil {
+		return m.GetChatFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockChats", "GetChat")
+}
+
+// Compile-time check.
+var _ Chats = (*MockChats)(nil)
+
 // forge:section MockWorkflowLoader
 // forge:hash=27de9052bc714bd51848a573063fd6021638e3ab686dcdb35a3c160c957c4b7a
 
