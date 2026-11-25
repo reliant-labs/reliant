@@ -179,51 +179,65 @@ func TestNestedFailure_FailsAnInstalledRoot(t *testing.T) {
 	assert.Contains(t, row.InstallError, "Permission denied (publickey)")
 }
 
-// Review R1.B3 (replan): the user sets the project up again while a nested
-// clone is running on the machine. A pass on another connection (a
-// reconnect) must not send a clone of the same target while the first runs;
-// once it ends, the new plan clones it again and the checkout settles.
+// Review R1.B3 / R2.B1 (replan): the user sets the project up again while a
+// nested clone is running on the machine: with the repository in the plan,
+// or first without it (a transient failure to list the repos plans none) and
+// then with it again. A pass on another connection (a reconnect) must not
+// send a clone of the same target while the first runs; once it ends, the
+// new plan clones it again and the checkout settles.
 func TestNestedClone_AReplanDuringARunningCloneNeverDispatchesItTwice(t *testing.T) {
-	f := newOrgMachinesFixture(t)
-	svc := newTestService(f.repo)
-	connA := newTestConn(f.userID, f.globexMachine, nil)
-	connA.orgID = "globex"
-	connB := newTestConn(f.userID, f.globexMachine, nil)
-	connB.orgID = "globex"
-	forge := f.nestedSetUp(t, f.ctx, f.globex, f.globexMachine)
-	target := f.path + "/forge"
+	for _, tc := range []struct {
+		name   string
+		replan func(forge *core.Repo) [][]string
+	}{
+		{"planned again with it", func(forge *core.Repo) [][]string { return [][]string{{forge.ID}} }},
+		{"planned without it, then with it", func(forge *core.Repo) [][]string { return [][]string{nil, {forge.ID}} }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newOrgMachinesFixture(t)
+			svc := newTestService(f.repo)
+			connA := newTestConn(f.userID, f.globexMachine, nil)
+			connA.orgID = "globex"
+			connB := newTestConn(f.userID, f.globexMachine, nil)
+			connB.orgID = "globex"
+			forge := f.nestedSetUp(t, f.ctx, f.globex, f.globexMachine)
+			target := f.path + "/forge"
 
-	var running bool
-	var dispatched []string // every clone sent, by either pass
-	passB := svc.nestedPassFor(connB, f.globex.ID, f.path, landed)
-	var bWaited bool
-	passB.wait = func(context.Context, time.Duration) bool { bWaited = true; return false }
-	passB.run = func(_ context.Context, step cloneStep) error {
-		if running && step.Path == target {
-			t.Errorf("pass B sent a clone of %s while pass A's clone of it was running", step.Path)
-		}
-		dispatched = append(dispatched, "B:"+step.Path)
-		return nil
+			var running bool
+			var dispatched []string // every clone sent, by either pass
+			passB := svc.nestedPassFor(connB, f.globex.ID, f.path, landed)
+			var bWaited bool
+			passB.wait = func(context.Context, time.Duration) bool { bWaited = true; return false }
+			passB.run = func(_ context.Context, step cloneStep) error {
+				if running && step.Path == target {
+					t.Errorf("pass B sent a clone of %s while pass A's clone of it was running", step.Path)
+				}
+				dispatched = append(dispatched, "B:"+step.Path)
+				return nil
+			}
+
+			passA := svc.nestedPassFor(connA, f.globex.ID, f.path, landed)
+			passA.run = func(_ context.Context, step cloneStep) error {
+				dispatched = append(dispatched, "A:"+step.Path)
+				if len(dispatched) == 1 {
+					// Mid-clone: the set-up is planned again, and the
+					// reconnected stream's pass looks for work.
+					running = true
+					for _, ids := range tc.replan(forge) {
+						require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, f.globex.ID, f.globexMachine, f.path, nil, "clone:"+uuid.NewString(), ids))
+					}
+					assert.False(t, passB.runPass(f.ctx), "pass B settled the checkout while a clone runs")
+					running = false
+				}
+				return nil
+			}
+
+			require.True(t, passA.runPass(f.ctx), "the checkout was not settled")
+			assert.True(t, bWaited, "pass B should have waited on the running clone's lease")
+			assert.Equal(t, []string{"A:" + target, "A:" + target}, dispatched,
+				"forge is cloned once under the old plan, then again for the new plan only after that clone ended")
+			assert.Equal(t, []core.NestedRepoState{core.NestedRepoInstalled}, f.nestedStates(t, f.globex.ID, f.globexMachine))
+			assert.Equal(t, core.ProjectInstallInstalled, f.checkout(t, f.globex.ID, f.globexMachine).InstallState)
+		})
 	}
-
-	passA := svc.nestedPassFor(connA, f.globex.ID, f.path, landed)
-	passA.run = func(_ context.Context, step cloneStep) error {
-		dispatched = append(dispatched, "A:"+step.Path)
-		if len(dispatched) == 1 {
-			// Mid-clone: the set-up is planned again, and the reconnected
-			// stream's pass looks for work.
-			running = true
-			require.NoError(t, f.repo.UpsertQueuedProjectDaemon(f.ctx, f.globex.ID, f.globexMachine, f.path, nil, "clone:"+uuid.NewString(), []string{forge.ID}))
-			assert.False(t, passB.runPass(f.ctx), "pass B settled the checkout while a clone runs")
-			running = false
-		}
-		return nil
-	}
-
-	require.True(t, passA.runPass(f.ctx), "the checkout was not settled")
-	assert.True(t, bWaited, "pass B should have waited on the running clone's lease")
-	assert.Equal(t, []string{"A:" + target, "A:" + target}, dispatched,
-		"forge is cloned once under the old plan, then again for the new plan only after that clone ended")
-	assert.Equal(t, []core.NestedRepoState{core.NestedRepoInstalled}, f.nestedStates(t, f.globex.ID, f.globexMachine))
-	assert.Equal(t, core.ProjectInstallInstalled, f.checkout(t, f.globex.ID, f.globexMachine).InstallState)
 }
