@@ -5,9 +5,6 @@ import (
 	"context"
 	"database/sql/driver"
 	"errors"
-	"strings"
-
-	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -34,33 +31,27 @@ func (s *Service) callerIdentity(ctx context.Context, authHeader string) (userID
 	return userID, email, nil
 }
 
-// controlPlaneAccountDeletedReason is the svcerr reason control-plane sets
-// (svcerr.ReasonHeader) when it refuses a request because the caller's
-// platform account is already deleted.
-const controlPlaneAccountDeletedReason = "account_deleted"
-
-// controlPlaneAccountDeletedMessage is the message control-plane's
-// deleted-account interceptor refuses with. Matched as well as the reason,
-// because control-plane releases before the reason only send the message.
-const controlPlaneAccountDeletedMessage = "this account has been deleted"
-
 // controlPlaneAccountAlreadyDeleted reports whether the control plane refused
-// because the caller's platform account is ALREADY deleted.
+// because the caller's platform account is VERIFIABLY deleted already.
 //
 // That is what a retry sees after a deletion whose control-plane half
 // succeeded and whose local purge then failed: the platform account is gone,
 // so the control plane refuses every later call with the same, still-valid
 // JWT. Treating that refusal as a failure strands the user's reliant data
-// forever, so DeleteAccount resumes the local purge on it instead. Trusting it
-// is sound: the control plane answers for exactly the bearer the caller
-// presented, and the purge removes only that caller's own rows.
+// forever, so DeleteAccount resumes the local purge on it instead.
+//
+// Only the control plane's confirmation counts (controlplane.
+// ErrAccountDeletionConfirmed, its AccountDeletionConfirmed error detail):
+// the control plane writes the tombstone it is sent for only after settling
+// the wallet and removing the sign-in identity. The same refusal WITHOUT the
+// confirmation (the control plane's tombstone lookup failed, or a release
+// that predates the detail) is ambiguous and stays a failure the user
+// retries: purging on it could wipe local data with no platform deletion and
+// no wallet settlement. Trusting the confirmation is sound: the control plane
+// answers for exactly the bearer the caller presented, and the purge removes
+// only that caller's own rows.
 func controlPlaneAccountAlreadyDeleted(err error) bool {
-	if svcerr.MetaOf(err).Get(svcerr.ReasonHeader) == controlPlaneAccountDeletedReason {
-		return true
-	}
-	var ce *connect.Error
-	return errors.As(err, &ce) && ce.Code() == connect.CodePermissionDenied &&
-		strings.Contains(ce.Message(), controlPlaneAccountDeletedMessage)
+	return errors.Is(err, controlplane.ErrAccountDeletionConfirmed)
 }
 
 // purgeAttempts bounds how often DeleteAccount runs the local purge when a
