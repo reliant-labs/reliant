@@ -400,7 +400,7 @@ func TestDerivation_UpgradeEventIsAcceptedAndWritesNothing(t *testing.T) {
 	repo.seedDaemon(&db.Daemon{ID: "d-1", UserID: "u-1"})
 	d := NewDerivation(nil, repo, repo)
 	err := d.dispatch(context.Background(), daemonwire.Event{
-		DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventUpgrade, At: time.Now().UTC(),
+		DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventUpgrade, At: time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC),
 		Upgrade: &daemonwire.Upgrade{State: daemonwire.UpgradeStateDrained},
 	})
 	if err != nil {
