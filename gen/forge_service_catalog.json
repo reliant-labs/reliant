@@ -58361,7 +58361,6 @@
     },
     {
       "consumer": "MCP",
-<<<<<<< ours
       "field": "Projects",
       "interface": "github.com/reliant-labs/reliant/internal/projectaccess.Service",
       "methods": [],
@@ -58373,7 +58372,9 @@
         "Projectaccess"
       ],
       "resolution": "composition_expression"
-=======
+    },
+    {
+      "consumer": "MCP",
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.UserRefetch",
       "methods": [],
@@ -58382,7 +58383,6 @@
       ],
       "providers": [],
       "resolution": "unresolved"
->>>>>>> theirs
     },
     {
       "consumer": "MCP",
