@@ -9,3 +9,6 @@ func GroupMembers(int) ([]GroupMember, bool) { return nil, false }
 
 // GroupOwned cannot prove anything without a process-table API.
 func GroupOwned(int, []GroupMember) bool { return false }
+
+// processTable cannot list processes without a process-table API.
+func processTable() ([]tableEntry, bool) { return nil, false }

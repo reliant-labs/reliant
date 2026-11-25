@@ -47,6 +47,28 @@ func GroupOwned(pgid int, members []GroupMember) bool {
 	return false
 }
 
+// processTable lists every live process (zombies excluded, as in
+// GroupMembers) with its parent and process group. ok is false where the
+// process table cannot be read.
+func processTable() (procs []tableEntry, ok bool) {
+	all, err := unix.SysctlKinfoProcSlice("kern.proc.all")
+	if err != nil {
+		return nil, false
+	}
+	for i := range all {
+		p := &all[i]
+		if p.Proc.P_stat == szomb {
+			continue
+		}
+		procs = append(procs, tableEntry{
+			GroupMember: GroupMember{PID: int(p.Proc.P_pid), Start: kinfoStart(p)},
+			PPID:        int(p.Eproc.Ppid),
+			Pgid:        int(p.Eproc.Pgid),
+		})
+	}
+	return procs, true
+}
+
 // kinfoStart is the process start time in microseconds since the epoch, the
 // identity that tells a pid's current holder from an earlier one.
 func kinfoStart(p *unix.KinfoProc) uint64 {

@@ -419,3 +419,102 @@ func TestGroupMembersAndOwnership(t *testing.T) {
 		t.Fatal("a member proved a group it is not in")
 	}
 }
+
+// strayScript is a command shaped like a workflow run node's: a multi-line
+// shell (so bash forks rather than execs) whose work runs under launcher,
+// which puts it in a process group of its own (`timeout`, setsid). The work
+// writes its pid to pidFile and records, from an EXIT trap, that it was let
+// clean up — the trap that releases a lane's claim in rc-train's cp_gate.
+// ignoreTERM makes the work refuse SIGTERM instead, for the escalation.
+func strayScript(launcher, marker, ready, pidFile string, ignoreTERM bool) string {
+	trap := `trap "echo cleaned > ` + marker + `" EXIT`
+	if ignoreTERM {
+		trap = `trap "" TERM`
+	}
+	return launcher + ` bash -c '` + trap + `; echo $$ > ` + pidFile + `; : > ` + ready + `; while true; do sleep 0.05; done' >/dev/null 2>&1
+	echo unreachable`
+}
+
+// startStray starts strayScript under ApplyGracefulCancel and returns, once
+// the work is armed, its cancel, the started command, ApplyGracefulCancel's
+// stop and the work's pid.
+func startStray(t *testing.T, launcher string, ignoreTERM bool, grace time.Duration) (cancel func(), cmd *exec.Cmd, stop func(), marker string, work int) {
+	t.Helper()
+	if _, ok := GroupMembers(1); !ok {
+		t.Skip("needs a readable process table")
+	}
+	if _, err := exec.LookPath(strings.Fields(launcher)[0]); err != nil {
+		t.Skipf("needs %s on PATH", strings.Fields(launcher)[0])
+	}
+	dir := t.TempDir()
+	marker, ready, pidFile := filepath.Join(dir, "cleanup.txt"), filepath.Join(dir, "ready"), filepath.Join(dir, "pid")
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	t.Cleanup(cancelCtx)
+	cmd = exec.CommandContext(ctx, "bash", "-c", strayScript(launcher, marker, ready, pidFile, ignoreTERM))
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.WaitDelay = 60 * time.Second
+	stop = ApplyGracefulCancel(cmd, grace)
+	t.Cleanup(stop)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	awaitTrapInstalled(t, ready)
+	b, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, _ = strconv.Atoi(strings.TrimSpace(string(b)))
+	// Whatever the outcome, never leave the work running past the test.
+	t.Cleanup(func() { _ = syscall.Kill(work, syscall.SIGKILL) })
+	if pgid, err := syscall.Getpgid(work); err != nil || pgid == cmd.Process.Pid {
+		t.Fatalf("the work's group = %d (err %v), want a group of its own apart from the command's %d", pgid, err, cmd.Process.Pid)
+	}
+	return cancelCtx, cmd, stop, marker, work
+}
+
+// awaitGone waits for pid to exit (or become a zombie awaiting its reaper).
+func awaitGone(t *testing.T, pid int, why string) {
+	t.Helper()
+	deadline := time.Now().Add(conditionTimeout)
+	for syscall.Kill(pid, 0) == nil && !isZombie(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("process %d still running %v after cancel: %s", pid, conditionTimeout, why)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// TestApplyGracefulCancel_ReachesDescendantsInGroupsOfTheirOwn: a cancelled
+// command whose work left its process group — under `timeout`, which takes a
+// group of its own, or setsid — must still get that work a SIGTERM, so its
+// EXIT trap runs and nothing outlives the command. Before, only the command's
+// own group was signalled: its shell died and the work ran on reparented to
+// init, trap never run (a cancelled rc-train run's `timeout -k 120 300m bash
+// scripts/ci-full-main.sh`, 2026-11-22 and 2026-11-24).
+func TestApplyGracefulCancel_ReachesDescendantsInGroupsOfTheirOwn(t *testing.T) {
+	for _, launcher := range []string{"timeout -k 120 300", "setsid"} {
+		t.Run(strings.Fields(launcher)[0], func(t *testing.T) {
+			cancel, cmd, stop, marker, work := startStray(t, launcher, false, DefaultGraceDelay)
+			cancel()
+			_ = cmd.Wait()
+			stop() // what every caller does once Wait has returned
+
+			if got := waitForMarker(t, marker, "cleaned", conditionTimeout); got != "cleaned" {
+				t.Fatalf("EXIT trap marker = %q, want %q: the work in a group of its own never got SIGTERM", got, "cleaned")
+			}
+			awaitGone(t, work, "it outlived the cancelled command")
+		})
+	}
+}
+
+// TestApplyGracefulCancel_KillsDescendantGroupThatIgnoresSIGTERM: grace bounds
+// the work in a group of its own too. One that ignores SIGTERM is SIGKILLed
+// with its group when grace runs out, though the command's shell, its parent,
+// died at once and Wait has long returned.
+func TestApplyGracefulCancel_KillsDescendantGroupThatIgnoresSIGTERM(t *testing.T) {
+	cancel, cmd, stop, _, work := startStray(t, "setsid", true, 300*time.Millisecond)
+	cancel()
+	_ = cmd.Wait()
+	stop() // what every caller does once Wait has returned
+	awaitGone(t, work, "a descendant group that ignored SIGTERM was never killed")
+}

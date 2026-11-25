@@ -16,3 +16,11 @@ type GroupMember struct {
 	PID   int
 	Start uint64
 }
+
+// tableEntry is one live process of a process-table snapshot: who it is, its
+// parent and its process group.
+type tableEntry struct {
+	GroupMember
+	PPID int
+	Pgid int
+}

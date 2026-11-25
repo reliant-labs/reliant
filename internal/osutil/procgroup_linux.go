@@ -48,28 +48,57 @@ func GroupOwned(pgid int, members []GroupMember) bool {
 	return false
 }
 
+// processTable lists every live process (zombies excluded, as in
+// GroupMembers) with its parent and process group. ok is false where /proc
+// cannot be read.
+func processTable() (procs []tableEntry, ok bool) {
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return nil, false
+	}
+	for _, e := range entries {
+		pid, err := strconv.Atoi(e.Name())
+		if err != nil {
+			continue
+		}
+		state, ppid, pgid, start, ok := readProcStatParent(pid)
+		if ok && state != 'Z' && state != 'X' {
+			procs = append(procs, tableEntry{GroupMember: GroupMember{PID: pid, Start: start}, PPID: ppid, Pgid: pgid})
+		}
+	}
+	return procs, true
+}
+
 // readProcStat reads a process's state (field 3), process group (field 5) and
-// start time (field 22) from /proc/<pid>/stat. The command name (field 2) may
-// hold spaces and parentheses, so fields are counted from the last ')'.
+// start time (field 22) from /proc/<pid>/stat.
 func readProcStat(pid int) (state byte, pgid int, start uint64, ok bool) {
+	state, _, pgid, start, ok = readProcStatParent(pid)
+	return state, pgid, start, ok
+}
+
+// readProcStatParent is readProcStat with the parent (field 4) too. The
+// command name (field 2) may hold spaces and parentheses, so fields are
+// counted from the last ')'.
+func readProcStatParent(pid int) (state byte, ppid, pgid int, start uint64, ok bool) {
 	data, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
 	if err != nil {
-		return 0, 0, 0, false
+		return 0, 0, 0, 0, false
 	}
 	s := string(data)
 	end := strings.LastIndexByte(s, ')')
 	if end < 0 {
-		return 0, 0, 0, false
+		return 0, 0, 0, 0, false
 	}
 	f := strings.Fields(s[end+1:])
 	// f[0] is field 3: field n is f[n-3].
 	if len(f) < 20 || len(f[0]) == 0 {
-		return 0, 0, 0, false
+		return 0, 0, 0, 0, false
 	}
+	ppid, err0 := strconv.Atoi(f[1])
 	pgid, err1 := strconv.Atoi(f[2])
 	start, err2 := strconv.ParseUint(f[19], 10, 64)
-	if err1 != nil || err2 != nil {
-		return 0, 0, 0, false
+	if err0 != nil || err1 != nil || err2 != nil {
+		return 0, 0, 0, 0, false
 	}
-	return f[0][0], pgid, start, true
+	return f[0][0], ppid, pgid, start, true
 }

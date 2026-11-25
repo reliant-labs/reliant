@@ -56,6 +56,16 @@ const DefaultGraceDelay = 3 * time.Second
 // callers must start the child with its own process group (Setpgid on Unix,
 // CREATE_NEW_PROCESS_GROUP on Windows) — both exec paths already do.
 //
+// A group is not the whole tree either. A descendant can leave it for a group
+// of its own: GNU `timeout` does unless given --foreground, and so does
+// anything started with setsid (an embedded postgres, a daemonized server).
+// Signalling only the command's group killed the shell and left those running,
+// reparented to init, with the EXIT traps that release their locks never run
+// (a cancelled workflow run's `timeout … ci-full-main.sh`, 2026-11-22 and
+// 2026-11-24). So the command's descendants are read once, at cancellation,
+// and every group they made of their own is stopped too: SIGTERM to the
+// process that made it, SIGKILL to all of it after grace (strayGroups).
+//
 // # Two ordering hazards this handles
 //
 // Cancel runs BEFORE Wait reaps the child, so the pid is still un-reaped and
@@ -103,8 +113,15 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 		// Who is in the group now, while the leader is unreaped and the
 		// group id is therefore certainly the command's (GroupMember).
 		members, _ := GroupMembers(proc.Pid)
+		// And the groups its descendants made of their own (`timeout`, which
+		// takes a group of its own; a server started with setsid), which a
+		// signal to the command's group never reaches. Read BEFORE the
+		// SIGTERM: once the shell dies its children are reparented and the
+		// tree can no longer be walked from it.
+		strays := snapshotStrayGroups(proc.Pid)
 
 		err := terminateGracefully(proc)
+		strays.terminate()
 
 		// Escalate on our own clock so WaitDelay keeps meaning only the pipe
 		// drain. The escalation kills the GROUP, and it outlives the
@@ -114,13 +131,15 @@ func ApplyGracefulCancel(cmd *exec.Cmd, grace time.Duration) (stop func()) {
 		// command finishes inside the grace period the timer is stopped
 		// only if none of those members is left; otherwise it fires and
 		// SIGKILLs the rest — the group only while one of them still proves
-		// the id is the command's (killGroup).
+		// the id is the command's (killGroup). The descendants' own groups
+		// are held to the same rule.
 		timer := time.AfterFunc(grace, func() {
 			killGroup(proc, members)
+			strays.kill()
 		})
 		go func() {
 			<-done
-			if !GroupOwned(proc.Pid, members) {
+			if !GroupOwned(proc.Pid, members) && !strays.alive() {
 				timer.Stop()
 			}
 		}()
