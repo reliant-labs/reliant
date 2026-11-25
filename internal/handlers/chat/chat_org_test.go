@@ -8,6 +8,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgs"
 )
@@ -29,7 +30,7 @@ func orgService(t *testing.T, projectOrg *string) *Service {
 			return &db.Project{ID: id, UserID: userID, OrgID: projectOrg}, nil
 		},
 	}
-	return NewTestChat(t, WithChatDeps(Deps{Repo: repo, Orgs: orgs.New(orgSource{})}))
+	return NewTestChat(t, WithChatDeps(Deps{Repo: repo, Chats: chataccesstest.For(repo), Orgs: orgs.New(orgSource{})}))
 }
 
 // A chat in an org's project belongs to that org, so even a request that
