@@ -2848,12 +2848,6 @@ func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID s
 	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
 }
 
-// PauseTrigger is store.SystemPauseTrigger: the system pausing a trigger that
-// can no longer launch as written, with the pause in its change history.
-func (r *Repo) PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error) {
-	return store.SystemPauseTrigger(ctx, r.ORM(), id, reason)
-}
-
 func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
 	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
 }

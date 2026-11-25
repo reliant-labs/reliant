@@ -16,6 +16,7 @@ func workflowStatusDeps(repo WorkflowStatusStore) WorkflowStatusDeps {
 		d.Runs = NewRunRecords(o.ORM())
 		d.Workflows = NewWorkflowRuns(o.ORM())
 		d.Attention = NewAttentionRecorder(o.ORM())
+		d.Pauser = store.NewTriggerWritesExtStore(o.ORM())
 	}
 	return d
 }

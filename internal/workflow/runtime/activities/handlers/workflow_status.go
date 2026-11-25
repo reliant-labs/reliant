@@ -117,6 +117,9 @@ type WorkflowStatusActivity struct {
 	runs      RunRecords
 	workflows WorkflowRuns
 	attention AttentionRecorder
+	// pauser pauses a trigger whose run an org policy refused; nil pauses
+	// nothing (deps.TriggerPauser).
+	pauser TriggerPauser
 	// trackerFor returns the product-event tracker for a user; analytics.ForUser
 	// outside tests.
 	trackerFor func(ctx context.Context, userID string) analytics.Tracker
@@ -129,6 +132,7 @@ func NewWorkflowStatusActivity(deps WorkflowStatusDeps) *WorkflowStatusActivity 
 		runs:       deps.Runs,
 		workflows:  deps.Workflows,
 		attention:  deps.Attention,
+		pauser:     deps.Pauser,
 		trackerFor: analytics.ForUser,
 	}
 }
@@ -441,12 +445,6 @@ func (a *WorkflowStatusActivity) setRunOutcome(ctx context.Context, input Workfl
 	return a.runs.SetWorkflowRunOutcome(ctx, input.WorkflowID, input.resolved.outcome)
 }
 
-// policyTriggerPauser pauses a trigger with a system reason; paused is false
-// when it was already paused. *db.Repo satisfies it.
-type policyTriggerPauser interface {
-	PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error)
-}
-
 // pauseTriggerRefusedByPolicy pauses, once, the trigger whose unattended
 // launch run an org policy ended (control-plane docs/design/org-policies.md
 // §5.1): every later fire would meet the same verdict, and without the pause
@@ -463,8 +461,7 @@ func (a *WorkflowStatusActivity) pauseTriggerRefusedByPolicy(ctx context.Context
 	if !ok {
 		return
 	}
-	pauser, ok := a.repo.(policyTriggerPauser)
-	if !ok {
+	if a.pauser == nil {
 		return
 	}
 	chat, err := a.repo.GetChat(ctx, input.ChatID)
@@ -475,7 +472,7 @@ func (a *WorkflowStatusActivity) pauseTriggerRefusedByPolicy(ctx context.Context
 	if triggerID == "" {
 		return
 	}
-	paused, err := pauser.PauseTrigger(ctx, triggerID, core.TriggerPausedOrgPolicy)
+	paused, err := a.pauser.SystemPauseTrigger(ctx, triggerID, core.TriggerPausedOrgPolicy)
 	switch {
 	case err != nil:
 		logging.WarnContext(ctx, "[WorkflowStatus] Could not pause a trigger an org policy refused; its next refused run pauses it",

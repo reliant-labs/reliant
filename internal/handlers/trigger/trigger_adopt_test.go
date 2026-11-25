@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -359,7 +360,7 @@ func TestAdoptAs_AdoptedTriggerIsDisabledAndEnablingGatesAsTheAdopter(t *testing
 		d.Access = map[string]IntegrationAccess{"gh": access}
 	})
 	old, _ := e.made(t, ghDefinition(e.triggerTestEnv, nil))
-	paused, err := e.repo.PauseTrigger(context.Background(), old.ID, core.TriggerPausedCreatorLeftOrg)
+	paused, err := store.NewTriggerWritesExtStore(e.repo.ORM()).SystemPauseTrigger(context.Background(), old.ID, core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 	require.True(t, paused)
 	old = e.row(t, old.ID)
