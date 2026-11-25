@@ -1480,7 +1480,7 @@ func (m *MockCapacityStore) SettleSupersededTriggerCapacityRun(ctx context.Conte
 var _ CapacityStore = (*MockCapacityStore)(nil)
 
 // forge:section MockRunCanceller
-// forge:hash=ea80cf640a5cf7ae38b7bfceb497ebadb66774b2d9798d8668e8ba21b66662b5
+// forge:hash=942c31ba9232eee68356a1db045eb6e6e35e596ed77b72d7deae3df9abb85a06
 
 // MockRunCanceller is a test mock for the RunCanceller interface.
 //
@@ -1490,16 +1490,16 @@ var _ CapacityStore = (*MockCapacityStore)(nil)
 // "MockRunCanceller.<Method>Func not set" error.
 type MockRunCanceller struct {
 	contractkit.Recorder
-	TerminateFunc func(context.Context, string) error
+	TerminateExecutionFunc func(context.Context, string, string, string) error
 }
 
-// Terminate records the call and delegates to TerminateFunc when set.
-func (m *MockRunCanceller) Terminate(ctx context.Context, chatID string) error {
-	m.Recorder.Record("Terminate", ctx, chatID)
-	if m.TerminateFunc != nil {
-		return m.TerminateFunc(ctx, chatID)
+// TerminateExecution records the call and delegates to TerminateExecutionFunc when set.
+func (m *MockRunCanceller) TerminateExecution(ctx context.Context, chatID string, workflowID string, runID string) error {
+	m.Recorder.Record("TerminateExecution", ctx, chatID, workflowID, runID)
+	if m.TerminateExecutionFunc != nil {
+		return m.TerminateExecutionFunc(ctx, chatID, workflowID, runID)
 	}
-	return contractkit.MockNotSet("MockRunCanceller", "Terminate")
+	return contractkit.MockNotSet("MockRunCanceller", "TerminateExecution")
 }
 
 // Compile-time check.

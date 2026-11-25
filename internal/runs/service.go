@@ -146,7 +146,7 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 
 	// Only a run Temporal could be read as live is asked: one whose state
 	// could not be read is terminated outright, as before.
-	if stateErr == nil && s.cancelCooperatively(ctx, workflowID) {
+	if stateErr == nil && s.cancelCooperatively(ctx, stopTarget{chatID: chatID, workflowID: workflowID}) {
 		s.clearUsageLimitWait(ctx, chatID)
 		return nil
 	}
@@ -216,16 +216,35 @@ const cancelPollInterval = 250 * time.Millisecond
 // handler's own budget, and terminating it would cut off the cleanup the
 // cancel was cooperative for. So it is left running, deliberately, and said
 // so; Terminate returns, because the run will stop by itself.
-func (s *Service) cancelCooperatively(ctx context.Context, workflowID string) bool {
+//
+// t names the run: the chat's current execution (Terminate), or one exact
+// execution (TerminateExecution), to which every Temporal call is then
+// addressed.
+func (s *Service) cancelCooperatively(ctx context.Context, t stopTarget) bool {
+	canceller, ok := s.requestCancel(ctx, t)
+	return ok && s.awaitCancel(ctx, canceller, t)
+}
+
+// requestCancel asks Temporal to cancel t's run, and reports whether it took
+// the request. A client that cannot cancel, or a refused request, means the
+// caller must hard-terminate instead.
+func (s *Service) requestCancel(ctx context.Context, t stopTarget) (TemporalCanceller, bool) {
 	canceller, ok := s.temporal.(TemporalCanceller)
 	if !ok {
-		return false
+		return nil, false
 	}
-	if err := canceller.CancelWorkflow(ctx, workflowID, ""); err != nil {
+	if err := canceller.CancelWorkflow(ctx, t.workflowID, t.runID); err != nil {
 		logging.WarnContext(ctx, "[runs] Could not ask Temporal to cancel the run; terminating it instead",
-			"workflowID", workflowID, "error", err)
-		return false
+			"workflowID", t.workflowID, "runID", t.runID, "error", err)
+		return nil, false
 	}
+	return canceller, true
+}
+
+// awaitCancel waits out the two phases of cancelCooperatively for a run whose
+// cancel Temporal took, and reports whether the run is stopping itself.
+func (s *Service) awaitCancel(ctx context.Context, canceller TemporalCanceller, t stopTarget) bool {
+	workflowID := t.workflowID
 	grace, settle, poll := s.cancelGrace, s.cancelSettle, s.cancelPoll
 	if grace <= 0 {
 		grace = cancelGrace
@@ -237,12 +256,12 @@ func (s *Service) cancelCooperatively(ctx context.Context, workflowID string) bo
 		poll = cancelPollInterval
 	}
 
-	if !s.pollUntil(ctx, grace, poll, func() bool { return s.runAcknowledgedCancel(ctx, canceller, workflowID) }) {
+	if !s.pollUntil(ctx, grace, poll, func() bool { return s.runAcknowledgedCancel(ctx, canceller, t) }) {
 		logging.WarnContext(ctx, "[runs] Cancelled run did not acknowledge the cancel in time; terminating it",
 			"workflowID", workflowID, "grace", grace)
 		return false
 	}
-	if !s.pollUntil(ctx, settle, poll, func() bool { return s.cancelledRunSettled(ctx, workflowID) }) {
+	if !s.pollUntil(ctx, settle, poll, func() bool { return s.cancelledRunSettled(ctx, t) }) {
 		logging.InfoContext(ctx, "[runs] Cancelled run is still executing its completion code; it writes its own terminal status when that ends",
 			"workflowID", workflowID, "waited", settle)
 	}
@@ -285,14 +304,14 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 // runAcknowledgedCancel reports whether a cancelled run has left its graph:
 // it says so itself, or Temporal reports it closed. Neither means its
 // bookkeeping is done (cancelledRunSettled).
-func (s *Service) runAcknowledgedCancel(ctx context.Context, canceller TemporalCanceller, workflowID string) bool {
-	if value, err := canceller.QueryWorkflow(ctx, workflowID, "", model.RunStopQuery); err == nil {
+func (s *Service) runAcknowledgedCancel(ctx context.Context, canceller TemporalCanceller, t stopTarget) bool {
+	if value, err := canceller.QueryWorkflow(ctx, t.workflowID, t.runID, model.RunStopQuery); err == nil {
 		var state model.RunStopState
 		if value != nil && value.Get(&state) == nil && state.Ending {
 			return true
 		}
 	}
-	state, err := s.State(ctx, workflowID)
+	state, err := s.state(ctx, t.workflowID, t.runID)
 	return err == nil && (!state.Exists || !state.IsRunning)
 }
 
@@ -300,12 +319,12 @@ func (s *Service) runAcknowledgedCancel(ctx context.Context, canceller TemporalC
 // execution has closed, so nothing of the run's own will write again, and
 // settleClosedRun has made its row agree. An execution Temporal reports open,
 // or whose state cannot be read, has not settled, whatever its row says.
-func (s *Service) cancelledRunSettled(ctx context.Context, workflowID string) bool {
-	state, err := s.State(ctx, workflowID)
+func (s *Service) cancelledRunSettled(ctx context.Context, t stopTarget) bool {
+	state, err := s.state(ctx, t.workflowID, t.runID)
 	if err != nil || (state.Exists && state.IsRunning) {
 		return false
 	}
-	s.settleClosedRun(ctx, workflowID)
+	s.whileCurrent(ctx, t, func() { s.settleClosedRun(ctx, t.workflowID) })
 	return true
 }
 
@@ -533,7 +552,13 @@ func (s *Service) Inspect(ctx context.Context, chatID string) (Inspection, error
 // no such execution, since a lost or expired run is an expected state with its
 // own recovery path.
 func (s *Service) State(ctx context.Context, workflowID string) (RunState, error) {
-	desc, err := s.temporal.DescribeWorkflowExecution(ctx, workflowID, "")
+	return s.state(ctx, workflowID, "")
+}
+
+// state is State for one execution of workflowID: runID, or the current one
+// when runID is "".
+func (s *Service) state(ctx context.Context, workflowID, runID string) (RunState, error) {
+	desc, err := s.temporal.DescribeWorkflowExecution(ctx, workflowID, runID)
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "not found") || strings.Contains(errStr, "NotFound") {
@@ -546,7 +571,8 @@ func (s *Service) State(ctx context.Context, workflowID string) (RunState, error
 		return RunState{Exists: false}, nil
 	}
 
-	runID := ""
+	// The execution described: runID, or the current one it resolved to.
+	runID = ""
 	if desc.WorkflowExecutionInfo.Execution != nil {
 		runID = desc.WorkflowExecutionInfo.Execution.RunId
 	}

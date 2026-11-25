@@ -3,11 +3,14 @@ package triggers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enums "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -20,33 +23,69 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
-// stoppingRuns is the run lifecycle as the firer sees it: Terminate closes the
-// chain Temporal reports for the chat (the cooperative cancel and its finally:
-// are the run service's, proven in internal/runs and the scenario runner's
-// TestFinally_RunsWhenTheRunIsCancelled), and writes no run_status, as a
+// stoppingRuns is the run lifecycle as the firer sees it: TerminateExecution
+// stops exactly the execution it is asked for, and refuses, stopping nothing,
+// when Temporal's current execution of the workflow id is another or is not
+// running (the run lifecycle's revalidation and Temporal's run-id addressing,
+// proven in internal/runs). The cooperative cancel and its finally: are the
+// run service's (internal/runs and the scenario runner's
+// TestFinally_RunsWhenTheRunIsCancelled). It writes no run_status, as a
 // hard-terminated run does not, so the firer's own settle is exercised.
 type stoppingRuns struct {
 	starter *describedStarter
 	mu      sync.Mutex
 	stopped []string
+	asked   []string
+	// beforeCancel runs as a cancel is asked, before it is revalidated: the
+	// moment a person's turn can replace the chain.
+	beforeCancel func(chatID string)
+	// onStopped runs after a run is stopped: a run that writes its own
+	// cancelled status as it closes.
+	onStopped func(chatID string)
+	// fail fails every cancel, as an unreachable Temporal would.
+	fail error
 }
 
-func (r *stoppingRuns) Terminate(_ context.Context, chatID string) error {
+func (r *stoppingRuns) TerminateExecution(_ context.Context, chatID, workflowID, runID string) error {
+	if r.beforeCancel != nil {
+		r.beforeCancel(chatID)
+	}
+	r.mu.Lock()
+	r.asked = append(r.asked, runID)
+	fail := r.fail
+	r.mu.Unlock()
+	if fail != nil {
+		return fail
+	}
+	r.starter.mu.Lock()
+	desc := r.starter.descriptions[workflowID]
+	if desc == nil || desc.WorkflowExecutionInfo.GetExecution().GetRunId() != runID || desc.WorkflowExecutionInfo.Status != enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		r.starter.mu.Unlock()
+		return errors.New("the chat's run is no longer the execution asked to stop")
+	}
+	desc.WorkflowExecutionInfo.Status = enums.WORKFLOW_EXECUTION_STATUS_CANCELED
+	r.starter.mu.Unlock()
 	r.mu.Lock()
 	r.stopped = append(r.stopped, chatID)
 	r.mu.Unlock()
-	r.starter.mu.Lock()
-	defer r.starter.mu.Unlock()
-	if desc := r.starter.descriptions[chatID]; desc != nil {
-		desc.WorkflowExecutionInfo.Status = enums.WORKFLOW_EXECUTION_STATUS_CANCELED
+	if r.onStopped != nil {
+		r.onStopped(chatID)
 	}
 	return nil
 }
 
+// calls is the chats whose run was stopped.
 func (r *stoppingRuns) calls() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append([]string(nil), r.stopped...)
+}
+
+// askedRuns is every run id a cancel was asked for, stopped or refused.
+func (r *stoppingRuns) askedRuns() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.asked...)
 }
 
 func cancelLauncher(f *fireFixture, starter *describedStarter) *launch.Launcher {
@@ -164,6 +203,106 @@ func TestCancelRunningNeverCancelsALaterChainOnTheChat(t *testing.T) {
 	require.Empty(t, runs.calls(), "a person's turn is not the slot's run")
 	require.Equal(t, string(core.TriggerEventLaunched), second.Outcome, "a different chain proves the admitted one closed; its slot frees as before")
 	require.Empty(t, f.cancelRow(t, first.EventID).Detail)
+}
+
+// The review's race (B1): between the description that decides the cancel and
+// the cancel itself, a person's turn replaces the chain on the chat's workflow
+// id. The cancel is asked for the run id the deciding description showed, so
+// it is refused and the person's run keeps running; the superseded firing is
+// left unmarked; and the newer firing, seeing a different chain under the
+// workflow id (proof the slot's own closed), takes the slot without cancelling
+// anything else.
+func TestCancelRunningNeverCancelsATurnThatReplacedTheChainMidCancel(t *testing.T) {
+	f, starter, runs := cancelScheduleFixture(t, reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT)
+	ctx := context.Background()
+	first, err := f.firer.Fire(ctx, f.fireAt(2))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventLaunched), first.Outcome)
+	starter.mu.Lock()
+	automationRun := starter.descriptions[first.ChatID].WorkflowExecutionInfo.GetExecution().GetRunId()
+	starter.mu.Unlock()
+
+	const humanRun = "a-person-s-turn"
+	runs.beforeCancel = func(chatID string) {
+		starter.mu.Lock()
+		defer starter.mu.Unlock()
+		starter.descriptions[chatID] = &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: chatID, RunId: humanRun}, FirstRunId: humanRun,
+			Status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		}}
+	}
+
+	second, err := f.firer.Fire(ctx, f.fireAt(3))
+	require.NoError(t, err)
+	require.Equal(t, []string{automationRun}, runs.askedRuns(), "the cancel names the run the deciding description showed")
+	require.Empty(t, runs.calls(), "and is refused: that run is no longer the chat's")
+	starter.mu.Lock()
+	humanStatus := starter.descriptions[first.ChatID].WorkflowExecutionInfo.Status
+	starter.mu.Unlock()
+	require.Equal(t, enums.WORKFLOW_EXECUTION_STATUS_RUNNING, humanStatus, "the person's run survives")
+
+	superseded := f.cancelRow(t, first.EventID)
+	require.Empty(t, superseded.Detail, "no superseded note for a cancel that did not happen")
+	require.Empty(t, superseded.RunStatus)
+	require.Equal(t, string(core.TriggerEventLaunched), second.Outcome, "a different chain proves the slot's own closed; the newer firing takes it")
+
+	runs.beforeCancel = nil
+	again, err := f.firer.Fire(ctx, f.fireAt(3))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventLaunched), again.Outcome)
+	require.Len(t, runs.askedRuns(), 1, "nothing else is cancelled for it")
+}
+
+// A cancel that fails leaves no superseded note and the run's status as it
+// was; the firing waits, and its next fire (the redriver's) cancels and
+// records it then.
+func TestCancelRunningFailedCancelLeavesNoMarkerAndRetries(t *testing.T) {
+	f, _, runs := cancelScheduleFixture(t, reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT)
+	ctx := context.Background()
+	first, err := f.firer.Fire(ctx, f.fireAt(2))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventLaunched), first.Outcome)
+
+	runs.fail = errors.New("temporal unavailable")
+	second, err := f.firer.Fire(ctx, f.fireAt(3))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventPending), second.Outcome, "the run still holds the key: the firing waits")
+	require.Len(t, runs.askedRuns(), 1)
+	require.Empty(t, runs.calls())
+	running := f.cancelRow(t, first.EventID)
+	require.Empty(t, running.Detail, "no superseded note for a cancel that failed")
+	require.Empty(t, running.RunStatus, "and the run's status is untouched")
+	require.False(t, running.Released)
+
+	runs.fail = nil
+	second, err = f.firer.Fire(ctx, f.fireAt(3))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventLaunched), second.Outcome, "the next fire cancels and takes the slot")
+	superseded := f.cancelRow(t, first.EventID)
+	require.Equal(t, store.TriggerCapacitySupersededPrefix+second.EventID, superseded.Detail)
+	require.Equal(t, core.TriggerRunCancelled, superseded.RunStatus)
+}
+
+// A run cancelled cooperatively writes its own cancelled status as it stops,
+// before the firer records the supersede: that status is no refusal, so the
+// note is still written.
+func TestCancelRunningNotesARunThatWroteItsOwnCancelledStatus(t *testing.T) {
+	f, _, runs := cancelScheduleFixture(t, reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT)
+	ctx := context.Background()
+	first, err := f.firer.Fire(ctx, f.fireAt(2))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventLaunched), first.Outcome)
+	runs.onStopped = func(string) {
+		_, err := f.repo.ORM().Bun().NewRaw(`UPDATE trigger_events SET run_status = ? WHERE id = ?`, core.TriggerRunCancelled, first.EventID).Exec(ctx)
+		require.NoError(t, err)
+	}
+
+	second, err := f.firer.Fire(ctx, f.fireAt(3))
+	require.NoError(t, err)
+	require.Equal(t, string(core.TriggerEventLaunched), second.Outcome)
+	superseded := f.cancelRow(t, first.EventID)
+	require.Equal(t, store.TriggerCapacitySupersededPrefix+second.EventID, superseded.Detail)
+	require.Equal(t, core.TriggerRunCancelled, superseded.RunStatus)
 }
 
 // Two firings of the key arrive together while a run holds it. Neither may

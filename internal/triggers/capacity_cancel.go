@@ -36,10 +36,18 @@ import (
 // its slot until Temporal reports it closed (reconcileCapacityExecution), and
 // the next firing is admitted under the scope lock (CanLaunchTriggerCapacity).
 //
-// How: the run lifecycle's cancel (RunCanceller), never a second mechanism.
-// It is asked only when Temporal shows the slot's own chain running: the
-// chat's workflow id is reused by later human turns, and a turn a person
-// started must never be cancelled for an automation's firing.
+// How: the run lifecycle's cancel (RunCanceller), never a second mechanism,
+// addressed to one exact execution. The chat's workflow id is reused by later
+// human turns, and a turn a person started must never be cancelled for an
+// automation's firing. So the cancel is decided on one Temporal description
+// (the slot's own chain, running) and asked for the run id read in that same
+// description: the run lifecycle revalidates it under the chat's run-control
+// lock and addresses every Temporal call to it, so a chain that replaced it
+// in between is refused, never cancelled.
+//
+// The "superseded by event <id>" note is written only once that cancel has
+// succeeded: a refused or failed cancel leaves the run's firing as it was,
+// and the next fire decides again.
 //
 // Every fire of a waiting firing re-derives this, so a cancel that failed
 // (Temporal unreachable, a start not yet visible) is retried by the next fire
@@ -108,25 +116,29 @@ func (c capacityCancel) cancel(ctx context.Context, repo CapacityStore, descript
 	if run.ChatID == "" || run.WorkflowID == "" {
 		return // the start has not prepared its identity yet, or the chat is gone
 	}
-	if matched, running := capacityRunState(ctx, descriptions, run); !matched || !running {
+	runID, matched, running := capacityRunState(ctx, descriptions, run)
+	if !matched || !running {
 		return
 	}
-	// Recorded before the cancel: a cooperatively cancelled run writes its own
-	// run_status as it closes, and the mark is refused once one is written.
-	if _, err := repo.MarkTriggerCapacityRunSuperseded(ctx, run.EventID, by); err != nil {
-		slog.WarnContext(ctx, "workflow capacity: cannot record which firing supersedes a run; cancelling it anyway",
-			"event_id", run.EventID, "superseded_by", by, "error", err)
-	}
-	if err := c.runs.Terminate(ctx, run.ChatID); err != nil {
-		slog.WarnContext(ctx, "workflow capacity: cannot cancel a run a newer firing of its key supersedes; the next fire of that firing retries",
-			"event_id", run.EventID, "chat_id", run.ChatID, "superseded_by", by, "error", err)
+	// The exact execution this description showed, and no other: refused if
+	// the chat's run is no longer it (a person's later turn).
+	if err := c.runs.TerminateExecution(ctx, run.ChatID, run.WorkflowID, runID); err != nil {
+		slog.WarnContext(ctx, "workflow capacity: cannot cancel a run a newer firing of its key supersedes; the next fire of that firing decides again",
+			"event_id", run.EventID, "chat_id", run.ChatID, "run_id", runID, "superseded_by", by, "error", err)
 		return
 	}
 	slog.InfoContext(ctx, "workflow capacity: cancelled a run a newer firing of its key supersedes (concurrency.cancel_running)",
-		"event_id", run.EventID, "chat_id", run.ChatID, "superseded_by", by)
+		"event_id", run.EventID, "chat_id", run.ChatID, "run_id", runID, "superseded_by", by)
+	// Recorded only now that the cancel succeeded. A run that completed or
+	// failed on its own in the meantime keeps its own outcome (the mark is
+	// refused); its own cancelled status does not refuse it.
+	if _, err := repo.MarkTriggerCapacityRunSuperseded(ctx, run.EventID, by); err != nil {
+		slog.WarnContext(ctx, "workflow capacity: cannot record which firing superseded a cancelled run",
+			"event_id", run.EventID, "superseded_by", by, "error", err)
+	}
 	// A run that closed without writing its status (hard-terminated: it ran
 	// no code) is settled here; one still running its finally: writes its own.
-	if matched, running := capacityRunState(ctx, descriptions, run); !matched || running {
+	if _, matched, running := capacityRunState(ctx, descriptions, run); !matched || running {
 		return
 	}
 	if err := repo.SettleSupersededTriggerCapacityRun(ctx, run.EventID); err != nil {
@@ -137,19 +149,19 @@ func (c capacityCancel) cancel(ctx context.Context, repo CapacityStore, descript
 // capacityRunState reads the slot's chain from Temporal. matched is false when
 // Temporal does not show that chain under the workflow id (missing, an outage,
 // or a later chain: a person's own turn on the chat); running is its status
-// then. A chain not yet bound is matched by the trigger_event_id memo its
+// then, and runID the exact execution the description showed. A chain not yet bound is matched by the trigger_event_id memo its
 // launch set, as reconcileCapacityExecution does.
-func capacityRunState(ctx context.Context, descriptions capacityDescriptions, run store.TriggerCapacityKeyRun) (matched, running bool) {
+func capacityRunState(ctx context.Context, descriptions capacityDescriptions, run store.TriggerCapacityKeyRun) (runID string, matched, running bool) {
 	if descriptions == nil {
-		return false, false
+		return "", false, false
 	}
 	desc, err := descriptions.DescribeWorkflowExecution(ctx, run.WorkflowID, "")
 	if err != nil {
-		return false, false
+		return "", false, false
 	}
 	info := desc.GetWorkflowExecutionInfo()
-	if info == nil || info.GetExecution().GetWorkflowId() != run.WorkflowID || info.GetFirstRunId() == "" {
-		return false, false
+	if info == nil || info.GetExecution().GetWorkflowId() != run.WorkflowID || info.GetExecution().GetRunId() == "" || info.GetFirstRunId() == "" {
+		return "", false, false
 	}
 	if run.FirstRunID != "" {
 		matched = info.GetFirstRunId() == run.FirstRunID
@@ -158,7 +170,7 @@ func capacityRunState(ctx context.Context, descriptions capacityDescriptions, ru
 		payload := info.GetMemo().GetFields()["trigger_event_id"]
 		matched = payload != nil && converter.GetDefaultDataConverter().FromPayload(payload, &memoEvent) == nil && memoEvent == run.EventID
 	}
-	return matched, info.GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
+	return info.GetExecution().GetRunId(), matched, info.GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING
 }
 
 // pullRequestHead is the GitHub pull request head a firing carries

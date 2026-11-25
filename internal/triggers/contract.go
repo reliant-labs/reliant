@@ -188,14 +188,19 @@ type CapacityStore interface {
 	SettleSupersededTriggerCapacityRun(ctx context.Context, eventID string) error
 }
 
-// RunCanceller stops a chat's run through the run lifecycle's own cancel, the
-// one a user's stop takes (runs.Service.Terminate): it cancels the run
-// cooperatively, so the run's finally: runs and it records its own cancelled
-// status, and hard-terminates only a run that does not acknowledge in time.
-// concurrency.cancel_running stops a superseded run with it, so there is one
-// way a run is stopped, not a second one for triggers.
+// RunCanceller stops one exact execution of a chat's run through the run
+// lifecycle's own cancel, the one a user's stop takes
+// (runs.Service.TerminateExecution, Terminate addressed to one execution): it
+// cancels the run cooperatively, so the run's finally: runs and it records its
+// own cancelled status, and hard-terminates only a run that does not
+// acknowledge in time. concurrency.cancel_running stops a superseded run with
+// it, so there is one way a run is stopped, not a second one for triggers.
+//
+// It stops runID and nothing else: when the chat's current execution is no
+// longer runID (it closed, or a person's later turn replaced it), it refuses
+// with an error and stops nothing.
 type RunCanceller interface {
-	Terminate(ctx context.Context, chatID string) error
+	TerminateExecution(ctx context.Context, chatID, workflowID, runID string) error
 }
 
 // CapacityDescriber is the Temporal read that reconciles occupied slots: the

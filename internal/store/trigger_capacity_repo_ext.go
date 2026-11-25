@@ -330,19 +330,20 @@ ORDER BY capacity_order`, pgdialect.Array(TriggerPullRequestHeadPath),
 	return rows, nil
 }
 
-// MarkTriggerCapacityRunSuperseded records on a launched event, before its run
-// is cancelled, which newer firing cancels it: outcome_detail becomes
-// TriggerCapacitySupersededPrefix + byEventID. The first firing to record it
-// wins, and a run that has already ended (run_status set) is never marked, so
-// a run that finished on its own is not misdescribed. marked reports whether
-// this call wrote it.
+// MarkTriggerCapacityRunSuperseded records on a launched event, once its run's
+// cancel has succeeded, which newer firing cancelled it: outcome_detail
+// becomes TriggerCapacitySupersededPrefix + byEventID. The first firing to
+// record it wins. A run that ended on its own (run_status completed or
+// failed) is never marked, so a run that finished before the cancel took is
+// not misdescribed; its own cancelled status, written as the cancel stopped
+// it, is no refusal. marked reports whether this call wrote it.
 func MarkTriggerCapacityRunSuperseded(ctx context.Context, db orm.Context, eventID, byEventID string) (marked bool, err error) {
 	if eventID == "" || byEventID == "" {
 		return false, errors.New("invalid trigger capacity supersede")
 	}
 	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome_detail = ?
-WHERE id = ? AND outcome = 'launched' AND run_status IS NULL AND outcome_detail = ''`,
-		TriggerCapacitySupersededPrefix+byEventID, eventID).Exec(ctx)
+WHERE id = ? AND outcome = 'launched' AND (run_status IS NULL OR run_status = ?) AND outcome_detail = ''`,
+		TriggerCapacitySupersededPrefix+byEventID, eventID, core.TriggerRunCancelled).Exec(ctx)
 	if err != nil {
 		return false, fmt.Errorf("mark a superseded trigger capacity run: %w", err)
 	}
