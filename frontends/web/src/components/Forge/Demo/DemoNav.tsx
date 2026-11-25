@@ -3,7 +3,7 @@
 /**
  * The public demo's nav body, in the app's own frame (demoShellRoutes.tsx
  * mounts AppShellFrame with `nav={DemoNav}`): the shell's one nav column
- * (Layout/sidebar/ShellNavColumn.tsx) with the demo's config (demoNav.ts)
+ * (Layout/sidebar/ShellNavColumn.tsx) with the demo's config (demoNavConfig.ts)
  * and the demo's slots. The renderer, drill-in and phone drawer are the
  * app's; the scope header is static, so no live account/project controls
  * (or their token-dependent hooks) mount on this public host.
@@ -29,7 +29,7 @@ import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import { consolePageOf, consolePath } from "../Console/paths";
 import { FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { DemoDrawerActions } from "./DemoScreenActions";
-import { demoNav } from "./demoNav";
+import { demoNav } from "./demoNavConfig";
 import { SidebarOrgLabel, SidebarOrgRow } from "@/components/Layout/sidebar/primitives";
 import { ForgeBrand } from "@/components/ForgeShell/ForgeBrand";
 

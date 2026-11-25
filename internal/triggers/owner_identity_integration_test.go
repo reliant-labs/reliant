@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // The production shape: the real repository, an activation with NO
@@ -31,7 +32,7 @@ func TestOwnerGatedFilterAgainstTheRealRepository(t *testing.T) {
 	f.trigger.WorkflowTrigger = &name
 	f.trigger.Workflow = "triage"
 	f.trigger.ConnectionID = nil
-	require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
+	require.NoError(t, triggertest.Update(ctx, f.repo, f.trigger))
 
 	intake := NewIntake(NewStores(f.repo), &recordingStarter{}, "q").
 		WithWorkflows(fakeWorkflows{yaml: map[string]string{"triage": trustedWorkflow}})

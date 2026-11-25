@@ -155,6 +155,7 @@ const worktreeSettleTimeout = 2 * time.Minute
 type worktreeTool struct {
 	repo    worktreeStore
 	records worktreeRecords
+	refetch Refetcher
 	chats   WorktreeChatLister
 	machine RunMachine
 	settler WorktreeSettler
@@ -165,8 +166,8 @@ const WorktreeToolName = "worktree"
 // NewWorktreeTool builds the worktree tool. records reads the chat's project
 // and the worktree rows it archives; nil, like a nil repo, reports that the
 // database is not available here.
-func NewWorktreeTool(repo worktreeStore, records worktreeRecords, chats WorktreeChatLister, machine RunMachine, settler WorktreeSettler) Tool {
-	tool := &worktreeTool{repo: repo, records: records, chats: chats, machine: machine, settler: settler}
+func NewWorktreeTool(repo worktreeStore, records worktreeRecords, chats WorktreeChatLister, machine RunMachine, settler WorktreeSettler, refetch Refetcher) Tool {
+	tool := &worktreeTool{repo: repo, records: records, refetch: refetch, chats: chats, machine: machine, settler: settler}
 	return NewToolWrapper(tool)
 }
 
@@ -845,7 +846,10 @@ func (w *worktreeTool) liveChatIn(ctx context.Context, worktreeID string) (strin
 
 // emitChanged tells the user's connected clients the worktree list changed.
 func (w *worktreeTool) emitChanged(ctx context.Context, userID, projectID, worktreeID string) {
-	if err := w.repo.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{
+	if w.refetch == nil {
+		return
+	}
+	if err := w.refetch.EmitUserRefetch(ctx, userID, core.RefetchWorktreeChanges, core.RefetchOpts{
 		ProjectID: &projectID, WorktreeID: &worktreeID,
 	}); err != nil {
 		logging.WarnContext(ctx, "worktree tool: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)

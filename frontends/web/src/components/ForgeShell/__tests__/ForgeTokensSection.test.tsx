@@ -46,11 +46,16 @@ afterEach(() => {
 });
 
 describe("ForgeTokensSection", () => {
-  it("shows the secret once after a successful create, with the right CLI instructions", async () => {
+  it("shows the secret once after a successful create, with the right CLI instructions, and reloads your tokens", async () => {
     const createSeen = vi.fn(() => ({ secret: "rlt_shown_once" }));
+    const listMine = vi.fn(() =>
+      listMine.mock.calls.length === 1
+        ? { tokens: [] }
+        : { tokens: [{ id: "t_new", name: "ci-deploy", displayPrefix: "rlt_ne", scopes: ["deploy:read", "deploy:write"] }] },
+    );
     setTransport(
       mockTransport({
-        "AccessTokenService.ListMyTokens": { response: { tokens: [] } },
+        "AccessTokenService.ListMyTokens": listMine,
         "AccessTokenService.CreateMyToken": createSeen,
       }),
     );
@@ -59,6 +64,7 @@ describe("ForgeTokensSection", () => {
 
     createToken();
 
+    expect(await screen.findByTestId("forge-token-t_new")).toBeTruthy();
     const box = await screen.findByTestId("forge-token-secret");
     expect(box.textContent).toContain("rlt_shown_once");
     const usage = screen.getByTestId("forge-token-usage").textContent ?? "";
@@ -195,23 +201,30 @@ describe("ForgeTokensSection", () => {
     expect(screen.queryByTestId("forge-token-org-note")).toBeNull();
   });
 
-  it("shows the org's automation tokens to an admin, and revokes them with RevokeToken", async () => {
+  it("shows the org's automation tokens to an admin, revokes them with RevokeToken and reloads that list alone", async () => {
     const revokeSeen = vi.fn(() => ({}));
+    const listMine = vi.fn(() => ({ tokens: [] }));
+    const listOrg = vi.fn(() =>
+      listOrg.mock.calls.length === 1
+        ? { tokens: [{ id: "t_maps", name: "desktop-maps", displayPrefix: "rlat_m", scopes: ["sourcemaps:write"] }] }
+        : { tokens: [] },
+    );
     setTransport(
       mockTransport({
-        "AccessTokenService.ListMyTokens": { response: { tokens: [] } },
-        "AccessTokenService.ListTokens": {
-          response: { tokens: [{ id: "t_maps", name: "desktop-maps", displayPrefix: "rlat_m", scopes: ["sourcemaps:write"] }] },
-        },
+        "AccessTokenService.ListMyTokens": listMine,
+        "AccessTokenService.ListTokens": listOrg,
         "AccessTokenService.RevokeToken": revokeSeen,
       }),
     );
     renderSection();
 
     const row = await screen.findByTestId("forge-org-token-t_maps");
+    expect(listOrg).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }));
     fireEvent.click(row.querySelector("button") as HTMLButtonElement);
 
     await waitFor(() => expect(revokeSeen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, id: "t_maps" })));
+    expect(await screen.findByText("No organization tokens.")).toBeTruthy();
+    expect(listMine).toHaveBeenCalledTimes(1);
   });
 
   it("hides the org tokens section from a member the server refuses", async () => {
@@ -229,28 +242,36 @@ describe("ForgeTokensSection", () => {
     expect(screen.queryByTestId("forge-org-tokens")).toBeNull();
   });
 
-  it("lists only live tokens and revokes in the active org", async () => {
+  it("lists only live tokens, revokes in the active org and reloads that list alone", async () => {
     const revokeSeen = vi.fn(() => ({}));
-    setTransport(
-      mockTransport({
-        "AccessTokenService.ListMyTokens": {
-          response: {
+    const listMine = vi.fn(() =>
+      listMine.mock.calls.length === 1
+        ? {
             tokens: [
               { id: "t_live", name: "ci-deploy", displayPrefix: "rlt_ab", scopes: ["deploy:write"] },
               { id: "t_ephemeral", name: "session", ephemeral: true },
             ],
-          },
-        },
+          }
+        : { tokens: [] },
+    );
+    const listOrg = vi.fn(() => ({ tokens: [] }));
+    setTransport(
+      mockTransport({
+        "AccessTokenService.ListMyTokens": listMine,
+        "AccessTokenService.ListTokens": listOrg,
         "AccessTokenService.RevokeMyToken": revokeSeen,
       }),
     );
     renderSection();
 
     const row = await screen.findByTestId("forge-token-t_live");
+    expect(listMine).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }));
     expect(screen.queryByTestId("forge-token-t_ephemeral")).toBeNull();
 
     fireEvent.click(row.querySelector("button") as HTMLButtonElement);
 
     await waitFor(() => expect(revokeSeen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, id: "t_live" })));
+    expect(await screen.findByText("No tokens yet.")).toBeTruthy();
+    expect(listOrg).toHaveBeenCalledTimes(1);
   });
 });

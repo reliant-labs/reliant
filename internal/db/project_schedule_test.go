@@ -12,9 +12,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // Deleting a project with a restore window (control-plane
@@ -60,7 +62,7 @@ func newDeleteFixture(t *testing.T) *deleteFixture {
 		id      string
 		enabled bool
 	}{{f.enabledTrigger, true}, {f.userPaused, false}} {
-		require.NoError(t, repo.CreateTrigger(f.ctx, &core.Trigger{
+		require.NoError(t, triggertest.Create(f.ctx, repo, &core.Trigger{
 			ID: tr.id, UserID: f.owner, ProjectID: f.project, Name: tr.id, Kind: core.TriggerKindSchedule, Enabled: tr.enabled,
 			Workflow: "builtin://agent", Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now,
 		}))
@@ -453,6 +455,7 @@ func (f *deleteFixture) newTrigger(id string, enabled bool) *core.Trigger {
 // migration 20261118103211): whichever commits second sees the first. So a
 // deleted project never keeps an enabled trigger.
 func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
+	testkit.Slow(t, "four real-Postgres lock-serialization scenarios")
 	after := deleteClock.Add(core.ProjectDeleteWindow)
 
 	t.Run("a create that commits first is paused by the schedule", func(t *testing.T) {
@@ -487,7 +490,7 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		receive(t, f.ctx, ready)
 		created := "trig-new-" + uuid.NewString()[:8]
 		creating := make(chan error, 1)
-		go func() { creating <- f.repo.CreateTrigger(f.ctx, f.newTrigger(created, true)) }()
+		go func() { creating <- triggertest.Create(f.ctx, f.repo, f.newTrigger(created, true)) }()
 		awaitLockWait(t, f)
 		release()
 		require.NoError(t, receive(t, f.ctx, done))
@@ -539,10 +542,10 @@ func TestTriggerWritesSerializeWithScheduling(t *testing.T) {
 		// off is not.
 		edit := f.trigger(t, f.userPaused)
 		edit.Enabled = true
-		assert.ErrorIs(t, f.repo.UpdateTrigger(f.ctx, edit), core.ErrProjectScheduledForDeletion)
+		assert.ErrorIs(t, triggertest.Update(f.ctx, f.repo, edit), core.ErrProjectScheduledForDeletion)
 		edit.Enabled = false
 		edit.Name = "renamed"
-		require.NoError(t, f.repo.UpdateTrigger(f.ctx, edit))
+		require.NoError(t, triggertest.Update(f.ctx, f.repo, edit))
 
 		resumed, err := f.purges.RestoreProject(f.ctx, f.project, f.decided())
 		require.NoError(t, err)
@@ -586,7 +589,7 @@ func TestADeletedProjectAdmitsNothingNew(t *testing.T) {
 			return err
 		},
 		"a new trigger": func() error {
-			return f.repo.CreateTrigger(f.ctx, f.newTrigger("trig-new-"+uuid.NewString()[:8], false))
+			return triggertest.Create(f.ctx, f.repo, f.newTrigger("trig-new-"+uuid.NewString()[:8], false))
 		},
 	}
 	for name, write := range writes {

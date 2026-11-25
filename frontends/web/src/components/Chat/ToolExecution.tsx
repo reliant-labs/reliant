@@ -9,8 +9,9 @@
  *
  * One call is a card instead, because it is not a record of work: a call
  * waiting on the user's approval (one primary action, Approve). A spawned
- * sub-agent is a row too — its state, its title, its elapsed time, and its
- * thread and Cancel on hover or focus — so a dozen of them stay one screen.
+ * sub-agent is a row too — its state, its title (which opens its thread), its
+ * elapsed time, and Cancel on hover or focus — so a dozen of them stay one
+ * screen.
  */
 
 import Tooltip from "../forge-ui/tooltip";
@@ -1053,8 +1054,9 @@ function ToolExecutionComponent({
   }
 
   // A sub-agent is one dense row, like a tool's: its state in the icon, its
-  // title, how long it has run (or how it ended), and — on hover or focus —
-  // its thread and, while it runs, Cancel. An agent that spawns twelve at once
+  // title, which opens its thread, how long it has run (or how it ended), and —
+  // on hover or focus — Cancel while it runs. The rest of the line opens its
+  // progress inline, with a box to message it. An agent that spawns twelve at once
   // gets twelve lines, not twelve cards (SubAgentGroup heads them).
   if (isSpawnToolFlag && !isInputPreparing) {
     const formatted = formatToolParams(toolCall.name, headerInput as ToolInput);
@@ -1087,7 +1089,7 @@ function ToolExecutionComponent({
           icon={agentMark}
           expanded={isExpandable && isExpanded}
           onToggle={isExpandable ? onToggleRow : undefined}
-          ariaLabel={`Toggle tool details for ${toolCall.name}`}
+          ariaLabel={`Show progress of ${agentTitle}`}
           tone={hasFailed ? "destructive" : "default"}
           trailing={
             <>
@@ -1098,18 +1100,6 @@ function ToolExecutionComponent({
               )}
               {agentElapsedMs !== null && (
                 <span className="text-meta tabular-nums text-muted-foreground">{formatToolDuration(agentElapsedMs)}</span>
-              )}
-              {canOpenThread && (
-                <Tooltip content="Open thread" side="bottom" delay={300} triggerClassName="inline-flex">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); onSelectThread?.(spawnThreadId ?? null); }}
-                    className={cn(ROW_ACTION_CLASS, revealOnHover)}
-                    aria-label="Open full thread view"
-                    type="button"
-                  >
-                    <Maximize2 className="size-3.5" />
-                  </button>
-                </Tooltip>
               )}
               {canCancel && (
                 <Tooltip content="Stop sub-agent" side="bottom" delay={300} triggerClassName="inline-flex">
@@ -1128,7 +1118,22 @@ function ToolExecutionComponent({
           }
           detail={isExpandable ? detail : undefined}
         >
-          <span className="min-w-0 truncate text-foreground/80">{agentTitle}</span>
+          {canOpenThread ? (
+            // The title is the agent's thread: one click opens it. The rest
+            // of the line opens the inline progress (and the message box).
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onSelectThread?.(spawnThreadId ?? null); }}
+              className="min-w-0 truncate rounded-sm text-left text-foreground/80 underline-offset-2 hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={`Open thread: ${agentTitle}`}
+              title="Open thread"
+              data-testid="sub-agent-open-thread"
+            >
+              {agentTitle}
+            </button>
+          ) : (
+            <span className="min-w-0 truncate text-foreground/80">{agentTitle}</span>
+          )}
         </QuietRow>
         {isDenied && approval?.denialReason && (
           <p className="ml-6 text-meta text-destructive-ink">Denied: {approval.denialReason}</p>

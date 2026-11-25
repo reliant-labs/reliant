@@ -147,6 +147,41 @@ describe("RunningTab", () => {
     await waitFor(() => expect(onRetry).toHaveBeenCalled());
   });
 
+  // Prod, 2026-11-23: the clone onto a Linux box failed at a Mac's
+  // /Users/... path. "Try the clone again" resent that path and failed the
+  // same way every time; a retry of a failed clone goes to the machine's
+  // default folder instead.
+  it("retries a failed clone into the machine's default folder, not the path that failed", async () => {
+    mocks.daemons = [{ daemonId: "ovh", name: "ovh-build-1", status: DaemonStatus.ACTIVE }];
+    mocks.createProjectFromRepo.mockReset();
+    mocks.createProjectFromRepo.mockResolvedValue({});
+    const d = detail({
+      daemonId: "ovh",
+      state: ProjectCheckoutState.CLONE_FAILED,
+      path: "/Users/me/src/reliant-labs/control-plane",
+      installError: "failed to create directory: mkdir /Users: permission denied",
+    });
+    render(
+      <RunningTab
+        envName="dev"
+        daemon="no-checkout"
+        envStatus={undefined}
+        envStatusLoading={false}
+        envStatusError={null}
+        onRetry={vi.fn()}
+        retrying={false}
+        projectName="control-plane"
+        checkoutMissing={d}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId("forge-checkout-clone"));
+    await waitFor(() => expect(mocks.createProjectFromRepo).toHaveBeenCalledTimes(1));
+    const sent = mocks.createProjectFromRepo.mock.calls[0][0] as { daemonId: string; path?: string };
+    expect(sent.daemonId).toBe("ovh");
+    expect(sent.path).toBeUndefined();
+  });
+
   it("reads the detail off the tab's own error too", () => {
     mocks.daemons = [];
     render(

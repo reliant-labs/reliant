@@ -810,7 +810,7 @@ func (h *Harness) WaitToolExecuting(scriptID string) {
 func (h *Harness) WaitWorkflowStatus(workflowID string, want db.WorkflowStatus) {
 	h.T.Helper()
 	h.eventually(fmt.Sprintf("workflow %s to reach status %s", workflowID, want), func() (bool, string) {
-		wf, err := h.Stack.Repo.GetWorkflow(h.Ctx, workflowID)
+		wf, err := store.LoadWorkflow(h.Ctx, h.Stack.Repo.ORM(), workflowID)
 		if err != nil || wf == nil {
 			return false, fmt.Sprintf("get workflow: %v", err)
 		}

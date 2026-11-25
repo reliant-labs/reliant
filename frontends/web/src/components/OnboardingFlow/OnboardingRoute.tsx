@@ -36,7 +36,7 @@ export function OnboardingRoute() {
   const queryClient = useQueryClient();
   const search = useSearch({ from: "/_authenticated/onboarding" });
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
-  // Where OnboardingGate found the user (./onboardingGate.ts): every exit to
+  // Where OnboardingGate found the user (./onboardingGatePolicy.ts): every exit to
   // the app lands back there.
   const returnTo = search.returnTo;
 

@@ -480,6 +480,14 @@ func (t *Tree) forget() {
 	}
 }
 
+// anonymous reports whether f is a pipe or a socket: a descriptor that names
+// no file on disk, and so holds no workspace open. An f that cannot be read
+// is not proven anonymous.
+func anonymous(f *os.File) bool {
+	fi, err := f.Stat()
+	return err == nil && fi.Mode()&(os.ModeNamedPipe|os.ModeSocket) != 0
+}
+
 // accountedFootprint lists every path a credsandbox init started by cmd holds:
 // its working directory, its executable and each file on its descriptors, in
 // the resolved form /proc reports. ok is false when one of those cannot be
@@ -507,6 +515,15 @@ func accountedFootprint(cmd *exec.Cmd) (paths []string, ok bool) {
 		name := f.Name()
 		// os.Pipe's ends are "|0" and "|1": no path at all.
 		if name == "|0" || name == "|1" {
+			continue
+		}
+		// Nor is any other anonymous pipe or socket, whatever its *os.File
+		// is called: credsandbox's liveness pipe, which every init gets, is
+		// "reliant-cred-sandbox-liveness". Read as a relative path, it left
+		// every sandboxed command's init unaccounted, so each one, while it
+		// ran, held every worktree reclaim on the machine as an undumpable
+		// process (2026-11-25: the "pid N (reliant, up 0s-3m)" blockers).
+		if !filepath.IsAbs(name) && anonymous(f) {
 			continue
 		}
 		named = append(named, name)

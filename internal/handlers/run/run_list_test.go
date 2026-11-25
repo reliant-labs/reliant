@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 type runListFixture struct {
@@ -282,7 +283,7 @@ func TestListRuns_UnlaunchedEventsInterleaveAndPage(t *testing.T) {
 	f := newRunListFixture(t)
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
 	triggerID := "trg-nightly"
-	require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(f.ctx, f.repo, &core.Trigger{
 		ID: triggerID, UserID: f.userID, ProjectID: f.project(),
 		Name: "nightly", Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "wf-a",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: base, UpdatedAt: base,

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func insertTestWorkflowWithParent(t *testing.T, repo *Repo, id, chatID string, parentID *string, status WorkflowStatus) {
@@ -56,7 +58,7 @@ func TestCascadeTerminalStatusToDescendants_CascadesRecursively(t *testing.T) {
 	}
 
 	for _, id := range []string{childID, grandchildID, greatGrandchildID} {
-		wf, err := repo.GetWorkflow(context.Background(), id)
+		wf, err := store.LoadWorkflow(context.Background(), repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetWorkflow(%s): %v", id, err)
 		}
@@ -71,7 +73,7 @@ func TestCascadeTerminalStatusToDescendants_CascadesRecursively(t *testing.T) {
 	// The root itself and the unrelated sibling root are not the cascade's
 	// responsibility.
 	for _, id := range []string{rootID, siblingChatWorkflowID} {
-		wf, err := repo.GetWorkflow(context.Background(), id)
+		wf, err := store.LoadWorkflow(context.Background(), repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetWorkflow(%s): %v", id, err)
 		}
@@ -121,7 +123,7 @@ func TestCascadeTerminalStatusToDescendants_TerminationIsNotCompletion(t *testin
 			}
 
 			for _, id := range []string{childID, grandchildID} {
-				wf, err := repo.GetWorkflow(ctx, id)
+				wf, err := store.LoadWorkflow(ctx, repo.ORM(), id)
 				if err != nil {
 					t.Fatalf("GetWorkflow(%s): %v", id, err)
 				}

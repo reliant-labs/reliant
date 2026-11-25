@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 const needsSetupWorkflow = `name: review
@@ -53,7 +54,7 @@ func (f *inboxFixture) activation(t *testing.T, id string, enabled bool, params 
 	name := "pr"
 	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(f.ctx, f.repo, &core.Trigger{
 		ID: id, UserID: f.userID, ProjectID: f.project(), Name: "Review " + id,
 		Kind: core.TriggerKindSchedule, Enabled: enabled, Workflow: "review", WorkflowTrigger: &name,
 		DaemonID: "d-" + id, Presets: map[string]string{}, Params: params, Config: cfg,
@@ -86,7 +87,7 @@ func TestListInbox_NeedsSetupOneItemPerAutomationAndClearsWhenSetupIsFinished(t 
 	row, err := f.repo.GetTrigger(f.ctx, "act-1")
 	require.NoError(t, err)
 	row.Params = map[string]any{"repos": []any{"acme/api"}}
-	require.NoError(t, f.repo.UpdateTrigger(f.ctx, row))
+	require.NoError(t, triggertest.Update(f.ctx, f.repo, row))
 	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP))
 }
 

@@ -17,7 +17,7 @@ import (
 func TestGetPlanByChatId_Generated(t *testing.T) {
 	t.Parallel()
 
-	repo := newPlanMocks()
+	repo := newPlanMocks(t)
 	repo.Plans.ListPlansByChatIDFunc = func(context.Context, string) ([]*core.Plan, error) { return nil, nil }
 	svc := plan.NewTestPlan(t, plan.WithPlanDeps(repo.Deps()))
 
@@ -29,10 +29,10 @@ func TestGetPlanByChatId_Generated(t *testing.T) {
 			WantErr: connect.CodeNotFound,
 		},
 		{
-			Name:    "another user's chat is denied",
+			Name:    "another user's chat is not found",
 			Req:     connect.NewRequest(&pb.GetPlanByChatIdRequest{ChatId: otherChatID}),
 			Ctx:     plan.AuthedContext(t),
-			WantErr: connect.CodePermissionDenied,
+			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "a chat with no plan answers an empty response",

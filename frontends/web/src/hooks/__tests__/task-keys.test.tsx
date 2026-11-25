@@ -50,7 +50,7 @@ beforeEach(() => {
         return { tasks: tasks.filter((t) => t.planId === planId) };
       },
       "TaskService.UpdateTask": (req) => {
-        const { taskId, status } = req as { taskId: string; status?: TaskStatus };
+        const { id: taskId, status } = (req as { task: { id: string; status?: TaskStatus } }).task;
         tasks = tasks.map((t) => (t.id === taskId && status !== undefined ? { ...t, status } : t));
         return { task: tasks.find((t) => t.id === taskId) };
       },
@@ -86,7 +86,7 @@ describe("TaskService keys", () => {
     await waitFor(() => expect(list.result.current.data).toHaveLength(2));
 
     const update = renderHook(() => useUpdateTask(), { wrapper });
-    await update.result.current.mutateAsync({ taskId: "t1", status: TaskStatus.COMPLETED });
+    await update.result.current.mutateAsync({ task: { id: "t1", status: TaskStatus.COMPLETED }, updateMask: { paths: ["status"] } });
 
     await waitFor(() => expect(statuses(list.result.current.data)?.[0]).toEqual(["t1", "completed"]));
     expect(listCalls).toBe(2);

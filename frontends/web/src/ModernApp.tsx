@@ -87,7 +87,7 @@ import { trackEvent } from "./lib/analytics";
 import { useCurrentWorktree, resolveWorktree, useCachedWorktrees, getCurrentWorktree, invalidateWorktreeLists } from "./hooks/worktree-queries";
 import { restoreLastWorktree } from "./hooks/worktree-actions";
 import { homePath, settingsPath, workflowBuilderPath, workflowsPath } from "@/lib/paths";
-import { chatSetupNeeded, chatSetupPath } from "./components/OnboardingFlow/onboardingGate";
+import { chatSetupNeeded, chatSetupPath } from "./components/OnboardingFlow/onboardingGatePolicy";
 import { useChatRouteRedirect } from "./components/OnboardingFlow/useChatSetup";
 
 // Stable empty reference so the useChatList default doesn't churn the tray effect.
@@ -122,7 +122,7 @@ function App() {
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
   const queryClient = useQueryClient();
 
-  // Who may use the chat routes yet (onboardingGate.ts, chatRouteAction): the
+  // Who may use the chat routes yet (onboardingGatePolicy.ts, chatRouteAction): the
   // home sends a person who cannot run a chat — not onboarded, or onboarded
   // with no usable machine — to their projects; a project's chats send a
   // person who has not onboarded through /onboarding and back. `/?plan=…`

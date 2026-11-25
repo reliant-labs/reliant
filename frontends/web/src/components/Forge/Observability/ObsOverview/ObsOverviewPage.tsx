@@ -36,10 +36,10 @@ import { RANGE_LABELS, RANGE_PRESETS, resolveWindow, type RangePreset } from "@/
 import { useForgeConsole } from "../../Console/consoleContext";
 import { NothingDeployed } from "../../Console/consolePageFrame";
 import { ENV_ALL } from "../../Console/envScope";
-import { Sparkline } from "../../LiveState/Sparkline";
 import { useAppLiveState } from "../../LiveState/useAppLiveState";
 import { OVERVIEW_RANGE } from "../../Workloads/workloadModel";
 import { VariableSelect } from "../Dashboards/parts";
+import { UPlotChart } from "../charts/UPlotChart";
 import { formatAgo, formatCount, formatDuration, formatPercent, formatRate } from "../format";
 import { shortService } from "../Graph/graphStats";
 import { HealthStrip } from "../Home/HealthStrip";
@@ -194,7 +194,7 @@ function ServiceSignals({ app, env, range }: { app: string; env: string; range: 
                     </td>
                     <td className={cn(TD, "text-right")}>{formatRate(h.requestRate)}</td>
                     <td className={cn(TD, "w-24")}>
-                      <Sparkline values={h.rateSeries} timestamps={h.timestamps} format={formatRate} label={`Requests per second to ${row.name}`} />
+                      <UPlotChart compact className="w-16" height={18} timestamps={h.timestamps} series={[{ label: "Requests", values: h.rateSeries }]} unit="rate" label={`Requests per second to ${row.name}`} />
                     </td>
                     <td className={cn(TD, "text-right", h.errorRate >= 0.05 ? "text-danger-ink" : h.errorRate >= 0.01 ? "text-warning-ink" : "")}>{formatPercent(h.errorRate)}</td>
                     <td className={cn(TD, "text-right")}>{formatDuration(h.p95Ms)}</td>

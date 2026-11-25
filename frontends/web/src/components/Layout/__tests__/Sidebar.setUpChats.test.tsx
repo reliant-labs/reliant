@@ -10,7 +10,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ChatSetup } from "../../OnboardingFlow/onboardingGate";
+import type { ChatSetup } from "../../OnboardingFlow/onboardingGatePolicy";
 
 const state = vi.hoisted(() => ({ setup: "ready" as string, openNewChat: vi.fn() }));
 

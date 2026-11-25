@@ -28,7 +28,7 @@ A frontend with no backend of its own is a complete forge project. From the app'
 reliant forge project new --in-place --kind site --name my-site
 ```
 
-This writes `forge.yaml` and `deploy/kcl/{dev,staging,prod}/main.k` and merges forge's entries into `.gitignore`. Your files are untouched. `dev` binds to your dev server, and `staging` and `prod` bind to Reliant's hosted static hosting. Then `reliant forge env deploy prod` builds the site and publishes it. One static site per organization is free, counted across its environments, and a Next.js app must build as a static export (`output: "export"`); `reliant forge lint --static-export` names anything that can't be served. To deploy with no account at all, [Deploy a Vite or Next.js app without an account](/forge/deploy-without-an-account).
+This writes `forge.yaml` and `deploy/kcl/{dev,staging,prod}/main.k` and merges forge's entries into `.gitignore`. Your files are untouched. `dev` binds to your dev server, and `staging` and `prod` bind to Reliant's hosted static hosting. Then `reliant forge env deploy prod` builds the site and publishes it. Static sites are free in one organization per person, with no limit on how many sites or environments, and a Next.js app must build as a static export (`output: "export"`); `reliant forge lint --static-export` names anything that can't be served. To deploy with no account at all, [Deploy a Vite or Next.js app without an account](/forge/deploy-without-an-account).
 
 ## An app with a Dockerfile, in any language
 

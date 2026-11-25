@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // The org integrations policy at the resolver (control-plane
@@ -186,7 +187,7 @@ func TestIntegrationPolicy_ForTrigger(t *testing.T) {
 func (e *env) integrationTrigger(owner, org, connID string) string {
 	e.t.Helper()
 	id := "trg-" + uuid.NewString()[:8]
-	require.NoError(e.t, e.repo.CreateTrigger(context.Background(), &core.Trigger{
+	require.NoError(e.t, triggertest.Create(context.Background(), e.repo, &core.Trigger{
 		ID: id, UserID: owner, OrgID: &org, ProjectID: "test-project", Name: id, Kind: core.TriggerKindIntegration,
 		Enabled: true, Workflow: "w", NoMachine: true, ConnectionID: &connID,
 		Config: []byte(`{"integration":"github"}`), CreatedAt: fixedNow, UpdatedAt: fixedNow,

@@ -17,21 +17,24 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 // AddTaskTool allows agents to add new tasks to an existing plan
 type AddTaskTool struct {
-	repo  addTaskStore
-	plans addTaskPlanning
+	repo    addTaskStore
+	refetch Refetcher
+	plans   addTaskPlanning
 }
 
 // NewAddTaskTool creates a new task addition tool
-func NewAddTaskTool(repo addTaskStore, plans addTaskPlanning) Tool {
+func NewAddTaskTool(repo addTaskStore, plans addTaskPlanning, refetch Refetcher) Tool {
 	return NewToolWrapper(&AddTaskTool{
-		repo:  repo,
+		repo: repo, refetch: refetch,
 		plans: plans,
 	})
 }
@@ -229,7 +232,7 @@ Status: %d`,
 		responseText += fmt.Sprintf("\nNotes: %s", params.Metadata.Notes)
 	}
 
-	if err := a.repo.EmitChatRefetch(rctx.Context, rctx.ChatID, db.RefetchPlanTasks); err != nil {
+	if err := emitChatRefetch(a.refetch, rctx.Context, rctx.ChatID, core.RefetchPlanTasks); err != nil {
 		logging.Warn("[AddTaskTool] Failed to emit plan_tasks refetch", "error", err)
 	}
 
