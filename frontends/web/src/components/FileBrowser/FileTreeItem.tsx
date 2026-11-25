@@ -14,6 +14,7 @@ import {
   FolderPlus,
   Trash2,
   Download,
+  Upload,
 } from "lucide-react";
 import { FileIcon } from "./FileIcon";
 import ContextMenu from "../forge-ui/context_menu";
@@ -59,6 +60,10 @@ interface FileTreeItemProps {
   onCollapse?: (path: string) => void;
   // Hoisted modal callback
   onFileOperation?: (operation: FileOperationType, node: FileNode, skipModal?: boolean) => void;
+  // Opens the file picker to upload into this folder (absent: no uploads).
+  onUploadHere?: (node: FileNode) => void;
+  // The folder an OS-file drag is over, highlighted with its subtree.
+  dropTargetPath?: string | null;
 }
 
 // Helper function to check if a node or any of its descendants match the search
@@ -130,6 +135,8 @@ export const FileTreeItem = memo(function FileTreeItem({
   onExpand,
   onCollapse,
   onFileOperation,
+  onUploadHere,
+  dropTargetPath,
 }: FileTreeItemProps) {
   // Use controlled expansion if provided, otherwise fall back to internal state
   const [internalIsExpanded, setInternalIsExpanded] = useState(false);
@@ -397,6 +404,13 @@ export const FileTreeItem = memo(function FileTreeItem({
           },
         }
       );
+      if (onUploadHere) {
+        items.push({
+          label: "Upload Files Here…",
+          icon: <Upload className="w-4 h-4" />,
+          onClick: () => onUploadHere(node),
+        });
+      }
     }
 
     // Copy operations
@@ -529,7 +543,13 @@ export const FileTreeItem = memo(function FileTreeItem({
   const paddingLeft = `${level * indentRem}rem`;
 
   return (
-    <div className="relative group/row">
+    <div
+      className={cn(
+        "relative group/row",
+        isDirectory && dropTargetPath === node.path && "rounded-md bg-primary/10 ring-1 ring-inset ring-ring",
+      )}
+      data-drop-target={isDirectory && dropTargetPath === node.path ? "true" : undefined}
+    >
       {/* Vertical indent guide lines for opened directories */}
       {level > 0 &&
         Array.from({ length: level }, (_, i) => (
@@ -727,6 +747,8 @@ export const FileTreeItem = memo(function FileTreeItem({
               onExpand={onExpand}
               onCollapse={onCollapse}
               onFileOperation={onFileOperation}
+              onUploadHere={onUploadHere}
+              dropTargetPath={dropTargetPath}
             />
           ))}
         </div>

@@ -97,31 +97,50 @@ func WriteNewFile(path string, content []byte) (time.Time, error) {
 // writeTempFile writes content to a new, uniquely named file in dir and
 // returns its path and identity. A failed write removes it.
 func writeTempFile(dir string, content []byte) (string, os.FileInfo, error) {
-	for range 100 {
-		var suffix [8]byte
-		if _, err := rand.Read(suffix[:]); err != nil {
-			return "", nil, err
+	f, tmp, err := createTempFile(dir)
+	if err != nil {
+		return "", nil, err
+	}
+	info, err := writeAndClose(f, content)
+	if err != nil {
+		if info != nil {
+			removeIfSame(tmp, info)
 		}
-		// A short fixed name, not one derived from path's base: a base near
-		// the name-length limit would otherwise fail here and not at path.
-		tmp := filepath.Join(dir, ".reliant-new-"+hex.EncodeToString(suffix[:])+".tmp")
+		return "", nil, err
+	}
+	return tmp, info, nil
+}
+
+// createTempFile creates a new, uniquely named, empty file in dir and returns
+// it open for writing, with its path.
+func createTempFile(dir string) (*os.File, string, error) {
+	for range 100 {
+		tmp, err := tempName(dir, ".reliant-new-")
+		if err != nil {
+			return nil, "", err
+		}
 		f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 		if errors.Is(err, fs.ErrExist) {
 			continue
 		}
 		if err != nil {
-			return "", nil, err
+			return nil, "", err
 		}
-		info, err := writeAndClose(f, content)
-		if err != nil {
-			if info != nil {
-				removeIfSame(tmp, info)
-			}
-			return "", nil, err
-		}
-		return tmp, info, nil
+		return f, tmp, nil
 	}
-	return "", nil, fmt.Errorf("could not pick an unused temporary file name in %s", dir)
+	return nil, "", fmt.Errorf("could not pick an unused temporary file name in %s", dir)
+}
+
+// tempName is a fresh random name in dir with the given prefix. A short fixed
+// name, not one derived from a destination's base: a base near the
+// name-length limit would otherwise fail on the temporary file and not at the
+// destination.
+func tempName(dir, prefix string) (string, error) {
+	var suffix [8]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, prefix+hex.EncodeToString(suffix[:])+".tmp"), nil
 }
 
 // writeExclusive creates path with O_EXCL and writes content to it. A failed
@@ -195,12 +214,11 @@ func removeIfSame(path string, info os.FileInfo) {
 // gone, not ours to move, or no no-replace rename is available.
 func moveAside(path string) (string, bool) {
 	for range 100 {
-		var suffix [8]byte
-		if _, err := rand.Read(suffix[:]); err != nil {
+		moved, err := tempName(filepath.Dir(path), ".reliant-rm-")
+		if err != nil {
 			return "", false
 		}
-		moved := filepath.Join(filepath.Dir(path), ".reliant-rm-"+hex.EncodeToString(suffix[:])+".tmp")
-		err := renameFile(path, moved)
+		err = renameFile(path, moved)
 		if err == nil {
 			return moved, true
 		}

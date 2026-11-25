@@ -240,6 +240,18 @@ describe('per-procedure timeouts', () => {
     // Only those services: another service's ListWorkloads-named read is not one.
     expect(timeoutForProcedure('reliant.v1.SomeService', 'ListWorkloads')).toBe(10_000)
   })
+
+  it('gives the file upload RPCs the server budgets plus headroom, not the 10s default', async () => {
+    // A 1 MiB chunk on a slow uplink, or a commit copying a large file, runs
+    // past 10s; aborting it here fails an upload the server would finish.
+    const { timeoutForProcedure } = await import('../transport')
+    const svc = 'reliant.v1.FileSystemService'
+    expect(timeoutForProcedure(svc, 'BeginFileUpload')).toBe(45_000)
+    expect(timeoutForProcedure(svc, 'UploadFileChunk')).toBe(65_000)
+    expect(timeoutForProcedure(svc, 'CommitFileUpload')).toBe(125_000)
+    expect(timeoutForProcedure(svc, 'AbortFileUpload')).toBe(35_000)
+    expect(timeoutForProcedure(svc, 'GetFileUploadStatus')).toBe(35_000)
+  })
 })
 
 describe('in-flight starvation diagnostics', () => {

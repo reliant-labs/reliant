@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/filesystem.proto.
  */
 export const file_reliant_v1_filesystem: GenFile = /*@__PURE__*/
-  fileDesc("ChtyZWxpYW50L3YxL2ZpbGVzeXN0ZW0ucHJvdG8SCnJlbGlhbnQudjEizAEKCEZpbGVOb2RlEgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRImCgR0eXBlGAMgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSJgoIY2hpbGRyZW4YBCADKAsyFC5yZWxpYW50LnYxLkZpbGVOb2RlEhEKBHNpemUYBSABKANIAIgBARIVCghtb2RpZmllZBgGIAEoCUgBiAEBEhQKDGhhc19jaGlsZHJlbhgHIAEoCEIHCgVfc2l6ZUILCglfbW9kaWZpZWQihwEKDEZpbGVNZXRhZGF0YRIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEc2l6ZRgDIAEoAxIQCghtb2RpZmllZBgEIAEoCRImCgR0eXBlGAUgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSEwoLcGVybWlzc2lvbnMYBiABKAkiuQEKD0ZpbGVQcmV2aWV3SW5mbxIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEc2l6ZRgDIAEoAxIQCghtb2RpZmllZBgEIAEoCRIvCgt2aWV3ZXJfa2luZBgFIAEoDjIaLnJlbGlhbnQudjEuRmlsZVZpZXdlcktpbmQSEQoJbWltZV90eXBlGAYgASgJEhEKCWlzX2JpbmFyeRgHIAEoCBITCgtpc19lZGl0YWJsZRgIIAEoCCKmAQoSR2V0RmlsZVRyZWVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRITCgtzaG93X2hpZGRlbhgDIAEoCBIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBARINCgVkZXB0aBgGIAEoBUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiYQoTR2V0RmlsZVRyZWVSZXNwb25zZRIjCgVmaWxlcxgBIAMoCzIULnJlbGlhbnQudjEuRmlsZU5vZGUSEQoJdHJ1bmNhdGVkGAIgASgIEhIKCm5vZGVfY291bnQYAyABKAUixwEKFlByb2plY3RDaGVja291dE1pc3NpbmcSEgoKcHJvamVjdF9pZBgBIAEoCRIRCglkYWVtb25faWQYAiABKAkSDAoEcGF0aBgDIAEoCRIvCgVzdGF0ZRgEIAEoDjIgLnJlbGlhbnQudjEuUHJvamVjdENoZWNrb3V0U3RhdGUSFQoNaW5zdGFsbF9lcnJvchgFIAEoCRISCgpyZW1vdGVfdXJsGAYgASgJEhwKFGF2YWlsYWJsZV9kYWVtb25faWRzGAcgAygJIoUBChVHZXRGaWxlQ29udGVudFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCIpChZHZXRGaWxlQ29udGVudFJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAkilwEKFlNhdmVGaWxlQ29udGVudFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg8KB2NvbnRlbnQYAyABKAkSGAoLd29ya3RyZWVfaWQYBCABKAlIAIgBARIUCgdjaGF0X2lkGAUgASgJSAGIAQFCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkIioKF1NhdmVGaWxlQ29udGVudFJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkihgEKFkdldEZpbGVNZXRhZGF0YVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJFChdHZXRGaWxlTWV0YWRhdGFSZXNwb25zZRIqCghtZXRhZGF0YRgBIAEoCzIYLnJlbGlhbnQudjEuRmlsZU1ldGFkYXRhIokBChlHZXRGaWxlUHJldmlld0luZm9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBEhQKB2NoYXRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiRwoaR2V0RmlsZVByZXZpZXdJbmZvUmVzcG9uc2USKQoEaW5mbxgBIAEoCzIbLnJlbGlhbnQudjEuRmlsZVByZXZpZXdJbmZvIsIBChlDcmVhdGVGaWxlT3JGb2xkZXJSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRImCgR0eXBlGAMgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSDwoHY29udGVudBgEIAEoCRIYCgt3b3JrdHJlZV9pZBgFIAEoCUgAiAEBEhQKB2NoYXRfaWQYBiABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiOwoaQ3JlYXRlRmlsZU9yRm9sZGVyUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIMCgRwYXRoGAIgASgJIokBChlEZWxldGVGaWxlT3JGb2xkZXJSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBEhQKB2NoYXRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiLQoaRGVsZXRlRmlsZU9yRm9sZGVyUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSKgAQoPQ29weUZpbGVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkSGAoQZGVzdGluYXRpb25fcGF0aBgDIAEoCRIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiOAoQQ29weUZpbGVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEhMKC2Rlc3RpbmF0aW9uGAIgASgJItMCChJTZWFyY2hGaWxlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRINCgVxdWVyeRgCIAEoCRIRCgRwYXRoGAMgASgJSACIAQESGAoLd29ya3RyZWVfaWQYBCABKAlIAYgBARIUCgdjaGF0X2lkGAUgASgJSAKIAQESGQoMZmlsZV9wYXR0ZXJuGAYgASgJSAOIAQESGwoOY2FzZV9zZW5zaXRpdmUYByABKAhIBIgBARIYCgttYXhfcmVzdWx0cxgIIAEoBUgFiAEBEhoKDWNvbnRleHRfbGluZXMYCSABKAVIBogBAUIHCgVfcGF0aEIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWRCDwoNX2ZpbGVfcGF0dGVybkIRCg9fY2FzZV9zZW5zaXRpdmVCDgoMX21heF9yZXN1bHRzQhAKDl9jb250ZXh0X2xpbmVzImoKE1NlYXJjaEZpbGVzUmVzcG9uc2USKQoHcmVzdWx0cxgBIAMoCzIYLnJlbGlhbnQudjEuU2VhcmNoUmVzdWx0EhUKDXRvdGFsX21hdGNoZXMYAiABKAUSEQoJdHJ1bmNhdGVkGAMgASgIIkYKDFNlYXJjaFJlc3VsdBIMCgRwYXRoGAEgASgJEigKB21hdGNoZXMYAiADKAsyFy5yZWxpYW50LnYxLlNlYXJjaE1hdGNoIo8BCgtTZWFyY2hNYXRjaBITCgtsaW5lX251bWJlchgBIAEoBRIUCgxsaW5lX2NvbnRlbnQYAiABKAkSEwoLbWF0Y2hfc3RhcnQYAyABKAUSEQoJbWF0Y2hfZW5kGAQgASgFEhYKDmNvbnRleHRfYmVmb3JlGAUgAygJEhUKDWNvbnRleHRfYWZ0ZXIYBiADKAkirgIKFVJlcGxhY2VJbkZpbGVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhMKC3NlYXJjaF90ZXh0GAIgASgJEhQKDHJlcGxhY2VfdGV4dBgDIAEoCRIRCgRwYXRoGAQgASgJSACIAQESGAoLd29ya3RyZWVfaWQYBSABKAlIAYgBARIUCgdjaGF0X2lkGAYgASgJSAKIAQESGQoMZmlsZV9wYXR0ZXJuGAcgASgJSAOIAQESGwoOY2FzZV9zZW5zaXRpdmUYCCABKAhIBIgBARISCgpmaWxlX3BhdGhzGAkgAygJQgcKBV9wYXRoQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZEIPCg1fZmlsZV9wYXR0ZXJuQhEKD19jYXNlX3NlbnNpdGl2ZSJ4ChZSZXBsYWNlSW5GaWxlc1Jlc3BvbnNlEioKB3Jlc3VsdHMYASADKAsyGS5yZWxpYW50LnYxLlJlcGxhY2VSZXN1bHQSGgoSdG90YWxfcmVwbGFjZW1lbnRzGAIgASgFEhYKDmZpbGVzX21vZGlmaWVkGAMgASgFIlMKDVJlcGxhY2VSZXN1bHQSDAoEcGF0aBgBIAEoCRIUCgxyZXBsYWNlbWVudHMYAiABKAUSDwoHc3VjY2VzcxgDIAEoCBINCgVlcnJvchgEIAEoCSJYChRMaXN0RGlyZWN0b3J5UmVxdWVzdBIRCgRwYXRoGAEgASgJSACIAQESFgoJZGFlbW9uX2lkGAIgASgJSAGIAQFCBwoFX3BhdGhCDAoKX2RhZW1vbl9pZCJ4ChVMaXN0RGlyZWN0b3J5UmVzcG9uc2USDAoEcGF0aBgBIAEoCRIrCgdlbnRyaWVzGAIgAygLMhoucmVsaWFudC52MS5EaXJlY3RvcnlFbnRyeRIWCglkYWVtb25faWQYAyABKAlIAIgBAUIMCgpfZGFlbW9uX2lkImkKDkRpcmVjdG9yeUVudHJ5EgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRIUCgxpc19kaXJlY3RvcnkYAyABKAgSEQoJaXNfaGlkZGVuGAQgASgIEhIKCmlzX3N5bWxpbmsYBSABKAgiTAoWQ3JlYXRlRGlyZWN0b3J5UmVxdWVzdBIMCgRwYXRoGAEgASgJEhYKCWRhZW1vbl9pZBgCIAEoCUgAiAEBQgwKCl9kYWVtb25faWQiTQoXQ3JlYXRlRGlyZWN0b3J5UmVzcG9uc2USDAoEcGF0aBgBIAEoCRIWCglkYWVtb25faWQYAiABKAlIAIgBAUIMCgpfZGFlbW9uX2lkIoUBChVHZXRGaWxlUHJldmlld1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJfChZHZXRGaWxlUHJldmlld1Jlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSFAoMY29udGVudF90eXBlGAIgASgJEhAKCGZpbGVuYW1lGAMgASgJEgwKBHNpemUYBCABKAMigwEKE0Rvd25sb2FkRmlsZVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJdChREb3dubG9hZEZpbGVSZXNwb25zZRIPCgdjb250ZW50GAEgASgMEhQKDGNvbnRlbnRfdHlwZRgCIAEoCRIQCghmaWxlbmFtZRgDIAEoCRIMCgRzaXplGAQgASgDKmUKDEZpbGVOb2RlVHlwZRIeChpGSUxFX05PREVfVFlQRV9VTlNQRUNJRklFRBAAEhcKE0ZJTEVfTk9ERV9UWVBFX0ZJTEUQARIcChhGSUxFX05PREVfVFlQRV9ESVJFQ1RPUlkQAirYAQoORmlsZVZpZXdlcktpbmQSIAocRklMRV9WSUVXRVJfS0lORF9VTlNQRUNJRklFRBAAEhkKFUZJTEVfVklFV0VSX0tJTkRfVEVYVBABEhoKFkZJTEVfVklFV0VSX0tJTkRfSU1BR0UQAhIYChRGSUxFX1ZJRVdFUl9LSU5EX1BERhADEhoKFkZJTEVfVklFV0VSX0tJTkRfQVVESU8QBBIaChZGSUxFX1ZJRVdFUl9LSU5EX1ZJREVPEAUSGwoXRklMRV9WSUVXRVJfS0lORF9CSU5BUlkQBiquAQoUUHJvamVjdENoZWNrb3V0U3RhdGUSJgoiUFJPSkVDVF9DSEVDS09VVF9TVEFURV9VTlNQRUNJRklFRBAAEiIKHlBST0pFQ1RfQ0hFQ0tPVVRfU1RBVEVfQ0xPTklORxABEicKI1BST0pFQ1RfQ0hFQ0tPVVRfU1RBVEVfQ0xPTkVfRkFJTEVEEAISIQodUFJPSkVDVF9DSEVDS09VVF9TVEFURV9BQlNFTlQQAzK1DgoRRmlsZVN5c3RlbVNlcnZpY2USUAoLR2V0RmlsZVRyZWUSHi5yZWxpYW50LnYxLkdldEZpbGVUcmVlUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0RmlsZVRyZWVSZXNwb25zZSIAElkKDkdldEZpbGVDb250ZW50EiEucmVsaWFudC52MS5HZXRGaWxlQ29udGVudFJlcXVlc3QaIi5yZWxpYW50LnYxLkdldEZpbGVDb250ZW50UmVzcG9uc2UiABK8AQoPU2F2ZUZpbGVDb250ZW50EiIucmVsaWFudC52MS5TYXZlRmlsZUNvbnRlbnRSZXF1ZXN0GiMucmVsaWFudC52MS5TYXZlRmlsZUNvbnRlbnRSZXNwb25zZSJgorsYXDpaOlhmaWxlIGVkaXQgdGhyb3VnaCB0aGUgZGFlbW9uOiBnaXQgcmVjb3JkcyBmaWxlIGNoYW5nZXMsIGFuZCBlZGl0b3Igc2F2ZXMgYXJlIGhpZ2gtdm9sdW1lElwKD0dldEZpbGVNZXRhZGF0YRIiLnJlbGlhbnQudjEuR2V0RmlsZU1ldGFkYXRhUmVxdWVzdBojLnJlbGlhbnQudjEuR2V0RmlsZU1ldGFkYXRhUmVzcG9uc2UiABJlChJHZXRGaWxlUHJldmlld0luZm8SJS5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3SW5mb1JlcXVlc3QaJi5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3SW5mb1Jlc3BvbnNlIgASWQoOR2V0RmlsZVByZXZpZXcSIS5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3UmVxdWVzdBoiLnJlbGlhbnQudjEuR2V0RmlsZVByZXZpZXdSZXNwb25zZSIAEroBChJDcmVhdGVGaWxlT3JGb2xkZXISJS5yZWxpYW50LnYxLkNyZWF0ZUZpbGVPckZvbGRlclJlcXVlc3QaJi5yZWxpYW50LnYxLkNyZWF0ZUZpbGVPckZvbGRlclJlc3BvbnNlIlWiuxhROk86TWZpbGVzeXN0ZW0gZWRpdCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIHRoZSBmaWxlIG9uY2UgaXQgaXMgY29tbWl0dGVkEr0BChJEZWxldGVGaWxlT3JGb2xkZXISJS5yZWxpYW50LnYxLkRlbGV0ZUZpbGVPckZvbGRlclJlcXVlc3QaJi5yZWxpYW50LnYxLkRlbGV0ZUZpbGVPckZvbGRlclJlc3BvbnNlIliiuxhUOlI6UGZpbGVzeXN0ZW0gZWRpdCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIHRoZSByZW1vdmFsIG9uY2UgaXQgaXMgY29tbWl0dGVkEpwBCghDb3B5RmlsZRIbLnJlbGlhbnQudjEuQ29weUZpbGVSZXF1ZXN0GhwucmVsaWFudC52MS5Db3B5RmlsZVJlc3BvbnNlIlWiuxhROk86TWZpbGVzeXN0ZW0gZWRpdCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIHRoZSBjb3B5IG9uY2UgaXQgaXMgY29tbWl0dGVkElAKC1NlYXJjaEZpbGVzEh4ucmVsaWFudC52MS5TZWFyY2hGaWxlc1JlcXVlc3QaHy5yZWxpYW50LnYxLlNlYXJjaEZpbGVzUmVzcG9uc2UiABK2AQoOUmVwbGFjZUluRmlsZXMSIS5yZWxpYW50LnYxLlJlcGxhY2VJbkZpbGVzUmVxdWVzdBoiLnJlbGlhbnQudjEuUmVwbGFjZUluRmlsZXNSZXNwb25zZSJdorsYWTpXOlVidWxrIGZpbGUgZWRpdCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIGVhY2ggY2hhbmdlZCBmaWxlIG9uY2UgaXQgaXMgY29tbWl0dGVkElYKDUxpc3REaXJlY3RvcnkSIC5yZWxpYW50LnYxLkxpc3REaXJlY3RvcnlSZXF1ZXN0GiEucmVsaWFudC52MS5MaXN0RGlyZWN0b3J5UmVzcG9uc2UiABK8AQoPQ3JlYXRlRGlyZWN0b3J5EiIucmVsaWFudC52MS5DcmVhdGVEaXJlY3RvcnlSZXF1ZXN0GiMucmVsaWFudC52MS5DcmVhdGVEaXJlY3RvcnlSZXNwb25zZSJgorsYXDpaOlhmaWxlc3lzdGVtIGVkaXQgdGhyb3VnaCB0aGUgZGFlbW9uOiBhbiBlbXB0eSBkaXJlY3RvcnkgaXMgbm90IGV2ZW4gc29tZXRoaW5nIGdpdCByZWNvcmRzElYKDERvd25sb2FkRmlsZRIfLnJlbGlhbnQudjEuRG93bmxvYWRGaWxlUmVxdWVzdBogLnJlbGlhbnQudjEuRG93bmxvYWRGaWxlUmVzcG9uc2UiA5ACAUI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_forge_v1_forge]);
+  fileDesc("ChtyZWxpYW50L3YxL2ZpbGVzeXN0ZW0ucHJvdG8SCnJlbGlhbnQudjEizAEKCEZpbGVOb2RlEgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRImCgR0eXBlGAMgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSJgoIY2hpbGRyZW4YBCADKAsyFC5yZWxpYW50LnYxLkZpbGVOb2RlEhEKBHNpemUYBSABKANIAIgBARIVCghtb2RpZmllZBgGIAEoCUgBiAEBEhQKDGhhc19jaGlsZHJlbhgHIAEoCEIHCgVfc2l6ZUILCglfbW9kaWZpZWQihwEKDEZpbGVNZXRhZGF0YRIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEc2l6ZRgDIAEoAxIQCghtb2RpZmllZBgEIAEoCRImCgR0eXBlGAUgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSEwoLcGVybWlzc2lvbnMYBiABKAkiuQEKD0ZpbGVQcmV2aWV3SW5mbxIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEc2l6ZRgDIAEoAxIQCghtb2RpZmllZBgEIAEoCRIvCgt2aWV3ZXJfa2luZBgFIAEoDjIaLnJlbGlhbnQudjEuRmlsZVZpZXdlcktpbmQSEQoJbWltZV90eXBlGAYgASgJEhEKCWlzX2JpbmFyeRgHIAEoCBITCgtpc19lZGl0YWJsZRgIIAEoCCKmAQoSR2V0RmlsZVRyZWVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRITCgtzaG93X2hpZGRlbhgDIAEoCBIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBARINCgVkZXB0aBgGIAEoBUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiYQoTR2V0RmlsZVRyZWVSZXNwb25zZRIjCgVmaWxlcxgBIAMoCzIULnJlbGlhbnQudjEuRmlsZU5vZGUSEQoJdHJ1bmNhdGVkGAIgASgIEhIKCm5vZGVfY291bnQYAyABKAUixwEKFlByb2plY3RDaGVja291dE1pc3NpbmcSEgoKcHJvamVjdF9pZBgBIAEoCRIRCglkYWVtb25faWQYAiABKAkSDAoEcGF0aBgDIAEoCRIvCgVzdGF0ZRgEIAEoDjIgLnJlbGlhbnQudjEuUHJvamVjdENoZWNrb3V0U3RhdGUSFQoNaW5zdGFsbF9lcnJvchgFIAEoCRISCgpyZW1vdGVfdXJsGAYgASgJEhwKFGF2YWlsYWJsZV9kYWVtb25faWRzGAcgAygJIoUBChVHZXRGaWxlQ29udGVudFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCIpChZHZXRGaWxlQ29udGVudFJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAkilwEKFlNhdmVGaWxlQ29udGVudFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg8KB2NvbnRlbnQYAyABKAkSGAoLd29ya3RyZWVfaWQYBCABKAlIAIgBARIUCgdjaGF0X2lkGAUgASgJSAGIAQFCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkIioKF1NhdmVGaWxlQ29udGVudFJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkihgEKFkdldEZpbGVNZXRhZGF0YVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJFChdHZXRGaWxlTWV0YWRhdGFSZXNwb25zZRIqCghtZXRhZGF0YRgBIAEoCzIYLnJlbGlhbnQudjEuRmlsZU1ldGFkYXRhIokBChlHZXRGaWxlUHJldmlld0luZm9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBEhQKB2NoYXRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiRwoaR2V0RmlsZVByZXZpZXdJbmZvUmVzcG9uc2USKQoEaW5mbxgBIAEoCzIbLnJlbGlhbnQudjEuRmlsZVByZXZpZXdJbmZvIsIBChlDcmVhdGVGaWxlT3JGb2xkZXJSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRImCgR0eXBlGAMgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSDwoHY29udGVudBgEIAEoCRIYCgt3b3JrdHJlZV9pZBgFIAEoCUgAiAEBEhQKB2NoYXRfaWQYBiABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiOwoaQ3JlYXRlRmlsZU9yRm9sZGVyUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIMCgRwYXRoGAIgASgJIokBChlEZWxldGVGaWxlT3JGb2xkZXJSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBEhQKB2NoYXRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiLQoaRGVsZXRlRmlsZU9yRm9sZGVyUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSKgAQoPQ29weUZpbGVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkSGAoQZGVzdGluYXRpb25fcGF0aBgDIAEoCRIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiOAoQQ29weUZpbGVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEhMKC2Rlc3RpbmF0aW9uGAIgASgJItMCChJTZWFyY2hGaWxlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRINCgVxdWVyeRgCIAEoCRIRCgRwYXRoGAMgASgJSACIAQESGAoLd29ya3RyZWVfaWQYBCABKAlIAYgBARIUCgdjaGF0X2lkGAUgASgJSAKIAQESGQoMZmlsZV9wYXR0ZXJuGAYgASgJSAOIAQESGwoOY2FzZV9zZW5zaXRpdmUYByABKAhIBIgBARIYCgttYXhfcmVzdWx0cxgIIAEoBUgFiAEBEhoKDWNvbnRleHRfbGluZXMYCSABKAVIBogBAUIHCgVfcGF0aEIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWRCDwoNX2ZpbGVfcGF0dGVybkIRCg9fY2FzZV9zZW5zaXRpdmVCDgoMX21heF9yZXN1bHRzQhAKDl9jb250ZXh0X2xpbmVzImoKE1NlYXJjaEZpbGVzUmVzcG9uc2USKQoHcmVzdWx0cxgBIAMoCzIYLnJlbGlhbnQudjEuU2VhcmNoUmVzdWx0EhUKDXRvdGFsX21hdGNoZXMYAiABKAUSEQoJdHJ1bmNhdGVkGAMgASgIIkYKDFNlYXJjaFJlc3VsdBIMCgRwYXRoGAEgASgJEigKB21hdGNoZXMYAiADKAsyFy5yZWxpYW50LnYxLlNlYXJjaE1hdGNoIo8BCgtTZWFyY2hNYXRjaBITCgtsaW5lX251bWJlchgBIAEoBRIUCgxsaW5lX2NvbnRlbnQYAiABKAkSEwoLbWF0Y2hfc3RhcnQYAyABKAUSEQoJbWF0Y2hfZW5kGAQgASgFEhYKDmNvbnRleHRfYmVmb3JlGAUgAygJEhUKDWNvbnRleHRfYWZ0ZXIYBiADKAkirgIKFVJlcGxhY2VJbkZpbGVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhMKC3NlYXJjaF90ZXh0GAIgASgJEhQKDHJlcGxhY2VfdGV4dBgDIAEoCRIRCgRwYXRoGAQgASgJSACIAQESGAoLd29ya3RyZWVfaWQYBSABKAlIAYgBARIUCgdjaGF0X2lkGAYgASgJSAKIAQESGQoMZmlsZV9wYXR0ZXJuGAcgASgJSAOIAQESGwoOY2FzZV9zZW5zaXRpdmUYCCABKAhIBIgBARISCgpmaWxlX3BhdGhzGAkgAygJQgcKBV9wYXRoQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZEIPCg1fZmlsZV9wYXR0ZXJuQhEKD19jYXNlX3NlbnNpdGl2ZSJ4ChZSZXBsYWNlSW5GaWxlc1Jlc3BvbnNlEioKB3Jlc3VsdHMYASADKAsyGS5yZWxpYW50LnYxLlJlcGxhY2VSZXN1bHQSGgoSdG90YWxfcmVwbGFjZW1lbnRzGAIgASgFEhYKDmZpbGVzX21vZGlmaWVkGAMgASgFIlMKDVJlcGxhY2VSZXN1bHQSDAoEcGF0aBgBIAEoCRIUCgxyZXBsYWNlbWVudHMYAiABKAUSDwoHc3VjY2VzcxgDIAEoCBINCgVlcnJvchgEIAEoCSJYChRMaXN0RGlyZWN0b3J5UmVxdWVzdBIRCgRwYXRoGAEgASgJSACIAQESFgoJZGFlbW9uX2lkGAIgASgJSAGIAQFCBwoFX3BhdGhCDAoKX2RhZW1vbl9pZCJ4ChVMaXN0RGlyZWN0b3J5UmVzcG9uc2USDAoEcGF0aBgBIAEoCRIrCgdlbnRyaWVzGAIgAygLMhoucmVsaWFudC52MS5EaXJlY3RvcnlFbnRyeRIWCglkYWVtb25faWQYAyABKAlIAIgBAUIMCgpfZGFlbW9uX2lkImkKDkRpcmVjdG9yeUVudHJ5EgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRIUCgxpc19kaXJlY3RvcnkYAyABKAgSEQoJaXNfaGlkZGVuGAQgASgIEhIKCmlzX3N5bWxpbmsYBSABKAgiTAoWQ3JlYXRlRGlyZWN0b3J5UmVxdWVzdBIMCgRwYXRoGAEgASgJEhYKCWRhZW1vbl9pZBgCIAEoCUgAiAEBQgwKCl9kYWVtb25faWQiTQoXQ3JlYXRlRGlyZWN0b3J5UmVzcG9uc2USDAoEcGF0aBgBIAEoCRIWCglkYWVtb25faWQYAiABKAlIAIgBAUIMCgpfZGFlbW9uX2lkIoUBChVHZXRGaWxlUHJldmlld1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJfChZHZXRGaWxlUHJldmlld1Jlc3BvbnNlEg8KB2NvbnRlbnQYASABKAwSFAoMY29udGVudF90eXBlGAIgASgJEhAKCGZpbGVuYW1lGAMgASgJEgwKBHNpemUYBCABKAMigwEKE0Rvd25sb2FkRmlsZVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJdChREb3dubG9hZEZpbGVSZXNwb25zZRIPCgdjb250ZW50GAEgASgMEhQKDGNvbnRlbnRfdHlwZRgCIAEoCRIQCghmaWxlbmFtZRgDIAEoCRIMCgRzaXplGAQgASgDIuIBChZCZWdpbkZpbGVVcGxvYWRSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSGAoLd29ya3RyZWVfaWQYAiABKAlIAIgBARIUCgdjaGF0X2lkGAMgASgJSAGIAQESEQoJZGlyZWN0b3J5GAQgASgJEhAKCGZpbGVuYW1lGAUgASgJEgwKBHNpemUYBiABKAMSNQoLb25fY29uZmxpY3QYByABKA4yIC5yZWxpYW50LnYxLlVwbG9hZENvbmZsaWN0UG9saWN5Qg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJgChdCZWdpbkZpbGVVcGxvYWRSZXNwb25zZRIRCgl1cGxvYWRfaWQYASABKAkSEgoKY2h1bmtfc2l6ZRgCIAEoBRIMCgRwYXRoGAMgASgJEhAKCG1heF9zaXplGAQgASgDIqkBChZVcGxvYWRGaWxlQ2h1bmtSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSGAoLd29ya3RyZWVfaWQYAiABKAlIAIgBARIUCgdjaGF0X2lkGAMgASgJSAGIAQESEQoJdXBsb2FkX2lkGAQgASgJEg4KBm9mZnNldBgFIAEoAxIMCgRkYXRhGAYgASgMQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJhChdVcGxvYWRGaWxlQ2h1bmtSZXNwb25zZRIWCg5ieXRlc19yZWNlaXZlZBgBIAEoAxIbCg5jb21taXR0ZWRfcGF0aBgCIAEoCUgAiAEBQhEKD19jb21taXR0ZWRfcGF0aCLYAQoXQ29tbWl0RmlsZVVwbG9hZFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIYCgt3b3JrdHJlZV9pZBgCIAEoCUgAiAEBEhQKB2NoYXRfaWQYAyABKAlIAYgBARIRCgl1cGxvYWRfaWQYBCABKAkSOgoLb25fY29uZmxpY3QYBSABKA4yIC5yZWxpYW50LnYxLlVwbG9hZENvbmZsaWN0UG9saWN5SAKIAQFCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkQg4KDF9vbl9jb25mbGljdCJHChhDb21taXRGaWxlVXBsb2FkUmVzcG9uc2USDAoEcGF0aBgBIAEoCRIMCgRzaXplGAIgASgDEg8KB2NyZWF0ZWQYAyABKAgiiwEKFkFib3J0RmlsZVVwbG9hZFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIYCgt3b3JrdHJlZV9pZBgCIAEoCUgAiAEBEhQKB2NoYXRfaWQYAyABKAlIAYgBARIRCgl1cGxvYWRfaWQYBCABKAlCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkIhkKF0Fib3J0RmlsZVVwbG9hZFJlc3BvbnNlIo8BChpHZXRGaWxlVXBsb2FkU3RhdHVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhgKC3dvcmt0cmVlX2lkGAIgASgJSACIAQESFAoHY2hhdF9pZBgDIAEoCUgBiAEBEhEKCXVwbG9hZF9pZBgEIAEoCUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiUwobR2V0RmlsZVVwbG9hZFN0YXR1c1Jlc3BvbnNlEg4KBmV4aXN0cxgBIAEoCBIWCg5ieXRlc19yZWNlaXZlZBgCIAEoAxIMCgRzaXplGAMgASgDKmUKDEZpbGVOb2RlVHlwZRIeChpGSUxFX05PREVfVFlQRV9VTlNQRUNJRklFRBAAEhcKE0ZJTEVfTk9ERV9UWVBFX0ZJTEUQARIcChhGSUxFX05PREVfVFlQRV9ESVJFQ1RPUlkQAirYAQoORmlsZVZpZXdlcktpbmQSIAocRklMRV9WSUVXRVJfS0lORF9VTlNQRUNJRklFRBAAEhkKFUZJTEVfVklFV0VSX0tJTkRfVEVYVBABEhoKFkZJTEVfVklFV0VSX0tJTkRfSU1BR0UQAhIYChRGSUxFX1ZJRVdFUl9LSU5EX1BERhADEhoKFkZJTEVfVklFV0VSX0tJTkRfQVVESU8QBBIaChZGSUxFX1ZJRVdFUl9LSU5EX1ZJREVPEAUSGwoXRklMRV9WSUVXRVJfS0lORF9CSU5BUlkQBiquAQoUUHJvamVjdENoZWNrb3V0U3RhdGUSJgoiUFJPSkVDVF9DSEVDS09VVF9TVEFURV9VTlNQRUNJRklFRBAAEiIKHlBST0pFQ1RfQ0hFQ0tPVVRfU1RBVEVfQ0xPTklORxABEicKI1BST0pFQ1RfQ0hFQ0tPVVRfU1RBVEVfQ0xPTkVfRkFJTEVEEAISIQodUFJPSkVDVF9DSEVDS09VVF9TVEFURV9BQlNFTlQQAyqoAQoUVXBsb2FkQ29uZmxpY3RQb2xpY3kSJgoiVVBMT0FEX0NPTkZMSUNUX1BPTElDWV9VTlNQRUNJRklFRBAAEh8KG1VQTE9BRF9DT05GTElDVF9QT0xJQ1lfRkFJTBABEiQKIFVQTE9BRF9DT05GTElDVF9QT0xJQ1lfT1ZFUldSSVRFEAISIQodVVBMT0FEX0NPTkZMSUNUX1BPTElDWV9SRU5BTUUQAzKNFQoRRmlsZVN5c3RlbVNlcnZpY2USUAoLR2V0RmlsZVRyZWUSHi5yZWxpYW50LnYxLkdldEZpbGVUcmVlUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0RmlsZVRyZWVSZXNwb25zZSIAElkKDkdldEZpbGVDb250ZW50EiEucmVsaWFudC52MS5HZXRGaWxlQ29udGVudFJlcXVlc3QaIi5yZWxpYW50LnYxLkdldEZpbGVDb250ZW50UmVzcG9uc2UiABK8AQoPU2F2ZUZpbGVDb250ZW50EiIucmVsaWFudC52MS5TYXZlRmlsZUNvbnRlbnRSZXF1ZXN0GiMucmVsaWFudC52MS5TYXZlRmlsZUNvbnRlbnRSZXNwb25zZSJgorsYXDpaOlhmaWxlIGVkaXQgdGhyb3VnaCB0aGUgZGFlbW9uOiBnaXQgcmVjb3JkcyBmaWxlIGNoYW5nZXMsIGFuZCBlZGl0b3Igc2F2ZXMgYXJlIGhpZ2gtdm9sdW1lElwKD0dldEZpbGVNZXRhZGF0YRIiLnJlbGlhbnQudjEuR2V0RmlsZU1ldGFkYXRhUmVxdWVzdBojLnJlbGlhbnQudjEuR2V0RmlsZU1ldGFkYXRhUmVzcG9uc2UiABJlChJHZXRGaWxlUHJldmlld0luZm8SJS5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3SW5mb1JlcXVlc3QaJi5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3SW5mb1Jlc3BvbnNlIgASWQoOR2V0RmlsZVByZXZpZXcSIS5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3UmVxdWVzdBoiLnJlbGlhbnQudjEuR2V0RmlsZVByZXZpZXdSZXNwb25zZSIAEroBChJDcmVhdGVGaWxlT3JGb2xkZXISJS5yZWxpYW50LnYxLkNyZWF0ZUZpbGVPckZvbGRlclJlcXVlc3QaJi5yZWxpYW50LnYxLkNyZWF0ZUZpbGVPckZvbGRlclJlc3BvbnNlIlWiuxhROk86TWZpbGVzeXN0ZW0gZWRpdCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIHRoZSBmaWxlIG9uY2UgaXQgaXMgY29tbWl0dGVkEr0BChJEZWxldGVGaWxlT3JGb2xkZXISJS5yZWxpYW50LnYxLkRlbGV0ZUZpbGVPckZvbGRlclJlcXVlc3QaJi5yZWxpYW50LnYxLkRlbGV0ZUZpbGVPckZvbGRlclJlc3BvbnNlIliiuxhUOlI6UGZpbGVzeXN0ZW0gZWRpdCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIHRoZSByZW1vdmFsIG9uY2UgaXQgaXMgY29tbWl0dGVkEpwBCghDb3B5RmlsZRIbLnJlbGlhbnQudjEuQ29weUZpbGVSZXF1ZXN0GhwucmVsaWFudC52MS5Db3B5RmlsZVJlc3BvbnNlIlWiuxhROk86TWZpbGVzeXN0ZW0gZWRpdCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIHRoZSBjb3B5IG9uY2UgaXQgaXMgY29tbWl0dGVkElAKC1NlYXJjaEZpbGVzEh4ucmVsaWFudC52MS5TZWFyY2hGaWxlc1JlcXVlc3QaHy5yZWxpYW50LnYxLlNlYXJjaEZpbGVzUmVzcG9uc2UiABK2AQoOUmVwbGFjZUluRmlsZXMSIS5yZWxpYW50LnYxLlJlcGxhY2VJbkZpbGVzUmVxdWVzdBoiLnJlbGlhbnQudjEuUmVwbGFjZUluRmlsZXNSZXNwb25zZSJdorsYWTpXOlVidWxrIGZpbGUgZWRpdCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIGVhY2ggY2hhbmdlZCBmaWxlIG9uY2UgaXQgaXMgY29tbWl0dGVkElYKDUxpc3REaXJlY3RvcnkSIC5yZWxpYW50LnYxLkxpc3REaXJlY3RvcnlSZXF1ZXN0GiEucmVsaWFudC52MS5MaXN0RGlyZWN0b3J5UmVzcG9uc2UiABK8AQoPQ3JlYXRlRGlyZWN0b3J5EiIucmVsaWFudC52MS5DcmVhdGVEaXJlY3RvcnlSZXF1ZXN0GiMucmVsaWFudC52MS5DcmVhdGVEaXJlY3RvcnlSZXNwb25zZSJgorsYXDpaOlhmaWxlc3lzdGVtIGVkaXQgdGhyb3VnaCB0aGUgZGFlbW9uOiBhbiBlbXB0eSBkaXJlY3RvcnkgaXMgbm90IGV2ZW4gc29tZXRoaW5nIGdpdCByZWNvcmRzElYKDERvd25sb2FkRmlsZRIfLnJlbGlhbnQudjEuRG93bmxvYWRGaWxlUmVxdWVzdBogLnJlbGlhbnQudjEuRG93bmxvYWRGaWxlUmVzcG9uc2UiA5ACARKtAQoPQmVnaW5GaWxlVXBsb2FkEiIucmVsaWFudC52MS5CZWdpbkZpbGVVcGxvYWRSZXF1ZXN0GiMucmVsaWFudC52MS5CZWdpbkZpbGVVcGxvYWRSZXNwb25zZSJRorsYTTpLOklmaWxlIHVwbG9hZCB0aHJvdWdoIHRoZSBkYWVtb246IGdpdCByZWNvcmRzIHRoZSBmaWxlIG9uY2UgaXQgaXMgY29tbWl0dGVkEsgBCg9VcGxvYWRGaWxlQ2h1bmsSIi5yZWxpYW50LnYxLlVwbG9hZEZpbGVDaHVua1JlcXVlc3QaIy5yZWxpYW50LnYxLlVwbG9hZEZpbGVDaHVua1Jlc3BvbnNlImyiuxhoOmY6ZGZpbGUgdXBsb2FkIHRocm91Z2ggdGhlIGRhZW1vbjogb25lIHBpZWNlIG9mIGEgc3RhZ2VkIGZpbGUsIGhpZ2gtdm9sdW1lIGFuZCBub3QgeWV0IGluIHRoZSB3b3Jrc3BhY2USsAEKEENvbW1pdEZpbGVVcGxvYWQSIy5yZWxpYW50LnYxLkNvbW1pdEZpbGVVcGxvYWRSZXF1ZXN0GiQucmVsaWFudC52MS5Db21taXRGaWxlVXBsb2FkUmVzcG9uc2UiUaK7GE06SzpJZmlsZSB1cGxvYWQgdGhyb3VnaCB0aGUgZGFlbW9uOiBnaXQgcmVjb3JkcyB0aGUgZmlsZSBvbmNlIGl0IGlzIGNvbW1pdHRlZBK6AQoPQWJvcnRGaWxlVXBsb2FkEiIucmVsaWFudC52MS5BYm9ydEZpbGVVcGxvYWRSZXF1ZXN0GiMucmVsaWFudC52MS5BYm9ydEZpbGVVcGxvYWRSZXNwb25zZSJeorsYWjpYOlZmaWxlIHVwbG9hZCB0aHJvdWdoIHRoZSBkYWVtb246IGRpc2NhcmRzIHN0YWdlZCBieXRlcyB0aGF0IG5ldmVyIHJlYWNoZWQgdGhlIHdvcmtzcGFjZRJrChNHZXRGaWxlVXBsb2FkU3RhdHVzEiYucmVsaWFudC52MS5HZXRGaWxlVXBsb2FkU3RhdHVzUmVxdWVzdBonLnJlbGlhbnQudjEuR2V0RmlsZVVwbG9hZFN0YXR1c1Jlc3BvbnNlIgOQAgFCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_forge_v1_forge]);
 
 /**
  * FileNode represents a file or directory in the tree
@@ -1326,6 +1326,361 @@ export const DownloadFileResponseSchema: GenMessage<DownloadFileResponse> = /*@_
   messageDesc(file_reliant_v1_filesystem, 35);
 
 /**
+ * @generated from message reliant.v1.BeginFileUploadRequest
+ */
+export type BeginFileUploadRequest = Message<"reliant.v1.BeginFileUploadRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: optional string worktree_id = 2;
+   */
+  worktreeId?: string | undefined;
+
+  /**
+   * @generated from field: optional string chat_id = 3;
+   */
+  chatId?: string | undefined;
+
+  /**
+   * The workspace-relative folder to upload into; "" or "/" is the workspace
+   * root. It must stay inside the workspace and outside .git.
+   *
+   * @generated from field: string directory = 4;
+   */
+  directory: string;
+
+  /**
+   * The file's base name: no path separators, no "." or "..".
+   *
+   * @generated from field: string filename = 5;
+   */
+  filename: string;
+
+  /**
+   * The file's total size in bytes. It must not exceed the server's limit
+   * (BeginFileUploadResponse.max_size; 2 GiB by default).
+   *
+   * @generated from field: int64 size = 6;
+   */
+  size: bigint;
+
+  /**
+   * @generated from field: reliant.v1.UploadConflictPolicy on_conflict = 7;
+   */
+  onConflict: UploadConflictPolicy;
+};
+
+/**
+ * Describes the message reliant.v1.BeginFileUploadRequest.
+ * Use `create(BeginFileUploadRequestSchema)` to create a new message.
+ */
+export const BeginFileUploadRequestSchema: GenMessage<BeginFileUploadRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 36);
+
+/**
+ * @generated from message reliant.v1.BeginFileUploadResponse
+ */
+export type BeginFileUploadResponse = Message<"reliant.v1.BeginFileUploadResponse"> & {
+  /**
+   * The session, opaque to the client; every later call names it.
+   *
+   * @generated from field: string upload_id = 1;
+   */
+  uploadId: string;
+
+  /**
+   * How many bytes each UploadFileChunk should carry (the last one may carry
+   * fewer). A machine that predates staged uploads takes a small file in a
+   * single chunk, and then chunk_size is the whole file.
+   *
+   * @generated from field: int32 chunk_size = 2;
+   */
+  chunkSize: number;
+
+  /**
+   * The workspace-relative path the file is headed for. With the RENAME
+   * policy the final path is decided at commit (CommitFileUploadResponse.path).
+   *
+   * @generated from field: string path = 3;
+   */
+  path: string;
+
+  /**
+   * The largest file this server accepts, in bytes.
+   *
+   * @generated from field: int64 max_size = 4;
+   */
+  maxSize: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.BeginFileUploadResponse.
+ * Use `create(BeginFileUploadResponseSchema)` to create a new message.
+ */
+export const BeginFileUploadResponseSchema: GenMessage<BeginFileUploadResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 37);
+
+/**
+ * @generated from message reliant.v1.UploadFileChunkRequest
+ */
+export type UploadFileChunkRequest = Message<"reliant.v1.UploadFileChunkRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: optional string worktree_id = 2;
+   */
+  worktreeId?: string | undefined;
+
+  /**
+   * @generated from field: optional string chat_id = 3;
+   */
+  chatId?: string | undefined;
+
+  /**
+   * @generated from field: string upload_id = 4;
+   */
+  uploadId: string;
+
+  /**
+   * Where data starts in the file. It must not be beyond the bytes received
+   * so far (a gap is refused with FAILED_PRECONDITION); re-sending a piece
+   * that already arrived is harmless.
+   *
+   * @generated from field: int64 offset = 5;
+   */
+  offset: bigint;
+
+  /**
+   * @generated from field: bytes data = 6;
+   */
+  data: Uint8Array;
+};
+
+/**
+ * Describes the message reliant.v1.UploadFileChunkRequest.
+ * Use `create(UploadFileChunkRequestSchema)` to create a new message.
+ */
+export const UploadFileChunkRequestSchema: GenMessage<UploadFileChunkRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 38);
+
+/**
+ * @generated from message reliant.v1.UploadFileChunkResponse
+ */
+export type UploadFileChunkResponse = Message<"reliant.v1.UploadFileChunkResponse"> & {
+  /**
+   * How many bytes of the file have arrived, contiguously from the start.
+   *
+   * @generated from field: int64 bytes_received = 1;
+   */
+  bytesReceived: bigint;
+
+  /**
+   * Set when this chunk itself placed the file: a machine that predates
+   * staged uploads takes a small file in one chunk and writes it at once.
+   * The upload is then complete and needs no CommitFileUpload.
+   *
+   * @generated from field: optional string committed_path = 2;
+   */
+  committedPath?: string | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.UploadFileChunkResponse.
+ * Use `create(UploadFileChunkResponseSchema)` to create a new message.
+ */
+export const UploadFileChunkResponseSchema: GenMessage<UploadFileChunkResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 39);
+
+/**
+ * @generated from message reliant.v1.CommitFileUploadRequest
+ */
+export type CommitFileUploadRequest = Message<"reliant.v1.CommitFileUploadRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: optional string worktree_id = 2;
+   */
+  worktreeId?: string | undefined;
+
+  /**
+   * @generated from field: optional string chat_id = 3;
+   */
+  chatId?: string | undefined;
+
+  /**
+   * @generated from field: string upload_id = 4;
+   */
+  uploadId: string;
+
+  /**
+   * Overrides the policy BeginFileUpload named: after a commit refused with
+   * ALREADY_EXISTS, the client commits again with OVERWRITE or RENAME
+   * without re-sending the bytes.
+   *
+   * @generated from field: optional reliant.v1.UploadConflictPolicy on_conflict = 5;
+   */
+  onConflict?: UploadConflictPolicy | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.CommitFileUploadRequest.
+ * Use `create(CommitFileUploadRequestSchema)` to create a new message.
+ */
+export const CommitFileUploadRequestSchema: GenMessage<CommitFileUploadRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 40);
+
+/**
+ * @generated from message reliant.v1.CommitFileUploadResponse
+ */
+export type CommitFileUploadResponse = Message<"reliant.v1.CommitFileUploadResponse"> & {
+  /**
+   * The workspace-relative path the file now has.
+   *
+   * @generated from field: string path = 1;
+   */
+  path: string;
+
+  /**
+   * @generated from field: int64 size = 2;
+   */
+  size: bigint;
+
+  /**
+   * False when the upload replaced an existing file (OVERWRITE).
+   *
+   * @generated from field: bool created = 3;
+   */
+  created: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.CommitFileUploadResponse.
+ * Use `create(CommitFileUploadResponseSchema)` to create a new message.
+ */
+export const CommitFileUploadResponseSchema: GenMessage<CommitFileUploadResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 41);
+
+/**
+ * @generated from message reliant.v1.AbortFileUploadRequest
+ */
+export type AbortFileUploadRequest = Message<"reliant.v1.AbortFileUploadRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: optional string worktree_id = 2;
+   */
+  worktreeId?: string | undefined;
+
+  /**
+   * @generated from field: optional string chat_id = 3;
+   */
+  chatId?: string | undefined;
+
+  /**
+   * @generated from field: string upload_id = 4;
+   */
+  uploadId: string;
+};
+
+/**
+ * Describes the message reliant.v1.AbortFileUploadRequest.
+ * Use `create(AbortFileUploadRequestSchema)` to create a new message.
+ */
+export const AbortFileUploadRequestSchema: GenMessage<AbortFileUploadRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 42);
+
+/**
+ * @generated from message reliant.v1.AbortFileUploadResponse
+ */
+export type AbortFileUploadResponse = Message<"reliant.v1.AbortFileUploadResponse"> & {
+};
+
+/**
+ * Describes the message reliant.v1.AbortFileUploadResponse.
+ * Use `create(AbortFileUploadResponseSchema)` to create a new message.
+ */
+export const AbortFileUploadResponseSchema: GenMessage<AbortFileUploadResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 43);
+
+/**
+ * @generated from message reliant.v1.GetFileUploadStatusRequest
+ */
+export type GetFileUploadStatusRequest = Message<"reliant.v1.GetFileUploadStatusRequest"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * @generated from field: optional string worktree_id = 2;
+   */
+  worktreeId?: string | undefined;
+
+  /**
+   * @generated from field: optional string chat_id = 3;
+   */
+  chatId?: string | undefined;
+
+  /**
+   * @generated from field: string upload_id = 4;
+   */
+  uploadId: string;
+};
+
+/**
+ * Describes the message reliant.v1.GetFileUploadStatusRequest.
+ * Use `create(GetFileUploadStatusRequestSchema)` to create a new message.
+ */
+export const GetFileUploadStatusRequestSchema: GenMessage<GetFileUploadStatusRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 44);
+
+/**
+ * @generated from message reliant.v1.GetFileUploadStatusResponse
+ */
+export type GetFileUploadStatusResponse = Message<"reliant.v1.GetFileUploadStatusResponse"> & {
+  /**
+   * False when the machine has no such session (it was committed, aborted,
+   * or swept as stale): the client starts over with BeginFileUpload.
+   *
+   * @generated from field: bool exists = 1;
+   */
+  exists: boolean;
+
+  /**
+   * How many bytes have arrived, contiguously from the start.
+   *
+   * @generated from field: int64 bytes_received = 2;
+   */
+  bytesReceived: bigint;
+
+  /**
+   * The total size the session was opened with.
+   *
+   * @generated from field: int64 size = 3;
+   */
+  size: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.GetFileUploadStatusResponse.
+ * Use `create(GetFileUploadStatusResponseSchema)` to create a new message.
+ */
+export const GetFileUploadStatusResponseSchema: GenMessage<GetFileUploadStatusResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 45);
+
+/**
  * FileNodeType distinguishes files from directories
  *
  * @generated from enum reliant.v1.FileNodeType
@@ -1441,6 +1796,49 @@ export enum ProjectCheckoutState {
  */
 export const ProjectCheckoutStateSchema: GenEnum<ProjectCheckoutState> = /*@__PURE__*/
   enumDesc(file_reliant_v1_filesystem, 2);
+
+/**
+ * UploadConflictPolicy says what a committed upload does when a file already
+ * exists at its destination.
+ *
+ * @generated from enum reliant.v1.UploadConflictPolicy
+ */
+export enum UploadConflictPolicy {
+  /**
+   * The same as FAIL.
+   *
+   * @generated from enum value: UPLOAD_CONFLICT_POLICY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Refuse with code ALREADY_EXISTS and leave the existing file untouched.
+   *
+   * @generated from enum value: UPLOAD_CONFLICT_POLICY_FAIL = 1;
+   */
+  FAIL = 1,
+
+  /**
+   * Replace the existing file.
+   *
+   * @generated from enum value: UPLOAD_CONFLICT_POLICY_OVERWRITE = 2;
+   */
+  OVERWRITE = 2,
+
+  /**
+   * Keep both: the upload takes the first free name of the form
+   * "report (1).xlsx", "report (2).xlsx", ...
+   *
+   * @generated from enum value: UPLOAD_CONFLICT_POLICY_RENAME = 3;
+   */
+  RENAME = 3,
+}
+
+/**
+ * Describes the enum reliant.v1.UploadConflictPolicy.
+ */
+export const UploadConflictPolicySchema: GenEnum<UploadConflictPolicy> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_filesystem, 3);
 
 /**
  * FileSystemService handles file system operations within projects
@@ -1595,6 +1993,62 @@ export const FileSystemService: GenService<{
     methodKind: "unary";
     input: typeof DownloadFileRequestSchema;
     output: typeof DownloadFileResponseSchema;
+  },
+  /**
+   * BeginFileUpload opens an upload session. With the FAIL conflict policy
+   * (the default) a file already at the destination is refused up front with
+   * code ALREADY_EXISTS, so the client can ask the user to replace it, keep
+   * both, or cancel before any bytes are sent.
+   *
+   * @generated from rpc reliant.v1.FileSystemService.BeginFileUpload
+   */
+  beginFileUpload: {
+    methodKind: "unary";
+    input: typeof BeginFileUploadRequestSchema;
+    output: typeof BeginFileUploadResponseSchema;
+  },
+  /**
+   * UploadFileChunk writes one piece of an upload at its offset.
+   *
+   * @generated from rpc reliant.v1.FileSystemService.UploadFileChunk
+   */
+  uploadFileChunk: {
+    methodKind: "unary";
+    input: typeof UploadFileChunkRequestSchema;
+    output: typeof UploadFileChunkResponseSchema;
+  },
+  /**
+   * CommitFileUpload verifies the upload is complete and moves it into place.
+   * With the FAIL policy a file that appeared at the destination meanwhile is
+   * refused with code ALREADY_EXISTS, and the staged upload is kept, so the
+   * client can commit again under another policy.
+   *
+   * @generated from rpc reliant.v1.FileSystemService.CommitFileUpload
+   */
+  commitFileUpload: {
+    methodKind: "unary";
+    input: typeof CommitFileUploadRequestSchema;
+    output: typeof CommitFileUploadResponseSchema;
+  },
+  /**
+   * AbortFileUpload discards an upload session and its staged bytes.
+   *
+   * @generated from rpc reliant.v1.FileSystemService.AbortFileUpload
+   */
+  abortFileUpload: {
+    methodKind: "unary";
+    input: typeof AbortFileUploadRequestSchema;
+    output: typeof AbortFileUploadResponseSchema;
+  },
+  /**
+   * GetFileUploadStatus reports how many bytes of an upload have arrived.
+   *
+   * @generated from rpc reliant.v1.FileSystemService.GetFileUploadStatus
+   */
+  getFileUploadStatus: {
+    methodKind: "unary";
+    input: typeof GetFileUploadStatusRequestSchema;
+    output: typeof GetFileUploadStatusResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_filesystem, 0);

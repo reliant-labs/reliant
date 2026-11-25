@@ -290,6 +290,16 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
   // (2026-11-01), and the roster then read as "no environments".
   "controlplane.v1.DeployService/GetLiveView": 30_000,
   "controlplane.v1.DeployService/ListEnvironments": 30_000,
+  // Files tab uploads (api/fileUpload.ts). A chunk is up to 1 MiB of request
+  // body on the user's uplink, and a commit can copy a 2 GiB file across
+  // filesystems on the machine: at the 10s default a slow link or a big
+  // commit was aborted here while the server was still working. These mirror
+  // the server's budgets (file_system.FileSystemRPCDeadlines) plus 5s.
+  "reliant.v1.FileSystemService/BeginFileUpload": 45_000,
+  "reliant.v1.FileSystemService/UploadFileChunk": 65_000,
+  "reliant.v1.FileSystemService/CommitFileUpload": 125_000,
+  "reliant.v1.FileSystemService/AbortFileUpload": 35_000,
+  "reliant.v1.FileSystemService/GetFileUploadStatus": 35_000,
 };
 
 /**

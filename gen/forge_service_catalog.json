@@ -15191,6 +15191,36 @@
       "proto_file": "reliant/v1/filesystem.proto",
       "methods": [
         {
+          "id": "reliant.v1.FileSystemService/AbortFileUpload",
+          "name": "AbortFileUpload",
+          "input": "reliant.v1.AbortFileUploadRequest",
+          "output": "reliant.v1.AbortFileUploadResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.FileSystemService/BeginFileUpload",
+          "name": "BeginFileUpload",
+          "input": "reliant.v1.BeginFileUploadRequest",
+          "output": "reliant.v1.BeginFileUploadResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.FileSystemService/CommitFileUpload",
+          "name": "CommitFileUpload",
+          "input": "reliant.v1.CommitFileUploadRequest",
+          "output": "reliant.v1.CommitFileUploadResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.FileSystemService/CopyFile",
           "name": "CopyFile",
           "input": "reliant.v1.CopyFileRequest",
@@ -15291,6 +15321,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.FileSystemService/GetFileUploadStatus",
+          "name": "GetFileUploadStatus",
+          "input": "reliant.v1.GetFileUploadStatusRequest",
+          "output": "reliant.v1.GetFileUploadStatusResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.FileSystemService/ListDirectory",
           "name": "ListDirectory",
           "input": "reliant.v1.ListDirectoryRequest",
@@ -15325,6 +15365,16 @@
           "name": "SearchFiles",
           "input": "reliant.v1.SearchFilesRequest",
           "output": "reliant.v1.SearchFilesResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.FileSystemService/UploadFileChunk",
+          "name": "UploadFileChunk",
+          "input": "reliant.v1.UploadFileChunkRequest",
+          "output": "reliant.v1.UploadFileChunkResponse",
           "client_streaming": false,
           "server_streaming": false,
           "idempotency": "UNKNOWN",
@@ -15587,11 +15637,231 @@
             "Activity": {
               "Mutating": false
             }
+          },
+          {
+            "Name": "BeginFileUpload",
+            "InputType": "BeginFileUploadRequest",
+            "OutputType": "BeginFileUploadResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.BeginFileUploadRequest",
+            "OutputTypeFQ": "reliant.v1.BeginFileUploadResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "None": "file upload through the daemon: git records the file once it is committed"
+            }
+          },
+          {
+            "Name": "UploadFileChunk",
+            "InputType": "UploadFileChunkRequest",
+            "OutputType": "UploadFileChunkResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UploadFileChunkRequest",
+            "OutputTypeFQ": "reliant.v1.UploadFileChunkResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "None": "file upload through the daemon: one piece of a staged file, high-volume and not yet in the workspace"
+            }
+          },
+          {
+            "Name": "CommitFileUpload",
+            "InputType": "CommitFileUploadRequest",
+            "OutputType": "CommitFileUploadResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.CommitFileUploadRequest",
+            "OutputTypeFQ": "reliant.v1.CommitFileUploadResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "None": "file upload through the daemon: git records the file once it is committed"
+            }
+          },
+          {
+            "Name": "AbortFileUpload",
+            "InputType": "AbortFileUploadRequest",
+            "OutputType": "AbortFileUploadResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.AbortFileUploadRequest",
+            "OutputTypeFQ": "reliant.v1.AbortFileUploadResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "None": "file upload through the daemon: discards staged bytes that never reached the workspace"
+            }
+          },
+          {
+            "Name": "GetFileUploadStatus",
+            "InputType": "GetFileUploadStatusRequest",
+            "OutputType": "GetFileUploadStatusResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetFileUploadStatusRequest",
+            "OutputTypeFQ": "reliant.v1.GetFileUploadStatusResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/filesystem.proto",
         "ModulePath": "github.com/reliant-labs/reliant",
         "Messages": {
+          "AbortFileUploadRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "upload_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "AbortFileUploadResponse": null,
+          "BeginFileUploadRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "directory",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "filename",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "size",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "on_conflict",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "BeginFileUploadResponse": [
+            {
+              "Name": "upload_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "chunk_size",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "max_size",
+              "ProtoType": "int64",
+              "IsOptional": false
+            }
+          ],
+          "CommitFileUploadRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "upload_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "on_conflict",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "CommitFileUploadResponse": [
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "size",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "created",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
           "CopyFileRequest": [
             {
               "Name": "project_id",
@@ -15955,6 +16225,45 @@
               "IsOptional": false
             }
           ],
+          "GetFileUploadStatusRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "upload_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetFileUploadStatusResponse": [
+            {
+              "Name": "exists",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "bytes_received",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "size",
+              "ProtoType": "int64",
+              "IsOptional": false
+            }
+          ],
           "ListDirectoryRequest": [
             {
               "Name": "path",
@@ -16148,10 +16457,166 @@
               "ProtoType": "bool",
               "IsOptional": false
             }
+          ],
+          "UploadFileChunkRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "upload_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "offset",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "data",
+              "ProtoType": "bytes",
+              "IsOptional": false
+            }
+          ],
+          "UploadFileChunkResponse": [
+            {
+              "Name": "bytes_received",
+              "ProtoType": "int64",
+              "IsOptional": false
+            },
+            {
+              "Name": "committed_path",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
           ]
         },
         "Audience": "user",
         "Schemas": {
+          "reliant.v1.AbortFileUploadRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "upload_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.AbortFileUploadResponse": [],
+          "reliant.v1.BeginFileUploadRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "directory",
+              "kind": "string"
+            },
+            {
+              "name": "filename",
+              "kind": "string"
+            },
+            {
+              "name": "size",
+              "kind": "int64"
+            },
+            {
+              "name": "on_conflict",
+              "kind": "enum",
+              "type_name": "reliant.v1.UploadConflictPolicy"
+            }
+          ],
+          "reliant.v1.BeginFileUploadResponse": [
+            {
+              "name": "upload_id",
+              "kind": "string"
+            },
+            {
+              "name": "chunk_size",
+              "kind": "int32"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "max_size",
+              "kind": "int64"
+            }
+          ],
+          "reliant.v1.CommitFileUploadRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "upload_id",
+              "kind": "string"
+            },
+            {
+              "name": "on_conflict",
+              "kind": "enum",
+              "type_name": "reliant.v1.UploadConflictPolicy",
+              "optional": true
+            }
+          ],
+          "reliant.v1.CommitFileUploadResponse": [
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "size",
+              "kind": "int64"
+            },
+            {
+              "name": "created",
+              "kind": "bool"
+            }
+          ],
           "reliant.v1.CopyFileRequest": [
             {
               "name": "project_id",
@@ -16592,6 +17057,40 @@
               "kind": "int32"
             }
           ],
+          "reliant.v1.GetFileUploadStatusRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "upload_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.GetFileUploadStatusResponse": [
+            {
+              "name": "exists",
+              "kind": "bool"
+            },
+            {
+              "name": "bytes_received",
+              "kind": "int64"
+            },
+            {
+              "name": "size",
+              "kind": "int64"
+            }
+          ],
           "reliant.v1.ListDirectoryRequest": [
             {
               "name": "path",
@@ -16829,9 +17328,54 @@
               "type_name": "reliant.v1.SearchMatch",
               "repeated": true
             }
+          ],
+          "reliant.v1.UploadFileChunkRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "upload_id",
+              "kind": "string"
+            },
+            {
+              "name": "offset",
+              "kind": "int64"
+            },
+            {
+              "name": "data",
+              "kind": "bytes"
+            }
+          ],
+          "reliant.v1.UploadFileChunkResponse": [
+            {
+              "name": "bytes_received",
+              "kind": "int64"
+            },
+            {
+              "name": "committed_path",
+              "kind": "string",
+              "optional": true
+            }
           ]
         },
         "SchemaFiles": {
+          "reliant.v1.AbortFileUploadRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.AbortFileUploadResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.BeginFileUploadRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.BeginFileUploadResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.CommitFileUploadRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.CommitFileUploadResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.CopyFileRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.CopyFileResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.CreateDirectoryRequest": "reliant/v1/filesystem.proto",
@@ -16856,6 +17400,8 @@
           "reliant.v1.GetFilePreviewResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.GetFileTreeRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.GetFileTreeResponse": "reliant/v1/filesystem.proto",
+          "reliant.v1.GetFileUploadStatusRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.GetFileUploadStatusResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.ListDirectoryRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.ListDirectoryResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.ReplaceInFilesRequest": "reliant/v1/filesystem.proto",
@@ -16866,7 +17412,9 @@
           "reliant.v1.SearchFilesRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.SearchFilesResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.SearchMatch": "reliant/v1/filesystem.proto",
-          "reliant.v1.SearchResult": "reliant/v1/filesystem.proto"
+          "reliant.v1.SearchResult": "reliant/v1/filesystem.proto",
+          "reliant.v1.UploadFileChunkRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.UploadFileChunkResponse": "reliant/v1/filesystem.proto"
         },
         "Enums": {
           "reliant.v1.FileNodeType": [
@@ -16882,6 +17430,12 @@
             "FILE_VIEWER_KIND_AUDIO",
             "FILE_VIEWER_KIND_VIDEO",
             "FILE_VIEWER_KIND_BINARY"
+          ],
+          "reliant.v1.UploadConflictPolicy": [
+            "UPLOAD_CONFLICT_POLICY_UNSPECIFIED",
+            "UPLOAD_CONFLICT_POLICY_FAIL",
+            "UPLOAD_CONFLICT_POLICY_OVERWRITE",
+            "UPLOAD_CONFLICT_POLICY_RENAME"
           ]
         },
         "EnumNumbers": {
@@ -16898,6 +17452,12 @@
             4,
             5,
             6
+          ],
+          "reliant.v1.UploadConflictPolicy": [
+            0,
+            1,
+            2,
+            3
           ]
         },
         "EnumGoRefs": {
@@ -16908,6 +17468,10 @@
           "reliant.v1.FileViewerKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileViewerKind"
+          },
+          "reliant.v1.UploadConflictPolicy": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "UploadConflictPolicy"
           }
         }
       }

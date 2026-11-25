@@ -359,6 +359,19 @@ message ApiServerConfig {
     (buf.validate.field).int64.gt = 0
   ];
 
+  // The largest file the Files tab uploads into a workspace, in bytes
+  // (FileSystemService.BeginFileUpload). The file is staged on the machine
+  // that holds the workspace, never on this server, so the limit is about the
+  // machine's disk and the time a transfer takes. 2 GiB by default.
+  int64 max_workspace_upload_size = 111 [
+    (forge.v1.config) = {
+      env_var: "MAX_WORKSPACE_UPLOAD_SIZE"
+      default_value: "2147483648"
+      description: "Largest file uploaded into a workspace through the Files tab, in bytes"
+    },
+    (buf.validate.field).int64.gt = 0
+  ];
+
   // What the worktree sweep does with active worktrees its daemon reports
   // finished (clean, merged or pushed, idle over 24h, not in use): dry-run
   // logs them and archives nothing; on archives them; off never asks.

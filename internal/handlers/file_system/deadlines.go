@@ -74,5 +74,12 @@ func FileSystemRPCDeadlines() map[string]time.Duration {
 		reliantv1connect.FileSystemServiceSearchFilesProcedure:        seq(fsScanTimeoutMs),
 		reliantv1connect.FileSystemServiceReplaceInFilesProcedure:     seq(fsScanTimeoutMs),
 		reliantv1connect.FileSystemServiceDownloadFileProcedure:       seq(homeDirTimeoutMs, previewInfoTimeoutMs, wholeFileReadTimeoutMs),
+		// Uploads (upload.go). A begin a daemon too old for staged uploads
+		// refuses is followed by the legacy fallback's stat.
+		reliantv1connect.FileSystemServiceBeginFileUploadProcedure:     seq(uploadBeginTimeoutMs, legacyStatTimeoutMs),
+		reliantv1connect.FileSystemServiceUploadFileChunkProcedure:     seq(uploadChunkTimeoutMs),
+		reliantv1connect.FileSystemServiceCommitFileUploadProcedure:    seq(uploadCommitTimeoutMs),
+		reliantv1connect.FileSystemServiceAbortFileUploadProcedure:     seq(uploadAbortTimeoutMs),
+		reliantv1connect.FileSystemServiceGetFileUploadStatusProcedure: seq(uploadStatusTimeoutMs),
 	}
 }

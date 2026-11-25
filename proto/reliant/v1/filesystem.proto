@@ -102,6 +102,56 @@ service FileSystemService {
   rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // ---- File upload: a resumable session per file ------------------------
+  //
+  // A file of any type is uploaded into a folder of the workspace in pieces:
+  // BeginFileUpload opens a session on the machine that holds the workspace,
+  // UploadFileChunk appends each piece at its offset, and CommitFileUpload
+  // moves the finished file into place atomically. The pieces are staged on
+  // the machine outside the workspace (~/.reliant/uploads/.partial/), so a
+  // half-uploaded file never appears in the tree or in git status.
+  // GetFileUploadStatus says how much arrived, for resuming after a failure;
+  // AbortFileUpload discards a session.
+
+  // BeginFileUpload opens an upload session. With the FAIL conflict policy
+  // (the default) a file already at the destination is refused up front with
+  // code ALREADY_EXISTS, so the client can ask the user to replace it, keep
+  // both, or cancel before any bytes are sent.
+  rpc BeginFileUpload(BeginFileUploadRequest) returns (BeginFileUploadResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "file upload through the daemon: git records the file once it is committed"}
+    };
+  }
+
+  // UploadFileChunk writes one piece of an upload at its offset.
+  rpc UploadFileChunk(UploadFileChunkRequest) returns (UploadFileChunkResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "file upload through the daemon: one piece of a staged file, high-volume and not yet in the workspace"}
+    };
+  }
+
+  // CommitFileUpload verifies the upload is complete and moves it into place.
+  // With the FAIL policy a file that appeared at the destination meanwhile is
+  // refused with code ALREADY_EXISTS, and the staged upload is kept, so the
+  // client can commit again under another policy.
+  rpc CommitFileUpload(CommitFileUploadRequest) returns (CommitFileUploadResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "file upload through the daemon: git records the file once it is committed"}
+    };
+  }
+
+  // AbortFileUpload discards an upload session and its staged bytes.
+  rpc AbortFileUpload(AbortFileUploadRequest) returns (AbortFileUploadResponse) {
+    option (forge.v1.method) = {
+      activity: {none: "file upload through the daemon: discards staged bytes that never reached the workspace"}
+    };
+  }
+
+  // GetFileUploadStatus reports how many bytes of an upload have arrived.
+  rpc GetFileUploadStatus(GetFileUploadStatusRequest) returns (GetFileUploadStatusResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ============================================
@@ -487,4 +537,118 @@ message DownloadFileResponse {
   string content_type = 2; // MIME type; "application/octet-stream" when unknown
   string filename = 3; // Base filename to save as
   int64 size = 4; // File size in bytes
+}
+
+// ============================================
+// File upload (BeginFileUpload, UploadFileChunk, CommitFileUpload,
+// AbortFileUpload, GetFileUploadStatus)
+// ============================================
+
+// UploadConflictPolicy says what a committed upload does when a file already
+// exists at its destination.
+enum UploadConflictPolicy {
+  // The same as FAIL.
+  UPLOAD_CONFLICT_POLICY_UNSPECIFIED = 0;
+  // Refuse with code ALREADY_EXISTS and leave the existing file untouched.
+  UPLOAD_CONFLICT_POLICY_FAIL = 1;
+  // Replace the existing file.
+  UPLOAD_CONFLICT_POLICY_OVERWRITE = 2;
+  // Keep both: the upload takes the first free name of the form
+  // "report (1).xlsx", "report (2).xlsx", ...
+  UPLOAD_CONFLICT_POLICY_RENAME = 3;
+}
+
+message BeginFileUploadRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  // The workspace-relative folder to upload into; "" or "/" is the workspace
+  // root. It must stay inside the workspace and outside .git.
+  string directory = 4;
+  // The file's base name: no path separators, no "." or "..".
+  string filename = 5;
+  // The file's total size in bytes. It must not exceed the server's limit
+  // (BeginFileUploadResponse.max_size; 2 GiB by default).
+  int64 size = 6;
+  UploadConflictPolicy on_conflict = 7;
+}
+
+message BeginFileUploadResponse {
+  // The session, opaque to the client; every later call names it.
+  string upload_id = 1;
+  // How many bytes each UploadFileChunk should carry (the last one may carry
+  // fewer). A machine that predates staged uploads takes a small file in a
+  // single chunk, and then chunk_size is the whole file.
+  int32 chunk_size = 2;
+  // The workspace-relative path the file is headed for. With the RENAME
+  // policy the final path is decided at commit (CommitFileUploadResponse.path).
+  string path = 3;
+  // The largest file this server accepts, in bytes.
+  int64 max_size = 4;
+}
+
+message UploadFileChunkRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  string upload_id = 4;
+  // Where data starts in the file. It must not be beyond the bytes received
+  // so far (a gap is refused with FAILED_PRECONDITION); re-sending a piece
+  // that already arrived is harmless.
+  int64 offset = 5;
+  bytes data = 6;
+}
+
+message UploadFileChunkResponse {
+  // How many bytes of the file have arrived, contiguously from the start.
+  int64 bytes_received = 1;
+  // Set when this chunk itself placed the file: a machine that predates
+  // staged uploads takes a small file in one chunk and writes it at once.
+  // The upload is then complete and needs no CommitFileUpload.
+  optional string committed_path = 2;
+}
+
+message CommitFileUploadRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  string upload_id = 4;
+  // Overrides the policy BeginFileUpload named: after a commit refused with
+  // ALREADY_EXISTS, the client commits again with OVERWRITE or RENAME
+  // without re-sending the bytes.
+  optional UploadConflictPolicy on_conflict = 5;
+}
+
+message CommitFileUploadResponse {
+  // The workspace-relative path the file now has.
+  string path = 1;
+  int64 size = 2;
+  // False when the upload replaced an existing file (OVERWRITE).
+  bool created = 3;
+}
+
+message AbortFileUploadRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  string upload_id = 4;
+}
+
+message AbortFileUploadResponse {}
+
+message GetFileUploadStatusRequest {
+  string project_id = 1;
+  optional string worktree_id = 2;
+  optional string chat_id = 3;
+  string upload_id = 4;
+}
+
+message GetFileUploadStatusResponse {
+  // False when the machine has no such session (it was committed, aborted,
+  // or swept as stale): the client starts over with BeginFileUpload.
+  bool exists = 1;
+  // How many bytes have arrived, contiguously from the start.
+  int64 bytes_received = 2;
+  // The total size the session was opened with.
+  int64 size = 3;
 }

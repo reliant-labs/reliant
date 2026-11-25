@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
@@ -414,12 +415,22 @@ func beginRecoveryCommand(name string, payload []byte) (func(), error) {
 			Path        string `json:"path"`
 			Source      string `json:"source"`
 			Destination string `json:"destination"`
+			Root        string `json:"root"`
 		}
 		if json.Unmarshal(payload, &req) == nil {
 			switch name {
-			case "fs.read_file", "fs.read_binary_file", "fs.pdf_page_count", "fs.read_pdf_pages", "fs.write_file", "fs.write_binary_file", "fs.create_binary_file", "fs.patch_file", "fs.stat", "fs.list_dir", "fs.mkdir", "fs.delete", "fs.get_tree":
+			case "fs.read_file", "fs.read_binary_file", "fs.pdf_page_count", "fs.read_pdf_pages", "fs.write_file", "fs.write_binary_file", "fs.create_binary_file", "fs.patch_file", "fs.stat", "fs.list_dir", "fs.mkdir", "fs.delete", "fs.get_tree",
+				daemon.UploadBeginCommand:
 				if req.Path != "" {
 					paths = []string{req.Path}
+				}
+			case daemon.UploadChunkCommand, daemon.UploadCommitCommand, daemon.UploadAbortCommand, daemon.UploadStatusCommand:
+				// A session is bound to the workspace root it was begun
+				// for (its handlers refuse any other), and the only place
+				// it writes outside the staging directory is the commit's
+				// destination, inside that root.
+				if req.Root != "" {
+					paths = []string{req.Root}
 				}
 			}
 		}
