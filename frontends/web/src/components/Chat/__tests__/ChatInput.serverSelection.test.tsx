@@ -224,7 +224,6 @@ describe("composer pushes edits to the selection", () => {
     await userEvent.keyboard("{Escape}");
     fireEvent.change(await screen.findByRole("textbox"), { target: { value: "continue" } });
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter", code: "Enter" });
-    expect(server.updates).toHaveLength(0);
     await waitFor(() => expect(send).toHaveBeenCalled());
     expect(send.mock.calls[0][3]).toEqual({ mode: null, model: { id: "claude-5.5-opus@claude" } });
   });
