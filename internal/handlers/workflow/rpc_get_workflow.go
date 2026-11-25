@@ -53,6 +53,8 @@ func (s *Service) GetWorkflow(
 			YamlDefinition:   draft.Definition,
 			Status:           draftStatusToProto(draft.Status),
 			ValidationErrors: s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition)).protoErrors(true),
+			Visibility:       draftVisibility(draft),
+			OrgId:            draft.OrgID,
 		}), nil
 	}
 
@@ -137,6 +139,8 @@ func (s *Service) GetWorkflow(
 			ParseError:    &parseErr,
 			RawDefinition: &draft.Definition,
 			Status:        draftStatusToProto(draft.Status),
+			Visibility:    draftVisibility(draft),
+			OrgId:         draft.OrgID,
 		}), nil
 	}
 
@@ -148,5 +152,7 @@ func (s *Service) GetWorkflow(
 		YamlDefinition:   draft.Definition,
 		Status:           draftStatusToProto(draft.Status),
 		ValidationErrors: s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition)).protoErrors(true),
+		Visibility:       draftVisibility(draft),
+		OrgId:            draft.OrgID,
 	}), nil
 }
