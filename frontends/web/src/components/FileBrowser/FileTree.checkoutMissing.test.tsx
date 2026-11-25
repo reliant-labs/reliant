@@ -146,7 +146,8 @@ describe("FileTree — the project's directory is not on this machine", () => {
         cloneUrl: "https://github.com/acme/houndersclub.git",
         daemonId: "2aab1465",
         name: "houndersclub",
-        path: "/home/workspace/projects/houndersclub",
+        // No other machine shows the project's folder fits this one, so
+        // the server picks the machine's own projects folder.
       }),
     );
   });
