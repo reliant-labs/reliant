@@ -11,15 +11,27 @@ import Link from "@/components/forge-ui/link";
 import Modal from "@/components/forge-ui/modal";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import type { ResourceUsage, Workload } from "@/services/controlPlane/observability/types";
+import type { ResourceUsage, Workload, WorkloadJob } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 import { shortDigest, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { formatPercent } from "../Observability/format";
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, INK_LINK } from "../Releases/releaseParts";
+import { Ago, BUTTON_PRIMARY, BUTTON_SECONDARY, INK_LINK } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import { HEALTH_STATUS } from "./health";
 import { causeNote, healthDetailText, healthLine } from "./plainHealth";
+
+/** When a Job or CronJob's run happened: "ran 3h ago", or "running since 2m ago" for one in progress. */
+export function RunWhen({ run, className }: { run: Pick<WorkloadJob, "result" | "startedAtMs" | "finishedAtMs">; className?: string }) {
+  const running = run.result === "running";
+  const at = running ? run.startedAtMs : (run.finishedAtMs ?? run.startedAtMs);
+  return (
+    <span className={className} data-testid="run-when">
+      {running ? "running since " : "ran "}
+      {at ? <Ago at={new Date(at).toISOString()} /> : "at an unknown time"}
+    </span>
+  );
+}
 
 /** The share of the limit at which a meter turns to the warning tone (the mockup's 85%). */
 export const USAGE_HOT = 0.85;
