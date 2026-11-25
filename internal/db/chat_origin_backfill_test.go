@@ -13,6 +13,7 @@ import (
 	forgedb "github.com/reliant-labs/reliant/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // The chat_origin migration backfills every existing chat's origin from its
@@ -33,7 +34,7 @@ func TestChatOriginMigrationBackfillsFromLaunchEvent(t *testing.T) {
 	}
 
 	triggerID := "trg-backfill"
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(triggerID, "test-user", "test-project", "pr-review")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(triggerID, "test-user", "test-project", "pr-review")))
 	now := time.Now().UTC()
 
 	kinds := []core.TriggerEventKind{

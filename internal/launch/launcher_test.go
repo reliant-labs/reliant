@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
 
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -742,7 +743,7 @@ func TestLaunchCarriesTheTriggerOnWorkflowInput(t *testing.T) {
 
 	scheduledFor := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
 	triggerID := uuid.NewString()
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: launchTestUserID, ProjectID: projectID, Name: "nightly",
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: scheduledFor, UpdatedAt: scheduledFor,

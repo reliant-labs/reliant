@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 func orgp(s string) *string { return &s }
@@ -238,7 +239,7 @@ func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
 	legacyTrigger := newStoreTrigger("t-legacy", "legacy", at)
 	legacyTrigger.ProjectID = "p-acme" // written before orgs, in a project that has one now
 	for _, tr := range []*core.Trigger{acmeTrigger, legacyTrigger} {
-		if err := env.Repo.CreateTrigger(ctx, tr); err != nil {
+		if err := triggertest.Create(ctx, env.Repo, tr); err != nil {
 			t.Fatalf("CreateTrigger(%s): %v", tr.ID, err)
 		}
 	}
@@ -446,7 +447,7 @@ func TestAssignUnassignedOrg_TriggersWaitForTheirProject(t *testing.T) {
 	}
 	tr := newStoreTrigger("t-held", "held", at)
 	tr.ProjectID = "p-held"
-	if err := env.Repo.CreateTrigger(ctx, tr); err != nil {
+	if err := triggertest.Create(ctx, env.Repo, tr); err != nil {
 		t.Fatal(err)
 	}
 	triggerOrg := func() *string {

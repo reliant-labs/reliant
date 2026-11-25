@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // An org_only automation's run, and a sub-run its agent started, never reach
@@ -35,7 +36,7 @@ func TestUnattendedStamp_DeletedTriggerStaysOrgFundedOnly(t *testing.T) {
 	config, err := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * 1-5"}, Timezone: "UTC", Overlap: core.ScheduleOverlapSkip})
 	require.NoError(t, err)
 	triggerID := "trigger-" + uuid.NewString()
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: user, ProjectID: projectID, OrgID: &org, Name: "nightly", Kind: core.TriggerKindSchedule,
 		Enabled: true, Workflow: "builtin://agent", Config: config, CreatedAt: now, UpdatedAt: now,
 		UnattendedFunding: core.UnattendedFundingOrgOnly,

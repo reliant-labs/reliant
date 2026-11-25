@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -205,7 +206,7 @@ func TestOrgConnection_TriggerOfTheOrgResolvesIt(t *testing.T) {
 		id := "trg-" + uuid.NewString()[:8]
 		connID := conn.ID
 		now := fixedNow
-		require.NoError(t, e.repo.CreateTrigger(context.Background(), &core.Trigger{
+		require.NoError(t, triggertest.Create(context.Background(), e.repo, &core.Trigger{
 			ID: id, UserID: owner, OrgID: &org, ProjectID: "test-project", Name: id, Kind: core.TriggerKindIntegration,
 			Enabled: true, Workflow: "w", NoMachine: true, ConnectionID: &connID,
 			Config: []byte(`{"integration":"github"}`), CreatedAt: now, UpdatedAt: now,

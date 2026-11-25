@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -183,7 +184,7 @@ nodes:
 	require.NoError(t, err)
 	now := time.Now().UTC()
 	triggerID := uuid.NewString()
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: launchTestUserID, ProjectID: projectID, Name: "digest",
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "digest",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now,
@@ -217,7 +218,7 @@ func TestAutomationPrecedenceSurvivesTriggerDeletion(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	now := time.Now().UTC()
 	triggerID := uuid.NewString()
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: launchTestUserID, ProjectID: projectID, Name: "nightly",
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now,
@@ -264,7 +265,7 @@ func TestLaunchAutomationBuildsInputsFromTheProjectWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	now := time.Now().UTC()
 	triggerID := uuid.NewString()
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: launchTestUserID, ProjectID: projectID, Name: "deploy",
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "deploy",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now,

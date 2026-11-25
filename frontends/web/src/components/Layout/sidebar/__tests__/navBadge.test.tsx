@@ -68,6 +68,26 @@ describe("a nav item's live badge", () => {
     expect(within(screen.getByTestId("nav-gadgets")).getByText("2")).toBeInTheDocument();
   });
 
+  it("draws a row's word label after it, and never carries it up to a closed group", () => {
+    const staged: NavConfig = {
+      items: [
+        {
+          kind: "group",
+          id: "labs",
+          label: "Labs",
+          match: () => true,
+          children: [{ kind: "row", id: "labs-trials", label: "Trials", href: () => "/trials", badge: () => ({ type: "label", text: "Beta" }) }],
+        },
+        { kind: "group", id: "closed", label: "Closed", children: [{ kind: "row", id: "closed-row", label: "Hidden", href: () => "/hidden", badge: () => ({ type: "label", text: "Beta" }) }] },
+      ],
+      footer: [],
+    };
+    render(<NavRenderer config={staged} ctx={ctxAt(inboxPath())} slots={{}} onNavigate={vi.fn()} />);
+    expect(screen.getByTestId("nav-labs-trials")).toHaveTextContent(/^TrialsBeta$/);
+    expect(screen.getByTestId("nav-closed")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("nav-closed")).toHaveTextContent(/^Closed$/);
+  });
+
   it("is absent with nothing to count", () => {
     render(<NavRenderer config={config} ctx={ctxAt(inboxPath(), { widgets: 0 })} slots={{}} onNavigate={vi.fn()} />);
     expect(screen.getByTestId("nav-widgets")).toHaveTextContent(/^Widgets$/);

@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // list_in_sidebar is the one definition of "the sidebar lists this chat".
@@ -24,7 +25,7 @@ func TestListInSidebarTruthTable(t *testing.T) {
 	ctx := context.Background()
 
 	triggerID := "trg-sidebar"
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
 	now := time.Now().UTC()
 
 	launchKinds := []struct {

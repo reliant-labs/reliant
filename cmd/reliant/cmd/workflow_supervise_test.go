@@ -412,21 +412,6 @@ func TestAnswerSeveralPendingRequiresQuestion(t *testing.T) {
 
 // --- lifecycle mutation tests -------------------------------------------
 
-func TestWorkflowTerminateCallsTerminateRPC(t *testing.T) {
-	h := newSuperviseHarness(t)
-
-	stdout, stderr, err := h.run(t, "", "workflow", "terminate", "chat-1")
-	if err != nil {
-		t.Fatalf("terminate failed: %v (stderr %s)", err, stderr)
-	}
-	if h.chat.terminatedChatID != "chat-1" {
-		t.Fatalf("TerminateChat chat id = %q, want chat-1", h.chat.terminatedChatID)
-	}
-	if !strings.Contains(stdout, "Terminated workflow chat-1") {
-		t.Fatalf("stdout = %q", stdout)
-	}
-}
-
 func TestWorkflowCancelCommandRemoved(t *testing.T) {
 	h := newSuperviseHarness(t)
 

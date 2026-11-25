@@ -278,6 +278,7 @@
               "hosting/observability/dashboards-and-alerts",
               "forge/observability/speed-insights",
               "forge/observability/product-analytics",
+              "forge/observability/changes",
               "hosting/observability/session-timelines",
               "hosting/observability/profiling",
               "hosting/observability/agents"

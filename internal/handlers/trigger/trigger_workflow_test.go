@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // triage declares one trigger of each stored kind that does not need a provider
@@ -764,7 +765,7 @@ nodes:
 func (e *triggerTestEnv) leftover(t *testing.T, name, workflow string) {
 	t.Helper()
 	trigger := "hook"
-	require.NoError(t, e.repo.CreateTrigger(context.Background(), &core.Trigger{
+	require.NoError(t, triggertest.Create(context.Background(), e.repo, &core.Trigger{
 		ID: uuid.NewString(), UserID: e.userID, ProjectID: e.projectID, Name: name,
 		Kind: core.TriggerKindWebhook, Enabled: false, Workflow: workflow, WorkflowTrigger: &trigger,
 		ActingIdentity: core.ActingIdentityOwner,

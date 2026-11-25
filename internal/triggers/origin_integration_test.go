@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -70,7 +71,7 @@ func newScenario(t *testing.T, workflow string) *scenario {
 	intake := NewIntake(NewStores(f.repo), starter, "").WithWorkflows(workflows).WithEnrichers(enricher)
 	firer := NewEventFirer(NewStores(f.repo), launcher).WithWorkflows(workflows)
 
-	require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
+	require.NoError(t, triggertest.Update(ctx, f.repo, f.trigger))
 	return &scenario{
 		repo: f.repo, starter: f.starter, intake: intake, firer: firer, trigger: f.trigger, userID: f.trigger.UserID,
 		recorder: writeledger.New(writeledger.Deps{Store: writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), Runs: writeledger.NewRuns(f.repo.ORM())}),
