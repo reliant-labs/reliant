@@ -46,7 +46,7 @@ func TestReconcilePassReadsEachMachineCatalogOnce(t *testing.T) {
 	nightly := "nightly"
 	cfg, err := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
 	require.NoError(t, err)
-	now := time.Now().UTC()
+	now := time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC)
 	for i := range workflows {
 		require.NoError(t, p.repo.CreateTrigger(p.ctx, &core.Trigger{
 			ID: uuid.NewString(), UserID: p.userID, ProjectID: p.projectID, Name: fmt.Sprintf("nightly %d", i),
