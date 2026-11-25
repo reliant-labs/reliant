@@ -3,6 +3,7 @@ package rowreads
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -46,4 +47,25 @@ func TestWithRepoReadsAMachine(t *testing.T) {
 	got, err := WithRepo(repo).GetDaemon(ctx, "d1")
 	require.NoError(t, err)
 	require.Equal(t, "u1", got.UserID)
+}
+
+// Every consumer that was handed a *db.Repo and is now handed a Repo chooses
+// optional roles with interface assertions (store.(Iface)). Those answer the
+// same as before exactly when the wrapper's method set holds every method of
+// *db.Repo with the same signature, so this is the whole proof: the wrapper
+// loses nothing, and what it adds is the reads the facade gave up.
+func TestRepoKeepsTheWholeFacadeMethodSet(t *testing.T) {
+	facade := reflect.ValueOf(&db.Repo{})
+	wrapped := reflect.ValueOf(Repo{})
+	ft := facade.Type()
+	for i := 0; i < ft.NumMethod(); i++ {
+		name := ft.Method(i).Name
+		w := wrapped.MethodByName(name)
+		require.True(t, w.IsValid(), "rowreads.Repo lost the facade method %s", name)
+		require.Equal(t, facade.Method(i).Type(), w.Type(), "rowreads.Repo changed the signature of %s", name)
+	}
+	for _, name := range []string{"GetDaemon"} {
+		require.True(t, wrapped.MethodByName(name).IsValid(), "rowreads.Repo has no %s", name)
+		require.False(t, facade.MethodByName(name).IsValid(), "the facade still has %s: delete it", name)
+	}
 }
