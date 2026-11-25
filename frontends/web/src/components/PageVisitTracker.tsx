@@ -3,6 +3,8 @@ import { useRouterState } from "@tanstack/react-router";
 import { privacyConsentKnown, subscribePrivacyConsent } from "../hooks/privacy-queries";
 import { trackEvent } from "../lib/analytics";
 import { routeTemplate } from "../lib/pageVisit";
+import { consolePageOf } from "./Forge/Console/paths";
+import { isSampleApp } from "./Forge/Sample/sampleApp";
 
 /**
  * Sends `product.page_visited` once per resolved navigation. Mounted at the
@@ -18,6 +20,10 @@ import { routeTemplate } from "../lib/pageVisit";
  * replays events queued before telemetry starts, so a returning user who
  * opted out would be tracked. When the settings load, the held visits are
  * sent if analytics is enabled and dropped if not.
+ *
+ * A page of the forge tour's sample app (Forge/Sample/sampleApp.ts) carries
+ * `sample: "true"`: its template is a real console page's, and a funnel must
+ * be able to tell a tour's visit from a person's own app.
  */
 /** Visits held while consent loads; a signed-out stretch keeps only the latest. */
 const MAX_HELD_VISITS = 20;
@@ -50,10 +56,12 @@ export function PageVisitTracker({ firstVisitProps }: { firstVisitProps?: Record
   useEffect(() => {
     if (!visit) return;
     const template = visit.slice(visit.indexOf("\n") + 1);
+    const pathname = visit.slice(0, visit.indexOf("\n"));
     const props = {
       ...(previous.current ? {} : firstVisitProps),
       pageName: template,
       ...(previous.current ? { previousPage: previous.current } : {}),
+      ...(isSampleApp(consolePageOf(pathname)?.project) ? { sample: "true" } : {}),
     };
     previous.current = template;
     if (privacyConsentKnown()) {

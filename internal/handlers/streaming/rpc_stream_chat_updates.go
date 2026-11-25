@@ -71,7 +71,7 @@ func (s *Service) StreamChatUpdates(
 	var chat *db.ChatRow
 	err := traced(ctx, "chat_stream.authorize", func(ctx context.Context) error {
 		var err error
-		chat, err = s.deps.Repo.GetChatRow(ctx, chatID)
+		chat, err = s.deps.ChatRows.GetChatRow(ctx, chatID)
 		return err
 	})
 	if err != nil {
@@ -129,7 +129,7 @@ func (s *Service) StreamChatUpdates(
 	}
 	// Each is decided as the user stream decides it (orgGate): an update
 	// about a chat of an org the caller may not read is not forwarded.
-	updateOrgs := newOrgGate(s.deps.Repo, s.deps.Projects, userID, s.unassignedOrgRecheck)
+	updateOrgs := newOrgGate(s.deps.Repo, s.deps.ChatRows, s.deps.Projects, userID, s.unassignedOrgRecheck)
 	var userUpdateCh <-chan streaming.UpdateEvent[db.UserUpdate]
 	if focus != nil && s.deps.UserUpdates != nil {
 		userUpdateSub := s.deps.UserUpdates.Subscribe(ctx, userID)
@@ -262,7 +262,7 @@ func (s *Service) StreamChatUpdates(
 			// viewer's owner (or an admin) may have made it private. Each
 			// must end the stream within one interval rather than at the
 			// next reconnect.
-			refreshed, err := s.deps.Repo.GetChatRow(ctx, chatID)
+			refreshed, err := s.deps.ChatRows.GetChatRow(ctx, chatID)
 			switch {
 			case svcerr.IsNotFound(err):
 				return svcerr.NotFound("chat")

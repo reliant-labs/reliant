@@ -3,6 +3,7 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
@@ -498,6 +499,20 @@ message ListRunsRequest {
   // owns, in any org, as before this field existed.
   // A run belongs to its chat's org.
   optional string org_id = 18;
+
+  // List the runs of several projects at once: the side nav's choice of
+  // several projects (ListChatsRequest.project_ids). The projects listed are
+  // the union of project_id and project_ids; with both empty every project
+  // is listed, as before this field existed. Cross-cutting list only, and
+  // it narrows the unlaunched events the same way. Runs are still the
+  // caller's own, so an id that is not theirs contributes nothing. At most
+  // 200 ids, none of them empty (INVALID_ARGUMENT otherwise).
+  repeated string project_ids = 19 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {
+      string: {min_len: 1}
+    }
+  }];
 }
 
 message ListRunsResponse {
@@ -556,6 +571,23 @@ message LastRunPerWorkflowRequest {
   // Workflow restricts the result to these workflow names. Empty returns every
   // workflow the caller has run.
   repeated string workflow = 2;
+
+  // Only this organization's runs (ListRunsRequest.org_id): it must be one
+  // the caller is a live member of (PERMISSION_DENIED otherwise), and runs
+  // created before orgs count under the caller's default org. Unset counts
+  // every run the caller owns, in any org, as before this field existed,
+  // except runs of an org they have left, which no list shows.
+  optional string org_id = 3;
+
+  // Several projects at once (ListRunsRequest.project_ids): the union of
+  // project_id and project_ids; both empty is every project. At most 200
+  // ids, none of them empty (INVALID_ARGUMENT otherwise).
+  repeated string project_ids = 4 [(buf.validate.field).repeated = {
+    max_items: 200
+    items: {
+      string: {min_len: 1}
+    }
+  }];
 }
 
 message LastRunPerWorkflowResponse {

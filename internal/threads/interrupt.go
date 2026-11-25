@@ -90,7 +90,10 @@ func (s *Service) InterruptThread(ctx context.Context, opts InterruptThreadOpts)
 	// as SendAgentMessage and ClaimQueuedAgentMessages. Revealing that a thread
 	// exists but belongs to another chat is an enumeration leak. A store miss
 	// is already a NotFound; any other read failure is the server's.
-	chat, err := s.repo.GetChatRowWithUserCheck(ctx, opts.ChatID, opts.UserID)
+	if s.chats == nil {
+		return InterruptThreadResult{}, fmt.Errorf("threads: Deps.Chats is required to interrupt a thread")
+	}
+	chat, err := s.chats.GetChatRowWithUserCheck(ctx, opts.ChatID, opts.UserID)
 	if err != nil {
 		return InterruptThreadResult{}, fmt.Errorf("load chat: %w", err)
 	}

@@ -88,7 +88,6 @@ type Repository interface {
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 
 	// ListTriggers is called directly too; TriggerLister declares it.
 	launch.WorkflowResolver
@@ -152,4 +151,9 @@ type DraftRequest struct {
 	Description string
 	Workflow    string
 	Timezone    string
+}
+
+// Chats reads the chat a launch event belongs to, for the access check. store.ChatExtStore satisfies it.
+type Chats interface {
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 }

@@ -84,12 +84,12 @@ function useDetailScope() {
       search: (prev: Record<string, unknown>) => ({ ...prev, allProjects: true }),
       replace: true,
     } as never);
-  return { scopeProjectId: scope.projectId, showAllProjects };
+  return { scopeProjectId: scope.projectId, scopeProjectIds: scope.projectIds, allProjects: scope.allProjects, showAllProjects };
 }
 
 export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; workflowRef: string }) {
   const navigate = useNavigate();
-  const { scopeProjectId, showAllProjects } = useDetailScope();
+  const { scopeProjectId, scopeProjectIds, allProjects, showAllProjects } = useDetailScope();
   const library = useWorkflowLibrary(projectId);
   const definition = useWorkflowDefinition(projectId, workflowRef);
   const scopePreferences = useScopePreferences();
@@ -104,7 +104,9 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
 
   if (library.isLoading) return <DetailSkeleton />;
   if (library.data && !listing && !invalid) {
-    return <WorkflowNotFound workflowRef={workflowRef} projectId={projectId} scopeProjectId={scopeProjectId} />;
+    return (
+      <WorkflowNotFound workflowRef={workflowRef} projectId={projectId} scopeProjectId={scopeProjectId} scopeProjectIds={scopeProjectIds} />
+    );
   }
 
   const displayName = workflowDisplayName({ name: workflowRef, title: listing?.title });
@@ -196,11 +198,14 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
             declared={declared}
             projectId={projectId}
             scopeProjectId={scopeProjectId}
+            scopeProjectIds={scopeProjectIds}
             setupBlockedReason={setupBlockedReason}
             onShowAllProjects={showAllProjects}
           />
           <RecentRunsCard
             projectId={scopeProjectId}
+            projectIds={scopeProjectIds}
+            allProjects={allProjects}
             workflowRef={workflowRef}
             onRun={runBlockedReason ? undefined : () => setRunning(true)}
             onAddTrigger={setupBlockedReason ? undefined : () => openAutomationDialog({ workflowRef, projectId, custom: true })}
@@ -291,12 +296,18 @@ function AboutRow({ label, value }: { label: string; value: React.ReactNode }) {
 
 function RecentRunsCard({
   projectId,
+  projectIds,
+  allProjects,
   workflowRef,
   onRun,
   onAddTrigger,
 }: {
-  /** The project in scope; undefined for every project. */
+  /** The project in scope; undefined for several or every project. */
   projectId?: string;
+  /** The projects in scope when it is several. */
+  projectIds?: readonly string[];
+  /** Every project is in scope. */
+  allProjects: boolean;
   workflowRef: string;
   onRun?: () => void;
   onAddTrigger?: () => void;
@@ -304,8 +315,8 @@ function RecentRunsCard({
   // Every run of this workflow in scope, whenever it ran and whatever started
   // it — and every trigger event of it that started no run.
   const filters = useMemo(
-    () => ({ projectId, workflow: [workflowRef], range: "all" as const, includeUnlaunched: true }),
-    [projectId, workflowRef],
+    () => ({ projectId, projectIds, workflow: [workflowRef], range: "all" as const, includeUnlaunched: true }),
+    [projectId, projectIds, workflowRef],
   );
   const list = useRunList(filters);
   const runs = list.runs.slice(0, RECENT_RUNS_LIMIT);
@@ -319,7 +330,7 @@ function RecentRunsCard({
           <h2 className="text-sm font-semibold text-foreground">Recent runs</h2>
           <Link
             to={runsPath()}
-            search={{ workflow: [workflowRef], range: "all", allProjects: projectId ? undefined : true }}
+            search={{ workflow: [workflowRef], range: "all", allProjects: allProjects ? true : undefined }}
             className="rounded-sm text-xs font-medium text-primary-ink hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             View all
@@ -463,7 +474,17 @@ const INPUT_COLUMNS: DataTableColumn<InputRow>[] = [
   },
 ];
 
-function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflowRef?: string; projectId?: string; scopeProjectId?: string }) {
+function WorkflowNotFound({
+  workflowRef,
+  projectId,
+  scopeProjectId,
+  scopeProjectIds,
+}: {
+  workflowRef?: string;
+  projectId?: string;
+  scopeProjectId?: string;
+  scopeProjectIds?: readonly string[];
+}) {
   return (
     <div className="space-y-4">
     <Card padding="lg" role="alert">
@@ -500,6 +521,7 @@ function WorkflowNotFound({ workflowRef, projectId, scopeProjectId }: { workflow
         declared={[]}
         projectId={projectId}
         scopeProjectId={scopeProjectId}
+        scopeProjectIds={scopeProjectIds}
         setupBlockedReason="This workflow no longer exists, so no trigger can be added."
       />
     )}

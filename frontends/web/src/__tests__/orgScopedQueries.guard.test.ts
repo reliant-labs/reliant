@@ -72,7 +72,7 @@ describe("org-scoped queries", () => {
     const fns = new Set(reads.map((site) => `${site.kind}:${site.fn}`));
     expect(fns).toContain("generated:useProjects");
     expect(fns).toContain("generated:useTriggers");
-    expect(fns).toContain("handwritten:useMembers");
+    expect(fns).toContain("generated:useMembers");
     expect(fns).toContain("handwritten:useForgeDomains");
     expect(reads.length).toBeGreaterThan(60);
   });

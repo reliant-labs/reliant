@@ -43,7 +43,7 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	}
 	noMachine := false
 	if chatID != nil && *chatID != "" {
-		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
+		chat, err := s.deps.Chats.GetChat(ctx, *chatID)
 		if err != nil {
 			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 		}
@@ -102,7 +102,7 @@ func (s *Service) placeOnRequestedMachine(ctx context.Context, userID, projectID
 		}
 	}
 	if chatID != nil && *chatID != "" {
-		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
+		chat, err := s.deps.Chats.GetChat(ctx, *chatID)
 		if err != nil {
 			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 		}
