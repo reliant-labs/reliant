@@ -25,10 +25,10 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 			saved := 0
 			var key string
 			detail := ""
-			repo := &MockWorkflowStatusStore{
-				GetChatFunc: func(context.Context, string) (*db.Chat, error) {
-					return &db.Chat{ID: "chat", LaunchKind: kind, TriggerID: &tid}, nil
-				},
+			repo := withChatWorkflowStatus{GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+				return &db.Chat{ID: "chat", LaunchKind: kind, TriggerID: &tid}, nil
+			}, MockWorkflowStatusStore: &MockWorkflowStatusStore{
+
 				GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
 					return &db.Message{Role: pb.MessageRole_MESSAGE_ROLE_ASSISTANT, CreatedAt: end.Add(-time.Second)}, nil
 				},
@@ -44,7 +44,7 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 						require.Equal(t, key, id)
 					}
 					return nil, true, nil
-				}}
+				}}}
 			repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
 				return []*db.StepExecution{{ID: "attempt", StepID: "gate", CreatedAt: end, ExitCode: ptr.Of(int64(2)), ErrorMessage: ptr.Of("client_secret: secret")}}, nil
 			}}
@@ -81,17 +81,17 @@ func TestAutomationFailureSuppressesAmbiguousSingleLineAssignments(t *testing.T)
 			raw, _ := json.Marshal(map[string]string{"stderr": text})
 			tid := "trigger"
 			saved := false
-			repo := &MockWorkflowStatusStore{
-				GetChatFunc: func(context.Context, string) (*db.Chat, error) {
-					return &db.Chat{ID: "chat", LaunchKind: "schedule", TriggerID: &tid}, nil
-				},
+			repo := withChatWorkflowStatus{GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+				return &db.Chat{ID: "chat", LaunchKind: "schedule", TriggerID: &tid}, nil
+			}, MockWorkflowStatusStore: &MockWorkflowStatusStore{
+
 				GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) { return nil, nil },
 				SaveMessageToThreadOnceFunc: func(_ context.Context, _, _ string, _ int32, content string, _ *string, _ []string, _ *int32, _ string) (*db.Message, bool, error) {
 					require.NotContains(t, content, "opaque-secret-value")
 					require.Contains(t, content, "credential-bearing diagnostic omitted")
 					saved = true
 					return nil, true, nil
-				}}
+				}}}
 			repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
 				return []*db.StepExecution{{StepID: "gate", ActivityName: "ExecuteRunStep", ExitCode: ptr.Of(int64(2)), OutputJSON: ptr.Of(string(raw))}}, nil
 			}}
@@ -116,16 +116,16 @@ func TestAutomationFailureNamesTheDeclaringSaveMessage(t *testing.T) {
 	trigger := "t"
 	text := "Review did not finish: the review was incomplete"
 	detail := ""
-	repo := &MockWorkflowStatusStore{
-		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
-			return &db.Chat{ID: "c", LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: &trigger}, nil
-		},
+	repo := withChatWorkflowStatus{GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+		return &db.Chat{ID: "c", LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: &trigger}, nil
+	}, MockWorkflowStatusStore: &MockWorkflowStatusStore{
+
 		GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
 			return &db.Message{ID: "m", Role: pb.MessageRole_MESSAGE_ROLE_ASSISTANT, CreatedAt: end.Add(-time.Millisecond)}, nil
 		},
 		ListContentBlocksFunc: func(context.Context, string) ([]*db.MessageContentBlock, error) {
 			return []*db.MessageContentBlock{{BlockType: pb.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: &text}}, nil
-		}}
+		}}}
 	repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
 		return []*db.StepExecution{{ID: "row", StepID: "stopped", ActivityName: "SaveMessage", CreatedAt: end,
 			Success:      ptr.Of(false),
@@ -144,8 +144,7 @@ func TestAutomationFailureNamesTheDeclaringSaveMessage(t *testing.T) {
 // A declaring node with no attempt (a compute node) is still named.
 func TestAutomationFailureNamesADeclaringNodeWithNoAttempt(t *testing.T) {
 	detail := ""
-	repo := &MockWorkflowStatusStore{
-		GetChatFunc: func(context.Context, string) (*db.Chat, error) { return &db.Chat{ID: "c"}, nil }}
+	repo := withChatWorkflowStatus{GetChatFunc: func(context.Context, string) (*db.Chat, error) { return &db.Chat{ID: "c"}, nil }, MockWorkflowStatusStore: &MockWorkflowStatusStore{}}
 	repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) { return nil, nil }}
 	repoRuns := &MockRunRecords{
 		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
@@ -159,13 +158,13 @@ func TestAutomationFailurePreservesAuthoredFailureMessage(t *testing.T) {
 	end := time.Now()
 	trigger := "t"
 	text := "The gate failed; please repair compilation."
-	repo := &MockWorkflowStatusStore{
-		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
-			return &db.Chat{ID: "c", LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: &trigger}, nil
-		},
+	repo := withChatWorkflowStatus{GetChatFunc: func(context.Context, string) (*db.Chat, error) {
+		return &db.Chat{ID: "c", LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: &trigger}, nil
+	}, MockWorkflowStatusStore: &MockWorkflowStatusStore{
+
 		GetLatestMessageInThreadFunc: func(context.Context, string) (*db.Message, error) {
 			return &db.Message{ID: "message", Role: pb.MessageRole_MESSAGE_ROLE_ASSISTANT, CreatedAt: end.Add(time.Second)}, nil
-		}}
+		}}}
 	repoWorkflows := &MockWorkflowRuns{ListRunNodeExecutionsFunc: func(context.Context, string, int) ([]*db.StepExecution, error) {
 		return []*db.StepExecution{{StepID: "gate", ErrorMessage: ptr.Of("bad"), CreatedAt: end}}, nil
 	}}

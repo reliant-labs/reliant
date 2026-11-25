@@ -48,6 +48,19 @@ describe("the app's session", () => {
     expect(reader).toHaveAttribute("data-signed-in", "false");
   });
 
+  it("is signed in the same way when forge's login broker signed the person in", () => {
+    const GRACE = {
+      id: "u2",
+      email: "grace@example.com",
+      app_metadata: { provider: "forge" },
+      user_metadata: { name: "Grace Hopper" },
+    } as unknown as User;
+    act(() => useAuthStore.setState({ user: GRACE, loading: false }));
+    const reader = renderSession();
+    expect(reader).toHaveAttribute("data-signed-in", "true");
+    expect(JSON.parse(reader.getAttribute("data-user") ?? "")).toEqual({ id: "u2", email: "grace@example.com", name: "Grace Hopper" });
+  });
+
   it("is loading while the auth store is", () => {
     act(() => useAuthStore.setState({ loading: true }));
     expect(renderSession()).toHaveAttribute("data-loading", "true");

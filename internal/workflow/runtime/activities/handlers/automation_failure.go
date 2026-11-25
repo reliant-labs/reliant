@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/google/uuid"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,7 +20,7 @@ import (
 // not an explanation; only text written after the failed attempt suppresses
 // the fallback. The preallocated id makes retries converge to one message.
 func (a *WorkflowStatusActivity) ensureAutomationFailureMessage(ctx context.Context, input WorkflowStatusInput) {
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil || chat == nil {
 		return
 	}

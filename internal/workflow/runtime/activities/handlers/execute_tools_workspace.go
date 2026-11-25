@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -78,7 +80,7 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 		return out
 	}
 
-	chat, err := a.repo.GetChat(ctx, rtx.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, rtx.ChatID)
 	if err != nil || chat.NoMachine || chat.ProjectID == "" {
 		return out
 	}

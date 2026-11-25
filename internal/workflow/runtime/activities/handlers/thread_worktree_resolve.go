@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -25,7 +27,7 @@ import (
 // conversation that has been working in one workspace keeps it, so naming a
 // different one is refused rather than silently moving the conversation.
 func (a *CreateWorkflowWithThreadActivity) resolveThreadWorktree(ctx context.Context, input CreateWorkflowWithThreadInput) (id, refusal string, err error) {
-	chat, err := a.repo.GetChat(ctx, input.ChatID)
+	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
 		return "", "", fmt.Errorf("load chat %s: %w", input.ChatID, err)
 	}

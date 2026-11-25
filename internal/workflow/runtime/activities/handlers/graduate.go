@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -50,7 +52,7 @@ func TransitionChatOnCompletion(ctx context.Context, repo ChatTransitioner, chat
 		return "", nil
 	}
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := chatviews.Of(repo).GetChat(ctx, chatID)
 	if err != nil {
 		return "", fmt.Errorf("transition_to: load chat %s: %w", chatID, err)
 	}

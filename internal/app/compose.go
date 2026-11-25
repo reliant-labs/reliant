@@ -53,6 +53,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/background"
 	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/chat_trace"
 	"github.com/reliant-labs/reliant/internal/handlers/connection"
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
@@ -730,6 +731,7 @@ func (g *Graph) newLedgerRetention() (*LedgerRetention, error) {
 		DB:                     g.Database(),
 		ChatUpdateRetention:    g.WorkerConfig.GetChatUpdateRetention().AsDuration(),
 		StepExecutionRetention: g.WorkerConfig.GetStepExecutionRetention().AsDuration(),
+		ObservationRetention:   g.WorkerConfig.GetNodeObservationRetention().AsDuration(),
 		StartDelay:             g.WorkerConfig.GetLedgerRetentionStartDelay().AsDuration(),
 	})
 }
@@ -817,8 +819,10 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		Policies:       g.OrgPolicyResolver(),
 		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
 		// Native sign-in (/auth/*), only with a configured identity.
-		SignIn:   g.SignInSessions(),
-		Accounts: g.ControlPlaneAccounts(),
+		SignIn:       g.SignInSessions(),
+		Accounts:     g.ControlPlaneAccounts(),
+		Auth:         g.UserAuth(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
@@ -1076,6 +1080,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		OrgPolicyImpact:    g.OrgPolicyImpact(),
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
+		ChatTrace:          g.ChatTrace(),
 	})
 }
 
@@ -1188,6 +1193,8 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Config:        g.Cfg,
 		Repo:          g.Database(),
 		Chats:         chataccess.NewFromORM(g.Database().ORM()),
+		ChatRows:      store.NewChatExtStore(g.Database().ORM()),
+		ChatViews:     store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Workflows:     store.NewWorkflowExtStore(g.Database().ORM()),
 		Worktrees:     store.NewWorktreeExtStore(g.Database().ORM()),
 		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
@@ -2041,6 +2048,19 @@ func (g *Graph) newProjectpurge() (projectpurge.Service, error) {
 	return projectpurge.NewServiceWithForgeMiddleware(projectpurge.New(projectpurge.Deps{
 		DB: g.Database().ORM(), // the project's ORM client
 	})), nil
+}
+
+// newChatTrace constructs the chat-trace handler (internal/handlers/chat_trace):
+// a chat's Trace/Cost tab, its spans read through control-plane
+// (ChatTraceSpans; nil answers every trace without spans, PARTIAL).
+func (g *Graph) newChatTrace() (*chat_trace.Service, error) {
+	return chat_trace.New(chat_trace.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		Store:  g.Database(),
+		Spans:  ChatTraceSpans(g.ServerProcessConfig.GetControlPlane()),
+		Now:    nil, // optional — no provider
+	})
 }
 
 // newChatprlinks constructs the chatprlinks package (internal/chatprlinks).
