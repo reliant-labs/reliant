@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -300,14 +301,15 @@ func (l *ListTasksTool) formatTask(task *db.Task, num int, indent string, taskMa
 
 // UpdateTaskTool allows agents to update task status and details
 type UpdateTaskTool struct {
-	repo  updateTaskStore
-	plans updateTaskPlanning
+	repo    updateTaskStore
+	refetch Refetcher
+	plans   updateTaskPlanning
 }
 
 // NewUpdateTaskTool creates a new task update tool
-func NewUpdateTaskTool(repo updateTaskStore, plans updateTaskPlanning) Tool {
+func NewUpdateTaskTool(repo updateTaskStore, plans updateTaskPlanning, refetch Refetcher) Tool {
 	return NewToolWrapper(&UpdateTaskTool{
-		repo:  repo,
+		repo: repo, refetch: refetch,
 		plans: plans,
 	})
 }
@@ -432,7 +434,7 @@ Status: %s`,
 	}
 
 	if chatID := rctx.ChatID; chatID != "" {
-		if err := u.repo.EmitChatRefetch(rctx.Context, chatID, db.RefetchPlanTasks); err != nil {
+		if err := emitChatRefetch(u.refetch, rctx.Context, chatID, core.RefetchPlanTasks); err != nil {
 			logging.Warn("[UpdateTaskTool] Failed to emit plan_tasks refetch", "error", err)
 		}
 	}
@@ -631,13 +633,14 @@ func inheritedTaskRefusal(task *db.Task, params UpdateTaskParams, threadID, owne
 
 // CreateSubtaskTool allows agents to create subtasks
 type CreateSubtaskTool struct {
-	repo createSubtaskStore
+	repo    createSubtaskStore
+	refetch Refetcher
 }
 
 // NewCreateSubtaskTool creates a new subtask creation tool
-func NewCreateSubtaskTool(repo createSubtaskStore) Tool {
+func NewCreateSubtaskTool(repo createSubtaskStore, refetch Refetcher) Tool {
 	return NewToolWrapper(&CreateSubtaskTool{
-		repo: repo,
+		repo: repo, refetch: refetch,
 	})
 }
 
@@ -756,7 +759,7 @@ Status: %s`,
 	}
 
 	if chatID := rctx.ChatID; chatID != "" {
-		if err := c.repo.EmitChatRefetch(rctx.Context, chatID, db.RefetchPlanTasks); err != nil {
+		if err := emitChatRefetch(c.refetch, rctx.Context, chatID, core.RefetchPlanTasks); err != nil {
 			logging.Warn("[CreateSubtaskTool] Failed to emit plan_tasks refetch", "error", err)
 		}
 	}

@@ -593,6 +593,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
+		Updates:           g.chatUpdates(),
 		ConnectionVault:   g.CredentialsConnectionvault(),
 		Network:           g.ServerProcessConfig.GetNetwork(),
 		Temporal:          g.TemporalClient(),
