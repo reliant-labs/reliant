@@ -348,6 +348,11 @@ secrets/
 # ...whose env lives in deploy/kcl/dev/, which the bare `dev/` above would
 # otherwise swallow.
 !deploy/kcl/dev/
+# ...and so is that env's entry in the scaffold birth ledger. Ignored, it was
+# an uncommitted file in every checkout that ran `forge generate`, which the
+# daemon's worktree reclaim must keep as possible data: it held 95 finished
+# worktrees (~32 GB) on one machine (2026-11-24).
+!.forge/scaffolded/deploy/kcl/dev/
 
 # forge's proto descriptor: derived from proto/ by whichever forge command
 # reads it, and never committed (commitpolicy: only what the compiler needs is

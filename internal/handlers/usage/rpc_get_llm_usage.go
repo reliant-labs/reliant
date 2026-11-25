@@ -176,7 +176,7 @@ var detailGroupBys = map[pb.LLMUsageGroupBy]bool{
 // with the grouping.
 func (s *Service) usageRows(ctx context.Context, userID string, start, end, detailFrom time.Time, detail bool) ([]usageRow, error) {
 	if !detail {
-		daily, err := s.deps.Store.ListLLMUsageDaily(ctx, userID, start, end)
+		daily, err := s.deps.Usage.ListLLMUsageDaily(ctx, userID, start, end)
 		if err != nil {
 			return nil, err
 		}
@@ -188,14 +188,14 @@ func (s *Service) usageRows(ctx context.Context, userID string, start, end, deta
 		if end.Before(last) {
 			last = end
 		}
-		daily, err := s.deps.Store.ListLLMUsageDaily(ctx, userID, start, last)
+		daily, err := s.deps.Usage.ListLLMUsageDaily(ctx, userID, start, last)
 		if err != nil {
 			return nil, err
 		}
 		rows = fromDaily(daily)
 	}
 	if first := maxTime(start, detailFrom); !end.Before(first) {
-		calls, err := s.deps.Store.ListLLMUsageDetail(ctx, userID, first, end)
+		calls, err := s.deps.Usage.ListLLMUsageDetail(ctx, userID, first, end)
 		if err != nil {
 			return nil, err
 		}
@@ -209,7 +209,7 @@ func (s *Service) usageRows(ctx context.Context, userID string, start, end, deta
 	return rows, nil
 }
 
-func fromDaily(daily []*db.LLMUsageDay) []usageRow {
+func fromDaily(daily []*store.LlmCallUsageDaily) []usageRow {
 	rows := make([]usageRow, 0, len(daily))
 	for _, r := range daily {
 		rows = append(rows, usageRow{Day: r.Day, OrgID: r.OrgID, Provider: r.Provider, Model: r.Model, AuthMode: r.AuthMode,

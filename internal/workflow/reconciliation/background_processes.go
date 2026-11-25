@@ -111,7 +111,7 @@ func (r *Reconciler) reconcileBackgroundedProcesses(ctx context.Context, stats *
 	}
 	calls, err := r.repo.ListBackgroundedProcessToolCalls(ctx)
 	if err != nil {
-		logging.ErrorContext(ctx, "[Reconciler] Failed to list backgrounded process tool calls", "error", err)
+		logPassFailure(ctx, "[Reconciler] Failed to list backgrounded process tool calls", err)
 		return 0, fmt.Errorf("failed to list backgrounded process tool calls: %w", err)
 	}
 	if len(calls) == 0 {

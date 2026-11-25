@@ -48010,6 +48010,16 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.ValidationError"
+            },
+            {
+              "Name": "visibility",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "ImportWorkflowRequest": [
@@ -49128,6 +49138,16 @@
               "kind": "message",
               "type_name": "reliant.v1.ValidationError",
               "repeated": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.GitPublishArgs": [
@@ -51306,6 +51326,16 @@
               "name": "permissions",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "visibility",
+              "kind": "enum",
+              "type_name": "reliant.v1.ResourceVisibility"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.WorkflowRequirements": [
@@ -51536,6 +51566,11 @@
             "CONFIG_SCOPE_PROJECT",
             "CONFIG_SCOPE_PROJECT_LOCAL"
           ],
+          "reliant.v1.ResourceVisibility": [
+            "RESOURCE_VISIBILITY_UNSPECIFIED",
+            "RESOURCE_VISIBILITY_PRIVATE",
+            "RESOURCE_VISIBILITY_ORG"
+          ],
           "reliant.v1.TriggerOverlapPolicy": [
             "TRIGGER_OVERLAP_POLICY_UNSPECIFIED",
             "TRIGGER_OVERLAP_POLICY_SKIP",
@@ -51559,6 +51594,11 @@
             2,
             3
           ],
+          "reliant.v1.ResourceVisibility": [
+            0,
+            1,
+            2
+          ],
           "reliant.v1.TriggerOverlapPolicy": [
             0,
             1,
@@ -51579,6 +51619,10 @@
           "reliant.v1.ConfigScope": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ConfigScope"
+          },
+          "reliant.v1.ResourceVisibility": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "ResourceVisibility"
           },
           "reliant.v1.TriggerOverlapPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -58517,29 +58561,23 @@
     },
     {
       "consumer": "OrgPolicyImpact",
+      "field": "Calls",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Calls",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "OrgPolicyImpact",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Chats",
       "methods": [],
       "candidates": [
         "Database"
       ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
-    },
-    {
-      "consumer": "OrgPolicyImpact",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Store",
-      "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "OrgPolicyResolver",
@@ -58656,16 +58694,12 @@
     },
     {
       "consumer": "OrgUsage",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.Store",
+      "field": "Usage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.OrgUsage",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "PackageCommands",
@@ -60540,6 +60574,15 @@
     },
     {
       "consumer": "Triggerowner",
+      "field": "Adoptions",
+      "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Adoptions",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Triggerowner",
       "field": "Locks",
       "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Locks",
       "methods": [],
@@ -60601,16 +60644,12 @@
     },
     {
       "consumer": "Usage",
-      "field": "Store",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Store",
+      "field": "Usage",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/usage.Usage",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
-      "providers": [
-        "Database"
-      ],
-      "resolution": "composition_expression"
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "UserAuth",
@@ -60660,6 +60699,17 @@
         "Providerbackoff"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerChat",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "WorkerDaemonRouter",
@@ -61294,7 +61344,31 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "OrgPolicyImpact.Calls",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgPolicyImpact.Chats",
+      "source": {
+        "path": "internal/handlers/org_policy_impact/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "OrgUsage.Prices",
+      "source": {
+        "path": "internal/handlers/org_usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgUsage.Usage",
       "source": {
         "path": "internal/handlers/org_usage/service.go",
         "symbol": "New"
@@ -61598,6 +61672,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Triggerowner.Adoptions",
+      "source": {
+        "path": "internal/triggerowner/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Triggerowner.Locks",
       "source": {
         "path": "internal/triggerowner/service.go",
@@ -61638,10 +61720,26 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Usage.Usage",
+      "source": {
+        "path": "internal/handlers/usage/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Vault.Ctx",
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewVault"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "WorkerChat.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWorkerChat"
       }
     },
     {
