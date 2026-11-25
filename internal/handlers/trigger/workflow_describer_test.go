@@ -2,6 +2,7 @@
 package trigger
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/launch"
 )
 
 // A list describes each workflow once, however many of its activations it
@@ -43,4 +45,71 @@ func TestWorkflowDescriberDescribesEachWorkflowOnce(t *testing.T) {
 
 	require.Nil(t, definitionSource(env.ctx, sources, activation("d", "missing")), "a workflow that does not resolve has no source")
 	require.EqualValues(t, 2, counting.catalogs.Load(), "another workflow is described on its own")
+}
+
+// Embed the unused resolver methods: describing this project workflow needs
+// only its machine catalog and the owner's same-name draft lookup.
+type descriptionScopeResolver struct {
+	launch.WorkflowResolver
+	catalog *string
+	reads   int
+	owners  []string
+}
+
+func (r *descriptionScopeResolver) GetProjectMachineWorkflowsJSON(context.Context, string, string) (*string, bool, error) {
+	r.reads++
+	return r.catalog, true, nil
+}
+
+func (r *descriptionScopeResolver) GetUsableWorkflowBySlug(_ context.Context, owner, _ string) (*db.WorkflowDraft, error) {
+	r.owners = append(r.owners, owner)
+	return nil, nil
+}
+
+func TestWorkflowDescriberSeparatesScopes(t *testing.T) {
+	catalog, err := config.EncodeCatalogJSON([]config.StoredWorkflow{
+		{Slug: "triage", Name: "triage", RelativePath: ".reliant/workflows/triage.yaml", YAMLContent: declaringWorkflowYAML},
+	})
+	require.NoError(t, err)
+	for _, dimension := range []string{"owner", "project", "machine"} {
+		t.Run(dimension, func(t *testing.T) {
+			resolver := &descriptionScopeResolver{catalog: catalog}
+			describer := newWorkflowDescriber(resolver)
+			first := core.Trigger{ID: "a", UserID: "owner-a", ProjectID: "project-a", DaemonID: "machine-a", Workflow: "triage"}
+			other := first
+			other.ID = "b"
+			switch dimension {
+			case "owner":
+				other.UserID = "owner-b"
+			case "project":
+				other.ProjectID = "project-b"
+			case "machine":
+				other.DaemonID = "machine-b"
+			}
+
+			ctx := context.Background()
+			a, err := describer.describe(ctx, &first)
+			require.NoError(t, err)
+			require.NotNil(t, a)
+			b, err := describer.describe(ctx, &other)
+			require.NoError(t, err)
+			require.NotNil(t, b)
+			require.NotSame(t, a, b, "a different scope must resolve its own description even for identical catalog content")
+			require.Equal(t, 2, resolver.reads)
+			require.Equal(t, []string{first.UserID, other.UserID}, resolver.owners)
+
+			// Interleave both scopes again: each must retain its own memo hit.
+			for _, activation := range []*core.Trigger{&first, &other} {
+				want := a
+				if activation == &other {
+					want = b
+				}
+				again, err := describer.describe(ctx, activation)
+				require.NoError(t, err)
+				require.Same(t, want, again)
+			}
+			require.Equal(t, 2, resolver.reads, "repeat activations must not resolve either scope again")
+			require.Len(t, resolver.owners, 2)
+		})
+	}
 }
