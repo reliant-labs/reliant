@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
+	"github.com/reliant-labs/reliant/internal/handlers/chat_trace"
 	"github.com/reliant-labs/reliant/internal/handlers/coverage_source"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/org_policy_impact"
@@ -391,6 +392,12 @@ type APIListenerDeps struct {
 	//
 	// forge:optional-dep
 	Accounts *ControlPlaneAccounts
+	// Auth verifies the tokens the session resolver hands out (the managed
+	// identity's validator).
+	Auth *grpcserver.UserAuth
+	// ControlPlane names the internal-service secret the session resolver
+	// accepts control-plane's calls with.
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
 // NewAPIListener is the address browsers, the CLI and `rlat_` tokens call
@@ -423,6 +430,13 @@ func NewAPIListener(d APIListenerDeps) (*grpcserver.APIListener, error) {
 				}
 				RegisterLoginBroker(mux, d.API, d.Logger, opts...)
 				d.Logger.Info("native sign-in enabled", "routes", "/auth/* (internal/app/login_broker.go)")
+				// The service-only session resolver, for control-plane to
+				// honour this sign-in's cookie on its own routes. Only with
+				// a control plane to share the internal-service secret with.
+				if secret := ControlPlaneEndpoint(d.ControlPlane).InternalServiceSecret; secret != "" {
+					mux.Handle(grpcserver.SessionResolvePath,
+						grpcserver.NewSessionResolveHandler(d.SignIn.Manager, d.Auth.Authenticator(), secret))
+				}
 			}
 			return services
 		}),
@@ -1775,6 +1789,23 @@ func ProjectOrgMoveFacts(cfg *configv1.ControlPlaneConfig) project.MoveFacts {
 // not hosted or this process has no internal-service secret; never a typed
 // nil in the handler's interface.
 func OrgUsageListPrices(cfg *configv1.ControlPlaneConfig) org_usage.ListPrices {
+	cp := ControlPlaneEndpoint(cfg)
+	if !cp.Hosted() || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	return controlplane.NewInstrumented(controlplane.Deps{
+		ControlPlane: cfg,
+		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+}
+
+// ChatTraceSpans is where a chat's Trace tab reads its spans: control-plane's
+// ConversationTraceInternalService, signed as the internal service. nil —
+// every trace is answered without spans, PARTIAL — when the control plane is
+// not hosted or this process has no internal-service secret; never a typed
+// nil in the handler's interface.
+func ChatTraceSpans(cfg *configv1.ControlPlaneConfig) chat_trace.Spans {
 	cp := ControlPlaneEndpoint(cfg)
 	if !cp.Hosted() || cp.InternalServiceSecret == "" {
 		return nil
