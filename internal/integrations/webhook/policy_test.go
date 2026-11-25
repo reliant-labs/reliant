@@ -47,7 +47,7 @@ type pauser struct {
 	paused map[string]string
 }
 
-func (p *pauser) PauseTrigger(_ context.Context, id, reason string) (bool, error) {
+func (p *pauser) SystemPauseTrigger(_ context.Context, id, reason string) (bool, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, ok := p.paused[id]; ok {

@@ -999,7 +999,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 		// A trigger whose org's policy does not allow its integration is
 		// paused (org-policies §4.3). The API holds no schedule client, and an
 		// integration trigger's events have no schedule to pause.
-		WithAutoPause(triggers.NewAutoPause(repo, nil))
+		WithAutoPause(triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
 	if d.GitHubAccess != nil {
 		in.Access = map[string]webhook.AccessRefresher{ghaccess.IntegrationID: gitHubAccess{d.GitHubAccess}}
 	}

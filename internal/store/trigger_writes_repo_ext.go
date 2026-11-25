@@ -104,3 +104,40 @@ func UpdateTriggerInOrg(ctx context.Context, db orm.Context, t *core.Trigger, re
 	}
 	return RecordTriggerChange(ctx, db, "update", before, after)
 }
+
+// SystemPauseTrigger is the system pausing a trigger that can no longer launch
+// as written, recording reason (core.TriggerPaused*) on the row and the pause
+// in its change history, in one transaction. paused is false when the trigger
+// was already paused (a person did, or a concurrent fire got here first):
+// nothing is written, so a burst of refused fires records one pause. It opens
+// its own transaction, or joins the one ctx carries.
+func SystemPauseTrigger(ctx context.Context, db orm.Context, id, reason string) (paused bool, err error) {
+	if id == "" {
+		return false, fmt.Errorf("trigger ID cannot be empty")
+	}
+	err = db.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		if err := LockTrigger(ctx, db, id); err != nil {
+			return err
+		}
+		before, err := GetTrigger(ctx, db, id)
+		if err != nil {
+			return err
+		}
+		if !before.Enabled {
+			return nil
+		}
+		if err := PauseTrigger(ctx, db, id, reason); err != nil {
+			return err
+		}
+		after, err := GetTrigger(ctx, db, id)
+		if err != nil {
+			return err
+		}
+		paused = true
+		return RecordTriggerChange(ctx, db, "pause", before, after)
+	})
+	if err != nil {
+		return false, err
+	}
+	return paused, nil
+}

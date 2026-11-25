@@ -101,12 +101,12 @@ type EventRepo interface {
 }
 
 // TriggerPauser is how the system pauses a trigger that can no longer launch
-// (AutoPause). *db.Repo satisfies it.
+// (AutoPause). store.TriggerWritesExtStore satisfies it.
 type TriggerPauser interface {
-	// PauseTrigger disables the trigger with reason (core.TriggerPaused*)
+	// SystemPauseTrigger disables the trigger with reason (core.TriggerPaused*)
 	// and records the pause in its change history; paused is false when it
 	// was already paused, and nothing is written.
-	PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error)
+	SystemPauseTrigger(ctx context.Context, id, reason string) (paused bool, err error)
 }
 
 // Launcher is the one door that turns an event plus a spec into a running
