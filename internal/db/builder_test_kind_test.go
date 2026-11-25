@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // builder.test is a trigger-event kind of its own (WORKFLOW_UI.md §13 G6). The
@@ -99,7 +100,7 @@ func TestListRuns_BuilderTestsExcludedByDefaultAndIncludedWhenFiltered(t *testin
 	assert.Equal(t, []string{"test", "legacy", "real"}, list("builder.test", "chat.start"))
 
 	// The per-workflow "last run" rollup is the same real-history view.
-	last, err := repo.LastRunPerWorkflow(ctx, RunListFilters{UserID: "test-user"})
+	last, err := store.LastRunPerWorkflow(ctx, repo.ORM(), RunListFilters{UserID: "test-user"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"agent"}, listRunIDs(last))
 }
