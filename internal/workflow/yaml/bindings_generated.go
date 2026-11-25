@@ -134,7 +134,6 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"capabilities":            {},
 			"compaction_threshold":    {},
 			"expected_response_tools": {},
-			"refused_tool_calls":      {},
 			"resolved_tool_calls":     {},
 			"response_tool_schemas":   {},
 			"tool_calls":              {},

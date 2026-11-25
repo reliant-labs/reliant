@@ -17,6 +17,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
+import { DEMO_PROJECT } from "../handlers/scope";
 import { DEMO_ORG, demoNow } from "../shopStory";
 import { shopAlerting } from "./alerting";
 import { shopDashboards } from "./dashboards";
@@ -85,19 +86,22 @@ export const demoWriteRefused = async (): Promise<never> => {
   throw new ConnectError("This is a demo. Changes are turned off.", Code.PermissionDenied);
 };
 
-let shared: { now: number; api: ObservabilityApi } | null = null;
+/** The model per app, at the pack clock's one `now` (rebuilt only when a test re-pins the clock). */
+const shared = new Map<string, { now: number; api: ObservabilityApi }>();
 
 /**
- * shop's observability, as of `now` (the page load). One per `now`: the
- * console, the wire scenario and the browser providers all read the same
- * answers, so they share one model and every cache behind it.
+ * shop's observability, as of `now` (the page load), told for `app` (the
+ * demo's `shop`; the forge tour's sample tells it for its own name). One per
+ * `now` and app: the console, the wire scenario and the browser providers all
+ * read the same answers, so they share one model and every cache behind it.
  */
-export function createShopApi(now: number = demoNow()): ObservabilityApi {
-  if (shared?.now !== now) shared = { now, api: buildShopApi(now) };
-  return shared.api;
+export function createShopApi(now: number = demoNow(), app: string = DEMO_PROJECT): ObservabilityApi {
+  let model = shared.get(app);
+  if (model?.now !== now) shared.set(app, (model = { now, api: buildShopApi(now, app) }));
+  return model.api;
 }
 
-function buildShopApi(now: number): ObservabilityApi {
+function buildShopApi(now: number, app: string): ObservabilityApi {
   return {
     currentOrgId: async () => DEMO_ORG,
     ...shopTelemetry(now),
@@ -105,10 +109,10 @@ function buildShopApi(now: number): ObservabilityApi {
     ...shopWorkloads(now),
     ...shopPanels(now),
     ...shopDelivery(now),
-    ...shopIssues(now),
+    ...shopIssues(now, app),
     ...shopAlerting(now),
     ...shopSessions(now),
-    ...shopDashboards(now),
+    ...shopDashboards(now, app),
     ...shopMetrics(now),
   };
 }

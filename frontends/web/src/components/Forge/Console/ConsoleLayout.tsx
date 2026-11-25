@@ -52,6 +52,7 @@ import { ForgeConsoleContext, rosterReadFailed, type ForgeConsole } from "./cons
 import { useConsoleNavModel } from "./useConsoleNavModel";
 import { rememberEnv } from "./envScope";
 import { consolePath, isTestsPage, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
+import { AppScopeProvider } from "@/fixtures/scope";
 
 /** Where switching to the forge app `app` lands: the same page there. */
 export function switchTarget(app: string, page: ConsolePage): string {
@@ -73,7 +74,22 @@ export function switchTarget(app: string, page: ConsolePage): string {
   return consolePath(app, same);
 }
 
+/**
+ * The console in its app's scope (fixtures/scope.tsx): the forge tour's
+ * sample app reads its fixture pack through a TransportScope of its own, with
+ * read-only controls; every real app is unwrapped. Everything below, the
+ * console's own model included, reads inside it.
+ */
 export function ConsoleLayout() {
+  const { project: forgeProject = "" } = useParams({ strict: false }) as { project?: string };
+  return (
+    <AppScopeProvider app={forgeProject}>
+      <ConsoleLayoutInScope />
+    </AppScopeProvider>
+  );
+}
+
+function ConsoleLayoutInScope() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { project: forgeProject = "" } = useParams({ strict: false }) as { project?: string };

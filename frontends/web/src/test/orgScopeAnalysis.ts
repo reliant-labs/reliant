@@ -67,6 +67,9 @@ const IMPERATIVE_READS = new Set(["fetchQuery", "ensureQueryData", "prefetchQuer
 
 const QUERY_HOOK = /^(createQueryHook|createInfiniteQueryHook|createSuspenseQueryHook)$/;
 
+/** The rpc a `<svc>Queries` member reads: `listMembersInfinite` is ListMembers, paged. */
+const rpcOfQueriesMember = (member: string) => member.replace(/Infinite$/, "");
+
 /**
  * An identifier that says which org: `org`, `orgId`, `activeOrgId`,
  * `orgScope`, `getOrgScope()`, `orgRequest(…)`, `orgQueryEnabled(…)`,
@@ -370,7 +373,8 @@ export class OrgScopeAnalysis {
           // `export const useListProjects = createQueryHook<…>(projectServiceQueries.listProjects, …)`
           if (ts.isCallExpression(init) && ts.isIdentifier(init.expression) && QUERY_HOOK.test(init.expression.text)) {
             const arg = init.arguments[0];
-            if (arg && ts.isPropertyAccessExpression(arg)) table.hooks.set(name, `${svc.typeName}.${arg.name.text}`);
+            // A paged read (`…Queries.listMembersInfinite`) is a read of its rpc.
+            if (arg && ts.isPropertyAccessExpression(arg)) table.hooks.set(name, `${svc.typeName}.${rpcOfQueriesMember(arg.name.text)}`);
           }
         }
       }
@@ -391,7 +395,7 @@ export class OrgScopeAnalysis {
       const d = this.lookup(callee.expression, file);
       if (!d || !d.file.path.endsWith("-hooks_gen.ts")) return null;
       const svc = this.generated(d.file.path)?.queries.get(nameOf(d.node) ?? "");
-      return svc ? `${svc.typeName}.${callee.name.text}` : null;
+      return svc ? `${svc.typeName}.${rpcOfQueriesMember(callee.name.text)}` : null;
     }
     return null;
   }

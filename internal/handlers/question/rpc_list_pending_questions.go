@@ -54,7 +54,7 @@ func (s *Service) ListPendingQuestions(
 	// One chat's questions serve its viewers too, as read-only cards:
 	// answering stays the owner's (ResolveQuestion). One decision shapes them.
 	ctx = authz.WithViewerReads(ctx)
-	chat, err := s.deps.Repo.GetChatRow(ctx, chatID)
+	chat, err := s.deps.ChatRows.GetChatRow(ctx, chatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
@@ -82,7 +82,7 @@ func (s *Service) pendingQuestionsOfUser(ctx context.Context, userID string) ([]
 	return authz.Visible(ctx, userID, questions, func(ctx context.Context, userID string, q *db.Question) bool {
 		ok, seen := readable[q.ChatID]
 		if !seen {
-			chat, getErr := s.deps.Repo.GetChatRow(ctx, q.ChatID)
+			chat, getErr := s.deps.ChatRows.GetChatRow(ctx, q.ChatID)
 			ok = getErr == nil && authz.CanReadChat(ctx, userID, chat)
 			readable[q.ChatID] = ok
 		}

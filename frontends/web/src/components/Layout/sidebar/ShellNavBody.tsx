@@ -11,11 +11,13 @@
  * (the public demo's) must not import them by reaching this file.
  */
 
-import { useMemo } from "react";
+import { memo, useLayoutEffect, useMemo, useState } from "react";
+
+import { appScope, AppScopeProvider } from "@/fixtures/scope";
 
 import { consolePageOf, orgPageOf } from "../../Forge/Console/paths";
 import type { GroupedNavInput } from "../../Forge/Console/consoleNavModel";
-import { useConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
+import { useConsoleNavModel, type ConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
 import type { NavConfig, NavCtx } from "./navConfig/types";
 import { NavRenderer, type NavigateOptions, type NavSlots } from "./NavRenderer";
 import type { ShellProject } from "./shellProject";
@@ -37,9 +39,49 @@ export function ShellNavBody(props: ShellNavBodyProps) {
 }
 
 function NavWithConsole({ app, ...props }: ShellNavBodyProps & { app: string }) {
+  if (appScope(app)) return <NavWithScopedConsole app={app} {...props} />;
+  return <NavWithLiveConsole app={app} {...props} />;
+}
+
+function NavWithLiveConsole({ app, ...props }: ShellNavBodyProps & { app: string }) {
   const model = useConsoleNavModel(app, props.pathname, props.search);
   return <NavBody {...props} console={model} />;
 }
+
+/**
+ * An app whose console reads its own scope (the forge tour's sample,
+ * fixtures/scope.tsx): its console model is read INSIDE that scope, so the
+ * nav's sections and the page under them share one cache and never read
+ * live, while the rest of the nav (its slots: chats, inbox) stays outside it,
+ * on the app's transport. The model is lifted out before paint.
+ */
+function NavWithScopedConsole({ app, ...props }: ShellNavBodyProps & { app: string }) {
+  const [model, setModel] = useState<ConsoleNavModel | null>(null);
+  return (
+    <>
+      <AppScopeProvider app={app}>
+        <ScopedConsoleModel app={app} pathname={props.pathname} search={props.search} onModel={setModel} />
+      </AppScopeProvider>
+      <NavBody {...props} console={model} />
+    </>
+  );
+}
+
+const ScopedConsoleModel = memo(function ScopedConsoleModel({
+  app,
+  pathname,
+  search,
+  onModel,
+}: {
+  app: string;
+  pathname: string;
+  search: Record<string, unknown>;
+  onModel: (model: ConsoleNavModel) => void;
+}) {
+  const model = useConsoleNavModel(app, pathname, search);
+  useLayoutEffect(() => onModel(model), [model, onModel]);
+  return null;
+});
 
 function NavBody({ config, shell, pathname, search, slots, onNavigate, flat, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
   const ctx = useMemo<NavCtx>(

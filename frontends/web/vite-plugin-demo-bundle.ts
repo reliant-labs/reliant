@@ -21,6 +21,19 @@ import type { Plugin } from "vite";
  * DEMO_BUNDLE_REPORT=<file> also writes every chunk's modules and sizes as
  * JSON (outside the published tree), for size comparisons and for finding
  * who imported what.
+ *
+ * THE SHELL IS IN THE DEMO GRAPH (since #3519). The demo renders in the app's
+ * one shell: the frame (Layout/shell/AppShell.tsx), the nav column and its
+ * renderer (Layout/sidebar/ShellNavColumn.tsx, NavRenderer.tsx), the nav
+ * config's items (Layout/sidebar/navConfig/items.tsx, with the demo's own
+ * config, Forge/Demo/demoNav.ts) and the keyboard host
+ * (Shortcuts/ShortcutHost.tsx). They are shared UI, not Reliant-only, so no
+ * rule names them. What is app-only comes in through seams the demo leaves
+ * empty: the nav body and the Setup Guide (AppShellFrame `nav`, `guide`), the
+ * keyboard host's overlays (`overlays`), and Settings' nav sections, which
+ * only the app's config imports (navConfig/settings.tsx via hybrid.ts). The
+ * rules below are unchanged by it: a shell import that reaches past a seam
+ * into a module they name still fails the build, which is the point.
  */
 
 /** A module the demo bundle must not contain, and why. Paths are relative to frontends/web, `/`-separated. */

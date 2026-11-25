@@ -267,33 +267,6 @@ func TestApprovalService_Approve_MissingRequestID(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
-// createRetiredToolApproval creates a pending approval as the removed
-// integration action approval prompt recorded it: type 1, the reserved
-// APPROVAL_TYPE_TOOL, asking about one call in the turn.
-func createRetiredToolApproval(t *testing.T, repo *db.Repo, chatID, workflowID string) string {
-	t.Helper()
-	approvalID := uuid.NewString()
-	require.NoError(t, repo.CreateApproval(context.Background(), &db.Approval{
-		ID:                 approvalID,
-		ChatID:             chatID,
-		ApprovalType:       retiredToolApprovalType,
-		EntityID:           workflowID + ":" + uuid.NewString(),
-		Status:             int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING),
-		Title:              "Post message in #general?",
-		TemporalWorkflowID: workflowID,
-		CreatedAt:          time.Now().UTC(),
-	}))
-	return approvalID
-}
-
-// Denying an approval the removed prompt recorded writes no denial message:
-// the run still waiting on it refuses that one call in ExecuteTools, so a
-// tool_result for every call in the turn would duplicate that result. Denying
-// a workflow step approval in the same turn still writes one.
-func TestApprovalService_DenyRetiredToolApprovalWritesNoDenialMessage(t *testing.T) {
-	testDenyAnsweredByItsRun(t, createRetiredToolApproval)
-}
-
 // A tool-call approval (an activation change, a machine start) is answered by
 // its run too: denying it must not write a denied tool_result for every call
 // in the turn, the others of which still run.
