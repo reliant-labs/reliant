@@ -36,6 +36,44 @@ func TestGetUserJWTDropsAnExpiredToken(t *testing.T) {
 	assert.False(t, ok)
 }
 
+// A run's activities offer the token captured at its start to whichever
+// worker runs them: it fills an empty or expired slot, and never replaces a
+// live token that lasts longer.
+func TestOfferUserJWTNeverDowngradesALiveToken(t *testing.T) {
+	now := time.Now()
+	older, fresher := fakeJWT(t, now.Add(10*time.Minute)), fakeJWT(t, now.Add(time.Hour))
+
+	OfferUserJWT("offer-empty", older)
+	got, ok := GetUserJWT("offer-empty")
+	assert.True(t, ok)
+	assert.Equal(t, older, got, "an empty slot takes the offered token")
+
+	SetUserJWT("offer-fresher-held", fresher)
+	OfferUserJWT("offer-fresher-held", older)
+	got, _ = GetUserJWT("offer-fresher-held")
+	assert.Equal(t, fresher, got, "a live token that lasts longer is kept")
+
+	OfferUserJWT("offer-empty", fresher)
+	got, _ = GetUserJWT("offer-empty")
+	assert.Equal(t, fresher, got, "a token that lasts longer replaces the held one")
+
+	SetUserJWT("offer-expired-held", fakeJWT(t, now.Add(-time.Minute)))
+	OfferUserJWT("offer-expired-held", older)
+	got, ok = GetUserJWT("offer-expired-held")
+	assert.True(t, ok)
+	assert.Equal(t, older, got, "an expired token is replaced")
+
+	SetUserJWT("offer-opaque", "opaque-a")
+	OfferUserJWT("offer-opaque", "opaque-b")
+	got, _ = GetUserJWT("offer-opaque")
+	assert.Equal(t, "opaque-b", got, "unreadable expiries are not compared: the offer wins, as SetUserJWT does")
+
+	OfferUserJWT("", older)
+	OfferUserJWT("offer-blank", " ")
+	_, ok = GetUserJWT("offer-blank")
+	assert.False(t, ok, "a blank token is not offered")
+}
+
 func TestJWTExpiredJudgesOnlyTokensItCanRead(t *testing.T) {
 	now := time.Now()
 	assert.True(t, jwtExpired(fakeJWT(t, now.Add(-time.Second)), now))
