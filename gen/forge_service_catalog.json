@@ -60707,6 +60707,19 @@
     },
     {
       "consumer": "Run",
+      "field": "RunLists",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.RunLists",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
       "field": "Workflows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.WorkflowLoader",
       "methods": [],

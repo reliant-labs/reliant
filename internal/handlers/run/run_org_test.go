@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	run "github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // orgSource: test-user is a live member of acme and home; home is the default.
@@ -49,7 +50,7 @@ func TestListRuns_SessionAndParentHonourTheOrg(t *testing.T) {
 	workflows := &run.MockWorkflowLoader{
 		LoadWorkflowFunc: func(context.Context, string) (*db.Workflow, error) { return runs[0], nil },
 	}
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Workflows: workflows, ChatRows: chatRows, ChatViews: chatViews, Orgs: resolver}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: &run.MockRunLists{}, Workflows: workflows, ChatRows: chatRows, ChatViews: chatViews, Orgs: resolver}))
 	// A request through a listener carries the membership authz decides with.
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 	str := func(s string) *string { return &s }
@@ -96,6 +97,9 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 				{ChatID: "c-legacy", CreatedAt: at.Add(-3 * time.Minute)},
 			}, false, nil
 		},
+	}
+	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
+	lists := &run.MockRunLists{
 		ListUnlaunchedTriggerEventsFunc: func(_ context.Context, f db.RunListFilters) ([]*db.UnlaunchedTriggerEvent, bool, error) {
 			if f.After != nil {
 				return nil, false, nil
@@ -106,8 +110,7 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 			}, false, nil
 		},
 	}
-	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: lists, Orgs: resolver}))
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 
 	got, err := svc.ListRuns(ctx, connect.NewRequest(&pb.ListRunsRequest{IncludeUnlaunchedEvents: ptrBool(true)}))
@@ -145,7 +148,9 @@ func TestListRuns_LeavesOutARemovedMembersOrgRows(t *testing.T) {
 func TestLastRunPerWorkflow_LeavesOutARemovedMembersOrgRuns(t *testing.T) {
 	acme, globex := "acme", "globex"
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
-	repo := &run.MockRepository{
+	repo := &run.MockRepository{}
+	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
+	lists := &run.MockRunLists{
 		LastRunPerWorkflowAndOrgFunc: func(context.Context, db.RunListFilters) ([]*db.RunListItem, error) {
 			return []*db.RunListItem{
 				{ChatID: "c-acme", WorkflowName: "wf-a", CreatedAt: at, OrgID: &acme},
@@ -154,8 +159,7 @@ func TestLastRunPerWorkflow_LeavesOutARemovedMembersOrgRuns(t *testing.T) {
 			}, nil
 		},
 	}
-	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: lists, Orgs: resolver}))
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 
 	got, err := svc.LastRunPerWorkflow(ctx, connect.NewRequest(&pb.LastRunPerWorkflowRequest{}))
@@ -173,14 +177,16 @@ func TestLastRunPerWorkflow_LeavesOutARemovedMembersOrgRuns(t *testing.T) {
 func TestLastRunPerWorkflow_HonoursTheNamedOrgAndProjects(t *testing.T) {
 	var got db.RunListFilters
 	repo := &run.MockRepository{
+		AssignUnassignedOrgFunc: func(context.Context, string, string) error { return nil },
+	}
+	resolver := orgs.New(orgSource{})
+	lists := &run.MockRunLists{
 		LastRunPerWorkflowAndOrgFunc: func(_ context.Context, f db.RunListFilters) ([]*db.RunListItem, error) {
 			got = f
 			return nil, nil
 		},
-		AssignUnassignedOrgFunc: func(context.Context, string, string) error { return nil },
 	}
-	resolver := orgs.New(orgSource{})
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: lists, Orgs: resolver}))
 	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
 	str := func(s string) *string { return &s }
 
@@ -212,7 +218,7 @@ func TestListRuns_PassesTheProjectSet(t *testing.T) {
 			return nil, false, nil
 		},
 	}
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: &run.MockRunLists{}}))
 	_, err := svc.ListRuns(run.AuthedContext(t), connect.NewRequest(&pb.ListRunsRequest{ProjectIds: []string{"p-1", "p-2"}}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"p-1", "p-2"}, got.ProjectIDs)
@@ -250,7 +256,7 @@ func TestLastRunPerWorkflow_AnOlderVisibleRunOutlivesANewerRemovedOne(t *testing
 			ID: c.id, ChatID: c.id, WorkflowName: workflow, Thread: c.id, Status: db.Completed(), CreatedAt: c.at,
 		}))
 	}
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, RunLists: store.NewRunListExtStore(repo.ORM()), Orgs: resolver}))
 
 	got, err := svc.LastRunPerWorkflow(ctx, connect.NewRequest(&pb.LastRunPerWorkflowRequest{}))
 	require.NoError(t, err)

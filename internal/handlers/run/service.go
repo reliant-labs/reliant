@@ -23,6 +23,9 @@ type Deps struct {
 
 	// Repo reads runs, the chats that own them and the run lists.
 	Repo Repository
+	// RunLists reads the unlaunched trigger events and each workflow's newest
+	// run (store.RunListExtStore).
+	RunLists RunLists
 	// Workflows reads the run an rpc names.
 	Workflows WorkflowLoader
 	// ChatRows and ChatViews read the chat a run belongs to (store.ChatExtStore,
@@ -54,6 +57,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("run: Deps.Repo is required")
+	}
+	if d.RunLists == nil {
+		return fmt.Errorf("run: Deps.RunLists is required")
 	}
 	if d.Workflows == nil {
 		return fmt.Errorf("run: Deps.Workflows is required")
