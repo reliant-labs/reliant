@@ -60713,8 +60713,10 @@
       "candidates": [
         "Database"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Run",
@@ -62943,14 +62945,6 @@
       "component": "Question.Refetch",
       "source": {
         "path": "internal/handlers/question/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "Run.RunLists",
-      "source": {
-        "path": "internal/handlers/run/service.go",
         "symbol": "New"
       }
     },
