@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -125,7 +127,7 @@ func TestReportContentFreeTurn_WritesTheErrorToTheChat(t *testing.T) {
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 
-	a := &CallLLMActivity{repo: repo}
+	a := &CallLLMActivity{repo: rowreads.WithRepo(repo)}
 	a.reportContentFreeTurn(
 		context.Background(),
 		chatID,

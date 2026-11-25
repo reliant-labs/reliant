@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
@@ -42,7 +44,7 @@ func TestWorkflowService_ListWorkflows_TitleAndHiddenBuiltins(t *testing.T) {
 		Status:     db.WorkflowDraftStatusComplete, CreatedAt: now, UpdatedAt: now, Version: 1,
 	}))
 
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: rowreads.WithRepo(repo), Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	list := func(includeHidden bool) map[string]*reliantv1.WorkflowListItem {
 		resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
 			ProjectId: projectID, IncludeHidden: proto.Bool(includeHidden),

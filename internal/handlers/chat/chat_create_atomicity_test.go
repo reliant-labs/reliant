@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
@@ -114,7 +116,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 		LastActive: now,
 	}))
 
-	failingRepo := &failAfterUserUpdateRepo{Repository: repo, shouldFail: true}
+	failingRepo := &failAfterUserUpdateRepo{Repository: rowreads.WithRepo(repo), shouldFail: true}
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
@@ -199,7 +201,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 		LastActive: now,
 	}))
 
-	failingRepo := &failAfterUserUpdateRepo{Repository: repo, shouldFail: false}
+	failingRepo := &failAfterUserUpdateRepo{Repository: rowreads.WithRepo(repo), shouldFail: false}
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{

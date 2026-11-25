@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -190,8 +192,8 @@ func newAsleepFixture(t *testing.T, asleep ...string) *asleepFixture {
 	return &asleepFixture{
 		placementFixture: pf,
 		router:           router,
-		fs:               newFileSystemService(t, router, pf.repo),
-		wt:               newWorktreeService(t, pf.repo, router),
+		fs:               newFileSystemService(t, router, rowreads.WithRepo(pf.repo)),
+		wt:               newWorktreeService(t, rowreads.WithRepo(pf.repo), router),
 	}
 }
 
@@ -319,7 +321,7 @@ func TestCreateWorktree_NoMachineChatWithRequestedMachine_NeverWakes(t *testing.
 		// The checkouts are made in the background, after the response: they
 		// must not wake the machine either. Wait for them to settle (the
 		// machine is asleep, so they fail) before looking.
-		awaitWorktreeStatus(t, f.repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+		awaitWorktreeStatus(t, rowreads.WithRepo(f.repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 	}
 	assert.Empty(t, f.router.wakeCalls(), "a no-machine chat must never wake a machine, even one it names")
 }
@@ -449,7 +451,7 @@ func TestCreateWorktree_AsleepChatMachine_WakesBeforeRecordingAnything(t *testin
 	f.router.wakeUp(asleepMachineB)
 	resp, err := create()
 	require.NoError(t, err, "the retry creates the worktree on the machine that is now up")
-	wt := awaitWorktreeStatus(t, f.repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	wt := awaitWorktreeStatus(t, rowreads.WithRepo(f.repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	assertPlacedOn(t, &f.router.placementRouter, wt, asleepMachineB)
 }
 
@@ -531,7 +533,7 @@ func TestFileSystemProxy_GetFilePreview_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newAsleepFixture(t)
 			router := &previewRouter{asleepRouter: newAsleepRouter(), info: tc.info}
-			fs := newFileSystemService(t, router, f.repo)
+			fs := newFileSystemService(t, router, rowreads.WithRepo(f.repo))
 			chatID := f.chat(t, f.userID, asleepMachineB, "")
 
 			_, err := fs.GetFilePreview(f.ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{

@@ -36,6 +36,10 @@ type Deps struct {
 	Workflows WorkflowLoader
 	// Worktrees reads the worktree a chat runs in.
 	Worktrees WorktreeReader
+	// Installs is each machine's checkout of a project (project_daemons) and
+	// the machine records behind it: a chat's main checkout is its machine's,
+	// never projects.path. daemonplacement.Records satisfies it.
+	Installs daemonplacement.Installs
 	// ProjectRows reads the project row of an already-authorized chat.
 	ProjectRows ProjectReader
 	// Projects reads the project a launch runs in, only when its owner may
@@ -170,12 +174,8 @@ type WorkflowResolver interface {
 	WorkflowSourceDiagnostic(ctx context.Context, projectID, daemonID, ref string) (string, error)
 }
 
-// ProjectLookup resolves the project, worktrees and settings a launch runs in.
-//
-// Installs is each machine's checkout of a project (project_daemons): a
-// chat's main checkout is its machine's, never projects.path.
+// ProjectLookup resolves the worktrees and settings a launch runs in.
 type ProjectLookup interface {
-	daemonplacement.Installs
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
 	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*db.Setting, error)
 }

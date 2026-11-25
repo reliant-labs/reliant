@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -193,13 +195,13 @@ func TestCreateWorktreeChecksOutSiblingReposConcurrently(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	router := newConcurrentCreateRouter(t)
 	router.rendezvous = 3
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "control-plane", "forge", "reliant")
 	_, id := createWorkspace(t, svc, userID, projectID, "parallel")
 
-	settled := awaitWorktreeStatus(t, repo, id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	settled := awaitWorktreeStatus(t, rowreads.WithRepo(repo), id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	peak, started, _, _ := router.snapshot()
 	assert.Equal(t, 3, peak, "all three sibling checkouts must be in flight together, not one after another")
 	assert.ElementsMatch(t, []string{"control-plane", "forge", "reliant"}, started)
@@ -219,14 +221,14 @@ func TestCreateWorktreeChecksOutContainerBeforeNestedRepo(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := newConcurrentCreateRouter(t)
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	// "" is the project root, which contains both nested repos.
 	projectID := seedMultiRepoProject(t, repo, userID, "", "apps/web", "apps/api")
 	_, id := createWorkspace(t, svc, userID, projectID, "nested")
 
-	settled := awaitWorktreeStatus(t, repo, id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	settled := awaitWorktreeStatus(t, rowreads.WithRepo(repo), id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	_, started, finished, _ := router.snapshot()
 	require.Len(t, started, 3)
 	require.NotEmpty(t, finished)
@@ -251,13 +253,13 @@ func TestCreateWorktreeFailureTearsDownEverySiblingCheckout(t *testing.T) {
 	router.rendezvous = 3
 	router.failSubPath = stringPtr("forge")
 	router.successDelay = 300 * time.Millisecond
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "control-plane", "forge", "reliant")
 	_, id := createWorkspace(t, svc, userID, projectID, "doomed")
 
-	settled := awaitWorktreeStatus(t, repo, id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+	settled := awaitWorktreeStatus(t, rowreads.WithRepo(repo), id, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 	assert.Empty(t, settled.Path, "a FAILED row carries no path")
 
 	_, _, finished, deleted := router.snapshot()

@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -61,7 +63,7 @@ func TestToolsFactory_WorktreeAnnouncesThroughRefetch(t *testing.T) {
 	f := newWorktreeToolFixture(t)
 	refetch := &toolRefetchRecorder{}
 	factory := NewToolsFactory(&ToolsOptions{
-		Repo: f.repo, Placement: f.repo, WorktreeChats: store.NewChatExtStore(f.repo.ORM()),
+		Repo: f.repo, Placement: rowreads.WithRepo(f.repo), WorktreeChats: store.NewChatExtStore(f.repo.ORM()),
 		RunMachine: f.machine, WorktreeSettler: f.settler, Refetch: refetch,
 	})
 	resp := callRunTool(t, factory.Worktree(), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "refetch-routing"})

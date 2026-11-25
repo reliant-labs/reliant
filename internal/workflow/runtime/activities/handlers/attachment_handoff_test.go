@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -21,7 +23,7 @@ func TestSpawnToolSaysSubAgentsCannotSeeAttachments(t *testing.T) {
 	t.Parallel()
 
 	repo := db.NewTestRepo(t)
-	spawn := (&CallLLMActivity{repo: repo}).getSpawnTool(context.Background(), spawnPresetSource{}, &SpawnConfig{Presets: []string{"general"}})
+	spawn := (&CallLLMActivity{repo: rowreads.WithRepo(repo)}).getSpawnTool(context.Background(), spawnPresetSource{}, &SpawnConfig{Presets: []string{"general"}})
 	require.NotNil(t, spawn)
 	description := spawn.Description()
 	assert.Contains(t, description, "not the images or files the user attached")

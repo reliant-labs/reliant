@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -15,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/filepreview"
@@ -97,7 +100,7 @@ func newFSRoutingFixture(t *testing.T) *fsRoutingFixture {
 	return &fsRoutingFixture{
 		placementFixture: pf,
 		router:           router,
-		fs:               newFileSystemService(t, router, pf.repo),
+		fs:               newFileSystemService(t, router, rowreads.WithRepo(pf.repo)),
 	}
 }
 

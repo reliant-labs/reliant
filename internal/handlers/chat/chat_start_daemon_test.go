@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -73,7 +75,7 @@ func newStartDaemonEnv(t *testing.T) *startDaemonEnv {
 	return &startDaemonEnv{
 		svc: &Service{
 			deps: Deps{
-				Repo:        repo,
+				Repo:        rowreads.WithRepo(repo),
 				Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 				Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 				ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

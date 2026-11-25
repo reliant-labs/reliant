@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +48,7 @@ func (d *requestShapeDriver) StreamResponse(ctx context.Context, prompts []strin
 func runChatProjectsTurn(t *testing.T, h *IdempotencyTestHelper, chatID string, wired bool) *requestShapeDriver {
 	t.Helper()
 	driver := &requestShapeDriver{}
-	act := NewCallLLMActivity(CallLLMDeps{Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(),
+	act := NewCallLLMActivity(CallLLMDeps{Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), ToolResults: toolCallsOf(h.Repo()), Store: rowreads.WithRepo(h.Repo()),
 		Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}),
 		Spawns:  store.NewToolCallExtStore(h.Repo().ORM()), ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
 		ConfigProvider: &staticConfigProvider{},

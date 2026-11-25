@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -37,7 +39,7 @@ func TestInterruptedStream_CancelsItsInFlightToolCalls(t *testing.T) {
 	repo := f.h.Repo()
 	ctx := context.Background()
 
-	activityInstance := &CallLLMActivity{repo: repo}
+	activityInstance := &CallLLMActivity{repo: rowreads.WithRepo(repo)}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	// The provider opens a tool call. Input is still empty at tool_use_start,
@@ -79,7 +81,7 @@ func TestInterruptedStream_DoesNotCancelCallsThatCompleted(t *testing.T) {
 	repo := f.h.Repo()
 	ctx := context.Background()
 
-	activityInstance := &CallLLMActivity{repo: repo}
+	activityInstance := &CallLLMActivity{repo: rowreads.WithRepo(repo)}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	const finishedID = "toolu_finished_before_pause"
@@ -129,7 +131,7 @@ func TestInterruptedStream_RespectsAnAlreadyTerminalRow(t *testing.T) {
 	repo := f.h.Repo()
 	ctx := context.Background()
 
-	activityInstance := &CallLLMActivity{repo: repo}
+	activityInstance := &CallLLMActivity{repo: rowreads.WithRepo(repo)}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	const callID = "toolu_completed_in_the_race_window"

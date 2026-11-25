@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,7 +46,7 @@ func newRemoteJoinFixture(t *testing.T) *remoteJoinFixture {
 	for _, id := range []string{f.laptop, f.cloud} {
 		require.NoError(t, repo.UpsertDaemon(f.ctx, &db.Daemon{ID: id, UserID: f.userID}))
 	}
-	f.svc = newTestService(repo)
+	f.svc = newTestService(rowreads.WithRepo(repo))
 	return f
 }
 

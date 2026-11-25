@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -161,7 +163,7 @@ func TestConnectDaemonAsksABelowFloorDaemonToRestartOnce(t *testing.T) {
 		"unknown build":   {commitTime: 0, want: 0},
 	} {
 		t.Run(name, func(t *testing.T) {
-			svc := newTestService(repo)
+			svc := newTestService(rowreads.WithRepo(repo))
 			svc.deps.ClientVersions = testFloorPolicy(false)
 			daemonID := uuid.NewString()
 			stream := dialDaemonAs(t, svc, "floor-user", &reliantv1.DaemonRegister{

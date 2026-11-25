@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -24,7 +26,7 @@ func TestRunStep_RemovedLLMGatewayIsRefusedWithoutRunningTheCommand(t *testing.T
 	repo := setupTestRepo(t)
 	input.ChatID = createTestChat(t, repo)
 	mock := &mockRunExecutor{responses: []mockRunResponse{{exitCode: 0}}}
-	activity := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, mock)
+	activity := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, mock)
 
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)

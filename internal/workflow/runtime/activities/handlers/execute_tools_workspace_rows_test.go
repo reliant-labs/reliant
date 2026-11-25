@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 func TestLoadToolExecutionContextWithoutWorkspaceRows(t *testing.T) {

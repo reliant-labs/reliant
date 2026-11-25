@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
@@ -34,7 +36,7 @@ func runStepActivityTimed(t *testing.T, executor RunExecutor, machines MachineOb
 	t.Helper()
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
-	act := NewExecuteRunStepActivity(repo, workspaceRowsOf(repo), nil, executor)
+	act := NewExecuteRunStepActivity(rowreads.WithRepo(repo), workspaceRowsOf(repo), nil, executor)
 	if machines != nil {
 		act = act.WithMachineObserver(machines)
 	}

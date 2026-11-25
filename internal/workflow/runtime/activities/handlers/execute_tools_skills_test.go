@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -49,7 +51,7 @@ func TestSkillToolReadsSkillsThroughTheConfigProvider(t *testing.T) {
 	}))
 
 	repo := h.Repo()
-	spy := &fullConfigRowReads{Repo: repo}
+	spy := &fullConfigRowReads{Repo: repo, Reads: rowreads.Of(repo)}
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(spy), store.NewProjectConfigExtStore(repo.ORM()), cfgpkg.DefaultParsedConfigCacheBytes)
 	// The tools factory is composition and takes the concrete *db.Repo, so the
 	// spy watches the activity's and the provider's reads; no tool reads the

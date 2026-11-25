@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -117,7 +119,7 @@ func TestWorktreeTool_RunsGitOnTheRunsMachine(t *testing.T) {
 	executor := NewRemoteExecutor(router)
 	executor.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:       database,
-		Placement:  database,
+		Placement:  rowreads.WithRepo(database),
 		RunMachine: NewRunMachine(router),
 	})))
 

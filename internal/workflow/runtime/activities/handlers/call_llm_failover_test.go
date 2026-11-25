@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 
@@ -80,7 +82,7 @@ func TestCallLLM_FailsOverToAnotherAccountOfTheProvider(t *testing.T) {
 		}
 		return d, nil
 	}
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(env.routing)
+	activity := NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(env.routing)
 
 	// The thread already sits on account A (its first assignment).
 	env.store.assignments[chat.ID+"|claude"] = "acct-a"
@@ -130,7 +132,7 @@ func TestCallLLM_AllAccountsLimitedMakesNoProviderCall(t *testing.T) {
 	soon := time.Now().Add(30 * time.Minute).UTC().Truncate(time.Second)
 	env.store.bench("acct-a", time.Now().Add(3*time.Hour), "seven_day")
 	env.store.bench("acct-b", soon, "five_hour")
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(env.routing)
+	activity := NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(env.routing)
 
 	var out CallLLMOutput
 	err := h.ExecuteActivity(activity.Execute, callLLMInput(chat.ID, chat.ID, routeModel+"@claude"), &out)
@@ -195,7 +197,7 @@ func TestCallLLM_DropsReasoningAnotherAccountProduced(t *testing.T) {
 	env.store.assignments[chat.ID+"|codex"] = "cx-b"
 	// A request that carries tools keeps reasoning parts; a tool-less one is
 	// flattened to text first, which would hide whether the strip ran.
-	activity := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(env.routing)
+	activity := NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: nil, MCPBinder: nil}).WithAccountRouting(env.routing)
 
 	input := callLLMInput(chat.ID, chat.ID, "gpt-5.6-sol@codex")
 	input.Node.GetCallLlm().ToolsConfig = &reliantv1.ToolsConfig{PreloadedTools: celStringListLiteral([]string{"view"})}

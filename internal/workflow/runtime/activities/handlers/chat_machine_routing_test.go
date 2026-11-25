@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -52,7 +53,7 @@ func TestExecuteTools_LiveChatStaysOnMachineWhenSecondCloudRegisters(t *testing.
 		t.Helper()
 		executor.requests, executor.selectors = nil, nil
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())}).Execute, ExecuteToolsInput{
+		err := h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())}).Execute, ExecuteToolsInput{
 			ChatID: chat, Thread: chat, ProjectPath: dir,
 			ToolCalls: []message.ToolCall{bashCall("pwd")},
 			// Deliberately no DaemonSelector: this is an already-running workflow.

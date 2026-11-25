@@ -12,12 +12,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -111,7 +114,7 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 	require.NoError(t, repo.UpsertDaemonAttachment(e.ctx, &db.DaemonAttachment{DaemonID: e.daemon, UserID: userID, Source: db.DaemonAttachmentSourceInbound}))
 
 	e.sweeper = worktreesweep.New(worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())), e.router)
-	e.svc = newWorktreeService(t, repo, e.router, e.sweeper)
+	e.svc = newWorktreeService(t, rowreads.WithRepo(repo), e.router, e.sweeper)
 	return e
 }
 
@@ -439,7 +442,7 @@ func TestUnarchive_UnreachableMachineLeavesTheRowArchived(t *testing.T) {
 	e := newReclaimEnv(t)
 	wt, _ := e.worktree(t, "offlinerestore")
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
-	e.svc = newWorktreeService(t, e.repo, &failingRouter{}, e.sweeper)
+	e.svc = newWorktreeService(t, rowreads.WithRepo(e.repo), &failingRouter{}, e.sweeper)
 	_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
 	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)

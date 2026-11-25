@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -48,7 +50,7 @@ func TestCreateProject_PersistsForgeProjectName(t *testing.T) {
 
 	userID := "user-forge-name-" + uuid.New().String()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	s := newProjectService(t, repo, &forgeDiscoverRouter{
+	s := newProjectService(t, rowreads.WithRepo(repo), &forgeDiscoverRouter{
 		stalePathRouter:  stalePathRouter{dirExists: true},
 		forgeProjectName: "hounders",
 	})
@@ -75,7 +77,7 @@ func TestSetProjectForgeName_IdempotentAndOwnerScoped(t *testing.T) {
 
 	userID := "user-forge-name-" + uuid.New().String()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
-	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
+	s := newProjectService(t, rowreads.WithRepo(repo), &stalePathRouter{dirExists: true})
 	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "legacy",
 		Path: "/home/workspace/projects/legacy-" + uuid.New().String(),

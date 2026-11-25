@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
@@ -22,6 +24,7 @@ import (
 // countingRepo counts the reads a workflow resolution makes.
 type countingRepo struct {
 	*db.Repo
+	rowreads.Reads
 	catalogs, drafts atomic.Int64
 }
 
@@ -81,7 +84,7 @@ func TestListTriggersReadsEachCatalogOnce(t *testing.T) {
 		}
 	}
 
-	counting := &countingRepo{Repo: env.repo}
+	counting := &countingRepo{Repo: env.repo, Reads: rowreads.Of(env.repo)}
 	env.configure(t, func(d *Deps) { d.Repo = counting })
 
 	resp, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{ProjectId: &env.projectID}))

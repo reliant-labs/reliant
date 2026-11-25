@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
@@ -70,7 +72,7 @@ func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, *db.
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	svc := NewTestProject(t, WithProjectDeps(withStores(Deps{
-		Repo: repo, Projects: projectaccesstest.For(repo),
+		Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo),
 		Router:       &createProjectRowRouter{resolveID: "daemon-abc"},
 		ControlPlane: cp,
 	})))
@@ -374,13 +376,13 @@ func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *conn
 	gateway, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(repo.ORM(), repo, nil),
 		Logger:      slog.New(slog.DiscardHandler),
 		Config:      &typedconfig.Config{},
-		Repo:        repo,
+		Repo:        rowreads.WithRepo(repo),
 		Projects:    store.NewProjectExtStore(repo.ORM()),
 		Installs:    store.NewProjectDaemonExtStore(repo.ORM()),
 		Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()),
 		LocalModels: store.NewDaemonExtStore(repo.ORM()),
 		Checkouts:   store.NewProjectDaemonDetachmentExtStore(repo.ORM()),
-		Pools:       poolsOfRepo(repo),
+		Pools:       poolsOfRepo(rowreads.WithRepo(repo)),
 	})
 	require.NoError(t, err)
 	t.Cleanup(gateway.Close)

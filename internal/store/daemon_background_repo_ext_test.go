@@ -29,7 +29,7 @@ func TestDaemonQueries(t *testing.T) {
 	if wrote, err := store.UpsertDaemonRegistration(ctx, env.ORM, d1, base, base); err != nil || !wrote {
 		t.Fatalf("UpsertDaemonRegistration = %v, %v", wrote, err)
 	}
-	twin, err := env.Repo.GetDaemon(ctx, "d1")
+	twin, err := store.GetDaemon(ctx, env.Repo.ORM(), "d1")
 	if err != nil || *twin.Hostname != "host-1" || *twin.DaemonType != "self_hosted" || !twin.CreatedAt.Equal(base) {
 		t.Fatalf("Repo.GetDaemon = %+v, %v", twin, err)
 	}
@@ -123,7 +123,7 @@ func TestDaemonQueries(t *testing.T) {
 	if wrote, err := store.UpsertDaemonIdentity(ctx, env.ORM, core.DaemonIdentity{DaemonID: "d4", UserID: "u1"}, base, base); err != nil || !wrote {
 		t.Fatalf("UpsertDaemonIdentity(no type) = %v, %v", wrote, err)
 	}
-	if d, _ := env.Repo.GetDaemon(ctx, "d4"); d.DaemonType != nil {
+	if d, _ := store.GetDaemon(ctx, env.Repo.ORM(), "d4"); d.DaemonType != nil {
 		t.Fatalf("empty daemon type stored as %q, want NULL", *d.DaemonType)
 	}
 

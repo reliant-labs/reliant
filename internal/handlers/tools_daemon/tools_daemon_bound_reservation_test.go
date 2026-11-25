@@ -10,6 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -86,7 +89,7 @@ func connectRegistering(t *testing.T, svc *Service, userID, boundID string, reg 
 
 func requireReserved(t *testing.T, repo *db.Repo, daemonID string, want bool) {
 	t.Helper()
-	d, err := repo.GetDaemon(context.Background(), daemonID)
+	d, err := store.GetDaemon(context.Background(), repo.ORM(), daemonID)
 	require.NoError(t, err)
 	require.Equal(t, want, d.RequiresBoundToken, "daemon %s requires_bound_token", daemonID)
 }
@@ -105,7 +108,7 @@ func requireReservedRefusal(t *testing.T, err error) {
 func TestConnectDaemonBoundCredentialReservesItsID(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	cloud := uuid.NewString()
 
@@ -127,7 +130,7 @@ func TestConnectDaemonBoundCredentialReservesItsID(t *testing.T) {
 func TestConnectDaemonRefusesUnboundTokenOnReservedID(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	cloud := uuid.NewString()
 
@@ -147,7 +150,7 @@ func TestConnectDaemonRefusesUnboundTokenOnReservedID(t *testing.T) {
 	listener.mu.Lock()
 	require.Empty(t, listener.connected, "no connect notification for a refused registration")
 	listener.mu.Unlock()
-	d, err := repo.GetDaemon(context.Background(), cloud)
+	d, err := store.GetDaemon(context.Background(), repo.ORM(), cloud)
 	require.NoError(t, err)
 	require.Equal(t, "h-user-A", *d.Hostname)
 	require.True(t, d.RequiresBoundToken, "a refused unbound registration must not clear the reservation")
@@ -160,7 +163,7 @@ func TestConnectDaemonRefusesUnboundTokenOnReservedIDWithNoLiveConnection(t *tes
 	t.Cleanup(cleanup)
 	cloud := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: cloud, UserID: "user-A", RequiresBoundToken: true}))
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 
 	_, err := connectAs(t, svc, "user-A", "", cloud)
@@ -194,7 +197,7 @@ func TestConnectDaemonUnboundTokenCannotSupersedeLiveBoundConnection(t *testing.
 func TestConnectDaemonUnboundTokenKeepsWorkingOnUnreservedID(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	laptop := uuid.NewString()
 
@@ -212,7 +215,7 @@ func TestConnectDaemonUnboundTokenKeepsWorkingOnUnreservedID(t *testing.T) {
 func TestConnectDaemonBoundConnectReservesAnUnboundRow(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	machine := uuid.NewString()
 
@@ -235,7 +238,7 @@ func TestConnectDaemonBoundConnectReservesAnUnboundRow(t *testing.T) {
 func TestRegisterOutboundConnectionReservesIDAgainstUnboundTokens(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	pod := uuid.NewString()
 
@@ -259,7 +262,7 @@ func TestRegisterOutboundConnectionReservesAnUnboundRow(t *testing.T) {
 	t.Cleanup(cleanup)
 	pod := uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{ID: pod, UserID: "user-A"}))
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 
 	out := dialInPod(t, svc, "user-A", pod)

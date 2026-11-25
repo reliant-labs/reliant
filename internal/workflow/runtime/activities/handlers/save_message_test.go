@@ -11,6 +11,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
@@ -53,7 +54,7 @@ func TestSaveUserMessage(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := SaveMessageInput{
 		ChatID:  chatID,
@@ -122,7 +123,7 @@ func TestSaveAssistantMessageWithText(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := SaveMessageInput{
 		ChatID:  chatID,
@@ -184,7 +185,7 @@ func TestSaveAssistantMessageWithToolCalls(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := SaveMessageInput{
 		ChatID: chatID,
@@ -270,7 +271,7 @@ func TestSaveAssistantMessageWithTextAndToolCalls(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := SaveMessageInput{
 		ChatID:  chatID,
@@ -346,7 +347,7 @@ func TestSaveToolMessage(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := SaveMessageInput{
 		ChatID: chatID,
@@ -430,7 +431,7 @@ func TestSaveMessageIdempotency(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := SaveMessageInput{
 		ChatID:  chatID,
@@ -501,7 +502,7 @@ func TestSaveMessagePassesThroughToolCalls(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("Tool calls are passed through in output for workflow routing", func(t *testing.T) {
 		input := SaveMessageInput{
@@ -581,7 +582,7 @@ func TestSaveAssistantMessageWithTokens(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("Stores token count for assistant message", func(t *testing.T) {
 		input := SaveMessageInput{
@@ -685,7 +686,7 @@ func TestSaveMessageValidation(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("Missing chat_id returns error", func(t *testing.T) {
 		input := SaveMessageInput{
@@ -831,7 +832,7 @@ func TestSaveMessageOrdinalSequencing(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("Messages in same thread have sequential ordinals", func(t *testing.T) {
 		// Create first message
@@ -920,7 +921,7 @@ func TestSaveMessageTransactionAtomicity(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create activity
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	t.Run("Message and content blocks created atomically", func(t *testing.T) {
 		input := SaveMessageInput{
@@ -995,7 +996,7 @@ func TestSaveMessageWithInjectImageFile(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	pngData := []byte("fake-png-binary-data")
 	input := buildInjectFileInput(chatID, "0", "user", "Check this image", []*reliantv1.InjectFileMsg{
@@ -1054,7 +1055,7 @@ func TestSaveMessageWithInjectDocumentFile(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	pdfData := []byte("%PDF-1.4 fake pdf content")
 	input := buildInjectFileInput(chatID, "0", "user", "Review this PDF", []*reliantv1.InjectFileMsg{
@@ -1111,7 +1112,7 @@ func TestSaveMessageWithInjectFilesAndText(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	input := buildInjectFileInput(chatID, "0", "user", "Here are two files", []*reliantv1.InjectFileMsg{
 		{Filename: "photo.jpg", MimeType: "image/jpeg", Data: []byte("jpeg-data")},
@@ -1169,7 +1170,7 @@ func TestSaveMessageWithInjectFileMixed(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	activity := NewSaveMessageActivity(SaveMessageDeps{Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
+	activity := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())})})
 
 	// Pre-create a regular attachment (image) to use alongside inject files
 	regularAttID := uuid.New().String()

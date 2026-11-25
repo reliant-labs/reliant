@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
 	"connectrpc.com/connect"
@@ -46,7 +48,7 @@ func newOrgsFixture(t *testing.T) *machinesFixture {
 	f.ctx = authz.WithMembership(f.ctx, resolver)
 	globex := "globex"
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: f.cloud, UserID: f.userID, OrgID: &globex}))
-	f.svc = NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: f.repo, Projects: projectaccesstest.For(f.repo), Router: f.disk, Orgs: resolver})))
+	f.svc = NewTestProject(t, WithProjectDeps(withStores(Deps{Repo: rowreads.WithRepo(f.repo), Projects: projectaccesstest.For(f.repo), Router: f.disk, Orgs: resolver})))
 	return f
 }
 

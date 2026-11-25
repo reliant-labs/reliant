@@ -117,6 +117,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/seatmatch"
 	"github.com/reliant-labs/reliant/internal/servergateway"
@@ -217,7 +218,7 @@ func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 		Refetch:         g.chatUpdates(),
 		Logger:          g.Log,
 		Config:          g.Cfg,
-		Repo:            g.Database(),
+		Repo:            rowreads.WithRepo(g.Database()),
 		Projects:        store.NewProjectExtStore(g.Database().ORM()),
 		Installs:        store.NewProjectDaemonExtStore(g.Database().ORM()),
 		Attachments:     store.NewDaemonAttachmentExtStore(g.Database().ORM()),
@@ -1174,7 +1175,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		GitCredentials: recoveryCredentials{client: credentials},
 		Logger:         g.Log,
 		Config:         g.Cfg,
-		Repo:           g.Database(),
+		Repo:           rowreads.WithRepo(g.Database()),
 		Chats:          store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Rows:           store.NewWorktreeExtStore(g.Database().ORM()),
 		Projects:       projectaccess.NewFromORM(g.Database().ORM()),
@@ -1194,7 +1195,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
 		Logger:           g.Log,
 		Config:           g.Cfg,
-		Repo:             g.Database(),
+		Repo:             rowreads.WithRepo(g.Database()),
 		Chats:            chataccess.NewFromORM(g.Database().ORM()),
 		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
@@ -1254,7 +1255,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Projects:       g.Projectaccess(),
 		Logger:         g.Log,
 		Config:         g.Cfg,
-		Repo:           g.Database(),
+		Repo:           rowreads.WithRepo(g.Database()),
 		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
@@ -1302,7 +1303,7 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 	return daemon_registry.New(daemon_registry.Deps{
 		Logger:       g.Log,
 		Config:       g.Cfg,
-		Repo:         g.Database(),
+		Repo:         rowreads.WithRepo(g.Database()),
 		Pools:        store.NewMachinePoolExtStore(g.Database().ORM()),
 		Mirror:       g.Daemonmirror(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
@@ -1334,7 +1335,7 @@ func (g *Graph) newForge() (*forge.Service, error) {
 		Logger:   g.Log,
 		Config:   g.Cfg,
 		Router:   g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:     g.Database(),
+		Repo:     rowreads.WithRepo(g.Database()),
 	})
 }
 
@@ -1373,7 +1374,7 @@ func (g *Graph) newMCP() (*mcp.Service, error) {
 		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
 		Logger:         g.Log,
 		Config:         g.Cfg,
-		Repo:           g.Database(),
+		Repo:           rowreads.WithRepo(g.Database()),
 		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 	})
@@ -1400,7 +1401,7 @@ func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Endpoints:   store.NewModelEndpointExtStore(g.Database().ORM()),
-		Machines:    g.Database(),
+		Machines:    rowreads.WithRepo(g.Database()),
 		Router:      g.APIDaemonRouter().NATSDaemonRouter,
 		Credentials: nil,
 		Network:     g.ServerProcessConfig.GetNetwork(),
@@ -1477,7 +1478,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Repos:          store.NewRepoExtStore(o),
 		Logger:         g.Log,
 		Config:         g.Cfg,
-		Repo:           g.Database(),
+		Repo:           rowreads.WithRepo(g.Database()),
 		Lookups:        store.NewProjectExtStore(o),
 		Installs:       store.NewProjectDaemonExtStore(o),
 		Detachments:    store.NewProjectDaemonDetachmentExtStore(o),
@@ -1551,7 +1552,7 @@ func (g *Graph) newRepo() (*repo.Service, error) {
 		Repos:    store.NewRepoExtStore(g.Database().ORM()),
 		Logger:   g.Log,
 		Config:   g.Cfg,
-		Repo:     g.Database(),
+		Repo:     rowreads.WithRepo(g.Database()),
 		Router:   g.APIDaemonRouter().NATSDaemonRouter,
 	})
 }
@@ -1562,7 +1563,7 @@ func (g *Graph) newScenario() (*scenario.Service, error) {
 		Projects:       g.Projectaccess(),
 		Logger:         g.Log,
 		Config:         g.Cfg,
-		Repo:           g.Database(),
+		Repo:           rowreads.WithRepo(g.Database()),
 		Drafts:         g.Workflowdrafts(),
 		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
 		ProjectRows:    store.NewProjectExtStore(g.Database().ORM()),
@@ -1684,7 +1685,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Projects:    g.Projectaccess(),
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Repo:        rowreads.WithRepo(g.Database()),
 		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
 		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
 		Drafts:      g.Workflowdrafts(),

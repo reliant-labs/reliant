@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -143,7 +145,7 @@ func TestInventory_StoredSkippedWhenIdenticalAndPublished(t *testing.T) {
 	defer cleanup()
 	seedDaemon(t, repo, "user-1", "daemon-1", true)
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub
@@ -292,7 +294,7 @@ func TestDaemonRegistry_ListAndGetCarryStoredLocalModels(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, store.SetDaemonLocalModels(context.Background(), repo.ORM(), "daemon-1", string(encoded)))
 
-	svc := newDaemonRegistry(t, repo, &localModelRouter{})
+	svc := newDaemonRegistry(t, rowreads.WithRepo(repo), &localModelRouter{})
 	list, err := svc.ListDaemons(userCtx("user-1"), connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
 	require.NoError(t, err)
 	byID := map[string]*reliantv1.DaemonInfo{}
@@ -317,7 +319,7 @@ func TestDaemonRegistry_RefreshLocalModels(t *testing.T) {
 	seedDaemon(t, repo, "user-2", "theirs", true)
 
 	router := &localModelRouter{inventory: sampleInventory()}
-	svc := newDaemonRegistry(t, repo, router)
+	svc := newDaemonRegistry(t, rowreads.WithRepo(repo), router)
 
 	resp, err := svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "online"}))
 	require.NoError(t, err)
@@ -349,7 +351,7 @@ func TestDaemonRegistry_SetLocalModelEndpoints(t *testing.T) {
 	seedDaemon(t, repo, "user-2", "theirs", true)
 
 	router := &localModelRouter{inventory: sampleInventory()}
-	svc := newDaemonRegistry(t, repo, router)
+	svc := newDaemonRegistry(t, rowreads.WithRepo(repo), router)
 
 	resp, err := svc.SetLocalModelEndpoints(userCtx("user-1"), connect.NewRequest(&reliantv1.SetLocalModelEndpointsRequest{
 		DaemonId: "online", BaseUrls: []string{"http://gpu-box.lan:8000/v1"},

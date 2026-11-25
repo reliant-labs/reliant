@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -89,7 +91,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	router := newCodePresenceHangingRouter(t, e.router)
 	e.svc = &Service{
 		deps: Deps{
-			Repo:        e.repo,
+			Repo:        rowreads.WithRepo(e.repo),
 			Workflows:   store.NewWorkflowExtStore(e.repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(e.repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(e.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(e.repo.ORM()),
@@ -172,7 +174,7 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 	}}
 	svc := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        rowreads.WithRepo(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

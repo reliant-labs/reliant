@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -339,7 +341,7 @@ func TestReconcileWatchesTheCheckoutsItRecords(t *testing.T) {
 	}
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, known.ID, daemonID, known.Path, nil))
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	conn := &daemonConnection{userID: userID, daemonID: daemonID, sendCh: make(chan *reliantv1.ServerMessage, 32), done: make(chan struct{})}
 	svc.mu.Lock()
 	registerTestConn(svc, conn)

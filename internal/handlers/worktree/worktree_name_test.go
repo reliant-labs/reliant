@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -12,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -27,14 +30,14 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 	t.Parallel()
 
 	repo := db.NewTestRepo(t)
-	svc := newWorktreeService(t, repo, &blockingWorktreeDaemonRouter{})
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), &blockingWorktreeDaemonRouter{})
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	first, err := createNamed(ctx, svc, projectID, "feat", "feat-1", false)
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, first.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, rowreads.WithRepo(repo), first.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	// A live row holds the name: AlreadyExists, not a raw constraint error.
 	_, err = createNamed(ctx, svc, projectID, "feat", "feat-2", false)
@@ -52,7 +55,7 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 	}
 	second, err := createNamed(ctx, svc, projectID, "feat", "feat-2", false)
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, second.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, rowreads.WithRepo(repo), second.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 }
 
 func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
@@ -60,18 +63,18 @@ func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
 	t.Parallel()
 
 	repo := db.NewTestRepo(t)
-	svc := newWorktreeService(t, repo, &blockingWorktreeDaemonRouter{})
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), &blockingWorktreeDaemonRouter{})
 	userID := uuid.New().String()
 	projectID := seedWorktreeProject(t, repo, userID)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	old, err := createNamed(ctx, svc, projectID, "feat", "feat-1", false)
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, old.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, rowreads.WithRepo(repo), old.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	require.NoError(t, repo.ArchiveWorktree(ctx, old.Msg.Worktree.Id))
 	taker, err := createNamed(ctx, svc, projectID, "feat", "feat-2", false)
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, taker.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, rowreads.WithRepo(repo), taker.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	_, err = svc.UnarchiveWorktree(ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: old.Msg.Worktree.Id}))
 	require.Error(t, err)

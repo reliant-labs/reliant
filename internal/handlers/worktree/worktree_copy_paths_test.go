@@ -8,12 +8,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -76,7 +79,7 @@ func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "control-plane", "forge", "reliant")
@@ -91,7 +94,7 @@ func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
 		CopyFiles: []string{".env", "reliant/.env", "reliant/web/node_modules/"},
 	}))
 	require.NoError(t, err)
-	settled := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	settled := awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -113,7 +116,7 @@ func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "")
@@ -122,7 +125,7 @@ func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
 		ProjectId: projectID, Name: "plain", Branch: "plain",
 	}))
 	require.NoError(t, err)
-	awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	awaitWorktreeStatus(t, rowreads.WithRepo(repo), resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -136,7 +139,7 @@ func TestCreateWorktreeRejectsInvalidCopyPath(t *testing.T) {
 
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
-	svc := newWorktreeService(t, repo, router)
+	svc := newWorktreeService(t, rowreads.WithRepo(repo), router)
 
 	userID := uuid.New().String()
 	projectID := seedMultiRepoProject(t, repo, userID, "")

@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -32,7 +34,7 @@ func TestCompletedStream_CancelsTheToolCallsTheDriverDropped(t *testing.T) {
 	ctx := context.Background()
 
 	hub := &captureHub{}
-	activityInstance := &CallLLMActivity{repo: repo, hub: hub}
+	activityInstance := &CallLLMActivity{repo: rowreads.WithRepo(repo), hub: hub}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	const keptCard, droppedCard, neverOpened = "fc_kept", "fc_dropped", "fc_never_opened"

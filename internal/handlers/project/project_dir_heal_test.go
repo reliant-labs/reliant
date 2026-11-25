@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -78,7 +80,7 @@ func TestProjectDirHeal_TargetsTheConnectedDaemon(t *testing.T) {
 	healTestProjects(t, repo, userID, 2)
 
 	router := &mkdirRecordingRouter{}
-	svc := newProjectService(t, repo, router)
+	svc := newProjectService(t, rowreads.WithRepo(repo), router)
 	require.NoError(t, svc.ensureProjectDirsOnDaemon(userID, "cloud-daemon"))
 
 	router.mu.Lock()
@@ -98,14 +100,14 @@ func TestProjectDirHeal_StopsAtTheFirstTransportFailure(t *testing.T) {
 	healTestProjects(t, repo, userID, 3)
 
 	router := &mkdirRecordingRouter{err: fmt.Errorf("daemon command %q via NATS failed: %w", "fs.mkdir", toolexec.ErrDaemonTimeout)}
-	svc := newProjectService(t, repo, router)
+	svc := newProjectService(t, rowreads.WithRepo(repo), router)
 	require.Error(t, svc.ensureProjectDirsOnDaemon(userID, "laptop"))
 	router.mu.Lock()
 	require.Len(t, router.mkdired, 1, "the heal must stop at the first mkdir whose round trip failed")
 	router.mu.Unlock()
 
 	refusing := &mkdirRecordingRouter{err: toolexec.DaemonReportedFailure("fs.mkdir", "permission denied")}
-	svc = newProjectService(t, repo, refusing)
+	svc = newProjectService(t, rowreads.WithRepo(repo), refusing)
 	require.NoError(t, svc.ensureProjectDirsOnDaemon(userID, "laptop"))
 	refusing.mu.Lock()
 	defer refusing.mu.Unlock()
@@ -145,7 +147,7 @@ func TestProjectDirHeal_NeverCreatesARepositoryProjectsDirectory(t *testing.T) {
 	require.NoError(t, repo.CreateProject(ctx, plain))
 
 	router := &mkdirRecordingRouter{}
-	svc := newProjectService(t, repo, router)
+	svc := newProjectService(t, rowreads.WithRepo(repo), router)
 	require.NoError(t, svc.ensureProjectDirsOnDaemon(userID, "daemon-1"))
 
 	router.mu.Lock()
@@ -169,7 +171,7 @@ func TestProjectDirHeal_AConnectNamingNoMachineHealsNothing(t *testing.T) {
 	healTestProjects(t, repo, userID, 2)
 
 	router := &mkdirRecordingRouter{}
-	require.NoError(t, newProjectService(t, repo, router).ensureProjectDirsOnDaemon(userID, ""))
+	require.NoError(t, newProjectService(t, rowreads.WithRepo(repo), router).ensureProjectDirsOnDaemon(userID, ""))
 
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -198,7 +200,7 @@ func TestProjectDirHeal_LeavesAFolderThatLivesOnAnotherMachine(t *testing.T) {
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, elsewhere.ID, laptop.ID, elsewhere.Path, nil))
 
 	router := &mkdirRecordingRouter{}
-	newProjectService(t, repo, router).ensureProjectDirsOnDaemon(userID, "cloud-1")
+	newProjectService(t, rowreads.WithRepo(repo), router).ensureProjectDirsOnDaemon(userID, "cloud-1")
 
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -244,7 +246,7 @@ func TestProjectDirHeal_AReplacedMachinesLeftoverRowDoesNotBlockTheHeal(t *testi
 	require.NoError(t, repo.UpsertDaemon(ctx, replacement))
 
 	router := &mkdirRecordingRouter{}
-	newProjectService(t, repo, router).ensureProjectDirsOnDaemon(userID, replacement.ID)
+	newProjectService(t, rowreads.WithRepo(repo), router).ensureProjectDirsOnDaemon(userID, replacement.ID)
 
 	router.mu.Lock()
 	defer router.mu.Unlock()
@@ -254,7 +256,7 @@ func TestProjectDirHeal_AReplacedMachinesLeftoverRowDoesNotBlockTheHeal(t *testi
 	// And recorded as that machine's checkout in the same step, so its chats
 	// resolve a directory this session, whatever the concurrent connect
 	// reconcile probed.
-	checkout, err := projectcheckout.On(ctx, repo, userID, myProject, replacement.ID, "use it")
+	checkout, err := projectcheckout.On(ctx, rowreads.WithRepo(repo), userID, myProject, replacement.ID, "use it")
 	require.NoError(t, err)
 	require.Equal(t, myProject.Path, checkout.Path)
 }

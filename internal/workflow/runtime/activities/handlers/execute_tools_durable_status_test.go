@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -50,7 +52,7 @@ func setupDurableStatusFixture(t *testing.T) *durableStatusFixture {
 
 func (f *durableStatusFixture) executeTool(t *testing.T, toolCallID, toolName, toolInput string, executor *mockToolExecutor) *ExecuteToolsOutput {
 	t.Helper()
-	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 
 	var output ExecuteToolsOutput
 	err := f.h.ExecuteActivity(activityInstance.Execute, ExecuteToolsInput{
@@ -249,7 +251,7 @@ func TestDurableStatus_ParallelToolsEachGetARow(t *testing.T) {
 	executor.SetResult(firstID, &toolexec.ToolResult{Success: true, Content: "first"})
 	executor.SetError(secondID, errors.New("second blew up"))
 
-	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activityInstance.Execute, ExecuteToolsInput{
 		ChatID: f.chatID,
@@ -316,7 +318,7 @@ func (f *durableStatusFixture) handleResultWithCancelledCtx(
 	execErr error,
 ) *reliantv1.ToolResultMsg {
 	t.Helper()
-	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: newMockToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: newMockToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 
 	run := func(ctx context.Context, _ string) (*reliantv1.ToolResultMsg, error) {
 		cancelled, cancel := context.WithCancel(ctx)

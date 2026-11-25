@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -24,7 +26,7 @@ func TestProcessStreamEvent_RetryWaitWritesAndClearsTheBackoffMarker(t *testing.
 	defer h.Cleanup()
 	ctx := context.Background()
 
-	a := &CallLLMActivity{repo: h.Repo(), backoff: providerbackofftest.New(t, h.Repo())}
+	a := &CallLLMActivity{repo: rowreads.WithRepo(h.Repo()), backoff: providerbackofftest.New(t, h.Repo())}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	require.NoError(t, a.processStreamEvent(ctx, "chat-1", "thread-1", llm.DriverEvent{

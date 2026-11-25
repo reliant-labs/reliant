@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	dbstore "github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -109,7 +110,7 @@ func testCoordinatedDrains(t *testing.T, serializable bool) {
 
 	retries := db.RecordRetryBackoffs(h.Repo())
 	store := &coordinatedDrainStore{
-		DrainAgentMessagesStore: h.Repo(),
+		DrainAgentMessagesStore: rowreads.WithRepo(h.Repo()),
 		MailboxQueue:            dbstore.NewAgentMessageExtStore(h.Repo().ORM()),
 		serializable:            serializable,
 		arrived:                 make(chan struct{}, threadsInChat),

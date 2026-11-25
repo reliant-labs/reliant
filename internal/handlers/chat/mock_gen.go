@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=f8e1657c4de537a8f504f02d1eb01d36cd01db1117fd9963aff98f1d27a39125
+// forge:hash=02899ca75f14064fe357179814007540cad798e48e5f631e8ac6cb3416692f5b
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -339,7 +339,6 @@ type MockRepository struct {
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
 	CreateChatFunc                                           func(context.Context, *db.Chat) error
 	CreateUserUpdateFunc                                     func(context.Context, *db.UserUpdate) error
-	GetDaemonFunc                                            func(context.Context, string) (*db.Daemon, error)
 	GetPresetBySlugFunc                                      func(context.Context, string, string) (*db.Preset, error)
 	GetPresetBySlugAndProjectFunc                            func(context.Context, string, string, string) (*db.Preset, error)
 	GetProjectMachinePresetsJSONFunc                         func(context.Context, string, string) (*string, bool, error)
@@ -349,7 +348,6 @@ type MockRepository struct {
 	GetSettingFunc                                           func(context.Context, string, *string, string) (*db.Setting, error)
 	GetUsableWorkflowBySlugFunc                              func(context.Context, string, string) (*db.WorkflowDraft, error)
 	GetWorkflowDraftBySlugFunc                               func(context.Context, string, string) (*db.WorkflowDraft, error)
-	ListProjectDaemonsForProjectFunc                         func(context.Context, string) ([]*core.ProjectDaemon, error)
 	ListWorktreesFunc                                        func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 	LockUserOrgsFunc                                         func(context.Context, string, ...db.OrgRead) error
 	MarkWorkflowStartFailedFunc                              func(context.Context, string) (bool, error)
@@ -360,6 +358,8 @@ type MockRepository struct {
 	WorkflowSourceDiagnosticFunc                             func(context.Context, string, string, string) (string, error)
 	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
+	GetDaemonFunc                                            func(context.Context, string) (*db.Daemon, error)
+	ListProjectDaemonsForProjectFunc                         func(context.Context, string) ([]*core.ProjectDaemon, error)
 	GetWorktreeFunc                                          func(context.Context, string) (*db.Worktree, error)
 	PinChatDaemonIfUnsetFunc                                 func(context.Context, string, string) (string, error)
 	ListToolCallsByIDsFunc                                   func(context.Context, []string) ([]*db.ToolCall, error)
@@ -1292,15 +1292,6 @@ func (m *MockRepository) CreateUserUpdate(ctx context.Context, update *db.UserUp
 	return contractkit.MockNotSet("MockRepository", "CreateUserUpdate")
 }
 
-// GetDaemon records the call and delegates to GetDaemonFunc when set.
-func (m *MockRepository) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
-	m.Recorder.Record("GetDaemon", ctx, id)
-	if m.GetDaemonFunc != nil {
-		return m.GetDaemonFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetDaemon")
-}
-
 // GetPresetBySlug records the call and delegates to GetPresetBySlugFunc when set.
 func (m *MockRepository) GetPresetBySlug(ctx context.Context, userID string, slug string) (*db.Preset, error) {
 	m.Recorder.Record("GetPresetBySlug", ctx, userID, slug)
@@ -1380,15 +1371,6 @@ func (m *MockRepository) GetWorkflowDraftBySlug(ctx context.Context, userID stri
 		return m.GetWorkflowDraftBySlugFunc(ctx, userID, slug)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflowDraftBySlug")
-}
-
-// ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
-func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
-	m.Recorder.Record("ListProjectDaemonsForProject", ctx, projectID)
-	if m.ListProjectDaemonsForProjectFunc != nil {
-		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForProject")
 }
 
 // ListWorktrees records the call and delegates to ListWorktreesFunc when set.
@@ -1479,6 +1461,24 @@ func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project
 		return m.GetProjectFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
+}
+
+// GetDaemon records the call and delegates to GetDaemonFunc when set.
+func (m *MockRepository) GetDaemon(ctx context.Context, id string) (*db.Daemon, error) {
+	m.Recorder.Record("GetDaemon", ctx, id)
+	if m.GetDaemonFunc != nil {
+		return m.GetDaemonFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetDaemon")
+}
+
+// ListProjectDaemonsForProject records the call and delegates to ListProjectDaemonsForProjectFunc when set.
+func (m *MockRepository) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	m.Recorder.Record("ListProjectDaemonsForProject", ctx, projectID)
+	if m.ListProjectDaemonsForProjectFunc != nil {
+		return m.ListProjectDaemonsForProjectFunc(ctx, projectID)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "ListProjectDaemonsForProject")
 }
 
 // GetWorktree records the call and delegates to GetWorktreeFunc when set.

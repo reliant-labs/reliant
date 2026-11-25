@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -72,7 +74,7 @@ func seedProject(t *testing.T, repo *db.Repo, ctx context.Context, path string) 
 	// The machine the create ran on is the user's: its row records the
 	// checkout, and the find branch asks that machine about the path.
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: "daemon-stale-path", UserID: auth.MustGetUserID(ctx)}))
-	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
+	s := newProjectService(t, rowreads.WithRepo(repo), &stalePathRouter{dirExists: true})
 	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: path,
@@ -102,7 +104,7 @@ func TestCreateProject_RefusesStaleProjectRowWhoseDirectoryIsGone(t *testing.T) 
 
 	// The directory is deleted out from under the row; the row survives.
 	router := &stalePathRouter{dirExists: false}
-	s := newProjectService(t, repo, router)
+	s := newProjectService(t, rowreads.WithRepo(repo), router)
 
 	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
@@ -129,7 +131,7 @@ func TestCreateProject_AcceptsExistingProjectWhoseDirectoryExists(t *testing.T) 
 
 	seedProject(t, repo, ctx, projectPath)
 
-	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
+	s := newProjectService(t, rowreads.WithRepo(repo), &stalePathRouter{dirExists: true})
 	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: projectPath,
@@ -153,7 +155,7 @@ func TestCreateProject_UnreachableDaemonDoesNotRefuse(t *testing.T) {
 
 	seedProject(t, repo, ctx, projectPath)
 
-	s := newProjectService(t, repo, &stalePathRouter{daemonDown: true})
+	s := newProjectService(t, rowreads.WithRepo(repo), &stalePathRouter{daemonDown: true})
 	_, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
 		Name: "stale-path-project",
 		Path: projectPath,
@@ -207,7 +209,7 @@ func TestCreateProject_FindAsksTheMachineTheRequestRunsOn(t *testing.T) {
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, b, projectPath, nil))
 
 	router := &statByMachineRouter{exists: map[string]bool{a: false, b: true}}
-	_, err := newProjectService(t, repo, router).CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "find", Path: projectPath}))
+	_, err := newProjectService(t, rowreads.WithRepo(repo), router).CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "find", Path: projectPath}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err), "found on B, where its checkout is: err = %v", err)
 	assert.Equal(t, []string{b}, router.asked)
@@ -215,7 +217,7 @@ func TestCreateProject_FindAsksTheMachineTheRequestRunsOn(t *testing.T) {
 	// A request on A's own credentials asks A, which says the path is gone.
 	router.asked = nil
 	onA := context.WithValue(ctx, auth.DaemonIDContextKey, a)
-	_, err = newProjectService(t, repo, router).CreateProject(onA, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "find", Path: projectPath}))
+	_, err = newProjectService(t, rowreads.WithRepo(repo), router).CreateProject(onA, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "find", Path: projectPath}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Equal(t, []string{a}, router.asked)

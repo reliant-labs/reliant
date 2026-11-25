@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
@@ -167,7 +169,7 @@ func newRestartRig(t *testing.T) *restartRig {
 	rig.natsURL = srv.ClientURL()
 	gatewayNATS := rig.connectNATS(t)
 	toolsSvc, err := tools_daemon.New(tools_daemon.Deps{Refetch: chatupdates.NewFromORM(rig.repo.ORM(), rig.repo, nil),
-		Logger: slog.Default(), Config: &typedconfig.Config{}, Projects: store.NewProjectExtStore(rig.repo.ORM()), Installs: store.NewProjectDaemonExtStore(rig.repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(rig.repo.ORM()), LocalModels: store.NewDaemonExtStore(rig.repo.ORM()), Repo: rig.repo, Checkouts: store.NewProjectDaemonDetachmentExtStore(rig.repo.ORM()), Pools: store.NewMachinePoolExtStore(rig.repo.ORM()),
+		Logger: slog.Default(), Config: &typedconfig.Config{}, Projects: store.NewProjectExtStore(rig.repo.ORM()), Installs: store.NewProjectDaemonExtStore(rig.repo.ORM()), Attachments: store.NewDaemonAttachmentExtStore(rig.repo.ORM()), LocalModels: store.NewDaemonExtStore(rig.repo.ORM()), Repo: rowreads.WithRepo(rig.repo), Checkouts: store.NewProjectDaemonDetachmentExtStore(rig.repo.ORM()), Pools: store.NewMachinePoolExtStore(rig.repo.ORM()),
 		ResultPublisher: toolexec.NewToolResultPublisher(gatewayNATS),
 	})
 	require.NoError(t, err)

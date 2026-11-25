@@ -145,7 +145,7 @@ func TestMachineProjectsDir_ADaemonStartedInsideACheckoutUsesItsParent(t *testin
 	p := seedMultiRepoProject(t, ctx, repo, userID, "https://github.com/acme/"+uuid.NewString())
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, p.ID, laptop, "/Users/me/src/reliant", nil))
 
-	machine, err := repo.GetDaemon(ctx, laptop)
+	machine, err := store.GetDaemon(ctx, repo.ORM(), laptop)
 	require.NoError(t, err)
 	assert.Equal(t, "/Users/me/src/new", svc.defaultClonePath(ctx, machine, "new"),
 		"a daemon running inside a checkout must not clone into it")

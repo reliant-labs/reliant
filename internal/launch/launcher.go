@@ -63,6 +63,7 @@ type Launcher struct {
 	events      TriggerEventStore
 	workflows   WorkflowLoader
 	worktrees   WorktreeReader
+	installs    daemonplacement.Installs
 	projectRows ProjectReader
 	projects    projectaccess.Service
 	selections  chatselection.Store
@@ -120,12 +121,16 @@ func New(deps Deps) *Launcher {
 	if deps.Store != nil && deps.TriggerEvents == nil {
 		panic("launch: New requires Deps.TriggerEvents beside Deps.Store")
 	}
+	if deps.Store != nil && deps.Installs == nil {
+		panic("launch: New requires Deps.Installs beside Deps.Store")
+	}
 	return &Launcher{
 		repo:        deps.Store,
 		chats:       deps.Chats,
 		events:      deps.TriggerEvents,
 		workflows:   deps.Workflows,
 		worktrees:   deps.Worktrees,
+		installs:    deps.Installs,
 		projectRows: deps.ProjectRows,
 		projects:    deps.Projects,
 		selections:  deps.Selections,

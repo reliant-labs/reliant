@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/store"
 
@@ -72,20 +74,20 @@ func TestCreateProjectFromRepo_AuthorizesTheMachineBeforeTheClone(t *testing.T) 
 	assert.Equal(t, connect.CodeInternal, codeOf(err), "%v", err)
 	assert.Zero(t, cp.calls, "cloned with the machine's org unchecked")
 
-	cp, err = clone(t, repo, theirs, "acme")
+	cp, err = clone(t, rowreads.WithRepo(repo), theirs, "acme")
 	assert.Equal(t, connect.CodeNotFound, codeOf(err), "%v", err)
 	assert.Zero(t, cp.calls)
 
-	cp, err = clone(t, repo, globexMachine, "acme")
+	cp, err = clone(t, rowreads.WithRepo(repo), globexMachine, "acme")
 	assert.Equal(t, connect.CodeFailedPrecondition, codeOf(err), "%v", err)
 	assert.Contains(t, err.Error(), "organization globex")
 	assert.Zero(t, cp.calls)
 
-	cp, err = clone(t, repo, globexMachine, "globex")
+	cp, err = clone(t, rowreads.WithRepo(repo), globexMachine, "globex")
 	require.NoError(t, err)
 	assert.Equal(t, 1, cp.calls)
 
-	cp, err = clone(t, repo, "never-connected-"+uuid.NewString(), "acme")
+	cp, err = clone(t, rowreads.WithRepo(repo), "never-connected-"+uuid.NewString(), "acme")
 	require.NoError(t, err, "a machine reliant never registered is the control plane's to decide")
 	assert.Equal(t, 1, cp.calls)
 }

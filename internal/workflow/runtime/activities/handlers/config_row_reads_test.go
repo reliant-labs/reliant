@@ -8,6 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -22,6 +24,7 @@ import (
 // worker allocation per 22 minutes.
 type fullConfigRowReads struct {
 	*db.Repo
+	rowreads.Reads
 
 	mu      sync.Mutex
 	callers []string
@@ -53,7 +56,7 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 		ProjectID: "test-project", DaemonID: "daemon-1",
 		ProjectPresetsJSON: &presets, ProjectSkillsJSON: &skills,
 	}))
-	spy := &fullConfigRowReads{Repo: repo}
+	spy := &fullConfigRowReads{Repo: repo, Reads: rowreads.Of(repo)}
 
 	// CallLLM: the spawn tool's description lists the project preset's own.
 	spawn := (&CallLLMActivity{repo: spy}).getSpawnTool(ctx, spawnPresetSource{projectID: "test-project"}, &SpawnConfig{Presets: []string{"project-reviewer"}})

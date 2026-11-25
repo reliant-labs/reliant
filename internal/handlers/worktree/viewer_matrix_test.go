@@ -3,6 +3,8 @@ package worktree
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
@@ -14,6 +16,6 @@ func TestWorktreeServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestWorktree(t, WithWorktreeDeps(WithReadRoles(Deps{Repo: repo})))
+	svc := NewTestWorktree(t, WithWorktreeDeps(WithReadRoles(Deps{Repo: rowreads.WithRepo(repo)})))
 	viewertest.RunService(t, f, svc, "reliant.v1.WorktreeService", nil)
 }

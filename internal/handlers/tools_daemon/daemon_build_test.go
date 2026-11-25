@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -56,7 +58,7 @@ func listedDaemon(t *testing.T, registry *daemon_registry.Service, userID, daemo
 // registry, carried on the connected event and counted by the fleet gauge.
 func TestRegisteredBuildIsStoredServedAndPublished(t *testing.T) {
 	repo, rawDB, registry, userID, daemonID := leaseFixture(t)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	events := &connectedRecorder{builds: map[string]daemonwire.Build{}}
 	svc.deps.StatePublisher = events
@@ -95,7 +97,7 @@ func TestRegisteredBuildIsStoredServedAndPublished(t *testing.T) {
 // an unknown build (all empty/zero), and publishes no build.
 func TestDaemonWithoutBuildFieldsIsAnUnknownBuild(t *testing.T) {
 	repo, _, registry, userID, daemonID := leaseFixture(t)
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	events := &connectedRecorder{builds: map[string]daemonwire.Build{}}
 	svc.deps.StatePublisher = events
@@ -122,7 +124,7 @@ func TestRecreatedLeaseKeepsTheSessionsBuild(t *testing.T) {
 	ctx := context.Background()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
 
-	svc := newTestService(repo)
+	svc := newTestService(rowreads.WithRepo(repo))
 	t.Cleanup(svc.Close)
 	stream := newParkedStream()
 	conn := newTestConn(userID, daemonID, stream)

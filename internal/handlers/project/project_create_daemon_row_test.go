@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -75,7 +77,7 @@ func TestCreateProjectRecordsProjectDaemonRow_ConnectedDaemon(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
 
 	router := &createProjectRowRouter{resolveID: "daemon-abc"}
-	s := newProjectService(t, repo, router)
+	s := newProjectService(t, rowreads.WithRepo(repo), router)
 
 	// Unique path: the test DB is shared, so a fixed path collides across runs.
 	projectPath := "/home/workspace/projects/connected-" + uuid.New().String()
@@ -105,7 +107,7 @@ func TestCreateProjectSkipsProjectDaemonRow_PendingDaemon(t *testing.T) {
 
 	// resolveID empty => ResolveDaemonID errors; mkdir also fails => pending path.
 	router := &createProjectRowRouter{mkdirFails: true}
-	s := newProjectService(t, repo, router)
+	s := newProjectService(t, rowreads.WithRepo(repo), router)
 
 	projectPath := "/home/workspace/projects/pending-" + uuid.New().String()
 	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{

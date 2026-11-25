@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
 	"connectrpc.com/connect"
@@ -16,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -203,7 +206,7 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 		env.seedFiring(t, trig.Id, time.Now().UTC(), core.TriggerEventLaunched, &done)
 	}
 	counting := &triggerQueryCounter{Firings: store.NewTriggerEventExtStore(env.repo.ORM())}
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Firings: counting, Projects: projectaccesstest.For(env.repo), Syncer: env.backend, Fires: env.backend})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: rowreads.WithRepo(env.repo), Firings: counting, Projects: projectaccesstest.For(env.repo), Syncer: env.backend, Fires: env.backend})))
 	resp, err := svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Triggers, 6)

@@ -72,6 +72,7 @@ type Stores struct {
 	CapacityStores
 	EventStores
 	TriggerStores
+	RowStores
 }
 
 // NewStores joins the repository facade with the generated trigger stores.
@@ -89,6 +90,7 @@ func NewStores(repo *db.Repo) Stores {
 			workflows:     store.NewWorkflowExtStore(orm),
 		},
 		TriggerStores: TriggerStores{triggers: store.NewTriggerExtStore(orm)},
+		RowStores:     NewRowStores(repo),
 	}
 }
 

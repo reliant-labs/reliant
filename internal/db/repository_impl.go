@@ -1345,17 +1345,6 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	return nil
 }
 
-func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
-	if id == "" {
-		return nil, fmt.Errorf("daemon ID cannot be empty")
-	}
-	d, err := store.GetDaemon(ctx, r.ORM(), id)
-	if err != nil && !svcerr.IsNotFound(err) {
-		return nil, fmt.Errorf("failed to get daemon %s: %w", id, err)
-	}
-	return d, err
-}
-
 // ApplyDaemonLifecycle mirrors one control-plane lifecycle event onto an
 // existing daemons row.
 //

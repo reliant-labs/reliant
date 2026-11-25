@@ -67,6 +67,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/prrecords"
 	"github.com/reliant-labs/reliant/internal/questions"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -347,12 +348,13 @@ type RunLauncherDeps struct {
 // NewRunLauncher launches runs on the shared task queue: the launcher the
 // run tools and scheduled trigger fires launch through.
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
-	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
+	pinner := daemonplacement.NewPinner(rowreads.WithRepo(d.DB), d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
 		Store:         d.DB,
 		Chats:         store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
 		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
+		Installs:      daemonplacement.NewRecords(d.DB.ORM()),
 		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
 		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
 		Projects:      d.Projects,
@@ -389,7 +391,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
 		Logger:           d.Logger,
 		Config:           d.Config,
-		Repo:             d.DB,
+		Repo:             rowreads.WithRepo(d.DB),
 		Chats:            chataccess.NewFromORM(d.DB.ORM()),
 		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -521,7 +523,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		OrgGitHubApps:  apps,
 		Logger:         d.Logger,
 		Config:         d.Config,
-		Repo:           repo,
+		Repo:           rowreads.WithRepo(repo),
 		Chats:          store.NewChatExtStore(repo.ORM()),
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
 		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()),

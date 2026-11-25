@@ -10,9 +10,11 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/daemonmirror"
 	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // These run the real SQL. The registry writes in daemon_registry.go carry
@@ -29,7 +31,7 @@ func registryTestRepo(t *testing.T) (*Repo, *sql.DB) {
 
 func mustGetDaemon(t *testing.T, repo *Repo, id string) *Daemon {
 	t.Helper()
-	d, err := repo.GetDaemon(context.Background(), id)
+	d, err := store.GetDaemon(context.Background(), repo.ORM(), id)
 	if err != nil {
 		t.Fatalf("GetDaemon(%s): %v", id, err)
 	}
@@ -38,7 +40,7 @@ func mustGetDaemon(t *testing.T, repo *Repo, id string) *Daemon {
 
 func daemonExists(t *testing.T, repo *Repo, id string) bool {
 	t.Helper()
-	_, err := repo.GetDaemon(context.Background(), id)
+	_, err := store.GetDaemon(context.Background(), repo.ORM(), id)
 	if svcerr.IsNotFound(err) {
 		return false
 	}

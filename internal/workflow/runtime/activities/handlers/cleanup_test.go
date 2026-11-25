@@ -32,7 +32,7 @@ const testMachine = "test-machine"
 func installTestCheckout(t testing.TB, repo *db.Repo, projectID, userID, path string) {
 	t.Helper()
 	ctx := context.Background()
-	if d, err := repo.GetDaemon(ctx, testMachine); err != nil || d == nil {
+	if d, err := store.GetDaemon(ctx, repo.ORM(), testMachine); err != nil || d == nil {
 		require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: testMachine, UserID: userID}))
 	}
 	require.NoError(t, repo.UpsertProjectDaemon(ctx, projectID, testMachine, path, nil))

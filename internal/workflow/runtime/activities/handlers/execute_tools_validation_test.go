@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -57,7 +58,7 @@ func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
 	t.Run("A loaded tool outside the preloaded bundle executes", func(t *testing.T) {
 		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 		var output ExecuteToolsOutput
 		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
@@ -77,7 +78,7 @@ func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
 	t.Run("A tool that was not offered is refused and never executed", func(t *testing.T) {
 		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 		var output ExecuteToolsOutput
 		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
@@ -105,7 +106,7 @@ func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
 	t.Run("A tool above the tier is refused mid-batch", func(t *testing.T) {
 		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 		caps := tools.ResolveCapabilities(tools.CapabilityInputs{
 			Access:     tools.ResolveToolAccess([]string{tools.ToolView, tools.ToolStartRun}, nil, nil),
@@ -134,7 +135,7 @@ func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
 	t.Run("With no recorded set an ordinary tool runs", func(t *testing.T) {
 		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 		var output ExecuteToolsOutput
 		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
@@ -151,7 +152,7 @@ func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
 	t.Run("With no recorded set an orchestrator tool is refused at the base tier", func(t *testing.T) {
 		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 		var output ExecuteToolsOutput
 		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
@@ -174,7 +175,7 @@ func TestExecuteTools_RefusesToolNotOfferedThisTurn(t *testing.T) {
 
 	h, chatID := newValidationChat(t)
 	mockExecutor := newMockToolExecutor()
-	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	toolCallID := "toolu_" + uuid.NewString()
 
 	var output ExecuteToolsOutput
@@ -218,7 +219,7 @@ func TestExecuteToolsActivity_SpawnRoutedHereIsRefused(t *testing.T) {
 	t.Run("A preset the spawn tool was not offered with names the offered ones", func(t *testing.T) {
 		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 		var output ExecuteToolsOutput
 		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
@@ -240,7 +241,7 @@ func TestExecuteToolsActivity_SpawnRoutedHereIsRefused(t *testing.T) {
 	t.Run("A spawn that was not offered says so", func(t *testing.T) {
 		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+		activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: rowreads.WithRepo(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 		var output ExecuteToolsOutput
 		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
