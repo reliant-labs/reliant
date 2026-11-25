@@ -60,8 +60,8 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces?: string[]; except?
   },
   // reliant#3458.
   'reliant.v1.SettingsService/BatchUpsertSettings': {
-    why: 'ColorSchemeSelector saves the colour scheme every time the appearance page opens, and the chat filter saves each pick (settingsSync.setSetting, not setSettingIfChanged; reliant#3458)',
-    surfaces: ['settings-appearance', 'chat-filter-open'],
+    why: 'ColorSchemeSelector saves the colour scheme every time the appearance page opens (settingsSync.setSetting, not setSettingIfChanged; reliant#3458)',
+    surfaces: ['settings-appearance'],
   },
   'reliant.v1.ChatService/DismissChat': {
     why: 'opening a chat from the sidebar dismisses its unread state',
@@ -515,41 +515,38 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('project-selector-row-app:status-page'),
     act: async (page) => {
       // The home focuses its composer once it has rendered, and the selector
-      // closes on losing focus (as chat-filter-open says): open it after.
+      // closes on losing focus (as project-switcher-several says): open it after.
       await expect(page.getByTestId('chat-input')).toBeFocused()
       await page.evaluate(() => window.dispatchEvent(new CustomEvent('open-project-switcher')))
     },
     harness: { overlays: ['project-selector'] },
   },
   {
-    // The chat list's project filter, choose N of M: the selector in
-    // multi-select mode, three projects of eight chosen. Desktop only, like
-    // the selector: the phone surface's chat list has its own project list.
-    name: 'chat-filter-open',
-    path: '/',
+    // The app's one project filter, choose N of M: the nav's switcher in
+    // multi-select mode ("Select several projects…"), three projects of
+    // eight chosen by the URL. Desktop only, like the selector: the phone
+    // surface's chat list has its own project list.
+    name: 'project-switcher-several',
+    path: `/?projects=${FILTER_PROJECT_IDS.join(',')}`,
     on: ['desktop'],
     ready: (page) => page.getByTestId('project-selector-chosen-count').getByText('3 chosen'),
     act: async (page) => {
-      // The home focuses its composer once it has rendered. Opening the filter
-      // before then lets that late focus land after the click, and the panel
-      // closes on losing focus. So wait for the composer to have it.
+      // The home focuses its composer once it has rendered. Opening the
+      // switcher before then lets that late focus land after the click, and
+      // the panel closes on losing focus. So wait for the composer to have it.
       await expect(page.getByTestId('chat-input')).toBeFocused()
-      await page.getByTestId('chat-project-filter-trigger').click()
-      // One at a time: each pick moves the URL (one project is `/project/<id>`,
-      // two or more `?projects=`), so wait for it to land before the next.
-      for (const [i, id] of FILTER_PROJECT_IDS.entries()) {
-        await page.getByTestId(`project-selector-row-${id}`).click()
-        await expect(page.getByTestId('project-selector-chosen-count')).toHaveText(`${i + 1} chosen`)
-      }
+      await page.getByTestId('shell-project-switcher').click()
+      await page.getByTestId('shell-switcher-select-several').click()
     },
     harness: { overlays: ['project-selector'] },
   },
   {
-    // The Chats heading once three projects are chosen, from the URL.
-    name: 'chat-filter-heading',
+    // The chat list once three projects are chosen, from the URL: the
+    // switcher names them; the Chats heading has no filter of its own.
+    name: 'chat-list-several',
     path: `/?projects=${FILTER_PROJECT_IDS.join(',')}`,
     on: ['desktop'],
-    ready: (page) => page.getByTestId('project-filter-label').getByText('3 projects'),
+    ready: (page) => page.getByTestId('shell-project-name').getByText('3 projects'),
     harness: { overlays: ['project-selector'] },
   },
   {

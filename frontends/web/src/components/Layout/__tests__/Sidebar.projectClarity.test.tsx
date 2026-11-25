@@ -186,6 +186,15 @@ describe("Sidebar: which project a chat is in", () => {
     expect(within(web).getByText("feature/login")).not.toHaveClass("uppercase");
   });
 
+  it("has one project filter, the nav's switcher: the Chats heading has none of its own", () => {
+    renderSidebar();
+    const heading = screen.getByTestId("sidebar-chats-heading");
+    expect(heading).toHaveTextContent(/^Chats/);
+    expect(screen.queryByTestId("chat-project-filter-trigger")).toBeNull();
+    expect(screen.queryByTestId("project-filter-label")).toBeNull();
+    expect(screen.queryByTestId("project-filter-clear")).toBeNull();
+  });
+
   it("names no project on rows when the list is one project's", () => {
     useChatListPreferencesStore.setState({ viewMode: "flat" });
     useWorkspaceStateStore.setState({ projectFilterId: "p-web" });
