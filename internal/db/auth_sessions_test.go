@@ -19,7 +19,7 @@ import (
 // The login broker keeps its sign-in sessions in auth_sessions through forge's
 // Postgres session store (app.NewSignInSessions: session.NewPostgresStore over
 // this Repo's pool). These tests run that store over the schema reliant's own
-// migrations build (db/migrations/20261123231707_create_auth_sessions.up.sql),
+// migrations build (db/migrations/20261125005044_create_auth_sessions.up.sql),
 // so a migration that is dropped, renamed or drifts from the store's columns
 // fails here, not at a person's first sign-in. The broker's own tests use the
 // in-memory store and cannot see the table.
