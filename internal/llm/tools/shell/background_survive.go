@@ -235,9 +235,12 @@ func (m *BackgroundManager) waitForFileProcess(process *BackgroundProcess, reap 
 	process.recordSurvivors()
 	process.tree.Release()
 	process.fileOut.finish()
-	// Journaled before the completion is reported: the files are gone now,
-	// so a crash past this point must find every line in the journal.
-	m.flushProcessOutput(process)
+	// Journaled before the files go and before the completion is reported:
+	// a crash in between finds the files, and one after finds every line in
+	// the journal.
+	if m.flushProcessOutput(process) {
+		process.fileOut.remove()
+	}
 	m.handleProcessCompletion(process, err)
 }
 
@@ -275,11 +278,17 @@ func reapAdopted(proc *os.Process) func() error {
 	}
 }
 
-// flushProcessOutput journals the process's output lines not journaled yet.
-func (m *BackgroundManager) flushProcessOutput(process *BackgroundProcess) {
+// flushProcessOutput journals the process's output lines not journaled yet. It
+// reports whether the journal now has every line the process has produced: a
+// write that failed leaves the rest unjournaled, and the caller keeps what the
+// lines can still be recovered from.
+func (m *BackgroundManager) flushProcessOutput(process *BackgroundProcess) bool {
 	process.flushMu.Lock()
 	defer process.flushMu.Unlock()
 	process.flushedSeq = m.flushNewOutputLines(process, process.flushedSeq)
+	process.outputMu.RLock()
+	defer process.outputMu.RUnlock()
+	return process.flushedSeq >= process.outputSeq
 }
 
 // ErrRestartingForUpdate refuses a background process while the daemon hands

@@ -611,3 +611,44 @@ func TestBackgroundStartRacingTheHandOffIsIncludedOrRefused(t *testing.T) {
 	require.Equal(t, "killed", status)
 	require.Equal(t, 1, proc.handoff.reapCount())
 }
+
+// The output files are the only full copy of a file-backed process's output
+// until the journal has every line. A journal that refuses the final output
+// write (a full disk) leaves them in place for the next image to read; once
+// the write succeeds, the completion removes them.
+func TestBackgroundOutputFilesStayUntilTheJournalHasEveryLine(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		failWrite bool
+		wantFiles bool
+	}{
+		{"a refused journal write keeps the files", true, true},
+		{"a journaled completion removes them", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "journal")
+			m := survivingManager(t, dir)
+			cb := newTestJournal(dir).Callback()
+			if tc.failWrite {
+				cb.OnOutput = func(string, []OutputLineWithSeq) error { return errors.New("no space left on device") }
+			}
+			m.SetPersistenceCallback(cb)
+			proc, err := m.StartProcess(context.Background(), StartProcessOptions{
+				Command:    `echo line-1; printf 'no newline'`,
+				WorkingDir: t.TempDir(),
+			})
+			require.NoError(t, err)
+			status, _ := waitDone(t, proc)
+			require.Equal(t, "completed", status)
+
+			for _, path := range outputFilePaths(dir, proc.ID) {
+				_, statErr := os.Stat(path)
+				if tc.wantFiles {
+					require.NoError(t, statErr, "the output file must outlive a refused journal write")
+				} else {
+					require.ErrorIs(t, statErr, os.ErrNotExist)
+				}
+			}
+		})
+	}
+}
