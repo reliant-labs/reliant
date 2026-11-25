@@ -2727,7 +2727,6 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 	presets, presetBytes := indexPresets(projectPath, workflowSources)
 	scenarios, scenarioBytes := indexScenarios(workflowSources)
 	skills, skillBytes := indexSkills(projectPath)
-	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
 	heads := readRepoHeads(projectPath, discoverRepoSources(ctx, projectPath))
 	states := repoStates(ctx, projectPath, heads)
 
@@ -2744,7 +2743,6 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		presetBytes,
 		scenarioBytes,
 		skillBytes,
-		repoMemoriesBytes,
 		headsVersion(heads),
 		statesVersion(states),
 	)
@@ -2767,19 +2765,14 @@ func buildProjectSnapshotContext(ctx context.Context, projectPath string) (*reli
 		Skills:          skills,
 		GlobalMemoryMd:  globalMemory,
 		ProjectMemoryMd: projectMemory,
-		RepoMemoriesMd:  repoMemories,
 		RepoStates:      states,
 	}, nil
 }
 
-// localMemoryFile is the personal, uncommitted companion of a reliant.md. It
-// is read beside EVERY reliant.md — the project root's and each nested repo's
-// — and placed after it, so personal notes have the last word.
+// localMemoryFile is the project root's personal companion to reliant.md.
 const localMemoryFile = "reliant.local.md"
 
-// withLocalMemory returns md followed by dir's reliant.local.md, if any. The
-// root and the nested repos share this one rule: a root that skipped it left a
-// single-repo project's local file silently unread.
+// withLocalMemory puts the root's personal notes after its shared memory.
 func withLocalMemory(dir string, md []byte) []byte {
 	local, _ := readOptionalFile(filepath.Join(dir, localMemoryFile))
 	if len(local) == 0 {
@@ -2798,81 +2791,6 @@ func withLocalMemory(dir string, md []byte) []byte {
 func readProjectMemory(projectPath string) []byte {
 	md, _ := readOptionalFile(filepath.Join(projectPath, "reliant.md"))
 	return withLocalMemory(projectPath, projectMemoryWithForgeFramework(projectPath, md))
-}
-
-// collectRepoMemories reads reliant.md and reliant.local.md for each nested
-// repo and returns a map[repoRelPath]->content suitable for the proto snapshot.
-// The second return value is a deterministic byte summary for version hashing.
-func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
-	repoSources := discoverRepoSources(context.Background(), projectPath)
-	if len(repoSources) == 0 {
-		return nil, nil
-	}
-
-	sorted := append([]string(nil), repoSources...)
-	sort.Strings(sorted)
-
-	result := make(map[string][]byte, len(sorted))
-	acc := strings.Builder{}
-
-	// The Forge framework guide is ~18KB and the same for every repo one
-	// forge renders it for, so it is carried once per forge per snapshot: by
-	// the project root's memory when the root's forge renders it, otherwise
-	// by the first forge repo in sorted order (the order the server emits
-	// entries in). Repos pinned to different forges get different guides
-	// (forgeFrameworkMemoryFrom asks each repo's pinned forge), and pointing
-	// one at another's would hand it the wrong version's rules — so a repo
-	// points only at a guide from the forge that renders its own.
-	carriers := map[string]string{} // forge identity -> repo carrying its guide
-	// Ask the same question buildProjectSnapshot does (rendered, not merely
-	// forge.yaml present): a root forge.yaml that fails to render carries no
-	// guide, and a pointer to it would name something the model never sees.
-	_, rootForge, rootCarriesFramework := forgeFrameworkMemoryFrom(projectPath)
-	// Byte-identical repo memories (e.g. two clones of one repo) collapse
-	// to a pointer at the first repo carrying that content.
-	seen := map[string]string{}
-
-	for _, rel := range sorted {
-		if rel == "" {
-			continue
-		}
-		repoDir := filepath.Join(projectPath, rel)
-		md, _ := readOptionalFile(filepath.Join(repoDir, "reliant.md"))
-		if hasForgeYAML(repoDir) {
-			if framework, forge, ok := forgeFrameworkMemoryFrom(repoDir); ok {
-				switch carrier, carried := carriers[forge]; {
-				case rootCarriesFramework && forge == rootForge:
-					md = prependMemory([]byte("This repo is also a Forge project: the Forge framework guide in the project memory applies here too."), md)
-				case carried:
-					md = prependMemory([]byte(fmt.Sprintf("This repo is also a Forge project: the Forge framework guide included with the `%s` repo's memory applies here too.", carrier)), md)
-				default:
-					md = prependMemory(framework, md)
-					carriers[forge] = rel
-				}
-			}
-		}
-		md = withLocalMemory(repoDir, md)
-		if len(md) == 0 {
-			continue
-		}
-		content := string(md)
-		sum := hashBytes([]byte(content))
-		if first, dup := seen[sum]; dup {
-			content = fmt.Sprintf("This repo's memory is identical to the `%s` repo's memory; see that entry.", first)
-		} else {
-			seen[sum] = rel
-		}
-		result[rel] = []byte(content)
-		acc.WriteString(rel)
-		acc.WriteString(":")
-		acc.WriteString(hashBytes([]byte(content)))
-		acc.WriteString(";")
-	}
-
-	if len(result) == 0 {
-		return nil, nil
-	}
-	return result, []byte(acc.String())
 }
 
 // indexSkills discovers all SKILL.md files across the standard roots

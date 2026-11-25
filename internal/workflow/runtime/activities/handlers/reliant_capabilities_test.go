@@ -173,12 +173,3 @@ func TestWithoutScaffoldedCapabilities(t *testing.T) {
 func TestFormatStoredMemories_OnlyStaleGuideSendsNothing(t *testing.T) {
 	assert.Equal(t, "", formatStoredMemories(&config.Config{ProjectMemoryMD: "## What Reliant can do\n\nold\n"}))
 }
-
-func TestFormatRepoMemoryMessages_DropsStaleScaffoldedCapabilities(t *testing.T) {
-	msgs, omitted := formatRepoMemoryMessages(map[string]string{"web": readScaffoldedV1(t)}, repoMemoryBudgetChars(272_000))
-	require.Empty(t, omitted)
-	require.Len(t, msgs, 1)
-	text := msgs[0].Content().Text
-	assert.NotContains(t, text, "What Reliant can do")
-	assert.Contains(t, text, "## Code navigation")
-}

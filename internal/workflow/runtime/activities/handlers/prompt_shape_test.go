@@ -20,7 +20,6 @@ func textMsg(role message.MessageRole, text string) message.Message {
 func baseHistory() []message.Message {
 	return []message.Message{
 		textMsg(message.System, "# User defined rules, memories, and context\n\nglobal"),
-		textMsg(message.System, "<system-memory repo=forge>\nforge notes\n</system-memory>"),
 		textMsg(message.User, "hello"),
 		textMsg(message.Assistant, "hi"),
 	}
@@ -41,8 +40,8 @@ func TestDiffPromptShape_GrownHistoryHasNoDivergence(t *testing.T) {
 	if !d.Known || d.ModelChanged || d.ToolsChanged || len(d.SystemChanged) != 0 {
 		t.Fatalf("unexpected change flagged: %+v", d)
 	}
-	if d.DivergedAt != -1 || d.SharedPrefix != 4 {
-		t.Fatalf("grown history: DivergedAt=%d SharedPrefix=%d, want -1 and 4", d.DivergedAt, d.SharedPrefix)
+	if d.DivergedAt != -1 || d.SharedPrefix != 3 {
+		t.Fatalf("grown history: DivergedAt=%d SharedPrefix=%d, want -1 and 3", d.DivergedAt, d.SharedPrefix)
 	}
 }
 
@@ -61,19 +60,6 @@ func TestDiffPromptShape_MemoryBlockChangeIsNamed(t *testing.T) {
 	}
 }
 
-func TestDiffPromptShape_RepoMemoryChangeIsNamed(t *testing.T) {
-	t.Parallel()
-
-	prev := shapeOf([]string{"sys"}, baseHistory())
-	h := baseHistory()
-	h[1] = textMsg(message.System, "<system-memory repo=forge>\nforge notes v2\n</system-memory>")
-	d := diffPromptShape(prev, shapeOf([]string{"sys"}, h))
-
-	if d.DivergedAt != 1 || d.SharedPrefix != 1 || d.DivergedKind != "repo-memory" {
-		t.Fatalf("got DivergedAt=%d SharedPrefix=%d Kind=%q, want 1/1/repo-memory", d.DivergedAt, d.SharedPrefix, d.DivergedKind)
-	}
-}
-
 // Editing a message deep in the conversation (compaction, a rewritten tool
 // result) diverges late: the shared prefix is long, which is the cheap kind.
 func TestDiffPromptShape_LateEditKeepsLongSharedPrefix(t *testing.T) {
@@ -81,10 +67,10 @@ func TestDiffPromptShape_LateEditKeepsLongSharedPrefix(t *testing.T) {
 
 	prev := shapeOf([]string{"sys"}, baseHistory())
 	h := baseHistory()
-	h[3] = textMsg(message.Assistant, "hi, rewritten")
+	h[2] = textMsg(message.Assistant, "hi, rewritten")
 	d := diffPromptShape(prev, shapeOf([]string{"sys"}, h))
 
-	if d.DivergedAt != 3 || d.SharedPrefix != 3 || d.DivergedKind != string(message.Assistant) {
+	if d.DivergedAt != 2 || d.SharedPrefix != 2 || d.DivergedKind != string(message.Assistant) {
 		t.Fatalf("got DivergedAt=%d SharedPrefix=%d Kind=%q", d.DivergedAt, d.SharedPrefix, d.DivergedKind)
 	}
 }

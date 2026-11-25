@@ -68,18 +68,17 @@ func TestWorktreeAddSuggestion_SuggestsTheWorktreeTool(t *testing.T) {
 	assert.Empty(t, a.worktreeAddSuggestion(context.Background(), caps, view), "only shell calls")
 }
 
-// A worktree root named in the user's, the project's or a repo's memory wins:
-// a checkout made there — relative paths resolved from the repo the command
-// ran in — gets no suggestion. A checkout anywhere else still does.
+// A worktree root named in global or project-root memory wins. Relative paths
+// still resolve from the nested repo the command ran in.
 func TestWorktreeAddSuggestion_MemoryRootIsRespected(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	caps := tools.LegacyCapabilities(false)
 	for name, cfg := range map[string]*cfgpkg.Config{
-		"user memory":    {GlobalMemoryMD: worktreeRootMemory},
-		"project memory": {ProjectMemoryMD: worktreeRootMemory},
-		"repo memory":    {RepoMemories: map[string]string{"reliant": worktreeRootMemory}},
+		"user memory":            {GlobalMemoryMD: worktreeRootMemory},
+		"project memory":         {ProjectMemoryMD: worktreeRootMemory},
+		"project local appended": {ProjectMemoryMD: "shared project notes\n\n" + worktreeRootMemory},
 	} {
 		t.Run(name, func(t *testing.T) {
 			a := (&ExecuteToolsActivity{}).WithConfigProvider(memoryConfigProvider{cfg: cfg})
@@ -178,26 +177,32 @@ func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
 		return out
 	}
 
-	got := run("git worktree add ../reliant-x -b x")
+	legacyJSON, err := json.Marshal(map[string]string{"reliant": worktreeRootMemory})
+	require.NoError(t, err)
+	legacy := string(legacyJSON)
+	record := &db.ProjectConfigRecord{ProjectID: project.ID, DaemonID: "daemon-1", RepoMemoriesJSON: &legacy}
+	require.NoError(t, h.Repo().UpsertProjectConfigRecord(ctx, record))
+
+	const commandInMemoryRoot = "git worktree add ~/src/rl-agent-worktrees/reliant-x -b x origin/main"
+	got := run(commandInMemoryRoot)
 	require.False(t, got.IsError, "nothing is refused: %s", got.Content)
 	out := decode(got)
 	assert.Equal(t, "Preparing worktree (new branch 'x')\n", out.Stdout, "the command's own output is intact")
-	assert.Contains(t, out.Suggestion, "worktree tool")
+	assert.Contains(t, out.Suggestion, "worktree tool", "legacy nested memory cannot suppress the suggestion")
 
-	memory := worktreeRootMemory
-	require.NoError(t, h.Repo().UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
-		ProjectID: project.ID, DaemonID: "daemon-1", GlobalMemoryMD: &memory,
-	}))
-	got = run("git worktree add ~/src/rl-agent-worktrees/reliant-x -b x origin/main")
+	memory := "shared project notes\n\n" + worktreeRootMemory
+	record.ProjectMemoryMD = &memory
+	require.NoError(t, h.Repo().UpsertProjectConfigRecord(ctx, record))
+	got = run(commandInMemoryRoot)
 	require.False(t, got.IsError, got.Content)
-	assert.Empty(t, decode(got).Suggestion, "the user's memory names this root; it wins")
+	assert.Empty(t, decode(got).Suggestion, "root-local memory names this root; it wins")
 
 	got = run("git worktree add ../reliant-y -b y")
 	assert.NotEmpty(t, decode(got).Suggestion, "outside the memory's root the suggestion still applies")
 
 	assert.Equal(t, []string{
-		"git worktree add ../reliant-x -b x",
-		"git worktree add ~/src/rl-agent-worktrees/reliant-x -b x origin/main",
+		commandInMemoryRoot,
+		commandInMemoryRoot,
 		"git worktree add ../reliant-y -b y",
 	}, executor.ran, "every command ran")
 }

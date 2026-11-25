@@ -8,7 +8,7 @@ Growth AI activation is included. Source paths below are relative to Reliant.
 
 | Source | Exact source path / seam | Effect of memory exclusion |
 |---|---|---|
-| Automatic global/project memory and repo reliant.md snapshots | `internal/workflow/runtime/activities/handlers/call_llm.go`: `formatStoredMemories`, `streamLLMResponse`; `repo_memory.go`: `formatRepoMemoryMessages`; `internal/config/provider.go`: `GetProjectConfig`/stored config parsing | Omitted from assembled history, including repo-memory omission messages |
+| Automatic global and project-root memory (including root `reliant.local.md`) | `internal/workflow/runtime/activities/handlers/call_llm.go`: `formatStoredMemories`, `streamLLMResponse`; `internal/toolexec/daemonruntime/runtime.go`: `readProjectMemory` | Omitted from assembled history. Nested repository instruction files are not injected automatically, even when exclusion is off. |
 | Identity, parallel-agent/git safety rules, scratch-file advice | `call_llm.go`: `getSystemPrompts` | Retained |
 | Working directory, bound worktree path, multi-repo names/relative paths | `call_llm.go`: `getSystemPrompts`; `chat_checkout.go`: `resolveCallCheckout`; `internal/projectcheckout/machine.go`: `ForMachine`; repository `ListReposByProject` | Retained when available; machine-less is not a metadata filter |
 | Static capability/Forge routing guide | `internal/workflow/runtime/activities/handlers/reliant_capabilities.go`, `guidance/reliant_capabilities.md` | Retained |

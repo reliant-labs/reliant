@@ -289,7 +289,7 @@ type ModelDefinition struct {
 	// DefaultCompactionThreshold is an OPTIONAL per-model override for the token
 	// count at which context compaction triggers. When unset (the norm), the
 	// threshold is DERIVED from max_context_window via
-	// CompactionThresholdFraction (0.85 × window) — see
+	// DeriveCompactionThreshold (85% of the prompt ceiling, capped at 600k) — see
 	// CompactionThresholdForDefinition. Set this only as an escape hatch for a
 	// specific model; the built-in models leave it unset and rely on the
 	// derivation. Pointer type so we can distinguish "not set" from zero.

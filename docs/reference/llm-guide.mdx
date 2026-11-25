@@ -111,8 +111,12 @@ Each model has a maximum context window (total tokens for input + output). The [
 
 Reliant tracks token usage per thread. When context grows large:
 
-1. **Compaction** summarizes older messages once the thread passes the model's compaction threshold (`compaction_threshold` on the Call LLM node's output). The built-in agent does this on its own, with the loop's own model
+1. **Compaction** summarizes older messages once the thread passes the model's compaction threshold (`compaction_threshold` on the Call LLM node's output). The built-in agent does this on its own, with the loop's own model.
 2. **Filtering** reduces tool result verbosity, when a workflow adds a filtering step (see [Multi-Agent Patterns](/workflows/patterns#context-management))
+
+Across providers, the derived compaction threshold is **85% of the prompt limit, capped at 600,000 tokens**. The prompt limit reserves room for output and honors a smaller limit reported by the provider. If the limit is unknown, the fallback is 185,000 tokens.
+
+The 600,000-token cap applies only to the derived default. Explicit `compaction_threshold` pins can go higher when the model and provider's safety ceiling permits it. The last-resort prompt trimming limit is unchanged.
 
 ### Caching
 

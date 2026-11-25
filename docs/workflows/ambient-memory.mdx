@@ -5,9 +5,9 @@ description: Opt out of ambient memory injection without claiming full model con
 
 # Excluding automatic saved memories
 
-Reliant normally attaches saved global, project and repository memories to every
-model turn, including a new thread. Set `exclude_ambient_memory: true` to omit
-those automatic memory blocks:
+Reliant normally attaches saved global and project-root memories to each model
+turn, including a new thread. Nested repository memory files are not automatically
+injected. Set `exclude_ambient_memory: true` to omit the automatic memory blocks:
 
 ```yaml
 nodes:

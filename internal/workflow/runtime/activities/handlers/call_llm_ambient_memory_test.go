@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/openai"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -102,6 +104,13 @@ func TestCallLLM_ExcludeAmbientMemoryOutgoingHTTP(t *testing.T) {
 			project := h.CreateTestProject(ctx, uuid.NewString(), uuid.NewString())
 			chat := h.CreateTestChat(ctx, uuid.NewString(), project.ID, project.UserID)
 			h.CreateTestUserMessageWithText(ctx, chat.ID, chat.ID, approvedBriefCanary)
+			now := time.Now().UTC()
+			for _, name := range []string{"backend", "frontend"} {
+				require.NoError(t, h.Repo().CreateRepo(ctx, &core.Repo{
+					ID: uuid.NewString(), ProjectID: project.ID, Name: name, RelativePath: "apps/" + name,
+					CreatedAt: now, UpdatedAt: now,
+				}))
+			}
 			bodies := make(chan string, 1)
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				body, err := io.ReadAll(r.Body)
@@ -111,11 +120,15 @@ func TestCallLLM_ExcludeAmbientMemoryOutgoingHTTP(t *testing.T) {
 				}
 				bodies <- string(body)
 				w.Header().Set("Content-Type", "text/event-stream")
-				fmt.Fprint(w, "data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-4o\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
+				fmt.Fprint(w, "data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"gpt-5.4\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n")
 			}))
 			defer srv.Close()
-			driver := openai.NewClient(llm.DriverOptions{Model: models.Model{ID: "gpt-4o", APIModel: "gpt-4o"}, ApiKey: "test-only", BaseURL: srv.URL, MaxTokens: 100})
-			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, RepoMemories: map[string]string{"private-repo": ambientRepoCanary}, DaemonRuntimeType: "kata",
+			driver := openai.NewClient(llm.DriverOptions{Model: models.Model{ID: models.GPT54, APIModel: "gpt-5.4"}, ApiKey: "test-only", BaseURL: srv.URL, MaxTokens: 100})
+			cfg := &cfgpkg.Config{GlobalMemoryMD: ambientGlobalCanary, ProjectMemoryMD: ambientProjectCanary, DaemonRuntimeType: "kata",
+				RepoMemories: map[string]string{
+					"private-repo": ambientRepoCanary,
+					"oversize":     strings.Repeat("legacy memory ", 100_000),
+				},
 				Skills: []cfgpkg.StoredSkill{{Name: privateSkillPath, SkillPath: privateSkillPath, Description: skillCatalogCanary, Body: skillBodyCanary}},
 			}
 			handler := NewCallLLMActivity(h.Repo(), nil, nil, ambientConfigProvider{cfg}, func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
@@ -130,13 +143,20 @@ func TestCallLLM_ExcludeAmbientMemoryOutgoingHTTP(t *testing.T) {
 			select {
 			case body := <-bodies:
 				require.Contains(t, body, approvedBriefCanary)
+				require.Contains(t, body, "reliant_capabilities", "base prompt")
+				require.Contains(t, body, "backend (apps/backend)", "repo discovery in the base prompt")
+				require.Contains(t, body, "frontend (apps/frontend)", "repo discovery in the base prompt")
+				require.Contains(t, body, "You are a coding agent.", "OpenAI-family guidance")
+				require.Contains(t, body, "the project root's reliant.md", "provider guidance must not claim nested files are loaded")
 				require.NotContains(t, body, skillBodyCanary)
+				require.NotContains(t, body, ambientRepoCanary, "legacy repo memory is never injected")
+				require.NotContains(t, body, "system-memory-omitted", "legacy repo memory does not generate notices")
 				var request struct {
 					Tools []json.RawMessage `json:"tools"`
 				}
 				require.NoError(t, json.Unmarshal([]byte(body), &request))
 				require.Empty(t, request.Tools)
-				for _, canary := range []string{ambientGlobalCanary, ambientProjectCanary, ambientRepoCanary, privateSkillPath, skillCatalogCanary} {
+				for _, canary := range []string{ambientGlobalCanary, ambientProjectCanary, privateSkillPath, skillCatalogCanary} {
 					if excluded {
 						require.NotContains(t, body, canary)
 					} else {
@@ -196,7 +216,8 @@ func TestCallLLM_ExcludeAmbientMemoryProviderBoundary(t *testing.T) {
 			for _, req := range driver.sent {
 				text := req.text(t)
 				require.Contains(t, text, approvedBriefCanary)
-				for _, canary := range []string{ambientGlobalCanary, ambientProjectCanary, ambientRepoCanary} {
+				require.NotContains(t, text, ambientRepoCanary, "legacy repo memory is ignored even by default")
+				for _, canary := range []string{ambientGlobalCanary, ambientProjectCanary} {
 					if tc.local || tc.inherited {
 						require.NotContains(t, text, canary)
 					} else {

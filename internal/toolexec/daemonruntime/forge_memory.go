@@ -21,10 +21,6 @@ var forgeMemoryWarn = logging.NewThrottle(time.Hour, time.Now)
 // pinnedForge runs the forge projects pin; the tests replace it.
 var pinnedForge = forgepin.Default()
 
-// embeddedForgeIdentity names the forge compiled into this binary, for
-// forgeFrameworkMemoryFrom's identity.
-const embeddedForgeIdentity = "embedded"
-
 // projectMemoryWithForgeFramework returns the project's memory bytes
 // for snapshot injection. When forge.yaml is present at projectPath, it
 // prepends forge's rendered framework memory so every LLM session for a
@@ -46,17 +42,9 @@ func projectMemoryWithForgeFramework(projectPath string, onDisk []byte) []byte {
 	return prependMemory(framework, onDisk)
 }
 
-// forgeFrameworkMemory renders the framework block for a forge project.
-// ok is false when projectPath is empty, has no forge.yaml, or rendering
-// fails.
-func forgeFrameworkMemory(projectPath string) ([]byte, bool) {
-	framework, _, ok := forgeFrameworkMemoryFrom(projectPath)
-	return framework, ok
-}
-
-// forgeFrameworkMemoryFrom is forgeFrameworkMemory plus the identity of the
-// forge whose guide it is: one forge's guide is the same for every repo it is
-// rendered for, and two forges' are not.
+// forgeFrameworkMemory renders the framework block for the project root.
+// ok is false when projectPath is empty, has no forge.yaml, or embedded
+// rendering fails.
 //
 // WHICH FORGE. The guide describes the forge that renders it — its commands,
 // rules and layout. In a project that pins another forge than the one
@@ -67,25 +55,25 @@ func forgeFrameworkMemory(projectPath string) ([]byte, bool) {
 // that predates the command), the block is an explicit note saying so —
 // never the embedded forge's guide, which would be the wrong version's rules
 // presented as the project's.
-func forgeFrameworkMemoryFrom(projectPath string) ([]byte, string, bool) {
+func forgeFrameworkMemory(projectPath string) ([]byte, bool) {
 	if projectPath == "" {
-		return nil, "", false
+		return nil, false
 	}
 	if _, err := os.Stat(filepath.Join(projectPath, "forge.yaml")); err != nil {
-		return nil, "", false
+		return nil, false
 	}
 	pf, pinned, err := pinnedForge.Pinned(projectPath, "project memory")
 	if err != nil {
 		warnForgeMemory(projectPath, "the project's pinned forge could not be obtained; sessions get a note instead of its framework guide", err)
-		return pinnedMemoryUnavailable(err), "unavailable:" + forgepin.Fingerprint([]byte(err.Error())), true
+		return pinnedMemoryUnavailable(err), true
 	}
 	if pinned {
 		memory, err := pinnedProjectMemory(pf, projectPath)
 		if err != nil {
 			warnForgeMemory(projectPath, "the project's pinned forge did not print its framework guide; sessions get a note instead", err)
-			return pinnedMemoryUnavailable(err), "unavailable:" + pf.Key, true
+			return pinnedMemoryUnavailable(err), true
 		}
-		return memory, pf.Key, true
+		return memory, true
 	}
 	framework, err := forgecli.RenderProjectMemory(projectPath)
 	if err != nil {
@@ -95,9 +83,9 @@ func forgeFrameworkMemoryFrom(projectPath string) ([]byte, string, bool) {
 		// the framework memory, and nothing else says so. Throttled per
 		// project, because it is re-rendered for every snapshot.
 		warnForgeMemory(projectPath, "forge framework memory render failed; sessions start without it", err)
-		return nil, "", false
+		return nil, false
 	}
-	return framework, embeddedForgeIdentity, true
+	return framework, true
 }
 
 // pinnedProjectMemory is the guide the pinned forge pf renders for the
@@ -151,9 +139,4 @@ func prependMemory(head, rest []byte) []byte {
 	out = append(out, '\n', '\n')
 	out = append(out, rest...)
 	return out
-}
-
-func hasForgeYAML(dir string) bool {
-	_, err := os.Stat(filepath.Join(dir, "forge.yaml"))
-	return err == nil
 }

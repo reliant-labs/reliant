@@ -195,33 +195,6 @@ func TestForgeMemory_AnUnavailablePinGetsANoteNotTheWrongGuide(t *testing.T) {
 	}
 }
 
-// Repos pinned to different forges each carry their own guide; repos on one
-// forge share it, as before.
-func TestCollectRepoMemories_EachForgeCarriesItsOwnGuide(t *testing.T) {
-	useFakePinnedForges(t)
-	root := t.TempDir()
-	for n, pin := range map[string]string{"a": "v1.0.4", "b": "v1.0.5", "c": "v1.0.4", "d": ""} {
-		require.NoError(t, os.MkdirAll(filepath.Join(root, n, ".git"), 0o755))
-		yaml := "name: " + n + "\n"
-		if pin != "" {
-			yaml += "forge_version: " + pin + "\n"
-		}
-		writeRepoFile(t, filepath.Join(root, n), "forge.yaml", yaml)
-	}
-	mem, _ := collectRepoMemories(root)
-	assert.Contains(t, string(mem["a"]), "# guide of forge v1.0.4 for a")
-	assert.Contains(t, string(mem["b"]), "# guide of forge v1.0.5 for b", "b was pointed at another forge's guide")
-	assert.Contains(t, string(mem["c"]), "`a`", "c shares a's forge, so it points at a's guide")
-	assert.Less(t, len(mem["c"]), 1000)
-	// d has no pin: it carries the embedded forge's own guide for d. Compared
-	// whole rather than by a phrase: which guide forge writes depends on the
-	// project's shape (forge #2107 gives an adopted, forge.yaml-only project
-	// like d its own), and that is forge's to decide, not this test's.
-	embedded, err := forgecli.RenderProjectMemory(filepath.Join(root, "d"))
-	require.NoError(t, err)
-	assert.Contains(t, string(mem["d"]), string(embedded), "d has no pin: the embedded guide")
-}
-
 // A proto rewrite that keeps the file's size and mtime (an atomic replace with
 // copied timestamps, a coarse-mtime filesystem) still moves the key: the
 // declarations are read from the content, not trusted to a stamp.

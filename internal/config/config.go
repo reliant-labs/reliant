@@ -121,10 +121,8 @@ type Config struct {
 	// authoritative, in-memory snapshot of SKILL.md files available to this
 	// project and is what the skill tool / auto-suggestion use at runtime.
 	Skills []StoredSkill `yaml:"-" json:"-"`
-	// RepoMemories maps nested repo relative path (e.g. "api", "forge") to
-	// the concatenated content of that repo's reliant.md + reliant.local.md.
-	// Populated from the daemon's project config sync so cloud workers don't
-	// need filesystem access.
+	// RepoMemories holds legacy nested repo memory decoded from older
+	// snapshots. It is not used for prompts or worktree rules.
 	RepoMemories map[string]string `yaml:"-" json:"-"`
 	// DaemonRuntimeType identifies the sandbox/runtime the serving daemon runs
 	// under (e.g. "kata", "gvisor"). Empty for local/unknown daemons. Reported

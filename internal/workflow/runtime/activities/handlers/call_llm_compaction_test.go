@@ -45,64 +45,39 @@ func TestExplicitCompactionThreshold(t *testing.T) {
 	}
 }
 
-// TestEffectiveCompactionThresholdPrecedence documents the layering applied in
-// executeCore: an explicit positive per-node arg wins outright; otherwise the
-// threshold is DERIVED from the resolved model's real context window (with a
-// per-model explicit override honored if one is declared); otherwise the global
-// default when the window is unknown.
+// TestEffectiveCompactionThresholdPrecedence checks the derived default and
+// that explicit overrides above 600k remain valid below the pin ceiling.
 func TestEffectiveCompactionThresholdPrecedence(t *testing.T) {
 	t.Parallel()
 
+	large := &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 1_000_000}}
+	custom := &models.ModelDefinition{
+		Capabilities:               large.Capabilities,
+		DefaultCompactionThreshold: ptrInt(950_000),
+	}
 	tests := []struct {
-		name string
-		arg  *reliantv1.CelInt
-		def  *models.ModelDefinition
-		want int32
+		name        string
+		arg         *reliantv1.CelInt
+		selector    *reliantv1.CelModelSelector
+		tag         int32
+		def         *models.ModelDefinition
+		promptLimit int64
+		want        int32
 	}{
-		{
-			name: "explicit per-node arg beats derived value",
-			arg:  celIntLiteral(300000),
-			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 1_000_000}},
-			want: 300000,
-		},
-		{
-			name: "1M-window model derives 850k when arg unset",
-			arg:  nil,
-			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 1_000_000}},
-			want: 850_000,
-		},
-		{
-			name: "200k-window model derives 170k when arg unset",
-			arg:  celIntLiteral(0),
-			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 200_000}},
-			want: 170_000,
-		},
-		{
-			name: "per-model override wins over derivation",
-			arg:  nil,
-			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 1_000_000}, DefaultCompactionThreshold: ptrInt(950000)},
-			want: 950000,
-		},
-		{
-			name: "global default when arg unset and window unknown",
-			arg:  nil,
-			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 0}},
-			want: DefaultCompactionThreshold,
-		},
+		{name: "node pin beats selector and tag", arg: celIntLiteral(800_000), selector: selectorWithThreshold(750_000), tag: 700_000, def: large, promptLimit: 1_000_000, want: 800_000},
+		{name: "selector pin beats tag", selector: selectorWithThreshold(750_000), tag: 700_000, def: large, promptLimit: 1_000_000, want: 750_000},
+		{name: "tag pin beats derived default", tag: 700_000, def: large, promptLimit: 1_000_000, want: 700_000},
+		{name: "large model defaults to 600k", def: large, promptLimit: 1_000_000, want: 600_000},
+		{name: "injected resolver with known ceiling defaults to 600k", promptLimit: 1_000_000, want: 600_000},
+		{name: "explicit per-model override beats derived default", def: custom, promptLimit: 1_000_000, want: 950_000},
+		{name: "unknown ceiling uses fallback", want: 185_000},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			args := &reliantv1.CallLLMArgs{CompactionThreshold: tc.arg}
-
-			// Mirror executeCore's precedence for a resolved definition.
-			effective := explicitCompactionThresholdArg(args)
-			if !explicitCompactionThresholdIsSet(args) {
-				effective = int32(models.CompactionThresholdForDefinition(tc.def))
-			}
-
-			if effective != tc.want {
-				t.Errorf("effective compaction threshold = %d, want %d", effective, tc.want)
+			args := &reliantv1.CallLLMArgs{CompactionThreshold: tc.arg, Model: tc.selector}
+			if got := resolveCompactionThreshold(args, tc.tag, tc.def, "codex", tc.promptLimit); got != tc.want {
+				t.Errorf("effective compaction threshold = %d, want %d", got, tc.want)
 			}
 		})
 	}

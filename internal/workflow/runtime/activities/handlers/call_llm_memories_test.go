@@ -93,41 +93,6 @@ func TestFormatStoredMemories_ProducesSystemMessage(t *testing.T) {
 	require.Contains(t, msg.Content().Text, "test memory")
 }
 
-func TestFormatRepoMemoryMessages_Empty(t *testing.T) {
-	t.Parallel()
-
-	for _, memories := range []map[string]string{nil, {}, {"api": "", "web": "  "}} {
-		msgs, omitted := formatRepoMemoryMessages(memories, repoMemoryBudgetChars(272_000))
-		require.Nil(t, msgs)
-		require.Nil(t, omitted)
-	}
-}
-
-func TestFormatRepoMemoryMessages_SortedByName(t *testing.T) {
-	t.Parallel()
-
-	msgs, omitted := formatRepoMemoryMessages(map[string]string{
-		"forge":         "forge context",
-		"api":           "api context",
-		"control-plane": "cp context",
-	}, repoMemoryBudgetChars(272_000))
-	require.Empty(t, omitted)
-	require.Len(t, msgs, 3)
-
-	// Verify sorted order: api, control-plane, forge
-	require.Contains(t, msgs[0].Content().Text, "<system-memory repo=api>")
-	require.Contains(t, msgs[0].Content().Text, "api context")
-	require.Contains(t, msgs[1].Content().Text, "<system-memory repo=control-plane>")
-	require.Contains(t, msgs[1].Content().Text, "cp context")
-	require.Contains(t, msgs[2].Content().Text, "<system-memory repo=forge>")
-	require.Contains(t, msgs[2].Content().Text, "forge context")
-
-	// All should be system role
-	for _, msg := range msgs {
-		require.Equal(t, message.System, msg.Role)
-	}
-}
-
 // A thread that does not know its working directory INVENTS one. Measured
 // across two forge-one-shot runs: ten of fifteen spawned units issued reads
 // against `/path/to/project/...` — a placeholder neither reliant nor forge

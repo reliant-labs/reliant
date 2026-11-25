@@ -57,7 +57,7 @@ All three methods produce the same YAML format. A workflow created with the AI b
 
 ## Workflow File Location
 
-Reliant automatically discovers top-level `.yaml` and `.yml` workflow files in the project root's `.reliant/workflows/` and in each discovered nested git repository's `.reliant/workflows/`. This uses the same repository discovery as memory files and skills; the project root need not itself be a git repository.
+Reliant automatically discovers top-level `.yaml` and `.yml` workflow files in the project root's `.reliant/workflows/` and in each discovered nested git repository's `.reliant/workflows/`. This uses the same repository discovery as nested skills; the project root need not itself be a git repository. Nested repository memory files are not automatically injected.
 
 <Tree>
   <Tree.Folder name="your-project" defaultOpen>

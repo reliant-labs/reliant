@@ -44,22 +44,20 @@ func TestPromptCeiling_TerraOnCodexIs872k(t *testing.T) {
 	require.EqualValues(t, codexAdvertisedLimit, promptCeiling(def, "codex", def.ToModel()))
 }
 
-// TestResolveCompactionThreshold_TerraOnCodexResolvesAgainst872k: both an
-// unpinned chat and a 1M pin compact at 85% of the 872k ceiling. Before, both
-// resolved to 231,200 (85% of 272k).
+// An unpinned Terra chat compacts at 600k, but pins still use the safety
+// ceiling derived from the provider's advertised 872k prompt limit.
 func TestResolveCompactionThreshold_TerraOnCodexResolvesAgainst872k(t *testing.T) {
 	t.Parallel()
 
 	def := terraOnCodex(t)
 	ceiling := promptCeiling(def, "codex", def.ToModel())
-	const want = 741_200 // 0.85 × 872,000
-
-	if got := resolveCompactionThreshold(&reliantv1.CallLLMArgs{}, 0, def, "codex", ceiling); got != want {
-		t.Errorf("unpinned threshold = %d, want %d", got, want)
+	if got := resolveCompactionThreshold(&reliantv1.CallLLMArgs{}, 0, def, "codex", ceiling); got != 600_000 {
+		t.Errorf("unpinned threshold = %d, want 600000", got)
 	}
 	pinned := &reliantv1.CallLLMArgs{Model: selectorWithThreshold(1_000_000)}
-	if got := resolveCompactionThreshold(pinned, 0, def, "codex", ceiling); got != want {
-		t.Errorf("1M pin capped to %d, want %d", got, want)
+	const pinCeiling = 741_200 // 0.85 × 872,000
+	if got := resolveCompactionThreshold(pinned, 0, def, "codex", ceiling); got != pinCeiling {
+		t.Errorf("1M pin capped to %d, want %d", got, pinCeiling)
 	}
 }
 

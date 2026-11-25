@@ -62,10 +62,7 @@ func storedRecord(record *db.ProjectConfigRecord) *config.StoredProjectConfigRec
 		ProjectPresetsJSON:   record.ProjectPresetsJSON,
 		ProjectScenariosJSON: record.ProjectScenariosJSON,
 		ProjectSkillsJSON:    record.ProjectSkillsJSON,
-		// RepoMemoriesJSON was absent here while both the db record and the
-		// config record carried the field, so per-repo reliant.md content the
-		// daemon had already synced was dropped on every read through this
-		// store and Config.RepoMemories was always empty.
+		// Preserve the legacy field when reading snapshots from older daemons.
 		RepoMemoriesJSON: record.RepoMemoriesJSON,
 		RuntimeType:      record.RuntimeType,
 	}

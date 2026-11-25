@@ -1105,7 +1105,7 @@ models:
   # window — and max_context_window 872000, "the maximum context window allowed
   # for config overrides". 872000 may itself be an input figure (1M − 128k), so
   # it is not converted: it caps the prompt ceiling because it is lower, and the
-  # codex ceiling is 872,000 (compaction 741,200, backstop 828,400). Prod
+  # codex ceiling is 872,000 (pin ceiling 741,200, backstop 828,400). Prod
   # accepted 698,604-token terra prompts, well past the 272k default.
   #
   # Copilot (terra, luna) inherits the same window: its /models reports

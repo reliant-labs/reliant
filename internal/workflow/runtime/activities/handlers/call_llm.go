@@ -296,12 +296,10 @@ func compactionThresholdIsSet(args *reliantv1.CallLLMArgs) bool {
 
 // resolveCompactionThreshold returns the token count at which the agent loop
 // compacts this call's thread. Precedence: node arg > model value > the user's
-// tag preference > DERIVED from the resolved model's prompt ceiling for the
-// selected provider (CompactionThresholdFraction × ProviderPromptCeiling, with
-// a per-model explicit override honored if the definition declares one; see
-// models.CompactionThresholdForProvider). With no registry definition (an
-// injected driver resolver, e.g. in tests) it derives from promptLimit, or
-// falls back to the global default when that is unknown.
+// tag preference > explicit per-model default > derived default (85% of the
+// selected provider's prompt limit, capped at 600k; see models.DeriveCompactionThreshold).
+// With no registry definition (e.g. an injected driver resolver), it derives
+// from promptLimit or uses the unknown-limit fallback.
 //
 // A pinned value is capped at models.CompactionThresholdCeiling: a threshold
 // past the point where the model runs out of room never fires, which leaves the
@@ -1686,20 +1684,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			Role:  message.System,
 			Parts: []message.ContentPart{message.TextContent{Text: memoryContent}},
 		})
-	}
-	// Per-repo memory: eagerly inject sub-repo reliant.md content from the
-	// config snapshot, within a share of this model's window (see
-	// repoMemoryBudgetFraction). Sorted by repo name for prefix-cache
-	// stability.
-	if !excludeAmbientMemory && projectCfg != nil && len(projectCfg.RepoMemories) > 0 {
-		budget := repoMemoryBudgetChars(ceiling)
-		memMsgs, omitted := formatRepoMemoryMessages(projectCfg.RepoMemories, budget)
-		if len(memMsgs) > 0 {
-			prefix = append(prefix, memMsgs...)
-		}
-		if len(omitted) > 0 {
-			repoMemoryOmissions.warn(chat.ProjectID, omitted, budget)
-		}
 	}
 	if len(prefix) > 0 {
 		history = append(prefix, history...)

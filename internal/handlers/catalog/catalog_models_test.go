@@ -19,6 +19,16 @@ func newCatalogServiceTestContext() context.Context {
 	return context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 }
 
+func TestCompactionThresholdsDistinguishDefaultFromPinCeiling(t *testing.T) {
+	def := &models.ModelDefinition{
+		Capabilities: models.ModelCapabilities{MaxContextWindow: 1_050_000, MaxOutputTokens: 128_000},
+		Providers:    []models.ProviderMapping{{Driver: "codex", AdvertisedLimit: 872_000}},
+	}
+	defaultThreshold, maxThreshold := compactionThresholds(def, "codex")
+	assert.EqualValues(t, 600_000, defaultThreshold)
+	assert.EqualValues(t, 741_200, maxThreshold)
+}
+
 // supportedReliantModelIDs is what ListModels must show for the reliant
 // driver: every gateway model that is user-visible for TEXT output, which is
 // the same gate ListModels applies (registry.GetUserVisibleModels). The

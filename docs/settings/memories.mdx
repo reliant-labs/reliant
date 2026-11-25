@@ -14,10 +14,8 @@ Reliant reads these context files on the chat's [machine](/machines/overview):
 | `~/.reliant/reliant.md` | **Global context** — your preferences for every project on that machine | Not in a repository |
 | `reliant.md` in the project root | **Project context** — shared guidelines, architecture notes, conventions | Commit to repository |
 | `reliant.local.md` in the project root | **Personal context** — your local notes and preferences for this project | Add to .gitignore |
-| `reliant.md` in each nested repository | **Repository context** — for a project made of several repositories | Commit to that repository |
-| `reliant.local.md` in each nested repository | **Personal context** for that repository | Add to .gitignore |
 
-Every file that exists is loaded and included in every conversation. A `reliant.local.md` is read wherever a `reliant.md` is, in the project root and in each nested repository, and comes right after that `reliant.md`, so your personal notes have the last word. It is loaded even when there is no `reliant.md` beside it.
+Existing files in these locations are included in conversations unless a workflow explicitly excludes automatic saved memories. The root `reliant.local.md` comes after the root `reliant.md`, so your personal notes have the last word; it is loaded even when there is no `reliant.md` beside it.
 
 ## The `reliant.md` a new project starts with
 
@@ -68,7 +66,7 @@ Brief description of what this project does and its architecture.
 
 ### Personal Context (`reliant.local.md`)
 
-A `reliant.local.md` in the project root holds your personal preferences and local setup for the project. Keep it out of git (add it to `.gitignore`) so it stays yours. In a project made of several repositories, a `reliant.local.md` beside a repository's `reliant.md` does the same for that one repository. For preferences that apply to every project, use the [global context file](#global-context) instead.
+A `reliant.local.md` in the project root holds your personal preferences and local setup for the project. Keep it out of git (add it to `.gitignore`) so it stays yours. For preferences that apply to every project, use the [global context file](#global-context) instead.
 
 ```markdown
 # My Setup
@@ -93,9 +91,9 @@ A `reliant.local.md` in the project root holds your personal preferences and loc
 
 ## Projects with several repositories
 
-A project can hold several git repositories side by side. Reliant finds each nested repository and loads its `reliant.md` and `reliant.local.md` as that repository's context, labelled with the repository's path, so the agent knows which rules apply where. Put what applies to the whole project in the root `reliant.md` and what applies to one repository in that repository's own file.
+A project can hold several git repositories side by side. Reliant still discovers nested repositories, but it does not automatically include their `reliant.md` or `reliant.local.md` files in model context. Put project-wide guidance in the project root's memory; for repository-specific instructions, point the agent to the relevant file there and ask it to read that file before working in the repository. Those files remain accessible to an agent with filesystem access.
 
-Together, the repositories' files (each repository's `reliant.md` and `reliant.local.md`) may take up to a tenth of the model's context window; any that don't fit are left out, and the agent is told where they are so it reads them before working in that repository. The project root's `reliant.md` and `reliant.local.md` are always included in full. Parent directories above the project are not searched.
+This change does not affect discovery of nested repository skills or presets. Parent directories above the project are not searched for project memory.
 
 ## Best Practices
 

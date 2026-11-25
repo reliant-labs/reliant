@@ -143,8 +143,6 @@ func messageKind(m *message.Message) string {
 	switch {
 	case strings.HasPrefix(text, "# User defined rules"):
 		return "memory"
-	case strings.HasPrefix(text, "<system-memory"):
-		return "repo-memory"
 	case strings.HasPrefix(text, "<preloaded-skills>"):
 		return "skills-seed"
 	}

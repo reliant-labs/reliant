@@ -65,9 +65,5 @@ func (a *ExecuteToolsActivity) memoryWorktreeRoots(ctx context.Context, projectI
 	if cfg == nil {
 		return nil
 	}
-	docs := []string{cfg.GlobalMemoryMD, cfg.ProjectMemoryMD}
-	for _, memory := range cfg.RepoMemories {
-		docs = append(docs, memory)
-	}
-	return tools.WorktreeRootsFromMemory(docs...)
+	return tools.WorktreeRootsFromMemory(cfg.GlobalMemoryMD, cfg.ProjectMemoryMD)
 }

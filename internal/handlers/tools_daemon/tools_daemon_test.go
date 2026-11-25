@@ -414,6 +414,7 @@ func TestHandleLoadProjectConfigsResponsePersistsSnapshotAndTracksState(t *testi
 			LocalConfigYaml:       []byte("local: yes"),
 			GlobalMemoryMd:        []byte("global memory"),
 			ProjectMemoryMd:       []byte("project memory"),
+			RepoMemoriesMd:        map[string][]byte{"api": []byte("legacy nested memory")},
 			McpConfigs: map[string][]byte{
 				"user":    []byte("{\"a\":1}"),
 				"project": []byte("{\"b\":2}"),
@@ -445,6 +446,8 @@ func TestHandleLoadProjectConfigsResponsePersistsSnapshotAndTracksState(t *testi
 	require.Equal(t, "global memory", *record.GlobalMemoryMD)
 	require.NotNil(t, record.ProjectMemoryMD)
 	require.Equal(t, "project memory", *record.ProjectMemoryMD)
+	require.NotNil(t, record.RepoMemoriesJSON)
+	require.JSONEq(t, `{"api":"legacy nested memory"}`, *record.RepoMemoriesJSON, "older daemons can still send the legacy field")
 
 	require.NotNil(t, record.MCPConfigs)
 	var stored map[string]string

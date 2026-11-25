@@ -10,30 +10,32 @@ import (
 // UnknownModelCompactionFloor is the fallback token count at which context
 // compaction triggers when a model's REAL context window is unknown — e.g. an
 // unregistered/empty model ID, or a driver-injected model with no definition.
-// Known models do NOT use this value; they DERIVE their threshold from the real
-// window via CompactionThresholdFraction (see DeriveCompactionThreshold). This
-// floor assumes a ~200k window and exists only so callers without a resolved
-// model keep a sane denominator.
+// This floor assumes a ~200k window and exists only so callers without a known
+// prompt ceiling keep a sane denominator.
 const UnknownModelCompactionFloor = 185000
 
-// CompactionThresholdFraction is the fraction of a model's PROMPT CEILING (see
-// PromptCeiling) at which context compaction triggers by DEFAULT. It mirrors
-// message.TrimBackstopFraction (0.95): compaction — which summarizes older
-// context into a handoff — is the PRIMARY context-management mechanism and sits
-// BELOW the trim backstop, so summarization happens before the last-resort
-// head/tail trim engages. Both thresholds derive from the same ceiling, so they
-// scale together across models (200k, 1M, …) instead of drifting via
-// per-model magic numbers.
+// CompactionThresholdFraction is the fraction of a model's prompt ceiling used
+// for the derived default and the baseline safety ceiling for pins. It sits
+// below message.TrimBackstopFraction (0.95) so summarization normally happens
+// before the last-resort head/tail trim engages.
 const CompactionThresholdFraction = 0.85
 
-// DeriveCompactionThreshold returns the default compaction threshold for a model
-// with the given prompt ceiling: CompactionThresholdFraction × ceiling. When the
-// ceiling is unknown (<= 0) it falls back to UnknownModelCompactionFloor so
-// callers without a resolved model keep a sane floor.
+// defaultCompactionThresholdCap bounds only the derived default, not pins or
+// explicit per-model overrides.
+const defaultCompactionThresholdCap = 600_000
+
+// DeriveCompactionThreshold returns the smaller of 85% of the prompt ceiling
+// and 600,000 tokens, or UnknownModelCompactionFloor if the ceiling is unknown.
 func DeriveCompactionThreshold(promptCeiling int) int {
 	if promptCeiling <= 0 {
 		return UnknownModelCompactionFloor
 	}
+	return min(compactionThresholdAtFraction(promptCeiling), defaultCompactionThresholdCap)
+}
+
+// compactionThresholdAtFraction is shared by the default and pin ceiling;
+// neither the default cap nor the unknown-window fallback applies here.
+func compactionThresholdAtFraction(promptCeiling int) int {
 	return int(float64(promptCeiling) * CompactionThresholdFraction)
 }
 
@@ -44,8 +46,8 @@ func DeriveCompactionThreshold(promptCeiling int) int {
 // a prompt that fills the window leaves no room to answer.
 //
 // Every context-management threshold derives from this one number: the default
-// compaction threshold (85%), the cap on a pinned threshold, the trim backstop
-// (95%) and the check that a stored token count is plausible. Use
+// compaction threshold (85%, capped at 600,000), the cap on a pinned threshold,
+// the trim backstop (95%) and the check that a stored token count is plausible. Use
 // ProviderPromptCeiling for a resolved model; it applies this rule to the
 // serving provider's window and honors a lower limit the provider advertises.
 //
@@ -119,9 +121,9 @@ func logAdvertisedLimit(def *ModelDefinition, providerDriver string, advertised 
 
 // CompactionThresholdCeiling is the largest compaction threshold that still
 // fires before a model with the given prompt ceiling (ProviderPromptCeiling)
-// runs out of room: the threshold derived from the ceiling, or the definition's
-// own default_compaction_threshold when that is higher (the model author's
-// call), never past the ceiling itself. 0 means the ceiling is unknown, so there
+// runs out of room: 85% of the prompt ceiling (without the default's 600k cap),
+// or the definition's own default_compaction_threshold when that is higher,
+// never past the prompt ceiling itself. 0 means the ceiling is unknown, so there
 // is nothing to cap against.
 //
 // It bounds PINNED thresholds (a call_llm arg, a model selector's
@@ -133,7 +135,7 @@ func CompactionThresholdCeiling(def *ModelDefinition, promptCeiling int) int {
 	if promptCeiling <= 0 {
 		return 0
 	}
-	ceiling := DeriveCompactionThreshold(promptCeiling)
+	ceiling := compactionThresholdAtFraction(promptCeiling)
 	if def != nil && def.DefaultCompactionThreshold != nil && *def.DefaultCompactionThreshold > ceiling {
 		ceiling = min(*def.DefaultCompactionThreshold, promptCeiling)
 	}

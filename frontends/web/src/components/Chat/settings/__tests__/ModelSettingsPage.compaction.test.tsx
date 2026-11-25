@@ -20,9 +20,8 @@ const mocks = vi.hoisted(() => ({
       provider: "Codex",
       driverId: "codex",
       contextWindow: 1_050_000,
-      // 0.85 × 872,000: the codex prompt ceiling (/codex/models advertises
-      // 872,000, below 1,050,000 − 128,000).
-      defaultCompactionThreshold: 741_200,
+      defaultCompactionThreshold: 600_000,
+      // The pin ceiling still uses 85% of Codex's advertised 872k prompt limit.
       maxCompactionThreshold: 741_200,
       capabilities: [],
       tags: ["moderate"],
@@ -90,9 +89,15 @@ describe("ModelSettingsPage compaction limits", () => {
 
   it("shows the selected model's default and the largest pin it honors", () => {
     renderPage({ id: "gpt-5.6-terra@codex" });
-    expect(compactionInput()).toHaveAttribute("placeholder", "741200");
+    expect(compactionInput()).toHaveAttribute("placeholder", "600000");
     expect(compactionInput()).toHaveAttribute("max", "741200");
     expect(screen.getByTestId("compaction-max")).toHaveTextContent("max 741,200");
+    expect(screen.queryByTestId("compaction-capped")).toBeNull();
+  });
+
+  it("allows a pin above the default but below the maximum", () => {
+    renderPage({ tags: ["moderate"], compaction_threshold: 700_000 });
+    expect(compactionInput()).toHaveValue(700_000);
     expect(screen.queryByTestId("compaction-capped")).toBeNull();
   });
 

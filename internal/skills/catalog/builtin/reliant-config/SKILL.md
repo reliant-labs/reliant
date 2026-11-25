@@ -34,7 +34,9 @@ Memory files inject persistent instructions into every LLM call as "User defined
 | `<project>/reliant.md` | Project — committed, shared with team | Committed |
 | `<project>/reliant.local.md` | Local — personal, gitignored | Gitignored |
 
-**Precedence:** All three are merged (not overridden). Global loads first, then project, then local. All content is concatenated.
+**Precedence:** All three are merged (not overridden). Global loads first, then project, then local. All content is concatenated. A workflow may explicitly exclude automatic saved memories.
+
+Nested repositories are still discovered for skills and presets, but their `reliant.md` and `reliant.local.md` files are not automatically injected. Put project-wide guidance in the project root; to apply repository-specific instructions, reference their paths there and read the relevant file before working in that repository.
 
 ### Add project instructions
 

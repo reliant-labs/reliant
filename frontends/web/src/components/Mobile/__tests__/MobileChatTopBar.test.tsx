@@ -43,6 +43,11 @@ describe("MobileChatTopBar subtitle", () => {
     expect(screen.getByTestId("mobile-chat-status")).toHaveTextContent("No machine");
   });
 
+  it("names the assigned machine alongside live status", () => {
+    renderBar({ runningWorkflow: "Agent", machineName: "Build workstation" });
+    expect(screen.getByTestId("mobile-chat-status")).toHaveTextContent("Running · Agent · Machine: Build workstation");
+  });
+
   it("keeps every status on the one line", () => {
     renderBar({ runningWorkflow: "Agent", noMachine: true });
     expect(screen.getByTestId("mobile-chat-status")).toHaveTextContent("Running · Agent · No machine");

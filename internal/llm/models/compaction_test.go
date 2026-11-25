@@ -2,24 +2,24 @@ package models
 
 import "testing"
 
-// TestDeriveCompactionThreshold pins the core derivation: 0.85 × real window,
-// with the global fallback when the window is unknown.
+// TestDeriveCompactionThreshold pins the cap, the fraction for smaller models,
+// and the fallback for an unknown prompt ceiling.
 func TestDeriveCompactionThreshold(t *testing.T) {
 	tests := []struct {
 		name          string
-		contextWindow int
+		promptCeiling int
 		want          int
 	}{
-		{name: "1M window derives 850k", contextWindow: 1_000_000, want: 850_000},
-		{name: "200k window derives 170k", contextWindow: 200_000, want: 170_000},
-		{name: "400k window derives 340k", contextWindow: 400_000, want: 340_000},
-		{name: "unknown window falls back to global default", contextWindow: 0, want: UnknownModelCompactionFloor},
-		{name: "negative window falls back to global default", contextWindow: -1, want: UnknownModelCompactionFloor},
+		{name: "1M prompt ceiling is capped at 600k", promptCeiling: 1_000_000, want: 600_000},
+		{name: "200k prompt ceiling derives 170k", promptCeiling: 200_000, want: 170_000},
+		{name: "400k prompt ceiling derives 340k", promptCeiling: 400_000, want: 340_000},
+		{name: "unknown ceiling uses fallback", promptCeiling: 0, want: 185_000},
+		{name: "negative ceiling uses fallback", promptCeiling: -1, want: 185_000},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := DeriveCompactionThreshold(tc.contextWindow); got != tc.want {
-				t.Errorf("DeriveCompactionThreshold(%d) = %d, want %d", tc.contextWindow, got, tc.want)
+			if got := DeriveCompactionThreshold(tc.promptCeiling); got != tc.want {
+				t.Errorf("DeriveCompactionThreshold(%d) = %d, want %d", tc.promptCeiling, got, tc.want)
 			}
 		})
 	}
@@ -37,9 +37,9 @@ func TestCompactionThresholdForDefinition(t *testing.T) {
 	}{
 		{name: "nil definition falls back", def: nil, want: UnknownModelCompactionFloor},
 		{
-			name: "derives from 1M window",
+			name: "caps the derived default from a 1M window",
 			def:  &ModelDefinition{Capabilities: ModelCapabilities{MaxContextWindow: 1_000_000}},
-			want: 850_000,
+			want: 600_000,
 		},
 		{
 			name: "derives from 200k window",
@@ -101,10 +101,8 @@ func TestEffectiveContextWindow(t *testing.T) {
 	}
 }
 
-// TestCompactionThresholdForProvider verifies the provider-aware trigger: the
-// same model compacts sooner when reached via a small-window provider. This is
-// the gpt-5.5@codex regression: the platform window derives 892.5k but the codex
-// backend must compact at 0.85 × 272k so it never overflows.
+// TestCompactionThresholdForProvider verifies that the same model defaults to
+// 600k on a large-window provider and 85% of the prompt ceiling on a smaller one.
 func TestCompactionThresholdForProvider(t *testing.T) {
 	def := &ModelDefinition{
 		Capabilities: ModelCapabilities{MaxContextWindow: 1_050_000},
@@ -113,16 +111,16 @@ func TestCompactionThresholdForProvider(t *testing.T) {
 			{Driver: "openai", APIModel: "gpt-5.5"},
 		},
 	}
-	if got := CompactionThresholdForProvider(def, "openai"); got != int(1_050_000*CompactionThresholdFraction) {
-		t.Errorf("openai provider: got %d, want %d", got, int(1_050_000*CompactionThresholdFraction))
+	if got := CompactionThresholdForProvider(def, "openai"); got != 600_000 {
+		t.Errorf("openai provider: got %d, want 600000", got)
 	}
-	if got := CompactionThresholdForProvider(def, "codex"); got != int(272_000*CompactionThresholdFraction) {
-		t.Errorf("codex provider: got %d, want %d", got, int(272_000*CompactionThresholdFraction))
+	if got := CompactionThresholdForProvider(def, "codex"); got != 231_200 {
+		t.Errorf("codex provider: got %d, want 231200", got)
 	}
-	// An explicit per-model default still wins over provider derivation.
-	override := 12345
+	// An explicit per-model default above 600k still wins over derivation.
+	override := 750_000
 	def.DefaultCompactionThreshold = &override
-	if got := CompactionThresholdForProvider(def, "codex"); got != override {
+	if got := CompactionThresholdForProvider(def, "openai"); got != override {
 		t.Errorf("explicit override: got %d, want %d", got, override)
 	}
 }
@@ -181,8 +179,8 @@ func TestPromptCeiling(t *testing.T) {
 // TestCompactionThresholdForProvider_CodexGPTWindows: the GPT-5.6 family and
 // GPT-6 Astra publish a 1,050,000-token context window with 128,000 max output
 // (developers.openai.com/api/docs/models/<id>.md), so the catalog prompt ceiling
-// is 922,000 and an unpinned codex chat compacts at 85% of it. When the
-// account's /codex/models advertises a lower limit (872,000), that applies.
+// is 922,000. The account can advertise a lower limit (872,000), but both
+// ceilings are large enough for the derived default to hit the 600k cap.
 func TestCompactionThresholdForProvider_CodexGPTWindows(t *testing.T) {
 	reg := MustGetRegistry()
 	live := reg.WithAvailability(func(driver, _ string) ModelAvailability {
@@ -196,23 +194,25 @@ func TestCompactionThresholdForProvider_CodexGPTWindows(t *testing.T) {
 		if !ok {
 			t.Fatalf("model %q not in registry", id)
 		}
-		if got := CompactionThresholdForProvider(def, "codex"); got != 783_700 {
-			t.Errorf("%s@codex from the catalog: threshold = %d, want 783700 (0.85 × 922k)", id, got)
+		if got := CompactionThresholdForProvider(def, "codex"); got != 600_000 {
+			t.Errorf("%s@codex from the catalog: threshold = %d, want 600000", id, got)
 		}
 		resolved, err := live.Resolve(ModelSelector{ID: id + "@codex"}, []string{"codex"})
 		if err != nil {
 			t.Fatalf("resolve %s@codex: %v", id, err)
 		}
-		if got := CompactionThresholdForProvider(&resolved.Definition, "codex"); got != 741_200 {
-			t.Errorf("%s@codex with /models 872k: threshold = %d, want 741200 (0.85 × 872k)", id, got)
+		if got := ProviderPromptCeiling(&resolved.Definition, "codex"); got != 872_000 {
+			t.Errorf("%s@codex with /models 872k: prompt ceiling = %d, want 872000", id, got)
+		}
+		if got := CompactionThresholdForProvider(&resolved.Definition, "codex"); got != 600_000 {
+			t.Errorf("%s@codex with /models 872k: threshold = %d, want 600000", id, got)
 		}
 	}
 }
 
 // TestCompactionThresholdForModel verifies the registry-backed read path used by
-// the UI context-usage denominator: unknown/empty IDs fall back, and every
-// registered model resolves to 0.85 × its real context window (no per-model YAML
-// magic numbers remain).
+// the UI context-usage denominator: unknown/empty IDs fall back, and a known
+// model uses the same default as the provider-agnostic definition lookup.
 func TestCompactionThresholdForModel(t *testing.T) {
 	// Empty and unknown models fall back to the global default.
 	if got := CompactionThresholdForModel(""); got != UnknownModelCompactionFloor {
@@ -231,7 +231,6 @@ func TestCompactionThresholdForModel(t *testing.T) {
 		t.Fatal("registry has no models")
 	}
 
-	// Every registered model derives its threshold from its real context window.
 	for i := range all {
 		def := all[i]
 		want := CompactionThresholdForDefinition(&all[i])
@@ -241,14 +240,13 @@ func TestCompactionThresholdForModel(t *testing.T) {
 		}
 	}
 
-	// Spot-check a known 1M-window flagship model: 0.85 × (1,000,000 window −
-	// 128,000 max output).
+	// Spot-check a large-window flagship model whose default hits the cap.
 	if def, ok := registry.GetDefinition("claude-4.8-opus"); ok {
 		if def.DefaultCompactionThreshold != nil {
 			t.Errorf("claude-4.8-opus should not declare a per-model default_compaction_threshold; got %d", *def.DefaultCompactionThreshold)
 		}
-		if got := CompactionThresholdForModel("claude-4.8-opus"); got != 741_200 {
-			t.Errorf("claude-4.8-opus (1M window, 128k output): got %d, want 741200", got)
+		if got := CompactionThresholdForModel("claude-4.8-opus"); got != 600_000 {
+			t.Errorf("claude-4.8-opus (1M window, 128k output): got %d, want 600000", got)
 		}
 	}
 }
