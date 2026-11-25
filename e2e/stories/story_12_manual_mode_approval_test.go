@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Story 12: builtin://agent in manual mode gates every tool turn on an
@@ -63,7 +64,7 @@ func TestStory12_ManualModeApprovalRunsToolOnlyAfterApprove(t *testing.T) {
 	assert.Equal(t, workflowID, approval.TemporalWorkflowID,
 		"the approval must name the execution the Approve signal is delivered to")
 
-	wf, err := h.Stack.Repo.GetWorkflow(h.Ctx, workflowID)
+	wf, err := store.LoadWorkflow(h.Ctx, h.Stack.Repo.ORM(), workflowID)
 	require.NoError(t, err)
 	require.Equal(t, db.Active(), wf.Status, "an approval blocks inside a running workflow")
 	require.Len(t, h.LLM.StreamCalls(), 1, "no second LLM turn may run while the gate is closed")

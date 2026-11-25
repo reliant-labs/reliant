@@ -60,7 +60,7 @@ func (s *Service) ContinueQueued(ctx context.Context, chatID string) (bool, erro
 		s.dropQueuedMessage(ctx, chatID, "the chat is archived")
 		return false, nil
 	}
-	root, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
+	root, err := s.deps.Workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || root == nil {
 		return false, fmt.Errorf("load root run %s: %w", workflowID, err)
 	}
@@ -174,7 +174,7 @@ func (s *Service) ResumePausedForMachine(ctx context.Context, chatID string) (bo
 	if workflowID == "" {
 		return false, nil
 	}
-	root, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
+	root, err := s.deps.Workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || root == nil {
 		return false, fmt.Errorf("load root run %s: %w", workflowID, err)
 	}

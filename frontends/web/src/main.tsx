@@ -44,12 +44,18 @@ import { shouldPreloadMonaco } from "./lib/monacoPreload";
 import { isDemoShell } from "./lib/shell";
 import { waitForConfig, isConfigReady, renderConfigError } from "./lib/configReady";
 import { bootFixtures } from "./lib/fixturesBoot";
+import { startChanges } from "./lib/changesStore";
 // globalDataStore prefetch is now called from AuthGuard after authentication
 
 // Fixture mode (lib/fixturesConfig.ts): when config.js names a fixture pack,
 // its lazy chunk starts loading now and is installed before the first render
 // below. Without the key this resolves at once and loads nothing.
 const fixtures = bootFixtures();
+
+// The Forge Changes snapshot (lib/changesStore.ts): fetched now, beside the
+// boot, so it is in hand before any surface that asks for a change renders.
+// It never blocks the render and never rejects.
+void startChanges();
 
 // CRITICAL: Wait for Electron's host config BEFORE any gRPC/API calls
 // In production Electron builds, RELIANT_CONFIG (the local daemon URL and other

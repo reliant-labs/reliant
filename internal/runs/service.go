@@ -476,7 +476,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 // because the delivery may have reset-replayed the execution into a new run. Both writes are best-effort: the signal is the step that actually
 // restarts the run, and it has already succeeded.
 func (s *Service) ResumeViaSignal(ctx context.Context, in ResumeViaSignalInput) (ResumeOutcome, error) {
-	before, known := workflow.StatusBeforeWake(ctx, workflow.FacadeWorkflows{Repo: s.repo}, in.WorkflowID)
+	before, known := workflow.StatusBeforeWake(ctx, s.workflows, in.WorkflowID)
 	if err := s.pause.SignalWithRecovery(ctx, in.TargetWorkflowID, in.SignalName, in.SignalData, in.InputUpdate); err != nil {
 		logging.InfoContext(ctx, "[runs] Signal-parked run not reset-resumable — restart at checkpoint",
 			"chatID", in.ChatID, "workflowID", in.WorkflowID,

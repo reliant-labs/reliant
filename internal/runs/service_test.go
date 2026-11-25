@@ -67,12 +67,8 @@ func (f *fakeRepo) UpdateChat(_ context.Context, chat *db.Chat) error {
 	return nil
 }
 
-func (f *fakeRepo) GetWorkflow(context.Context, string) (*db.Workflow, error) {
+func (f *fakeRepo) LoadWorkflow(context.Context, string) (*db.Workflow, error) {
 	return f.workflow, f.workflowErr
-}
-
-func (f *fakeRepo) LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	return f.GetWorkflow(ctx, id)
 }
 
 func (f *fakeRepo) UpdateWorkflowStatus(_ context.Context, id string, status db.WorkflowStatus) error {
