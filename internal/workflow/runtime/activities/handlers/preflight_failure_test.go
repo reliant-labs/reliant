@@ -4,7 +4,6 @@ package handlers
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -13,18 +12,22 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
 
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/dbconn"
 	"github.com/reliant-labs/reliant/internal/errclass"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // The workflow retries PreflightDaemonCheck a few times so one lost heartbeat
 // does not fail a run. What the check decides itself must not ride that
 // ladder: a missing machine retried is the same error card three times, and
 // the message has already been queued for the machine.
-func TestPreflightFailure_VerdictIsNonRetryable(t *testing.T) {
+func TestPreflightVerdict_IsNonRetryable(t *testing.T) {
 	t.Parallel()
 
 	verdict := svcerr.WithClass(errors.New("This chat's machine was removed"), svcerr.ClassUser)
-	err := preflightFailure(verdict)
+	err := preflightVerdict(verdict)
 
 	var appErr *temporal.ApplicationError
 	require.True(t, errors.As(err, &appErr))
@@ -33,20 +36,6 @@ func TestPreflightFailure_VerdictIsNonRetryable(t *testing.T) {
 	assert.Equal(t, "This chat's machine was removed", appErr.Message(), "the user-facing text is unchanged")
 	assert.Equal(t, temporal.ApplicationErrorCategoryBenign, errclass.TemporalCategory(err),
 		"a user error still crosses the activity boundary as benign")
-}
-
-// A database that did not answer is retried, and a cancellation stays a
-// cancellation.
-func TestPreflightFailure_UnavailableAndCancelPassThrough(t *testing.T) {
-	t.Parallel()
-
-	assert.NoError(t, preflightFailure(nil))
-
-	dbDown := fmt.Errorf("failed to get chat for preflight check: %w", &pgconn.ConnectError{})
-	assert.Same(t, dbDown, preflightFailure(dbDown), "left to classifyError, which types it DatabaseUnavailable (retryable)")
-
-	cancelled := fmt.Errorf("check: %w", context.Canceled)
-	assert.Same(t, cancelled, preflightFailure(cancelled))
 }
 
 // End to end through the activity: a refused wake fails non-retryable.
@@ -63,4 +52,56 @@ func TestPreflightWait_HardWakeErrorIsNotRetried(t *testing.T) {
 	assert.True(t, appErr.NonRetryable())
 	assert.Equal(t, PreflightDaemonCheckFailedErrType, appErr.Type())
 	assert.Contains(t, err.Error(), "no daemon registered for this account")
+}
+
+// A database that did not answer, at any read the check returns an error
+// from, is left to classifyError — which types it DatabaseUnavailable, and
+// retries it — rather than made a verdict.
+func TestPreflight_DatabaseOutageStaysRetryable(t *testing.T) {
+	t.Parallel()
+
+	outage := &pgconn.ConnectError{}
+	for name, fail := range map[string]func(*preflightFailingStore, *preflightFailingRows){
+		"GetChat":    func(s *preflightFailingStore, _ *preflightFailingRows) { s.chatErr = outage },
+		"GetProject": func(_ *preflightFailingStore, r *preflightFailingRows) { r.projectErr = outage },
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			store := &preflightFailingStore{}
+			rows := &preflightFailingRows{}
+			fail(store, rows)
+			a := NewPreflightDaemonCheckActivity(store, rows, toolexec.NewRemoteExecutor(&waitFakeRouter{}))
+
+			_, err := a.Execute(context.Background(), PreflightDaemonCheckInput{ChatID: "c1"})
+
+			require.Error(t, err)
+			assert.True(t, dbconn.Unavailable(err), "the outage keeps its identity for classifyError: %v", err)
+			var appErr *temporal.ApplicationError
+			assert.False(t, errors.As(err, &appErr) && appErr.NonRetryable(), "an outage is not a verdict: %v", err)
+		})
+	}
+}
+
+// preflightFailingStore is the check's store, reading one chat and failing
+// GetChat with chatErr when set.
+type preflightFailingStore struct {
+	PreflightDaemonCheckStore
+	chatErr error
+}
+
+func (s *preflightFailingStore) GetChat(context.Context, string) (*core.Chat, error) {
+	if s.chatErr != nil {
+		return nil, s.chatErr
+	}
+	return &core.Chat{ID: "c1", ProjectID: "p1"}, nil
+}
+
+// preflightFailingRows fails GetProject with projectErr.
+type preflightFailingRows struct {
+	WorkspaceRows
+	projectErr error
+}
+
+func (r *preflightFailingRows) GetProject(context.Context, string) (*db.Project, error) {
+	return nil, r.projectErr
 }

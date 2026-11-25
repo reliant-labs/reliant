@@ -15,7 +15,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/dbconn"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinefailure"
@@ -109,36 +108,28 @@ func (a *PreflightDaemonCheckActivity) Category() schema.ActivityCategory {
 }
 
 // PreflightDaemonCheckFailedErrType is the Temporal error type of every
-// failure PreflightDaemonCheck decides itself. Each is non-retryable.
+// verdict PreflightDaemonCheck reaches itself (preflightVerdict). Each is
+// non-retryable.
 const PreflightDaemonCheckFailedErrType = "PreflightDaemonCheckFailed"
 
-func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
-	out, err := a.check(ctx, input)
-	return out, preflightFailure(err)
-}
-
-// preflightFailure decides whether a failed check is retried. The workflow
-// dispatches the check with a short retry ladder so that one lost heartbeat —
-// a worker restarting mid-slice — does not fail the user's run (obs 5a36f26f,
-// "[Workflow Runtime] TimeoutError"). Temporal raises those timeouts itself
-// and retries them; this decides the failures the check returns:
+// preflightVerdict marks a failure the check decided — the machine is gone,
+// its wake was refused, it never came up, or this worker cannot route to
+// daemons at all — as non-retryable.
 //
-//   - a database that did not answer is retried (classifyError types it as
-//     DatabaseUnavailable);
-//   - a cancellation passes through untouched, so it stays a cancellation;
-//   - everything else is the check's verdict — the machine is gone, its wake
-//     was refused, it never came up (terminal has already queued the message
-//     for the machine), or the worker cannot route to daemons at all — and a
-//     retry would only repeat it, so it is non-retryable.
-func preflightFailure(err error) error {
-	if err == nil || errors.Is(err, context.Canceled) || dbconn.Unavailable(err) {
-		return err
-	}
+// The workflow dispatches the check with a short retry ladder, so that one
+// lost heartbeat (a worker restarting mid-slice) does not fail the user's run
+// (obs 5a36f26f, "[Workflow Runtime] TimeoutError"). A verdict must not ride
+// that ladder: retried, it is the same error card three times, and terminal
+// has already queued the message for the machine. Every other failure — a
+// read of the chat or project that failed, a database that did not answer —
+// is left to classifyError, as every activity's is: a database outage stays
+// retryable, a missing row is terminal.
+func preflightVerdict(err error) error {
 	return temporal.NewApplicationErrorWithOptions(err.Error(), PreflightDaemonCheckFailedErrType,
 		temporal.ApplicationErrorOptions{NonRetryable: true, Cause: err})
 }
 
-func (a *PreflightDaemonCheckActivity) check(ctx context.Context, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
+func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
 	// Resolve the user ID from the chat
 	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
 	if err != nil {
@@ -173,7 +164,7 @@ func (a *PreflightDaemonCheckActivity) check(ctx context.Context, input Prefligh
 
 	router := remoteExec.DaemonRouter()
 	if router == nil {
-		return PreflightDaemonCheckOutput{}, fmt.Errorf("daemon router not configured")
+		return PreflightDaemonCheckOutput{}, preflightVerdict(errors.New("daemon router not configured"))
 	}
 
 	// Only an unattended run — one a stored trigger launched, of any kind — may
@@ -298,14 +289,14 @@ func (a *PreflightDaemonCheckActivity) sliceEnd(ctx, exitCtx context.Context, ro
 func (a *PreflightDaemonCheckActivity) terminal(ctx context.Context, chatID string, selector *toolexec.DaemonSelector, attended bool, cause error) (PreflightDaemonCheckOutput, error) {
 	a.setBlocked(ctx, chatID, false)
 	if !attended {
-		return PreflightDaemonCheckOutput{}, cause
+		return PreflightDaemonCheckOutput{}, preflightVerdict(cause)
 	}
 	if _, err := a.repo.QueueChatForMachine(ctx, chatID, queuedMachine(selector)); err != nil {
 		logging.ErrorContext(ctx, "[PreflightDaemonCheck] Failed to queue the message for the machine; the user will have to send it again",
 			"chatID", chatID, "error", err)
-		return PreflightDaemonCheckOutput{}, cause
+		return PreflightDaemonCheckOutput{}, preflightVerdict(cause)
 	}
-	return PreflightDaemonCheckOutput{}, keepClass(cause, fmt.Errorf("%s. %s", strings.TrimRight(cause.Error(), ". "), queuedForMachineNote))
+	return PreflightDaemonCheckOutput{}, preflightVerdict(keepClass(cause, fmt.Errorf("%s. %s", strings.TrimRight(cause.Error(), ". "), queuedForMachineNote)))
 }
 
 // keepClass gives the message terminal builds from cause cause's class when
