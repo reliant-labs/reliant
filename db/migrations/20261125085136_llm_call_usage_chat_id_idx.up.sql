@@ -1,7 +1,7 @@
 -- forge:backward-compatible — a new index; no statement of the previous release changes meaning.
 
 -- Migration: llm_call_usage_chat_id_idx
--- Created: 2026-11-24T18:03:03Z
+-- Created: 2026-11-25T08:51:36Z
 --
 -- The per-chat Trace/Cost tab (ChatTraceService.GetChatTrace,
 -- dev-docs/design/agent-analytics.md §2.2) lists one chat's model calls in
