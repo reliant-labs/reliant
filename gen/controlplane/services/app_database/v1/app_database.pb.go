@@ -2643,14 +2643,14 @@ const file_services_app_database_v1_app_database_proto_rawDesc = "" +
 	"\x18BROWSE_COUNT_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11BROWSE_COUNT_NONE\x10\x01\x12\x1a\n" +
 	"\x16BROWSE_COUNT_ESTIMATED\x10\x02\x12\x16\n" +
-	"\x12BROWSE_COUNT_EXACT\x10\x032\xab\x05\n" +
+	"\x12BROWSE_COUNT_EXACT\x10\x032\xa6\x05\n" +
 	"\x12AppDatabaseService\x12^\n" +
 	"\rQueryDatabase\x12%.controlplane.v1.QueryDatabaseRequest\x1a&.controlplane.v1.QueryDatabaseResponse\x12m\n" +
-	"\x12QueryDatabasePanel\x12*.controlplane.v1.QueryDatabasePanelRequest\x1a+.controlplane.v1.QueryDatabasePanelResponse\x12y\n" +
-	"\x16ListDashboardDatabases\x12..controlplane.v1.ListDashboardDatabasesRequest\x1a/.controlplane.v1.ListDashboardDatabasesResponse\x12~\n" +
-	"\x16ListBrowsableDatabases\x12..controlplane.v1.ListBrowsableDatabasesRequest\x1a/.controlplane.v1.ListBrowsableDatabasesResponse\"\x03\x90\x02\x01\x12l\n" +
-	"\x10DescribeDatabase\x12(.controlplane.v1.DescribeDatabaseRequest\x1a).controlplane.v1.DescribeDatabaseResponse\"\x03\x90\x02\x01\x12]\n" +
-	"\vBrowseTable\x12#.controlplane.v1.BrowseTableRequest\x1a$.controlplane.v1.BrowseTableResponse\"\x03\x90\x02\x01B\xde\x01\n" +
+	"\x12QueryDatabasePanel\x12*.controlplane.v1.QueryDatabasePanelRequest\x1a+.controlplane.v1.QueryDatabasePanelResponse\x12~\n" +
+	"\x16ListDashboardDatabases\x12..controlplane.v1.ListDashboardDatabasesRequest\x1a/.controlplane.v1.ListDashboardDatabasesResponse\"\x03\x90\x02\x01\x12~\n" +
+	"\x16ListBrowsableDatabases\x12..controlplane.v1.ListBrowsableDatabasesRequest\x1a/.controlplane.v1.ListBrowsableDatabasesResponse\"\x03\x90\x02\x01\x12g\n" +
+	"\x10DescribeDatabase\x12(.controlplane.v1.DescribeDatabaseRequest\x1a).controlplane.v1.DescribeDatabaseResponse\x12X\n" +
+	"\vBrowseTable\x12#.controlplane.v1.BrowseTableRequest\x1a$.controlplane.v1.BrowseTableResponseB\xde\x01\n" +
 	"\x13com.controlplane.v1B\x10AppDatabaseProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/app_database/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (

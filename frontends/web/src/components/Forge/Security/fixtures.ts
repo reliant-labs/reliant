@@ -36,7 +36,7 @@ import { byServerOrder, countsOf, passes } from "./vulnDataset";
 
 /**
  * A fixed "now", so relative times do not move: the visual harness's and the
- * preview's frozen clock, FIXED_NOW in e2e/visual/fixtures/base.ts (2026-11-18
+ * preview's frozen clock, FIXED_NOW in e2e/visual/clock.ts (2026-11-18
  * 15:30 UTC). src cannot import e2e/, so it is repeated here and
  * __tests__/fixtures.test.ts holds the two equal. Every fixture time here is
  * relative to it, so nothing that already happened lands in the preview's

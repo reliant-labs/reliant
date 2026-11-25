@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
-import { useMutation } from "@tanstack/react-query";
 
 import Status from "@/components/forge-ui/status";
 import {
@@ -9,7 +8,7 @@ import {
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { capabilities } from "@/services/controlPlane/capabilities";
-import { deleteDaemon } from "@/services/controlPlane/daemon";
+import { useDeleteDaemon } from "@/hooks/controlplane/daemon-service-hooks_gen";
 import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
 
@@ -109,8 +108,9 @@ export function NoActiveMachinePanel() {
   // there is nothing to wake. The only recovery is to delete it and create a
   // new one. Delete is offered for FAILED cloud machines only; a working
   // machine is never removable from here.
-  const deleteDaemonMutation = useMutation({
-    mutationFn: (daemonId: string) => deleteDaemon(daemonId),
+  const deleteDaemonMutation = useDeleteDaemon({
+    // refetch() below re-reads the daemon list; nothing else changes.
+    invalidate: false,
     onSuccess: async () => {
       setError(null);
       await refetch();
@@ -122,9 +122,7 @@ export function NoActiveMachinePanel() {
     },
   });
   const deletingId =
-    deleteDaemonMutation.isPending && typeof deleteDaemonMutation.variables === "string"
-      ? deleteDaemonMutation.variables
-      : null;
+    deleteDaemonMutation.isPending ? (deleteDaemonMutation.variables?.daemonId ?? null) : null;
 
   const handleResume = (daemon: CloudDaemon) => {
     if (daemon.status !== DaemonStatus.SUSPENDED) return;
@@ -142,7 +140,7 @@ export function NoActiveMachinePanel() {
       return;
     }
     setError(null);
-    deleteDaemonMutation.mutate(daemon.daemonId);
+    deleteDaemonMutation.mutate({ daemonId: daemon.daemonId });
   };
 
   const daemons = hasCloud ? (cloudDaemons ?? []) : [];

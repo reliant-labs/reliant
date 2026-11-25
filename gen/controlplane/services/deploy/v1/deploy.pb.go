@@ -454,6 +454,11 @@ const (
 	// The demand fits the claimable plan but the platform will not take it right
 	// now (compute is off, or the platform-wide ceiling is full). Retry later.
 	DeployCapacityCode_DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE DeployCapacityCode = 8
+	// The org has billing and the demand would take it past its live
+	// static-site limit (100 by default; each environment's site counts as
+	// one). Refused, never queued. The limit is a soft one: the fix says how to
+	// have support raise it.
+	DeployCapacityCode_DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED DeployCapacityCode = 9
 )
 
 // Enum value maps for DeployCapacityCode.
@@ -468,6 +473,7 @@ var (
 		6: "DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN",
 		7: "DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE",
 		8: "DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE",
+		9: "DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED",
 	}
 	DeployCapacityCode_value = map[string]int32{
 		"DEPLOY_CAPACITY_CODE_UNSPECIFIED":               0,
@@ -479,6 +485,7 @@ var (
 		"DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN":              6,
 		"DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE":      7,
 		"DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE":     8,
+		"DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED": 9,
 	}
 )
 
@@ -12307,7 +12314,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"*DEPLOY_OBJECT_COMPARISON_STATE_UNSPECIFIED\x10\x00\x12+\n" +
 	"'DEPLOY_OBJECT_COMPARISON_STATE_COMPARED\x10\x01\x121\n" +
 	"-DEPLOY_OBJECT_COMPARISON_STATE_NO_ENVIRONMENT\x10\x02\x121\n" +
-	"-DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING\x10\x03*\x91\x03\n" +
+	"-DEPLOY_OBJECT_COMPARISON_STATE_BUNDLE_MISSING\x10\x03*\xc5\x03\n" +
 	"\x12DeployCapacityCode\x12$\n" +
 	" DEPLOY_CAPACITY_CODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_CAPACITY_CODE_OK\x10\x01\x12(\n" +
@@ -12317,77 +12324,78 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"&DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED\x10\x05\x12%\n" +
 	"!DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN\x10\x06\x12-\n" +
 	")DEPLOY_CAPACITY_CODE_CLAIMABLE_INELIGIBLE\x10\a\x12.\n" +
-	"*DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE\x10\b2\x9a5\n" +
+	"*DEPLOY_CAPACITY_CODE_CLAIMABLE_UNAVAILABLE\x10\b\x122\n" +
+	".DEPLOY_CAPACITY_CODE_STATIC_SITE_LIMIT_REACHED\x10\t2\xac6\n" +
 	"\rDeployService\x12s\n" +
-	"\x14ResolveHostedProject\x12,.controlplane.v1.ResolveHostedProjectRequest\x1a-.controlplane.v1.ResolveHostedProjectResponse\x12p\n" +
-	"\x0fGetCapabilities\x12-.controlplane.v1.GetDeployCapabilitiesRequest\x1a..controlplane.v1.GetDeployCapabilitiesResponse\x12^\n" +
-	"\tGetTenant\x12'.controlplane.v1.GetDeployTenantRequest\x1a(.controlplane.v1.GetDeployTenantResponse\x12g\n" +
+	"\x14ResolveHostedProject\x12,.controlplane.v1.ResolveHostedProjectRequest\x1a-.controlplane.v1.ResolveHostedProjectResponse\x12u\n" +
+	"\x0fGetCapabilities\x12-.controlplane.v1.GetDeployCapabilitiesRequest\x1a..controlplane.v1.GetDeployCapabilitiesResponse\"\x03\x90\x02\x01\x12c\n" +
+	"\tGetTenant\x12'.controlplane.v1.GetDeployTenantRequest\x1a(.controlplane.v1.GetDeployTenantResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\fCreateTenant\x12*.controlplane.v1.CreateDeployTenantRequest\x1a+.controlplane.v1.CreateDeployTenantResponse\x12v\n" +
-	"\x11CreateEnvironment\x12/.controlplane.v1.CreateDeployEnvironmentRequest\x1a0.controlplane.v1.CreateDeployEnvironmentResponse\x12m\n" +
-	"\x0eGetEnvironment\x12,.controlplane.v1.GetDeployEnvironmentRequest\x1a-.controlplane.v1.GetDeployEnvironmentResponse\x12s\n" +
-	"\x10ListEnvironments\x12..controlplane.v1.ListDeployEnvironmentsRequest\x1a/.controlplane.v1.ListDeployEnvironmentsResponse\x12`\n" +
+	"\x11CreateEnvironment\x12/.controlplane.v1.CreateDeployEnvironmentRequest\x1a0.controlplane.v1.CreateDeployEnvironmentResponse\x12r\n" +
+	"\x0eGetEnvironment\x12,.controlplane.v1.GetDeployEnvironmentRequest\x1a-.controlplane.v1.GetDeployEnvironmentResponse\"\x03\x90\x02\x01\x12x\n" +
+	"\x10ListEnvironments\x12..controlplane.v1.ListDeployEnvironmentsRequest\x1a/.controlplane.v1.ListDeployEnvironmentsResponse\"\x03\x90\x02\x01\x12`\n" +
 	"\bListApps\x12&.controlplane.v1.ListDeployAppsRequest\x1a'.controlplane.v1.ListDeployAppsResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x11UpdateEnvironment\x12/.controlplane.v1.UpdateDeployEnvironmentRequest\x1a0.controlplane.v1.UpdateDeployEnvironmentResponse\x12v\n" +
-	"\x11DeleteEnvironment\x12/.controlplane.v1.DeleteDeployEnvironmentRequest\x1a0.controlplane.v1.DeleteDeployEnvironmentResponse\x12v\n" +
-	"\x15ListRetainedDatabases\x12-.controlplane.v1.ListRetainedDatabasesRequest\x1a..controlplane.v1.ListRetainedDatabasesResponse\x12y\n" +
+	"\x11DeleteEnvironment\x12/.controlplane.v1.DeleteDeployEnvironmentRequest\x1a0.controlplane.v1.DeleteDeployEnvironmentResponse\x12{\n" +
+	"\x15ListRetainedDatabases\x12-.controlplane.v1.ListRetainedDatabasesRequest\x1a..controlplane.v1.ListRetainedDatabasesResponse\"\x03\x90\x02\x01\x12y\n" +
 	"\x16DeleteRetainedDatabase\x12..controlplane.v1.DeleteRetainedDatabaseRequest\x1a/.controlplane.v1.DeleteRetainedDatabaseResponse\x12\x8b\x01\n" +
 	"\x1cSetRetainedDatabaseRetention\x124.controlplane.v1.SetRetainedDatabaseRetentionRequest\x1a5.controlplane.v1.SetRetainedDatabaseRetentionResponse\x12r\n" +
 	"\x12GetManagedDatabase\x12*.controlplane.v1.GetManagedDatabaseRequest\x1a+.controlplane.v1.GetManagedDatabaseResponse\"\x03\x90\x02\x01\x12a\n" +
 	"\x0eBeginAppStepUp\x12&.controlplane.v1.BeginAppStepUpRequest\x1a'.controlplane.v1.BeginAppStepUpResponse\x12j\n" +
 	"\x11CompleteAppStepUp\x12).controlplane.v1.CompleteAppStepUpRequest\x1a*.controlplane.v1.CompleteAppStepUpResponse\x12p\n" +
 	"\x13ScheduleAppDeletion\x12+.controlplane.v1.ScheduleAppDeletionRequest\x1a,.controlplane.v1.ScheduleAppDeletionResponse\x12j\n" +
-	"\x11CancelAppDeletion\x12).controlplane.v1.CancelAppDeletionRequest\x1a*.controlplane.v1.CancelAppDeletionResponse\x12a\n" +
-	"\x0eGetAppDeletion\x12&.controlplane.v1.GetAppDeletionRequest\x1a'.controlplane.v1.GetAppDeletionResponse\x12v\n" +
+	"\x11CancelAppDeletion\x12).controlplane.v1.CancelAppDeletionRequest\x1a*.controlplane.v1.CancelAppDeletionResponse\x12f\n" +
+	"\x0eGetAppDeletion\x12&.controlplane.v1.GetAppDeletionRequest\x1a'.controlplane.v1.GetAppDeletionResponse\"\x03\x90\x02\x01\x12v\n" +
 	"\x11EnsureEnvironment\x12/.controlplane.v1.EnsureDeployEnvironmentRequest\x1a0.controlplane.v1.EnsureDeployEnvironmentResponse\x12g\n" +
-	"\x10CreateDeployment\x12(.controlplane.v1.CreateDeploymentRequest\x1a).controlplane.v1.CreateDeploymentResponse\x12^\n" +
-	"\rGetDeployment\x12%.controlplane.v1.GetDeploymentRequest\x1a&.controlplane.v1.GetDeploymentResponse\x12d\n" +
-	"\x0fListDeployments\x12'.controlplane.v1.ListDeploymentsRequest\x1a(.controlplane.v1.ListDeploymentsResponse\x12g\n" +
+	"\x10CreateDeployment\x12(.controlplane.v1.CreateDeploymentRequest\x1a).controlplane.v1.CreateDeploymentResponse\x12c\n" +
+	"\rGetDeployment\x12%.controlplane.v1.GetDeploymentRequest\x1a&.controlplane.v1.GetDeploymentResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fListDeployments\x12'.controlplane.v1.ListDeploymentsRequest\x1a(.controlplane.v1.ListDeploymentsResponse\"\x03\x90\x02\x01\x12g\n" +
 	"\x10UpdateDeployment\x12(.controlplane.v1.UpdateDeploymentRequest\x1a).controlplane.v1.UpdateDeploymentResponse\x12g\n" +
 	"\x10DeleteDeployment\x12(.controlplane.v1.DeleteDeploymentRequest\x1a).controlplane.v1.DeleteDeploymentResponse\x12Z\n" +
 	"\aPromote\x12&.controlplane.v1.PromoteReleaseRequest\x1a'.controlplane.v1.PromoteReleaseResponse\x12g\n" +
 	"\x10SetRollbackFloor\x12(.controlplane.v1.SetRollbackFloorRequest\x1a).controlplane.v1.SetRollbackFloorResponse\x12j\n" +
-	"\x11LiftRollbackFloor\x12).controlplane.v1.LiftRollbackFloorRequest\x1a*.controlplane.v1.LiftRollbackFloorResponse\x12m\n" +
-	"\x12ListRollbackFloors\x12*.controlplane.v1.ListRollbackFloorsRequest\x1a+.controlplane.v1.ListRollbackFloorsResponse\x12Z\n" +
+	"\x11LiftRollbackFloor\x12).controlplane.v1.LiftRollbackFloorRequest\x1a*.controlplane.v1.LiftRollbackFloorResponse\x12r\n" +
+	"\x12ListRollbackFloors\x12*.controlplane.v1.ListRollbackFloorsRequest\x1a+.controlplane.v1.ListRollbackFloorsResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\x05Scale\x12'.controlplane.v1.ScaleDeploymentRequest\x1a(.controlplane.v1.ScaleDeploymentResponse\x12y\n" +
 	"\x16SetEnvironmentRunState\x12..controlplane.v1.SetEnvironmentRunStateRequest\x1a/.controlplane.v1.SetEnvironmentRunStateResponse\x12d\n" +
-	"\x0fRestartWorkload\x12'.controlplane.v1.RestartWorkloadRequest\x1a(.controlplane.v1.RestartWorkloadResponse\x12f\n" +
-	"\tGetStatus\x12+.controlplane.v1.GetDeploymentStatusRequest\x1a,.controlplane.v1.GetDeploymentStatusResponse\x12k\n" +
+	"\x0fRestartWorkload\x12'.controlplane.v1.RestartWorkloadRequest\x1a(.controlplane.v1.RestartWorkloadResponse\x12k\n" +
+	"\tGetStatus\x12+.controlplane.v1.GetDeploymentStatusRequest\x1a,.controlplane.v1.GetDeploymentStatusResponse\"\x03\x90\x02\x01\x12p\n" +
 	"\n" +
-	"StreamLogs\x12,.controlplane.v1.StreamDeploymentLogsRequest\x1a-.controlplane.v1.StreamDeploymentLogsResponse0\x01\x12U\n" +
+	"StreamLogs\x12,.controlplane.v1.StreamDeploymentLogsRequest\x1a-.controlplane.v1.StreamDeploymentLogsResponse\"\x03\x90\x02\x010\x01\x12U\n" +
 	"\n" +
 	"CutRelease\x12\".controlplane.v1.CutReleaseRequest\x1a#.controlplane.v1.CutReleaseResponse\x12|\n" +
-	"\x17RecordReleaseMigrations\x12/.controlplane.v1.RecordReleaseMigrationsRequest\x1a0.controlplane.v1.RecordReleaseMigrationsResponse\x12g\n" +
-	"\fListReleases\x12*.controlplane.v1.ListDeployReleasesRequest\x1a+.controlplane.v1.ListDeployReleasesResponse\x12a\n" +
+	"\x17RecordReleaseMigrations\x12/.controlplane.v1.RecordReleaseMigrationsRequest\x1a0.controlplane.v1.RecordReleaseMigrationsResponse\x12l\n" +
+	"\fListReleases\x12*.controlplane.v1.ListDeployReleasesRequest\x1a+.controlplane.v1.ListDeployReleasesResponse\"\x03\x90\x02\x01\x12f\n" +
 	"\n" +
-	"GetRelease\x12(.controlplane.v1.GetDeployReleaseRequest\x1a).controlplane.v1.GetDeployReleaseResponse\x12m\n" +
-	"\x0eListPromotions\x12,.controlplane.v1.ListDeployPromotionsRequest\x1a-.controlplane.v1.ListDeployPromotionsResponse\x12p\n" +
-	"\x0fCompareReleases\x12-.controlplane.v1.CompareDeployReleasesRequest\x1a..controlplane.v1.CompareDeployReleasesResponse\x12a\n" +
+	"GetRelease\x12(.controlplane.v1.GetDeployReleaseRequest\x1a).controlplane.v1.GetDeployReleaseResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x0eListPromotions\x12,.controlplane.v1.ListDeployPromotionsRequest\x1a-.controlplane.v1.ListDeployPromotionsResponse\"\x03\x90\x02\x01\x12u\n" +
+	"\x0fCompareReleases\x12-.controlplane.v1.CompareDeployReleasesRequest\x1a..controlplane.v1.CompareDeployReleasesResponse\"\x03\x90\x02\x01\x12f\n" +
 	"\n" +
-	"GetRollout\x12(.controlplane.v1.GetDeployRolloutRequest\x1a).controlplane.v1.GetDeployRolloutResponse\x12a\n" +
+	"GetRollout\x12(.controlplane.v1.GetDeployRolloutRequest\x1a).controlplane.v1.GetDeployRolloutResponse\"\x03\x90\x02\x01\x12a\n" +
 	"\n" +
-	"RecordGate\x12(.controlplane.v1.RecordDeployGateRequest\x1a).controlplane.v1.RecordDeployGateResponse\x12^\n" +
-	"\tListGates\x12'.controlplane.v1.ListDeployGatesRequest\x1a(.controlplane.v1.ListDeployGatesResponse\x12U\n" +
-	"\x06GetRun\x12$.controlplane.v1.GetDeployRunRequest\x1a%.controlplane.v1.GetDeployRunResponse\x12^\n" +
-	"\tListUsage\x12'.controlplane.v1.ListDeployUsageRequest\x1a(.controlplane.v1.ListDeployUsageResponse\x12g\n" +
-	"\fRecordBundle\x12*.controlplane.v1.RecordDeployBundleRequest\x1a+.controlplane.v1.RecordDeployBundleResponse\x12^\n" +
-	"\tGetBundle\x12'.controlplane.v1.GetDeployBundleRequest\x1a(.controlplane.v1.GetDeployBundleResponse\x12j\n" +
-	"\x11GetWorkloadConfig\x12).controlplane.v1.GetWorkloadConfigRequest\x1a*.controlplane.v1.GetWorkloadConfigResponse\x12s\n" +
-	"\x10ListConvergences\x12..controlplane.v1.ListDeployConvergencesRequest\x1a/.controlplane.v1.ListDeployConvergencesResponse\x12j\n" +
+	"RecordGate\x12(.controlplane.v1.RecordDeployGateRequest\x1a).controlplane.v1.RecordDeployGateResponse\x12c\n" +
+	"\tListGates\x12'.controlplane.v1.ListDeployGatesRequest\x1a(.controlplane.v1.ListDeployGatesResponse\"\x03\x90\x02\x01\x12Z\n" +
+	"\x06GetRun\x12$.controlplane.v1.GetDeployRunRequest\x1a%.controlplane.v1.GetDeployRunResponse\"\x03\x90\x02\x01\x12c\n" +
+	"\tListUsage\x12'.controlplane.v1.ListDeployUsageRequest\x1a(.controlplane.v1.ListDeployUsageResponse\"\x03\x90\x02\x01\x12g\n" +
+	"\fRecordBundle\x12*.controlplane.v1.RecordDeployBundleRequest\x1a+.controlplane.v1.RecordDeployBundleResponse\x12c\n" +
+	"\tGetBundle\x12'.controlplane.v1.GetDeployBundleRequest\x1a(.controlplane.v1.GetDeployBundleResponse\"\x03\x90\x02\x01\x12o\n" +
+	"\x11GetWorkloadConfig\x12).controlplane.v1.GetWorkloadConfigRequest\x1a*.controlplane.v1.GetWorkloadConfigResponse\"\x03\x90\x02\x01\x12x\n" +
+	"\x10ListConvergences\x12..controlplane.v1.ListDeployConvergencesRequest\x1a/.controlplane.v1.ListDeployConvergencesResponse\"\x03\x90\x02\x01\x12j\n" +
 	"\x11OpenDeployAttempt\x12).controlplane.v1.OpenDeployAttemptRequest\x1a*.controlplane.v1.OpenDeployAttemptResponse\x12p\n" +
 	"\x13ReportDeployAttempt\x12+.controlplane.v1.ReportDeployAttemptRequest\x1a,.controlplane.v1.ReportDeployAttemptResponse\x12m\n" +
-	"\x12CloseDeployAttempt\x12*.controlplane.v1.CloseDeployAttemptRequest\x1a+.controlplane.v1.CloseDeployAttemptResponse\x12m\n" +
-	"\x12ListDeployAttempts\x12*.controlplane.v1.ListDeployAttemptsRequest\x1a+.controlplane.v1.ListDeployAttemptsResponse\x12g\n" +
-	"\x10GetDeployAttempt\x12(.controlplane.v1.GetDeployAttemptRequest\x1a).controlplane.v1.GetDeployAttemptResponse\x12d\n" +
-	"\vGetLiveView\x12).controlplane.v1.GetDeployLiveViewRequest\x1a*.controlplane.v1.GetDeployLiveViewResponse\x12|\n" +
-	"\x13GetEnvironmentShape\x121.controlplane.v1.GetDeployEnvironmentShapeRequest\x1a2.controlplane.v1.GetDeployEnvironmentShapeResponse\x12y\n" +
-	"\x12GetProjectTopology\x120.controlplane.v1.GetDeployProjectTopologyRequest\x1a1.controlplane.v1.GetDeployProjectTopologyResponse\x12U\n" +
+	"\x12CloseDeployAttempt\x12*.controlplane.v1.CloseDeployAttemptRequest\x1a+.controlplane.v1.CloseDeployAttemptResponse\x12r\n" +
+	"\x12ListDeployAttempts\x12*.controlplane.v1.ListDeployAttemptsRequest\x1a+.controlplane.v1.ListDeployAttemptsResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10GetDeployAttempt\x12(.controlplane.v1.GetDeployAttemptRequest\x1a).controlplane.v1.GetDeployAttemptResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\vGetLiveView\x12).controlplane.v1.GetDeployLiveViewRequest\x1a*.controlplane.v1.GetDeployLiveViewResponse\"\x03\x90\x02\x01\x12\x81\x01\n" +
+	"\x13GetEnvironmentShape\x121.controlplane.v1.GetDeployEnvironmentShapeRequest\x1a2.controlplane.v1.GetDeployEnvironmentShapeResponse\"\x03\x90\x02\x01\x12~\n" +
+	"\x12GetProjectTopology\x120.controlplane.v1.GetDeployProjectTopologyRequest\x1a1.controlplane.v1.GetDeployProjectTopologyResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\n" +
-	"PlanDeploy\x12\".controlplane.v1.PlanDeployRequest\x1a#.controlplane.v1.PlanDeployResponse\x12p\n" +
+	"PlanDeploy\x12\".controlplane.v1.PlanDeployRequest\x1a#.controlplane.v1.PlanDeployResponse\"\x03\x90\x02\x01\x12p\n" +
 	"\x13CheckDeployCapacity\x12+.controlplane.v1.CheckDeployCapacityRequest\x1a,.controlplane.v1.CheckDeployCapacityResponse\x12m\n" +
 	"\x12ReportLocalSession\x12*.controlplane.v1.ReportLocalSessionRequest\x1a+.controlplane.v1.ReportLocalSessionResponse\x12|\n" +
 	"\x17MintLocalTelemetryToken\x12/.controlplane.v1.MintLocalTelemetryTokenRequest\x1a0.controlplane.v1.MintLocalTelemetryTokenResponse\x12[\n" +
-	"\fImportLedger\x12$.controlplane.v1.ImportLedgerRequest\x1a%.controlplane.v1.ImportLedgerResponse\x12[\n" +
-	"\bGetDrift\x12&.controlplane.v1.GetDeployDriftRequest\x1a'.controlplane.v1.GetDeployDriftResponseB\xd3\x01\n" +
+	"\fImportLedger\x12$.controlplane.v1.ImportLedgerRequest\x1a%.controlplane.v1.ImportLedgerResponse\x12`\n" +
+	"\bGetDrift\x12&.controlplane.v1.GetDeployDriftRequest\x1a'.controlplane.v1.GetDeployDriftResponse\"\x03\x90\x02\x01B\xd3\x01\n" +
 	"\x13com.controlplane.v1B\vDeployProtoP\x01ZRgithub.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (

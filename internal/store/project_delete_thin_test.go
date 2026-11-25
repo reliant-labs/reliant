@@ -17,7 +17,7 @@ import (
 // request, and every attempt rolled the whole batch back (prod, 2026-11-18).
 // So the bulk under a project's chats — messages with their content blocks,
 // tool calls and results, chat_updates, user_updates, step_executions,
-// node_observations — goes
+// node_observations, tool_call_usage — goes
 // in row-bounded slices before the chat batches run, each slice its own
 // transaction, and nothing of it is left behind. A thread and context window
 // of ANOTHER project forked at a thinned message lose the pointer, rather
@@ -38,7 +38,7 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 		thinnedMessage  = "thin-chat-msg-05"
 		workflowOfChat  = "thin-chat-wf"
 		messagesInChat  = 10
-		minThinningTxns = 4 + 4*4 // ceil(10/3) message slices; 12/4 + one short slice per flat table (4)
+		minThinningTxns = 4 + 5*4 // ceil(10/3) message slices; 12/4 + one short slice per flat table (5)
 	)
 
 	exec := func(query string, args ...any) {
@@ -101,12 +101,16 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 		      VALUES ($1,$2,'step','CallLLM',$3)`, fmt.Sprintf("%s-step-%02d", chat, i), workflowOfChat, now)
 		exec(`INSERT INTO node_observations (id, chat_id, workflow_id, step_id, attempt, created_at)
 		      VALUES ($1,$2,$3,'step',$4,$5)`, fmt.Sprintf("%s-obs-%02d", chat, i), chat, workflowOfChat, i+1, now)
+		exec(`INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, tool_name, tool_kind, location, outcome, created_at)
+		      VALUES ($1,1,'owner',$2,'shell','builtin','daemon','success',$3)`, fmt.Sprintf("%s-tcu-%02d", chat, i), chat, now)
 	}
 
 	// A chat of another project, forked at one of the messages being thinned.
 	seedChat(other, kept)
 	exec(`UPDATE threads SET fork_at_message_id = $2 WHERE id = $1`, kept+"-thread", thinnedMessage)
 	exec(`UPDATE context_windows SET fork_at_message_id = $2 WHERE id = $1`, kept+"-cw", thinnedMessage)
+	exec(`INSERT INTO tool_call_usage (id, attempt, user_id, chat_id, tool_name, tool_kind, location, outcome, created_at)
+	      VALUES ($1,1,'owner',$2,'shell','builtin','daemon','success',$3)`, kept+"-tcu", kept, now)
 
 	under := map[string]string{
 		"messages":               `SELECT count(*) FROM messages WHERE chat_id = $1`,
@@ -117,6 +121,8 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 		"user_updates":           `SELECT count(*) FROM user_updates WHERE chat_id = $1 OR id LIKE $1 || '-%'`,
 		"step_executions":        `SELECT count(*) FROM step_executions WHERE id LIKE $1 || '-%'`,
 		"node_observations":      `SELECT count(*) FROM node_observations WHERE chat_id = $1`,
+		// No foreign key cascades the tool calls' usage records.
+		"tool_call_usage": `SELECT count(*) FROM tool_call_usage WHERE chat_id = $1`,
 		// The delivery record goes with its message, as in the chat batch,
 		// rather than staying as a delivered record naming no message.
 		"agent_messages": `SELECT count(*) FROM agent_messages WHERE chat_id = $1`,
@@ -178,5 +184,8 @@ func TestDeleteUserProjectThinsALargeChatInRowBoundedSlices(t *testing.T) {
 	}
 	if n := count(`SELECT count(*) FROM context_windows WHERE id = $1 AND fork_at_message_id IS NULL`, kept+"-cw"); n != 1 {
 		t.Error("the other project's context window is gone, or still forked at a deleted message")
+	}
+	if n := count(`SELECT count(*) FROM tool_call_usage WHERE chat_id = $1`, kept); n != 1 {
+		t.Errorf("the other project's tool usage records: %d, want 1", n)
 	}
 }

@@ -355,12 +355,21 @@ message DaemonHeartbeat {
   // (RestartRequested). Unset means CURRENT: no restart in progress, or a
   // daemon that predates the drain protocol.
   DaemonUpgradeStatus upgrade = 11;
-  // The host's load and memory as the daemon read them from /proc
-  // (internal/machinehealth). The gateway logs them, with the disk report,
-  // as `machine health` / `machine volume` lines for the self-hosted
-  // machines it is told to watch (MACHINE_STATS_ORGS). Unset for a daemon
-  // that cannot read /proc (macOS, Windows) and for one that predates it.
+  // The host's load, memory, CPU, swap and open files as the daemon read
+  // them (forge/pkg/resmetrics, projected by internal/machinehealth). The
+  // gateway logs them, with the disk report, as `machine health` /
+  // `machine volume` lines for the self-hosted machines it is told to watch
+  // (MACHINE_STATS_ORGS), and keeps the latest on the daemon's attachment
+  // for DaemonInfo.resources. Unset for a daemon whose platform has no
+  // readers yet (macOS and Windows today) and for one that predates it.
   MachineStats machine_stats = 12;
+  // The daemon process's own CPU, memory, file descriptors and threads.
+  // Unset from a daemon that predates it.
+  DaemonProcessStats process_stats = 13;
+  // The daemon's own cgroup v2: pressure stalls, CPU quota and throttling.
+  // Unset outside cgroup v2 (macOS, Windows, cgroup v1 hosts) and from a
+  // daemon that predates it.
+  DaemonCgroupStats cgroup_stats = 14;
 }
 
 // MachineStats is the whole host's load and memory at one moment: what the
@@ -381,6 +390,84 @@ message MachineStats {
   uint64 mem_available_bytes = 6;
   // When the daemon read these (unix ms, its own clock).
   int64 sampled_at_ms = 7;
+  // The machine's CPU use between the daemon's previous reading and this
+  // one, as shares of all CPU time summed over every CPU, from 0 to 1
+  // (/proc/stat): busy is user and system time (nice and interrupts
+  // included), iowait time idle with IO outstanding, steal time the
+  // hypervisor gave to another VM. Unset on the daemon's first reading and
+  // when they could not be read.
+  optional double cpu_busy_ratio = 8;
+  optional double cpu_iowait_ratio = 9;
+  optional double cpu_steal_ratio = 10;
+  // SwapTotal and SwapFree from /proc/meminfo, in bytes. Unset when it could
+  // not be read; total 0 is a machine with no swap.
+  optional uint64 swap_total_bytes = 11;
+  optional uint64 swap_free_bytes = 12;
+  // Open files on the whole machine and the kernel's limit on them
+  // (/proc/sys/fs/file-nr). Unset when it could not be read.
+  optional uint64 open_files = 13;
+  optional uint64 open_files_limit = 14;
+}
+
+// DaemonProcessStats is the daemon process itself at one moment: not the
+// commands it runs, which are their own processes. A reading the daemon could
+// not take is left out, never sent as zero.
+message DaemonProcessStats {
+  // CPU the daemon used between its previous reading and this one, in cores
+  // (2.0 is two cores busy the whole time). Unset on the first reading and
+  // when it could not be read.
+  optional double cpu_cores = 1;
+  // Resident set size, in bytes.
+  optional uint64 rss_bytes = 2;
+  // Open file descriptors, and the soft RLIMIT_NOFILE they count against.
+  optional int64 open_fds = 3;
+  optional int64 fd_limit = 4;
+  // OS threads.
+  optional int64 threads = 5;
+  // Goroutines (runtime.NumGoroutine); always read.
+  int64 goroutines = 6;
+  // When the process started (unix ms).
+  int64 started_at_ms = 7;
+  // When the daemon read these (unix ms, its own clock).
+  int64 sampled_at_ms = 8;
+}
+
+// DaemonCgroupStats is the daemon process's own cgroup v2, the one
+// /proc/self/cgroup names. Its scope depends on the machine: in a container a
+// self-hosted daemon runs in, it is the container's; on a cloud machine it is
+// the daemon/self leaf, which holds the daemon and what it starts without a
+// command cgroup, but not the commands or docker (the workspace's memory is
+// DaemonHeartbeat.memory_used_bytes). A reading the daemon could not take is
+// left out, never sent as zero.
+message DaemonCgroupStats {
+  // Pressure stall information (cpu.pressure, memory.pressure, io.pressure):
+  // the share of the last ten seconds, from 0 to 1, in which some task was
+  // stalled on the resource ("some") or every task was ("full").
+  optional double cpu_some_avg10 = 1;
+  optional double memory_some_avg10 = 2;
+  optional double memory_full_avg10 = 3;
+  optional double io_some_avg10 = 4;
+  optional double io_full_avg10 = 5;
+  // cpu.max as cores (quota over period). Unset when it is "max".
+  optional double cpu_limit_cores = 6;
+  // The share of CPU enforcement periods, between the daemon's previous
+  // reading and this one, in which the cgroup used up its quota (cpu.stat
+  // nr_throttled over nr_periods). Unset with no quota, on the first
+  // reading, and when no period elapsed.
+  optional double cpu_throttled_ratio = 7;
+  // pids.current and pids.max. The limit is unset when it is "max".
+  optional uint64 pids_current = 8;
+  optional uint64 pids_max = 9;
+}
+
+// DaemonResourceStats is the latest resource reading of an attached daemon,
+// as its heartbeats carried it (DaemonHeartbeat.machine_stats,
+// process_stats, cgroup_stats). Each part is unset when the daemon did not
+// send it.
+message DaemonResourceStats {
+  MachineStats machine = 1;
+  DaemonProcessStats process = 2;
+  DaemonCgroupStats cgroup = 3;
 }
 
 // DaemonUpgradeStatus is the daemon's side of the drain protocol: what it is

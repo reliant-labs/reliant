@@ -4,11 +4,14 @@ const {
   canCheckForUpdates,
   classifyCheckResult,
   cleanMinVersion,
+  createDaemonUpgradeResponder,
   createDownloadRunner,
   createForcedUpdate,
   createMenuUpdateCheck,
   isUpdatePending,
+  isUpgradeOverdue,
   nextUpdateState,
+  withDaemonUpgrade,
 } = require("../src/update-check");
 
 // electron-updater 6's checkForUpdates() result when the running version is
@@ -402,4 +405,155 @@ test("a second menu click joins the running check", async () => {
   await first;
   assert.equal(calls.checks, 1);
   assert.equal(calls.messages.length, 1);
+});
+
+// The daemon's upgrade request (createDaemonUpgradeResponder). These model
+// main.js: every status is folded through nextUpdateState after
+// withDaemonUpgrade attaches the newest request, and `announce` re-shows a
+// pending update with the request attached. There is no install dependency at
+// all: the responder cannot install, which is the point (D7).
+const SECURITY_REQUEST = {
+  targetVersion: "1.14.0",
+  urgency: "security",
+  deadlineUnixMs: 1_790_000_600_000,
+  rolloutId: "roll-7",
+  reason: "a security fix",
+};
+
+function daemonUpgrade({ status = null, downloading = false, check, download } = {}) {
+  const calls = { checks: 0, downloads: 0, sent: [] };
+  let request = null;
+  let state = status;
+  const broadcast = (event) => {
+    const sent = withDaemonUpgrade(event, request);
+    calls.sent.push(sent);
+    state = nextUpdateState(state, sent);
+  };
+  const respond = createDaemonUpgradeResponder({
+    getStatus: () => state,
+    isDownloading: () => downloading,
+    check: async () => {
+      calls.checks += 1;
+      const result = await (check ? check() : AVAILABLE);
+      broadcast(
+        result && result.isUpdateAvailable
+          ? { type: "available", version: result.updateInfo.version }
+          : { type: "not-available" },
+      );
+      return result;
+    },
+    download: async () => {
+      calls.downloads += 1;
+      const result = await (download ? download() : { success: true });
+      if (!result.error) broadcast({ type: "downloaded", version: "1.14.0" });
+      return result;
+    },
+    announce: (next) => {
+      request = next;
+      if (isUpdatePending(state)) broadcast(state);
+    },
+  });
+  return { respond, calls, state: () => state };
+}
+
+test("daemon upgrade: checks and downloads by itself, and the ready update carries the request", async () => {
+  const { respond, calls, state } = daemonUpgrade();
+  assert.deepEqual(await respond(SECURITY_REQUEST), { outcome: "downloaded" });
+  assert.equal(calls.checks, 1);
+  assert.equal(calls.downloads, 1);
+  // What every window hears, and what a window that opens later reads: the
+  // downloaded update with the request, which opens the restart prompt.
+  assert.equal(state().type, "downloaded");
+  assert.deepEqual(state().daemonUpgrade, SECURITY_REQUEST);
+  assert.ok(calls.sent.every((event) => event.daemonUpgrade === SECURITY_REQUEST));
+});
+
+test("daemon upgrade: an update already downloaded is shown again with the request, not fetched again", async () => {
+  const { respond, calls, state } = daemonUpgrade({ status: { type: "downloaded", version: "1.14.0" } });
+  assert.deepEqual(await respond(SECURITY_REQUEST), { outcome: "downloaded" });
+  assert.equal(calls.checks, 0);
+  assert.equal(calls.downloads, 0);
+  assert.equal(calls.sent.length, 1, "the downloaded update is re-sent once, with the request");
+  assert.equal(calls.sent[0].type, "downloaded");
+  assert.deepEqual(state().daemonUpgrade, SECURITY_REQUEST);
+});
+
+test("daemon upgrade: a found or downloading update is downloaded without a second check", async () => {
+  const found = daemonUpgrade({ status: { type: "available", version: "1.14.0" } });
+  assert.deepEqual(await found.respond(SECURITY_REQUEST), { outcome: "downloaded" });
+  assert.equal(found.calls.checks, 0);
+  assert.equal(found.calls.downloads, 1);
+
+  // A check now would discard the download in flight; the runner joins it.
+  const inFlight = daemonUpgrade({ status: { type: "download-progress", version: "1.14.0" }, downloading: true });
+  assert.deepEqual(await inFlight.respond(SECURITY_REQUEST), { outcome: "downloaded" });
+  assert.equal(inFlight.calls.checks, 0);
+  assert.equal(inFlight.calls.downloads, 1);
+});
+
+test("daemon upgrade: nothing newer, an inactive updater, or a failure downloads nothing more", async () => {
+  const upToDate = daemonUpgrade({ check: async () => UP_TO_DATE });
+  assert.deepEqual(await upToDate.respond(SECURITY_REQUEST), { outcome: "up-to-date" });
+  assert.equal(upToDate.calls.downloads, 0);
+
+  const inactive = daemonUpgrade({ check: async () => null });
+  assert.deepEqual(await inactive.respond(SECURITY_REQUEST), { outcome: "inactive" });
+
+  const offline = daemonUpgrade({
+    check: async () => {
+      throw new Error("offline");
+    },
+  });
+  assert.deepEqual(await offline.respond(SECURITY_REQUEST), { outcome: "error", error: "offline" });
+
+  const stalled = daemonUpgrade({ download: async () => ({ error: "stalled" }) });
+  assert.deepEqual(await stalled.respond(SECURITY_REQUEST), { outcome: "error", error: "stalled" });
+  // The next notice tries again rather than replaying the failure.
+  await stalled.respond(SECURITY_REQUEST);
+  assert.equal(stalled.calls.downloads, 2);
+});
+
+test("daemon upgrade: a notice while one is acted on joins it, and the newer request is the one shown", async () => {
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const { respond, calls, state } = daemonUpgrade({
+    check: async () => {
+      await gate;
+      return AVAILABLE;
+    },
+  });
+  const sooner = { ...SECURITY_REQUEST, deadlineUnixMs: SECURITY_REQUEST.deadlineUnixMs - 60_000 };
+  const first = respond(SECURITY_REQUEST);
+  const second = respond(sooner);
+  assert.equal(first, second);
+  release();
+  await first;
+  assert.equal(calls.checks, 1);
+  assert.equal(calls.downloads, 1);
+  assert.deepEqual(state().daemonUpgrade, sooner);
+});
+
+test("daemon upgrade: the forced mark and the request coexist in the main process's state", () => {
+  let state = nextUpdateState(null, { type: "forced", minVersion: "1.9.0" });
+  state = nextUpdateState(state, withDaemonUpgrade({ type: "downloaded", version: "1.14.0" }, SECURITY_REQUEST));
+  assert.equal(state.forced, true);
+  assert.deepEqual(state.daemonUpgrade, SECURITY_REQUEST);
+});
+
+test("withDaemonUpgrade attaches the request only when there is one", () => {
+  const status = { type: "available", version: "1.14.0" };
+  assert.equal(withDaemonUpgrade(status, null), status);
+  assert.equal(withDaemonUpgrade(null, SECURITY_REQUEST), null);
+  assert.deepEqual(withDaemonUpgrade(status, SECURITY_REQUEST), { ...status, daemonUpgrade: SECURITY_REQUEST });
+  assert.equal(status.daemonUpgrade, undefined, "the status passed in is not changed");
+});
+
+test("isUpgradeOverdue: security and emergency requests past their deadline", () => {
+  const deadline = SECURITY_REQUEST.deadlineUnixMs;
+  assert.equal(isUpgradeOverdue(SECURITY_REQUEST, deadline - 1), false, "before the deadline");
+  assert.equal(isUpgradeOverdue(SECURITY_REQUEST, deadline), true, "at the deadline");
+  assert.equal(isUpgradeOverdue({ ...SECURITY_REQUEST, urgency: "emergency" }, deadline + 1), true);
+  assert.equal(isUpgradeOverdue({ ...SECURITY_REQUEST, urgency: "normal" }, deadline + 1), false, "normal is never overdue");
+  assert.equal(isUpgradeOverdue({ ...SECURITY_REQUEST, deadlineUnixMs: 0 }, deadline + 1), false, "no deadline");
+  assert.equal(isUpgradeOverdue(null, deadline), false);
 });

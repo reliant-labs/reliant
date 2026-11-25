@@ -1,14 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { billingHandlers } from "@/test/billingTransport";
 import { MachinePlanChange } from "../MachinePlanChange";
 
 const mock = vi.hoisted(() => ({ preview: vi.fn(), change: vi.fn(), active: { id: "org-a", role: "owner" } }));
 vi.mock("@/hooks/useOrgs", () => ({ useActiveOrg: () => ({ active: mock.active }) }));
-vi.mock("@/services/controlPlane/client", () => ({
-  getControlPlaneClient: () => ({ previewMachinePlanChange: mock.preview, changeMachinePlan: mock.change }),
-}));
+
+// The quote and the change run on the generated BillingService hooks.
+beforeEach(() => setTransport(mockTransport(billingHandlers({ previewMachinePlanChange: (r) => mock.preview(r), changeMachinePlan: (r) => mock.change(r) }))));
+afterEach(() => setTransport(null));
 
 const renewal = { seconds: 1_900_000_000n, nanos: 0 };
 const upgrade = {
@@ -43,10 +47,10 @@ it("shows today's prorated charge and the new monthly price, then confirms the e
   expect(screen.getByText(/\+80\.0 L hours/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Upgrade and pay $15.00" }));
   await waitFor(() =>
-    expect(mock.change).toHaveBeenCalledWith({
+    expect(mock.change).toHaveBeenCalledWith(expect.objectContaining({
       orgId: "org-a", planId: "plan_compute_l", pricingVersion: "machine-pooled-v1",
-      prorationDate: upgrade.prorationDate, termsSha256: upgrade.termsSha256,
-    }),
+      prorationDate: expect.objectContaining(upgrade.prorationDate), termsSha256: upgrade.termsSha256,
+    })),
   );
   expect(await screen.findByText(/You're on L now\. \$15\.00 was charged\./)).toBeInTheDocument();
 });

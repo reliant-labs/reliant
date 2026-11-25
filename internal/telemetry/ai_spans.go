@@ -3,11 +3,13 @@ package telemetry
 
 import (
 	"context"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/observe/genai"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -115,6 +117,9 @@ func (t *AgentTurn) EndAs(err error, errType string) {
 // ToolCall is the span of one tool call: "execute_tool <tool>".
 type ToolCall struct {
 	span trace.Span
+	// start and end bracket the span on this process's clock, for Duration
+	// when the span records no times of its own (a no-op provider).
+	start, end time.Time
 }
 
 // StartToolCall opens the span for the tool call callID of tool name, run at
@@ -136,6 +141,7 @@ func StartToolCall(ctx context.Context, name, callID, location, turnTraceParent 
 			link = turn
 		}
 	}
+	start := toolCallNow()
 	ctx, span := genai.StartTool(genai.WithScope(ctx, scope.GenAIAttributes()...), genai.Tool{
 		Name:     name,
 		CallID:   callID,
@@ -148,7 +154,7 @@ func StartToolCall(ctx context.Context, name, callID, location, turnTraceParent 
 	if link.IsValid() {
 		span.AddLink(trace.Link{SpanContext: link})
 	}
-	return ctx, &ToolCall{span: span}
+	return ctx, &ToolCall{span: span, start: start}
 }
 
 // End records how the call ended and ends the span. A tool that ran and
@@ -163,6 +169,25 @@ func (c *ToolCall) End(toolError bool, err error) {
 		c.span.SetAttributes(attribute.String(AttrErrorType, ErrorTypeToolError))
 	}
 	EndAISpan(c.span, err)
+	c.end = toolCallNow()
+}
+
+// toolCallNow is the clock a ToolCall is timed by when its span records no
+// times of its own. Tests replace it.
+var toolCallNow = time.Now
+
+// Duration is how long the call took, once End has run: the span's own
+// duration when it records one (the SDK's spans do, and genai.KeepSampler
+// keeps every tool call), so a record of the call and its span agree to the
+// nanosecond; else the time between StartToolCall and End. Zero before End.
+func (c *ToolCall) Duration() time.Duration {
+	if c == nil || c.end.IsZero() {
+		return 0
+	}
+	if ro, ok := c.span.(sdktrace.ReadOnlySpan); ok && !ro.EndTime().IsZero() {
+		return max(ro.EndTime().Sub(ro.StartTime()), 0)
+	}
+	return max(c.end.Sub(c.start), 0)
 }
 
 // EndAISpan records err's class on span, if any, and ends it: error.type and

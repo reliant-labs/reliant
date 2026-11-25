@@ -28,7 +28,7 @@
  * toggle opens. It is ONE element in all three: only its positioning changes.
  */
 
-import { Suspense, useCallback, useEffect, useMemo, type ReactNode } from "react";
+import { Suspense, useCallback, useEffect, useMemo, type ComponentType, type ReactNode } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { Menu } from "lucide-react";
 
@@ -37,8 +37,8 @@ import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import { useShortcutHost } from "@/hooks/useShortcutHost";
 import { useSidebarOverlay } from "@/hooks/useSidebarOverlay";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
-import { lazyRoute } from "@/lib/lazyRoute";
 import { runsPath } from "@/lib/paths";
+import type { RunsSearch } from "@/routeSchemas";
 import { useSignedIn } from "@/lib/session";
 import { cn } from "@/lib/utils";
 import { useShortcutLabel } from "@/store/shortcutsStore";
@@ -50,14 +50,58 @@ import type { NavigateOptions } from "../sidebar/NavRenderer";
 import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../sidebar/navDrawerHold";
 import { ShellFrameContext, shellFrameScope, toggleShellNav, useNavDrawer, useShellFrame, type ShellFrame } from "./shellFrame";
 
-// The nav and its chat list load with the first shell page, not with the
-// entry chunk every signed-out page pays for.
-const Sidebar = lazyRoute(() => import("../Sidebar"), "Sidebar");
-const SetupGuide = lazyRoute(() => import("../../Onboarding/OnboardingChecklist"), "OnboardingChecklist");
-
 // ── The frame ───────────────────────────────────────────────────────────────
 
-export function AppShellFrame({ children }: { children: ReactNode }) {
+/**
+ * What the frame hands its nav body: the page on screen, and the frame's
+ * navigation, wired to the router, the drawer and the keyboard host.
+ */
+export interface ShellNavProps {
+  /** The page on screen (the router's): which row is current, which app is open. */
+  pathname: string;
+  /** The page's search, carried by the rows that keep a scope (`?project=`, `?env=`). */
+  search: Record<string, unknown>;
+  /** Opens a page; `drill` keeps a narrow window's drawer open on the area's rows. */
+  onNavigate: (href: string, options?: NavigateOptions) => void;
+  /** Opens the Runs tab with filters (the Workflows row's live pill). */
+  onOpenRuns?: (search?: RunsSearch) => void;
+  /** Opens chat search over the page on screen (the keyboard host's). */
+  onOpenChatSearch?: () => void;
+  /** Opens the journey picker over the page on screen (Help › Take a tour). */
+  onOpenTours?: () => void;
+}
+
+/** What the frame hands the Setup Guide that floats over its pages. */
+export interface ShellGuideProps {
+  /** Opens a page (a narrow window's nav drawer closes on it). */
+  onNavigate: (href: string) => void;
+  /** Opens the journey picker over the page on screen. */
+  onOpenTours: () => void;
+}
+
+export interface AppShellFrameProps {
+  /**
+   * The nav body, the column under the macOS title strip. The host chooses it:
+   * the app passes its own (routes.tsx `AppNav`, the lazy Layout/Sidebar), so
+   * the frame never imports the app's nav and a host with another nav (the
+   * public demo) can wear the same frame. A lazy component loads with the
+   * first shell page, not with the entry chunk.
+   */
+  nav: ComponentType<ShellNavProps>;
+  /**
+   * The Setup Guide over every shell page, except while a tour is open: the
+   * app passes its own (routes.tsx `AppSetupGuide`, the lazy
+   * Onboarding/OnboardingChecklist), so the frame never imports the app's
+   * onboarding; a host with nothing to set up (the public demo) passes none.
+   */
+  guide?: ComponentType<ShellGuideProps>;
+  /** Public, read-only hosts may draw the frame without impersonating an authenticated session.
+   * This affects presentation only: it grants no session or keyboard-host capabilities. */
+  publicPreview?: boolean;
+  children: ReactNode;
+}
+
+export function AppShellFrame({ nav, guide, publicPreview = false, children }: AppShellFrameProps) {
   // The RENDERED matches, like the keyboard host: mid-navigation the location
   // already names the destination while the page on screen is still the old one.
   const pathname = useRouterState({
@@ -65,7 +109,7 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
   });
   const routeIds = useRouterState({ select: (s) => s.matches.map((match) => match.routeId).join(" ") });
   const signedIn = useSignedIn();
-  const inShell = shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn });
+  const inShell = shellFrameScope({ routeIds: routeIds.split(" "), pathname, signedIn: signedIn || publicPreview });
 
   const expanded = useWorkspaceStateStore((state) => state.leftSidebarExpanded);
   const narrow = useNarrowViewport();
@@ -136,7 +180,7 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
               {/* The id is how the right panels leave room for the nav; only a docked nav takes any. */}
               <div id={docked ? "layout-left-sidebar" : undefined} className="flex h-full flex-col">
                 <Suspense fallback={null}>
-                  <ShellNav />
+                  <ShellNav nav={nav} />
                 </Suspense>
               </div>
             </ResizableSidebar>
@@ -146,9 +190,9 @@ export function AppShellFrame({ children }: { children: ReactNode }) {
         <div role={inShell ? "main" : undefined} className={inShell ? "flex h-full min-w-0 flex-1 flex-col" : "contents"} data-testid={inShell ? "shell-main" : undefined}>
           {children}
         </div>
-        {inShell && (
+        {inShell && guide && (
           <Suspense fallback={null}>
-            <ShellSetupGuide />
+            <ShellSetupGuide guide={guide} />
           </Suspense>
         )}
       </div>
@@ -167,10 +211,11 @@ function useOpenTours(): () => void {
 }
 
 /**
- * The Setup Guide (Onboarding/OnboardingChecklist.tsx) floats over every shell
- * page, except while a tour is open: the tour's spotlights are the guide then.
+ * The host's Setup Guide (the app's: Onboarding/OnboardingChecklist.tsx) floats
+ * over every shell page, except while a tour is open: the tour's spotlights are
+ * the guide then.
  */
-function ShellSetupGuide() {
+function ShellSetupGuide({ guide: SetupGuide }: { guide: ComponentType<ShellGuideProps> }) {
   const navigate = useNavigate();
   const tourOpen = useRouterState({ select: (s) => (s.location.search as { tour?: unknown }).tour != null });
   const onOpenTours = useOpenTours();
@@ -187,7 +232,7 @@ function ShellSetupGuide() {
 }
 
 /** The nav, wired to the router and the keyboard host. */
-function ShellNav() {
+function ShellNav({ nav: Nav }: { nav: ComponentType<ShellNavProps> }) {
   const navigate = useNavigate();
   const shortcutHost = useShortcutHost();
   const location = useRouterState({ select: (s) => s.location });
@@ -234,7 +279,7 @@ function ShellNav() {
           )}
         </div>
       )}
-      <Sidebar
+      <Nav
         pathname={location.pathname}
         search={location.search as Record<string, unknown>}
         onNavigate={onNavigate}

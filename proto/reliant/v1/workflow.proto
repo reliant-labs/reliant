@@ -254,6 +254,16 @@ message WorkflowListItem {
   // The definition's declared `permissions:` (Workflow.permissions), so a list
   // or detail page can say the workflow can decide approvals.
   repeated string permissions = 23;
+  // Who besides its owner may read a saved workflow (source "user"), set by
+  // SharingService.SetWorkflowDraftSharing: PRIVATE, or ORG while shared with
+  // org_id's members to read and fork. The list holds only the caller's own
+  // saved workflows, so only their owner reads this. UNSPECIFIED for builtin
+  // and project workflows, and from an older server.
+  ResourceVisibility visibility = 24;
+  // The organization a saved workflow (source "user") belongs to, fixed at
+  // creation. Unset for builtin and project workflows, and for a saved
+  // workflow with no org, which cannot be shared.
+  optional string org_id = 25;
 }
 
 // ============================================
@@ -357,6 +367,12 @@ message GetWorkflowResponse {
   // Current validation findings for a user workflow, computed on read (errors,
   // then warnings typed "warning:<category>").
   repeated ValidationError validation_errors = 12;
+  // Who besides its owner may read a user workflow (WorkflowListItem.visibility):
+  // PRIVATE or ORG. Only the owner reads a saved workflow here, so only they
+  // read this. UNSPECIFIED for builtin and project workflows.
+  ResourceVisibility visibility = 13;
+  // The organization a user workflow belongs to (WorkflowListItem.org_id).
+  optional string org_id = 14;
 }
 
 // ============================================

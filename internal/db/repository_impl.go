@@ -16,7 +16,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
@@ -53,49 +52,6 @@ func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	return store.GetChatRow(ctx, r.ORM(), id)
-}
-
-// GetChatRowWithUserCheck is an ownership check that reads only the chats
-// row: userID's chat, or core.ErrChatNotFound for a chat that is missing or
-// another user's. GetChatWithUserCheck is the same check over the activity
-// view, for a caller that needs a derived field.
-//
-// The store read filters on the owner; the row it returns is then confirmed
-// by authz, the one place the rule lives, as a write (the strict question,
-// since these reads back both reads and changes).
-func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*ChatRow, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	chat, err := store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
-		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-	}
-	return chat, nil
-}
-
-func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-
-	chat, err := store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
-		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-	}
-	return chat, nil
 }
 
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
@@ -154,6 +110,13 @@ func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListF
 
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
+}
+
+// LastRunPerWorkflowAndOrg is the newest run of each (workflow, org) pair:
+// LastRunPerWorkflow's candidates, before a caller drops the orgs a person
+// may no longer see (store.LastRunPerWorkflowAndOrg).
+func (r *Repo) LastRunPerWorkflowAndOrg(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
+	return store.LastRunPerWorkflowAndOrg(ctx, r.ORM(), filters)
 }
 
 // ==================== Messages ====================
@@ -3513,6 +3476,8 @@ func (r *Repo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slug
 	return svc.GetWorkflowDraftsBySlugs(ctx, userID, slugs)
 }
 
+// Deprecated: use workflowdrafts.Service.GetWorkflowDraftByName. Kept as a
+// forwarder: the v1 contract removes an exported method only in a major.
 func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
 	svc, err := r.workflowDrafts()
 	if err != nil {
@@ -3521,6 +3486,7 @@ func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) 
 	return svc.GetWorkflowDraftByName(ctx, userID, name)
 }
 
+// Deprecated: use workflowdrafts.Service.ListWorkflowDraftsByUser.
 func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
 	svc, err := r.workflowDrafts()
 	if err != nil {
@@ -3529,6 +3495,7 @@ func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*
 	return svc.ListWorkflowDraftsByUser(ctx, userID)
 }
 
+// Deprecated: use workflowdrafts.Service.UpdateWorkflowDraftDefinition.
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
 	svc, err := r.workflowDrafts()
 	if err != nil {
@@ -3537,6 +3504,7 @@ func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, nam
 	return svc.UpdateWorkflowDraftDefinition(ctx, id, name, slug, definition, status)
 }
 
+// Deprecated: use workflowdrafts.Service.UpdateWorkflowDraftDefinitionAtVersion.
 func (r *Repo) UpdateWorkflowDraftDefinitionAtVersion(ctx context.Context, id string, version int64, name string, slug string, definition string, status WorkflowDraftStatus) error {
 	svc, err := r.workflowDrafts()
 	if err != nil {

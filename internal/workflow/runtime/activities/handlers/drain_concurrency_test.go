@@ -27,6 +27,7 @@ import (
 // store and the thread service share the real Repo, including its transaction.
 type coordinatedDrainStore struct {
 	DrainAgentMessagesStore
+	MailboxQueue
 	serializable bool
 	claims       atomic.Int32
 	arrived      chan struct{}
@@ -41,7 +42,7 @@ func (s *coordinatedDrainStore) RunTx(ctx context.Context, policy orm.TxPolicy, 
 }
 
 func (s *coordinatedDrainStore) MarkAgentMessagesDelivered(ctx context.Context, ids []string, at time.Time, messageID string) ([]string, error) {
-	claimed, err := s.DrainAgentMessagesStore.MarkAgentMessagesDelivered(ctx, ids, at, messageID)
+	claimed, err := s.MailboxQueue.MarkAgentMessagesDelivered(ctx, ids, at, messageID)
 	if err != nil {
 		return nil, err
 	}
@@ -109,11 +110,12 @@ func testCoordinatedDrains(t *testing.T, serializable bool) {
 	retries := db.RecordRetryBackoffs(h.Repo())
 	store := &coordinatedDrainStore{
 		DrainAgentMessagesStore: h.Repo(),
+		MailboxQueue:            dbstore.NewAgentMessageExtStore(h.Repo().ORM()),
 		serializable:            serializable,
 		arrived:                 make(chan struct{}, threadsInChat),
 		release:                 make(chan struct{}),
 	}
-	act := NewDrainAgentMessagesActivity(store, threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())}))
+	act := NewDrainAgentMessagesActivity(DrainAgentMessagesDeps{Store: store, Mailbox: store, Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
 	start := make(chan struct{})
 	outputs := make([]DrainAgentMessagesOutput, threadsInChat)
 	errs := make([]error, threadsInChat)
@@ -157,7 +159,7 @@ func testCoordinatedDrains(t *testing.T, serializable bool) {
 		assert.Zero(t, retries.Len(), "no drain transaction conflicted and had to be retried")
 	}
 	for _, thread := range threadIDs {
-		queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, thread)
+		queued, err := dbstore.ListQueuedAgentMessagesForThread(ctx, h.Repo().ORM(), thread)
 		require.NoError(t, err)
 		assert.Empty(t, queued, "every queued message was delivered")
 	}

@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { UpdateStatus } from "../types/electron";
+import type { DaemonUpgradeRequest, UpdateStatus } from "../types/electron";
 import { logger } from "../lib/logger";
 
 /**
@@ -41,6 +41,18 @@ export function nextPendingUpdate(previous: PendingUpdate | null, event: UpdateS
     default:
       return event as PendingUpdate;
   }
+}
+
+/**
+ * Whether the daemon's upgrade request is overdue at `nowMs`: a security or
+ * emergency request past its deadline. The update dialog says so plainly; the
+ * user still chooses when to restart (a person's machine is never blocked).
+ * Mirrors isUpgradeOverdue in electron/src/update-check.js.
+ */
+export function isUpgradeOverdue(request: DaemonUpgradeRequest | null | undefined, nowMs: number): boolean {
+  if (!request) return false;
+  if (request.urgency !== "security" && request.urgency !== "emergency") return false;
+  return request.deadlineUnixMs > 0 && nowMs >= request.deadlineUnixMs;
 }
 
 function errorText(error: unknown): string {
@@ -132,8 +144,10 @@ export const useAppUpdateStore = create<AppUpdateState>()((set, get) => ({
             ? false
             : isDownloading,
       // A download the user started here and then minimized comes back when it
-      // is ready to install.
-      dialogOpen: dialogOpen || (event.type === "downloaded" && isDownloading),
+      // is ready to install. So does one the app fetched because the platform
+      // asked its daemon to upgrade (daemonUpgrade): downloaded, it waits
+      // for the user to restart.
+      dialogOpen: dialogOpen || (event.type === "downloaded" && (isDownloading || !!event.daemonUpgrade)),
     });
   },
 

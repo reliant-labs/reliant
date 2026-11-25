@@ -278,6 +278,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge fix trimpath-default`](#reliant-forge-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`reliant forge fix zod4-forms`](#reliant-forge-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
 | [`reliant forge frontend`](#reliant-forge-frontend) | Operate on built frontends |
@@ -305,6 +306,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge lint fix harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`reliant forge lint fix narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge lint fix operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge lint fix trimpath-default`](#reliant-forge-lint-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`reliant forge lint fix tx-isolation`](#reliant-forge-lint-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`reliant forge lint fix zod4-forms`](#reliant-forge-lint-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
@@ -580,6 +582,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant server api`](#reliant-server-api) | Run the stateless HTTP + gRPC API server |
 | [`reliant server gateway`](#reliant-server-gateway) | Run the daemon connection gateway |
 | [`reliant server worker`](#reliant-server-worker) | Run the Temporal workflow worker |
+| [`reliant storage`](#reliant-storage) | Inspect what the daemon reclaims of this machine's disk |
+| [`reliant storage idle`](#reliant-storage-idle) | The idle reclaim of scratch directories and idle worktrees' node_modules |
+| [`reliant storage idle report`](#reliant-storage-idle-report) | Show the daemon's last idle reclaim pass |
+| [`reliant storage idle scan`](#reliant-storage-idle-scan) | Run a dry-run idle reclaim pass now and print what it would remove |
 | [`reliant trigger`](#reliant-trigger) | Manage triggers and workflow activations |
 | [`reliant trigger activate`](#reliant-trigger-activate) | Turn on the triggers a workflow declares |
 | [`reliant trigger create`](#reliant-trigger-create) | Create a schedule trigger |
@@ -2594,6 +2600,10 @@ database is an allowed SKIP (exit 78). From that release (or with lint.rules:
 {vuln-gate: error}) a blocking finding exits 1 and a scan that cannot run exits 77,
 a SKIP that fails the gate.
 
+While the rule does not gate, the step never downloads the database: a machine
+without one skips. --pull downloads it first (~200 MB, into $FORGE_VULN_DB_DIR
+when set), which is what a fresh CI runner needs; a gating rule always fetches.
+
 ```
 reliant forge ci vuln-sbom [dir] [flags]
 ```
@@ -2604,6 +2614,7 @@ reliant forge ci vuln-sbom [dir] [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--json` | `bool` | - | print the forge.dev/vuln-list/v1 document |
+| `--pull` | `bool` | - | download the vulnerability database when it is missing or old, even while vuln-gate does not gate (a fresh CI runner) |
 
 ---
 
@@ -9403,6 +9414,7 @@ Examples:
   cli forge env render dev --list                       # one line per object (kind/name/cluster)
   cli forge env render prod --count                     # objects per cluster, and per kind on each
   cli forge env render dev --json | jq .telemetry         # the env's declared telemetry, normalized
+  cli forge env render demo --json | jq .frontends        # each frontend's runtime config (config.js), fixtures included
   cli forge env render dev --cluster k3d-cp-daemon      # only what that cluster receives
   cli forge env render prod --kind Deployment,Job       # only those kinds
   cli forge env render prod --target workspace-proxy    # only that app's objects
@@ -9422,7 +9434,7 @@ reliant forge env render <environment> [flags]
 | `--cluster` | `string` | - | Print ONLY the objects that land on this cluster (the kubectl context named by forge.K8sCluster.cluster) |
 | `--count` | `bool` | - | Print how many objects land on each cluster (and per kind on each), instead of the YAML stream |
 | `--fail-on-write` | `bool` | - | Exit non-zero if any file in the project changed while rendering (the render is not guaranteed side-effect-free — see the command description) |
-| `--json` | `bool` | - | Print one JSON document (forge.env-render/v1) instead of the YAML stream: the objects --list shows, and the env's declared telemetry (forge.Telemetry), normalized |
+| `--json` | `bool` | - | Print one JSON document (forge.env-render/v1) instead of the YAML stream: the objects --list shows, the env's declared telemetry (forge.Telemetry), normalized, and each frontend's runtime config document (fixtures included) |
 | `--kind` | `stringSlice` | `[]` | Print only these kinds (comma-separated or repeated; case-insensitive) |
 | `--list` | `bool` | - | Print one line per object (cluster, kind, namespace, name) instead of the YAML stream |
 | `--name` | `string` | - | Print only objects with this metadata.name |
@@ -10627,6 +10639,7 @@ reliant forge fix [flags]
 | [`harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`trimpath-default`](#reliant-forge-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`zod4-forms`](#reliant-forge-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
 
@@ -11025,6 +11038,43 @@ reliant forge fix operatorkit [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge fix trimpath-default
+
+Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile
+
+Write what a project forge scaffolds today declares, so its Go builds use
+-trimpath and every worktree shares Go build-cache entries:
+
+  - deploy/kcl: "-trimpath" in each forge.GoBuild literal's flags (a new
+    `flags = ["-trimpath"]`, or first in an existing list). forge passes
+    GoBuild.flags to forge build, the host go-run runner, air and BuildOnly
+    variants.
+  - .air.toml (and any air_config an OnHost declares): $FORGE_GO_BUILD_FLAGS
+    in the [build] command, which is how those flags reach air's build; a
+    [build.windows] command still in an older forge's form is replaced by the
+    current one. .air-debug.toml is never touched: debug builds keep paths.
+  - Taskfile.yml: the top-level env GOFLAGS entry that merges -trimpath into
+    the machine's GOFLAGS, for everything Task runs.
+
+Anything that already says trimpath, -trimpath=false included, is left alone,
+and so is any shape it cannot rewrite safely (flags bound to a variable, a
+spread, an edited air command, a Taskfile that sets GOFLAGS itself); the run
+names each with the edit to make by hand. Re-running it changes nothing.
+The rest of the story: `forge skill load migrations/v1.11.0/trimpath-default`.
+
+```
+reliant forge fix trimpath-default [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -12066,6 +12116,7 @@ reliant forge lint [paths...] [flags]
 | `--graph` | `bool` | - | Check the composition graph (internal/app) as a whole: every component and provider is reached by some root, and every listener serves only services of its chain's audience. FAILS the build on an error (graph mode only) |
 | `--guarded-fields` | `bool` | - | Flag a scaffolded edit page whose update_mask still names a column declared 'forge:guards' — saving the form writes it raw and bypasses the rpc that owns it, and pages are scaffold-once so 'forge generate' cannot repair them (warnings only) |
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
+| `--idempotency` | `bool` | - | Flag an rpc whose idempotency_level contradicts its name: a read (Get, List, Search, Find, Check, Has, Is, Count, Exists, Watch, Query, Describe, BatchGet) that does not declare option idempotency_level = NO_SIDE_EFFECTS, which read-only fixture and demo transports require, and a write (Create, Update, Delete, Set, Add, Remove, Upsert, Insert, Patch, Replace, Cancel, Send, Grant, Revoke, Archive, Restore, Purge, Move, Rename) or a forge:mutation rpc that declares it, which makes it a cacheable GET. A unary read whose response carries a secret or a per-call value (a token, password, credential, nonce, challenge, one-time code, oauth_state, api_key, a presigned, upload, download, export, checkout, authorize, reset, invite or claim URL, or a debug_redact field; not a page_token or cursor) must not declare it either: a GET can be cached and replayed to the next caller. A read that really writes, or mints a value on each call, says so with a // forge:mutation: <why> comment above it. Runs in every forge lint (warns first; gates from the release after the one that ships it) |
 | `--install` | `bool` | - | Install a frontend's missing dependencies (and refresh a node_modules older than its lockfile) with its own package manager, frozen to the lockfile, before the frontend lanes run. Off by default: lint never mutates the checkout, and a frontend with no node_modules is a lane that could NOT run, named in the verdict with its install command. The install's output goes to stderr, and nowhere under --quiet unless it fails |
 | `--json` | `bool` | - | Output findings as JSON (see lint_json.go header for the schema; exit code matches text mode) |
 | `--migration-safety` | `bool` | - | Run SQL migration safety checks |
@@ -12114,6 +12165,7 @@ reliant forge lint fix [flags]
 | [`harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`trimpath-default`](#reliant-forge-lint-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`tx-isolation`](#reliant-forge-lint-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`zod4-forms`](#reliant-forge-lint-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
 
@@ -12512,6 +12564,43 @@ reliant forge lint fix operatorkit [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge lint fix trimpath-default
+
+Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile
+
+Write what a project forge scaffolds today declares, so its Go builds use
+-trimpath and every worktree shares Go build-cache entries:
+
+  - deploy/kcl: "-trimpath" in each forge.GoBuild literal's flags (a new
+    `flags = ["-trimpath"]`, or first in an existing list). forge passes
+    GoBuild.flags to forge build, the host go-run runner, air and BuildOnly
+    variants.
+  - .air.toml (and any air_config an OnHost declares): $FORGE_GO_BUILD_FLAGS
+    in the [build] command, which is how those flags reach air's build; a
+    [build.windows] command still in an older forge's form is replaced by the
+    current one. .air-debug.toml is never touched: debug builds keep paths.
+  - Taskfile.yml: the top-level env GOFLAGS entry that merges -trimpath into
+    the machine's GOFLAGS, for everything Task runs.
+
+Anything that already says trimpath, -trimpath=false included, is left alone,
+and so is any shape it cannot rewrite safely (flags bound to a variable, a
+spread, an edited air command, a Taskfile that sets GOFLAGS itself); the run
+names each with the edit to make by hand. Re-running it changes nothing.
+The rest of the story: `forge skill load migrations/v1.11.0/trimpath-default`.
+
+```
+reliant forge lint fix trimpath-default [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -17037,7 +17126,8 @@ reliant forge obs tokens rotate <token-id> [flags]
 One trace as a tree, with its errors and logs
 
 Show one trace: its span tree, the failing spans with their exception, and the
-logs that carry its id. [env] defaults to dev.
+logs that carry its id. [env] defaults to dev. The env may also come first, as
+it does for every sibling verb (cli forge obs trace prod <trace-id>).
 
 Each span line carries what says how it ended: the rpc / http outcome,
 error.type, a database statement's summary, the rows a ClickHouse statement
@@ -19139,6 +19229,11 @@ List pending forge migrations for this project
 
 List forge migration skills for releases this project has not crossed
 yet and whose detection script matches the project's current shape.
+
+It also lists, marked "Missed", the playbooks of releases forge_version has
+already crossed (within the two-minor upgrade window below it) that
+.forge/migrations.json does not record and whose detection still matches: an
+earlier upgrade moved the pin past them without applying them.
 
 Migrations are LLM-readable playbooks under skills/forge/migrations/,
 one per release that introduced a breaking change. This command does NOT
@@ -24752,6 +24847,110 @@ reliant server worker [flags]
 |------|------|---------|-------------|
 | `--health-port` | `int32` | `8081` | Health check endpoint port [env: HEALTH_PORT] |
 | `--pprof-port` | `int32` | `6060` | pprof debug server port (binds 127.0.0.1 only) [env: PPROF_PORT] |
+
+---
+
+## reliant storage
+
+Inspect what the daemon reclaims of this machine's disk
+
+```
+reliant storage
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`idle`](#reliant-storage-idle) | The idle reclaim of scratch directories and idle worktrees' node_modules |
+
+---
+
+### reliant storage idle
+
+The idle reclaim of scratch directories and idle worktrees' node_modules
+
+The daemon frees the disk of directories nobody is using, in two places:
+
+  Scratch directories (~/.reliant/scratch/<chat>/), which the system prompt
+  gives every chat. After 48h unused (no file changed in it and no daemon work
+  named a path in it) and with no process using it, its node_modules, its
+  build output (dist, .next, out, build, .turbo, .vite ... beside a
+  package.json; target beside a Cargo.toml) and its clean, pushed, unlocked
+  git worktrees are removed. After 7 days unused, also counted from its chat's
+  last tool call, the whole directory is removed, unless a git working tree in
+  it holds work that exists nowhere else. A .keep file at the top of a scratch
+  directory keeps it and everything in it.
+
+  Linked worktrees under ~/.reliant/worktrees that are kept for another
+  reason (uncommitted or unpushed work, a chat still bound to them): after 72h
+  unused, their git-ignored node_modules are removed. Nothing else in them is
+  touched.
+
+A command that fails in a directory whose node_modules or build output was
+removed gets a note saying so; reinstall with the project's package manager.
+
+RELIANT_IDLE_RECLAIM sets the mode: auto (the default: it runs wherever the
+storage reaper runs, RELIANT_STORAGE_REAPER), on, dry-run or off. The
+thresholds are RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE,
+RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE and
+RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE.
+
+```
+reliant storage idle
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`report`](#reliant-storage-idle-report) | Show the daemon's last idle reclaim pass |
+| [`scan`](#reliant-storage-idle-scan) | Run a dry-run idle reclaim pass now and print what it would remove |
+
+---
+
+#### reliant storage idle report
+
+Show the daemon's last idle reclaim pass
+
+```
+reliant storage idle report [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the report as JSON |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
+
+---
+
+#### reliant storage idle scan
+
+Run a dry-run idle reclaim pass now and print what it would remove
+
+Run one dry-run pass in this process with the daemon's thresholds and its
+record of use, and print what it would remove and why it would keep the
+rest. It removes nothing and does not replace the daemon's report.
+
+A process can only inspect another process of the same user when that one
+allows it, and the daemon does not, so from a shell every directory the
+daemon holds a file in looks in use. --skip-process-check leaves the process
+check out of the scan to estimate what a pass would free; the daemon's own
+passes always make it.
+
+```
+reliant storage idle scan [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | print the report as JSON |
+| `--skip-process-check` | `bool` | - | estimate without the process check, which a shell cannot make against the daemon's own process |
+| `--state-dir` | `string` | - | the reclaim state directory (default ~/.reliant/reclaim) |
 
 ---
 

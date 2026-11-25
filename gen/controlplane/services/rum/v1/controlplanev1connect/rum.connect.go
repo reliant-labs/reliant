@@ -99,24 +99,28 @@ func NewRumServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+RumServiceListSessionsProcedure,
 			connect.WithSchema(rumServiceMethods.ByName("ListSessions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getSession: connect.NewClient[v1.GetSessionRequest, v1.GetSessionResponse](
 			httpClient,
 			baseURL+RumServiceGetSessionProcedure,
 			connect.WithSchema(rumServiceMethods.ByName("GetSession")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getSessionTimeline: connect.NewClient[v1.GetSessionTimelineRequest, v1.GetSessionTimelineResponse](
 			httpClient,
 			baseURL+RumServiceGetSessionTimelineProcedure,
 			connect.WithSchema(rumServiceMethods.ByName("GetSessionTimeline")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getSessionReplay: connect.NewClient[v1.GetSessionReplayRequest, v1.GetSessionReplayResponse](
 			httpClient,
 			baseURL+RumServiceGetSessionReplayProcedure,
 			connect.WithSchema(rumServiceMethods.ByName("GetSessionReplay")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -200,24 +204,28 @@ func NewRumServiceHandler(svc RumServiceHandler, opts ...connect.HandlerOption) 
 		RumServiceListSessionsProcedure,
 		svc.ListSessions,
 		connect.WithSchema(rumServiceMethods.ByName("ListSessions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	rumServiceGetSessionHandler := connect.NewUnaryHandler(
 		RumServiceGetSessionProcedure,
 		svc.GetSession,
 		connect.WithSchema(rumServiceMethods.ByName("GetSession")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	rumServiceGetSessionTimelineHandler := connect.NewUnaryHandler(
 		RumServiceGetSessionTimelineProcedure,
 		svc.GetSessionTimeline,
 		connect.WithSchema(rumServiceMethods.ByName("GetSessionTimeline")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	rumServiceGetSessionReplayHandler := connect.NewUnaryHandler(
 		RumServiceGetSessionReplayProcedure,
 		svc.GetSessionReplay,
 		connect.WithSchema(rumServiceMethods.ByName("GetSessionReplay")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.RumService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

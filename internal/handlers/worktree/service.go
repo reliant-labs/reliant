@@ -29,6 +29,8 @@ type Deps struct {
 	// Repo reads and writes worktrees, their projects, repos and chats
 	// (deps.go).
 	Repo Repository
+	// Chats reads the chat a worktree is placed for (store.ChatsWithActivityExtStore).
+	Chats Chats
 	// Rows reads a worktree, looks up a create's prior row and deletes a
 	// worktree (deps.go).
 	Rows Rows
@@ -61,6 +63,11 @@ type Deps struct {
 	// periodic sweep, and a permanent delete does not wait on the machine.
 	// forge:optional-dep
 	Settler Settler
+	// PRLinks records which chats a pull request CreateWorktreePR opens was
+	// produced by (chat_pr_links). Without it the pull request is opened and
+	// no chat is linked to it.
+	// forge:optional-dep
+	PRLinks PRLinker
 }
 
 // Router is the slice of toolexec.DaemonRouter the worktree handlers use.
@@ -95,6 +102,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("worktree: Deps.Repo is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("worktree: Deps.Chats is required")
 	}
 	if d.Rows == nil {
 		return fmt.Errorf("worktree: Deps.Rows is required")

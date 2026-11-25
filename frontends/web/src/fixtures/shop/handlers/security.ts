@@ -49,7 +49,7 @@ import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport
 import { shopVulnEngine } from "../model/security";
 import { demoNow } from "../shopStory";
 import { withMessageRequests } from "./defaults";
-import { scopedToDemo } from "./scope";
+import { DEMO_SCOPE, scopedToDemo, type PackScope } from "./scope";
 
 const rpc = (method: string) => `${VulnerabilityService.typeName}/${method}`;
 
@@ -140,7 +140,7 @@ const finding = (f: Finding) => ({
  * clock), with requests normalized to messages and reads outside shop
  * answered empty (scope.ts).
  */
-export function securityHandlers(now: () => number = demoNow): MockHandlers {
+export function securityHandlers(now: () => number = demoNow, scope: PackScope = DEMO_SCOPE): MockHandlers {
   // One engine per transport: the dataset is fixed by the pack clock, which never moves.
   let engine: ReturnType<typeof shopVulnEngine> | null = null;
   const answers = () => (engine ??= shopVulnEngine(now()));
@@ -251,5 +251,5 @@ export function securityHandlers(now: () => number = demoNow): MockHandlers {
       });
     },
   };
-  return withMessageRequests(scopedToDemo(handlers, [VulnerabilityService]), [VulnerabilityService]);
+  return withMessageRequests(scopedToDemo(handlers, [VulnerabilityService], scope), [VulnerabilityService]);
 }

@@ -1288,12 +1288,17 @@ func (FrontendReplaySource) EnumDescriptor() ([]byte, []int) {
 	return file_services_observability_v1_observability_proto_rawDescGZIP(), []int{20}
 }
 
-// TimeRange is a half-open range [start, end). Both ends are required and
-// end must be after start; each RPC caps the length.
+// TimeRange is a half-open range [start, end): either both absolute ends, with
+// end after start, or a window relative to the server's clock (relative), which
+// the server resolves to absolute bounds when it answers. Never both. Each RPC
+// caps the length. A range in a response is always absolute.
 type TimeRange struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Start         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
-	End           *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Start *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start,proto3" json:"start,omitempty"`
+	End   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end,proto3" json:"end,omitempty"`
+	// E.g. {last: 1h}: the hour before the server's now. A client that polls a
+	// moving window sends this, so its request (and its cache key) stays the same.
+	Relative      *v1.RelativeWindow `protobuf:"bytes,3,opt,name=relative,proto3" json:"relative,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1338,6 +1343,13 @@ func (x *TimeRange) GetStart() *timestamppb.Timestamp {
 func (x *TimeRange) GetEnd() *timestamppb.Timestamp {
 	if x != nil {
 		return x.End
+	}
+	return nil
+}
+
+func (x *TimeRange) GetRelative() *v1.RelativeWindow {
+	if x != nil {
+		return x.Relative
 	}
 	return nil
 }
@@ -2979,8 +2991,12 @@ type SearchLogsResponse struct {
 	// instance_users, echoed exactly. Unset when the request named none, or
 	// when this read could not apply it (controlplane.v1.InstanceScope).
 	InstanceScope *v1.InstanceScope `protobuf:"bytes,3,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The absolute range this page read: scope.time_range, resolved when it was
+	// relative. A client pages a relative window by sending this as the next
+	// page's scope.time_range, so every page reads the same range.
+	EffectiveTimeRange *TimeRange `protobuf:"bytes,4,opt,name=effective_time_range,json=effectiveTimeRange,proto3" json:"effective_time_range,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *SearchLogsResponse) Reset() {
@@ -3030,6 +3046,13 @@ func (x *SearchLogsResponse) GetNextPageToken() string {
 func (x *SearchLogsResponse) GetInstanceScope() *v1.InstanceScope {
 	if x != nil {
 		return x.InstanceScope
+	}
+	return nil
+}
+
+func (x *SearchLogsResponse) GetEffectiveTimeRange() *TimeRange {
+	if x != nil {
+		return x.EffectiveTimeRange
 	}
 	return nil
 }
@@ -3356,8 +3379,10 @@ type ListTracesResponse struct {
 	// instance_users, echoed exactly. Unset when the request named none, or
 	// when this read could not apply it (controlplane.v1.InstanceScope).
 	InstanceScope *v1.InstanceScope `protobuf:"bytes,5,opt,name=instance_scope,json=instanceScope,proto3" json:"instance_scope,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// The absolute range this page read (SearchLogsResponse.effective_time_range).
+	EffectiveTimeRange *TimeRange `protobuf:"bytes,6,opt,name=effective_time_range,json=effectiveTimeRange,proto3" json:"effective_time_range,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListTracesResponse) Reset() {
@@ -3421,6 +3446,13 @@ func (x *ListTracesResponse) GetRedGroups() []*TraceRedGroup {
 func (x *ListTracesResponse) GetInstanceScope() *v1.InstanceScope {
 	if x != nil {
 		return x.InstanceScope
+	}
+	return nil
+}
+
+func (x *ListTracesResponse) GetEffectiveTimeRange() *TimeRange {
+	if x != nil {
+		return x.EffectiveTimeRange
 	}
 	return nil
 }
@@ -6302,6 +6334,12 @@ type Workload struct {
 	// declared replicas; unset when neither is known (then render ready alone).
 	// Narrowed to dev instances: ready is the instances' pods reporting, and
 	// desired is unset (an instance declares no replica count).
+	//
+	// A Job or CronJob has no replica claim: ready is its pods running now and
+	// desired is always unset, and its health is judged on its runs (the
+	// latest run in jobs, else the ledger), never on its replicas. A completed
+	// run with no pod running is HEALTHY; a failed one DEGRADED; one running
+	// now PENDING; one with no run on record UNKNOWN.
 	ReadyReplicas   *int32 `protobuf:"varint,13,opt,name=ready_replicas,json=readyReplicas,proto3,oneof" json:"ready_replicas,omitempty"`
 	DesiredReplicas *int32 `protobuf:"varint,14,opt,name=desired_replicas,json=desiredReplicas,proto3,oneof" json:"desired_replicas,omitempty"`
 	// The release this workload is running, e.g. "v1.7.44". Empty when it cannot
@@ -6341,7 +6379,12 @@ type Workload struct {
 	// deployment ledger's spec.kind. Empty when neither knows it (a deployment by
 	// an older forge, a hand-written manifest) and on a read narrowed to dev
 	// instances: fall back to kind.
-	ForgeKind     string `protobuf:"bytes,23,opt,name=forge_kind,json=forgeKind,proto3" json:"forge_kind,omitempty"`
+	ForgeKind string `protobuf:"bytes,23,opt,name=forge_kind,json=forgeKind,proto3" json:"forge_kind,omitempty"`
+	// A CronJob's next scheduled run, from the schedule its environment's
+	// recorded bundle declares (DeclaredWorkload.schedule). Unset for any other
+	// kind, for a CronJob that is suspended, whose schedule is not recorded or
+	// cannot be read, and on a read narrowed to dev instances.
+	NextRunAt     *timestamppb.Timestamp `protobuf:"bytes,24,opt,name=next_run_at,json=nextRunAt,proto3" json:"next_run_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6535,6 +6578,13 @@ func (x *Workload) GetForgeKind() string {
 		return x.ForgeKind
 	}
 	return ""
+}
+
+func (x *Workload) GetNextRunAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.NextRunAt
+	}
+	return nil
 }
 
 // WorkloadHealthChange is one transition of a workload's health, derived from
@@ -11990,10 +12040,11 @@ var File_services_observability_v1_observability_proto protoreflect.FileDescript
 
 const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\n" +
-	"-services/observability/v1/observability.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"k\n" +
+	"-services/observability/v1/observability.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/client.proto\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1ccontrolplane/v1/issues.proto\x1a!controlplane/v1/time_window.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa8\x01\n" +
 	"\tTimeRange\x120\n" +
 	"\x05start\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12,\n" +
-	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\"\x81\x03\n" +
+	"\x03end\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x03end\x12;\n" +
+	"\brelative\x18\x03 \x01(\v2\x1f.controlplane.v1.RelativeWindowR\brelative\"\x81\x03\n" +
 	"\n" +
 	"QueryScope\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1a\n" +
@@ -12152,11 +12203,12 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x05order\x18\x04 \x01(\x0e2\x1a.controlplane.v1.SortOrderR\x05order\x12\x1b\n" +
 	"\tpage_size\x18\x05 \x01(\x05R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\x06 \x01(\tR\tpageToken\"\xb3\x01\n" +
+	"page_token\x18\x06 \x01(\tR\tpageToken\"\x81\x02\n" +
 	"\x12SearchLogsResponse\x12.\n" +
 	"\x04logs\x18\x01 \x03(\v2\x1a.controlplane.v1.LogRecordR\x04logs\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x12E\n" +
-	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\x80\x05\n" +
+	"\x0einstance_scope\x18\x03 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\x12L\n" +
+	"\x14effective_time_range\x18\x04 \x01(\v2\x1a.controlplane.v1.TimeRangeR\x12effectiveTimeRange\"\x80\x05\n" +
 	"\tLogRecord\x128\n" +
 	"\ttimestamp\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\ttimestamp\x12#\n" +
 	"\rseverity_text\x18\x02 \x01(\tR\fseverityText\x12'\n" +
@@ -12209,14 +12261,15 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\b_browserB\x05\n" +
 	"\x03_osB\x13\n" +
 	"\x11_frontend_versionB\x12\n" +
-	"\x10_backend_versionJ\x04\b\x05\x10\x06R\x0fspan_attributes\"\xad\x02\n" +
+	"\x10_backend_versionJ\x04\b\x05\x10\x06R\x0fspan_attributes\"\xfb\x02\n" +
 	"\x12ListTracesResponse\x125\n" +
 	"\x06traces\x18\x01 \x03(\v2\x1d.controlplane.v1.TraceSummaryR\x06traces\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x122\n" +
 	"\x03red\x18\x03 \x01(\v2 .controlplane.v1.TraceRedSummaryR\x03red\x12=\n" +
 	"\n" +
 	"red_groups\x18\x04 \x03(\v2\x1e.controlplane.v1.TraceRedGroupR\tredGroups\x12E\n" +
-	"\x0einstance_scope\x18\x05 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xbe\x01\n" +
+	"\x0einstance_scope\x18\x05 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\x12L\n" +
+	"\x14effective_time_range\x18\x06 \x01(\v2\x1a.controlplane.v1.TimeRangeR\x12effectiveTimeRange\"\xbe\x01\n" +
 	"\rTraceRedGroup\x12?\n" +
 	"\x05group\x18\x01 \x03(\v2).controlplane.v1.TraceRedGroup.GroupEntryR\x05group\x122\n" +
 	"\x03red\x18\x02 \x01(\v2 .controlplane.v1.TraceRedSummaryR\x03red\x1a8\n" +
@@ -12498,7 +12551,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x04jobs\x18\x03 \x03(\v2\x1c.controlplane.v1.WorkloadJobR\x04jobs\x12%\n" +
 	"\x0ejobs_truncated\x18\x04 \x01(\bR\rjobsTruncated\x121\n" +
 	"\x14unavailable_sections\x18\x05 \x03(\tR\x13unavailableSections\x12E\n" +
-	"\x0einstance_scope\x18\x06 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xf4\b\n" +
+	"\x0einstance_scope\x18\x06 \x01(\v2\x1e.controlplane.v1.InstanceScopeR\rinstanceScope\"\xb0\t\n" +
 	"\bWorkload\x12\x15\n" +
 	"\x06env_id\x18\x01 \x01(\tR\x05envId\x12\x19\n" +
 	"\benv_name\x18\x02 \x01(\tR\aenvName\x12\x1a\n" +
@@ -12526,7 +12579,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\fhealth_since\x18\x15 \x01(\v2\x1a.google.protobuf.TimestampR\vhealthSince\x12,\n" +
 	"\x12health_since_known\x18\x16 \x01(\bR\x10healthSinceKnown\x12\x1d\n" +
 	"\n" +
-	"forge_kind\x18\x17 \x01(\tR\tforgeKindB\x11\n" +
+	"forge_kind\x18\x17 \x01(\tR\tforgeKind\x12:\n" +
+	"\vnext_run_at\x18\x18 \x01(\v2\x1a.google.protobuf.TimestampR\tnextRunAtB\x11\n" +
 	"\x0f_ready_replicasB\x13\n" +
 	"\x11_desired_replicas\"\x8d\x02\n" +
 	"\x14WorkloadHealthChange\x12\x15\n" +
@@ -13155,32 +13209,32 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\"FRONTEND_REPLAY_SOURCE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bFRONTEND_REPLAY_SOURCE_LIVE\x10\x01\x12\"\n" +
 	"\x1eFRONTEND_REPLAY_SOURCE_RELEASE\x10\x02\x12\x1f\n" +
-	"\x1bFRONTEND_REPLAY_SOURCE_NONE\x10\x032\xe5\x10\n" +
-	"\x14ObservabilityService\x12U\n" +
+	"\x1bFRONTEND_REPLAY_SOURCE_NONE\x10\x032\xc9\x11\n" +
+	"\x14ObservabilityService\x12Z\n" +
 	"\n" +
-	"SearchLogs\x12\".controlplane.v1.SearchLogsRequest\x1a#.controlplane.v1.SearchLogsResponse\x12U\n" +
+	"SearchLogs\x12\".controlplane.v1.SearchLogsRequest\x1a#.controlplane.v1.SearchLogsResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\n" +
-	"ListTraces\x12\".controlplane.v1.ListTracesRequest\x1a#.controlplane.v1.ListTracesResponse\x12O\n" +
-	"\bGetTrace\x12 .controlplane.v1.GetTraceRequest\x1a!.controlplane.v1.GetTraceResponse\x12X\n" +
-	"\vListMetrics\x12#.controlplane.v1.ListMetricsRequest\x1a$.controlplane.v1.ListMetricsResponse\x12R\n" +
-	"\tGetMetric\x12!.controlplane.v1.GetMetricRequest\x1a\".controlplane.v1.GetMetricResponse\x12p\n" +
-	"\x13ListMetricExemplars\x12+.controlplane.v1.ListMetricExemplarsRequest\x1a,.controlplane.v1.ListMetricExemplarsResponse\x12d\n" +
-	"\x0fGetServiceGraph\x12'.controlplane.v1.GetServiceGraphRequest\x1a(.controlplane.v1.GetServiceGraphResponse\x12y\n" +
-	"\x16GetServiceGraphCatalog\x12..controlplane.v1.GetServiceGraphCatalogRequest\x1a/.controlplane.v1.GetServiceGraphCatalogResponse\x12m\n" +
-	"\x12GetServiceOverview\x12*.controlplane.v1.GetServiceOverviewRequest\x1a+.controlplane.v1.GetServiceOverviewResponse\x12^\n" +
-	"\rGetFlamegraph\x12%.controlplane.v1.GetFlamegraphRequest\x1a&.controlplane.v1.GetFlamegraphResponse\x12l\n" +
-	"\x10ExportPGOProfile\x12(.controlplane.v1.ExportPGOProfileRequest\x1a).controlplane.v1.ExportPGOProfileResponse\"\x03\x90\x02\x01\x12U\n" +
+	"ListTraces\x12\".controlplane.v1.ListTracesRequest\x1a#.controlplane.v1.ListTracesResponse\"\x03\x90\x02\x01\x12T\n" +
+	"\bGetTrace\x12 .controlplane.v1.GetTraceRequest\x1a!.controlplane.v1.GetTraceResponse\"\x03\x90\x02\x01\x12]\n" +
+	"\vListMetrics\x12#.controlplane.v1.ListMetricsRequest\x1a$.controlplane.v1.ListMetricsResponse\"\x03\x90\x02\x01\x12W\n" +
+	"\tGetMetric\x12!.controlplane.v1.GetMetricRequest\x1a\".controlplane.v1.GetMetricResponse\"\x03\x90\x02\x01\x12u\n" +
+	"\x13ListMetricExemplars\x12+.controlplane.v1.ListMetricExemplarsRequest\x1a,.controlplane.v1.ListMetricExemplarsResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fGetServiceGraph\x12'.controlplane.v1.GetServiceGraphRequest\x1a(.controlplane.v1.GetServiceGraphResponse\"\x03\x90\x02\x01\x12~\n" +
+	"\x16GetServiceGraphCatalog\x12..controlplane.v1.GetServiceGraphCatalogRequest\x1a/.controlplane.v1.GetServiceGraphCatalogResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x12GetServiceOverview\x12*.controlplane.v1.GetServiceOverviewRequest\x1a+.controlplane.v1.GetServiceOverviewResponse\"\x03\x90\x02\x01\x12c\n" +
+	"\rGetFlamegraph\x12%.controlplane.v1.GetFlamegraphRequest\x1a&.controlplane.v1.GetFlamegraphResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10ExportPGOProfile\x12(.controlplane.v1.ExportPGOProfileRequest\x1a).controlplane.v1.ExportPGOProfileResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\n" +
-	"QueryPanel\x12\".controlplane.v1.QueryPanelRequest\x1a#.controlplane.v1.QueryPanelResponse\x12p\n" +
-	"\x13ListAttributeValues\x12+.controlplane.v1.ListAttributeValuesRequest\x1a,.controlplane.v1.ListAttributeValuesResponse\x12j\n" +
-	"\x11GetServiceSignals\x12).controlplane.v1.GetServiceSignalsRequest\x1a*.controlplane.v1.GetServiceSignalsResponse\x12^\n" +
-	"\rListWorkloads\x12%.controlplane.v1.ListWorkloadsRequest\x1a&.controlplane.v1.ListWorkloadsResponse\x12X\n" +
-	"\vGetWorkload\x12#.controlplane.v1.GetWorkloadRequest\x1a$.controlplane.v1.GetWorkloadResponse\x12\x82\x01\n" +
-	"\x19GetManagedDatabaseMetrics\x121.controlplane.v1.GetManagedDatabaseMetricsRequest\x1a2.controlplane.v1.GetManagedDatabaseMetricsResponse\x12^\n" +
-	"\rGetDashboards\x12%.controlplane.v1.GetDashboardsRequest\x1a&.controlplane.v1.GetDashboardsResponse\x12g\n" +
-	"\x10GetReleaseHealth\x12(.controlplane.v1.GetReleaseHealthRequest\x1a).controlplane.v1.GetReleaseHealthResponse\x12d\n" +
-	"\x0fGetUserActivity\x12'.controlplane.v1.GetUserActivityRequest\x1a(.controlplane.v1.GetUserActivityResponse\x12m\n" +
-	"\x12ListFrontendReplay\x12*.controlplane.v1.ListFrontendReplayRequest\x1a+.controlplane.v1.ListFrontendReplayResponseB\xe1\x01\n" +
+	"QueryPanel\x12\".controlplane.v1.QueryPanelRequest\x1a#.controlplane.v1.QueryPanelResponse\"\x03\x90\x02\x01\x12u\n" +
+	"\x13ListAttributeValues\x12+.controlplane.v1.ListAttributeValuesRequest\x1a,.controlplane.v1.ListAttributeValuesResponse\"\x03\x90\x02\x01\x12o\n" +
+	"\x11GetServiceSignals\x12).controlplane.v1.GetServiceSignalsRequest\x1a*.controlplane.v1.GetServiceSignalsResponse\"\x03\x90\x02\x01\x12c\n" +
+	"\rListWorkloads\x12%.controlplane.v1.ListWorkloadsRequest\x1a&.controlplane.v1.ListWorkloadsResponse\"\x03\x90\x02\x01\x12]\n" +
+	"\vGetWorkload\x12#.controlplane.v1.GetWorkloadRequest\x1a$.controlplane.v1.GetWorkloadResponse\"\x03\x90\x02\x01\x12\x87\x01\n" +
+	"\x19GetManagedDatabaseMetrics\x121.controlplane.v1.GetManagedDatabaseMetricsRequest\x1a2.controlplane.v1.GetManagedDatabaseMetricsResponse\"\x03\x90\x02\x01\x12c\n" +
+	"\rGetDashboards\x12%.controlplane.v1.GetDashboardsRequest\x1a&.controlplane.v1.GetDashboardsResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\x10GetReleaseHealth\x12(.controlplane.v1.GetReleaseHealthRequest\x1a).controlplane.v1.GetReleaseHealthResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x0fGetUserActivity\x12'.controlplane.v1.GetUserActivityRequest\x1a(.controlplane.v1.GetUserActivityResponse\"\x03\x90\x02\x01\x12r\n" +
+	"\x12ListFrontendReplay\x12*.controlplane.v1.ListFrontendReplayRequest\x1a+.controlplane.v1.ListFrontendReplayResponse\"\x03\x90\x02\x01B\xe1\x01\n" +
 	"\x13com.controlplane.v1B\x12ObservabilityProtoP\x01ZYgithub.com/reliant-labs/reliant/gen/controlplane/services/observability/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
 var (
@@ -13348,288 +13402,293 @@ var file_services_observability_v1_observability_proto_goTypes = []any{
 	nil,                                       // 147: controlplane.v1.GetReleaseHealthRequest.ThresholdOverridesEntry
 	nil,                                       // 148: controlplane.v1.ReleaseAlertRef.LabelsEntry
 	(*timestamppb.Timestamp)(nil),             // 149: google.protobuf.Timestamp
-	(*v1.InstanceScope)(nil),                  // 150: controlplane.v1.InstanceScope
-	(*v1.ClientContext)(nil),                  // 151: controlplane.v1.ClientContext
-	(*v1.ServiceBuild)(nil),                   // 152: controlplane.v1.ServiceBuild
-	(v1.WorkloadKind)(0),                      // 153: controlplane.v1.WorkloadKind
-	(*v1.DeclaredWorkload)(nil),               // 154: controlplane.v1.DeclaredWorkload
-	(*durationpb.Duration)(nil),               // 155: google.protobuf.Duration
-	(*v1.Issue)(nil),                          // 156: controlplane.v1.Issue
+	(*v1.RelativeWindow)(nil),                 // 150: controlplane.v1.RelativeWindow
+	(*v1.InstanceScope)(nil),                  // 151: controlplane.v1.InstanceScope
+	(*v1.ClientContext)(nil),                  // 152: controlplane.v1.ClientContext
+	(*v1.ServiceBuild)(nil),                   // 153: controlplane.v1.ServiceBuild
+	(v1.WorkloadKind)(0),                      // 154: controlplane.v1.WorkloadKind
+	(*v1.DeclaredWorkload)(nil),               // 155: controlplane.v1.DeclaredWorkload
+	(*durationpb.Duration)(nil),               // 156: google.protobuf.Duration
+	(*v1.Issue)(nil),                          // 157: controlplane.v1.Issue
 }
 var file_services_observability_v1_observability_proto_depIdxs = []int32{
 	149, // 0: controlplane.v1.TimeRange.start:type_name -> google.protobuf.Timestamp
 	149, // 1: controlplane.v1.TimeRange.end:type_name -> google.protobuf.Timestamp
-	21,  // 2: controlplane.v1.QueryScope.time_range:type_name -> controlplane.v1.TimeRange
-	34,  // 3: controlplane.v1.QueryScope.filters:type_name -> controlplane.v1.AttributeFilter
-	22,  // 4: controlplane.v1.GetServiceGraphRequest.scope:type_name -> controlplane.v1.QueryScope
-	1,   // 5: controlplane.v1.GetServiceGraphRequest.edge_kinds:type_name -> controlplane.v1.GraphEdgeKind
-	25,  // 6: controlplane.v1.GetServiceGraphResponse.nodes:type_name -> controlplane.v1.GraphNode
-	28,  // 7: controlplane.v1.GetServiceGraphResponse.edges:type_name -> controlplane.v1.GraphEdge
-	29,  // 8: controlplane.v1.GetServiceGraphResponse.completeness:type_name -> controlplane.v1.GraphCompleteness
-	21,  // 9: controlplane.v1.GetServiceGraphResponse.effective_time_range:type_name -> controlplane.v1.TimeRange
-	150, // 10: controlplane.v1.GetServiceGraphResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	0,   // 11: controlplane.v1.GraphNode.kind:type_name -> controlplane.v1.GraphNodeKind
-	1,   // 12: controlplane.v1.GraphEdge.kind:type_name -> controlplane.v1.GraphEdgeKind
-	2,   // 13: controlplane.v1.GraphEdge.evidence:type_name -> controlplane.v1.GraphEvidenceKind
-	26,  // 14: controlplane.v1.GraphEdge.duration:type_name -> controlplane.v1.GraphHistogram
-	27,  // 15: controlplane.v1.GraphEdge.exemplars:type_name -> controlplane.v1.GraphTraceExemplar
-	149, // 16: controlplane.v1.GraphEdge.first_seen:type_name -> google.protobuf.Timestamp
-	149, // 17: controlplane.v1.GraphEdge.last_seen:type_name -> google.protobuf.Timestamp
-	149, // 18: controlplane.v1.GraphCompleteness.aggregated_through:type_name -> google.protobuf.Timestamp
-	22,  // 19: controlplane.v1.GetServiceGraphCatalogRequest.scope:type_name -> controlplane.v1.QueryScope
-	2,   // 20: controlplane.v1.GraphRPCMethod.evidence:type_name -> controlplane.v1.GraphEvidenceKind
-	26,  // 21: controlplane.v1.GraphRPCMethod.duration:type_name -> controlplane.v1.GraphHistogram
-	31,  // 22: controlplane.v1.GetServiceGraphCatalogResponse.methods:type_name -> controlplane.v1.GraphRPCMethod
-	29,  // 23: controlplane.v1.GetServiceGraphCatalogResponse.completeness:type_name -> controlplane.v1.GraphCompleteness
-	32,  // 24: controlplane.v1.GetServiceGraphCatalogResponse.declared_catalogs:type_name -> controlplane.v1.GraphDeclaredCatalog
-	150, // 25: controlplane.v1.GetServiceGraphCatalogResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	4,   // 26: controlplane.v1.AttributeFilter.op:type_name -> controlplane.v1.AttributeOp
-	149, // 27: controlplane.v1.TimePoint.time:type_name -> google.protobuf.Timestamp
-	22,  // 28: controlplane.v1.SearchLogsRequest.scope:type_name -> controlplane.v1.QueryScope
-	3,   // 29: controlplane.v1.SearchLogsRequest.order:type_name -> controlplane.v1.SortOrder
-	38,  // 30: controlplane.v1.SearchLogsResponse.logs:type_name -> controlplane.v1.LogRecord
-	150, // 31: controlplane.v1.SearchLogsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	149, // 32: controlplane.v1.LogRecord.timestamp:type_name -> google.protobuf.Timestamp
-	135, // 33: controlplane.v1.LogRecord.attributes:type_name -> controlplane.v1.LogRecord.AttributesEntry
-	136, // 34: controlplane.v1.LogRecord.resource_attributes:type_name -> controlplane.v1.LogRecord.ResourceAttributesEntry
-	22,  // 35: controlplane.v1.ListTracesRequest.scope:type_name -> controlplane.v1.QueryScope
-	5,   // 36: controlplane.v1.ListTracesRequest.order:type_name -> controlplane.v1.TraceOrder
-	42,  // 37: controlplane.v1.ListTracesResponse.traces:type_name -> controlplane.v1.TraceSummary
-	43,  // 38: controlplane.v1.ListTracesResponse.red:type_name -> controlplane.v1.TraceRedSummary
-	41,  // 39: controlplane.v1.ListTracesResponse.red_groups:type_name -> controlplane.v1.TraceRedGroup
-	150, // 40: controlplane.v1.ListTracesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	137, // 41: controlplane.v1.TraceRedGroup.group:type_name -> controlplane.v1.TraceRedGroup.GroupEntry
-	43,  // 42: controlplane.v1.TraceRedGroup.red:type_name -> controlplane.v1.TraceRedSummary
-	149, // 43: controlplane.v1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
-	151, // 44: controlplane.v1.TraceSummary.client:type_name -> controlplane.v1.ClientContext
-	152, // 45: controlplane.v1.TraceSummary.backend_builds:type_name -> controlplane.v1.ServiceBuild
-	22,  // 46: controlplane.v1.GetTraceRequest.scope:type_name -> controlplane.v1.QueryScope
-	47,  // 47: controlplane.v1.GetTraceResponse.spans:type_name -> controlplane.v1.Span
-	46,  // 48: controlplane.v1.GetTraceResponse.related_traces:type_name -> controlplane.v1.RelatedTrace
-	150, // 49: controlplane.v1.GetTraceResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	149, // 50: controlplane.v1.Span.start_time:type_name -> google.protobuf.Timestamp
-	138, // 51: controlplane.v1.Span.attributes:type_name -> controlplane.v1.Span.AttributesEntry
-	139, // 52: controlplane.v1.Span.resource_attributes:type_name -> controlplane.v1.Span.ResourceAttributesEntry
-	48,  // 53: controlplane.v1.Span.events:type_name -> controlplane.v1.SpanEvent
-	49,  // 54: controlplane.v1.Span.links:type_name -> controlplane.v1.SpanLink
-	149, // 55: controlplane.v1.SpanEvent.time:type_name -> google.protobuf.Timestamp
-	140, // 56: controlplane.v1.SpanEvent.attributes:type_name -> controlplane.v1.SpanEvent.AttributesEntry
-	22,  // 57: controlplane.v1.ListMetricsRequest.scope:type_name -> controlplane.v1.QueryScope
-	52,  // 58: controlplane.v1.ListMetricsResponse.metrics:type_name -> controlplane.v1.MetricInfo
-	150, // 59: controlplane.v1.ListMetricsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	6,   // 60: controlplane.v1.MetricInfo.type:type_name -> controlplane.v1.MetricType
-	7,   // 61: controlplane.v1.MetricInfo.temporality:type_name -> controlplane.v1.MetricTemporality
-	149, // 62: controlplane.v1.MetricInfo.last_seen:type_name -> google.protobuf.Timestamp
-	53,  // 63: controlplane.v1.MetricInfo.declared_attributes:type_name -> controlplane.v1.MetricAttributeSpec
-	22,  // 64: controlplane.v1.GetMetricRequest.scope:type_name -> controlplane.v1.QueryScope
-	6,   // 65: controlplane.v1.GetMetricRequest.metric_type:type_name -> controlplane.v1.MetricType
-	52,  // 66: controlplane.v1.GetMetricResponse.info:type_name -> controlplane.v1.MetricInfo
-	56,  // 67: controlplane.v1.GetMetricResponse.attributes:type_name -> controlplane.v1.MetricAttribute
-	150, // 68: controlplane.v1.GetMetricResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	22,  // 69: controlplane.v1.ListMetricExemplarsRequest.scope:type_name -> controlplane.v1.QueryScope
-	6,   // 70: controlplane.v1.ListMetricExemplarsRequest.metric_type:type_name -> controlplane.v1.MetricType
-	112, // 71: controlplane.v1.ListMetricExemplarsRequest.where:type_name -> controlplane.v1.PanelPredicate
-	141, // 72: controlplane.v1.ListMetricExemplarsRequest.group:type_name -> controlplane.v1.ListMetricExemplarsRequest.GroupEntry
-	21,  // 73: controlplane.v1.ListMetricExemplarsRequest.time_range:type_name -> controlplane.v1.TimeRange
-	59,  // 74: controlplane.v1.ListMetricExemplarsResponse.exemplars:type_name -> controlplane.v1.MetricExemplar
-	150, // 75: controlplane.v1.ListMetricExemplarsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	149, // 76: controlplane.v1.MetricExemplar.time:type_name -> google.protobuf.Timestamp
-	142, // 77: controlplane.v1.MetricExemplar.attributes:type_name -> controlplane.v1.MetricExemplar.AttributesEntry
-	22,  // 78: controlplane.v1.GetServiceOverviewRequest.scope:type_name -> controlplane.v1.QueryScope
-	62,  // 79: controlplane.v1.GetServiceOverviewResponse.services:type_name -> controlplane.v1.ServiceOverview
-	150, // 80: controlplane.v1.GetServiceOverviewResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	35,  // 81: controlplane.v1.ServiceOverview.request_trend:type_name -> controlplane.v1.TimePoint
-	35,  // 82: controlplane.v1.ServiceOverview.error_trend:type_name -> controlplane.v1.TimePoint
-	143, // 83: controlplane.v1.ServiceOverview.group:type_name -> controlplane.v1.ServiceOverview.GroupEntry
-	22,  // 84: controlplane.v1.GetFlamegraphRequest.scope:type_name -> controlplane.v1.QueryScope
-	150, // 85: controlplane.v1.GetFlamegraphResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	22,  // 86: controlplane.v1.ExportPGOProfileRequest.scope:type_name -> controlplane.v1.QueryScope
-	149, // 87: controlplane.v1.ExportPGOProfileResponse.oldest:type_name -> google.protobuf.Timestamp
-	149, // 88: controlplane.v1.ExportPGOProfileResponse.newest:type_name -> google.protobuf.Timestamp
-	22,  // 89: controlplane.v1.ListAttributeValuesRequest.scope:type_name -> controlplane.v1.QueryScope
-	8,   // 90: controlplane.v1.ListAttributeValuesRequest.signal:type_name -> controlplane.v1.Signal
-	69,  // 91: controlplane.v1.ListAttributeValuesResponse.values:type_name -> controlplane.v1.AttributeValue
-	150, // 92: controlplane.v1.ListAttributeValuesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	22,  // 93: controlplane.v1.GetServiceSignalsRequest.scope:type_name -> controlplane.v1.QueryScope
-	72,  // 94: controlplane.v1.GetServiceSignalsResponse.services:type_name -> controlplane.v1.ServiceSignals
-	150, // 95: controlplane.v1.GetServiceSignalsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	22,  // 96: controlplane.v1.ListWorkloadsRequest.scope:type_name -> controlplane.v1.QueryScope
-	75,  // 97: controlplane.v1.ListWorkloadsResponse.workloads:type_name -> controlplane.v1.Workload
-	78,  // 98: controlplane.v1.ListWorkloadsResponse.jobs:type_name -> controlplane.v1.WorkloadJob
-	150, // 99: controlplane.v1.ListWorkloadsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	79,  // 100: controlplane.v1.Workload.containers:type_name -> controlplane.v1.WorkloadContainer
-	81,  // 101: controlplane.v1.Workload.latest_warning:type_name -> controlplane.v1.WorkloadEvent
-	153, // 102: controlplane.v1.Workload.kind:type_name -> controlplane.v1.WorkloadKind
-	10,  // 103: controlplane.v1.Workload.health:type_name -> controlplane.v1.WorkloadHealth
-	11,  // 104: controlplane.v1.Workload.release_basis:type_name -> controlplane.v1.WorkloadReleaseBasis
-	77,  // 105: controlplane.v1.Workload.pods:type_name -> controlplane.v1.WorkloadPod
-	154, // 106: controlplane.v1.Workload.declared:type_name -> controlplane.v1.DeclaredWorkload
-	9,   // 107: controlplane.v1.Workload.health_cause:type_name -> controlplane.v1.WorkloadCause
-	149, // 108: controlplane.v1.Workload.health_since:type_name -> google.protobuf.Timestamp
-	149, // 109: controlplane.v1.WorkloadHealthChange.at:type_name -> google.protobuf.Timestamp
-	10,  // 110: controlplane.v1.WorkloadHealthChange.from:type_name -> controlplane.v1.WorkloadHealth
-	10,  // 111: controlplane.v1.WorkloadHealthChange.to:type_name -> controlplane.v1.WorkloadHealth
-	9,   // 112: controlplane.v1.WorkloadHealthChange.cause:type_name -> controlplane.v1.WorkloadCause
-	12,  // 113: controlplane.v1.WorkloadPod.state:type_name -> controlplane.v1.WorkloadPodState
-	149, // 114: controlplane.v1.WorkloadPod.last_exit_at:type_name -> google.protobuf.Timestamp
-	149, // 115: controlplane.v1.WorkloadPod.first_seen:type_name -> google.protobuf.Timestamp
-	149, // 116: controlplane.v1.WorkloadPod.last_seen:type_name -> google.protobuf.Timestamp
-	81,  // 117: controlplane.v1.WorkloadPod.latest_warning:type_name -> controlplane.v1.WorkloadEvent
-	80,  // 118: controlplane.v1.WorkloadPod.cpu:type_name -> controlplane.v1.ResourceUsage
-	80,  // 119: controlplane.v1.WorkloadPod.memory:type_name -> controlplane.v1.ResourceUsage
-	79,  // 120: controlplane.v1.WorkloadPod.containers:type_name -> controlplane.v1.WorkloadContainer
-	13,  // 121: controlplane.v1.WorkloadJob.result:type_name -> controlplane.v1.WorkloadJobResult
-	149, // 122: controlplane.v1.WorkloadJob.started_at:type_name -> google.protobuf.Timestamp
-	149, // 123: controlplane.v1.WorkloadJob.finished_at:type_name -> google.protobuf.Timestamp
-	149, // 124: controlplane.v1.WorkloadContainer.last_terminated_at:type_name -> google.protobuf.Timestamp
-	80,  // 125: controlplane.v1.WorkloadContainer.cpu:type_name -> controlplane.v1.ResourceUsage
-	80,  // 126: controlplane.v1.WorkloadContainer.memory:type_name -> controlplane.v1.ResourceUsage
-	149, // 127: controlplane.v1.WorkloadEvent.time:type_name -> google.protobuf.Timestamp
-	22,  // 128: controlplane.v1.GetWorkloadRequest.scope:type_name -> controlplane.v1.QueryScope
-	84,  // 129: controlplane.v1.GetWorkloadResponse.series:type_name -> controlplane.v1.WorkloadSeries
-	81,  // 130: controlplane.v1.GetWorkloadResponse.events:type_name -> controlplane.v1.WorkloadEvent
-	88,  // 131: controlplane.v1.GetWorkloadResponse.image_changes:type_name -> controlplane.v1.ImageChange
-	89,  // 132: controlplane.v1.GetWorkloadResponse.version_changes:type_name -> controlplane.v1.VersionChange
-	75,  // 133: controlplane.v1.GetWorkloadResponse.workloads:type_name -> controlplane.v1.Workload
-	76,  // 134: controlplane.v1.GetWorkloadResponse.health_changes:type_name -> controlplane.v1.WorkloadHealthChange
-	150, // 135: controlplane.v1.GetWorkloadResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	14,  // 136: controlplane.v1.WorkloadSeries.metric:type_name -> controlplane.v1.WorkloadMetric
-	35,  // 137: controlplane.v1.WorkloadSeries.points:type_name -> controlplane.v1.TimePoint
-	22,  // 138: controlplane.v1.GetManagedDatabaseMetricsRequest.scope:type_name -> controlplane.v1.QueryScope
-	87,  // 139: controlplane.v1.GetManagedDatabaseMetricsResponse.series:type_name -> controlplane.v1.ManagedDatabaseSeries
-	15,  // 140: controlplane.v1.ManagedDatabaseSeries.metric:type_name -> controlplane.v1.ManagedDatabaseMetric
-	35,  // 141: controlplane.v1.ManagedDatabaseSeries.points:type_name -> controlplane.v1.TimePoint
-	149, // 142: controlplane.v1.ImageChange.first_seen:type_name -> google.protobuf.Timestamp
-	149, // 143: controlplane.v1.ImageChange.last_seen:type_name -> google.protobuf.Timestamp
-	149, // 144: controlplane.v1.VersionChange.first_seen:type_name -> google.protobuf.Timestamp
-	149, // 145: controlplane.v1.VersionChange.last_seen:type_name -> google.protobuf.Timestamp
-	22,  // 146: controlplane.v1.QueryPanelRequest.scope:type_name -> controlplane.v1.QueryScope
-	109, // 147: controlplane.v1.QueryPanelRequest.panel:type_name -> controlplane.v1.Panel
-	112, // 148: controlplane.v1.QueryPanelRequest.filters:type_name -> controlplane.v1.PanelPredicate
-	91,  // 149: controlplane.v1.QueryPanelRequest.panel_ref:type_name -> controlplane.v1.PanelRef
-	144, // 150: controlplane.v1.CompiledStatement.params:type_name -> controlplane.v1.CompiledStatement.ParamsEntry
-	149, // 151: controlplane.v1.HeatmapCell.time:type_name -> google.protobuf.Timestamp
-	100, // 152: controlplane.v1.QueryPanelResponse.series:type_name -> controlplane.v1.PanelSeriesResult
-	101, // 153: controlplane.v1.QueryPanelResponse.rows:type_name -> controlplane.v1.PanelTableRow
-	97,  // 154: controlplane.v1.QueryPanelResponse.funnel_steps:type_name -> controlplane.v1.FunnelStepResult
-	98,  // 155: controlplane.v1.QueryPanelResponse.issues:type_name -> controlplane.v1.PanelIssue
-	99,  // 156: controlplane.v1.QueryPanelResponse.sessions:type_name -> controlplane.v1.PanelSession
-	92,  // 157: controlplane.v1.QueryPanelResponse.compiled_sql:type_name -> controlplane.v1.CompiledStatement
-	93,  // 158: controlplane.v1.QueryPanelResponse.heatmap:type_name -> controlplane.v1.HeatmapCell
-	94,  // 159: controlplane.v1.QueryPanelResponse.sql_columns:type_name -> controlplane.v1.SqlColumn
-	96,  // 160: controlplane.v1.QueryPanelResponse.series_meta:type_name -> controlplane.v1.PanelSeriesMeta
-	109, // 161: controlplane.v1.QueryPanelResponse.panel:type_name -> controlplane.v1.Panel
-	150, // 162: controlplane.v1.QueryPanelResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	6,   // 163: controlplane.v1.PanelSeriesMeta.metric_type:type_name -> controlplane.v1.MetricType
-	7,   // 164: controlplane.v1.PanelSeriesMeta.temporality:type_name -> controlplane.v1.MetricTemporality
-	149, // 165: controlplane.v1.PanelIssue.first_seen:type_name -> google.protobuf.Timestamp
-	149, // 166: controlplane.v1.PanelIssue.last_seen:type_name -> google.protobuf.Timestamp
-	149, // 167: controlplane.v1.PanelSession.start:type_name -> google.protobuf.Timestamp
-	149, // 168: controlplane.v1.PanelSession.end:type_name -> google.protobuf.Timestamp
-	145, // 169: controlplane.v1.PanelSeriesResult.group:type_name -> controlplane.v1.PanelSeriesResult.GroupEntry
-	35,  // 170: controlplane.v1.PanelSeriesResult.points:type_name -> controlplane.v1.TimePoint
-	146, // 171: controlplane.v1.PanelTableRow.group:type_name -> controlplane.v1.PanelTableRow.GroupEntry
-	22,  // 172: controlplane.v1.GetDashboardsRequest.scope:type_name -> controlplane.v1.QueryScope
-	104, // 173: controlplane.v1.GetDashboardsResponse.spec:type_name -> controlplane.v1.DashboardSpec
-	150, // 174: controlplane.v1.GetDashboardsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	105, // 175: controlplane.v1.DashboardSpec.dashboards:type_name -> controlplane.v1.Dashboard
-	113, // 176: controlplane.v1.DashboardSpec.saved_searches:type_name -> controlplane.v1.SavedSearch
-	114, // 177: controlplane.v1.DashboardSpec.alerts:type_name -> controlplane.v1.DashboardAlert
-	107, // 178: controlplane.v1.Dashboard.filters:type_name -> controlplane.v1.DashboardFilter
-	109, // 179: controlplane.v1.Dashboard.panels:type_name -> controlplane.v1.Panel
-	108, // 180: controlplane.v1.Dashboard.annotations:type_name -> controlplane.v1.DashboardAnnotation
-	106, // 181: controlplane.v1.Dashboard.sections:type_name -> controlplane.v1.DashboardSection
-	111, // 182: controlplane.v1.Panel.series:type_name -> controlplane.v1.PanelSeries
-	112, // 183: controlplane.v1.Panel.where:type_name -> controlplane.v1.PanelPredicate
-	110, // 184: controlplane.v1.Panel.funnel:type_name -> controlplane.v1.PanelFunnel
-	112, // 185: controlplane.v1.PanelSeries.where:type_name -> controlplane.v1.PanelPredicate
-	112, // 186: controlplane.v1.SavedSearch.where:type_name -> controlplane.v1.PanelPredicate
-	16,  // 187: controlplane.v1.QueryQuotaExhausted.limit:type_name -> controlplane.v1.QueryQuotaLimit
-	149, // 188: controlplane.v1.QueryQuotaExhausted.resets_at:type_name -> google.protobuf.Timestamp
-	22,  // 189: controlplane.v1.GetReleaseHealthRequest.scope:type_name -> controlplane.v1.QueryScope
-	155, // 190: controlplane.v1.GetReleaseHealthRequest.window:type_name -> google.protobuf.Duration
-	147, // 191: controlplane.v1.GetReleaseHealthRequest.threshold_overrides:type_name -> controlplane.v1.GetReleaseHealthRequest.ThresholdOverridesEntry
-	118, // 192: controlplane.v1.GetReleaseHealthResponse.promotion:type_name -> controlplane.v1.ReleasePromotionRef
-	21,  // 193: controlplane.v1.GetReleaseHealthResponse.before:type_name -> controlplane.v1.TimeRange
-	21,  // 194: controlplane.v1.GetReleaseHealthResponse.after:type_name -> controlplane.v1.TimeRange
-	119, // 195: controlplane.v1.GetReleaseHealthResponse.services:type_name -> controlplane.v1.ServiceHealthDelta
-	156, // 196: controlplane.v1.GetReleaseHealthResponse.new_issues:type_name -> controlplane.v1.Issue
-	156, // 197: controlplane.v1.GetReleaseHealthResponse.regressed_issues:type_name -> controlplane.v1.Issue
-	123, // 198: controlplane.v1.GetReleaseHealthResponse.firing_alerts:type_name -> controlplane.v1.ReleaseAlertRef
-	124, // 199: controlplane.v1.GetReleaseHealthResponse.workload_findings:type_name -> controlplane.v1.WorkloadFinding
-	17,  // 200: controlplane.v1.GetReleaseHealthResponse.verdict:type_name -> controlplane.v1.ReleaseVerdict
-	125, // 201: controlplane.v1.GetReleaseHealthResponse.findings:type_name -> controlplane.v1.ReleaseFinding
-	126, // 202: controlplane.v1.GetReleaseHealthResponse.thresholds:type_name -> controlplane.v1.EffectiveThreshold
-	150, // 203: controlplane.v1.GetReleaseHealthResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
-	123, // 204: controlplane.v1.GetReleaseHealthResponse.baseline_alerts:type_name -> controlplane.v1.ReleaseAlertRef
-	149, // 205: controlplane.v1.ReleasePromotionRef.promoted_at:type_name -> google.protobuf.Timestamp
-	149, // 206: controlplane.v1.ReleasePromotionRef.live_at:type_name -> google.protobuf.Timestamp
-	120, // 207: controlplane.v1.ServiceHealthDelta.before:type_name -> controlplane.v1.ServiceWindowStats
-	120, // 208: controlplane.v1.ServiceHealthDelta.after:type_name -> controlplane.v1.ServiceWindowStats
-	121, // 209: controlplane.v1.ServiceHealthDelta.browser:type_name -> controlplane.v1.BrowserHealthDelta
-	122, // 210: controlplane.v1.BrowserHealthDelta.before:type_name -> controlplane.v1.BrowserWindowStats
-	122, // 211: controlplane.v1.BrowserHealthDelta.after:type_name -> controlplane.v1.BrowserWindowStats
-	149, // 212: controlplane.v1.ReleaseAlertRef.firing_at:type_name -> google.protobuf.Timestamp
-	148, // 213: controlplane.v1.ReleaseAlertRef.labels:type_name -> controlplane.v1.ReleaseAlertRef.LabelsEntry
-	18,  // 214: controlplane.v1.ReleaseFinding.code:type_name -> controlplane.v1.ReleaseFindingCode
-	129, // 215: controlplane.v1.ListFrontendReplayResponse.frontends:type_name -> controlplane.v1.FrontendReplay
-	19,  // 216: controlplane.v1.FrontendReplay.state:type_name -> controlplane.v1.FrontendReplayState
-	20,  // 217: controlplane.v1.FrontendReplay.source:type_name -> controlplane.v1.FrontendReplaySource
-	22,  // 218: controlplane.v1.GetUserActivityRequest.scope:type_name -> controlplane.v1.QueryScope
-	134, // 219: controlplane.v1.GetUserActivityResponse.envs:type_name -> controlplane.v1.EnvUserActivity
-	132, // 220: controlplane.v1.EnvUserActivity.current:type_name -> controlplane.v1.UserActivityCounts
-	132, // 221: controlplane.v1.EnvUserActivity.previous:type_name -> controlplane.v1.UserActivityCounts
-	133, // 222: controlplane.v1.EnvUserActivity.days:type_name -> controlplane.v1.UserActivityDay
-	149, // 223: controlplane.v1.EnvUserActivity.first_event_at:type_name -> google.protobuf.Timestamp
-	149, // 224: controlplane.v1.EnvUserActivity.new_decided_from:type_name -> google.protobuf.Timestamp
-	149, // 225: controlplane.v1.EnvUserActivity.previous_new_decided_from:type_name -> google.protobuf.Timestamp
-	36,  // 226: controlplane.v1.ObservabilityService.SearchLogs:input_type -> controlplane.v1.SearchLogsRequest
-	39,  // 227: controlplane.v1.ObservabilityService.ListTraces:input_type -> controlplane.v1.ListTracesRequest
-	44,  // 228: controlplane.v1.ObservabilityService.GetTrace:input_type -> controlplane.v1.GetTraceRequest
-	50,  // 229: controlplane.v1.ObservabilityService.ListMetrics:input_type -> controlplane.v1.ListMetricsRequest
-	54,  // 230: controlplane.v1.ObservabilityService.GetMetric:input_type -> controlplane.v1.GetMetricRequest
-	57,  // 231: controlplane.v1.ObservabilityService.ListMetricExemplars:input_type -> controlplane.v1.ListMetricExemplarsRequest
-	23,  // 232: controlplane.v1.ObservabilityService.GetServiceGraph:input_type -> controlplane.v1.GetServiceGraphRequest
-	30,  // 233: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:input_type -> controlplane.v1.GetServiceGraphCatalogRequest
-	60,  // 234: controlplane.v1.ObservabilityService.GetServiceOverview:input_type -> controlplane.v1.GetServiceOverviewRequest
-	63,  // 235: controlplane.v1.ObservabilityService.GetFlamegraph:input_type -> controlplane.v1.GetFlamegraphRequest
-	65,  // 236: controlplane.v1.ObservabilityService.ExportPGOProfile:input_type -> controlplane.v1.ExportPGOProfileRequest
-	90,  // 237: controlplane.v1.ObservabilityService.QueryPanel:input_type -> controlplane.v1.QueryPanelRequest
-	67,  // 238: controlplane.v1.ObservabilityService.ListAttributeValues:input_type -> controlplane.v1.ListAttributeValuesRequest
-	70,  // 239: controlplane.v1.ObservabilityService.GetServiceSignals:input_type -> controlplane.v1.GetServiceSignalsRequest
-	73,  // 240: controlplane.v1.ObservabilityService.ListWorkloads:input_type -> controlplane.v1.ListWorkloadsRequest
-	82,  // 241: controlplane.v1.ObservabilityService.GetWorkload:input_type -> controlplane.v1.GetWorkloadRequest
-	85,  // 242: controlplane.v1.ObservabilityService.GetManagedDatabaseMetrics:input_type -> controlplane.v1.GetManagedDatabaseMetricsRequest
-	102, // 243: controlplane.v1.ObservabilityService.GetDashboards:input_type -> controlplane.v1.GetDashboardsRequest
-	116, // 244: controlplane.v1.ObservabilityService.GetReleaseHealth:input_type -> controlplane.v1.GetReleaseHealthRequest
-	130, // 245: controlplane.v1.ObservabilityService.GetUserActivity:input_type -> controlplane.v1.GetUserActivityRequest
-	127, // 246: controlplane.v1.ObservabilityService.ListFrontendReplay:input_type -> controlplane.v1.ListFrontendReplayRequest
-	37,  // 247: controlplane.v1.ObservabilityService.SearchLogs:output_type -> controlplane.v1.SearchLogsResponse
-	40,  // 248: controlplane.v1.ObservabilityService.ListTraces:output_type -> controlplane.v1.ListTracesResponse
-	45,  // 249: controlplane.v1.ObservabilityService.GetTrace:output_type -> controlplane.v1.GetTraceResponse
-	51,  // 250: controlplane.v1.ObservabilityService.ListMetrics:output_type -> controlplane.v1.ListMetricsResponse
-	55,  // 251: controlplane.v1.ObservabilityService.GetMetric:output_type -> controlplane.v1.GetMetricResponse
-	58,  // 252: controlplane.v1.ObservabilityService.ListMetricExemplars:output_type -> controlplane.v1.ListMetricExemplarsResponse
-	24,  // 253: controlplane.v1.ObservabilityService.GetServiceGraph:output_type -> controlplane.v1.GetServiceGraphResponse
-	33,  // 254: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:output_type -> controlplane.v1.GetServiceGraphCatalogResponse
-	61,  // 255: controlplane.v1.ObservabilityService.GetServiceOverview:output_type -> controlplane.v1.GetServiceOverviewResponse
-	64,  // 256: controlplane.v1.ObservabilityService.GetFlamegraph:output_type -> controlplane.v1.GetFlamegraphResponse
-	66,  // 257: controlplane.v1.ObservabilityService.ExportPGOProfile:output_type -> controlplane.v1.ExportPGOProfileResponse
-	95,  // 258: controlplane.v1.ObservabilityService.QueryPanel:output_type -> controlplane.v1.QueryPanelResponse
-	68,  // 259: controlplane.v1.ObservabilityService.ListAttributeValues:output_type -> controlplane.v1.ListAttributeValuesResponse
-	71,  // 260: controlplane.v1.ObservabilityService.GetServiceSignals:output_type -> controlplane.v1.GetServiceSignalsResponse
-	74,  // 261: controlplane.v1.ObservabilityService.ListWorkloads:output_type -> controlplane.v1.ListWorkloadsResponse
-	83,  // 262: controlplane.v1.ObservabilityService.GetWorkload:output_type -> controlplane.v1.GetWorkloadResponse
-	86,  // 263: controlplane.v1.ObservabilityService.GetManagedDatabaseMetrics:output_type -> controlplane.v1.GetManagedDatabaseMetricsResponse
-	103, // 264: controlplane.v1.ObservabilityService.GetDashboards:output_type -> controlplane.v1.GetDashboardsResponse
-	117, // 265: controlplane.v1.ObservabilityService.GetReleaseHealth:output_type -> controlplane.v1.GetReleaseHealthResponse
-	131, // 266: controlplane.v1.ObservabilityService.GetUserActivity:output_type -> controlplane.v1.GetUserActivityResponse
-	128, // 267: controlplane.v1.ObservabilityService.ListFrontendReplay:output_type -> controlplane.v1.ListFrontendReplayResponse
-	247, // [247:268] is the sub-list for method output_type
-	226, // [226:247] is the sub-list for method input_type
-	226, // [226:226] is the sub-list for extension type_name
-	226, // [226:226] is the sub-list for extension extendee
-	0,   // [0:226] is the sub-list for field type_name
+	150, // 2: controlplane.v1.TimeRange.relative:type_name -> controlplane.v1.RelativeWindow
+	21,  // 3: controlplane.v1.QueryScope.time_range:type_name -> controlplane.v1.TimeRange
+	34,  // 4: controlplane.v1.QueryScope.filters:type_name -> controlplane.v1.AttributeFilter
+	22,  // 5: controlplane.v1.GetServiceGraphRequest.scope:type_name -> controlplane.v1.QueryScope
+	1,   // 6: controlplane.v1.GetServiceGraphRequest.edge_kinds:type_name -> controlplane.v1.GraphEdgeKind
+	25,  // 7: controlplane.v1.GetServiceGraphResponse.nodes:type_name -> controlplane.v1.GraphNode
+	28,  // 8: controlplane.v1.GetServiceGraphResponse.edges:type_name -> controlplane.v1.GraphEdge
+	29,  // 9: controlplane.v1.GetServiceGraphResponse.completeness:type_name -> controlplane.v1.GraphCompleteness
+	21,  // 10: controlplane.v1.GetServiceGraphResponse.effective_time_range:type_name -> controlplane.v1.TimeRange
+	151, // 11: controlplane.v1.GetServiceGraphResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	0,   // 12: controlplane.v1.GraphNode.kind:type_name -> controlplane.v1.GraphNodeKind
+	1,   // 13: controlplane.v1.GraphEdge.kind:type_name -> controlplane.v1.GraphEdgeKind
+	2,   // 14: controlplane.v1.GraphEdge.evidence:type_name -> controlplane.v1.GraphEvidenceKind
+	26,  // 15: controlplane.v1.GraphEdge.duration:type_name -> controlplane.v1.GraphHistogram
+	27,  // 16: controlplane.v1.GraphEdge.exemplars:type_name -> controlplane.v1.GraphTraceExemplar
+	149, // 17: controlplane.v1.GraphEdge.first_seen:type_name -> google.protobuf.Timestamp
+	149, // 18: controlplane.v1.GraphEdge.last_seen:type_name -> google.protobuf.Timestamp
+	149, // 19: controlplane.v1.GraphCompleteness.aggregated_through:type_name -> google.protobuf.Timestamp
+	22,  // 20: controlplane.v1.GetServiceGraphCatalogRequest.scope:type_name -> controlplane.v1.QueryScope
+	2,   // 21: controlplane.v1.GraphRPCMethod.evidence:type_name -> controlplane.v1.GraphEvidenceKind
+	26,  // 22: controlplane.v1.GraphRPCMethod.duration:type_name -> controlplane.v1.GraphHistogram
+	31,  // 23: controlplane.v1.GetServiceGraphCatalogResponse.methods:type_name -> controlplane.v1.GraphRPCMethod
+	29,  // 24: controlplane.v1.GetServiceGraphCatalogResponse.completeness:type_name -> controlplane.v1.GraphCompleteness
+	32,  // 25: controlplane.v1.GetServiceGraphCatalogResponse.declared_catalogs:type_name -> controlplane.v1.GraphDeclaredCatalog
+	151, // 26: controlplane.v1.GetServiceGraphCatalogResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	4,   // 27: controlplane.v1.AttributeFilter.op:type_name -> controlplane.v1.AttributeOp
+	149, // 28: controlplane.v1.TimePoint.time:type_name -> google.protobuf.Timestamp
+	22,  // 29: controlplane.v1.SearchLogsRequest.scope:type_name -> controlplane.v1.QueryScope
+	3,   // 30: controlplane.v1.SearchLogsRequest.order:type_name -> controlplane.v1.SortOrder
+	38,  // 31: controlplane.v1.SearchLogsResponse.logs:type_name -> controlplane.v1.LogRecord
+	151, // 32: controlplane.v1.SearchLogsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	21,  // 33: controlplane.v1.SearchLogsResponse.effective_time_range:type_name -> controlplane.v1.TimeRange
+	149, // 34: controlplane.v1.LogRecord.timestamp:type_name -> google.protobuf.Timestamp
+	135, // 35: controlplane.v1.LogRecord.attributes:type_name -> controlplane.v1.LogRecord.AttributesEntry
+	136, // 36: controlplane.v1.LogRecord.resource_attributes:type_name -> controlplane.v1.LogRecord.ResourceAttributesEntry
+	22,  // 37: controlplane.v1.ListTracesRequest.scope:type_name -> controlplane.v1.QueryScope
+	5,   // 38: controlplane.v1.ListTracesRequest.order:type_name -> controlplane.v1.TraceOrder
+	42,  // 39: controlplane.v1.ListTracesResponse.traces:type_name -> controlplane.v1.TraceSummary
+	43,  // 40: controlplane.v1.ListTracesResponse.red:type_name -> controlplane.v1.TraceRedSummary
+	41,  // 41: controlplane.v1.ListTracesResponse.red_groups:type_name -> controlplane.v1.TraceRedGroup
+	151, // 42: controlplane.v1.ListTracesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	21,  // 43: controlplane.v1.ListTracesResponse.effective_time_range:type_name -> controlplane.v1.TimeRange
+	137, // 44: controlplane.v1.TraceRedGroup.group:type_name -> controlplane.v1.TraceRedGroup.GroupEntry
+	43,  // 45: controlplane.v1.TraceRedGroup.red:type_name -> controlplane.v1.TraceRedSummary
+	149, // 46: controlplane.v1.TraceSummary.start_time:type_name -> google.protobuf.Timestamp
+	152, // 47: controlplane.v1.TraceSummary.client:type_name -> controlplane.v1.ClientContext
+	153, // 48: controlplane.v1.TraceSummary.backend_builds:type_name -> controlplane.v1.ServiceBuild
+	22,  // 49: controlplane.v1.GetTraceRequest.scope:type_name -> controlplane.v1.QueryScope
+	47,  // 50: controlplane.v1.GetTraceResponse.spans:type_name -> controlplane.v1.Span
+	46,  // 51: controlplane.v1.GetTraceResponse.related_traces:type_name -> controlplane.v1.RelatedTrace
+	151, // 52: controlplane.v1.GetTraceResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	149, // 53: controlplane.v1.Span.start_time:type_name -> google.protobuf.Timestamp
+	138, // 54: controlplane.v1.Span.attributes:type_name -> controlplane.v1.Span.AttributesEntry
+	139, // 55: controlplane.v1.Span.resource_attributes:type_name -> controlplane.v1.Span.ResourceAttributesEntry
+	48,  // 56: controlplane.v1.Span.events:type_name -> controlplane.v1.SpanEvent
+	49,  // 57: controlplane.v1.Span.links:type_name -> controlplane.v1.SpanLink
+	149, // 58: controlplane.v1.SpanEvent.time:type_name -> google.protobuf.Timestamp
+	140, // 59: controlplane.v1.SpanEvent.attributes:type_name -> controlplane.v1.SpanEvent.AttributesEntry
+	22,  // 60: controlplane.v1.ListMetricsRequest.scope:type_name -> controlplane.v1.QueryScope
+	52,  // 61: controlplane.v1.ListMetricsResponse.metrics:type_name -> controlplane.v1.MetricInfo
+	151, // 62: controlplane.v1.ListMetricsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	6,   // 63: controlplane.v1.MetricInfo.type:type_name -> controlplane.v1.MetricType
+	7,   // 64: controlplane.v1.MetricInfo.temporality:type_name -> controlplane.v1.MetricTemporality
+	149, // 65: controlplane.v1.MetricInfo.last_seen:type_name -> google.protobuf.Timestamp
+	53,  // 66: controlplane.v1.MetricInfo.declared_attributes:type_name -> controlplane.v1.MetricAttributeSpec
+	22,  // 67: controlplane.v1.GetMetricRequest.scope:type_name -> controlplane.v1.QueryScope
+	6,   // 68: controlplane.v1.GetMetricRequest.metric_type:type_name -> controlplane.v1.MetricType
+	52,  // 69: controlplane.v1.GetMetricResponse.info:type_name -> controlplane.v1.MetricInfo
+	56,  // 70: controlplane.v1.GetMetricResponse.attributes:type_name -> controlplane.v1.MetricAttribute
+	151, // 71: controlplane.v1.GetMetricResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	22,  // 72: controlplane.v1.ListMetricExemplarsRequest.scope:type_name -> controlplane.v1.QueryScope
+	6,   // 73: controlplane.v1.ListMetricExemplarsRequest.metric_type:type_name -> controlplane.v1.MetricType
+	112, // 74: controlplane.v1.ListMetricExemplarsRequest.where:type_name -> controlplane.v1.PanelPredicate
+	141, // 75: controlplane.v1.ListMetricExemplarsRequest.group:type_name -> controlplane.v1.ListMetricExemplarsRequest.GroupEntry
+	21,  // 76: controlplane.v1.ListMetricExemplarsRequest.time_range:type_name -> controlplane.v1.TimeRange
+	59,  // 77: controlplane.v1.ListMetricExemplarsResponse.exemplars:type_name -> controlplane.v1.MetricExemplar
+	151, // 78: controlplane.v1.ListMetricExemplarsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	149, // 79: controlplane.v1.MetricExemplar.time:type_name -> google.protobuf.Timestamp
+	142, // 80: controlplane.v1.MetricExemplar.attributes:type_name -> controlplane.v1.MetricExemplar.AttributesEntry
+	22,  // 81: controlplane.v1.GetServiceOverviewRequest.scope:type_name -> controlplane.v1.QueryScope
+	62,  // 82: controlplane.v1.GetServiceOverviewResponse.services:type_name -> controlplane.v1.ServiceOverview
+	151, // 83: controlplane.v1.GetServiceOverviewResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	35,  // 84: controlplane.v1.ServiceOverview.request_trend:type_name -> controlplane.v1.TimePoint
+	35,  // 85: controlplane.v1.ServiceOverview.error_trend:type_name -> controlplane.v1.TimePoint
+	143, // 86: controlplane.v1.ServiceOverview.group:type_name -> controlplane.v1.ServiceOverview.GroupEntry
+	22,  // 87: controlplane.v1.GetFlamegraphRequest.scope:type_name -> controlplane.v1.QueryScope
+	151, // 88: controlplane.v1.GetFlamegraphResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	22,  // 89: controlplane.v1.ExportPGOProfileRequest.scope:type_name -> controlplane.v1.QueryScope
+	149, // 90: controlplane.v1.ExportPGOProfileResponse.oldest:type_name -> google.protobuf.Timestamp
+	149, // 91: controlplane.v1.ExportPGOProfileResponse.newest:type_name -> google.protobuf.Timestamp
+	22,  // 92: controlplane.v1.ListAttributeValuesRequest.scope:type_name -> controlplane.v1.QueryScope
+	8,   // 93: controlplane.v1.ListAttributeValuesRequest.signal:type_name -> controlplane.v1.Signal
+	69,  // 94: controlplane.v1.ListAttributeValuesResponse.values:type_name -> controlplane.v1.AttributeValue
+	151, // 95: controlplane.v1.ListAttributeValuesResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	22,  // 96: controlplane.v1.GetServiceSignalsRequest.scope:type_name -> controlplane.v1.QueryScope
+	72,  // 97: controlplane.v1.GetServiceSignalsResponse.services:type_name -> controlplane.v1.ServiceSignals
+	151, // 98: controlplane.v1.GetServiceSignalsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	22,  // 99: controlplane.v1.ListWorkloadsRequest.scope:type_name -> controlplane.v1.QueryScope
+	75,  // 100: controlplane.v1.ListWorkloadsResponse.workloads:type_name -> controlplane.v1.Workload
+	78,  // 101: controlplane.v1.ListWorkloadsResponse.jobs:type_name -> controlplane.v1.WorkloadJob
+	151, // 102: controlplane.v1.ListWorkloadsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	79,  // 103: controlplane.v1.Workload.containers:type_name -> controlplane.v1.WorkloadContainer
+	81,  // 104: controlplane.v1.Workload.latest_warning:type_name -> controlplane.v1.WorkloadEvent
+	154, // 105: controlplane.v1.Workload.kind:type_name -> controlplane.v1.WorkloadKind
+	10,  // 106: controlplane.v1.Workload.health:type_name -> controlplane.v1.WorkloadHealth
+	11,  // 107: controlplane.v1.Workload.release_basis:type_name -> controlplane.v1.WorkloadReleaseBasis
+	77,  // 108: controlplane.v1.Workload.pods:type_name -> controlplane.v1.WorkloadPod
+	155, // 109: controlplane.v1.Workload.declared:type_name -> controlplane.v1.DeclaredWorkload
+	9,   // 110: controlplane.v1.Workload.health_cause:type_name -> controlplane.v1.WorkloadCause
+	149, // 111: controlplane.v1.Workload.health_since:type_name -> google.protobuf.Timestamp
+	149, // 112: controlplane.v1.Workload.next_run_at:type_name -> google.protobuf.Timestamp
+	149, // 113: controlplane.v1.WorkloadHealthChange.at:type_name -> google.protobuf.Timestamp
+	10,  // 114: controlplane.v1.WorkloadHealthChange.from:type_name -> controlplane.v1.WorkloadHealth
+	10,  // 115: controlplane.v1.WorkloadHealthChange.to:type_name -> controlplane.v1.WorkloadHealth
+	9,   // 116: controlplane.v1.WorkloadHealthChange.cause:type_name -> controlplane.v1.WorkloadCause
+	12,  // 117: controlplane.v1.WorkloadPod.state:type_name -> controlplane.v1.WorkloadPodState
+	149, // 118: controlplane.v1.WorkloadPod.last_exit_at:type_name -> google.protobuf.Timestamp
+	149, // 119: controlplane.v1.WorkloadPod.first_seen:type_name -> google.protobuf.Timestamp
+	149, // 120: controlplane.v1.WorkloadPod.last_seen:type_name -> google.protobuf.Timestamp
+	81,  // 121: controlplane.v1.WorkloadPod.latest_warning:type_name -> controlplane.v1.WorkloadEvent
+	80,  // 122: controlplane.v1.WorkloadPod.cpu:type_name -> controlplane.v1.ResourceUsage
+	80,  // 123: controlplane.v1.WorkloadPod.memory:type_name -> controlplane.v1.ResourceUsage
+	79,  // 124: controlplane.v1.WorkloadPod.containers:type_name -> controlplane.v1.WorkloadContainer
+	13,  // 125: controlplane.v1.WorkloadJob.result:type_name -> controlplane.v1.WorkloadJobResult
+	149, // 126: controlplane.v1.WorkloadJob.started_at:type_name -> google.protobuf.Timestamp
+	149, // 127: controlplane.v1.WorkloadJob.finished_at:type_name -> google.protobuf.Timestamp
+	149, // 128: controlplane.v1.WorkloadContainer.last_terminated_at:type_name -> google.protobuf.Timestamp
+	80,  // 129: controlplane.v1.WorkloadContainer.cpu:type_name -> controlplane.v1.ResourceUsage
+	80,  // 130: controlplane.v1.WorkloadContainer.memory:type_name -> controlplane.v1.ResourceUsage
+	149, // 131: controlplane.v1.WorkloadEvent.time:type_name -> google.protobuf.Timestamp
+	22,  // 132: controlplane.v1.GetWorkloadRequest.scope:type_name -> controlplane.v1.QueryScope
+	84,  // 133: controlplane.v1.GetWorkloadResponse.series:type_name -> controlplane.v1.WorkloadSeries
+	81,  // 134: controlplane.v1.GetWorkloadResponse.events:type_name -> controlplane.v1.WorkloadEvent
+	88,  // 135: controlplane.v1.GetWorkloadResponse.image_changes:type_name -> controlplane.v1.ImageChange
+	89,  // 136: controlplane.v1.GetWorkloadResponse.version_changes:type_name -> controlplane.v1.VersionChange
+	75,  // 137: controlplane.v1.GetWorkloadResponse.workloads:type_name -> controlplane.v1.Workload
+	76,  // 138: controlplane.v1.GetWorkloadResponse.health_changes:type_name -> controlplane.v1.WorkloadHealthChange
+	151, // 139: controlplane.v1.GetWorkloadResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	14,  // 140: controlplane.v1.WorkloadSeries.metric:type_name -> controlplane.v1.WorkloadMetric
+	35,  // 141: controlplane.v1.WorkloadSeries.points:type_name -> controlplane.v1.TimePoint
+	22,  // 142: controlplane.v1.GetManagedDatabaseMetricsRequest.scope:type_name -> controlplane.v1.QueryScope
+	87,  // 143: controlplane.v1.GetManagedDatabaseMetricsResponse.series:type_name -> controlplane.v1.ManagedDatabaseSeries
+	15,  // 144: controlplane.v1.ManagedDatabaseSeries.metric:type_name -> controlplane.v1.ManagedDatabaseMetric
+	35,  // 145: controlplane.v1.ManagedDatabaseSeries.points:type_name -> controlplane.v1.TimePoint
+	149, // 146: controlplane.v1.ImageChange.first_seen:type_name -> google.protobuf.Timestamp
+	149, // 147: controlplane.v1.ImageChange.last_seen:type_name -> google.protobuf.Timestamp
+	149, // 148: controlplane.v1.VersionChange.first_seen:type_name -> google.protobuf.Timestamp
+	149, // 149: controlplane.v1.VersionChange.last_seen:type_name -> google.protobuf.Timestamp
+	22,  // 150: controlplane.v1.QueryPanelRequest.scope:type_name -> controlplane.v1.QueryScope
+	109, // 151: controlplane.v1.QueryPanelRequest.panel:type_name -> controlplane.v1.Panel
+	112, // 152: controlplane.v1.QueryPanelRequest.filters:type_name -> controlplane.v1.PanelPredicate
+	91,  // 153: controlplane.v1.QueryPanelRequest.panel_ref:type_name -> controlplane.v1.PanelRef
+	144, // 154: controlplane.v1.CompiledStatement.params:type_name -> controlplane.v1.CompiledStatement.ParamsEntry
+	149, // 155: controlplane.v1.HeatmapCell.time:type_name -> google.protobuf.Timestamp
+	100, // 156: controlplane.v1.QueryPanelResponse.series:type_name -> controlplane.v1.PanelSeriesResult
+	101, // 157: controlplane.v1.QueryPanelResponse.rows:type_name -> controlplane.v1.PanelTableRow
+	97,  // 158: controlplane.v1.QueryPanelResponse.funnel_steps:type_name -> controlplane.v1.FunnelStepResult
+	98,  // 159: controlplane.v1.QueryPanelResponse.issues:type_name -> controlplane.v1.PanelIssue
+	99,  // 160: controlplane.v1.QueryPanelResponse.sessions:type_name -> controlplane.v1.PanelSession
+	92,  // 161: controlplane.v1.QueryPanelResponse.compiled_sql:type_name -> controlplane.v1.CompiledStatement
+	93,  // 162: controlplane.v1.QueryPanelResponse.heatmap:type_name -> controlplane.v1.HeatmapCell
+	94,  // 163: controlplane.v1.QueryPanelResponse.sql_columns:type_name -> controlplane.v1.SqlColumn
+	96,  // 164: controlplane.v1.QueryPanelResponse.series_meta:type_name -> controlplane.v1.PanelSeriesMeta
+	109, // 165: controlplane.v1.QueryPanelResponse.panel:type_name -> controlplane.v1.Panel
+	151, // 166: controlplane.v1.QueryPanelResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	6,   // 167: controlplane.v1.PanelSeriesMeta.metric_type:type_name -> controlplane.v1.MetricType
+	7,   // 168: controlplane.v1.PanelSeriesMeta.temporality:type_name -> controlplane.v1.MetricTemporality
+	149, // 169: controlplane.v1.PanelIssue.first_seen:type_name -> google.protobuf.Timestamp
+	149, // 170: controlplane.v1.PanelIssue.last_seen:type_name -> google.protobuf.Timestamp
+	149, // 171: controlplane.v1.PanelSession.start:type_name -> google.protobuf.Timestamp
+	149, // 172: controlplane.v1.PanelSession.end:type_name -> google.protobuf.Timestamp
+	145, // 173: controlplane.v1.PanelSeriesResult.group:type_name -> controlplane.v1.PanelSeriesResult.GroupEntry
+	35,  // 174: controlplane.v1.PanelSeriesResult.points:type_name -> controlplane.v1.TimePoint
+	146, // 175: controlplane.v1.PanelTableRow.group:type_name -> controlplane.v1.PanelTableRow.GroupEntry
+	22,  // 176: controlplane.v1.GetDashboardsRequest.scope:type_name -> controlplane.v1.QueryScope
+	104, // 177: controlplane.v1.GetDashboardsResponse.spec:type_name -> controlplane.v1.DashboardSpec
+	151, // 178: controlplane.v1.GetDashboardsResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	105, // 179: controlplane.v1.DashboardSpec.dashboards:type_name -> controlplane.v1.Dashboard
+	113, // 180: controlplane.v1.DashboardSpec.saved_searches:type_name -> controlplane.v1.SavedSearch
+	114, // 181: controlplane.v1.DashboardSpec.alerts:type_name -> controlplane.v1.DashboardAlert
+	107, // 182: controlplane.v1.Dashboard.filters:type_name -> controlplane.v1.DashboardFilter
+	109, // 183: controlplane.v1.Dashboard.panels:type_name -> controlplane.v1.Panel
+	108, // 184: controlplane.v1.Dashboard.annotations:type_name -> controlplane.v1.DashboardAnnotation
+	106, // 185: controlplane.v1.Dashboard.sections:type_name -> controlplane.v1.DashboardSection
+	111, // 186: controlplane.v1.Panel.series:type_name -> controlplane.v1.PanelSeries
+	112, // 187: controlplane.v1.Panel.where:type_name -> controlplane.v1.PanelPredicate
+	110, // 188: controlplane.v1.Panel.funnel:type_name -> controlplane.v1.PanelFunnel
+	112, // 189: controlplane.v1.PanelSeries.where:type_name -> controlplane.v1.PanelPredicate
+	112, // 190: controlplane.v1.SavedSearch.where:type_name -> controlplane.v1.PanelPredicate
+	16,  // 191: controlplane.v1.QueryQuotaExhausted.limit:type_name -> controlplane.v1.QueryQuotaLimit
+	149, // 192: controlplane.v1.QueryQuotaExhausted.resets_at:type_name -> google.protobuf.Timestamp
+	22,  // 193: controlplane.v1.GetReleaseHealthRequest.scope:type_name -> controlplane.v1.QueryScope
+	156, // 194: controlplane.v1.GetReleaseHealthRequest.window:type_name -> google.protobuf.Duration
+	147, // 195: controlplane.v1.GetReleaseHealthRequest.threshold_overrides:type_name -> controlplane.v1.GetReleaseHealthRequest.ThresholdOverridesEntry
+	118, // 196: controlplane.v1.GetReleaseHealthResponse.promotion:type_name -> controlplane.v1.ReleasePromotionRef
+	21,  // 197: controlplane.v1.GetReleaseHealthResponse.before:type_name -> controlplane.v1.TimeRange
+	21,  // 198: controlplane.v1.GetReleaseHealthResponse.after:type_name -> controlplane.v1.TimeRange
+	119, // 199: controlplane.v1.GetReleaseHealthResponse.services:type_name -> controlplane.v1.ServiceHealthDelta
+	157, // 200: controlplane.v1.GetReleaseHealthResponse.new_issues:type_name -> controlplane.v1.Issue
+	157, // 201: controlplane.v1.GetReleaseHealthResponse.regressed_issues:type_name -> controlplane.v1.Issue
+	123, // 202: controlplane.v1.GetReleaseHealthResponse.firing_alerts:type_name -> controlplane.v1.ReleaseAlertRef
+	124, // 203: controlplane.v1.GetReleaseHealthResponse.workload_findings:type_name -> controlplane.v1.WorkloadFinding
+	17,  // 204: controlplane.v1.GetReleaseHealthResponse.verdict:type_name -> controlplane.v1.ReleaseVerdict
+	125, // 205: controlplane.v1.GetReleaseHealthResponse.findings:type_name -> controlplane.v1.ReleaseFinding
+	126, // 206: controlplane.v1.GetReleaseHealthResponse.thresholds:type_name -> controlplane.v1.EffectiveThreshold
+	151, // 207: controlplane.v1.GetReleaseHealthResponse.instance_scope:type_name -> controlplane.v1.InstanceScope
+	123, // 208: controlplane.v1.GetReleaseHealthResponse.baseline_alerts:type_name -> controlplane.v1.ReleaseAlertRef
+	149, // 209: controlplane.v1.ReleasePromotionRef.promoted_at:type_name -> google.protobuf.Timestamp
+	149, // 210: controlplane.v1.ReleasePromotionRef.live_at:type_name -> google.protobuf.Timestamp
+	120, // 211: controlplane.v1.ServiceHealthDelta.before:type_name -> controlplane.v1.ServiceWindowStats
+	120, // 212: controlplane.v1.ServiceHealthDelta.after:type_name -> controlplane.v1.ServiceWindowStats
+	121, // 213: controlplane.v1.ServiceHealthDelta.browser:type_name -> controlplane.v1.BrowserHealthDelta
+	122, // 214: controlplane.v1.BrowserHealthDelta.before:type_name -> controlplane.v1.BrowserWindowStats
+	122, // 215: controlplane.v1.BrowserHealthDelta.after:type_name -> controlplane.v1.BrowserWindowStats
+	149, // 216: controlplane.v1.ReleaseAlertRef.firing_at:type_name -> google.protobuf.Timestamp
+	148, // 217: controlplane.v1.ReleaseAlertRef.labels:type_name -> controlplane.v1.ReleaseAlertRef.LabelsEntry
+	18,  // 218: controlplane.v1.ReleaseFinding.code:type_name -> controlplane.v1.ReleaseFindingCode
+	129, // 219: controlplane.v1.ListFrontendReplayResponse.frontends:type_name -> controlplane.v1.FrontendReplay
+	19,  // 220: controlplane.v1.FrontendReplay.state:type_name -> controlplane.v1.FrontendReplayState
+	20,  // 221: controlplane.v1.FrontendReplay.source:type_name -> controlplane.v1.FrontendReplaySource
+	22,  // 222: controlplane.v1.GetUserActivityRequest.scope:type_name -> controlplane.v1.QueryScope
+	134, // 223: controlplane.v1.GetUserActivityResponse.envs:type_name -> controlplane.v1.EnvUserActivity
+	132, // 224: controlplane.v1.EnvUserActivity.current:type_name -> controlplane.v1.UserActivityCounts
+	132, // 225: controlplane.v1.EnvUserActivity.previous:type_name -> controlplane.v1.UserActivityCounts
+	133, // 226: controlplane.v1.EnvUserActivity.days:type_name -> controlplane.v1.UserActivityDay
+	149, // 227: controlplane.v1.EnvUserActivity.first_event_at:type_name -> google.protobuf.Timestamp
+	149, // 228: controlplane.v1.EnvUserActivity.new_decided_from:type_name -> google.protobuf.Timestamp
+	149, // 229: controlplane.v1.EnvUserActivity.previous_new_decided_from:type_name -> google.protobuf.Timestamp
+	36,  // 230: controlplane.v1.ObservabilityService.SearchLogs:input_type -> controlplane.v1.SearchLogsRequest
+	39,  // 231: controlplane.v1.ObservabilityService.ListTraces:input_type -> controlplane.v1.ListTracesRequest
+	44,  // 232: controlplane.v1.ObservabilityService.GetTrace:input_type -> controlplane.v1.GetTraceRequest
+	50,  // 233: controlplane.v1.ObservabilityService.ListMetrics:input_type -> controlplane.v1.ListMetricsRequest
+	54,  // 234: controlplane.v1.ObservabilityService.GetMetric:input_type -> controlplane.v1.GetMetricRequest
+	57,  // 235: controlplane.v1.ObservabilityService.ListMetricExemplars:input_type -> controlplane.v1.ListMetricExemplarsRequest
+	23,  // 236: controlplane.v1.ObservabilityService.GetServiceGraph:input_type -> controlplane.v1.GetServiceGraphRequest
+	30,  // 237: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:input_type -> controlplane.v1.GetServiceGraphCatalogRequest
+	60,  // 238: controlplane.v1.ObservabilityService.GetServiceOverview:input_type -> controlplane.v1.GetServiceOverviewRequest
+	63,  // 239: controlplane.v1.ObservabilityService.GetFlamegraph:input_type -> controlplane.v1.GetFlamegraphRequest
+	65,  // 240: controlplane.v1.ObservabilityService.ExportPGOProfile:input_type -> controlplane.v1.ExportPGOProfileRequest
+	90,  // 241: controlplane.v1.ObservabilityService.QueryPanel:input_type -> controlplane.v1.QueryPanelRequest
+	67,  // 242: controlplane.v1.ObservabilityService.ListAttributeValues:input_type -> controlplane.v1.ListAttributeValuesRequest
+	70,  // 243: controlplane.v1.ObservabilityService.GetServiceSignals:input_type -> controlplane.v1.GetServiceSignalsRequest
+	73,  // 244: controlplane.v1.ObservabilityService.ListWorkloads:input_type -> controlplane.v1.ListWorkloadsRequest
+	82,  // 245: controlplane.v1.ObservabilityService.GetWorkload:input_type -> controlplane.v1.GetWorkloadRequest
+	85,  // 246: controlplane.v1.ObservabilityService.GetManagedDatabaseMetrics:input_type -> controlplane.v1.GetManagedDatabaseMetricsRequest
+	102, // 247: controlplane.v1.ObservabilityService.GetDashboards:input_type -> controlplane.v1.GetDashboardsRequest
+	116, // 248: controlplane.v1.ObservabilityService.GetReleaseHealth:input_type -> controlplane.v1.GetReleaseHealthRequest
+	130, // 249: controlplane.v1.ObservabilityService.GetUserActivity:input_type -> controlplane.v1.GetUserActivityRequest
+	127, // 250: controlplane.v1.ObservabilityService.ListFrontendReplay:input_type -> controlplane.v1.ListFrontendReplayRequest
+	37,  // 251: controlplane.v1.ObservabilityService.SearchLogs:output_type -> controlplane.v1.SearchLogsResponse
+	40,  // 252: controlplane.v1.ObservabilityService.ListTraces:output_type -> controlplane.v1.ListTracesResponse
+	45,  // 253: controlplane.v1.ObservabilityService.GetTrace:output_type -> controlplane.v1.GetTraceResponse
+	51,  // 254: controlplane.v1.ObservabilityService.ListMetrics:output_type -> controlplane.v1.ListMetricsResponse
+	55,  // 255: controlplane.v1.ObservabilityService.GetMetric:output_type -> controlplane.v1.GetMetricResponse
+	58,  // 256: controlplane.v1.ObservabilityService.ListMetricExemplars:output_type -> controlplane.v1.ListMetricExemplarsResponse
+	24,  // 257: controlplane.v1.ObservabilityService.GetServiceGraph:output_type -> controlplane.v1.GetServiceGraphResponse
+	33,  // 258: controlplane.v1.ObservabilityService.GetServiceGraphCatalog:output_type -> controlplane.v1.GetServiceGraphCatalogResponse
+	61,  // 259: controlplane.v1.ObservabilityService.GetServiceOverview:output_type -> controlplane.v1.GetServiceOverviewResponse
+	64,  // 260: controlplane.v1.ObservabilityService.GetFlamegraph:output_type -> controlplane.v1.GetFlamegraphResponse
+	66,  // 261: controlplane.v1.ObservabilityService.ExportPGOProfile:output_type -> controlplane.v1.ExportPGOProfileResponse
+	95,  // 262: controlplane.v1.ObservabilityService.QueryPanel:output_type -> controlplane.v1.QueryPanelResponse
+	68,  // 263: controlplane.v1.ObservabilityService.ListAttributeValues:output_type -> controlplane.v1.ListAttributeValuesResponse
+	71,  // 264: controlplane.v1.ObservabilityService.GetServiceSignals:output_type -> controlplane.v1.GetServiceSignalsResponse
+	74,  // 265: controlplane.v1.ObservabilityService.ListWorkloads:output_type -> controlplane.v1.ListWorkloadsResponse
+	83,  // 266: controlplane.v1.ObservabilityService.GetWorkload:output_type -> controlplane.v1.GetWorkloadResponse
+	86,  // 267: controlplane.v1.ObservabilityService.GetManagedDatabaseMetrics:output_type -> controlplane.v1.GetManagedDatabaseMetricsResponse
+	103, // 268: controlplane.v1.ObservabilityService.GetDashboards:output_type -> controlplane.v1.GetDashboardsResponse
+	117, // 269: controlplane.v1.ObservabilityService.GetReleaseHealth:output_type -> controlplane.v1.GetReleaseHealthResponse
+	131, // 270: controlplane.v1.ObservabilityService.GetUserActivity:output_type -> controlplane.v1.GetUserActivityResponse
+	128, // 271: controlplane.v1.ObservabilityService.ListFrontendReplay:output_type -> controlplane.v1.ListFrontendReplayResponse
+	251, // [251:272] is the sub-list for method output_type
+	230, // [230:251] is the sub-list for method input_type
+	230, // [230:230] is the sub-list for extension type_name
+	230, // [230:230] is the sub-list for extension extendee
+	0,   // [0:230] is the sub-list for field type_name
 }
 
 func init() { file_services_observability_v1_observability_proto_init() }

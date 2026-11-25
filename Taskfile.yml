@@ -586,6 +586,7 @@ tasks:
       - .githooks/check-binary-files.sh --range {{.BASE}} HEAD
       - node .github/scripts/sync-release-config.mjs --check
       - node --test .github/scripts/*.test.mjs
+      - python3 scripts/test_main_bisect.py
       - ./scripts/test-fmt-staged.sh
       - ./scripts/test-binary-files.sh
 
@@ -605,6 +606,15 @@ tasks:
       - cd frontends/web && npm run lint
       - cd frontends/web && NODE_ENV=production npm run build
       - node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
+
+  demo:bundle-size:
+    # The forge demo bundle against frontends/web/scripts/demo/bundle-budget.json:
+    # the release gate's demo-size step (scripts/release-gate.sh). It gates
+    # there only; a pull request that moves the demo pastes its
+    # `-- --report-only` table (dev-docs/demo-inventory.md, "Bundle size").
+    desc: "Build the forge demo and check its size against the budget, as a markdown table: -- --report-only | --json-out <f> | --before <f>"
+    cmds:
+      - ./scripts/demo-bundle-size.sh {{.CLI_ARGS}}
 
   test:web:e2e:
     desc: Run desktop Chromium and representative touch Chromium/WebKit against the built renderer

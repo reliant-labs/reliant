@@ -29,6 +29,7 @@ import { ScheduleSourceSchema, UnattendedFunding } from "@/gen/reliant/v1/trigge
 import type { Trigger } from "@/hooks/trigger-model";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
+import { ListMyOrganizationsResponseSchema } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { orgKeys } from "@/services/controlPlane/orgs";
 import { AutomationFunding } from "../AutomationFunding";
 import { AutomationsFundingBanner, automationsFundingMessage } from "../AutomationsFundingBanner";
@@ -75,10 +76,13 @@ const wire = {
 
 beforeEach(() => {
   queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity }, mutations: { retry: false } } });
-  queryClient.setQueryData(orgKeys.mine, {
-    orgs: [{ id: "acme", name: "Acme", slug: "acme", role: "member", isOwner: false }],
-    defaultOrgId: "acme",
-  });
+  queryClient.setQueryData(
+    orgKeys.mine,
+    create(ListMyOrganizationsResponseSchema, {
+      organizations: [{ id: "acme", name: "Acme", slug: "acme", role: "member", isOwner: false }],
+      defaultOrgId: "acme",
+    }),
+  );
   toastError.mockReset();
 });
 

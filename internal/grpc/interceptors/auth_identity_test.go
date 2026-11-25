@@ -2,6 +2,7 @@ package interceptors
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	forgeauth "github.com/reliant-labs/forge/pkg/auth"
@@ -29,7 +30,7 @@ func TestAuthInterceptorAcceptsTheManagedIdentityAsSoftware(t *testing.T) {
 
 	authenticate := func(t *testing.T, token string) (context.Context, *auth.JWTClaims, error) {
 		return interceptor.authenticateRequest(context.Background(), "/reliant.v1.ChatService/ListChats",
-			func(string) string { return "Bearer " + token })
+			http.Header{"Authorization": {"Bearer " + token}})
 	}
 
 	t.Run("identity bearer", func(t *testing.T) {

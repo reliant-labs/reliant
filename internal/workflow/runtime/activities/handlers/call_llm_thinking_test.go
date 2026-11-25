@@ -80,7 +80,7 @@ func TestCallLLMActivity_ReconcilesThinkingLevelForInjectedResolvers(t *testing.
 			h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 			captured := &capturedDriverOptions{}
-			activityInstance := NewCallLLMActivity(CallLLMDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: asInjectedResolver(captureDriverOptionsResolver(captured)), MCPBinder: nil})
+			activityInstance := NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: asInjectedResolver(captureDriverOptionsResolver(captured)), MCPBinder: nil})
 
 			input := callLLMInput(chat.ID, chat.ID, tt.modelID)
 			input.Node.GetCallLlm().ThinkingLevel = &reliantv1.CelString{

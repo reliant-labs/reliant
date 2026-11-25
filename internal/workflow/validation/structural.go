@@ -382,6 +382,7 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 			result.AddError(CategoryStructure, nodePath, "ref",
 				"workflow/loop node requires either 'ref' or 'inline'")
 		}
+		warnInlineBodyInputFields(args.GetInline() != nil, len(args.GetArgs()) > 0, len(args.GetPassthrough()) > 0, len(args.GetPresets()) > 0, nodePath, result)
 		// Sequential loops are passthrough — they always inherit the parent's thread.
 		// Parallel loops have their own thread config (defaults to mode: new).
 
@@ -396,6 +397,7 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 			result.AddError(CategoryStructure, nodePath, "ref",
 				"workflow/loop node requires either 'ref' or 'inline'")
 		}
+		warnInlineBodyInputFields(args.GetInline() != nil, len(args.GetArgs()) > 0, len(args.GetPassthrough()) > 0, len(args.GetPresets()) > 0, nodePath, result)
 
 	case model.NodeTypeRouter:
 		args := node.GetRouter()
@@ -485,6 +487,36 @@ func validateInlineWorkflows(node *reliantv1.Node, basePath []string, result *Re
 	}
 	if loopArgs := node.GetLoop(); loopArgs != nil && loopArgs.GetInline() != nil {
 		validateInlineWorkflow(loopArgs.GetInline(), append(basePath, "inline"), result)
+	}
+}
+
+// warnInlineBodyInputFields warns that args, passthrough and presets on a loop
+// or workflow node do nothing when its body is inline. An inline body runs with
+// the enclosing workflow's own inputs (core.InputPolicyInlineInheritParentInputs);
+// only a ref: body assembles its inputs from those fields. A value set there
+// is read back as "no such key" in the body at run time. A warning, not an
+// error: such a definition always ran, with the fields ignored.
+func warnInlineBodyInputFields(inline, hasArgs, hasPassthrough, hasPresets bool, nodePath []string, result *Result) {
+	if !inline {
+		return
+	}
+	for _, f := range []struct {
+		field string
+		set   bool
+	}{{"args", hasArgs}, {"passthrough", hasPassthrough}, {"presets", hasPresets}} {
+		if !f.set {
+			continue
+		}
+		result.Add(&Error{
+			Severity: SeverityWarning,
+			Category: CategoryStructure,
+			Path:     nodePath,
+			Field:    f.field,
+			Message: fmt.Sprintf("%s is ignored on an inline body: the body runs with this workflow's inputs, "+
+				"so inputs.<name> set here is not there at run time", f.field),
+			Suggestion: "carry per-iteration values in items (read them as iter.item); for a body with inputs of its own, " +
+				"move it to a workflow file and call it with ref:",
+		})
 	}
 }
 

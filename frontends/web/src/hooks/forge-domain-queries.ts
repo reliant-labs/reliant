@@ -37,6 +37,8 @@ import {
   type DomainAvailability,
   type ForgeDomain,
 } from "@/services/forge/domains";
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { orgQueryEnabled, useOrgScope, withOrgFailure } from "@/lib/orgScope";
 
 /** How often to re-read while a domain is still converging. */
@@ -84,6 +86,7 @@ export interface DomainsState {
 export function useForgeDomains({ enabled = true }: { enabled?: boolean } = {}) {
   // The tab's org: read in it, keyed by it, and not before it is known (lib/orgScope).
   const org = useOrgScope();
+  const transport = useTransport(appTransport);
   return useQuery<DomainsState>(
     withOrgFailure(
       queryOptions<DomainsState>({
@@ -95,7 +98,7 @@ export function useForgeDomains({ enabled = true }: { enabled?: boolean } = {}) 
             return { availability: "no-control-plane" as const, domains: [], detail: "" };
           }
           try {
-            return { availability: "available" as const, domains: await listDomains(org.orgId), detail: "" };
+            return { availability: "available" as const, domains: await listDomains(transport, org.orgId), detail: "" };
           } catch (err) {
             return {
               availability: domainAvailabilityFromError(err),
@@ -142,18 +145,19 @@ function useInvalidateDomains() {
  */
 export function useAddDomain() {
   const invalidate = useInvalidateDomains();
+  const transport = useTransport(appTransport);
   return useMutation<
     { domain: ForgeDomain; bindError: string | null },
     Error,
     { hostname: string; environmentId?: string; target?: string; redirectTo?: string }
   >({
     mutationFn: async ({ hostname, environmentId, target, redirectTo }) => {
-      const domain = await createDomain(hostname);
+      const domain = await createDomain(transport, hostname);
       if (!environmentId || (!target && !redirectTo)) {
         return { domain, bindError: null };
       }
       try {
-        await bindDomain({ domainId: domain.id, environmentId, target, redirectTo });
+        await bindDomain(transport, { domainId: domain.id, environmentId, target, redirectTo });
         return { domain, bindError: null };
       } catch (err) {
         return {
@@ -169,13 +173,14 @@ export function useAddDomain() {
 /** Rebind: the same RPC as the first bind, which replaces any existing binding. */
 export function useBindDomain() {
   const invalidate = useInvalidateDomains();
+  const transport = useTransport(appTransport);
   return useMutation<
     void,
     Error,
     { domainId: string; environmentId: string; target?: string; redirectTo?: string }
   >({
     mutationFn: async (args) => {
-      await bindDomain(args);
+      await bindDomain(transport, args);
     },
     onSuccess: invalidate,
   });
@@ -184,8 +189,9 @@ export function useBindDomain() {
 /** Stop serving, keep the domain and its verification. */
 export function useUnbindDomain() {
   const invalidate = useInvalidateDomains();
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, { domainId: string }>({
-    mutationFn: ({ domainId }) => unbindDomain(domainId),
+    mutationFn: ({ domainId }) => unbindDomain(transport, domainId),
     onSuccess: invalidate,
   });
 }
@@ -193,8 +199,9 @@ export function useUnbindDomain() {
 /** Remove the domain entirely. Frees the hostname for another org to claim. */
 export function useRemoveDomain() {
   const invalidate = useInvalidateDomains();
+  const transport = useTransport(appTransport);
   return useMutation<void, Error, { domainId: string }>({
-    mutationFn: ({ domainId }) => deleteDomain(domainId),
+    mutationFn: ({ domainId }) => deleteDomain(transport, domainId),
     onSuccess: invalidate,
   });
 }
@@ -202,8 +209,9 @@ export function useRemoveDomain() {
 /** Check DNS now. A nudge — the reconciler polls regardless. */
 export function useVerifyDomain() {
   const invalidate = useInvalidateDomains();
+  const transport = useTransport(appTransport);
   return useMutation<ForgeDomain | null, Error, { domainId: string }>({
-    mutationFn: ({ domainId }) => verifyDomain(domainId),
+    mutationFn: ({ domainId }) => verifyDomain(transport, domainId),
     onSuccess: invalidate,
   });
 }

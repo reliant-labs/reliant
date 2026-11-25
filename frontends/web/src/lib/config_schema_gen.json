@@ -67,11 +67,6 @@
       ]
     },
     {
-      "name": "DEMO_APP_HOST",
-      "type": "string",
-      "source": "config"
-    },
-    {
       "name": "DEMO_DATA_SOURCE",
       "type": "string",
       "source": "config"
@@ -103,6 +98,16 @@
     },
     {
       "name": "ENVIRONMENT",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
+      "name": "FIXTURES_READ_ONLY",
+      "type": "string",
+      "source": "runtime"
+    },
+    {
+      "name": "FIXTURES_SCENARIO",
       "type": "string",
       "source": "runtime"
     },

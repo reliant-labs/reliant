@@ -10,15 +10,24 @@
  * these refuse it and the web (which then has no active org) names none.
  */
 
-import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import type { ListMyOrganizationsResponse } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import {
+  organizationServiceKeys,
+  organizationServiceQueries,
+} from "@/hooks/controlplane/organization-service-hooks_gen";
 import { queryClient } from "@/lib/query-client";
 import { switchTabOrg } from "@/lib/orgSwitch";
 import { whenRouteOrgSettled } from "@/lib/routeOrg";
 import { learnOrgSegments, useActiveOrgStore } from "@/store/activeOrgStore";
-import { getControlPlaneClient } from "./client";
+import { hasControlPlane } from "./config";
 
 export const orgKeys = {
-  mine: ["orgs", "mine"] as const,
+  /**
+   * The membership list's one cache entry: ListMyOrganizations takes no
+   * fields, so every reader (the switcher, the org routes, currentOrgId)
+   * shares it. It holds the wire response; `toMyOrgs` maps it.
+   */
+  mine: organizationServiceKeys.listMyOrganizations({}),
 };
 
 export interface MyOrg {
@@ -38,9 +47,12 @@ export interface MyOrgs {
   defaultOrgId: string;
 }
 
-/** ListMyOrganizations: every org the caller belongs to, oldest first. */
-export async function listMyOrganizations(): Promise<MyOrgs> {
-  const res = await getControlPlaneClient(OrganizationService).listMyOrganizations({});
+/**
+ * ListMyOrganizations' answer in the web's model: every org the caller
+ * belongs to, oldest first. Module-level, so a hook's `select` keeps one
+ * result per response.
+ */
+export function toMyOrgs(res: ListMyOrganizationsResponse): MyOrgs {
   return {
     orgs: res.organizations.map((o) => ({
       id: o.id,
@@ -55,11 +67,12 @@ export async function listMyOrganizations(): Promise<MyOrgs> {
 }
 
 /**
- * SetDefaultOrganization: the org requests that name none act in, on every
- * device and client. PermissionDenied for an org the caller is not in.
+ * The membership list through its shared cache entry (fresh for a minute).
+ * Rejects with no control plane, before anything is sent.
  */
-export async function setDefaultOrganization(orgId: string): Promise<void> {
-  await getControlPlaneClient(OrganizationService).setDefaultOrganization({ orgId });
+export async function fetchMyOrgs(): Promise<MyOrgs> {
+  if (!hasControlPlane) throw new Error("Control plane API URL not configured (CONTROL_PLANE_API_URL)");
+  return toMyOrgs(await queryClient.fetchQuery(organizationServiceQueries.listMyOrganizations({}, { staleTime: 60_000 })));
 }
 
 /**
@@ -89,7 +102,7 @@ export async function currentOrgId(): Promise<string | null> {
   const route = await whenRouteOrgSettled();
   if (route.kind === "member") return route.org.id;
   if (route.kind !== "legacy") return null;
-  const mine = await queryClient.fetchQuery({ queryKey: orgKeys.mine, queryFn: listMyOrganizations, staleTime: 60_000 });
+  const mine = await fetchMyOrgs();
   return resolveActiveOrg(mine, useActiveOrgStore.getState().chosenId);
 }
 
@@ -103,7 +116,8 @@ export async function currentOrgId(): Promise<string | null> {
  */
 export async function switchToJoinedOrg(orgId: string): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: orgKeys.mine });
-  const orgs = queryClient.getQueryData<MyOrgs>(orgKeys.mine)?.orgs ?? [];
+  const listed = queryClient.getQueryData<ListMyOrganizationsResponse>(orgKeys.mine);
+  const orgs = listed ? toMyOrgs(listed).orgs : [];
   learnOrgSegments(orgs);
   const org = orgs.find((o) => o.id === orgId);
   switchTabOrg({ id: orgId, slug: org?.slug ?? "" });

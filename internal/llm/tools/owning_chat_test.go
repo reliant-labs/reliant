@@ -34,23 +34,33 @@ func TestStampOwningChat(t *testing.T) {
 
 func TestWithChatEnv(t *testing.T) {
 	own := map[string]string{"A": "1"}
-	got := withChatEnv(own, "c1", "")
+	got := withChatEnv(own, "c1", "", "")
 	require.Equal(t, map[string]string{"A": "1", ChatIDEnv: "c1"}, got)
 	require.Equal(t, map[string]string{"A": "1"}, own, "the caller's env is not modified")
-	require.Equal(t, map[string]string{ChatIDEnv: "mine"}, withChatEnv(map[string]string{ChatIDEnv: "mine"}, "c1", ""))
-	require.Nil(t, withChatEnv(nil, "", ""))
+	require.Equal(t, map[string]string{ChatIDEnv: "mine"}, withChatEnv(map[string]string{ChatIDEnv: "mine"}, "c1", "", ""))
+	require.Nil(t, withChatEnv(nil, "", "", ""))
 }
 
 // RELIANT_PROJECT_ID is how forge, run from a chat, names the Reliant project
 // a release came from (control-plane unified-shell-and-projects.md §8.1).
 func TestWithChatEnvSetsTheProjectID(t *testing.T) {
 	own := map[string]string{"A": "1"}
-	got := withChatEnv(own, "c1", "p1")
+	got := withChatEnv(own, "c1", "p1", "")
 	require.Equal(t, map[string]string{"A": "1", ChatIDEnv: "c1", ProjectIDEnv: "p1"}, got)
 	require.Equal(t, map[string]string{"A": "1"}, own, "the caller's env is not modified")
 	require.Equal(t, "RELIANT_PROJECT_ID", ProjectIDEnv, "forge reads this name; it is a public surface")
 
 	require.Equal(t, map[string]string{ChatIDEnv: "c1", ProjectIDEnv: "mine"},
-		withChatEnv(map[string]string{ProjectIDEnv: "mine"}, "c1", "p1"), "a caller's own value wins")
-	require.Equal(t, map[string]string{ChatIDEnv: "c1"}, withChatEnv(nil, "c1", ""), "no project, no variable")
+		withChatEnv(map[string]string{ProjectIDEnv: "mine"}, "c1", "p1", ""), "a caller's own value wins")
+	require.Equal(t, map[string]string{ChatIDEnv: "c1"}, withChatEnv(nil, "c1", "", ""), "no project, no variable")
+}
+
+// RELIANT_THREAD_ID tells a chat's sub-agents apart (they share
+// RELIANT_CHAT_ID): control-plane's scripts/pr-open.sh caps open PRs per thread.
+func TestWithChatEnvSetsTheThreadID(t *testing.T) {
+	require.Equal(t, "RELIANT_THREAD_ID", ThreadIDEnv, "control-plane's pr-open.sh reads this name; it is a public surface")
+	require.Equal(t, map[string]string{ChatIDEnv: "c1", ThreadIDEnv: "t1"}, withChatEnv(nil, "c1", "", "t1"))
+	require.Equal(t, map[string]string{ChatIDEnv: "c1", ThreadIDEnv: "mine"},
+		withChatEnv(map[string]string{ThreadIDEnv: "mine"}, "c1", "", "t1"), "a caller's own value wins")
+	require.Equal(t, map[string]string{ChatIDEnv: "c1"}, withChatEnv(nil, "c1", "", ""), "no thread, no variable")
 }

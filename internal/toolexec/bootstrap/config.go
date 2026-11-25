@@ -124,6 +124,12 @@ type DaemonBootstrapConfig struct {
 	// remains the source of truth in both modes, so a daemon started without
 	// this flag is still fully observable — just one poll interval slower.
 	Verbose bool
+
+	// Supervisor is who spawned and supervises this daemon, from
+	// daemonstate.SupervisorEnv; empty when nothing declared itself. The
+	// desktop app sets daemonstate.SupervisorElectron, and the daemon then
+	// tells it of a requested upgrade on stdout (daemonstate.UpgradeNoticePrefix).
+	Supervisor string
 }
 
 // NormalizeGatewayURL maps the gateway address forms an operator can plausibly
