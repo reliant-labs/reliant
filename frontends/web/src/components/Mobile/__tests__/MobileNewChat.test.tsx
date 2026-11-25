@@ -414,7 +414,7 @@ describe('MobileNewChat', () => {
 
     await userEvent.click(screen.getByText('Runs on'))
     await userEvent.click(screen.getByRole('button', { name: /^laptop/ }))
-    expect(screen.getByTestId('mobile-new-chat-placement')).toHaveTextContent("reliant isn't set up on laptop")
+    expect(screen.getByTestId('mobile-new-chat-placement')).toHaveTextContent("reliant is a folder on another machine, so it can't be copied to laptop")
 
     await userEvent.type(screen.getByLabelText('Message'), 'fix the build')
     expect(screen.getByLabelText('Message')).toHaveValue('fix the build')
@@ -443,7 +443,7 @@ describe('MobileNewChat', () => {
     // The online source, never the target itself.
     expect(screen.getByTestId('stays-on-source')).toHaveTextContent('d-desk')
 
-    await userEvent.click(screen.getByRole('button', { name: /^Set up reliant on laptop/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Add to laptop/ }))
     expect(createProjectFromRepo).toHaveBeenCalledWith(expect.objectContaining({ daemonId: 'd-laptop' }))
 
     // The clone is queued on laptop; desk drops and old-box comes online.

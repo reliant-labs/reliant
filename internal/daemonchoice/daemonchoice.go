@@ -50,5 +50,8 @@ func Validate(ctx context.Context, repo Reader, userID, projectID, daemonID stri
 			return nil
 		}
 	}
+	// The web's new-chat view recognises this refusal by its message, to offer
+	// adding the project to the machine (frontends/web/src/lib/daemon-errors.ts,
+	// isProjectNotOnChosenMachine): keep the two in step.
 	return svcerr.ToConnect(svcerr.FailedPrecondition("project is not installed on that daemon"))
 }

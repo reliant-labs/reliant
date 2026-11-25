@@ -72,9 +72,15 @@ describe("startBlockedReason", () => {
   });
 
   it("says what to do instead of a bare \"isn't on\"", () => {
-    expect(reason("cicd")).toBe("temp isn't set up on cicd. Set it up there, or pick a machine it's on.");
+    expect(reason("cicd")).toBe("temp isn't on cicd yet. Add it there, or pick a machine it's on.");
     expect(reason("gpu")).toBe("Setting up temp on gpu. You can send once it's there.");
     expect(reason("old")).toBe("Setting up temp on old failed. Try again, or pick a machine it's on.");
+  });
+
+  it("offers no add for a plain folder, which has nothing to clone from", () => {
+    expect(
+      startBlockedReason({ placement: temp, daemonId: "cicd", projectName: "temp", machineName: "cicd", canClone: false }),
+    ).toBe("temp is a folder on another machine, so it can't be copied to cicd. Pick a machine it's on, or choose a folder already on cicd.");
   });
 
   it("names the machine's reason for a failed clone", () => {

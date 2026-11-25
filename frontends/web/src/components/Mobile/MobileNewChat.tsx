@@ -392,6 +392,7 @@ function MobileNewChatDraft({
           daemonId: runsOnDaemonId,
           projectName: currentProject.name,
           machineName: daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId ?? ""),
+          canClone: canSetUpElsewhere(currentProject),
         })
       : null;
   const canSetUpHere =
@@ -757,8 +758,7 @@ function MobileNewChatDraft({
                   className="mt-2 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-border font-medium text-primary-ink active:bg-foreground/5 disabled:opacity-60"
                 >
                   {settingUp && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
-                  Set up {currentProject?.name} on{" "}
-                  {daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId ?? "")}
+                  Add to {daemonLabel(daemons.find((d) => d.daemonId === runsOnDaemonId), runsOnDaemonId ?? "")}
                 </button>
               )}
             </StatusLine>
