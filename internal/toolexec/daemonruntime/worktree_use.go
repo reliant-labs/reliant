@@ -55,6 +55,8 @@ func noteWorktreeUse(texts ...string) {
 	for _, t := range texts {
 		u.Note(t)
 	}
+	// The same texts name the scratch directories in use (idle_reclaim.go).
+	noteScratchUse(texts...)
 }
 
 // usesPathsCommand names the daemon commands whose payload is work on the
