@@ -59827,9 +59827,7 @@
       "field": "Updates",
       "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61504,9 +61502,7 @@
       "field": "Updates",
       "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -62201,9 +62197,7 @@
       "field": "Updates",
       "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -62304,9 +62298,7 @@
       "field": "Updates",
       "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -62766,9 +62758,7 @@
       "field": "Updates",
       "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },

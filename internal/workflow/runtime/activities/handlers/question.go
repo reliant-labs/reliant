@@ -222,30 +222,6 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 			}
 		}
 
-		// Emit question update (include metadata so frontend can render the question)
-		metadata := ""
-		if input.Metadata != nil {
-			metadata = *input.Metadata
-		}
-		logger.Debug("[QuestionCreate] Emitting question update",
-			"questionID", questionID,
-			"chatID", input.ChatID,
-			"metadataLen", len(metadata),
-		)
-		if err := a.repo.EmitQuestionUpdate(txCtx, input.ChatID, db.QuestionUpdate{
-			QuestionID: questionID,
-			ChatID:     input.ChatID,
-			WorkflowID: input.WorkflowID,
-			ThreadID:   input.ThreadID,
-			StepID:     input.StepID,
-			Status:     "pending",
-			Metadata:   metadata,
-			Async:      input.Async,
-			ToolCallID: input.ToolCallID,
-		}); err != nil {
-			return fmt.Errorf("failed to emit question update: %w", err)
-		}
-
 		// An async question blocks nothing: the run goes on. It is an item
 		// in the user's inbox, which no activity change announces, so the
 		// inbox is told to re-read.
@@ -358,25 +334,6 @@ func (a *QuestionResolveActivity) Execute(ctx context.Context, input QuestionRes
 
 	if err := a.writer.ResolveQuestion(ctx, input.QuestionID, responseData); err != nil {
 		return QuestionResolveOutput{}, fmt.Errorf("failed to resolve question: %w", err)
-	}
-
-	// A timed-out question is closed as far as the user is concerned, so the
-	// feed must say so. Without this the last question update stays "pending"
-	// forever and every later open of the chat replays that gate — the question
-	// reappears even though nothing is waiting on it. Best-effort: the DB row
-	// is already resolved, which is what actually unblocks the run.
-	if question != nil {
-		if err := a.repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
-			QuestionID: question.ID,
-			ChatID:     question.ChatID,
-			WorkflowID: question.WorkflowID,
-			ThreadID:   question.ThreadID,
-			StepID:     question.StepID,
-			Status:     "resolved",
-		}); err != nil {
-			logger.Warn("[QuestionResolve] Failed to emit question resolved update",
-				"questionID", input.QuestionID, "error", err)
-		}
 	}
 
 	return QuestionResolveOutput{Success: true}, nil
