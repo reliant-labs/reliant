@@ -16,7 +16,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
@@ -53,49 +52,6 @@ func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	return store.GetChatRow(ctx, r.ORM(), id)
-}
-
-// GetChatRowWithUserCheck is an ownership check that reads only the chats
-// row: userID's chat, or core.ErrChatNotFound for a chat that is missing or
-// another user's. GetChatWithUserCheck is the same check over the activity
-// view, for a caller that needs a derived field.
-//
-// The store read filters on the owner; the row it returns is then confirmed
-// by authz, the one place the rule lives, as a write (the strict question,
-// since these reads back both reads and changes).
-func (r *Repo) GetChatRowWithUserCheck(ctx context.Context, id, userID string) (*ChatRow, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	chat, err := store.GetChatRowWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
-		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-	}
-	return chat, nil
-}
-
-func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-
-	chat, err := store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
-	if err != nil {
-		return nil, err
-	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
-		return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
-	}
-	return chat, nil
 }
 
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
@@ -154,6 +110,13 @@ func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListF
 
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
+}
+
+// LastRunPerWorkflowAndOrg is the newest run of each (workflow, org) pair:
+// LastRunPerWorkflow's candidates, before a caller drops the orgs a person
+// may no longer see (store.LastRunPerWorkflowAndOrg).
+func (r *Repo) LastRunPerWorkflowAndOrg(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
+	return store.LastRunPerWorkflowAndOrg(ctx, r.ORM(), filters)
 }
 
 // ==================== Messages ====================
@@ -1118,8 +1081,10 @@ func (r *Repo) RecordObservedProjectDaemonInScope(ctx context.Context, projectID
 	return recorded, err
 }
 
-// UpsertQueuedProjectDaemon records a clone that is queued but has not run.
-func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error {
+// UpsertQueuedProjectDaemon records a clone that is queued but has not run,
+// and the nested repositories (nestedRepoIDs, the project's repos below its
+// root) to clone into it once it lands, in one transaction.
+func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string, nestedRepoIDs []string) error {
 	if projectID == "" {
 		return fmt.Errorf("project ID cannot be empty")
 	}
@@ -1139,6 +1104,9 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 			return err
 		}
 		if err := store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID); err != nil {
+			return err
+		}
+		if err := store.PlanProjectDaemonRepos(ctx, r.ORM(), projectID, daemonID, nestedRepoIDs); err != nil {
 			return err
 		}
 		return store.ClearProjectDaemonDetachment(ctx, r.ORM(), projectID, daemonID)
@@ -1226,6 +1194,41 @@ func (r *Repo) FailProjectDaemonInstallInScope(ctx context.Context, projectID, d
 		return err
 	})
 	return failed, err
+}
+
+// SettleProjectDaemonFromNestedReposInScope settles the machine's checkout
+// of the project from its nested repositories' outcomes, once none is left
+// to clone: failed with installErr when installErr is set (one did not
+// clone; from installing or installed, see
+// store.FailProjectDaemonFromNestedRepos), else installed (every one
+// cloned). Both are fenced on the nested plan in the same statement, so a
+// set-up planned again meanwhile is never settled by the old plan's outcome,
+// and a checkout with a failed nested repository never reads installed. The
+// org is re-read under the same locks as MarkProjectDaemonInstalledInScope.
+// It reports whether the row is in the settled state now: installed for a
+// success, marked failed by this call for a failure.
+func (r *Repo) SettleProjectDaemonFromNestedReposInScope(ctx context.Context, projectID, daemonID, installErr string, scope *core.OrgScope) (bool, error) {
+	if projectID == "" || daemonID == "" {
+		return false, fmt.Errorf("project ID and daemon ID cannot be empty")
+	}
+	settled := false
+	err := r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+		settled = false
+		inScope, err := r.lockProjectInScope(ctx, projectID, scope)
+		if err != nil || !inScope {
+			return err
+		}
+		if installErr != "" {
+			settled, err = store.FailProjectDaemonFromNestedRepos(ctx, r.ORM(), projectID, daemonID, installErr)
+			return err
+		}
+		if err := store.MarkProjectDaemonInstalledFromNestedRepos(ctx, r.ORM(), projectID, daemonID); err != nil {
+			return err
+		}
+		settled, err = store.ProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
+		return err
+	})
+	return settled, err
 }
 
 // RecordFailedProjectDaemonRestoreInScope records that putting a pool

@@ -32,7 +32,7 @@ func (s *Service) chatBelongsToUser(ctx context.Context, chatID string) error {
 	if err != nil {
 		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if !authz.CanWriteChat(ctx, userID, chat) {
+	if !authz.CanOwnChat(ctx, userID, chat) {
 		return svcerr.NotFound("approval")
 	}
 	return nil
@@ -78,19 +78,13 @@ func resolvedMessage(a *db.Approval) string {
 	}
 }
 
-// retiredToolApprovalType is the approval_type of a row recorded by the
-// removed integration action approval prompt: 1, the reserved
-// APPROVAL_TYPE_TOOL. Retire it with runtime's actionApprovalRemovedChangeID.
-const retiredToolApprovalType = 1
-
 // answeredByItsRun reports whether denying a reaches the model through its own
-// run. A tool-call approval (and a row the removed prompt recorded) asks about
-// one call, and the run waiting on it answers that call in ExecuteTools with
-// the refusal, so a denial message — a tool_result for every call in the turn,
-// including calls that still run — would contradict and duplicate it.
+// run. A tool-call approval asks about one call, and the run waiting on it
+// answers that call in ExecuteTools with the refusal, so a denial message — a
+// tool_result for every call in the turn, including calls that still run —
+// would contradict and duplicate it.
 func answeredByItsRun(a *db.Approval) bool {
-	return a.ApprovalType == retiredToolApprovalType ||
-		a.ApprovalType == int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL)
+	return a.ApprovalType == int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL)
 }
 
 // decision is what the person decided about one or more approvals.

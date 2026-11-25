@@ -47,7 +47,7 @@ import { SecretAuthorKind, SecretStoreService } from "@/gen/controlplane/service
 
 import { completed } from "./defaults";
 import { shopActivity } from "../model/activity";
-import { DEMO_ENVS, DEMO_PROJECT, demoEnvId, inDemoProject, type DemoEnvId } from "./scope";
+import { DEMO_ENVS, DEMO_PROJECT, DEMO_SCOPE, demoEnvId, inProject, type DemoEnvId, type PackScope } from "./scope";
 import { mockService, type MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 import {
   artifactVersion,
@@ -203,12 +203,12 @@ function provenance(version: string) {
 /** A workload's artifact digest in `version`: unchanged since the release that last changed it (Security's SBOMs name it too). */
 export const artifactDigest = (workload: string, version: string) => digest(`${workload}@${artifactVersion(workload, version)}`);
 
-function environment(env: (typeof DEMO_ENVS)[number]) {
+function environment(env: (typeof DEMO_ENVS)[number], app: string = DEMO_PROJECT) {
   const running = RUNNING[env.id];
   return {
     id: env.id,
     name: env.name,
-    project: DEMO_PROJECT,
+    project: app,
     // A platform-run env: what DeployEnvironment.kind PERSISTENT meant.
     lifetime: DeployEnvironmentLifetime.PERSISTENT,
     secretPosture: DeploySecretPosture.WRITE_ONLY,
@@ -263,14 +263,14 @@ function promotion(envId: EnvId, p: DemoPromotion, from?: string): MessageInitSh
 }
 
 
-function release(r: (typeof DEMO_RELEASES)[number], index: number) {
+function release(r: (typeof DEMO_RELEASES)[number], index: number, app: string = DEMO_PROJECT) {
   const base = DEMO_RELEASES[index + 1];
   return {
     id: `rel-${r.version}`,
     version: r.version,
     gitCommit: r.commit,
     gitTag: r.version,
-    project: DEMO_PROJECT,
+    project: app,
     createdAt: ago(r.age),
     provenance: provenance(r.version),
     artifacts: DEMO_WORKLOADS.map((w) => ({
@@ -423,9 +423,9 @@ function domain(d: (typeof DEMO_DOMAINS)[number]) {
 }
 
 /** The activity feed on the wire: the same events the observability views read (model/activity.ts). */
-function activity(): MessageInitShape<typeof ActivityEventSchema>[] {
+function activity(app: string): MessageInitShape<typeof ActivityEventSchema>[] {
   const kinds = { user: ActivityActorKind.USER, machine: ActivityActorKind.MACHINE, system: ActivityActorKind.SYSTEM, unknown: ActivityActorKind.UNSPECIFIED } as const;
-  return shopActivity(demoNow()).map((e) => ({
+  return shopActivity(demoNow(), app).map((e) => ({
     id: e.id,
     at: timestampFromMs(e.atMs),
     actor: { ...e.actor, kind: kinds[e.actor.kind] },
@@ -465,7 +465,7 @@ const FAILED_DEPLOY = {
  * and the failed one. The promotions to dev and staging ran in CI; prod's
  * from a terminal, so their output stayed there.
  */
-function deployAttempts() {
+function deployAttempts(app: string = DEMO_PROJECT) {
   const runs = (Object.keys(RUNNING) as EnvId[]).flatMap((envId) =>
     [RUNNING[envId], ...HISTORY[envId]].map((p): DemoPromotion & { envId: EnvId; failed: typeof FAILED_DEPLOY | null } => ({
       envId,
@@ -483,7 +483,7 @@ function deployAttempts() {
     const phases = r.failed ? DEPLOY_PHASES.slice(0, DEPLOY_PHASES.indexOf("build") + 1) : DEPLOY_PHASES;
     return {
       id: r.failed ? r.failed.id : `dep-run-${env.name}-${r.version.replace(/\./g, "")}${r.seq ? `-${r.seq}` : ""}`,
-      project: DEMO_PROJECT,
+      project: app,
       environmentName: env.name,
       mode: "apply",
       source: ci ? "ci" : "terminal",
@@ -585,16 +585,18 @@ function comparison(from: number, to: number, envId: EnvId | undefined) {
 // ── Handlers ────────────────────────────────────────────────────────────────
 
 // Scope, in every handler as well as around them all (handlers/scope.ts scopedToDemo): an environment
-// id that is not one of shop's, or a project that is not shop, gets nothing.
+// id that is not one of shop's, or a project that is not the pack's app, gets nothing.
 const envIdOf = demoEnvId;
-const forProject = inDemoProject;
 
 /**
  * The story's overrides, by "pkg.Service/Method": what shop's console says.
  * Every other read is answered by forge's generated defaults
  * (handlers/defaults.ts), so only what the demo is ABOUT is written here.
  */
-export function consoleScenarioHandlers(): MockHandlers {
+export function consoleScenarioHandlers({ app }: PackScope = DEMO_SCOPE): MockHandlers {
+  const forProject = (project: string | undefined) => inProject({ app, org: null }, project);
+  const environmentOf = (env: (typeof DEMO_ENVS)[number]) => environment(env, app);
+  const releaseOf = (r: (typeof DEMO_RELEASES)[number], index: number) => release(r, index, app);
   return {
     ...completed(
       DeployService,
@@ -602,7 +604,7 @@ export function consoleScenarioHandlers(): MockHandlers {
         getLiveView: (req) => ({
           environments: forProject(req.project)
             ? DEMO_ENVS.map((env) => ({
-                environment: environment(env),
+                environment: environmentOf(env),
                 currentPromotion: promotion(env.id, RUNNING[env.id], PROMOTED_FROM[env.id]),
                 phase: DeployRolloutPhase.SUCCEEDED,
                 drift: { state: "in_sync", observedAt: ago(4 * MINUTE) },
@@ -618,13 +620,13 @@ export function consoleScenarioHandlers(): MockHandlers {
             : [],
         }),
         listEnvironments: (req) => ({
-          environments: forProject(req.project) ? DEMO_ENVS.map(environment) : [],
+          environments: forProject(req.project) ? DEMO_ENVS.map(environmentOf) : [],
         }),
         getEnvironment: (req) => {
           const env = DEMO_ENVS.find((e) => e.id === envIdOf(req.environmentId));
           return env
             ? {
-                environment: environment(env),
+                environment: environmentOf(env),
                 currentPromotion: promotion(env.id, RUNNING[env.id], PROMOTED_FROM[env.id]),
               }
             : {};
@@ -656,7 +658,7 @@ export function consoleScenarioHandlers(): MockHandlers {
         listReleases: (req) => ({
           releases:
             forProject(req.project) && (!req.promotedToEnvironmentId || envIdOf(req.promotedToEnvironmentId))
-              ? DEMO_RELEASES.map(release).slice(0, req.limit && req.limit > 0 ? req.limit : undefined) : [],
+              ? DEMO_RELEASES.map(releaseOf).slice(0, req.limit && req.limit > 0 ? req.limit : undefined) : [],
         }),
         getRelease: (req) => {
           if (!forProject(req.project)) return {};
@@ -664,7 +666,7 @@ export function consoleScenarioHandlers(): MockHandlers {
           if (index < 0) return {};
           const version = DEMO_RELEASES[index].version;
           return {
-            release: release(DEMO_RELEASES[index], index),
+            release: releaseOf(DEMO_RELEASES[index], index),
             currentEnvironmentIds: DEMO_ENVS.filter((e) => RUNNING[e.id].version === version).map((e) => e.id),
           };
         },
@@ -711,18 +713,18 @@ export function consoleScenarioHandlers(): MockHandlers {
           const from = DEMO_RELEASES.findIndex((r) => r.version === req.fromVersion);
           if (to < 0 || from < 0) return {};
           return {
-            from: release(DEMO_RELEASES[from], from),
-            to: release(DEMO_RELEASES[to], to),
+            from: releaseOf(DEMO_RELEASES[from], from),
+            to: releaseOf(DEMO_RELEASES[to], to),
             ...comparison(from, to, envIdOf(req.environmentId)),
           };
         },
         listDeployAttempts: (req) => {
           if (!forProject(req.project)) return { attempts: [] };
-          const attempts = deployAttempts().filter((a) => !req.environmentName || a.environmentName === req.environmentName);
+          const attempts = deployAttempts(app).filter((a) => !req.environmentName || a.environmentName === req.environmentName);
           return { attempts: req.limit > 0 ? attempts.slice(0, req.limit) : attempts };
         },
         getDeployAttempt: (req) => {
-          const attempt = deployAttempts().find((a) => a.id === req.id);
+          const attempt = deployAttempts(app).find((a) => a.id === req.id);
           if (!attempt) return {};
           return {
             attempt,
@@ -801,7 +803,7 @@ export function consoleScenarioHandlers(): MockHandlers {
           const envs = scope?.envIds.length ? new Set(scope.envIds) : null;
           // An issue's history and a target's feed narrow by what they name (activityApi.ts listActivity).
           return {
-            events: activity().filter(
+            events: activity(app).filter(
               (e) =>
                 (!envs || (e.env && envs.has(String(e.env.id)))) &&
                 (!req.targetKind || e.target?.kind === req.targetKind) &&

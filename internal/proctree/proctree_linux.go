@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 
@@ -235,6 +236,31 @@ func (t *Tree) prepareCgroup(cmd *exec.Cmd, seq uint64) {
 	t.dir, t.fd = dir, fd
 }
 
+// reattachCgroup takes back dir as the tree's cgroup (Limiter.Reattach): only
+// a cgroup v2 directory named cmd-<this pid>-<n>, which this process made
+// before its exec, and only while it still holds a process (an empty one is
+// the sweep's to remove). The sequence moves past n, so this image never
+// names a new command's cgroup after one still in use.
+func (t *Tree) reattachCgroup(dir string) {
+	rest, ok := strings.CutPrefix(filepath.Base(dir), fmt.Sprintf("%s%d-", cmdPrefix, os.Getpid()))
+	if !ok || !filepath.IsAbs(dir) || !strings.HasPrefix(dir, "/sys/fs/cgroup/") {
+		return
+	}
+	seq, err := strconv.ParseUint(rest, 10, 64)
+	if err != nil {
+		return
+	}
+	for {
+		cur := cgroupSeq.Load()
+		if cur >= seq || cgroupSeq.CompareAndSwap(cur, seq) {
+			break
+		}
+	}
+	if populated(dir) {
+		t.dir = dir
+	}
+}
+
 // cgroupVanished reports whether err, from starting the tree's command, is
 // the kernel refusing the clone into the tree's cgroup because the cgroup was
 // removed: ENOENT for a removed cgroup, ENODEV for one dying, and the cgroup
@@ -345,15 +371,106 @@ func (t *Tree) limitNproc() {
 // Kill SIGKILLs every process in the tree's cgroup, wherever it went: a member
 // that left the process group with setsid is still in the cgroup. A tree with
 // no cgroup reports false and kills nothing (the caller kills the group).
+//
+// It writes cgroup.kill, which the kernel applies to the cgroup and every
+// cgroup under it at once (Linux 5.14+). Before 5.14 there is no cgroup.kill,
+// and the cgroup is frozen instead and every process in it SIGKILLed by pid
+// (freezeAndKill).
 func (t *Tree) Kill() bool {
 	if t == nil || t.dir == "" {
 		return false
 	}
-	if err := os.WriteFile(filepath.Join(t.dir, "cgroup.kill"), []byte("1"), 0); err != nil {
-		logging.Warn("proctree: cgroup.kill failed", "dir", t.dir, "error", err)
-		return false
+	err := writeCgroupFile(filepath.Join(t.dir, cgroupKillFile), "1")
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, os.ErrNotExist) {
+		if _, statErr := os.Stat(t.dir); statErr == nil {
+			err = freezeAndKill(t.dir)
+			if err == nil {
+				return true
+			}
+		}
+	}
+	logging.Warn("proctree: cannot kill a command cgroup", "dir", t.dir, "error", err)
+	return false
+}
+
+// cgroupKillFile is the cgroup file Kill writes. A var so a test can take the
+// path a kernel without it takes.
+var cgroupKillFile = "cgroup.kill"
+
+// freezeTimeout bounds how long freezeAndKill waits for a cgroup to freeze.
+const freezeTimeout = 2 * time.Second
+
+// freezeAndKill SIGKILLs every process in cgroup dir and the cgroups under it
+// by pid, while the cgroup is frozen. A frozen process cannot exit or fork, so
+// each pid listed stays its process until it is sent its SIGKILL (a fatal
+// signal is delivered to a frozen process), and nothing is born after the
+// listing to escape it. A cgroup that does not freeze within freezeTimeout is
+// thawed and not signalled: its pids would not be pinned.
+func freezeAndKill(dir string) error {
+	freeze := filepath.Join(dir, "cgroup.freeze")
+	if err := writeCgroupFile(freeze, "1"); err != nil {
+		return fmt.Errorf("freezing: %w", err)
+	}
+	defer func() { _ = writeCgroupFile(freeze, "0") }()
+	if !awaitFrozen(dir, freezeTimeout) {
+		return fmt.Errorf("the cgroup did not freeze within %v", freezeTimeout)
+	}
+	for _, pid := range cgroupPids(dir) {
+		if err := unix.Kill(pid, unix.SIGKILL); err != nil && !errors.Is(err, unix.ESRCH) {
+			logging.Debug("proctree: cannot SIGKILL a process of a frozen command cgroup", "pid", pid, "error", err)
+		}
+	}
+	return nil
+}
+
+// awaitFrozen waits up to d for cgroup dir to report itself frozen.
+func awaitFrozen(dir string, d time.Duration) bool {
+	giveUp := time.After(d)
+	poll := time.NewTicker(5 * time.Millisecond)
+	defer poll.Stop()
+	for !cgroupEvent(dir, "frozen") {
+		select {
+		case <-giveUp:
+			return false
+		case <-poll.C:
+		}
 	}
 	return true
+}
+
+// cgroupPids lists the processes of cgroup dir and of every cgroup under it.
+func cgroupPids(dir string) []int {
+	var pids []int
+	data, _ := os.ReadFile(filepath.Join(dir, "cgroup.procs"))
+	for _, f := range strings.Fields(string(data)) {
+		if pid, err := strconv.Atoi(f); err == nil && pid > 0 {
+			pids = append(pids, pid)
+		}
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if e.IsDir() {
+			pids = append(pids, cgroupPids(filepath.Join(dir, e.Name()))...)
+		}
+	}
+	return pids
+}
+
+// writeCgroupFile writes value to an existing cgroup control file. It never
+// creates one: a file the kernel does not have reads as os.ErrNotExist.
+func writeCgroupFile(path, value string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY, 0)
+	if err != nil {
+		return err
+	}
+	_, err = f.WriteString(value)
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	return err
 }
 
 // Populated reports whether any process of the tree's cgroup is alive. False
@@ -366,13 +483,19 @@ func (t *Tree) Populated() bool {
 }
 
 func populated(dir string) bool {
+	return cgroupEvent(dir, "populated")
+}
+
+// cgroupEvent reports whether cgroup dir's cgroup.events sets key ("populated",
+// "frozen"). False when it cannot be read.
+func cgroupEvent(dir, key string) bool {
 	data, err := os.ReadFile(filepath.Join(dir, "cgroup.events"))
 	if err != nil {
 		return false
 	}
 	sc := bufio.NewScanner(bytes.NewReader(data))
 	for sc.Scan() {
-		if v, ok := strings.CutPrefix(sc.Text(), "populated "); ok {
+		if v, ok := strings.CutPrefix(sc.Text(), key+" "); ok {
 			return v != "0"
 		}
 	}

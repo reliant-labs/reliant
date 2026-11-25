@@ -257,6 +257,12 @@ var purgeSteps = []step{
 	// payloads included, keyed by chat with no foreign key.
 	{"chat_update_heads", `
 		DELETE FROM chat_update_heads WHERE chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
+	// Per-person grants (chat-collaboration.md §3.1): the grants the user
+	// holds on other people's chats, and every grant on their own chats
+	// (which chats would cascade, deleted explicitly so a future FK change
+	// cannot silently orphan them).
+	{"chat_members", `
+		DELETE FROM chat_members WHERE user_id = $1 OR chat_id IN (SELECT id FROM chats WHERE user_id = $1)`},
 	// The per-thread message counts the messages triggers maintain, and the
 	// chats still waiting for theirs to be counted: keyed by chat with no
 	// foreign key. They follow messages, whose delete writes the counts.
@@ -347,6 +353,11 @@ var purgeSteps = []step{
 	// chat's owner, with no foreign key to cascade them. Its writes take the
 	// same lock and fence as the model calls' above.
 	{"tool_call_usage", `DELETE FROM tool_call_usage WHERE user_id = $1`},
+	// The insights member rollups (agent-analytics.md §3.1): a member's daily
+	// totals, keyed by user. Their writes take the lock above. The team
+	// rollups name no one and stay with the org.
+	{"insights_model_calls_member_daily", `DELETE FROM insights_model_calls_member_daily WHERE user_id = $1`},
+	{"insights_tool_calls_member_daily", `DELETE FROM insights_tool_calls_member_daily WHERE user_id = $1`},
 	// A chat's question before it uses the person's own account (§10): it names
 	// their account's label. Chats cascade it too; this covers a chat kept.
 	{"chat_personal_funding", `DELETE FROM chat_personal_funding WHERE user_id = $1`},

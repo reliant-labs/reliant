@@ -63,24 +63,33 @@ type selfUpdateExec interface {
 // binary is still in place, so the runtime is started again on it, with
 // auto-update off for the rest of this process, rather than leaving a
 // person's machine with no daemon (D6).
-func runSelfUpdating(start func() error, su selfUpdateExec, beforeExec func()) error {
+//
+// beforeExec readies the background processes for the exec; the func it
+// returns undoes that when the exec failed and this binary runs on.
+func runSelfUpdating(start func() error, su selfUpdateExec, beforeExec func() (undo func())) error {
 	for {
 		err := start()
 		if su == nil || !errors.Is(err, daemonruntime.ErrUpgradeExit) || !su.Armed() {
 			return err
 		}
-		beforeExec()
+		undo := beforeExec()
 		execErr := su.ExecPending()
 		if execErr == nil {
 			return err // only a stand-in exec returns
+		}
+		if undo != nil {
+			undo()
 		}
 		logging.Error("The update could not be installed; the daemon keeps running the version it has", "error", execErr)
 		su.Disable(execErr)
 	}
 }
 
-// killBackgroundForSwap stops the background processes before the swap's
-// exec: their output pipes would close under them, and the new binary
-// cannot adopt them yet (R5). At a quiet moment there are none; a forced
-// update interrupts them, as any restart does.
-func killBackgroundForSwap() { shell.GetBackgroundManager().KillAllRunning() }
+// handOffBackgroundForSwap readies the background processes for the swap's
+// exec (R5): one with file-backed output keeps running and the new binary,
+// the same process, adopts it; every other one is stopped, as at any
+// restart: its output pipes would close under it. At a quiet moment there
+// are none of those; a forced update interrupts them. This replaces the
+// shutdown's KillAllRunning for this exit only: the exec never returns to
+// run it, and a normal stop or a crash is unchanged.
+func handOffBackgroundForSwap() (undo func()) { return shell.GetBackgroundManager().HandOffForExec() }

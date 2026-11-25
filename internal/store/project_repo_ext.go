@@ -39,6 +39,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -183,6 +184,49 @@ func GetProjectByRemoteURLAndUserInScope(ctx context.Context, db orm.Context, re
 		return nil, fmt.Errorf("%w for remote_url: %s", svcerr.NotFound("project"), remoteURL)
 	}
 	return p, nil
+}
+
+// GetProjectBySameRemoteAndUserInScope finds the user's oldest project, in
+// scope (nil: any org), whose remote names the same repository as remoteURL
+// in another spelling: git@github.com:o/r.git, https://github.com/o/r and
+// ssh://git@github.com/o/r are one repository (gitremote.Canonical, compared
+// case-insensitively). It is the fallback after the exact remote_url lookup,
+// so a repository added once over SSH and once over HTTPS is found again
+// instead of becoming a second project. It never merges or rewrites what is
+// stored. A remote that names no shareable repository (a local path) finds
+// nothing.
+func GetProjectBySameRemoteAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	want := gitremote.Canonical(gitremote.StripCredentials(remoteURL))
+	if want == "" {
+		return nil, fmt.Errorf("%w for remote_url: %s", svcerr.NotFound("project"), gitremote.Redacted(remoteURL))
+	}
+	// The repository's path (owner/repo) narrows the candidates in SQL; the
+	// canonical comparison below decides. LIKE's wildcards in it only widen
+	// the candidates.
+	repoPath := want
+	if i := strings.Index(want, "/"); i >= 0 {
+		repoPath = want[i+1:]
+	}
+	opts := []orm.QueryOption{
+		orm.WhereEq(ProjectFieldUserID, userID),
+		func(q *bun.SelectQuery) { q.Where("? ILIKE ?", bun.Ident(ProjectFieldRemoteURL), "%"+repoPath+"%") },
+	}
+	if scope != nil {
+		opts = append(opts, whereOrg(ProjectFieldOrgID, scope))
+	}
+	rows, err := ListProject(ctx, db, append(opts, oldestProjectFirst...)...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project by remote and user: %w", err)
+	}
+	for _, row := range rows {
+		if row.RemoteURL != nil && strings.EqualFold(gitremote.Canonical(*row.RemoteURL), want) {
+			return projectToCore(row), nil
+		}
+	}
+	return nil, fmt.Errorf("%w for remote_url: %s", svcerr.NotFound("project"), gitremote.Redacted(remoteURL))
 }
 
 // oldestProjectFirst orders a lookup that may match one project per org.

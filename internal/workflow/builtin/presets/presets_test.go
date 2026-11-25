@@ -36,7 +36,7 @@ var ValidAgentParams = map[string]bool{
 	"system_prompt":   true,
 	"max_turns":       true,
 	"planning_prompt": true,
-	"skills":          true, // unified skill-preload param (was top-level recommended_skills)
+	"skills":          true, // skill-preload param
 }
 
 func TestPresetsLoad(t *testing.T) {

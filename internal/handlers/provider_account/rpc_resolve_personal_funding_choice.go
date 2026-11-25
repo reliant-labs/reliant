@@ -47,7 +47,7 @@ func (s *Service) ResolvePersonalFundingChoice(
 	default:
 		return nil, svcerr.Wrap(svcerr.InvalidArgument("choice must be USE_PERSONAL or KEEP_WAITING"))
 	}
-	if _, err := s.deps.Store.GetChatRowWithUserCheck(ctx, chatID, userID); err != nil {
+	if _, err := s.deps.Chats.GetChatRowWithUserCheck(ctx, chatID, userID); err != nil {
 		return nil, notFoundOr(err, "chat")
 	}
 	q, err := s.deps.Funding.AnswerChatPersonalFunding(ctx, chatID, userID, state, time.Now())

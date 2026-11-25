@@ -9,10 +9,8 @@
  * document's HOSTNAME picks the shell, so the forge pages are the same bytes
  * in both and ship with the same release. The public demo
  * (`demo.reliantlabs.io`) is a build of its own (demo.html, the forge-demo
- * frontend of the `demo` env), which is always the demo shell
- * (`__WEB_TARGET__`). Deprecated, kept working until a future major: this
- * bundle still mounts the demo shell on the DEMO_APP_HOST host, so a
- * deployment that still points that host at reliant-web keeps its demo.
+ * frontend), which is always the demo shell (`__WEB_TARGET__`); this bundle
+ * mounts the demo shell only through the dev override below.
  *
  *   forge    the app's one route tree (routes.tsx), as the forge BRAND:
  *            the same routes, guards and pages as Reliant (U6, one shell),
@@ -50,9 +48,8 @@ const isShell = (value: string | null): value is AppShell => (SHELLS as readonly
 /** The forge app host when the runtime config names none. */
 export const DEFAULT_FORGE_APP_HOST = "forge.reliantlabs.io";
 
-/** The demo host when the runtime config names none. */
+/** The public demo's host: its own build (demo.html), where the app's /forge/demo hands off to. */
 export const DEFAULT_DEMO_APP_HOST = "demo.reliantlabs.io";
-
 
 /** localStorage key of the dev override. */
 export const SHELL_OVERRIDE_KEY = "reliant.shell";
@@ -85,30 +82,18 @@ export function forgeAppHost(): string {
   return normalizeHost(configured) || DEFAULT_FORGE_APP_HOST;
 }
 
-/**
- * The public demo's hostname in this bundle: DEMO_APP_HOST, else the default.
- * Where the app's /forge/demo hands off to (demoAppOrigin). Mounting the demo
- * shell on this host is deprecated: the demo's own build (demo.html) is the
- * supported path.
- */
-export function demoAppHost(): string {
-  let configured = "";
-  try {
-    configured = loadConfig().DEMO_APP_HOST;
-  } catch {
-    // An invalid config document is configGuard's to report; fall back.
-  }
-  return normalizeHost(configured) || DEFAULT_DEMO_APP_HOST;
-}
-
 /** The forge host's public origin, for a link into the app from outside it (the public demo's). */
 export function forgeAppOrigin(): string {
   return `https://${forgeAppHost()}`;
 }
 
-/** The public demo's origin, for a link to it from the app (the app's /forge/demo leaves for it). */
+/**
+ * The public demo's origin, for a link to it from the app (the app's
+ * /forge/demo leaves for it). The DEMO_APP_HOST config key that once
+ * overrode the host is removed; the demo's own build lives on one host.
+ */
 export function demoAppOrigin(): string {
-  return `https://${demoAppHost()}`;
+  return `https://${DEFAULT_DEMO_APP_HOST}`;
 }
 
 export interface ShellInputs {
@@ -116,8 +101,6 @@ export interface ShellInputs {
   search: string;
   /** The forge app host (forgeAppHost()). */
   forgeHost: string;
-  /** The demo host (demoAppHost()). */
-  demoHost: string;
   /** True in the desktop app. */
   electron: boolean;
   storage: Pick<Storage, "getItem" | "setItem" | "removeItem"> | null;
@@ -128,7 +111,7 @@ export interface ShellInputs {
  * `storage` (that is the point of the override: it outlives the query string,
  * which the router and sign-in redirects drop).
  */
-export function resolveShell({ hostname, search, forgeHost, demoHost, electron, storage }: ShellInputs): AppShell {
+export function resolveShell({ hostname, search, forgeHost, electron, storage }: ShellInputs): AppShell {
   if (electron) return "reliant";
 
   let param: string | null = null;
@@ -156,9 +139,7 @@ export function resolveShell({ hostname, search, forgeHost, demoHost, electron, 
   }
   if (isShell(stored)) return stored;
 
-  const host = normalizeHost(hostname);
-  if (host === demoHost) return "demo";
-  return host === forgeHost ? "forge" : "reliant";
+  return normalizeHost(hostname) === forgeHost ? "forge" : "reliant";
 }
 
 let resolved: AppShell | null = null;
@@ -180,7 +161,6 @@ export function getShell(): AppShell {
     hostname: window.location.hostname,
     search: window.location.search,
     forgeHost: forgeAppHost(),
-    demoHost: demoAppHost(),
     electron: !!window.electronAPI || !!window.RELIANT_CONFIG?.isElectron,
     storage,
   });

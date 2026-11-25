@@ -50,9 +50,10 @@ import (
 // Its owner's updater acts — Electron's, a package manager, or later the
 // self-update primitive — and stops it the way it always does.
 //
-// Background processes still die with the daemon at a restart, as at any
-// stop: KillAllRunning (daemon.go) is unchanged. Surviving one is a later
-// phase (R5), which needs their output on disk, not in daemon-held pipes.
+// Background processes still die with a managed daemon at a restart, as at
+// any stop: KillAllRunning (daemon.go) is unchanged, and a pod roll ends
+// them anyway. Only a self-update's exec in place hands them to the next
+// image (R5: upgrade_self.go, shell/background_survive.go).
 
 const (
 	// upgradeMaxDrain caps how long a drain lets running calls go on (D5).
