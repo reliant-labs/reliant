@@ -1,0 +1,569 @@
+// Copyright (c) 2025 Reliant Labs
+package gate
+
+import (
+	"archive/tar"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/netip"
+	"slices"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+// fakeDocker stands in for the docker CLI: it records every command and
+// answers the ones the backend runs.
+type fakeDocker struct {
+	t *testing.T
+
+	mu    sync.Mutex
+	calls [][]string
+
+	runtimes     string // docker info .Runtimes
+	v4, v6       string // the probe's dumps
+	containerEnv []string
+	imageEnv     []string
+	state        containerState
+	sizeFails    bool                            // volume create --opt size fails
+	attach       func(ctx context.Context) error // docker start --attach
+	killed       chan struct{}
+	listed       map[string]string // list command (first two args) -> ids
+	copiedTar    bytes.Buffer
+}
+
+func newFake(t *testing.T) *fakeDocker {
+	v4, v6 := readDumps(t)
+	return &fakeDocker{
+		t:        t,
+		runtimes: `{"runc":{"path":"runc"},"sysbox-runc":{"path":"/usr/bin/sysbox-runc"}}`,
+		v4:       v4, v6: v6,
+		imageEnv: []string{"PATH=/image/bin", "DOCKER_VERSION=27.0"},
+		state:    containerState{Status: "exited"},
+		killed:   make(chan struct{}),
+		listed:   map[string]string{},
+	}
+}
+
+func (f *fakeDocker) backend(cfg SysboxConfig) *Sysbox {
+	if cfg.ProbeImage == "" {
+		cfg.ProbeImage = "probe@sha256:abc"
+	}
+	s := NewSysbox(cfg)
+	s.exec = f.exec
+	return s
+}
+
+func (f *fakeDocker) exec(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args ...string) error {
+	f.mu.Lock()
+	f.calls = append(f.calls, append([]string{}, args...))
+	f.mu.Unlock()
+	head := strings.Join(args[:min(2, len(args))], " ")
+	switch {
+	case head == "info --format":
+		switch args[2] {
+		case "{{json .Runtimes}}":
+			fmt.Fprintln(stdout, f.runtimes)
+		case "{{json .FirewallBackend}}":
+			fmt.Fprintln(stdout, `{"Driver":"iptables"}`)
+		}
+	case args[0] == "run": // the egress probe
+		fmt.Fprintf(stdout, "%siptables iptables-save\n%s%sip6tables ip6tables-save\n%s", dumpMarker, f.v4, dumpMarker, f.v6)
+	case head == "volume create":
+		if f.sizeFails && slices.Contains(args, "--opt") {
+			fmt.Fprintln(stderr, "quota size requested but no quota support")
+			return errors.New("exit status 1")
+		}
+	case head == "container inspect" && strings.Contains(args[3], "Config.Env"):
+		env := f.containerEnv
+		if env == nil {
+			// What the engine does: the image's ENV, overridden by --env.
+			env = mergeEnv(f.imageEnv, envArgs(f.createCall()))
+		}
+		_ = json.NewEncoder(stdout).Encode(env)
+	case head == "image inspect":
+		_ = json.NewEncoder(stdout).Encode(f.imageEnv)
+	case head == "container inspect":
+		_ = json.NewEncoder(stdout).Encode(f.state)
+	case head == "cp -":
+		_, _ = io.Copy(&f.copiedTar, stdin)
+	case head == "start --attach":
+		if f.attach != nil {
+			return f.attach(ctx)
+		}
+	case args[0] == "kill":
+		close(f.killed)
+	case head == "ps -aq", head == "volume ls", head == "network ls":
+		fmt.Fprint(stdout, f.listed[args[0]])
+	}
+	return nil
+}
+
+func (f *fakeDocker) commands() [][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.calls)
+}
+
+func (f *fakeDocker) createCall() []string {
+	for _, c := range f.commands() {
+		if c[0] == "create" {
+			return c
+		}
+	}
+	return nil
+}
+
+func (f *fakeDocker) ran(verb ...string) bool {
+	for _, c := range f.commands() {
+		if len(c) >= len(verb) && slices.Equal(c[:len(verb)], verb) {
+			return true
+		}
+	}
+	return false
+}
+
+func envArgs(create []string) []string {
+	var out []string
+	for i := 0; i+1 < len(create); i++ {
+		if create[i] == "--env" {
+			out = append(out, create[i+1])
+		}
+	}
+	return out
+}
+
+func mergeEnv(base, over []string) []string {
+	m := map[string]string{}
+	var order []string
+	for _, kv := range append(slices.Clone(base), over...) {
+		k, _, _ := strings.Cut(kv, "=")
+		if _, ok := m[k]; !ok {
+			order = append(order, k)
+		}
+		m[k] = kv
+	}
+	out := make([]string, 0, len(order))
+	for _, k := range order {
+		out = append(out, m[k])
+	}
+	return out
+}
+
+func testSpec(t *testing.T) Spec {
+	s := validSpec()
+	s.SourceDir = t.TempDir()
+	s.Limits.Wall = time.Minute
+	s.EgressAllow = mustPrefixes("10.20.0.0/16") // what the testdata machine allows
+	return s
+}
+
+// The create command is the boundary. It must never hold what would hand the
+// gate the host: privilege, a host path, the host engine's socket, a host
+// namespace, or a bare --env.
+func TestCreateArgsHoldNoHostAccess(t *testing.T) {
+	t.Setenv("RELIANT_GATE_TEST_CANARY", "daemon-secret")
+	spec := validSpec()
+	spec.Env = map[string]string{"GOFLAGS": "-mod=mod"}
+	spec.Limits.DiskBytes = 10 << 30
+	env, err := GateEnv(spec.RunID, spec.Env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := namesFor(spec.RunID)
+	args := createArgs(spec, n, env, SysboxConfig{DNS: []string{"1.1.1.1"}, EngineWait: time.Minute})
+	joined := strings.Join(args, " ")
+
+	banned := []string{"--privileged", "-v", "--volume", "--volumes-from", "--pid", "--ipc", "--userns", "--uts",
+		"--cap-add", "--security-opt", "--device", "--env-file", "--cgroup-parent", "--add-host", "-e"}
+	for _, a := range args {
+		if slices.Contains(banned, a) {
+			t.Errorf("create args hold %q", a)
+		}
+		if strings.Contains(a, "daemon-secret") {
+			t.Errorf("create args hold this process's environment: %q", a)
+		}
+	}
+	flag := func(name string) []string {
+		var vals []string
+		for i := 0; i+1 < len(args); i++ {
+			if args[i] == name {
+				vals = append(vals, args[i+1])
+			}
+		}
+		return vals
+	}
+	want := map[string][]string{
+		"--runtime":     {SysboxRuntime},
+		"--network":     {n.network},
+		"--cpus":        {"4"},
+		"--memory":      {"8589934592"},
+		"--memory-swap": {"8589934592"},
+		"--pids-limit":  {"4096"},
+		"--dns":         {"1.1.1.1"},
+		"--entrypoint":  {"/bin/sh"},
+		"--mount": {
+			"type=volume,src=reliant-gate-run-1-work,dst=/gate",
+			"type=volume,src=reliant-gate-run-1-engine,dst=/var/lib/docker",
+		},
+		"--label": {"reliant.run-id=run-1", "reliant.gate.backend=sysbox", "reliant.gate.role=gate"},
+		"--env":   env,
+	}
+	for name, vals := range want {
+		if got := flag(name); !slices.Equal(got, vals) {
+			t.Errorf("%s = %q, want %q", name, got, vals)
+		}
+	}
+	for _, kv := range flag("--env") {
+		if !strings.Contains(kv, "=") {
+			t.Errorf("bare --env %q copies this process's value in", kv)
+		}
+	}
+	if !slices.Contains(args, "--init") {
+		t.Errorf("no --init: %s", joined)
+	}
+	// The command follows the image, after the bootstrap.
+	i := slices.Index(args, spec.Image)
+	if i < 0 || args[i+1] != "-c" || args[i+3] != "reliant-gate" || !slices.Equal(args[i+4:], spec.Command) {
+		t.Errorf("image and command tail = %q", args[max(i, 0):])
+	}
+}
+
+func TestNetworkAndVolumeArgs(t *testing.T) {
+	n := namesFor("run-1")
+	if len(n.bridge) > 15 || !strings.HasPrefix(n.bridge, BridgePrefix) {
+		t.Errorf("bridge %q must start %q and fit IFNAMSIZ", n.bridge, BridgePrefix)
+	}
+	if namesFor("run-2").bridge == n.bridge {
+		t.Error("two runs share a bridge name")
+	}
+	net := networkCreateArgs("run-1", n)
+	for _, want := range []string{"--ipv6=false", "com.docker.network.bridge.name=" + n.bridge, "com.docker.network.bridge.enable_icc=false", "reliant.run-id=run-1", n.network} {
+		if !slices.Contains(net, want) {
+			t.Errorf("network create lacks %q: %q", want, net)
+		}
+	}
+	if v := volumeCreateArgs("run-1", n.work, "work", 0); slices.Contains(v, "--opt") {
+		t.Errorf("unlimited volume carries an option: %q", v)
+	}
+	if v := volumeCreateArgs("run-1", n.work, "work", 1024); !slices.Contains(v, "size=1024") || !slices.Contains(v, "reliant.run-id=run-1") {
+		t.Errorf("limited volume: %q", v)
+	}
+}
+
+// The probe reads host netfilter, so it runs the machine's own image, never
+// the gate's, and never under sysbox.
+func TestProbeArgs(t *testing.T) {
+	args := probeArgs("run-1", "probe@sha256:abc")
+	for _, want := range []string{"--rm", "runc", "--network", "host", "NET_ADMIN", "--read-only", "probe@sha256:abc", "reliant.run-id=run-1"} {
+		if !slices.Contains(args, want) {
+			t.Errorf("probe args lack %q: %q", want, args)
+		}
+	}
+	v4, v6 := splitDumps(dumpMarker + "iptables iptables-nft-save\nA\n" + dumpMarker + "ip6tables ip6tables-save\nB\n" + dumpMarker + "iptables iptables-legacy-save\nC\n")
+	if !slices.Equal(v4, []string{"A\n", "C\n"}) || !slices.Equal(v6, []string{"B\n"}) {
+		t.Errorf("splitDumps = %q, %q", v4, v6)
+	}
+}
+
+func TestRunSequenceAndVerdicts(t *testing.T) {
+	for _, c := range []struct {
+		state containerState
+		want  Class
+	}{
+		{containerState{Status: "exited", ExitCode: 0}, ClassPass},
+		{containerState{Status: "exited", ExitCode: 1}, ClassFail},
+		{containerState{Status: "exited", ExitCode: 2}, ClassUnproven},
+		{containerState{Status: "exited", ExitCode: 137, OOMKilled: true}, ClassUnproven},
+	} {
+		f := newFake(t)
+		f.state = c.state
+		res, err := f.backend(SysboxConfig{}).Run(context.Background(), testSpec(t))
+		if err != nil {
+			t.Fatalf("exit %d: Run: %v", c.state.ExitCode, err)
+		}
+		if res.Class != c.want || res.ExitCode != c.state.ExitCode || res.OOMKilled != c.state.OOMKilled {
+			t.Errorf("exit %d oom %v: result %+v, want class %s", c.state.ExitCode, c.state.OOMKilled, res, c.want)
+		}
+		var verbs []string
+		for _, cmd := range f.commands() {
+			v := cmd[0]
+			if cmd[0] == "volume" || cmd[0] == "network" || cmd[0] == "container" || cmd[0] == "image" || cmd[0] == "start" {
+				v += " " + cmd[1]
+			}
+			verbs = append(verbs, v)
+		}
+		want := []string{"info", "info", "run", "network create", "volume create", "volume create", "create", "container inspect", "image inspect", "cp", "start --attach", "container inspect"}
+		if !slices.Equal(verbs, want) {
+			t.Errorf("command sequence = %q, want %q", verbs, want)
+		}
+	}
+}
+
+func TestRunRefusesWithoutSysbox(t *testing.T) {
+	f := newFake(t)
+	f.runtimes = `{"runc":{"path":"runc"}}`
+	_, err := f.backend(SysboxConfig{}).Run(context.Background(), testSpec(t))
+	if !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Run without sysbox = %v, want ErrUnavailable", err)
+	}
+	if f.ran("create") || f.ran("network", "create") {
+		t.Error("a refused gate created resources")
+	}
+	if a := f.backend(SysboxConfig{}).Detect(context.Background()); a.Available || !strings.Contains(a.Reason, "runc") {
+		t.Errorf("Detect = %+v", a)
+	}
+}
+
+func TestRunRefusesWithoutEgressRules(t *testing.T) {
+	cases := map[string]func(*fakeDocker, *Spec, *SysboxConfig){
+		"rules absent":     func(f *fakeDocker, _ *Spec, _ *SysboxConfig) { f.v4 = "*filter\nCOMMIT\n" },
+		"no probe image":   func(f *fakeDocker, _ *Spec, c *SysboxConfig) { c.ProbeImage = "" },
+		"undeclared allow": func(f *fakeDocker, s *Spec, _ *SysboxConfig) { s.EgressAllow = nil },
+		"unprovided allow": func(f *fakeDocker, s *Spec, _ *SysboxConfig) {
+			s.EgressAllow = mustPrefixes("10.20.0.0/16", "192.168.5.0/24")
+		},
+	}
+	for name, mutate := range cases {
+		f := newFake(t)
+		spec := testSpec(t)
+		cfg := SysboxConfig{ProbeImage: "probe"}
+		mutate(f, &spec, &cfg)
+		s := NewSysbox(cfg)
+		s.exec = f.exec
+		_, err := s.Run(context.Background(), spec)
+		if !errors.Is(err, ErrEgressNotEnforced) {
+			t.Errorf("%s: Run = %v, want ErrEgressNotEnforced", name, err)
+		}
+		if f.ran("create") {
+			t.Errorf("%s: a refused gate created its container", name)
+		}
+	}
+}
+
+func TestRunRefusesInjectedEnv(t *testing.T) {
+	f := newFake(t)
+	f.containerEnv = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "HTTPS_PROXY=http://user:pw@proxy:3128"}
+	_, err := f.backend(SysboxConfig{}).Run(context.Background(), testSpec(t))
+	if !errors.Is(err, ErrEnvInjected) || !strings.Contains(err.Error(), "HTTPS_PROXY") {
+		t.Fatalf("Run = %v, want ErrEnvInjected naming HTTPS_PROXY", err)
+	}
+	if f.ran("start") {
+		t.Error("a gate with an injected variable was started")
+	}
+}
+
+func TestCheckEnvAllowsImageEnv(t *testing.T) {
+	if err := checkEnv([]string{"A=1", "IMG=x"}, []string{"IMG=x"}, []string{"A=1"}); err != nil {
+		t.Errorf("image and gate env: %v", err)
+	}
+	if err := checkEnv([]string{"IMG=changed"}, []string{"IMG=x"}, nil); !errors.Is(err, ErrEnvInjected) {
+		t.Errorf("a changed image value: %v", err)
+	}
+}
+
+func TestRunWallTimeIsUnprovenAndKills(t *testing.T) {
+	f := newFake(t)
+	f.state = containerState{Status: "exited", ExitCode: 137}
+	f.attach = func(ctx context.Context) error {
+		select {
+		case <-f.killed:
+			return errors.New("exit status 137")
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	spec := testSpec(t)
+	spec.Limits.Wall = 20 * time.Millisecond
+	res, err := f.backend(SysboxConfig{}).Run(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Class != ClassUnproven || !res.TimedOut || !strings.Contains(res.Reason, "wall-time") {
+		t.Errorf("result %+v, want unproven by wall time", res)
+	}
+	if !f.ran("kill", namesFor(spec.RunID).container) {
+		t.Error("the gate was not killed")
+	}
+}
+
+func TestRunCanceledKillsAndReturnsError(t *testing.T) {
+	f := newFake(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	f.attach = func(context.Context) error {
+		cancel()
+		<-f.killed
+		return nil
+	}
+	res, err := f.backend(SysboxConfig{}).Run(ctx, testSpec(t))
+	if !errors.Is(err, context.Canceled) || res.Class != ClassUnproven {
+		t.Fatalf("Run = %+v, %v; want unproven and context.Canceled", res, err)
+	}
+}
+
+func TestRunDiskLimitFallsBackWithLimitation(t *testing.T) {
+	f := newFake(t)
+	f.sizeFails = true
+	spec := testSpec(t)
+	spec.Limits.DiskBytes = 20 << 30
+	res, err := f.backend(SysboxConfig{}).Run(context.Background(), spec)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res.Limitations) != 2 || !strings.Contains(res.Limitations[0], "no disk limit") {
+		t.Errorf("limitations = %q", res.Limitations)
+	}
+}
+
+func TestRunTarSourceLandsUnderTree(t *testing.T) {
+	var src bytes.Buffer
+	tw := tar.NewWriter(&src)
+	_ = tw.WriteHeader(&tar.Header{Name: "go.mod", Mode: 0o644, Size: 6, Typeflag: tar.TypeReg})
+	_, _ = tw.Write([]byte("module"))
+	_ = tw.WriteHeader(&tar.Header{Name: "link", Linkname: "go.mod", Typeflag: tar.TypeLink})
+	_ = tw.Close()
+	f := newFake(t)
+	spec := testSpec(t)
+	spec.SourceDir, spec.SourceTar = "", &src
+	if _, err := f.backend(SysboxConfig{}).Run(context.Background(), spec); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !f.ran("cp", "-", namesFor(spec.RunID).container+":"+WorkMount) {
+		t.Errorf("tar not copied to %s: %q", WorkMount, f.commands())
+	}
+	tr := tar.NewReader(&f.copiedTar)
+	var got []string
+	for {
+		h, err := tr.Next()
+		if err != nil {
+			break
+		}
+		got = append(got, h.Name+"|"+h.Linkname)
+	}
+	if want := []string{"src/|", "src/go.mod|", "src/link|src/go.mod"}; !slices.Equal(got, want) {
+		t.Errorf("copied entries = %q, want %q", got, want)
+	}
+}
+
+func TestPrefixTarRefusesEscapes(t *testing.T) {
+	for _, h := range []tar.Header{
+		{Name: "../evil", Typeflag: tar.TypeReg},
+		{Name: "/etc/passwd", Typeflag: tar.TypeReg},
+		{Name: "a/../../evil", Typeflag: tar.TypeReg},
+		{Name: "ok", Linkname: "../../etc/shadow", Typeflag: tar.TypeLink},
+	} {
+		var src bytes.Buffer
+		tw := tar.NewWriter(&src)
+		_ = tw.WriteHeader(&h)
+		_ = tw.Close()
+		if err := prefixTar(&src, io.Discard, "src"); !errors.Is(err, ErrInvalidSpec) {
+			t.Errorf("%q -> %q: prefixTar = %v, want ErrInvalidSpec", h.Name, h.Linkname, err)
+		}
+	}
+}
+
+func TestTeardownByLabelAndIdempotent(t *testing.T) {
+	f := newFake(t)
+	s := f.backend(SysboxConfig{})
+	if err := s.Teardown(context.Background(), "run-1"); err != nil {
+		t.Fatalf("Teardown with nothing left: %v", err)
+	}
+	for _, c := range f.commands() {
+		if c[len(c)-1] != "label=reliant.run-id=run-1" {
+			t.Errorf("a teardown with nothing left ran %q", c)
+		}
+	}
+	f = newFake(t)
+	f.listed = map[string]string{"ps": "c1\nc2\n", "volume": "v1\nv2\n", "network": "n1\n"}
+	s = f.backend(SysboxConfig{})
+	if err := s.Teardown(context.Background(), "run-1"); err != nil {
+		t.Fatalf("Teardown: %v", err)
+	}
+	var rms [][]string
+	for _, c := range f.commands() {
+		if slices.Contains(c, "rm") {
+			rms = append(rms, c)
+		}
+	}
+	want := [][]string{{"rm", "-f", "-v", "c1", "c2"}, {"volume", "rm", "-f", "v1", "v2"}, {"network", "rm", "n1"}}
+	if !slices.EqualFunc(rms, want, slices.Equal[[]string]) {
+		t.Errorf("removals = %q, want %q (containers first)", rms, want)
+	}
+	for _, bad := range []string{"", "x/y", "Run"} {
+		if err := s.Teardown(context.Background(), bad); !errors.Is(err, ErrInvalidSpec) {
+			t.Errorf("Teardown(%q) = %v: an odd id must never become a label filter", bad, err)
+		}
+	}
+}
+
+func TestCopyOutCapsBytes(t *testing.T) {
+	big := bytes.Repeat([]byte("x"), 1000)
+	s := NewSysbox(SysboxConfig{})
+	s.exec = func(ctx context.Context, _ io.Reader, stdout, _ io.Writer, args ...string) error {
+		if !slices.Equal(args, []string{"cp", "reliant-gate-run-1:/gate/src/.reliant", "-"}) {
+			t.Errorf("args = %q", args)
+		}
+		for range 10 {
+			_, _ = stdout.Write(big)
+		}
+		return nil
+	}
+	var out bytes.Buffer
+	if err := s.CopyOut(context.Background(), "run-1", "/gate/src/.reliant", &out, 2500); err == nil {
+		t.Error("CopyOut over its cap succeeded")
+	}
+	if out.Len() > 2500 {
+		t.Errorf("CopyOut wrote %d bytes past a 2500 cap", out.Len())
+	}
+	out.Reset()
+	if err := s.CopyOut(context.Background(), "run-1", "/gate/src/.reliant", &out, 1<<20); err != nil || out.Len() != 10000 {
+		t.Errorf("CopyOut under its cap: %v, %d bytes", err, out.Len())
+	}
+	if err := s.CopyOut(context.Background(), "run-1", "relative", &out, 1); !errors.Is(err, ErrInvalidSpec) {
+		t.Errorf("relative path: %v", err)
+	}
+}
+
+func TestPreflightReport(t *testing.T) {
+	f := newFake(t)
+	f.sizeFails = true
+	r, err := f.backend(SysboxConfig{}).Preflight(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !r.Availability.Available || r.Egress != nil || r.DiskLimit || r.DiskLimitReason == "" {
+		t.Errorf("report %+v", r)
+	}
+	if !slices.Equal(r.EgressAllow, []netip.Prefix{netip.MustParsePrefix("10.20.0.0/16")}) {
+		t.Errorf("allow = %v", r.EgressAllow)
+	}
+	if r.Ready() != nil {
+		t.Errorf("Ready = %v", r.Ready())
+	}
+	// Everything the probe created is torn down by its label.
+	if !f.ran("ps", "-aq", "--filter") {
+		t.Error("preflight left its probe resources")
+	}
+}
+
+func TestCheckFirewallBackend(t *testing.T) {
+	for in, ok := range map[string]bool{"": true, "null": true, `{"Driver":"iptables"}`: true, `{"Driver":"nftables"}`: false} {
+		if err := checkFirewallBackend(in); (err == nil) != ok {
+			t.Errorf("checkFirewallBackend(%q) = %v", in, err)
+		}
+	}
+}
+
+func TestBootstrapScript(t *testing.T) {
+	s := bootstrapScript(45 * time.Second)
+	for _, want := range []string{"dockerd --data-root=/var/lib/docker", "-ge 45 ]", "exit 2", "cd /gate/src", `exec "$@"`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("bootstrap lacks %q:\n%s", want, s)
+		}
+	}
+}
