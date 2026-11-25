@@ -5538,9 +5538,10 @@ type DiscoveredProject struct {
 	IsGitRepo bool                   `protobuf:"varint,3,opt,name=is_git_repo,json=isGitRepo,proto3" json:"is_git_repo,omitempty"`
 	// remote_url is remote.origin.url of the checkout at path, credentials
 	// stripped; empty when path is not itself a git checkout, has no origin, or
-	// the daemon predates this field. The server matches it, in any form (SSH
-	// or HTTPS), against the user's projects (projects.remote_key) before it
-	// creates one: a repository already a project on another machine joins
+	// the daemon predates this field. The server matches it by repository
+	// (projects.remote_key: on GitHub, GitLab and Bitbucket its SSH and HTTPS
+	// forms are one; a local path matches nothing) against the user's
+	// projects before it creates one: a repository already a project on another machine joins
 	// that project here, at this path, instead of becoming a second one.
 	RemoteUrl     string `protobuf:"bytes,4,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`
 	unknownFields protoimpl.UnknownFields

@@ -187,15 +187,16 @@ func GetProjectByRemoteURLAndUserInScope(ctx context.Context, db orm.Context, re
 }
 
 // GetProjectByRemoteKeyAndUserInScope returns the user's project of the
-// repository remoteURL names, whatever form of its remote either side holds
-// (ssh://, scp-like git@host:org/repo, https://, a trailing .git or /, any
-// case): projects.remote_key = git_remote_key(remoteURL), the one definition
-// of the key, in the database (20261125034821_projects_remote_key). Scope as
+// repository remoteURL names, in any form of its remote known to name it (on
+// github.com, gitlab.com and bitbucket.org: ssh://, scp-like, https://, a
+// trailing .git, any case; elsewhere only the same server and path):
+// projects.remote_key = git_remote_key(remoteURL), the one definition of the
+// key, in the database (20261125034821_projects_remote_key). Scope as
 // GetProjectByRemoteURLAndUserInScope; the oldest when several match (a
 // user's duplicates from before the key, or one per org with a nil scope).
 // A project scheduled for deletion is returned like any other: the caller
 // decides what it means. NotFound when none matches, and when remoteURL names
-// no host (its key is NULL, which equals nothing).
+// no server, such as a local path (its key is NULL, which equals nothing).
 func GetProjectByRemoteKeyAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
 	remoteURL = strings.TrimSpace(remoteURL)
 	if remoteURL == "" {

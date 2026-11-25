@@ -303,6 +303,10 @@ func (s *Service) CreateProject(
 			break
 		}
 	}
+	// A remote another project already holds verbatim, that did not match it
+	// by repository above, names no server (a local path): kept, it would
+	// only collide with that project's key.
+	projectRemoteURL = s.freeRemoteURL(ctx, projectRemoteURL, userID, orgID)
 
 	// forge's name for the project is the join key to its control-plane
 	// environments; NULL until a daemon reads one (GetTopology backfills).

@@ -39,10 +39,11 @@ type Project struct {
 	IsGitRepo     bool    `json:"is_git_repo"`
 	DefaultBranch *string `json:"default_branch,omitempty"`
 	RemoteURL     *string `json:"remote_url,omitempty"`
-	// RemoteKey is RemoteURL reduced to the repository it names (lowercase
-	// host/path: the SSH and HTTPS forms of one repo share it), computed by
-	// the database (projects.remote_key, git_remote_key). Read-only: nil
-	// when RemoteURL is unset or names no host. Two of a user's projects
+	// RemoteKey is RemoteURL reduced to the repository it names, computed by
+	// the database (projects.remote_key, git_remote_key): on GitHub, GitLab
+	// and Bitbucket the SSH and HTTPS forms share it; elsewhere only the same
+	// server and path do. Read-only: nil when RemoteURL is unset or names no
+	// server (a local path). Two of a user's projects
 	// with one key are duplicates of one repository.
 	RemoteKey *string `json:"remote_key,omitempty"`
 	// IsForge is true when the project's repo root contains a forge.yaml.

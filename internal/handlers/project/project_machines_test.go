@@ -277,12 +277,35 @@ func TestCreateProject_AttachesTheProjectOfTheFoldersRepositoryInAnyRemoteForm(t
 	}
 }
 
+// A folder whose remote names no server (a relative or absolute local path)
+// is not the project of another folder with the same remote text: it is
+// created as a project of its own, without that remote.
+func TestCreateProject_ALocalPathRemoteNeverAttaches(t *testing.T) {
+	for _, remote := range []string{"repos/props", "/srv/git/props.git"} {
+		t.Run(remote, func(t *testing.T) {
+			f := newMachinesFixture(t)
+			existing := f.project(t, "props", "/home/workspace/props-"+uuid.NewString(), f.cloud, &remote)
+			local := "/Users/me/props-" + uuid.NewString()
+			f.disk.folder(f.laptop, local, remote)
+
+			resp, err := f.svc.CreateProject(f.ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{
+				Name: "props", Path: local, DaemonId: &f.laptop,
+			}))
+			require.NoError(t, err)
+			assert.False(t, resp.Msg.Attached)
+			assert.NotEqual(t, existing.ID, resp.Msg.Project.Id)
+			assert.Nil(t, resp.Msg.Project.RemoteUrl, "the new project took a remote that identifies nothing")
+			assert.Equal(t, map[string]string{f.cloud: existing.Path}, f.rows(t, existing.ID))
+		})
+	}
+}
+
 // Another user's project of the repository is never attached: the folder
 // becomes the caller's own project.
 func TestCreateProject_NeverAttachesAnotherUsersRepository(t *testing.T) {
 	f := newMachinesFixture(t)
 	remote := "https://github.com/acme/theirs-" + uuid.NewString() + ".git"
-	now := time.Now().UTC()
+	now := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
 	theirs := &db.Project{ID: uuid.NewString(), UserID: "someone-else", Name: "theirs", Path: "/srv/theirs",
 		RemoteURL: &remote, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, f.repo.CreateProject(f.ctx, theirs))

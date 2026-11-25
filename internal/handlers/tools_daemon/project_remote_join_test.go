@@ -132,6 +132,41 @@ func TestDiscovery_NoRemoteKeepsThePathRules(t *testing.T) {
 	assert.NotEqual(t, a.ID, b.ID, "a local-path remote matched across machines")
 }
 
+// Remotes that do not name one repository never join: a relative local
+// path (the same text on two machines names two folders), a path that differs
+// only in case on a host that is not known to fold case, and the same path on
+// another port (another server).
+func TestDiscovery_DistinctRepositoriesNeverJoin(t *testing.T) {
+	for name, remotes := range map[string][2]string{
+		"relative local remote":       {"repos/props", "repos/props"},
+		"absolute local remote":       {"/srv/git/props.git", "/srv/git/props.git"},
+		"case-sensitive path":         {"https://git.example.com/Team/Props.git", "https://git.example.com/team/props.git"},
+		"another port":                {"https://git.example.com/team/props.git", "https://git.example.com:8443/team/props.git"},
+		"another ssh port":            {"ssh://git@git.example.com/srv/props.git", "ssh://git@git.example.com:2222/srv/props.git"},
+		"another ssh account's home":  {"alice@git.example.com:props.git", "bob@git.example.com:props.git"},
+		"home-relative vs absolute":   {"git@git.example.com:srv/props.git", "git@git.example.com:/srv/props.git"},
+		"another transport elsewhere": {"https://git.example.com/team/props.git", "ssh://git@git.example.com/team/props.git"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newRemoteJoinFixture(t)
+			a := f.discover(t, f.userID, f.laptop, f.laptopPath, remotes[0])
+			b := f.discover(t, f.userID, f.cloud, f.cloudPath, remotes[1])
+			assert.NotEqual(t, a.ID, b.ID, "%s joined %s", remotes[1], remotes[0])
+			assert.Equal(t, []string{f.laptop + "=" + f.laptopPath}, f.checkouts(t, a.ID), "the first project gained a checkout")
+		})
+	}
+}
+
+// One repository on a self-hosted server, reported in forms that name the
+// same server and path, joins: default ports and the scp-like spelling of an
+// ssh:// remote are the same remote.
+func TestDiscovery_TheSameRemoteOnAnotherHostJoins(t *testing.T) {
+	f := newRemoteJoinFixture(t)
+	a := f.discover(t, f.userID, f.laptop, f.laptopPath, "git@git.example.com:/srv/props.git")
+	b := f.discover(t, f.userID, f.cloud, f.cloudPath, "ssh://git@GIT.example.com:22/srv/props.git/")
+	assert.Equal(t, a.ID, b.ID)
+}
+
 // Another user's project of the same repository is never joined.
 func TestDiscovery_AnotherUsersRepositoryIsNeverJoined(t *testing.T) {
 	f := newRemoteJoinFixture(t)
@@ -169,7 +204,7 @@ func TestDiscovery_DetachedOrDeletedProjectsAreNotJoined(t *testing.T) {
 
 	g := newRemoteJoinFixture(t)
 	dying := g.discover(t, g.userID, g.laptop, g.laptopPath, "git@github.com:acme/props.git")
-	_, err := g.repo.ORM().Bun().NewRaw("UPDATE projects SET delete_after = ? WHERE id = ?", time.Now().Add(time.Hour), dying.ID).Exec(g.ctx)
+	_, err := g.repo.ORM().Bun().NewRaw("UPDATE projects SET delete_after = ? WHERE id = ?", time.Date(2099, 1, 1, 0, 0, 0, 0, time.UTC), dying.ID).Exec(g.ctx)
 	require.NoError(t, err)
 	fresh := g.discover(t, g.userID, g.cloud, g.cloudPath, "https://github.com/acme/props")
 	assert.NotEqual(t, dying.ID, fresh.ID, "a project scheduled for deletion was joined")

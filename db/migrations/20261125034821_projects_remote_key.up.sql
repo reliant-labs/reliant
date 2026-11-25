@@ -10,11 +10,30 @@
 -- `https://github.com/org/repo` on a cloud machine, compared as strings, was
 -- two repositories, and a second machine's folder became a second project.
 --
--- remote_key is the remote reduced to `host/path`: no scheme, no user or
--- password, no port, the scp-like `host:path` read as `host/path`, no
--- trailing `/` or `.git`, all lowercase. Every form of one repo has one key.
--- NULL when there is no remote, or the remote names no host (a local path,
--- file://): a folder's path on disk is no identity across machines.
+-- remote_key is the repository a remote names, or NULL. A key equates two
+-- remotes only where the equivalence is established; anything else keeps the
+-- remote's own identity, so a false "same repository" (which would attach a
+-- folder to an unrelated project) is never traded for a missed duplicate
+-- (which the user can merge):
+--
+--   * github.com, gitlab.com, bitbucket.org, on their default ports: these
+--     hosts serve one repository at the same owner/path over https, http,
+--     ssh, scp-like ssh and git://, ignore a trailing .git, and route owner
+--     and repository names case-insensitively. Key: `github.com/acme/props`
+--     (lowercase, no scheme, user, port or .git; at least owner/repo).
+--   * every other host: the transport, the ssh user, the host (lowercase:
+--     DNS names are) and any non-default port are kept, and the path is kept
+--     as written (case and .git included), with only trailing slashes
+--     dropped. The scp-like `[user@]host:path` is git's
+--     `ssh://[user@]host/~/path` (home-relative) or, for `host:/abs`,
+--     `ssh://[user@]host/abs`, and keyed in that form. Default ports (https
+--     443, http 80, ssh 22, git 9418) are the same server. Key:
+--     `https://git.example.com:8443/Team/Props.git`.
+--   * NULL: no remote, or one that names no server: a local path (absolute,
+--     relative like `repos/props`, or a Windows drive), file://, any other
+--     scheme, a host with no repository path, or anything unparseable. git's
+--     own rule decides scp-like vs local: a colon before the first slash.
+--     A path on disk is no identity across machines.
 --
 -- WHY GENERATED, NOT WRITTEN BY THE APP. The key has one definition, here, and
 -- the database applies it to every row whoever writes it: the release before
@@ -41,34 +60,95 @@
 SET LOCAL lock_timeout = '5s';
 
 CREATE FUNCTION git_remote_key(remote text) RETURNS text
-    LANGUAGE sql IMMUTABLE STRICT PARALLEL SAFE
+    LANGUAGE plpgsql IMMUTABLE STRICT PARALLEL SAFE
 AS $$
-    SELECT CASE
-        -- A host of two or more characters (a one-letter "host" is a Windows
-        -- drive, C:\src), then at least one path segment; no backslash.
-        WHEN k ~ '^[a-z0-9_][a-z0-9_.-]+(/[^/\\]+)+$' THEN k
-    END
-    FROM (
-        SELECT lower(regexp_replace(regexp_replace(
-            CASE
-                -- scheme://[userinfo@]host[:port]/path
-                WHEN r ~ '^[A-Za-z][A-Za-z0-9+.-]*://' THEN
-                    regexp_replace(
-                        regexp_replace(r, '^[A-Za-z][A-Za-z0-9+.-]*://', ''),
-                        '^([^/@]*@)?([^/:]*)(:[0-9]*)?', '\2')
-                -- scp-like [user@]host:path
-                ELSE regexp_replace(r, '^([^/@:]*@)?([^/:]+):/*', '\2/')
-            END,
-            '/+$', ''), '(\.git)?/*$', '')) AS k
-        FROM (SELECT btrim(remote, E' \t\r\n') AS r) AS raw
-    ) AS keyed
+DECLARE
+    r      text := btrim(remote, E' \t\r\n');
+    m      text[];
+    family text;
+    usr    text;
+    host   text;
+    port   text;
+    path   text;
+    dflt   text;
+    homerel boolean := false;
+BEGIN
+    IF r ~ '^[A-Za-z][A-Za-z0-9+.-]*://' THEN
+        -- scheme://[userinfo@]host[:port][/path]; no query or fragment.
+        m := regexp_match(r,
+            '^([A-Za-z][A-Za-z0-9+.-]*)://(?:([^/]*)@)?(\[[0-9A-Fa-f:.]+\]|[^/:?#@\[\]]+)(?::([0-9]*))?(/[^?#]*)?$');
+        IF m IS NULL THEN
+            RETURN NULL;
+        END IF;
+        family := CASE lower(m[1])
+            WHEN 'https' THEN 'https'
+            WHEN 'http' THEN 'http'
+            WHEN 'ssh' THEN 'ssh'
+            WHEN 'git+ssh' THEN 'ssh'
+            WHEN 'ssh+git' THEN 'ssh'
+            WHEN 'git' THEN 'git'
+        END;
+        IF family IS NULL THEN
+            RETURN NULL; -- file:// and every other scheme name no server
+        END IF;
+        -- Only an ssh user names something (the account, whose home a ~ path
+        -- is under); an http(s) userinfo is a credential.
+        IF family = 'ssh' THEN
+            usr := nullif(split_part(m[2], ':', 1), '');
+        END IF;
+        host := lower(m[3]);
+        port := nullif(m[4], '');
+        path := coalesce(m[5], '');
+    ELSE
+        -- scp-like [user@]host:path, by git's rule: a colon before the first
+        -- slash. A one-letter "host" is a Windows drive (C:\src, C:/src).
+        m := regexp_match(r, '^(?:([^/@:]*)@)?(\[[0-9A-Fa-f:.]+\]|[^/:\\@\[\]]{2,}):(.*)$');
+        IF m IS NULL THEN
+            RETURN NULL; -- a local path
+        END IF;
+        family := 'ssh';
+        usr := nullif(m[1], '');
+        host := lower(m[2]);
+        path := m[3];
+        IF left(path, 1) <> '/' THEN
+            -- Home-relative: on a hosting provider just the repository's
+            -- path, elsewhere ssh://host/~/path (below).
+            homerel := true;
+            path := '/' || path;
+        END IF;
+    END IF;
+
+    -- The default port is the same server. (Read into a variable: an IF
+    -- condition ends at its first THEN, a CASE's included.)
+    dflt := CASE family WHEN 'https' THEN '443' WHEN 'http' THEN '80' WHEN 'ssh' THEN '22' WHEN 'git' THEN '9418' END;
+    IF port = dflt THEN
+        port := NULL;
+    END IF;
+    path := regexp_replace(path, '/+$', '');
+    IF path !~ '^(/[^/\\]+)+$' THEN
+        RETURN NULL; -- no repository path, an empty segment, or a backslash
+    END IF;
+
+    IF host IN ('github.com', 'gitlab.com', 'bitbucket.org') AND port IS NULL THEN
+        path := lower(regexp_replace(ltrim(path, '/'), '\.git$', ''));
+        IF path !~ '^[^/]+(/[^/]+)+$' OR path ~ '(^|/)~' THEN
+            RETURN NULL; -- not owner/repo
+        END IF;
+        RETURN host || '/' || path;
+    END IF;
+
+    IF homerel THEN
+        path := CASE WHEN left(path, 2) = '/~' THEN path ELSE '/~' || path END;
+    END IF;
+    RETURN family || '://' || coalesce(usr || '@', '') || host || coalesce(':' || port, '') || path;
+END
 $$;
 
 COMMENT ON FUNCTION git_remote_key(text) IS
-    'A git remote reduced to lowercase host/path (no scheme, userinfo, port, trailing / or .git; scp-like host:path read as host/path), or NULL when it names no host. projects.remote_key.';
+    'The repository a git remote names: lowercase owner/repo on github.com, gitlab.com and bitbucket.org; transport://[ssh user@]host[:non-default port]/path as written elsewhere; NULL for a local path or anything naming no server. projects.remote_key; see 20261125034821_projects_remote_key.';
 
 ALTER TABLE projects
     ADD COLUMN remote_key text GENERATED ALWAYS AS (git_remote_key(remote_url)) STORED;
 
 COMMENT ON COLUMN projects.remote_key IS
-    'git_remote_key(remote_url): the repository, whatever form of its remote a machine reported. Not unique (see MergeProjects).';
+    'git_remote_key(remote_url): the repository, in any form of its remote known to name it. Not unique (see MergeProjects).';
