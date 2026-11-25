@@ -22,6 +22,7 @@ import (
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
+	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
 )
 
@@ -103,9 +104,27 @@ func TestUserChainDeadlineIsReliants(t *testing.T) {
 	require.Equal(t, interceptors.UnaryTimeout, d.Unary)
 	require.Equal(t, 10*time.Second, d.Unary)
 	require.NotNil(t, d.OnSlow, "slow RPCs report as [SlowRPC] and reliant_grpc_slow_rpc_total")
-	require.Equal(t, interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines()), d.Procedures)
+	require.Equal(t, interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines(), file_system.FileSystemRPCDeadlines()), d.Procedures)
 	for procedure, budget := range forge.ForgeRPCDeadlines() {
 		require.Equal(t, budget, d.Procedures[procedure], procedure)
+	}
+	for procedure, budget := range file_system.FileSystemRPCDeadlines() {
+		require.Equal(t, budget, d.Procedures[procedure], procedure)
+	}
+}
+
+// GetFilePreview asks the machine for 60s to read a file of up to 25 MB, but
+// the user chain had no FileSystemService entry, so the 10s every unnamed rpc
+// gets cut it first (and the router shrank the daemon's budget to match): a
+// large preview over a slow uplink failed at 10s. DownloadFile reads the same
+// way. Both get a deadline that outlives the whole-file read.
+func TestUserChainGivesWholeFileReadsTheirDaemonBudget(t *testing.T) {
+	d := userChainDeadline(t)
+	for _, procedure := range []string{
+		reliantv1connect.FileSystemServiceGetFilePreviewProcedure,
+		reliantv1connect.FileSystemServiceDownloadFileProcedure,
+	} {
+		require.Greater(t, d.Procedures[procedure], 60*time.Second, procedure)
 	}
 }
 
