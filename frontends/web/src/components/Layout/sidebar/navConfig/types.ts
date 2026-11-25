@@ -68,7 +68,7 @@ export type NavSlotId =
   | "update-button"
   /** The footer's Help row: a tour, the docs, keyboard shortcuts (sidebar/HelpMenu). */
   | "help"
-  /** A host's own actions in the footer: the public demo's tour, Install Forge and telemetry notice in a phone's drawer (Forge/Demo/demoNav.ts). */
+  /** A host's own actions in the footer: the public demo's tour, Install Forge and telemetry notice in a phone's drawer (Forge/Demo/demoNavConfig.ts). */
   | "host-actions";
 
 /** A count or a dot after a row's label. */

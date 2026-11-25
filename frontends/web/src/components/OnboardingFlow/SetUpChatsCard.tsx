@@ -16,7 +16,7 @@ import { Laptop } from "lucide-react";
 import { buttonClasses } from "@/components/forge-ui/button";
 import { cn } from "@/lib/utils";
 
-import { chatSetupPath } from "./onboardingGate";
+import { chatSetupPath } from "./onboardingGatePolicy";
 
 export const SET_UP_CHATS_COPY = "Chats run your agents in an agent sandbox";
 

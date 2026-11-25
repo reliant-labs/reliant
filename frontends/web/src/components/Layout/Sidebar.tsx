@@ -110,7 +110,7 @@ import type { NavigateOptions, NavSlots } from "./sidebar/NavRenderer";
 import { hybridNav } from "./sidebar/navConfig";
 import { ShellNavColumn } from "./sidebar/ShellNavColumn";
 import { useNarrowViewport } from "../../hooks/useNarrowViewport";
-import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGate";
+import { chatSetupNeeded, chatSetupPath } from "../OnboardingFlow/onboardingGatePolicy";
 import { ConnectSandboxCta } from "../EmptyState/ConnectSandboxCta";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { isAtOrBelow } from "./sidebar/navLocation";
@@ -1155,7 +1155,7 @@ function SidebarComponent({
     return ordered[0]?.id ?? null;
   }, [chatListTab, filteredArchivedChats, viewMode, flatList, projectFilterId, activeGroups, projectGroups, activeChatId]);
 
-  // Whether chats can run yet (OnboardingFlow/onboardingGate.ts, ChatSetup).
+  // Whether chats can run yet (OnboardingFlow/onboardingGatePolicy.ts, ChatSetup).
   // Until they can, the Chats section is the Set up chats card, and New chat
   // goes where the card does.
   const setup = useChatSetup();

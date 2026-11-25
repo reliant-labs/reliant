@@ -20,7 +20,7 @@
  *
  * Someone who signed up here only to deploy apps has no use for agent setup, so
  * the hatch also leads to their apps (Projects, narrowed to them), which no
- * onboarding gates (OnboardingFlow/onboardingGate.ts gates the chats). It
+ * onboarding gates (OnboardingFlow/onboardingGatePolicy.ts gates the chats). It
  * leaves this user's onboarding unfinished: a chat still onboards them.
  */
 import { useState } from "react";

@@ -14,7 +14,7 @@
  *    copy, never a chat;
  *  - the led console with the demo's own additions (DemoConsoleHost).
  *
- * The nav is not here: it is the shell's (Forge/Demo/DemoNav.tsx, demoNav.ts).
+ * The nav is not here: it is the shell's (Forge/Demo/DemoNav.tsx, demoNavConfig.ts).
  */
 
 import { useMemo, type ReactNode } from "react";
