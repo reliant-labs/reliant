@@ -22,6 +22,7 @@
         "Attachment",
         "AutomationTakeover",
         "Background",
+        "CallerControlPlane",
         "Catalog",
         "Chat",
         "ChatTrace",
@@ -52,6 +53,7 @@
         "Inbox",
         "InputOptions",
         "IntegrationSettings",
+        "InternalControlPlane",
         "LLMUsageRetention",
         "Llmusage",
         "MCP",
@@ -14113,6 +14115,10 @@
             {
               "name": "is_git_repo",
               "kind": "bool"
+            },
+            {
+              "name": "remote_url",
+              "kind": "string"
             }
           ],
           "reliant.v1.DiskConsumer": [
@@ -44089,6 +44095,10 @@
             {
               "name": "is_git_repo",
               "kind": "bool"
+            },
+            {
+              "name": "remote_url",
+              "kind": "string"
             }
           ],
           "reliant.v1.DiskConsumer": [
@@ -56004,6 +56014,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "CallerControlPlane",
+      "name": "CallerControlPlane",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.CallerControlPlane",
+      "source": {
+        "path": "internal/app/variant_caller_control_plane.go",
+        "symbol": "NewCallerControlPlane"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "Catalog",
       "name": "Catalog",
       "kind": "component",
@@ -56681,6 +56703,18 @@
           "methods": []
         }
       ]
+    },
+    {
+      "id": "InternalControlPlane",
+      "name": "InternalControlPlane",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.InternalControlPlane",
+      "source": {
+        "path": "internal/app/variant_internal_control_plane.go",
+        "symbol": "NewInternalControlPlane"
+      },
+      "methods": [],
+      "implementation_candidates": []
     },
     {
       "id": "JetStream",
@@ -58193,10 +58227,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/account.ControlPlane",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "CallerControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Account",
@@ -58576,6 +58614,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "QuestionResolver",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.QuestionResolver",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Questions",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Questions",
       "methods": [],
@@ -58669,6 +58718,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "TriggerEvents",
+      "interface": "github.com/reliant-labs/reliant/internal/launch.TriggerEventStore",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Workflows",
       "interface": "github.com/reliant-labs/reliant/internal/launch.WorkflowLoader",
       "methods": [],
@@ -58697,7 +58757,9 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat_trace.Spans",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
       "providers": [],
       "resolution": "unresolved"
@@ -58826,10 +58888,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Reports",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "CallerControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "CredentialsAutomationtokens",
@@ -58969,10 +59035,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MemberIdleTimeouts",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "CallerControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "DaemonRegistry",
@@ -58993,10 +59063,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MachineNames",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "CallerControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "DaemonRegistry",
@@ -59219,6 +59293,19 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Chats",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Firings",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Firings",
       "methods": [],
@@ -59282,10 +59369,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgLister",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "CallerControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Inbox",
@@ -59871,10 +59962,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.ListPrices",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "InternalControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "OrgUsage",
@@ -60098,10 +60193,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.HostedApps",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "CallerControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Project",
@@ -60109,10 +60208,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.CloneDispatcher",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "CallerControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Project",
@@ -60167,10 +60270,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "InternalControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Project",
@@ -60561,6 +60668,17 @@
     },
     {
       "consumer": "Question",
+      "field": "Resolver",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Resolver",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
       "field": "Signals",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/question.Signaler",
       "methods": [],
@@ -60696,6 +60814,19 @@
       "consumer": "Run",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.Repository",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Run",
+      "field": "RunLists",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.RunLists",
       "methods": [],
       "candidates": [
         "Database"
@@ -60890,7 +61021,9 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.LLMKeyMinter",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
       "providers": [],
       "resolution": "unresolved"
@@ -61680,10 +61813,14 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.AutomationTokens",
       "methods": [],
       "candidates": [
-        "ControlPlaneAccounts"
+        "CallerControlPlane",
+        "ControlPlaneAccounts",
+        "InternalControlPlane"
       ],
-      "providers": [],
-      "resolution": "unresolved"
+      "providers": [
+        "CallerControlPlane"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Trigger",
@@ -62625,14 +62762,6 @@
   "diagnostics": [
     {
       "code": "binding_unresolved",
-      "component": "Account.ControlPlane",
-      "source": {
-        "path": "internal/handlers/account/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
       "component": "Account.Purger",
       "source": {
         "path": "internal/handlers/account/service.go",
@@ -62665,14 +62794,6 @@
     },
     {
       "code": "binding_unresolved",
-      "component": "CoverageSource.Reports",
-      "source": {
-        "path": "internal/handlers/coverage_source/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
       "component": "DaemonEventPublisher.Ctx",
       "source": {
         "path": "internal/app/nodes_gateway.go",
@@ -62681,33 +62802,9 @@
     },
     {
       "code": "binding_unresolved",
-      "component": "DaemonRegistry.IdleTimeouts",
-      "source": {
-        "path": "internal/handlers/daemon_registry/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "DaemonRegistry.Names",
-      "source": {
-        "path": "internal/handlers/daemon_registry/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
       "component": "Daemonmirror.Daemons",
       "source": {
         "path": "internal/daemonmirror/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "Inbox.MyOrgs",
-      "source": {
-        "path": "internal/handlers/inbox/service.go",
         "symbol": "New"
       }
     },
@@ -62756,14 +62853,6 @@
       "component": "OrgPolicyImpact.Chats",
       "source": {
         "path": "internal/handlers/org_policy_impact/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "OrgUsage.Prices",
-      "source": {
-        "path": "internal/handlers/org_usage/service.go",
         "symbol": "New"
       }
     },
@@ -62825,22 +62914,6 @@
     },
     {
       "code": "binding_unresolved",
-      "component": "Project.Apps",
-      "source": {
-        "path": "internal/handlers/project/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "Project.ControlPlane",
-      "source": {
-        "path": "internal/handlers/project/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
       "component": "Project.Detachments",
       "source": {
         "path": "internal/handlers/project/service.go",
@@ -62874,14 +62947,6 @@
     {
       "code": "binding_unresolved",
       "component": "Project.Machines",
-      "source": {
-        "path": "internal/handlers/project/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "Project.MoveFacts",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"
@@ -63090,14 +63155,6 @@
     {
       "code": "binding_unresolved",
       "component": "Trigger.Catalog",
-      "source": {
-        "path": "internal/handlers/trigger/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "Trigger.ControlPlane",
       "source": {
         "path": "internal/handlers/trigger/service.go",
         "symbol": "New"

@@ -45,6 +45,8 @@ type Deps struct {
 	// (ChatRows, ChatViews; deps.go).
 	ChatRows  ChatRows
 	ChatViews ChatViews
+	// QuestionResolver resolves a question when a chat resumes past it.
+	QuestionResolver QuestionResolver
 	// Backoff reads and releases the provider-backoff markers of the chats' runs.
 	Backoff Backoff
 	// Questions lists the chat's open questions (Questions, deps.go).
@@ -97,6 +99,9 @@ type Deps struct {
 	Workflows   launch.WorkflowLoader
 	Worktrees   launch.WorktreeReader
 	ProjectRows launch.ProjectReader
+	// TriggerEvents is the ledger a launch dedupes against
+	// (store.TriggerEventExtStore).
+	TriggerEvents launch.TriggerEventStore
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and
@@ -148,6 +153,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.ChatViews == nil {
 		return fmt.Errorf("chat: Deps.ChatViews is required")
+	}
+	if d.QuestionResolver == nil {
+		return fmt.Errorf("chat: Deps.QuestionResolver is required")
 	}
 	if d.Backoff == nil {
 		return fmt.Errorf("chat: Deps.Backoff is required")
@@ -240,6 +248,28 @@ func isMockReads(v any) bool {
 	return false
 }
 
+// fixtureQuestionResolver fills QuestionResolver for the tests, as
+// fixtureChatReads fills the chat reads: nil in every binary.
+var fixtureQuestionResolver func(Repository) QuestionResolver
+
+// isMockResolver reports a role the harness filled with its generated mock.
+func isMockResolver(v QuestionResolver) bool {
+	switch v.(type) {
+	case nil, *MockQuestionResolver:
+		return true
+	}
+	return false
+}
+
+// questionResolver is Deps.QuestionResolver; in this package's tests a fixture
+// that left it unnamed resolves through its own repository.
+func (s *Service) questionResolver() QuestionResolver {
+	if isMockResolver(s.deps.QuestionResolver) && fixtureQuestionResolver != nil {
+		return fixtureQuestionResolver(s.deps.Repo)
+	}
+	return s.deps.QuestionResolver
+}
+
 // chatRows is Deps.ChatRows; in this package's tests, a fixture that left it
 // unnamed gets the one fixtureChatReads builds over its repository.
 func (s *Service) chatRows() ChatRows {
@@ -265,6 +295,9 @@ func New(deps Deps) (*Service, error) {
 	if deps.Chats == nil && fixtureChats != nil {
 		deps.Chats = fixtureChats(deps.Repo)
 	}
+	if fixtureQuestionResolver != nil && isMockResolver(deps.QuestionResolver) {
+		deps.QuestionResolver = fixtureQuestionResolver(deps.Repo)
+	}
 	if fixtureChatReads != nil {
 		rows, views := fixtureChatReads(deps.Repo)
 		if isMockReads(deps.ChatRows) {
@@ -279,7 +312,7 @@ func New(deps Deps) (*Service, error) {
 	}
 	return &Service{
 		deps:    deps,
-		runs:    runs.New(runs.Deps{Repo: deps.Repo, Chats: deps.ChatViews, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Chats: deps.ChatViews, Resolver: deps.QuestionResolver, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
 		threads: threads.New(threads.Deps{Repo: deps.Repo, Chats: deps.Chats, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
@@ -294,7 +327,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Chats: s.chatViews(), Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Chats: s.chatViews(), Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, TriggerEvents: s.deps.TriggerEvents, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

@@ -143,7 +143,12 @@ export function reliantApiBaseUrl(): string | null {
   // BEFORE RELIANT_CONFIG.grpcUrl / config.js's API_URL fallback below so
   // electron-dev never dials a cross-origin backend port. The packaged app
   // falls through to the daemon URL.
-  if (isSameOriginTransport()) {
+  //
+  // `import.meta.env.DEV &&` here, not only inside isSameOriginTransport: a
+  // production build must drop this branch whatever chunk protocol.ts lands
+  // in, and a call into another chunk is never folded, so the minified
+  // `?window.location.origin:` would survive (verify-bundle refuses it).
+  if (import.meta.env.DEV && isSameOriginTransport()) {
     return window.location.origin;
   }
 
@@ -185,7 +190,8 @@ export function controlPlaneBaseUrl(): string | null {
   if (!CONTROL_PLANE_API_URL) return null;
   // forge sign-in: same-origin `/_api/@cp`, for the cookie (see above).
   if (isForgeAuth()) return controlPlaneForgeBase();
-  return isSameOriginTransport() ? window.location.origin : CONTROL_PLANE_API_URL;
+  // DEV-guarded at the call site, as in reliantApiBaseUrl.
+  return import.meta.env.DEV && isSameOriginTransport() ? window.location.origin : CONTROL_PLANE_API_URL;
 }
 
 // ─── Transports ──────────────────────────────────────────────────────

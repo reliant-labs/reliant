@@ -78,7 +78,7 @@ func TestPendingQuestionsInThreadSubtree_Scoping(t *testing.T) {
 	assert.Equal(t, "sa-a1", byID["q-a1"].ThreadID)
 
 	// Answered questions are not pending.
-	require.NoError(t, c.repo.ResolveQuestion(context.Background(), "q-b", nil))
+	require.NoError(t, resolveQuestionAnnounced(context.Background(), c.repo, "q-b", nil))
 	assert.Empty(t, c.listFrom("sa-b"))
 }
 

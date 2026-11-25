@@ -3,6 +3,7 @@
   "APP_URL": "",
   "AUTH_COOKIE_DOMAIN": "",
   "AUTH_MODE": "cloud",
+  "AUTH_PROVIDER": "supabase",
   "AUTO_ANON_SIGN_IN": "",
   "CHANGES_UI": "",
   "CLI_DEFAULTS_BAKED": "",

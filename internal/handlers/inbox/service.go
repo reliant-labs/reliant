@@ -29,6 +29,8 @@ type Deps struct {
 	// automation) through authz: one of an org the caller has left is not
 	// listed.
 	ProjectRows ProjectReader
+	// Chats reads the chat an item or a machine process names (deps.go).
+	Chats Chats
 	// Machines reads a machine by id; the handler decides whose it is.
 	Machines DaemonReader
 	// OrgKeys lists the org keys a provider rejected (credentials/orgaccounts).
@@ -76,6 +78,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("inbox: Deps.Repo is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("inbox: Deps.Chats is required")
 	}
 	if d.ProjectRows == nil {
 		return fmt.Errorf("inbox: Deps.ProjectRows is required")

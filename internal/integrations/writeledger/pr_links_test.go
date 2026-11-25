@@ -63,7 +63,7 @@ func TestAPullRequestARunOpensIsLinkedToItsChat(t *testing.T) {
 				got = append(got, linkCall{chatID, runID, pr})
 				return 1, nil
 			}}
-			rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo, Workflows: workflows, PRLinks: links})
+			rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: writeledger.NewRuns(repo.ORM()), Workflows: workflows, PRLinks: links})
 			res, err := rec.Wrap(&fakeRunner{result: tc.result}).RunAuthenticated(ctx, githubManifest(), action(tc.action, true), tc.params, nil, tc.site)
 			require.NoError(t, err)
 			assert.Same(t, tc.result, res)
@@ -81,7 +81,7 @@ func TestAFailedLinkLeavesThePullRequestsResultAlone(t *testing.T) {
 		return 0, errors.New("database is down")
 	}}
 	created := &httpaction.Result{StatusCode: 201, Data: map[string]any{"number": int64(5)}}
-	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo, Workflows: workflowsOf(repo), PRLinks: links})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: writeledger.NewRuns(repo.ORM()), Workflows: workflowsOf(repo), PRLinks: links})
 	res, err := rec.Wrap(&fakeRunner{result: created}).RunAuthenticated(context.Background(), githubManifest(), action("pr.create", true),
 		map[string]any{"owner": "acme", "repo": "app", "head": "x", "base": "main", "title": "t"}, nil, httpaction.CallSite{RunID: chatID})
 	require.NoError(t, err)

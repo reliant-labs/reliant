@@ -227,19 +227,13 @@ func (s *Service) CreateProjectFromRepo(
 //
 // Re-adding a repo the user already has is a normal thing to do — they may be
 // putting it on a SECOND machine — so the add is find-or-create rather than an
-// error. Matching on remote URL first and path second mirrors how the old
-// client chain recovered from AlreadyExists. Both match in scope only (nil:
-// any org): the same repo may be a project in each of the caller's orgs.
-// A found project the caller may no longer act in is refused
-// (reusableProject), never re-added.
-//
-// The remote matches in another spelling too (git@github.com:o/r.git is
-// https://github.com/o/r): a repository added over SSH on one machine and
-// picked from the GitHub list (HTTPS) for another is one project, set up on
-// a second machine, not a second project. Existing duplicates stay as they
-// are; the oldest matching project is the one found.
+// error. Matching on the repository first (projectOfRepository: any form of
+// its remote) and path second mirrors how the old client chain recovered from
+// AlreadyExists. Both match in scope only (nil: any org): the same repo may be
+// a project in each of the caller's orgs. A found project the caller may no
+// longer act in is refused (reusableProject), never re-added.
 func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, cloneURL string, scope *core.OrgScope) (*core.Project, error) {
-	if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
+	if existing := s.projectOfRepository(ctx, cloneURL, userID, scope); existing != nil {
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	if existing, err := s.deps.Lookups.GetProjectBySameRemoteAndUserInScope(ctx, cloneURL, userID, scope); err == nil && existing != nil {
@@ -249,6 +243,46 @@ func (s *Service) existingProjectForRepo(ctx context.Context, userID, path, clon
 		return existing, reusableProject(ctx, userID, existing)
 	}
 	return nil, nil
+}
+
+// projectOfRepository is the caller's project, in scope, of the repository
+// remote names, nil when there is none: matched by repository
+// (projects.remote_key, git_remote_key), so the SSH form of a GitHub remote
+// finds a project created from its HTTPS form and the reverse. A remote that
+// names no server (a local path, relative or absolute) has no key and matches
+// nothing: the same local path on two machines names two repositories. The
+// oldest when several match.
+func (s *Service) projectOfRepository(ctx context.Context, remote, userID string, scope *core.OrgScope) *core.Project {
+	remote = strings.TrimSpace(remote)
+	if remote == "" {
+		return nil
+	}
+	if existing, err := s.deps.Lookups.GetProjectByRemoteKeyAndUserInScope(ctx, remote, userID, scope); err == nil && existing != nil {
+		return existing
+	}
+	return nil
+}
+
+// freeRemoteURL is remote when no project of the user's in org already holds
+// that exact remote_url, else nil: projects_org_user_remote_url_key (user,
+// remote_url, org) would refuse the row, and a remote that matched no
+// project by repository (projectOfRepository) is one with no key, a local
+// path, which identifies nothing. The project is created without it, as one
+// with no remote is. A lookup that fails keeps the remote: the insert then
+// decides, as before.
+func (s *Service) freeRemoteURL(ctx context.Context, remote *string, userID string, orgID *string) *string {
+	if remote == nil || strings.TrimSpace(*remote) == "" {
+		return remote
+	}
+	// The index's bucket: the org, or the rows with no org ('' names none).
+	bucket := &core.OrgScope{IncludeUnassigned: true}
+	if orgID != nil {
+		bucket = &core.OrgScope{OrgID: *orgID}
+	}
+	if existing, err := s.deps.Lookups.GetProjectByRemoteURLAndUserInScope(ctx, *remote, userID, bucket); err == nil && existing != nil {
+		return nil
+	}
+	return remote
 }
 
 // createProjectForRepo creates the project row for a repo being added, under

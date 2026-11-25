@@ -30,6 +30,14 @@ IDENTITY = forge.ManagedIdentity {}
 # gateway authenticate no user.
 API_WORKLOAD = "reliant-api-server"
 
+# Where a person signed in to the web app may hand the desktop app a session
+# of its own (forge's sign-in handoff, reliant-api's handoff_redirects): the
+# Electron main process's loopback listener (electron/src/forge-handoff.js),
+# RFC 8252, so any port matches. Exact, comma-separated; nothing is
+# registered at the identity provider for it, since the issuer only ever
+# redirects to the broker's own oidc_redirect_uri.
+DESKTOP_HANDOFF_REDIRECTS = "http://127.0.0.1/callback"
+
 for_env = lambda env: str, runtime: forge.IdentityOnHost -> forge.ManagedIdentity {
     IDENTITY | {
         runtime = runtime

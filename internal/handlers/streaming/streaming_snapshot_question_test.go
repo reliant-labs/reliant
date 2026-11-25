@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -173,7 +174,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 	chatID := seedQuestionChat(t, repo, ctx)
 
 	questionID := uuid.NewString()
-	require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+	require.NoError(t, questions.NewFromRepo(repo).CreateQuestion(ctx, &db.Question{
 		ID: questionID, ChatID: chatID, WorkflowID: "wf-1", ThreadID: chatID,
 		StepID: "ask", Status: db.QuestionStatusPending, CreatedAt: now,
 	}))
@@ -183,7 +184,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 		Metadata: `{"type":"ask_user","questions":[{"question":"Ship it?"}]}`,
 	}))
 
-	runSvc := runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &questionResolveTemporalClient{}, Pause: nil})
+	runSvc := runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &questionResolveTemporalClient{}, Pause: nil})
 	require.NoError(t, runSvc.Terminate(ctx, chatID))
 
 	q, err := repo.GetQuestionByID(ctx, questionID)

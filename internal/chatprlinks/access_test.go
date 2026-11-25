@@ -27,7 +27,7 @@ func TestListForChatIsTheOwnersAlone(t *testing.T) {
 	f := viewertest.New(t, repo)
 	svc, err := chatprlinks.New(chatprlinks.Deps{
 		Store: store.NewChatPrLinkExtStore(repo.ORM()),
-		Chats: repo,
+		Chats: store.NewChatsWithActivityExtStore(repo.ORM()),
 		Now:   func() time.Time { return fixedNow },
 	})
 	if err != nil {

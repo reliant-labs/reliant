@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/questions"
 
 	"github.com/nats-io/nats.go/jetstream"
 
@@ -1103,7 +1104,7 @@ func (g *Graph) newAccount() (*account.Service, error) {
 		Logger:       g.Log,
 		Config:       g.Cfg,
 		Purger:       purger,
-		ControlPlane: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		ControlPlane: g.CallerControlPlane().Client(),
 	})
 }
 
@@ -1189,15 +1190,16 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 // newChat constructs the chat handler (internal/handlers/chat).
 func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
-		Logger:        g.Log,
-		Config:        g.Cfg,
-		Repo:          g.Database(),
-		Chats:         chataccess.NewFromORM(g.Database().ORM()),
-		ChatRows:      store.NewChatExtStore(g.Database().ORM()),
-		ChatViews:     store.NewChatsWithActivityExtStore(g.Database().ORM()),
-		Workflows:     store.NewWorkflowExtStore(g.Database().ORM()),
-		Worktrees:     store.NewWorktreeExtStore(g.Database().ORM()),
-		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
+		Logger:           g.Log,
+		Config:           g.Cfg,
+		Repo:             g.Database(),
+		Chats:            chataccess.NewFromORM(g.Database().ORM()),
+		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
+		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		QuestionResolver: questions.NewFromRepo(g.Database()),
+		Workflows:        store.NewWorkflowExtStore(g.Database().ORM()),
+		Worktrees:        store.NewWorktreeExtStore(g.Database().ORM()),
+		ProjectRows:      store.NewProjectExtStore(g.Database().ORM()), TriggerEvents: store.NewTriggerEventExtStore(g.Database().ORM()),
 		Questions:     store.NewQuestionExtStore(g.Database().ORM()),
 		Spawns:        store.NewToolCallExtStore(g.Database().ORM()),
 		Selections:    store.NewChatSelectionExtStore(g.Database().ORM()),
@@ -1223,6 +1225,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Repo:      g.Database(),
+		RunLists:  store.NewRunListExtStore(g.Database().ORM()),
 		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
 		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
@@ -1258,7 +1261,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
 		Fires:          fires,
-		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		ControlPlane:   g.CallerControlPlane().Client(),
 		AutomationKeys: g.CredentialsAutomationtokens(),
 		Integrations:   g.IntegrationSettings().Config,
 		Sealer:         in.Vault,
@@ -1301,8 +1304,8 @@ func (g *Graph) newDaemonRegistry() (*daemon_registry.Service, error) {
 		Pools:        store.NewMachinePoolExtStore(g.Database().ORM()),
 		Mirror:       g.Daemonmirror(),
 		Router:       g.APIDaemonRouter().NATSDaemonRouter,
-		IdleTimeouts: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
-		Names:        hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		IdleTimeouts: g.CallerControlPlane().Client(),
+		Names:        g.CallerControlPlane().Client(),
 	})
 }
 
@@ -1314,7 +1317,7 @@ func (g *Graph) newFileSystem() (*file_system.Service, error) {
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Router:    g.APIDaemonRouter().NATSDaemonRouter,
-		Repo:      g.Database(),
+		Repo:      store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Placement: daemonplacement.NewRecords(g.Database().ORM()),
 	})
 }
@@ -1339,6 +1342,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Chats:       store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
 		Machines:    store.NewDaemonExtStore(g.Database().ORM()),
 		OrgKeys:     g.CredentialsOrgaccounts(),
@@ -1352,7 +1356,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 		Orgs:        g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
-		MyOrgs: hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		MyOrgs: g.CallerControlPlane().Client(),
 		// Which of the caller's orgs are teams, for the notice of their
 		// automations still on their own accounts; nil without orgs.
 		Members: inboxMembers(g.OrgResolver()),
@@ -1479,17 +1483,17 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Ledger:         store.NewProjectOrgMoveExtStore(o),
 		Shared:         store.NewShareEventExtStore(o),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
-		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		ControlPlane:   g.CallerControlPlane().Client(),
 		// The Projects list reads the org's hosted apps as the caller; nil
 		// self-hosted, where it lists them as unavailable.
-		Apps: projectHostedApps(g.ServerProcessConfig.GetControlPlane()),
+		Apps: g.CallerControlPlane().Client(),
 		Orgs: g.OrgResolver(),
 		// Moving a project is off until control-plane's half is in prod and
 		// in the rollback target (orgs.project_moves_enabled).
 		OrgRollout: ProjectOrgRollout(g.ApiServerConfig),
 		Moves:      projectOrgMoveStarter{c: g.TemporalClient().Client},
 		// The preview's control-plane facts; nil shows them as unknown.
-		MoveFacts: ProjectOrgMoveFacts(g.ServerProcessConfig.GetControlPlane()),
+		MoveFacts: g.InternalControlPlane().Client(),
 		// A project delete pauses its triggers' schedules, a restore
 		// resumes them, and a purge removes them.
 		Schedules: g.ScheduleSyncer(),
@@ -1532,10 +1536,10 @@ func (g *Graph) newQuestion() (*question.Service, error) {
 		Repo:      g.Database(),
 		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
-		Questions: store.NewQuestionExtStore(g.Database().ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
-		Signals:   g.PauseService(),
-		Messages:  g.Chat(),
+		Resolver:  questions.NewFromRepo(g.Database()), Questions: store.NewQuestionExtStore(g.Database().ORM()),
+		Mailbox:  agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(g.Database().ORM()), Announcer: g.chatUpdates()}),
+		Signals:  g.PauseService(),
+		Messages: g.Chat(),
 	})
 }
 
@@ -1884,7 +1888,7 @@ func (g *Graph) newTriggerowner() (triggerowner.Service, error) {
 
 // newOrgUsage constructs the org-usage handler (internal/handlers/org_usage):
 // an org's billing:read holders read its org-funded usage, priced at list
-// through control-plane (OrgUsageListPrices; nil shows no estimates).
+// through control-plane (InternalControlPlane; nil shows no estimates).
 func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
 	repo := g.Database()
 	return org_usage.New(org_usage.Deps{
@@ -1892,7 +1896,7 @@ func (g *Graph) newOrgUsage() (*org_usage.Service, error) {
 		Config:   g.Cfg,
 		Usage:    store.NewLlmOrgUsageDailyExtStore(repo.ORM()),
 		Accounts: g.CredentialsProvideraccounts(),
-		Prices:   OrgUsageListPrices(g.ServerProcessConfig.GetControlPlane()),
+		Prices:   g.InternalControlPlane().Client(),
 		Now:      nil, // optional — no provider
 	})
 }
@@ -1941,7 +1945,7 @@ func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
 		Config:   g.Cfg,
 		Projects: g.Database(),
 		Orgs:     g.OrgResolver(),
-		Reports:  CoverageSourceReports(g.ServerProcessConfig.GetControlPlane()),
+		Reports:  g.CallerControlPlane().Client(),
 		Blobs:    blobs,
 		Now:      nil, // optional — no provider
 	})
@@ -1961,7 +1965,7 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 func (g *Graph) newIntegrationsWriteledger() (writeledger.Service, error) {
 	return writeledger.NewServiceWithForgeMiddleware(writeledger.New(writeledger.Deps{
 		Store:     g.WriteLedgerStore(),
-		Runs:      g.Database(),
+		Runs:      writeledger.NewRuns(g.Database().ORM()),
 		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
 		PRLinks:   g.Chatprlinks(),
 		Now:       time.Now, // framework clock
@@ -2067,11 +2071,23 @@ func (g *Graph) newChatTrace() (*chat_trace.Service, error) {
 func (g *Graph) newChatprlinks() (chatprlinks.Service, error) {
 	svc, err := chatprlinks.New(chatprlinks.Deps{
 		Store: store.NewChatPrLinkExtStore(g.Database().ORM()),
-		Chats: g.Database(),
+		Chats: store.NewChatsWithActivityExtStore(g.Database().ORM()),
 		Now:   time.Now, // framework clock
 	})
 	if err != nil {
 		return nil, err
 	}
 	return chatprlinks.NewServiceWithForgeMiddleware(svc), nil
+}
+
+func (g *Graph) newCallerControlPlane() (*CallerControlPlane, error) {
+	return NewCallerControlPlane(CallerControlPlaneDeps{
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
+	return NewInternalControlPlane(InternalControlPlaneDeps{
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
 }

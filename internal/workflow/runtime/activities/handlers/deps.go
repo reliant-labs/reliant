@@ -488,7 +488,6 @@ type PreflightDaemonCheckStore interface {
 // runevents.Store).
 type QuestionCreateStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
-	CreateQuestion(ctx context.Context, question *db.Question) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
@@ -498,8 +497,14 @@ type QuestionCreateStore interface {
 // QuestionResolveStore is what QuestionResolveActivity reads and writes.
 type QuestionResolveStore interface {
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
-	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
+}
+
+// QuestionWriter creates and resolves questions and announces the chat's
+// activity. *questions.Service satisfies it.
+type QuestionWriter interface {
+	CreateQuestion(ctx context.Context, question *db.Question) error
+	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 }
 
 // SaveMessageStore is what SaveMessageActivity writes: the message through
