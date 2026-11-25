@@ -54,12 +54,11 @@ import { lazy, Suspense } from "react";
 import { FORGE_DEMO_PATH } from "../../Forge/Demo/demoPath";
 import { FORGE_ONE_LINER } from "../../Forge/Demo/demoCopy";
 import { trackEvent } from "../../../lib/analytics";
-import { isDemoShell } from "../../../lib/shell";
 import { notOnShortDemo, onDemo, onDemoFull } from "../../../lib/demoTour";
 import { DemoCta } from "../../Forge/Demo/DemoCta";
 import { SAMPLE_APP, SAMPLE_ID_PREFIX } from "../../Forge/Sample/sampleApp";
 import { setSampleTourActive } from "../../Forge/Sample/sampleTour";
-import { getReliantTourHooks } from "../tourShell";
+import { getDemoTourHooks, getReliantTourHooks } from "../tourShell";
 import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
 import { projectsPath, workflowDetailPath } from "@/lib/paths";
@@ -90,13 +89,16 @@ function demo(search: Record<string, unknown>): JourneyRoute {
   return { path: FORGE_DEMO_PATH, open, label: "Open the demo console", message: "This step is on the Forge demo console." };
 }
 
+/** On the public demo: its boot installs the demo's tour hooks (Forge/Demo/demoShellBoot.ts), and nothing else does. */
+const onPublicDemo = (): boolean => getDemoTourHooks() !== null;
+
 /**
  * Whether the tour walks the sample app inside the signed-in shell: someone
- * is signed in on an app host (catalog.ts `inAppShell`; the demo's bundle
- * never installs the Reliant hooks, so it is never true there).
+ * is signed in on an app host (catalog.ts `inAppShell`), never on the public
+ * demo.
  */
 export function inAppShell(): boolean {
-  return getReliantTourHooks()?.inAppShell?.() ?? false;
+  return !onPublicDemo() && (getReliantTourHooks()?.inAppShell?.() ?? false);
 }
 
 /** Only in the signed-in shell: the steps about its own nav and pages. */
@@ -108,13 +110,12 @@ const notInShell = () => !inAppShell();
 type StopView = "overview" | "traces" | "errors" | "graph" | "alerts";
 
 /**
- * The console a step walks: shop's on the demo host (the fixtures'
- * FIXTURE_PROJECT), the sample app's in the signed-in shell, or none
- * (signed out on an app host: `/forge/demo`, which leaves for the demo host).
+ * The console a step walks: the public demo's own app (its tour hooks:
+ * shop), the sample app's in the signed-in shell, or none (signed out on an
+ * app host: `/forge/demo`, which leaves for the demo host).
  */
 function walkedApp(): string | null {
-  if (isDemoShell()) return "shop";
-  return inAppShell() ? SAMPLE_APP : null;
+  return getDemoTourHooks()?.app ?? (inAppShell() ? SAMPLE_APP : null);
 }
 
 /**
@@ -187,7 +188,7 @@ const scaffoldCommands = (cli: string) => [`${cli} scaffold service inventory`, 
 
 function TryOnYourApp({ cli }: { cli: string }) {
   // The public demo hands off here: one call to action, not a command list for someone who has not installed it.
-  if (isDemoShell()) {
+  if (onPublicDemo()) {
     return (
       <>
         <p>
@@ -334,7 +335,7 @@ export const forgeJourney: Journey = {
   controls: "callout",
   // The person's apps (Projects, narrowed to them), on either brand; signed out, sign-in comes first.
   // The demo: nowhere to go, so the visitor stays on the console with the tour closed.
-  finish: () => (isDemoShell() ? null : { to: projectsPath(), search: { show: "apps" } }),
+  finish: () => (onPublicDemo() ? null : { to: projectsPath(), search: { show: "apps" } }),
   // In the shell the tour walks a sample, not the person's app: leaving it goes back to where they were.
   returnToStart: () => inAppShell(),
   // While it walks the sample there, the switcher lists it ("shop (sample)"); when the tour stops, however it
