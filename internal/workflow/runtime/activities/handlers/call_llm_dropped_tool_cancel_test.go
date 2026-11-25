@@ -10,6 +10,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/streaming"
 )
@@ -32,7 +33,7 @@ func TestCompletedStream_CancelsTheToolCallsTheDriverDropped(t *testing.T) {
 	ctx := context.Background()
 
 	hub := &captureHub{}
-	activityInstance := &CallLLMActivity{repo: repo, hub: hub}
+	activityInstance := &CallLLMActivity{repo: tools.WithChats(repo), hub: hub}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	const keptCard, droppedCard, neverOpened = "fc_kept", "fc_dropped", "fc_never_opened"

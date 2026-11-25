@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func (c *endedRunTemporalClient) CancelWorkflow(_ context.Context, workflowID, runID string) error {
@@ -67,7 +68,7 @@ func TestArchive_WaitsForADeliveryInProgress(t *testing.T) {
 	t.Parallel()
 
 	f := newContinueFixture(t, true)
-	chat, err := f.repo.GetChat(f.ctx, f.chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 
 	release, err := f.repo.LockChatRunControl(f.ctx, f.chatID)
@@ -80,14 +81,14 @@ func TestArchive_WaitsForADeliveryInProgress(t *testing.T) {
 		t.Fatalf("archive finished while a delivery held the run-control lock: %v", err)
 	case <-time.After(200 * time.Millisecond):
 	}
-	got, err := f.repo.GetChat(f.ctx, f.chatID)
+	got, err := store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.NotEqual(t, db.ChatStateArchived, got.State, "not archived until the delivery lets go")
 	assert.Empty(t, f.temporal.cancels())
 
 	release()
 	require.NoError(t, <-done)
-	got, err = f.repo.GetChat(f.ctx, f.chatID)
+	got, err = store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.ChatStateArchived, got.State)
 	assert.Equal(t, []string{f.chatID + "/"}, f.temporal.cancels())

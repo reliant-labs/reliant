@@ -127,7 +127,7 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	}
 
 	launchedHook := waitForLaunched(t, repo, userID, hook.GetId())
-	chat, err := repo.GetChat(ctx, *launchedHook.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launchedHook.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, userID, chat.UserID)
 	body, _ := launchedHook.Payload["body"].(map[string]any)

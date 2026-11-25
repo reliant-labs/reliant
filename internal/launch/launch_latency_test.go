@@ -70,7 +70,7 @@ func (s *rendezvousStarter) ExecuteWorkflow(
 	}
 
 	chatID, _ := args[0].(map[string]interface{})["chat_id"].(string)
-	_, chatErr := s.repo.GetChat(ctx, chatID)
+	_, chatErr := store.GetChat(ctx, s.repo.ORM(), chatID)
 	s.mu.Lock()
 	s.titleCalls++
 	s.titleSawChat = chatErr == nil

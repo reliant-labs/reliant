@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/providerbackoff/providerbackofftest"
 )
 
@@ -24,7 +25,7 @@ func TestProcessStreamEvent_RetryWaitWritesAndClearsTheBackoffMarker(t *testing.
 	defer h.Cleanup()
 	ctx := context.Background()
 
-	a := &CallLLMActivity{repo: h.Repo(), backoff: providerbackofftest.New(t, h.Repo())}
+	a := &CallLLMActivity{repo: tools.WithChats(h.Repo()), backoff: providerbackofftest.New(t, h.Repo())}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	require.NoError(t, a.processStreamEvent(ctx, "chat-1", "thread-1", llm.DriverEvent{

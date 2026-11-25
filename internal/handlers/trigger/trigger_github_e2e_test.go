@@ -243,7 +243,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	assert.Equal(t, "issues.opened", launched.Payload["event"])
 	assert.Equal(t, "98765", launched.Payload["account"])
 	assert.Equal(t, "123456", launched.Payload["resource"])
-	chat, err := repo.GetChat(ctx, *launched.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launched.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, alice, chat.UserID)
 	assertFirings(t, repo, alice, aliceIssues.GetId(), map[core.TriggerEventOutcome]int{core.TriggerEventLaunched: 1})

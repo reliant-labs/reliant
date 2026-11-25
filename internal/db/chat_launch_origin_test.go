@@ -70,7 +70,7 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 	createActivityTestChat(t, repo, "origin-legacy") // no event: predates triggers
 
 	t.Run("GetChat schedule", func(t *testing.T) {
-		chat, err := repo.GetChat(ctx, "origin-schedule")
+		chat, err := store.GetChat(ctx, repo.ORM(), "origin-schedule")
 		require.NoError(t, err)
 		assert.Equal(t, "schedule", chat.LaunchKind)
 		require.NotNil(t, chat.TriggerID)
@@ -83,7 +83,7 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 		assert.Nil(t, chat.TriggerID)
 	})
 	t.Run("legacy chat has no origin", func(t *testing.T) {
-		chat, err := repo.GetChat(ctx, "origin-legacy")
+		chat, err := store.GetChat(ctx, repo.ORM(), "origin-legacy")
 		require.NoError(t, err)
 		assert.Empty(t, chat.LaunchKind)
 		assert.Nil(t, chat.TriggerID)
@@ -116,12 +116,12 @@ func TestChatLaunchOriginUsesEarliestEventAndSurvivesTriggerDeletion(t *testing.
 	recordLaunchEvent(t, repo, "origin-two-events", core.TriggerEventKindSchedule, &triggerID, now.Add(-time.Hour))
 	recordLaunchEvent(t, repo, "origin-two-events", core.TriggerEventKindChatStart, nil, now)
 
-	chat, err := repo.GetChat(ctx, "origin-two-events")
+	chat, err := store.GetChat(ctx, repo.ORM(), "origin-two-events")
 	require.NoError(t, err)
 	assert.Equal(t, "schedule", chat.LaunchKind, "the earliest event is the launch event")
 
 	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
-	chat, err = repo.GetChat(ctx, "origin-two-events")
+	chat, err = store.GetChat(ctx, repo.ORM(), "origin-two-events")
 	require.NoError(t, err)
 	assert.Equal(t, "schedule", chat.LaunchKind, "deleting the trigger keeps the origin kind")
 	assert.Nil(t, chat.TriggerID, "ON DELETE SET NULL clears the trigger id")

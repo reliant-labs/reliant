@@ -88,7 +88,7 @@ func TestArchiveLandedWorktree_OnlyWhenQuietAndNotRunning(t *testing.T) {
 	require.NotNil(t, wt.DeletedAt)
 	require.NotNil(t, wt.CleanupMetadata)
 	require.Equal(t, core.ArchivedBecauseLanded, wt.CleanupMetadata.ArchivedBecause)
-	chat, err := env.Repo.GetChat(ctx, c.ID)
+	chat, err := store.GetChat(ctx, env.Repo.ORM(), c.ID)
 	require.NoError(t, err)
 	require.NotEqual(t, core.ChatStateArchived, chat.State, "the chat stays live")
 

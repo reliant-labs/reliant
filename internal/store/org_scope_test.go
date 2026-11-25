@@ -51,10 +51,10 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 	if got, err := env.Repo.GetProject(ctx, "p-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
 		t.Fatalf("GetProject org = %v, %v; want acme", got.OrgID, err)
 	}
-	if got, err := env.Repo.GetChatRow(ctx, "c-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
+	if got, err := store.GetChatRow(ctx, env.Repo.ORM(), "c-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
 		t.Fatalf("GetChatRow org = %v, %v; want acme", got, err)
 	}
-	if got, err := env.Repo.GetChat(ctx, "c-home"); err != nil || got.OrgID == nil || *got.OrgID != "home" {
+	if got, err := store.GetChat(ctx, env.Repo.ORM(), "c-home"); err != nil || got.OrgID == nil || *got.OrgID != "home" {
 		t.Fatalf("GetChat (the view) org = %v, %v; want home", got, err)
 	}
 
@@ -116,7 +116,7 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 	}
 	wantOrg := map[string]string{"c-acme": "acme", "c-home": "home", "c-legacy": "home", "c-unresolved": "acme", "c-other": ""}
 	for id, want := range wantOrg {
-		got, err := env.Repo.GetChatRow(ctx, id)
+		got, err := store.GetChatRow(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -182,7 +182,7 @@ func TestAssignUnassignedOrg_SpansBatches(t *testing.T) {
 			t.Fatalf("project %s org = %v, want %s", id, got.OrgID, want)
 		}
 		for j := range 2 {
-			chat, err := env.Repo.GetChatRow(ctx, fmt.Sprintf("c-%s-%d", id, j))
+			chat, err := store.GetChatRow(ctx, env.Repo.ORM(), fmt.Sprintf("c-%s-%d", id, j))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -381,7 +381,7 @@ func TestAssignUnassignedOrg_ChatsWaitForTheirProject(t *testing.T) {
 	}
 	chatOrg := func(id string) string {
 		return org(func() (*string, error) {
-			c, err := env.Repo.GetChatRow(ctx, id)
+			c, err := store.GetChatRow(ctx, env.Repo.ORM(), id)
 			if err != nil {
 				return nil, err
 			}

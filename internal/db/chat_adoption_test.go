@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // list_in_sidebar is the one definition of "the sidebar lists this chat".
@@ -69,7 +70,7 @@ func TestListInSidebarTruthTable(t *testing.T) {
 				// decision 5). Only origin and adoption decide.
 				want := lk.kind == "" || lk.kind == core.TriggerEventKindChatStart || adopted
 
-				chat, err := repo.GetChat(ctx, id)
+				chat, err := store.GetChat(ctx, repo.ORM(), id)
 				require.NoError(t, err)
 				assert.Equal(t, want, chat.ListInSidebar, id)
 				wantOrigin := core.ChatOriginUser
@@ -139,7 +140,7 @@ func TestSetChatAdopted_OwnerScopedAndIdempotent(t *testing.T) {
 	ok, err := repo.SetChatAdopted(ctx, "adopt-me", "someone-else", true)
 	require.NoError(t, err)
 	assert.False(t, ok, "another user cannot adopt the chat")
-	chat, err := repo.GetChat(ctx, "adopt-me")
+	chat, err := store.GetChat(ctx, repo.ORM(), "adopt-me")
 	require.NoError(t, err)
 	assert.Nil(t, chat.AdoptedAt)
 
@@ -150,7 +151,7 @@ func TestSetChatAdopted_OwnerScopedAndIdempotent(t *testing.T) {
 	ok, err = repo.SetChatAdopted(ctx, "adopt-me", "test-user", true)
 	require.NoError(t, err)
 	require.True(t, ok)
-	chat, err = repo.GetChat(ctx, "adopt-me")
+	chat, err = store.GetChat(ctx, repo.ORM(), "adopt-me")
 	require.NoError(t, err)
 	require.NotNil(t, chat.AdoptedAt)
 	first := *chat.AdoptedAt
@@ -158,14 +159,14 @@ func TestSetChatAdopted_OwnerScopedAndIdempotent(t *testing.T) {
 	ok, err = repo.SetChatAdopted(ctx, "adopt-me", "test-user", true)
 	require.NoError(t, err)
 	assert.True(t, ok)
-	chat, err = repo.GetChat(ctx, "adopt-me")
+	chat, err = store.GetChat(ctx, repo.ORM(), "adopt-me")
 	require.NoError(t, err)
 	assert.Equal(t, first, *chat.AdoptedAt, "adopting twice keeps the original timestamp")
 
 	ok, err = repo.SetChatAdopted(ctx, "adopt-me", "someone-else", false)
 	require.NoError(t, err)
 	assert.False(t, ok)
-	chat, _ = repo.GetChat(ctx, "adopt-me")
+	chat, _ = store.GetChat(ctx, repo.ORM(), "adopt-me")
 	assert.NotNil(t, chat.AdoptedAt, "another user cannot un-adopt it")
 
 	for i := 0; i < 2; i++ {
@@ -173,7 +174,7 @@ func TestSetChatAdopted_OwnerScopedAndIdempotent(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, ok)
 	}
-	chat, _ = repo.GetChat(ctx, "adopt-me")
+	chat, _ = store.GetChat(ctx, repo.ORM(), "adopt-me")
 	assert.Nil(t, chat.AdoptedAt)
 }
 

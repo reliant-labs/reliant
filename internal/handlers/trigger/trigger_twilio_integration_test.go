@@ -18,6 +18,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/questions"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
@@ -40,7 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
-	"github.com/reliant-labs/reliant/internal/store"
+	extstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -211,7 +212,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, alice.trigger.GetId()+":SMalice1", launchedAlice.DedupeKey)
 	assert.Equal(t, "message.received", launchedAlice.Payload["event"])
 	assert.Equal(t, accountA, launchedAlice.Payload["account"])
-	chat, err := repo.GetChat(ctx, *launchedAlice.ChatID)
+	chat, err := extstore.GetChat(ctx, repo.ORM(), *launchedAlice.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, alice.userID, chat.UserID)
 	assertRunSees(t, repo, *launchedAlice.ChatID, "trigger.payload.data.body == 'is the deploy done?'")

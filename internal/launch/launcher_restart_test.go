@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func threadTexts(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) []string {
@@ -58,7 +59,7 @@ func TestLaunchPendingNewTurnAfterFailedStartAppliesMessageAndSwitch(t *testing.
 	assert.Equal(t, []string{"first", "second"}, threadTexts(t, ctx, repo, chatID),
 		"the second send's message must not be dropped")
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin://structured-agent", *chat.WorkflowName)
 	root, err := repo.GetWorkflow(ctx, chatID)
@@ -116,7 +117,7 @@ func TestLaunchScheduleRetryStartsFromPersistedWorkflow(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "builtin://agent", starter.lastRootInput(t).WorkflowName)
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin://agent", *chat.WorkflowName)
 	assert.Equal(t, []string{"scheduled"}, threadTexts(t, ctx, repo, chatID))
@@ -183,7 +184,7 @@ func (r *failingLookups) GetChat(ctx context.Context, id string) (*db.Chat, erro
 	if r.failChat {
 		return nil, errors.New("connection reset by peer")
 	}
-	return r.Repo.GetChat(ctx, id)
+	return store.GetChat(ctx, r.Repo.ORM(), id)
 }
 
 func (r *failingLookups) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*core.WorkflowDraft, error) {

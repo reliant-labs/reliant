@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
@@ -231,7 +232,7 @@ func (h *IdempotencyTestHelper) CreateTestWorktree(ctx context.Context, projectI
 	err := h.repo.CreateWorktree(ctx, worktree)
 	require.NoError(h.t, err)
 
-	chat, err := h.repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, h.repo.ORM(), chatID)
 	require.NoError(h.t, err)
 	chat.WorktreeID = &worktreeID
 	err = h.repo.UpdateChat(ctx, chat)

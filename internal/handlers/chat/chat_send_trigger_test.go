@@ -106,7 +106,7 @@ func TestSendMessage_RestartOfCompletedChatCarriesLaunchTrigger(t *testing.T) {
 
 func mustChatProject(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) string {
 	t.Helper()
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	return chat.ProjectID
 }

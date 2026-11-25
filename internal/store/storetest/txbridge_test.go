@@ -117,7 +117,7 @@ func TestEachLayerSeesTheOthersUncommittedWrite(t *testing.T) {
 		} else if pd.Path != "/srv/visible" {
 			t.Errorf("store read path %q, want /srv/visible", pd.Path)
 		}
-		chat, err := env.Repo.GetChat(ctx, "chat-visible")
+		chat, err := store.GetChat(ctx, env.Repo.ORM(), "chat-visible")
 		if err != nil {
 			t.Errorf("Repository read of the store write: %v", err)
 		} else if chat.Title != "visible" {
@@ -175,7 +175,7 @@ func TestNoSelfDeadlockOnARowTheTransactionLocked(t *testing.T) {
 		}
 	})
 
-	chat, err := env.Repo.GetChat(context.Background(), "chat-locked")
+	chat, err := store.GetChat(context.Background(), env.Repo.ORM(), "chat-locked")
 	if err != nil {
 		t.Fatalf("GetChat: %v", err)
 	}

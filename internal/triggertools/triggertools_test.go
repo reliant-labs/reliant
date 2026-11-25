@@ -138,7 +138,7 @@ func setup(t *testing.T, publicURL string) *env {
 	})
 	require.NoError(t, err)
 	e.svc = svc
-	e.list = tools.NewListTriggersTool(repo, triggertools.New(svc))
+	e.list = tools.NewListTriggersTool(tools.WithChats(repo), triggertools.New(svc))
 	return e
 }
 

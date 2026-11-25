@@ -35,23 +35,6 @@ func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 	return store.InsertChat(ctx, r.ORM(), chat)
 }
 
-func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-
-	return store.GetChat(ctx, r.ORM(), id)
-}
-
-// GetChatRow reads a chat's own row from the chats table — no activity view —
-// for a caller that needs none of the activity-derived fields (ChatRow).
-func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetChatRow(ctx, r.ORM(), id)
-}
-
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
 // or an empty string when it is unused.
 func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {

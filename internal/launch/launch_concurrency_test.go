@@ -17,6 +17,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // seedLaunchUser gives userID a project with its main worktree in repo, the
@@ -162,7 +163,7 @@ func TestLaunchSucceedsWhenThePostCommitActivityEmitFails(t *testing.T) {
 	require.NoError(t, err, "a failed activity announcement must not fail the launch it follows")
 	require.NotNil(t, result.Chat)
 
-	chat, err := repo.GetChat(context.Background(), result.Chat.ID)
+	chat, err := store.GetChat(context.Background(), repo.ORM(), result.Chat.ID)
 	require.NoError(t, err, "the chat committed before its announcement was attempted")
 	assert.Equal(t, userID, chat.UserID)
 	_, err = repo.GetWorkflow(context.Background(), result.WorkflowID)

@@ -2062,6 +2062,7 @@ func (g *Graph) newChatTrace() (*chat_trace.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Store:  g.Database(),
+		Chats:  store.NewChatExtStore(g.Database().ORM()),
 		Spans:  ChatTraceSpans(g.ServerProcessConfig.GetControlPlane()),
 		Now:    nil, // optional — no provider
 	})

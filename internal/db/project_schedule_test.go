@@ -167,7 +167,7 @@ func TestProjectPurgeRunsAfterTheWindowOnce(t *testing.T) {
 	require.Error(t, err, "the purged project is gone")
 	_, err = f.repo.GetTrigger(f.ctx, f.enabledTrigger)
 	assert.ErrorIs(t, err, core.ErrTriggerNotFound)
-	_, err = f.repo.GetChat(f.ctx, f.chat)
+	_, err = store.GetChat(f.ctx, f.repo.ORM(), f.chat)
 	assert.Error(t, err, "its chat is gone")
 
 	// Idempotent: a second pass finds nothing, and so does a restore.
@@ -293,7 +293,7 @@ func TestAClaimedPurgeThatFailsIsResumedByTheWorker(t *testing.T) {
 	require.ErrorContains(t, err, "the chat batch fails", "the batches stop part way")
 	_, err = f.repo.GetProject(f.ctx, f.project)
 	require.NoError(t, err, "what is left stays, hidden and claimed")
-	_, err = f.repo.GetChat(f.ctx, f.chat)
+	_, err = store.GetChat(f.ctx, f.repo.ORM(), f.chat)
 	require.NoError(t, err, "the chat's batch rolled back")
 	var messages int
 	require.NoError(t, f.repo.ORM().Bun().NewRaw(`SELECT count(*) FROM messages WHERE chat_id = ?`, f.chat).Scan(f.ctx, &messages))
@@ -309,7 +309,7 @@ func TestAClaimedPurgeThatFailsIsResumedByTheWorker(t *testing.T) {
 	assert.Equal(t, 1, res.Purged, "the worker resumes it after the lease")
 	_, err = f.repo.GetProject(f.ctx, f.project)
 	require.Error(t, err, "the project is gone")
-	_, err = f.repo.GetChat(f.ctx, f.chat)
+	_, err = store.GetChat(f.ctx, f.repo.ORM(), f.chat)
 	assert.Error(t, err, "its chat is gone")
 }
 

@@ -19,6 +19,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/questions"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
@@ -41,7 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
-	"github.com/reliant-labs/reliant/internal/store"
+	extstore "github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -202,7 +203,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, "T0ACME", launchedAcme.Payload["account"])
 	data, _ := launchedAcme.Payload["data"].(map[string]any)
 	assert.Equal(t, "<@U0BOT> summarize the thread", data["text"])
-	chat, err := repo.GetChat(ctx, *launchedAcme.ChatID)
+	chat, err := extstore.GetChat(ctx, repo.ORM(), *launchedAcme.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, acme.userID, chat.UserID)
 	assertFirings(t, repo, acme.userID, acme.trigger.GetId(), map[core.TriggerEventOutcome]int{

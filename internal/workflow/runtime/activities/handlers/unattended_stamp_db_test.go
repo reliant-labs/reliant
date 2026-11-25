@@ -14,6 +14,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // An org_only automation's run, and a sub-run its agent started, never reach
@@ -56,9 +58,9 @@ func TestUnattendedStamp_DeletedTriggerStaysOrgFundedOnly(t *testing.T) {
 
 	personalOnly := func(t *testing.T, chatID string) {
 		t.Helper()
-		chat, err := repo.GetChat(ctx, chatID)
+		chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 		require.NoError(t, err)
-		who := chatAttendance(ctx, repo, chat)
+		who := chatAttendance(ctx, tools.WithChats(repo), chat)
 		assert.False(t, who.attended, "%s is unattended", chatID)
 		assert.False(t, who.anySource, "%s spends the org's own sources only", chatID)
 		scope := llmCallSpec{UserID: user, OrgID: org, Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
@@ -74,7 +76,7 @@ func TestUnattendedStamp_DeletedTriggerStaysOrgFundedOnly(t *testing.T) {
 	})
 
 	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
-	chat, err := repo.GetChat(ctx, root)
+	chat, err := store.GetChat(ctx, repo.ORM(), root)
 	require.NoError(t, err)
 	require.Nil(t, chat.TriggerID, "deleting the trigger cleared the launch's trigger id")
 	require.Equal(t, string(core.TriggerEventKindSchedule), chat.LaunchKind, "the launch keeps its kind")
