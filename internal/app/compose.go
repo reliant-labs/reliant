@@ -1789,16 +1789,17 @@ func (g *Graph) newSeatmatch() (seatmatch.Service, error) {
 // the one writer of a trigger's owner after it is created (the takeover).
 func (g *Graph) newTriggerowner() (triggerowner.Service, error) {
 	o := g.Database().ORM()
-	stores := triggerowner.NewStores(o)
+	owned, trigs := store.NewTriggerOwnerExtStore(o), store.NewTriggerExtStore(o)
 	svc, err := triggerowner.New(triggerowner.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Tx:       o,
-		Locks:    stores,
-		Triggers: stores,
-		Offers:   stores,
-		OrgReads: stores,
-		Now:      nil, // optional — no provider
+		Logger:    g.Log,
+		Config:    g.Cfg,
+		Tx:        o,
+		Locks:     owned,
+		Triggers:  trigs,
+		Adoptions: owned,
+		Offers:    owned,
+		OrgReads:  owned,
+		Now:       nil, // optional — no provider
 	})
 	if err != nil {
 		return nil, err
