@@ -102,10 +102,16 @@ func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunList
 
 // ListUnlaunchedTriggerEvents is the run log's other half: the trigger
 // events that started no run, under the same filters and keyset as ListRuns.
+//
+// Deprecated: use store.RunListExtStore.ListUnlaunchedTriggerEvents; the run
+// handler reads it through Deps.RunLists.
 func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListFilters) ([]*UnlaunchedTriggerEvent, bool, error) {
 	return store.ListUnlaunchedTriggerEvents(ctx, r.ORM(), filters)
 }
 
+// LastRunPerWorkflow is store.LastRunPerWorkflow.
+//
+// Deprecated: use store.RunListExtStore.LastRunPerWorkflow.
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
 }
@@ -113,6 +119,9 @@ func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) (
 // LastRunPerWorkflowAndOrg is the newest run of each (workflow, org) pair:
 // LastRunPerWorkflow's candidates, before a caller drops the orgs a person
 // may no longer see (store.LastRunPerWorkflowAndOrg).
+//
+// Deprecated: use store.RunListExtStore.LastRunPerWorkflowAndOrg; the run
+// handler reads it through Deps.RunLists.
 func (r *Repo) LastRunPerWorkflowAndOrg(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflowAndOrg(ctx, r.ORM(), filters)
 }
@@ -2918,6 +2927,10 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
+// UpdateTriggerEventOutcome is store.UpdateTriggerEventOutcome.
+//
+// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventOutcome; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -2925,6 +2938,10 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
+// UpdateTriggerEventPayload is store.UpdateTriggerEventPayload.
+//
+// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventPayload; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
@@ -3035,6 +3052,10 @@ func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*co
 	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
+// ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
+//
+// Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
@@ -3514,42 +3535,11 @@ func (r *Repo) DeleteWorkflowScenario(ctx context.Context, id string) error {
 
 // ==================== Questions ====================
 
-func (r *Repo) CreateQuestion(ctx context.Context, question *Question) error {
-	if question == nil {
-		return fmt.Errorf("question cannot be nil")
-	}
-	if question.ID == "" {
-		return fmt.Errorf("question ID cannot be empty")
-	}
-	if err := store.InsertQuestion(ctx, r.ORM(), question); err != nil {
-		return err
-	}
-	_ = r.emitChatActivityIfChanged(ctx, question.ChatID)
-	return nil
-}
-
 func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error) {
 	if id == "" {
 		return nil, fmt.Errorf("question ID cannot be empty")
 	}
 	return store.GetQuestion(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
-	if id == "" {
-		return fmt.Errorf("question ID cannot be empty")
-	}
-	if err := store.ResolveQuestion(ctx, r.ORM(), id, responseData, time.Now().UTC()); err != nil {
-		return err
-	}
-
-	// Emit activity change
-	q, err := r.GetQuestionByID(ctx, id)
-	if err == nil && q != nil {
-		_ = r.emitChatActivityIfChanged(ctx, q.ChatID)
-	}
-
-	return nil
 }
 
 // ==================== Helper Functions ====================

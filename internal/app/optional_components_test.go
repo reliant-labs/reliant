@@ -32,3 +32,25 @@ func TestOptionalWorkerComponentsAreNilSelfHosted(t *testing.T) {
 		t.Fatalf("newMachineController without a control plane = %v; want nil", c)
 	}
 }
+
+// TestControlPlaneVariantsAreNilSelfHosted pins the api-server's two
+// control-plane clients: absent (an untyped nil Client) when self-hosted,
+// and the internal-service one also without the secret.
+func TestControlPlaneVariantsAreNilSelfHosted(t *testing.T) {
+	selfHosted := &configv1.ControlPlaneConfig{}
+	caller, err := NewCallerControlPlane(CallerControlPlaneDeps{ControlPlane: selfHosted})
+	if err != nil || caller != nil || caller.Client() != nil {
+		t.Fatalf("NewCallerControlPlane self-hosted = %v, %v; want nil, nil", caller, err)
+	}
+	internal, err := NewInternalControlPlane(InternalControlPlaneDeps{ControlPlane: selfHosted})
+	if err != nil || internal != nil || internal.Client() != nil {
+		t.Fatalf("NewInternalControlPlane self-hosted = %v, %v; want nil, nil", internal, err)
+	}
+	hosted := &configv1.ControlPlaneConfig{Url: "https://cp.example.test"}
+	if caller, _ := NewCallerControlPlane(CallerControlPlaneDeps{ControlPlane: hosted}); caller.Client() == nil {
+		t.Fatal("NewCallerControlPlane hosted = nil; want a client")
+	}
+	if internal, _ := NewInternalControlPlane(InternalControlPlaneDeps{ControlPlane: hosted}); internal.Client() != nil {
+		t.Fatal("NewInternalControlPlane without the secret = a client; want nil")
+	}
+}

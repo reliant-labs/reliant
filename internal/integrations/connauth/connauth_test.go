@@ -64,7 +64,7 @@ func newEnv(t *testing.T) *env {
 	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
-	resolver := connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens})
+	resolver := connections.NewResolver(connections.ResolverDeps{Owners: connections.NewOwners(repo.ORM()), Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens})
 	return &env{t: t, repo: repo, svc: connections.NewService(store, v, providers, tokens, broker, nil), resolver: resolver, source: connauth.New(connauth.Deps{Resolver: resolver})}
 }
 

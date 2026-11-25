@@ -81,7 +81,7 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, err)
 	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, nil)
-	resolver := connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens})
+	resolver := connections.NewResolver(connections.ResolverDeps{Owners: connections.NewOwners(repo.ORM()), Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens})
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
 	svc := connections.NewService(store, v, providers, tokens, broker, nil)
 	return &env{t: t, repo: repo, svc: svc, resolver: resolver, cp: &fakeCP{tokens: map[string]string{

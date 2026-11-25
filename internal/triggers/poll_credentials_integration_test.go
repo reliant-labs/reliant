@@ -116,7 +116,7 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 	require.NoError(t, err)
 	te := newTokenEndpoint(t)
 	store := db.TestConnections(t, repo)
-	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: connections.NewTokenSource(store, v, providers, te)})})
+	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(connections.ResolverDeps{Owners: connections.NewOwners(repo.ORM()), Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: connections.NewTokenSource(store, v, providers, te)})})
 	poller := &credPoller{}
 	tp := NewTriggerPoller(
 		pollRepoOver{Stores: NewStores(repo), conns: store},

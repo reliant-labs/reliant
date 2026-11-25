@@ -326,7 +326,7 @@ func (m *MockMachineDetachments) ListProjectDaemonDetachmentsForDaemon(ctx conte
 var _ MachineDetachments = (*MockMachineDetachments)(nil)
 
 // forge:section MockProjectReconcileStore
-// forge:hash=dfaa5740f15079aea105a684eaceca1a9968fc0fd1cb617905bed824865235cc
+// forge:hash=e8a9bfe717087b3c953654e356d416b43637b168eac428f38eab8faf1c45f142
 
 // MockProjectReconcileStore is a test mock for the ProjectReconcileStore interface.
 //
@@ -348,6 +348,7 @@ type MockProjectReconcileStore struct {
 	ListProjectDaemonDetachmentsForDaemonFunc     func(context.Context, string) ([]*core.ProjectDaemonDetachment, error)
 	GetProjectByPathAndUserInScopeFunc            func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
 	GetProjectByRemoteURLAndUserInScopeFunc       func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
+	GetProjectByRemoteKeyAndUserInScopeFunc       func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
 	ListProjectDaemonsForDaemonFunc               func(context.Context, string) ([]*core.ProjectDaemon, error)
 	StartQueuedProjectDaemonClonesFunc            func(context.Context, string) error
 	ResolveQueuedProjectDaemonFunc                func(context.Context, string, string) error
@@ -463,6 +464,15 @@ func (m *MockProjectReconcileStore) GetProjectByRemoteURLAndUserInScope(ctx cont
 		return m.GetProjectByRemoteURLAndUserInScopeFunc(ctx, remoteURL, userID, scope)
 	}
 	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "GetProjectByRemoteURLAndUserInScope")
+}
+
+// GetProjectByRemoteKeyAndUserInScope records the call and delegates to GetProjectByRemoteKeyAndUserInScopeFunc when set.
+func (m *MockProjectReconcileStore) GetProjectByRemoteKeyAndUserInScope(ctx context.Context, remoteURL string, userID string, scope *core.OrgScope) (*core.Project, error) {
+	m.Recorder.Record("GetProjectByRemoteKeyAndUserInScope", ctx, remoteURL, userID, scope)
+	if m.GetProjectByRemoteKeyAndUserInScopeFunc != nil {
+		return m.GetProjectByRemoteKeyAndUserInScopeFunc(ctx, remoteURL, userID, scope)
+	}
+	return nil, contractkit.MockNotSet("MockProjectReconcileStore", "GetProjectByRemoteKeyAndUserInScope")
 }
 
 // ListProjectDaemonsForDaemon records the call and delegates to ListProjectDaemonsForDaemonFunc when set.
@@ -730,7 +740,7 @@ func (m *MockLocalModels) SetDaemonLocalModels(ctx context.Context, daemonID str
 var _ LocalModels = (*MockLocalModels)(nil)
 
 // forge:section MockProjectLookups
-// forge:hash=624ff5345ed34ed2fcdcd1cd2dd963fa7f8e089638a49198c71b8cab231ae16b
+// forge:hash=aaf5182764a3ac0afacc9b96def932ec632590a27159b0dbfa3f5783ff4dcbb8
 
 // MockProjectLookups is a test mock for the ProjectLookups interface.
 //
@@ -742,6 +752,7 @@ type MockProjectLookups struct {
 	contractkit.Recorder
 	GetProjectByPathAndUserInScopeFunc      func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
 	GetProjectByRemoteURLAndUserInScopeFunc func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
+	GetProjectByRemoteKeyAndUserInScopeFunc func(context.Context, string, string, *core.OrgScope) (*core.Project, error)
 }
 
 // GetProjectByPathAndUserInScope records the call and delegates to GetProjectByPathAndUserInScopeFunc when set.
@@ -760,6 +771,15 @@ func (m *MockProjectLookups) GetProjectByRemoteURLAndUserInScope(ctx context.Con
 		return m.GetProjectByRemoteURLAndUserInScopeFunc(ctx, remoteURL, userID, scope)
 	}
 	return nil, contractkit.MockNotSet("MockProjectLookups", "GetProjectByRemoteURLAndUserInScope")
+}
+
+// GetProjectByRemoteKeyAndUserInScope records the call and delegates to GetProjectByRemoteKeyAndUserInScopeFunc when set.
+func (m *MockProjectLookups) GetProjectByRemoteKeyAndUserInScope(ctx context.Context, remoteURL string, userID string, scope *core.OrgScope) (*core.Project, error) {
+	m.Recorder.Record("GetProjectByRemoteKeyAndUserInScope", ctx, remoteURL, userID, scope)
+	if m.GetProjectByRemoteKeyAndUserInScopeFunc != nil {
+		return m.GetProjectByRemoteKeyAndUserInScopeFunc(ctx, remoteURL, userID, scope)
+	}
+	return nil, contractkit.MockNotSet("MockProjectLookups", "GetProjectByRemoteKeyAndUserInScope")
 }
 
 // Compile-time check.

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -71,9 +72,55 @@ func TestVisualRecaptureWorkflow(t *testing.T) {
 	if !update || !upload {
 		t.Errorf("capture must re-capture the changed baselines (%v) and upload them (%v)", update, upload)
 	}
-	// The job that writes runs nothing from the PR: only main's apply script.
-	if push.Permissions["contents"] != "write" || len(push.Permissions) != 1 {
-		t.Errorf("push permissions %v, want contents: write alone (no actions: a dispatch on the PR branch would run its workflow with secrets)", push.Permissions)
+	// The job that pushes runs nothing from the PR: only main's apply script. Its own
+	// GITHUB_TOKEN only reads: the push is the Reliant App's, with a token minted for this
+	// repository and handed to the push step alone, so control-plane's push gate (cp#3624)
+	// trusts the CI that follows it. A GITHUB_TOKEN push stays refused there, and none is made.
+	if push.Permissions["contents"] != "read" || len(push.Permissions) != 1 {
+		t.Errorf("push permissions %v, want contents: read alone (the push is the Reliant App's token, never GITHUB_TOKEN; no actions: a dispatch on the PR branch would run its workflow with secrets)", push.Permissions)
+	}
+	const appToken = "${{ steps.app.outputs.token }}"
+	var mints, tokenUsers int
+	for _, s := range push.Steps {
+		if strings.HasPrefix(s.Uses, "actions/create-github-app-token@") {
+			mints++
+			if s.ID != "app" || !regexp.MustCompile(`@[0-9a-f]{40}$`).MatchString(strings.Fields(s.Uses)[0]) {
+				t.Errorf("the App token step is id app, pinned to a commit: %q id %q", s.Uses, s.ID)
+			}
+			if s.With["permission-contents"] != "write" || s.With["repositories"] != "${{ github.event.repository.name }}" ||
+				s.With["private-key"] != "${{ secrets.RELIANT_APP_PRIVATE_KEY }}" || s.With["client-id"] != "${{ vars.RELIANT_APP_CLIENT_ID }}" {
+				t.Errorf("the App token is minted for this repository alone, contents: write, from the Reliant App's credentials: %v", s.With)
+			}
+			for k := range s.With {
+				if strings.HasPrefix(k, "permission-") && k != "permission-contents" {
+					t.Errorf("the App token asks for %s too: contents: write alone", k)
+				}
+			}
+		}
+		blob := s.Run
+		for _, v := range s.Env {
+			blob += "\n" + v
+		}
+		for _, v := range s.With {
+			if str, ok := v.(string); ok {
+				blob += "\n" + str
+			}
+		}
+		if strings.Contains(blob, "steps.app.outputs.token") {
+			tokenUsers++
+			if !strings.Contains(s.Run, "trusted/.github/scripts/visual-recapture-apply.sh") || s.Env["PUSH_TOKEN"] != appToken {
+				t.Errorf("step %q holds the App token: only the push step (PUSH_TOKEN, main's apply script) may", s.Name)
+			}
+		}
+		if strings.Contains(blob, "github.token") || strings.Contains(blob, "GITHUB_TOKEN }}") || strings.Contains(blob, "secrets.GITHUB_TOKEN") {
+			t.Errorf("push step %q uses the job's GITHUB_TOKEN: the push is the Reliant App's alone", s.Name)
+		}
+		if strings.HasPrefix(s.Uses, "actions/checkout@") && s.With["persist-credentials"] != false {
+			t.Errorf("push's checkout %v persists a credential: the push must use the App's token, not GITHUB_TOKEN", s.With["path"])
+		}
+	}
+	if mints != 1 || tokenUsers != 1 {
+		t.Errorf("one App token step (%d) and one step that uses it (%d)", mints, tokenUsers)
 	}
 	if push.Needs != "capture" || !strings.Contains(push.If, "needs.capture.outputs.changed") {
 		t.Errorf("push needs capture (%v) and runs only when a baseline changed (%q)", push.Needs, push.If)
@@ -118,6 +165,7 @@ func TestVisualRecaptureApplyScript(t *testing.T) {
 		link  string            // a staged symlink, by path
 		dest  string            // a symlink committed in the PR's checkout at this path, to /tmp
 		moved bool              // the remote branch moved past the head
+		noTok bool              // no PUSH_TOKEN: the step was given no App token
 	}
 	run := func(t *testing.T, s setup) (string, int, string) {
 		t.Helper()
@@ -180,7 +228,10 @@ func TestVisualRecaptureApplyScript(t *testing.T) {
 			}
 		}
 		cmd := exec.Command("bash", script)
-		cmd.Env = append(os.Environ(), "STAGED="+staged, "TARGET="+work, "BRANCH=feat/ui", "HEAD_SHA="+head, "GIT_CONFIG_GLOBAL=/dev/null")
+		cmd.Env = append(os.Environ(), "STAGED="+staged, "TARGET="+work, "BRANCH=feat/ui", "HEAD_SHA="+head, "GIT_CONFIG_GLOBAL=/dev/null", "PUSH_TOKEN=")
+		if !s.noTok {
+			cmd.Env = append(cmd.Env, "PUSH_TOKEN=ghs_test")
+		}
 		out, err := cmd.CombinedOutput()
 		rc := 0
 		if err != nil {
@@ -230,6 +281,16 @@ func TestVisualRecaptureApplyScript(t *testing.T) {
 			}
 		})
 	}
+	t.Run("no App token pushes nothing", func(t *testing.T) {
+		t.Parallel()
+		line, rc, tip := run(t, setup{files: map[string]string{shot: png}, noTok: true})
+		if rc != 1 || !strings.HasPrefix(line, "RECAPTURE=failed no PUSH_TOKEN") {
+			t.Fatalf("rc=%d last=%q, want failed: no PUSH_TOKEN (never a GITHUB_TOKEN push)", rc, line)
+		}
+		if tip == "" {
+			t.Fatal("the remote branch is gone")
+		}
+	})
 	t.Run("a branch that moved refuses the push", func(t *testing.T) {
 		t.Parallel()
 		line, rc, _ := run(t, setup{files: map[string]string{shot: png}, moved: true})

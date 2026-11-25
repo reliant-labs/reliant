@@ -22,7 +22,7 @@ func TestPushIntentIsRecordedBeforeThePushWithItsSha(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
 	chatID, _ := seedRun(t, repo, "autopilot-issue")
-	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo, Workflows: workflowsOf(repo)})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: writeledger.NewRuns(repo.ORM()), Workflows: workflowsOf(repo)})
 
 	intent, err := rec.BeginPush(ctx, writeledger.Push{Repo: "Acme/App", Branch: "autopilot/issue-1", SHA: "abc1234def", RunID: chatID, NodeID: "publish"})
 	require.NoError(t, err)
@@ -56,7 +56,7 @@ func TestPushIntentIsRecordedBeforeThePushWithItsSha(t *testing.T) {
 func TestPushToAPullRequestHeadIsAlsoRecordedAsItsSynchronize(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
-	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo, Workflows: workflowsOf(repo)})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: writeledger.NewRuns(repo.ORM()), Workflows: workflowsOf(repo)})
 	intent, err := rec.BeginPush(ctx, writeledger.Push{Repo: "acme/app", Branch: "fix-save", SHA: "cccccccccccccccccccccccccccccccccccccccc", PullNumber: 7, Actor: core.IntegrationActorApp})
 	require.NoError(t, err)
 	assert.Len(t, intent.IDs(), 2)
@@ -76,7 +76,7 @@ func TestPushToAPullRequestHeadIsAlsoRecordedAsItsSynchronize(t *testing.T) {
 // the webhook parser makes from GitHub's real push payload.
 func TestAPushWriteAgreesWithItsPushEcho(t *testing.T) {
 	repo := db.NewTestRepo(t)
-	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo, Workflows: workflowsOf(repo)})
+	rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: writeledger.NewRuns(repo.ORM()), Workflows: workflowsOf(repo)})
 	_, err := rec.BeginPush(context.Background(), writeledger.Push{Repo: "acme/app", Branch: "main", SHA: "eeee000000000000000000000000000000000002"})
 	require.NoError(t, err)
 	w := mustOne(t, repo)
@@ -103,7 +103,7 @@ func TestFailedPushIsSettledFailedAndAmbiguousWhenItMayHaveApplied(t *testing.T)
 		t.Run(name, func(t *testing.T) {
 			repo := db.NewTestRepo(t)
 			ctx := context.Background()
-			rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: repo, Workflows: workflowsOf(repo)})
+			rec := writeledger.New(writeledger.Deps{Store: ledgerOf(repo), Runs: writeledger.NewRuns(repo.ORM()), Workflows: workflowsOf(repo)})
 			intent, err := rec.BeginPush(ctx, writeledger.Push{Repo: "acme/app", Branch: "x", SHA: "abc1234"})
 			require.NoError(t, err)
 			intent.Settle(ctx, tc.out)

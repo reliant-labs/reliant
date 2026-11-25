@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -52,7 +53,7 @@ func TestListPendingQuestionsRejectsUnknownChat(t *testing.T) {
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
 
 	get := func(ctx context.Context, id string) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
 		return svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &id}))
@@ -118,7 +119,7 @@ func TestListPendingQuestionsReturnsEveryThreadsQuestion(t *testing.T) {
 	ask := func(id, threadID string, status int, at time.Time) {
 		t.Helper()
 		metadata := `{"questions":[{"question":"` + id + `?"}]}`
-		require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+		require.NoError(t, questions.NewFromRepo(repo).CreateQuestion(ctx, &db.Question{
 			ID: id, ChatID: chatID, WorkflowID: "wf-" + threadID, TemporalWorkflowID: chatID,
 			ThreadID: threadID, StepID: "ask_user", Status: status, Metadata: &metadata, CreatedAt: at,
 		}))
@@ -129,7 +130,7 @@ func TestListPendingQuestionsReturnsEveryThreadsQuestion(t *testing.T) {
 	ask(qBDone, spawnB, db.QuestionStatusResolved, now.Add(-time.Hour))
 	ask(qB, spawnB, db.QuestionStatusPending, now.Add(-time.Minute))
 
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
 	resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &chatID}))
 	require.NoError(t, err)
 
@@ -168,7 +169,7 @@ func TestListPendingQuestionsChatIDIsAFilter(t *testing.T) {
 	ask := func(chatID string, status int, at time.Time) string {
 		id := uuid.NewString()
 		metadata := `{"questions":[{"question":"?"}]}`
-		require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+		require.NoError(t, questions.NewFromRepo(repo).CreateQuestion(ctx, &db.Question{
 			ID: id, ChatID: chatID, WorkflowID: "wf-" + id, TemporalWorkflowID: chatID,
 			ThreadID: "thread-" + id, StepID: "ask_user", Status: status, Metadata: &metadata, CreatedAt: at,
 		}))
@@ -180,7 +181,7 @@ func TestListPendingQuestionsChatIDIsAFilter(t *testing.T) {
 	ask(chatB, db.QuestionStatusResolved, now.Add(-3*time.Minute))
 	ask(othersChat, db.QuestionStatusPending, now.Add(-4*time.Minute))
 
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo, ChatRows: store.NewChatExtStore(repo.ORM()), Resolver: questions.NewFromRepo(repo), ChatViews: store.NewChatsWithActivityExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo})}))
 	ids := func(req *reliantv1.ListPendingQuestionsRequest) []string {
 		t.Helper()
 		resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(req))

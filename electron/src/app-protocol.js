@@ -215,17 +215,41 @@ function configResponse(configScript, log) {
   }
 }
 
+/** The named same-origin APIs (`/_api/@<name>/…`), the hosted origin's API routes. */
+const API_PATH_PREFIX = "/_api/";
+
+/**
+ * Whether a request is for the same-origin API rather than the bundle. Only
+ * the app's own host: the path alone is not enough.
+ *
+ * @param {string} requestUrl
+ * @returns {boolean}
+ */
+function isApiRequest(requestUrl) {
+  try {
+    const url = new URL(requestUrl);
+    return url.host === APP_HOST && url.pathname.startsWith(API_PATH_PREFIX);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Serve the packaged web directory over `app://`. Call after the app is ready.
  *
  * @param {import('electron').Protocol} protocol
  * @param {string} webRoot - Absolute path to the packaged web directory
  * @param {{ error: Function, warn: Function }} log
- * @param {{ configScript: () => string }} options - configScript answers
- *   `app://bundle/config.js` (runtime-config.js); called per request, so it
- *   sees the main process's endpoints as they are when the renderer loads.
+ * @param {{ configScript: () => string,
+ *           apiHandler?: (request: Request) => Promise<Response> }} options -
+ *   configScript answers `app://bundle/config.js` (runtime-config.js); called
+ *   per request, so it sees the main process's endpoints as they are when the
+ *   renderer loads. apiHandler, when given (forge sign-in, forge-auth.js),
+ *   answers every `app://bundle/_api/…` request instead of the web root, so
+ *   the renderer's API is same-origin and the session cookie stays in the main
+ *   process. Without it (Supabase sign-in) those paths are files, as before.
  */
-function registerAppProtocol(protocol, webRoot, log, { configScript }) {
+function registerAppProtocol(protocol, webRoot, log, { configScript, apiHandler }) {
   if (typeof configScript !== "function") {
     throw new Error("app-protocol: registerAppProtocol needs options.configScript — the packaged renderer has no other source of config.js");
   }
@@ -236,6 +260,14 @@ function registerAppProtocol(protocol, webRoot, log, { configScript }) {
   protocol.handle(APP_SCHEME, async (request) => {
     if (isConfigRequest(request.url)) {
       return configResponse(configScript, log);
+    }
+    if (typeof apiHandler === "function" && isApiRequest(request.url)) {
+      try {
+        return await apiHandler(request);
+      } catch (err) {
+        log.error("[AppProtocol] the API proxy failed:", err && err.message);
+        return new Response("Bad gateway", { status: 502, headers: { "content-type": "text/plain" } });
+      }
     }
     const resolved = resolveRequestPath(request.url, webRoot);
 
@@ -281,6 +313,7 @@ module.exports = {
   APP_INDEX_URL,
   configResponse,
   contentTypeFor,
+  isApiRequest,
   isConfigRequest,
   registerAppProtocol,
   registerSchemePrivileges,

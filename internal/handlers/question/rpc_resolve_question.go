@@ -67,7 +67,7 @@ func (s *Service) ResolveQuestion(
 		responseData = req.Msg.ResponseData
 	}
 
-	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, responseData); err != nil {
+	if err := s.deps.Resolver.ResolveQuestion(ctx, question.ID, responseData); err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))
 	}
 

@@ -23,6 +23,7 @@ import (
 type Service struct {
 	repo      Repository
 	chats     Chats
+	resolver  QuestionResolver
 	workflows WorkflowLoader
 	questions Questions
 	temporal  TemporalClient
@@ -46,7 +47,7 @@ type Service struct {
 // Deps, not a forge contract package: it is built by hand in the worker and the
 // chat handler.
 func New(deps Deps) *Service {
-	return &Service{repo: deps.Repo, chats: deps.Chats, workflows: deps.Workflows, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause, waits: deps.Waits}
+	return &Service{repo: deps.Repo, chats: deps.Chats, resolver: deps.Resolver, workflows: deps.Workflows, questions: deps.Questions, temporal: deps.Temporal, pause: deps.Pause, waits: deps.Waits}
 }
 
 // LockRunControl serializes the chat's run-control operations — pause, resume,
@@ -707,7 +708,7 @@ func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
 
 	terminatedResponse := `{"action":"terminated","reason":"workflow terminated by operator"}`
 	for _, q := range questions {
-		if err := s.repo.ResolveQuestion(ctx, q.ID, &terminatedResponse); err != nil {
+		if err := s.resolver.ResolveQuestion(ctx, q.ID, &terminatedResponse); err != nil {
 			logging.WarnContext(ctx, "[runs] Failed to resolve pending question while terminating",
 				"chatID", chatID, "questionID", q.ID, "error", err)
 			continue

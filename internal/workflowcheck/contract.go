@@ -27,11 +27,9 @@
 // Two configurations, each a variant type in internal/app: RecordOnlyChecks
 // (no GitHub) for the fire and run activities, and SyncingChecks (GitHub, the
 // broker and RunURL), wrapped in the Syncer its consumers take. The package
-// itself has no default configuration, so it stays provided: only those two
-// providers construct it (forge's graph lint would otherwise report it
-// unreachable, since no consumer takes the plain Service).
-//
-//forge:provided
+// itself has no default configuration: only those two providers construct
+// it, and forge's graph counts a variant's provider as supplying the package,
+// so no consumer need take the plain Service.
 package workflowcheck
 
 import (

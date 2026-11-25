@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -40,7 +41,7 @@ func newRunListFixture(t *testing.T) *runListFixture {
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 	// The harness stubs Chats: listing never reaches the chat service.
-	svc := NewTestRun(t, WithRunDeps(Deps{Repo: repo}))
+	svc := NewTestRun(t, WithRunDeps(Deps{Repo: repo, RunLists: store.NewRunListExtStore(repo.ORM())}))
 	return &runListFixture{svc: svc, repo: repo, ctx: ctx, userID: userID}
 }
 

@@ -68,6 +68,9 @@ function resolveRendererConfig({ release, status = {}, env = {} }) {
     CONTROL_PLANE_API_URL: status.controlPlaneUrl,
     SUPABASE_URL: env.SUPABASE_URL,
     SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY,
+    // Which sign-in (forge-auth.js): "supabase" (default) or "forge". The
+    // main process reads the same document, so the two never disagree.
+    AUTH_PROVIDER: env.RELIANT_AUTH_PROVIDER,
   };
   for (const [key, value] of Object.entries(resolved)) {
     if (typeof value === "string" && value.trim() !== "") doc[key] = value;

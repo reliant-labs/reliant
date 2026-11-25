@@ -25,6 +25,7 @@ import {
   startTerminalSessionSpan,
   type TerminalSessionSpan,
 } from "./terminalTrace";
+import { desktopTerminalSocket } from "@/lib/desktop-terminal-socket";
 
 interface TerminalProps {
   sessionId: string;
@@ -632,7 +633,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, chatId,
       // working directory are none of the log's business.
       logger.info("[Terminal] Connecting to WebSocket", { url: redactedTerminalWSURL(wsBase, params) });
 
-      const ws = new WebSocket(wsUrl);
+      // The packaged desktop app on forge sign-in: its main process holds the
+      // session and relays the socket (lib/desktop-terminal-socket.ts).
+      const ws = desktopTerminalSocket(params) ?? new WebSocket(wsUrl);
       wsRef.current = ws;
       sessionSpanRef.current = span;
       socketCreatedAtRef.current = Date.now();

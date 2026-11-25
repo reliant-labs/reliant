@@ -186,47 +186,53 @@ func GetProjectByRemoteURLAndUserInScope(ctx context.Context, db orm.Context, re
 	return p, nil
 }
 
-// GetProjectBySameRemoteAndUserInScope finds the user's oldest project, in
-// scope (nil: any org), whose remote names the same repository as remoteURL
-// in another spelling: git@github.com:o/r.git, https://github.com/o/r and
-// ssh://git@github.com/o/r are one repository (gitremote.Canonical, compared
-// case-insensitively). It is the fallback after the exact remote_url lookup,
-// so a repository added once over SSH and once over HTTPS is found again
-// instead of becoming a second project. It never merges or rewrites what is
-// stored. A remote that names no shareable repository (a local path) finds
-// nothing.
-func GetProjectBySameRemoteAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
+// GetProjectByRemoteKeyAndUserInScope returns the user's project of the
+// repository remoteURL names, in any form of its remote known to name it (on
+// github.com, gitlab.com and bitbucket.org: ssh://, scp-like, https://, a
+// trailing .git, any case; elsewhere only the same server and path):
+// projects.remote_key = git_remote_key(remoteURL), the one definition of the
+// key, in the database (20261125034821_projects_remote_key). Scope as
+// GetProjectByRemoteURLAndUserInScope; the oldest when several match (a
+// user's duplicates from before the key, or one per org with a nil scope).
+// A project scheduled for deletion is returned like any other: the caller
+// decides what it means. NotFound when none matches, and when remoteURL names
+// no server, such as a local path (its key is NULL, which equals nothing).
+func GetProjectByRemoteKeyAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
+	remoteURL = strings.TrimSpace(remoteURL)
+	if remoteURL == "" {
+		return nil, fmt.Errorf("remote URL cannot be empty")
+	}
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	want := gitremote.Canonical(gitremote.StripCredentials(remoteURL))
-	if want == "" {
-		return nil, fmt.Errorf("%w for remote_url: %s", svcerr.NotFound("project"), gitremote.Redacted(remoteURL))
-	}
-	// The repository's path (owner/repo) narrows the candidates in SQL; the
-	// canonical comparison below decides. LIKE's wildcards in it only widen
-	// the candidates.
-	repoPath := want
-	if i := strings.Index(want, "/"); i >= 0 {
-		repoPath = want[i+1:]
-	}
 	opts := []orm.QueryOption{
+		whereRemoteKeyOf(gitremote.StripCredentials(remoteURL)),
 		orm.WhereEq(ProjectFieldUserID, userID),
-		func(q *bun.SelectQuery) { q.Where("? ILIKE ?", bun.Ident(ProjectFieldRemoteURL), "%"+repoPath+"%") },
 	}
 	if scope != nil {
 		opts = append(opts, whereOrg(ProjectFieldOrgID, scope))
 	}
-	rows, err := ListProject(ctx, db, append(opts, oldestProjectFirst...)...)
+	p, err := firstProject(ctx, db, append(opts, oldestProjectFirst...)...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get project by remote and user: %w", err)
+		return nil, fmt.Errorf("failed to get project by remote key and user: %w", err)
 	}
-	for _, row := range rows {
-		if row.RemoteURL != nil && strings.EqualFold(gitremote.Canonical(*row.RemoteURL), want) {
-			return projectToCore(row), nil
-		}
+	if p == nil {
+		return nil, fmt.Errorf("%w for remote: %s", svcerr.NotFound("project"), gitremote.Redacted(remoteURL))
 	}
-	return nil, fmt.Errorf("%w for remote_url: %s", svcerr.NotFound("project"), gitremote.Redacted(remoteURL))
+	return p, nil
+}
+
+// whereRemoteKeyOf matches the projects whose remote_key is remoteURL's.
+func whereRemoteKeyOf(remoteURL string) orm.QueryOption {
+	return func(q *bun.SelectQuery) {
+		q.Where("? = git_remote_key(?)", bun.Ident(ProjectFieldRemoteKey), remoteURL)
+	}
+}
+
+// GetProjectBySameRemoteAndUserInScope uses the database's repository identity
+// for main's alternate-spelling lookup as well.
+func GetProjectBySameRemoteAndUserInScope(ctx context.Context, db orm.Context, remoteURL, userID string, scope *core.OrgScope) (*core.Project, error) {
+	return GetProjectByRemoteKeyAndUserInScope(ctx, db, remoteURL, userID, scope)
 }
 
 // oldestProjectFirst orders a lookup that may match one project per org.
@@ -362,6 +368,7 @@ func projectToCore(row *Project) *core.Project {
 		IsGitRepo:        row.IsGitRepo != nil && *row.IsGitRepo,
 		DefaultBranch:    row.DefaultBranch,
 		RemoteURL:        gitremote.StripCredentialsPtr(row.RemoteURL),
+		RemoteKey:        row.RemoteKey,
 		IsForge:          row.IsForge,
 		ForgeProjectName: row.ForgeProjectName,
 		OrgID:            row.OrgID,

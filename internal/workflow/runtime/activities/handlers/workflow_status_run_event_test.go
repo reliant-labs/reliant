@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
@@ -149,7 +150,7 @@ func TestApprovalAndQuestionCreate_EmitBlockedOnceForTheFirstPendingItem(t *test
 
 	metadata := `{"type":"ask_user","questions":[{"question":"Which region?","options":[]}]}`
 	var questionOut QuestionCreateOutput
-	require.NoError(t, f.h.ExecuteActivity(NewQuestionCreateActivity(f.h.Repo(), store.NewQuestionExtStore(f.h.Repo().ORM())).Execute, QuestionCreateInput{
+	require.NoError(t, f.h.ExecuteActivity(NewQuestionCreateActivity(f.h.Repo(), questions.NewFromRepo(f.h.Repo()), store.NewQuestionExtStore(f.h.Repo().ORM())).Execute, QuestionCreateInput{
 		ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, ThreadID: f.chatID, StepID: "ask", Metadata: &metadata,
 	}, &questionOut))
 
@@ -168,7 +169,7 @@ func TestQuestionCreate_EmitsBlockedWithTheQuestionText(t *testing.T) {
 	f := newRunEventFixture(t, true)
 	metadata := `{"type":"ask_user","questions":[{"question":"Which region?","options":[]}]}`
 	var out QuestionCreateOutput
-	require.NoError(t, f.h.ExecuteActivity(NewQuestionCreateActivity(f.h.Repo(), store.NewQuestionExtStore(f.h.Repo().ORM())).Execute, QuestionCreateInput{
+	require.NoError(t, f.h.ExecuteActivity(NewQuestionCreateActivity(f.h.Repo(), questions.NewFromRepo(f.h.Repo()), store.NewQuestionExtStore(f.h.Repo().ORM())).Execute, QuestionCreateInput{
 		ChatID: f.chatID, WorkflowID: f.chatID, TemporalWorkflowID: f.chatID, ThreadID: f.chatID, StepID: "ask", Metadata: &metadata,
 	}, &out))
 

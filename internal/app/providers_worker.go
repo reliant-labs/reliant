@@ -66,6 +66,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/projectpurge"
 	"github.com/reliant-labs/reliant/internal/providerbackoff"
 	"github.com/reliant-labs/reliant/internal/prrecords"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -221,7 +222,7 @@ func newWorkerConnectionResolver(repo *db.Repo, vaultStore connectionvault.Servi
 		return nil, fmt.Errorf("connections: %w", err)
 	}
 	tokens := connections.NewTokenSource(vaultStore, keys, providers, nil)
-	return connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: store.NewWorkflowExtStore(repo.ORM()), Store: vaultStore, Tokens: tokens}), nil
+	return connections.NewResolver(connections.ResolverDeps{Owners: connections.NewOwners(repo.ORM()), Runs: store.NewWorkflowExtStore(repo.ORM()), Store: vaultStore, Tokens: tokens}), nil
 }
 
 // newWorkerIntegrationCredentials is the credential source integration
@@ -329,7 +330,7 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.New(runs.Deps{Repo: d.DB, Chats: store.NewChatsWithActivityExtStore(d.DB.ORM()), Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
+	return runs.New(runs.Deps{Repo: d.DB, Chats: store.NewChatsWithActivityExtStore(d.DB.ORM()), Resolver: questions.NewFromRepo(d.DB), Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Questions: store.NewQuestionExtStore(d.DB.ORM()), Temporal: d.Temporal.Client, Pause: d.Pause, Waits: d.Backoff}), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
@@ -348,18 +349,19 @@ type RunLauncherDeps struct {
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 	pinner := daemonplacement.NewPinner(d.DB, d.Router.NATSDaemonRouter)
 	return launch.New(launch.Deps{
-		Store:       d.DB,
-		Chats:       store.NewChatsWithActivityExtStore(d.DB.ORM()),
-		Workflows:   store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:   store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows: store.NewProjectExtStore(d.DB.ORM()),
-		Projects:    d.Projects,
-		Selections:  store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:     threads.New(threads.Deps{Repo: d.DB}),
-		Temporal:    d.Temporal.Client,
-		Runs:        d.Runs,
-		TaskQueue:   v2workflow.SharedTaskQueue,
-		Pinner:      pinner,
+		Store:         d.DB,
+		Chats:         store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
+		Projects:      d.Projects,
+		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
+		Threads:       threads.New(threads.Deps{Repo: d.DB}),
+		Temporal:      d.Temporal.Client,
+		Runs:          d.Runs,
+		TaskQueue:     v2workflow.SharedTaskQueue,
+		Pinner:        pinner,
 	}), nil
 }
 
@@ -385,15 +387,16 @@ type WorkerChatDeps struct {
 //forge:root-only worker
 func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
-		Logger:        d.Logger,
-		Config:        d.Config,
-		Repo:          d.DB,
-		Chats:         chataccess.NewFromORM(d.DB.ORM()),
-		ChatRows:      store.NewChatExtStore(d.DB.ORM()),
-		ChatViews:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
-		Workflows:     store.NewWorkflowExtStore(d.DB.ORM()),
-		Worktrees:     store.NewWorktreeExtStore(d.DB.ORM()),
-		ProjectRows:   store.NewProjectExtStore(d.DB.ORM()),
+		Logger:           d.Logger,
+		Config:           d.Config,
+		Repo:             d.DB,
+		Chats:            chataccess.NewFromORM(d.DB.ORM()),
+		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
+		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		QuestionResolver: questions.NewFromRepo(d.DB),
+		Workflows:        store.NewWorkflowExtStore(d.DB.ORM()),
+		Worktrees:        store.NewWorktreeExtStore(d.DB.ORM()),
+		ProjectRows:      store.NewProjectExtStore(d.DB.ORM()), TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
 		Questions:     store.NewQuestionExtStore(d.DB.ORM()),
 		Spawns:        store.NewToolCallExtStore(d.DB.ORM()),
 		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
@@ -434,6 +437,7 @@ func NewWorkerRun(d WorkerRunDeps) (*WorkerRun, error) {
 		Logger:    d.Logger,
 		Config:    d.Config,
 		Repo:      d.DB,
+		RunLists:  store.NewRunListExtStore(d.DB.ORM()),
 		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
 		ChatRows:  store.NewChatExtStore(d.DB.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(d.DB.ORM()),

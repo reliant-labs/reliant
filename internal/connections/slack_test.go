@@ -170,7 +170,7 @@ func slackEnv(t *testing.T) (*env, *fakeSlack) {
 	e.tokens = connections.NewTokenSource(e.store, e.vault, providers, doer)
 	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	e.svc = connections.NewService(e.store, e.vault, providers, e.tokens, e.broker, doer)
-	e.resolver = connections.NewResolver(connections.ResolverDeps{Owners: e.repo, Runs: ormstore.NewWorkflowExtStore(e.repo.ORM()), Store: e.store, Tokens: e.tokens})
+	e.resolver = connections.NewResolver(connections.ResolverDeps{Owners: connections.NewOwners(e.repo.ORM()), Runs: ormstore.NewWorkflowExtStore(e.repo.ORM()), Store: e.store, Tokens: e.tokens})
 	return e, f
 }
 
