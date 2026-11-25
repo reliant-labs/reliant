@@ -462,7 +462,6 @@ Execute a shell command
 | `working_dir` | string | - |
 | `log_file` | string | - |
 | `truncated` | boolean | - |
-| `llm_gateway` | object | - |
 
 ---
 

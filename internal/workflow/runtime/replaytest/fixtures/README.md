@@ -81,6 +81,7 @@ that shape.
 | `2026-10-11-integration-action-approval` | `action_approval.json` at `14f6aff7`: an attended turn's mutating integration action asks first (`ApprovalCreate`, a timer, `signal.approval.*`), is denied, and `ExecuteTools` refuses it — the prompt #664 removed | `actionApprovalRemovedChangeID` (`runtime/action_approval_legacy.go`) |
 | `2026-10-30-bookkeeping-regular-activities` | Every fixture at the commit before local bookkeeping: `ActivityLoadWorkflow`, `LoadPresetParams` and `WorkflowCheckpoint` scheduled as regular activities | `bookkeepingLocalGate` (`runtime/bookkeeping_local.go`), asked at the run's first definition load |
 | `2026-11-20-interrupt-redispatches-tool-step` | `interrupt_redispatches_tool_step.json` at `81983b55`: an interrupt that cancels a tool batch re-dispatches the same step — its activation preview runs again before the second `ExecuteTools` | `interruptSettlesToolStepChangeID` (`runtime/interrupt_settle.go`) |
+| `2026-11-25-requires-cli-login-llm-gateway` | `requires_cli_login.json` and `run_llm_gateway.json` at `0d3f7684e`, the last commit with `requires.cli_login` and a run node's `llm_gateway` (shipped in v1.29.0, then removed): a cli_login-only run schedules `PreflightRequirements`, and a recorded definition carrying either key re-parses on replay | `cliLoginRemovedChangeID` and `dropRemovedDefinitionKeys` (`runtime/removed_definition_keys.go`) |
 
 Retire a set only together with its gate, once no run older than the gate's
 deploy can still be open.

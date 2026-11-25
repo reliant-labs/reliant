@@ -15,7 +15,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=03d2cfd6cdf972082a4fcb5e4608be07f497cfef8af3dc3a5604bbd8ae543062
+// forge:hash=bada28056e059a5053b8be57e8c62552556eefddb195ca1f2a19b0f6d58b5a55
 
 // MockService is a test mock for the Service interface.
 //
@@ -48,8 +48,6 @@ type MockService struct {
 	NotifyOrgKeyRejectedFunc            func(context.Context, OrgKeyRejectedNotice) (bool, error)
 	NotifyOrgAutomationNoOrgAccountFunc func(context.Context, OrgAutomationNoOrgAccountNotice) (bool, error)
 	GetModelListPricesFunc              func(context.Context, []ModelRef) ([]ModelListPrice, time.Time, error)
-	MintStepKeyFunc                     func(context.Context, StepKeyRequest) (StepKey, error)
-	RevokeStepKeyFunc                   func(context.Context, string) (StepKeyRevocation, error)
 	HasCoverageBlobFunc                 func(context.Context, string, string, string, string) (CoverageBlob, error)
 	ListHostedAppsFunc                  func(context.Context, string, string) ([]HostedApp, error)
 }
@@ -259,24 +257,6 @@ func (m *MockService) GetModelListPrices(ctx context.Context, refs []ModelRef) (
 		return m.GetModelListPricesFunc(ctx, refs)
 	}
 	return nil, *new(time.Time), contractkit.MockNotSet("MockService", "GetModelListPrices")
-}
-
-// MintStepKey records the call and delegates to MintStepKeyFunc when set.
-func (m *MockService) MintStepKey(ctx context.Context, r StepKeyRequest) (StepKey, error) {
-	m.Recorder.Record("MintStepKey", ctx, r)
-	if m.MintStepKeyFunc != nil {
-		return m.MintStepKeyFunc(ctx, r)
-	}
-	return StepKey{}, contractkit.MockNotSet("MockService", "MintStepKey")
-}
-
-// RevokeStepKey records the call and delegates to RevokeStepKeyFunc when set.
-func (m *MockService) RevokeStepKey(ctx context.Context, requestID string) (StepKeyRevocation, error) {
-	m.Recorder.Record("RevokeStepKey", ctx, requestID)
-	if m.RevokeStepKeyFunc != nil {
-		return m.RevokeStepKeyFunc(ctx, requestID)
-	}
-	return StepKeyRevocation{}, contractkit.MockNotSet("MockService", "RevokeStepKey")
 }
 
 // HasCoverageBlob records the call and delegates to HasCoverageBlobFunc when set.

@@ -1612,7 +1612,8 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// node can have a side effect.
 	// Checked on the inherited machine only when some node routes there; a
 	// pool member is checked when a step is first placed on it.
-	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread, !onlyPools); err != nil {
+	legacyCLILogin := legacyRequiresCLILogin(ctx, loadedWf.WorkflowJSON, execCtx)
+	if err := checkRequirements(ctx, input, execCtx, wf, workflowID, thread, !onlyPools, legacyCLILogin); err != nil {
 		return nil, err
 	}
 	requirementsCheckedID := ""
@@ -1621,7 +1622,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			requirementsCheckedID, _ = sel["id"].(string)
 		}
 	}
-	placedReqs := newPlacedRequirements(input, execCtx, wf, workflowID, requirementsCheckedID)
+	placedReqs := newPlacedRequirements(input, execCtx, wf, workflowID, requirementsCheckedID, legacyCLILogin)
 
 	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
 	// guidance it may seed is in the thread when the first LLM call reads it,
