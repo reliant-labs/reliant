@@ -59157,6 +59157,17 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "OrgMoves",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "OrgPolicyImpact",
       "field": "Attendance",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
@@ -62130,6 +62141,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewNATSConn"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgMoves.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewOrgMoves"
       }
     },
     {

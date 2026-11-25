@@ -854,6 +854,8 @@ type OrgMovesDeps struct {
 	// (orgmove's ResumeTriggers step).
 	Triggers   *WorkerTrigger
 	Membership *orgs.Resolver
+	// Updates announces the move to the owner's clients.
+	Updates chatupdates.Service
 }
 
 // NewOrgMoves is the steps of a project's move to another org on this

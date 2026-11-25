@@ -628,6 +628,7 @@ func (g *Graph) newOrgMoves() (orgmove.Service, error) {
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		Triggers:     g.WorkerTrigger(),
 		Membership:   g.OrgResolver(),
+		Updates:      g.chatUpdates(),
 	})
 }
 
