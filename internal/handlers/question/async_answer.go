@@ -88,22 +88,6 @@ func (s *Service) resolveAsyncQuestion(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))
 	}
 
-	toolCallID := ""
-	if question.ToolCallID != nil {
-		toolCallID = *question.ToolCallID
-	}
-	if err := s.deps.Repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
-		QuestionID: question.ID,
-		ChatID:     question.ChatID,
-		WorkflowID: question.WorkflowID,
-		ThreadID:   question.ThreadID,
-		StepID:     question.StepID,
-		Status:     "resolved",
-		Async:      true,
-		ToolCallID: toolCallID,
-	}); err != nil {
-		logging.WarnContext(ctx, "[Question] Failed to emit question update", "error", err)
-	}
 	// Answered, it leaves the user's inbox; no chat activity change says so.
 	if err := s.deps.Refetch.EmitUserRefetch(ctx, chat.UserID, core.RefetchInbox, core.RefetchOpts{ChatID: &chat.ID}); err != nil {
 		logging.WarnContext(ctx, "[Question] Failed to announce an answered async question to the inbox", "error", err)

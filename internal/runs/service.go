@@ -713,18 +713,6 @@ func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
 				"chatID", chatID, "questionID", q.ID, "error", err)
 			continue
 		}
-
-		if err := s.repo.EmitQuestionUpdate(ctx, q.ChatID, db.QuestionUpdate{
-			QuestionID: q.ID,
-			ChatID:     q.ChatID,
-			WorkflowID: q.WorkflowID,
-			ThreadID:   q.ThreadID,
-			StepID:     q.StepID,
-			Status:     "resolved",
-		}); err != nil {
-			logging.WarnContext(ctx, "[runs] Failed to emit question resolved update while terminating",
-				"chatID", chatID, "questionID", q.ID, "error", err)
-		}
 	}
 }
 
