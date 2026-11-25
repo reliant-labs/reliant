@@ -17,15 +17,12 @@ import { useAuthStore } from "@/store/authStore";
 
 const listMyOrganizations = vi.fn();
 const getCurrentUserComputeSubscription = vi.fn();
-vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
-  listMyOrganizations: () => listMyOrganizations(),
-}));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { billingHandlers } from "@/test/billingTransport";
+import { myOrgsHandlers } from "@/test/orgsTransport";
 import { ActiveOrgBinding } from "../ActiveOrgBinding";
 import { OrgSwitcher } from "../OrgSwitcher";
 import { orgPlanLabel } from "../orgPlan";
@@ -69,7 +66,12 @@ describe("the sidebar header's org row", () => {
     listMyOrganizations.mockReset().mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
     getCurrentUserComputeSubscription.mockReset();
     // The plan is read through the generated BillingService hooks.
-    setTransport(mockTransport(billingHandlers({ getCurrentUserComputeSubscription: () => getCurrentUserComputeSubscription() })));
+    setTransport(
+      mockTransport({
+        ...myOrgsHandlers({ listMyOrganizations: () => listMyOrganizations() }),
+        ...billingHandlers({ getCurrentUserComputeSubscription: () => getCurrentUserComputeSubscription() }),
+      }),
+    );
     useAuthStore.setState({ user: { id: "alice" } as never });
     useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
   });

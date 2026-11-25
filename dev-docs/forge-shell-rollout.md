@@ -133,15 +133,11 @@ Its runtime config is the env's (`DEMO_DATA_SOURCE`, `DEMO_DATA_URL`,
 auth mode and no key. It needs no control-plane CORS entry and no GoTrue
 redirect entry: it calls no backend.
 
-`DEMO_APP_HOST` (proto field 24) is deprecated but still works:
-`prod/reliant-web` mounts the demo shell on that host, as before, so a
-deployment that still points the host at reliant-web keeps its demo (and the
-cutover keeps a rollback target). It is removed only in a future major.
+`DEMO_APP_HOST` (proto field 24) was removed (2026-11-19): `prod/reliant-web`
+no longer mounts the demo shell on any host, only through `?shell=demo`.
 
 **Order.** The cutover below moves the domain to the demo env and checks it.
-`prod/reliant-web` stays its rollback target throughout, because it still
-serves the demo shell on that host (`DEMO_APP_HOST`, deprecated). The full
-runbook, with every check, is `dev-docs/forge-demo-cutover.md`.
+The full runbook, with every check, is `dev-docs/forge-demo-cutover.md`.
 
 Ship and bind it from a reliant checkout of `main` (owner, tenant-zero
 credential):
@@ -166,9 +162,10 @@ node frontends/web/scripts/demo/smoke-demo-site.mjs https://demo.reliantlabs.io
 
 **Rollback of the cutover** (if a check fails). The domain's verification and
 certificate belong to the domain, not to the binding, so moving it back is
-instant and needs no DNS change. It restores exactly what served before: the
-build `prod/reliant-web` runs, which still mounts the demo shell on this host
-(`DEMO_APP_HOST`).
+instant and needs no DNS change. Since `DEMO_APP_HOST` was removed
+(2026-11-19), `prod/reliant-web` serves Reliant on this host, not the demo
+shell, so this is no longer a rollback of the demo: deploy the demo's previous
+release instead.
 
 ```bash
 cd ../control-plane

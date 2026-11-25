@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
@@ -12,6 +13,7 @@ import (
 	forgeauth "github.com/reliant-labs/forge/pkg/auth"
 	"github.com/reliant-labs/forge/pkg/authn"
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	"github.com/reliant-labs/forge/pkg/session"
 
 	"github.com/reliant-labs/reliant/internal/auth/authmetrics"
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -32,6 +34,12 @@ var ErrSessionUnavailable = errors.New("the session could not be checked; try ag
 type Authenticator struct {
 	chain *TokenChain
 	forge *forgeauth.Authenticator
+	// sessions: a session store is installed (Settings.Sessions), so the
+	// sign-in cookie can hold a session.
+	sessions bool
+	// devCookie: the session cookie's plain name counts too
+	// (Settings.DevSessionCookie).
+	devCookie bool
 }
 
 // NewAuthenticator builds the authenticator s describes (NewTokenChain).
@@ -57,7 +65,7 @@ func NewAuthenticator(ctx context.Context, s Settings) (*Authenticator, error) {
 			return meta.UserinfoEndpoint, nil
 		}, nil))
 	}
-	return &Authenticator{chain: chain, forge: fa}, nil
+	return &Authenticator{chain: chain, forge: fa, sessions: s.Sessions != nil, devCookie: s.DevSessionCookie}, nil
 }
 
 // Verified is a credential the user audience accepted: who it proves, how
@@ -74,6 +82,25 @@ type Verified struct {
 	Principal *fat.Principal
 }
 
+// CredentialFrom is the credential the request with header h presents, and
+// the channel it arrived on (CredentialFromHeader, with the plain-named
+// cookie only in local development).
+func (a *Authenticator) CredentialFrom(h http.Header) (string, authn.Channel) {
+	return CredentialFromHeader(h, a.devCookie)
+}
+
+// CheckChannel refuses a credential its channel may not carry: the sign-in
+// cookie holds a server-side session id and nothing else. A token in it — a
+// JWT, an `rlat_` access token — is a program replaying a bearer as a
+// cookie: refused, never checked as a bearer. Every caller runs it before it
+// dispatches on the credential's shape.
+func (a *Authenticator) CheckChannel(credential string, channel authn.Channel) error {
+	if channel == authn.ChannelCookie && (!a.sessions || !session.IsID(credential)) {
+		return fmt.Errorf("%w: the sign-in cookie holds no session", ErrInvalidToken)
+	}
+	return nil
+}
+
 // Verify checks credential, which arrived on channel, and says what it
 // proves. Its errors are credential rejections (IsCredentialRejection),
 // except ErrSessionUnavailable and the errors of an issuer that could not be
@@ -83,6 +110,9 @@ func (a *Authenticator) Verify(ctx context.Context, credential string, channel a
 		// Never a token of the chain: the token authority resolves it, or no
 		// one does.
 		return nil, fmt.Errorf("%w: an access token is not accepted here", ErrInvalidToken)
+	}
+	if err := a.CheckChannel(credential, channel); err != nil {
+		return nil, err
 	}
 	var claims *forgeauth.Claims
 	var err error
@@ -150,7 +180,10 @@ func VerifiedAccessToken(claims *JWTClaims, p *fat.Principal, channel authn.Chan
 // the validator that proved it and how it was presented (method). It is the
 // one place this is decided.
 //
-//   - The managed identity's token is software's, whatever it is
+//   - The managed identity's session, read from the sign-in cookie and
+//     resolved through the session store (authn.Method.IsBrowserSession), is
+//     a person's browser (CredentialBrowserSession).
+//   - Any other managed identity credential is software's
 //     (CredentialIdentityToken): the app's browser holds only its sign-in
 //     cookie, so a program presenting the identity's token or a session id
 //     itself is acting for the user, not as them.
@@ -161,6 +194,9 @@ func VerifiedAccessToken(claims *JWTClaims, p *fat.Principal, channel authn.Chan
 func credentialFor(v verdict, method authn.Method) (Credential, error) {
 	switch v.source {
 	case SourceIdentity:
+		if method.IsBrowserSession() {
+			return CredentialBrowserSession, nil
+		}
 		return CredentialIdentityToken, nil
 	case SourceSupabase, SourceDevSigner, SourceSharedKey:
 		if method.Credential == forgeauth.CredentialSession {

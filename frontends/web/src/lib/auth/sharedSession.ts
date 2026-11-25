@@ -13,8 +13,8 @@
  *
  *   resolveAuthStorageMode  which storage this page load uses. The shared
  *                           cookie ONLY on a hosted https page inside the
- *                           configured domain, and NEVER on the demo host or
- *                           in the demo shell (no auth exists there).
+ *                           configured domain, and NEVER in the demo shell
+ *                           (no auth exists there).
  *   createSessionCookieStore  the session JSON as base64url chunks
  *                           `supabase-auth.0..n` on `Domain=<domain>; Path=/;
  *                           Secure; SameSite=Lax`. The session can exceed one
@@ -126,9 +126,7 @@ export interface AuthStorageInputs {
   cookieDomain: string
   hostname: string
   protocol: string
-  /** The demo host (shell.ts demoAppHost()). */
-  demoHost: string
-  /** True when this page load mounts the demo shell (including ?shell=demo). */
+  /** True when this page load mounts the demo shell (the demo's own build, or ?shell=demo). */
   demoShell: boolean
 }
 
@@ -150,7 +148,7 @@ export function resolveAuthStorageMode(i: AuthStorageInputs): AuthStorageMode {
   if (!domain) return 'local'
   if (i.protocol !== 'https:') return 'local'
   const host = i.hostname.trim().toLowerCase()
-  if (i.demoShell || (i.demoHost && host === i.demoHost.trim().toLowerCase())) return 'local'
+  if (i.demoShell) return 'local'
   return hostInCookieDomain(host, domain) ? 'shared-cookie' : 'local'
 }
 

@@ -8,6 +8,7 @@
 
 import type { ActivityEvent } from "@/services/controlPlane/observability/activityApi";
 
+import { DEMO_PROJECT } from "../handlers/scope";
 import { DAY, DEMO_CI_ACTOR, DEMO_INCIDENT, demoPerson, HOUR, MINUTE, RUNNING } from "../shopStory";
 
 const ENV = { dev: { id: "env-dev", name: "dev" }, staging: { id: "env-staging", name: "staging" }, prod: { id: "env-prod", name: "prod" } };
@@ -19,7 +20,7 @@ const PLATFORM: ActivityEvent["actor"] = { id: "reliant", name: "reliant", kind:
 const ISSUE = { kind: "issue", id: DEMO_INCIDENT.issueId, label: DEMO_INCIDENT.error };
 
 /** Newest first. */
-export function shopActivity(now: number): ActivityEvent[] {
+export function shopActivity(now: number, app: string = DEMO_PROJECT): ActivityEvent[] {
   const at = (ago: number) => now - ago;
   const events: Omit<ActivityEvent, "project">[] = [
     { id: "act-promote-dev-v184", atMs: at(RUNNING["env-dev"].age), actor: user("maya"), verb: "promote", target: { kind: "release", id: "v1.8.4", label: "v1.8.4" }, env: ENV.dev, via: "cli", detail: { from: "v1.8.3" } },
@@ -52,5 +53,5 @@ export function shopActivity(now: number): ActivityEvent[] {
       detail: { platform: "server", service: "inventory", status: "resolved", from: "unresolved", resolve_in: "version", version: "v1.8.2" },
     },
   ];
-  return events.map((e) => ({ ...e, project: "shop" })).sort((a, b) => b.atMs - a.atMs);
+  return events.map((e) => ({ ...e, project: app })).sort((a, b) => b.atMs - a.atMs);
 }

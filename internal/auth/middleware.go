@@ -56,8 +56,14 @@ type Settings struct {
 	// ModeSupabase accepts beside Supabase's. Inert until its Issuer is set.
 	Identity IdentitySettings
 	// Sessions resolves a server-side sign-in session id (forge/pkg/session)
-	// to its access token. nil: a session id is an unknown token.
+	// to its access token. nil: a session id is an unknown token, and the
+	// sign-in cookie is refused.
 	Sessions forgeauth.SessionResolver
+	// DevSessionCookie reads the sign-in cookie by its plain name
+	// (SessionCookieName) too, as well as its __Host- name. Local
+	// development only: it serves plain HTTP, where a browser refuses a
+	// __Host- cookie.
+	DevSessionCookie bool
 }
 
 // IdentitySettings is where the managed identity's tokens are verified:
@@ -146,17 +152,13 @@ func (m *Middleware) RequireAuthOrAccessToken(v AccessTokenIntrospector) func(ht
 // (JWT-only surface) instead of falling through to JWT validation.
 func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospector) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Get token from Authorization header first
-		var tokenString string
-		channel := authn.ChannelAuthorization
-		authHeader := r.Header.Get("Authorization")
-		if authHeader != "" {
-			tokenString = strings.TrimPrefix(authHeader, "Bearer ")
-		}
+		// The Authorization header when the request has one, else the
+		// sign-in session cookie (CredentialFromHeader).
+		tokenString, channel := m.authenticator.CredentialFrom(r.Header)
 
 		// For WebSocket upgrade requests, allow query parameter as fallback
 		// This is necessary because browser WebSocket API doesn't support custom headers
-		if tokenString == "" && isWebSocketUpgrade(r) {
+		if tokenString == "" && channel != authn.ChannelAuthorization && isWebSocketUpgrade(r) {
 			tokenString = r.URL.Query().Get("token")
 			channel = authn.ChannelUnknown
 		}
@@ -172,8 +174,9 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 		// authenticator's token chain.
 		isAccessToken := IsAccessTokenFormat(tokenString)
 		var verified *Verified
-		var err error
+		err := m.authenticator.CheckChannel(tokenString, channel)
 		switch {
+		case err != nil:
 		case isAccessToken && tokens != nil:
 			var claims *JWTClaims
 			var principal *fat.Principal
