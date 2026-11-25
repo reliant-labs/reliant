@@ -55,6 +55,13 @@ type Service interface {
 	// credential is refused there: it has no orgs to list.
 	ListMyOrganizations(ctx context.Context, jwt string) ([]MyOrganization, error)
 
+	// GetCurrentAccount is the caller's control-plane account
+	// (UserService.GetCurrentUser): what the sign-in session reports beside
+	// the identity's own claims, because onboarding decides from it (its
+	// created_at, not the identity's: an imported user's identity record is
+	// as old as the import).
+	GetCurrentAccount(ctx context.Context, jwt string) (*Account, error)
+
 	// PreviewAccountDeletionWallet asks the control plane what deleting the
 	// caller's account would refund and forfeit. Changes nothing. The error
 	// wraps ErrAccountDeletionConfirmed when the platform account is already

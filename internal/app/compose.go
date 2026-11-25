@@ -755,6 +755,21 @@ func (g *Graph) newUserAuth() (*grpcserver.UserAuth, error) {
 	return NewUserAuth(UserAuthDeps{
 		Settings: g.APISettings(),
 		Tokens:   g.TokenAuthority(),
+		Sessions: g.SignInSessions(),
+	})
+}
+
+func (g *Graph) newSignInSessions() (*SignInSessions, error) {
+	return NewSignInSessions(SignInSessionsDeps{
+		API:    g.ApiServerConfig,
+		DB:     g.Database(),
+		Logger: g.Log,
+	})
+}
+
+func (g *Graph) newControlPlaneAccounts() (*ControlPlaneAccounts, error) {
+	return NewControlPlaneAccounts(ControlPlaneAccountsDeps{
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
@@ -798,6 +813,9 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies:       g.OrgPolicyResolver(),
 		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
+		// Native sign-in (/auth/*), only with a configured identity.
+		SignIn:   g.SignInSessions(),
+		Accounts: g.ControlPlaneAccounts(),
 	})
 }
 

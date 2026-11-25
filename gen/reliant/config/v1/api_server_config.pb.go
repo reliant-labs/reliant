@@ -57,6 +57,29 @@ type ApiServerConfig struct {
 	JwtJwksSnapshotFile   string               `protobuf:"bytes,94,opt,name=jwt_jwks_snapshot_file,json=jwtJwksSnapshotFile,proto3" json:"jwt_jwks_snapshot_file,omitempty"`
 	JwtJwksSnapshot       string               `protobuf:"bytes,95,opt,name=jwt_jwks_snapshot,json=jwtJwksSnapshot,proto3" json:"jwt_jwks_snapshot,omitempty"`
 	JwtJwksSnapshotMaxAge *durationpb.Duration `protobuf:"bytes,96,opt,name=jwt_jwks_snapshot_max_age,json=jwtJwksSnapshotMaxAge,proto3" json:"jwt_jwks_snapshot_max_age,omitempty"`
+	// ── Native sign-in: the login broker (internal/app/login_broker.go) ────
+	//
+	// The managed identity's sign-in, served by reliant-api on /auth/*: the
+	// browser posts credentials to this server, which runs the OIDC flow
+	// against the identity and answers with an HttpOnly cookie holding a
+	// server-side session id. forge.IdentityRef fills every one of these from
+	// the env's forge.ManagedIdentity (an IdentityOnHost in dev, the control
+	// plane's instance when hosted); nothing is mounted until oidc_client_id
+	// and the broker token are set (LoginBrokerConfigured).
+	OidcClientId    string `protobuf:"bytes,99,opt,name=oidc_client_id,json=oidcClientId,proto3" json:"oidc_client_id,omitempty"`
+	OidcRedirectUri string `protobuf:"bytes,100,opt,name=oidc_redirect_uri,json=oidcRedirectUri,proto3" json:"oidc_redirect_uri,omitempty"`
+	OidcScopes      string `protobuf:"bytes,101,opt,name=oidc_scopes,json=oidcScopes,proto3" json:"oidc_scopes,omitempty"`
+	IdpLoginUri     string `protobuf:"bytes,102,opt,name=idp_login_uri,json=idpLoginUri,proto3" json:"idp_login_uri,omitempty"`
+	IdpBase         string `protobuf:"bytes,103,opt,name=idp_base,json=idpBase,proto3" json:"idp_base,omitempty"`
+	IdpHost         string `protobuf:"bytes,104,opt,name=idp_host,json=idpHost,proto3" json:"idp_host,omitempty"`
+	// HIGHLY PRIVILEGED: it can complete a sign-in for any user of the
+	// instance. It belongs to this server alone.
+	IdpBrokerToken     string `protobuf:"bytes,105,opt,name=idp_broker_token,json=idpBrokerToken,proto3" json:"idp_broker_token,omitempty"`
+	IdpBrokerTokenFile string `protobuf:"bytes,106,opt,name=idp_broker_token_file,json=idpBrokerTokenFile,proto3" json:"idp_broker_token_file,omitempty"`
+	// DELIVERED by the identity's converge, never hand-written.
+	IdpLoginPolicy   string `protobuf:"bytes,107,opt,name=idp_login_policy,json=idpLoginPolicy,proto3" json:"idp_login_policy,omitempty"`
+	TrustedProxyHops int32  `protobuf:"varint,108,opt,name=trusted_proxy_hops,json=trustedProxyHops,proto3" json:"trusted_proxy_hops,omitempty"`
+	AuthSelfSignup   bool   `protobuf:"varint,109,opt,name=auth_self_signup,json=authSelfSignup,proto3" json:"auth_self_signup,omitempty"`
 	// The email domains allowed to sign in, comma-separated; none allows every
 	// domain. The loader trims each element and drops blank ones, which the
 	// domain whitelist already did to every entry, so " B.com," still means
@@ -310,6 +333,83 @@ func (x *ApiServerConfig) GetJwtJwksSnapshotMaxAge() *durationpb.Duration {
 		return x.JwtJwksSnapshotMaxAge
 	}
 	return nil
+}
+
+func (x *ApiServerConfig) GetOidcClientId() string {
+	if x != nil {
+		return x.OidcClientId
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetOidcRedirectUri() string {
+	if x != nil {
+		return x.OidcRedirectUri
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetOidcScopes() string {
+	if x != nil {
+		return x.OidcScopes
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpLoginUri() string {
+	if x != nil {
+		return x.IdpLoginUri
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpBase() string {
+	if x != nil {
+		return x.IdpBase
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpHost() string {
+	if x != nil {
+		return x.IdpHost
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpBrokerToken() string {
+	if x != nil {
+		return x.IdpBrokerToken
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpBrokerTokenFile() string {
+	if x != nil {
+		return x.IdpBrokerTokenFile
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetIdpLoginPolicy() string {
+	if x != nil {
+		return x.IdpLoginPolicy
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetTrustedProxyHops() int32 {
+	if x != nil {
+		return x.TrustedProxyHops
+	}
+	return 0
+}
+
+func (x *ApiServerConfig) GetAuthSelfSignup() bool {
+	if x != nil {
+		return x.AuthSelfSignup
+	}
+	return false
 }
 
 func (x *ApiServerConfig) GetAllowedEmailDomains() []string {
@@ -695,7 +795,7 @@ var File_reliant_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xe75\n" +
+	")reliant/config/v1/api_server_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xbcC\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -726,7 +826,30 @@ const file_reliant_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x11jwt_jwks_snapshot\x18_ \x01(\tB}\x82\xce\x18y\n" +
 	"\x11JWT_JWKS_SNAPSHOT*`The same JWKS snapshot, inline (sensitive only so it rides the secret path; the keys are public)0\x01P\x01R\x0fjwtJwksSnapshot\x12\xc7\x01\n" +
 	"\x19jwt_jwks_snapshot_max_age\x18` \x01(\v2\x19.google.protobuf.DurationBr\x82\xce\x18n\n" +
-	"\x19JWT_JWKS_SNAPSHOT_MAX_AGE\x12\x19jwt-jwks-snapshot-max-age\x1a\x04168h*0How old a JWKS snapshot may be and still be usedR\x15jwtJwksSnapshotMaxAge\x12\x93\x01\n" +
+	"\x19JWT_JWKS_SNAPSHOT_MAX_AGE\x12\x19jwt-jwks-snapshot-max-age\x1a\x04168h*0How old a JWKS snapshot may be and still be usedR\x15jwtJwksSnapshotMaxAge\x12\x8c\x01\n" +
+	"\x0eoidc_client_id\x18c \x01(\tBf\x82\xce\x18b\n" +
+	"\x0eOIDC_CLIENT_ID*PThe identity's native-broker OIDC client id (a PKCE public client: not a secret)R\foidcClientId\x12}\n" +
+	"\x11oidc_redirect_uri\x18d \x01(\tBQ\x82\xce\x18M\n" +
+	"\x11OIDC_REDIRECT_URI*8The redirect URI registered for the broker's OIDC clientR\x0foidcRedirectUri\x12\xc7\x01\n" +
+	"\voidc_scopes\x18e \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
+	"\vOIDC_SCOPES\x1a#openid,profile,email,offline_access*lComma-separated scopes the broker asks for; offline_access earns the refresh token sessions are renewed withR\n" +
+	"oidcScopes\x12\xab\x01\n" +
+	"\ridp_login_uri\x18f \x01(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
+	"\rIDP_LOGIN_URI*pThe app's sign-in route the identity redirects an authorization request to (the app's origin is derived from it)R\vidpLoginUri\x12t\n" +
+	"\bidp_base\x18g \x01(\tBY\x82\xce\x18U\n" +
+	"\bIDP_BASE*IThe identity's origin the server dials for the session and finalize callsR\aidpBase\x12\x86\x01\n" +
+	"\bidp_host\x18h \x01(\tBk\x82\xce\x18g\n" +
+	"\bIDP_HOST*[Host header for the identity when idp_base is not the host its instance is registered underR\aidpHost\x12\x8d\x01\n" +
+	"\x10idp_broker_token\x18i \x01(\tBc\x82\xce\x18_\n" +
+	"\x10IDP_BROKER_TOKEN*GThe login broker's service-account token (sensitive, highly privileged)0\x01P\x01R\x0eidpBrokerToken\x12\xa5\x01\n" +
+	"\x15idp_broker_token_file\x18j \x01(\tBr\x82\xce\x18n\n" +
+	"\x15IDP_BROKER_TOKEN_FILE*UA file holding the broker token, re-read on every use so it rotates without a restartR\x12idpBrokerTokenFile\x12\xbb\x01\n" +
+	"\x10idp_login_policy\x18k \x01(\tB\x90\x01\x82\xce\x18\x8b\x01\n" +
+	"\x10IDP_LOGIN_POLICY*sThe LOGIN_POLICY document the broker enforces (sign-up mode, methods, social providers); empty is the legacy policy0\x01P\x01R\x0eidpLoginPolicy\x12\xc4\x01\n" +
+	"\x12trusted_proxy_hops\x18l \x01(\x05B\x95\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x89\x01\n" +
+	"\x12TRUSTED_PROXY_HOPS\x1a\x010*pReverse proxies in front of this server that append to X-Forwarded-For (the sign-in rate limits' client address)R\x10trustedProxyHops\x12\x90\x01\n" +
+	"\x10auth_self_signup\x18m \x01(\bBf\x82\xce\x18b\n" +
+	"\x10AUTH_SELF_SIGNUP*NServe POST /auth/register outside development (with no delivered login policy)R\x0eauthSelfSignup\x12\x93\x01\n" +
 	"\x15allowed_email_domains\x18\x04 \x03(\tB_\x82\xce\x18[\n" +
 	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains\x12\x9f\x01\n" +
 	"\x11disable_forge_api\x18\x06 \x01(\bBs\x82\xce\x18o\n" +

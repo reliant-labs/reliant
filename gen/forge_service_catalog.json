@@ -30,6 +30,7 @@
         "Connection",
         "Connector",
         "ConnectorGrants",
+        "ControlPlaneAccounts",
         "CoverageSource",
         "CredentialsAutomationtokens",
         "CredentialsConnectionvault",
@@ -91,6 +92,7 @@
         "Seatmatch",
         "Settings",
         "Sharing",
+        "SignInSessions",
         "Streaming",
         "StreamingHub",
         "System",
@@ -55684,6 +55686,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ControlPlaneAccounts",
+      "name": "ControlPlaneAccounts",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.ControlPlaneAccounts",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewControlPlaneAccounts"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "CoverageSource",
       "name": "CoverageSource",
       "kind": "component",
@@ -56988,6 +57002,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "SignInSessions",
+      "name": "SignInSessions",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.SignInSessions",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewSignInSessions"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "StateDerivation",
       "name": "StateDerivation",
       "kind": "provider",
@@ -57691,7 +57717,9 @@
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/account.ControlPlane",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58272,7 +58300,9 @@
       "field": "Reports",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Reports",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58413,7 +58443,9 @@
       "field": "IdleTimeouts",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MemberIdleTimeouts",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58435,7 +58467,9 @@
       "field": "Names",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MachineNames",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58722,7 +58756,9 @@
       "field": "MyOrgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgLister",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -59287,7 +59323,9 @@
       "field": "Prices",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.ListPrices",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -59512,7 +59550,9 @@
       "field": "Apps",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.HostedApps",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -59521,7 +59561,9 @@
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.CloneDispatcher",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -59577,7 +59619,9 @@
       "field": "MoveFacts",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60276,7 +60320,9 @@
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.LLMKeyMinter",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61031,7 +61077,9 @@
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.AutomationTokens",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
