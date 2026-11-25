@@ -45,7 +45,7 @@
  * be a read path wearing a write path's name.
  */
 
-import { ConnectError, Code } from "@connectrpc/connect";
+import { ConnectError, Code, type Transport } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -446,8 +446,8 @@ function toAuthor(msg: { kind: SecretAuthorKind; email: string } | undefined): S
 
 // ── RPCs ────────────────────────────────────────────────────────────────────
 
-function client() {
-  return getControlPlaneClient(SecretStoreService);
+function client(transport: Transport) {
+  return getControlPlaneClient(SecretStoreService, transport);
 }
 
 /**
@@ -455,8 +455,8 @@ function client() {
  * environment's protection and the caller's step-up grant — the two facts a
  * console needs to know BEFORE the user types a value.
  */
-export async function listSecrets(environmentId: string): Promise<ManagedSecretListing> {
-  const res = await client().listSecrets({ environmentId });
+export async function listSecrets(transport: Transport, environmentId: string): Promise<ManagedSecretListing> {
+  const res = await client(transport).listSecrets({ environmentId });
   const stepUpValidUntil = toISO(res.stepUpValidUntil);
   return {
     secrets: (res.secrets ?? [])
@@ -527,8 +527,8 @@ export function verifyFailureOf(err: unknown): VerifyFailure {
  * Email a one-time code to the caller's verified address. Org admin only.
  * The code is never in the response — only where it went.
  */
-export async function beginStepUp(environmentId: string): Promise<StepUpChallenge> {
-  const res = await client().beginStepUp({ environmentId });
+export async function beginStepUp(transport: Transport, environmentId: string): Promise<StepUpChallenge> {
+  const res = await client(transport).beginStepUp({ environmentId });
   const expiresAt = toISO(res.expiresAt);
   return { sentTo: res.sentTo, ...(expiresAt ? { expiresAt } : {}) };
 }
@@ -538,10 +538,11 @@ export async function beginStepUp(environmentId: string): Promise<StepUpChalleng
  * secrets until `validUntil`. The code travels inbound only and is not kept.
  */
 export async function completeStepUp(
+  transport: Transport,
   environmentId: string,
   code: string
 ): Promise<{ validUntil?: string }> {
-  const res = await client().completeStepUp({ environmentId, code });
+  const res = await client(transport).completeStepUp({ environmentId, code });
   const validUntil = toISO(res.validUntil);
   return validUntil ? { validUntil } : {};
 }
@@ -554,10 +555,11 @@ export async function completeStepUp(
  * every consumer wants the same order.
  */
 export async function getSecretVersions(
+  transport: Transport,
   environmentId: string,
   name: string
 ): Promise<ManagedSecretHistory> {
-  const res = await client().getSecretVersions({ environmentId, name });
+  const res = await client(transport).getSecretVersions({ environmentId, name });
   return {
     summary: res.summary ? toSummary(res.summary) : null,
     versions: (res.versions ?? []).map(toVersion).sort((a, b) => b.version - a.version),
@@ -576,13 +578,13 @@ export async function getSecretVersions(
  * The value is forwarded and then forgotten. It is not returned, not cached,
  * and deliberately not included in any error this function can raise.
  */
-export async function setSecret(args: {
+export async function setSecret(transport: Transport, args: {
   environmentId: string;
   name: string;
   value: string;
   cas?: number;
 }): Promise<SetSecretResult> {
-  const res = await client().setSecret({
+  const res = await client(transport).setSecret({
     environmentId: args.environmentId,
     name: args.name,
     secretValue: args.value,
@@ -622,12 +624,12 @@ export async function setSecret(args: {
  * An empty `versions` means the current version only, which is KV-v2's own
  * default and the one this UI uses for the row-level "Delete" action.
  */
-export async function deleteSecret(args: {
+export async function deleteSecret(transport: Transport, args: {
   environmentId: string;
   name: string;
   versions?: number[];
 }): Promise<void> {
-  await client().deleteSecret({
+  await client(transport).deleteSecret({
     environmentId: args.environmentId,
     name: args.name,
     versions: args.versions ?? [],
@@ -635,12 +637,12 @@ export async function deleteSecret(args: {
 }
 
 /** Restore soft-deleted versions. Cannot restore a destroyed one — that data is gone. */
-export async function undeleteSecret(args: {
+export async function undeleteSecret(transport: Transport, args: {
   environmentId: string;
   name: string;
   versions: number[];
 }): Promise<void> {
-  await client().undeleteSecret({
+  await client(transport).undeleteSecret({
     environmentId: args.environmentId,
     name: args.name,
     versions: args.versions,
@@ -655,12 +657,12 @@ export async function undeleteSecret(args: {
  * is the first place the difference between "recoverable" and "gone" should be
  * visible, before any confirmation dialog gets a chance to be dismissed.
  */
-export async function destroySecret(args: {
+export async function destroySecret(transport: Transport, args: {
   environmentId: string;
   name: string;
   versions: number[];
 }): Promise<void> {
-  await client().destroySecret({
+  await client(transport).destroySecret({
     environmentId: args.environmentId,
     name: args.name,
     versions: args.versions,

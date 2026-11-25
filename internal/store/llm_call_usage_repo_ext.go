@@ -307,6 +307,9 @@ func PruneLLMCallUsage(ctx context.Context, db orm.Context, cutoff time.Time, ba
 // dates), oldest first. It is what the usage API reads: the per-call rows are
 // deleted after the retention period, the rollup is not.
 func ListLLMUsageDaily(ctx context.Context, db orm.Context, userID string, from, to time.Time) ([]*LlmCallUsageDaily, error) {
+	if userID == "" {
+		return nil, errors.New("llm call usage: user id is required")
+	}
 	var rows []*LlmCallUsageDaily
 	err := db.Bun().NewSelect().Model(&rows).
 		Where("user_id = ?", userID).
@@ -423,6 +426,12 @@ type OrgChatCall struct {
 // created_at index; the org and the chat's own org are both matched, so a
 // call billed to the org from a chat that has since moved is not counted.
 func LatestOrgChatCalls(ctx context.Context, db orm.Context, orgID string, since time.Time, limit int) ([]OrgChatCall, error) {
+	if orgID == "" {
+		return nil, errors.New("llm call usage: org id is required")
+	}
+	if limit <= 0 {
+		return nil, errors.New("llm call usage: limit must be positive")
+	}
 	var rows []OrgChatCall
 	err := db.Bun().NewRaw(`SELECT chat_id, provider, model, funding FROM (
 		SELECT DISTINCT ON (u.chat_id) u.chat_id, u.provider, u.model, u.funding, u.created_at

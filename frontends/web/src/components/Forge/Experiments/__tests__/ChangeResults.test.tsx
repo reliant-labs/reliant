@@ -1,23 +1,22 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The results panel against a fake GetChangeReadout (protojson, through the
- * real ChangesApi): each verdict draws in its own tone and words, a failed
+ * The results panel against a fake GetChangeReadout (protojson, behind the
+ * app's transport: fakeChangesService.ts): each verdict draws in its own tone and words, a failed
  * sample-ratio check hides the lift, every refusal has its own plain
  * sentence, and a control plane without the readout keeps the "ships soon"
  * state.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { screen, within } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { renderWithQuery } from "@/test/renderWithQuery";
-import { ChangesApiProvider } from "@/services/controlPlane/changes/ChangesApiContext";
-import { createChangesApi } from "@/services/controlPlane/changes/changesApi";
 import type { Change } from "@/services/controlPlane/changes/changesTypes";
 
 import { ChangeResults } from "../ChangeResults";
+import { installFakeChangesService, type FakeChangesService } from "./fakeChangesService";
 
 const CHANGE = { id: "chg-1", currentRun: { id: "r_abcdefgh" } } as unknown as Change;
 
@@ -48,17 +47,17 @@ function wireReadout(overrides: Record<string, unknown> = {}) {
   };
 }
 
+let installed: FakeChangesService | null = null;
+
+afterEach(() => {
+  installed?.restore();
+  installed = null;
+});
+
 function renderResults(answer: () => unknown) {
-  const call = vi.fn(async (method: string) => {
-    if (method !== "GetChangeReadout") throw new ConnectError(method, Code.Unimplemented);
-    return answer();
-  });
-  renderWithQuery(
-    <ChangesApiProvider api={createChangesApi(call, async () => "org-1")}>
-      <ChangeResults change={CHANGE} />
-    </ChangesApiProvider>
-  );
-  return call;
+  installed = installFakeChangesService({ GetChangeReadout: () => answer() });
+  renderWithQuery(<ChangeResults change={CHANGE} />);
+  return installed;
 }
 
 const refusal = (reason: string, code: Code) => () => {
@@ -67,13 +66,13 @@ const refusal = (reason: string, code: Code) => () => {
 
 describe("ChangeResults", () => {
   it("draws a better treatment in success words, with each version's counts, the lift and the window", async () => {
-    const call = renderResults(() => wireReadout());
+    const service = renderResults(() => wireReadout());
     const verdict = await screen.findByTestId("results-verdict");
     expect(verdict).toHaveAttribute("data-verdict", "treatment_better");
     const line = within(verdict).getByText(/The new version is better/);
     expect(line).toHaveClass("text-success-ink");
     expect(line).toHaveTextContent("(treatment)");
-    expect(call).toHaveBeenCalledWith("GetChangeReadout", { changeId: "chg-1" }, expect.anything());
+    expect(service.of("GetChangeReadout").map((c) => c.body)).toEqual([{ changeId: "chg-1" }]);
 
     const arm = screen.getByTestId("results-arm-treatment");
     expect(arm).toHaveTextContent("1,010");

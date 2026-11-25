@@ -128,7 +128,7 @@ const getLiveView = vi.fn(() => Promise.resolve(liveEnvs));
 vi.mock("@/services/forge/live", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/live")>()),
   getLiveView: () => getLiveView(),
-  getEnvironmentShape: (id: string) => Promise.resolve(declaredShapes[id] ?? null),
+  getEnvironmentShape: (_transport: unknown, id: string) => Promise.resolve(declaredShapes[id] ?? null),
 }));
 
 /** EnsureEnvironment, as called straight from the browser. */
@@ -190,7 +190,7 @@ const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 1 }));
 vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
   listSecrets: () => listSecrets(),
-  setSecret: (input: unknown) => setSecret(input),
+  setSecret: (_transport: unknown, input: unknown) => setSecret(input),
   getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
 }));
 

@@ -155,6 +155,9 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 		return nil, fmt.Errorf("list triggers of %s: %w", ev.UserID, err)
 	}
 
+	// Every trigger this event is matched against reads the same catalogs:
+	// read (and pin) each once for the whole dispatch.
+	workflows := triggers.ForOneArrival(d.workflows)
 	var (
 		chain       lineage.Lineage
 		chainLoaded bool
@@ -173,7 +176,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 			retryable = append(retryable, err)
 			continue
 		}
-		spec, err := d.specIn(ctx, triggers.PinnedTo(d.workflows, recorded), trigger)
+		spec, err := d.specIn(ctx, triggers.PinnedTo(workflows, recorded), trigger)
 		if err != nil {
 			var declErr *triggers.DeclarationError
 			switch {
@@ -184,7 +187,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 				if prev, prevErr := SpecOf(trigger); prevErr == nil && !prev.Source.Matches(ev.WorkflowName, ev.Outcome) {
 					continue
 				}
-				def, defErr := triggers.DefinitionOf(ctx, d.workflows, trigger)
+				def, defErr := triggers.DefinitionOf(ctx, workflows, trigger)
 				if defErr != nil {
 					retryable = append(retryable, defErr)
 					continue
@@ -223,7 +226,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 			chainLoaded = true
 		}
 		res, err := d.traced(ctx, trigger, ev, recorded, func(ctx context.Context) (*Result, error) {
-			return d.fire(ctx, trigger, spec, ev, chain, recorded)
+			return d.fire(ctx, workflows, trigger, spec, ev, chain, recorded)
 		})
 		results, retryable = appendResult(results, retryable, res, err)
 	}
@@ -266,8 +269,9 @@ func appendResult(results []Result, errs []error, res *Result, err error) ([]Res
 // launches.
 //
 // recorded is the definition an earlier attempt of this firing launched
-// against (launchedDefinition), nil for a first attempt.
-func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec, ev *core.RunEvent, chain lineage.Lineage, recorded *core.TriggerEventDefinition) (*Result, error) {
+// against (launchedDefinition), nil for a first attempt. workflows is the
+// dispatch's (triggers.ForOneArrival).
+func (d *Dispatcher) fire(ctx context.Context, workflows triggers.WorkflowResolver, trigger *core.Trigger, spec Spec, ev *core.RunEvent, chain lineage.Lineage, recorded *core.TriggerEventDefinition) (*Result, error) {
 	if recorded != nil {
 		// Resuming a recorded launch: spec was read in its snapshot, and the
 		// launcher restarts it on the same one (launch.Launcher.startRecorded).
@@ -293,7 +297,7 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	}
 	// Which definition this firing resolves rides on its event row; a broken
 	// one refuses it before any guard or filter (triggers.Firer.Fire).
-	def, err := triggers.DefinitionOf(ctx, d.workflows, trigger)
+	def, err := triggers.DefinitionOf(ctx, workflows, trigger)
 	if err != nil {
 		return nil, err
 	}
@@ -303,7 +307,7 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 	if def != nil && def.CatalogPin != "" {
 		// The declaration this firing runs is the one in the snapshot it
 		// recorded and launches on, not the live one it was matched by.
-		pinned, err := d.specIn(ctx, triggers.PinnedTo(d.workflows, def), trigger)
+		pinned, err := d.specIn(ctx, triggers.PinnedTo(workflows, def), trigger)
 		var declErr *triggers.DeclarationError
 		switch {
 		case errors.As(err, &declErr):

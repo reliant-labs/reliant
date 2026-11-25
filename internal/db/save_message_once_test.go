@@ -224,7 +224,7 @@ func TestEnqueueAgentMessageOnce_ConcurrentCallsInsertOneRow(t *testing.T) {
 		}
 	}
 	assert.Equal(t, 1, winners)
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentThreadID)
+	queued, err := store.ListQueuedAgentMessagesForThread(ctx, repo.ORM(), parentThreadID)
 	require.NoError(t, err)
 	assert.Len(t, queued, 1)
 }

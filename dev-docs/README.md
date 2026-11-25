@@ -25,6 +25,7 @@ IDs, hosts or local infrastructure belong here, not in `docs/`.
 - `human-only-approvals-verification.md` — post-deploy check that real app sessions and OAuth-client tokens classify correctly for human-only approvals.
 - `sdk-approval-decisions-rollout.md` — post-deploy check of the Go SDK's approval decisions against a real server, and their rollback.
 - `desktop-sourcemaps.md` — how a desktop release files its renderer's source maps, the `release` environment's `RELIANT_SOURCEMAPS_TOKEN`, and how to set it up and check it.
+- `preview-env.md` — the hosted preview: the production web build on the shop fixture pack (forge.Fixtures), hosted as a control-plane prod frontend; the tests that prove its sign-in code is inert, and its noindex.
 - `forge-shell-rollout.md` — activating the forge shell host (forge.reliantlabs.io): external configuration, post-deploy checks, rollback.
 - `project-machines-rollout.md` — post-deploy check of machine-specific folder browsing, project creation and the checkout remove/reclone guard, and their rollback.
 - `dashboard-postgres-panels.md` — post-deploy check for dashboard postgres panels (`AppDatabaseService`), and how to roll them back.
