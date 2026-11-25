@@ -61,7 +61,7 @@ func (s *Service) BranchChat(
 	// since inherited messages are resolved on-demand via CW chain
 
 	// Get the source chat to verify ownership and get metadata
-	sourceChat, err := s.deps.Repo.GetChat(ctx, sourceChatID)
+	sourceChat, err := s.chatViews().GetChat(ctx, sourceChatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get source chat"))
 	}
@@ -154,7 +154,7 @@ func (s *Service) BranchChat(
 	// If the requesting chat differs from the source chat (branching from an inherited message),
 	// use the requesting chat's worktree as the default instead of the message's original chat's worktree.
 	if req.Msg.ChatId != "" && req.Msg.ChatId != sourceChatID {
-		requestingChat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
+		requestingChat, err := s.chatViews().GetChat(ctx, req.Msg.ChatId)
 		if err == nil && authz.CanOwnChat(ctx, userID, requestingChat) {
 			worktreeID = requestingChat.WorktreeID
 			fromChat = requestingChat
@@ -377,7 +377,7 @@ func (s *Service) BranchChat(
 	// workflow state (PENDING, which tells the client its first send is a
 	// StartChat) is derived by the chat view and cannot be set by hand
 	// without drifting from it.
-	committed, err := s.deps.Repo.GetChat(ctx, branchChatID)
+	committed, err := s.chatViews().GetChat(ctx, branchChatID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load branch"))
 	}
