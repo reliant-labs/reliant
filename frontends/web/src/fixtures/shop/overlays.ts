@@ -34,6 +34,7 @@ import { serve } from "./handlers/serve";
 import { settingsHandlers } from "./handlers/reliant/settings";
 import { chatStreamEvents, untilAborted } from "./handlers/reliant/streaming";
 import { DATA_ANCHOR, packJson } from "./packJson";
+import { agentsChatHandlers, agentsChatStream } from "./overlays/agents";
 import { chartHoverHandlers, sandboxesHandlers } from "./overlays/dashboards";
 import { SHOP_READ_ONLY_MESSAGE } from "./index";
 import { DEMO_ORG, MINUTE } from "./shopStory";
@@ -304,6 +305,13 @@ export const SHOP_OVERLAYS: Readonly<Record<string, ShopOverlay>> = {
   "new-chat-installs": () => defineFixturePack({ name: "new-chat-installs", scenario: serve(ProjectService, { listProjectDaemons: newChatInstalls }) }),
   /** A dashboard opened by URL, never listed: a figure and a two-series line, for the chart hover surfaces (overlays/dashboards.ts). */
   "chart-hover": () => defineFixturePack({ name: "chart-hover", scenario: chartHoverHandlers }),
+  /** A chat opened by URL, never listed: one turn that starts twelve sub-agents, 8 done, 3 running, 1 failed (overlays/agents.ts). */
+  "chat-agents": () =>
+    defineFixturePack({
+      name: "chat-agents",
+      scenario: agentsChatHandlers(),
+      routes: (router) => router.service(StreamingService, { streamChatUpdates: (req: StreamChatUpdatesRequest, ctx) => agentsChatStream(req, ctx) }),
+    }),
   /** The platform's Sandboxes dashboard opened by URL under shop's release dashboards (overlays/dashboards.ts). */
   "sandboxes-dashboard": () => defineFixturePack({ name: "sandboxes-dashboard", scenario: sandboxesHandlers }),
   /** The phone's project pickers: both projects on the cloud machine, ListChats and StartChat requests noted, StartChat still refused. */

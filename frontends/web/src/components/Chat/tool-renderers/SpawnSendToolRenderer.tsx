@@ -13,6 +13,7 @@ import { memo } from "react";
 import type { ToolContentProps } from "./types";
 import { MarkdownRenderer } from "../MarkdownRenderer";
 import { formatErrorMessage } from "../../../lib/utils";
+import { ToolErrorText } from "./ToolErrorText";
 
 function SpawnSendToolRendererComponent({ ctx }: ToolContentProps) {
   const { input, result } = ctx;
@@ -28,17 +29,12 @@ function SpawnSendToolRendererComponent({ ctx }: ToolContentProps) {
           <MarkdownRenderer content={message} isUser={false} className="text-sm w-full" />
         </div>
       )}
-      {result?.content && (
-        <div
-          className={
-            result.is_error
-              ? "border-t border-border/30 px-2 py-1.5 text-xs text-warning-ink"
-              : "border-t border-border/30 px-2 py-1.5 text-xs text-muted-foreground"
-          }
-        >
-          {result.is_error ? formatErrorMessage(result.content) : result.content}
-        </div>
-      )}
+      {result?.content &&
+        (result.is_error ? (
+          <ToolErrorText className="border-t border-border/30">{formatErrorMessage(result.content)}</ToolErrorText>
+        ) : (
+          <div className="border-t border-border/30 px-2 py-1.5 text-xs text-muted-foreground">{result.content}</div>
+        ))}
     </div>
   );
 }
