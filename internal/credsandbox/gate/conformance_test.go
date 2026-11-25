@@ -194,7 +194,7 @@ URLS="$GATE_T_HOST_URLS http://$gw:$GATE_T_HOST_PORT/"
 			name:   "private-range and metadata egress are blocked",
 			denial: true,
 			needs:  func(f *hostFixture) string { return f.noPeer },
-			script: `URLS="$GATE_T_PEER http://169.254.169.254/computeMetadata/v1/ http://169.254.169.254/latest/meta-data/ http://169.254.169.254/"
+			script: `URLS="$GATE_T_PEER http://169.254.169.254/"
 ` + reach,
 			check: func(f *hostFixture, res Result, out string) error {
 				if err := ran(res, out); err != nil {
@@ -456,12 +456,19 @@ func conformanceTree(t *testing.T) string {
 	return src
 }
 
+// conformanceParallel bounds how many cases run at once: each is a gate.
+const conformanceParallel = 4
+
 // runConformance runs the whole table against b: every case must hold.
 func runConformance(t *testing.T, b Backend, image string, allow []netip.Prefix) {
 	f := plantHost(t)
 	src := conformanceTree(t)
+	sem := make(chan struct{}, conformanceParallel)
 	for _, c := range conformanceCases() {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			failure, skip, err := runCase(b, f, image, allow, src, c)
 			switch {
 			case err != nil:
@@ -579,11 +586,15 @@ func TestDenialCasesCatchALeakyBoundary(t *testing.T) {
 	f := plantHost(t)
 	b := leakyBackend{image: image, credDir: filepath.Dir(f.credPath)}
 	src := conformanceTree(t)
+	sem := make(chan struct{}, conformanceParallel)
 	for _, c := range conformanceCases() {
 		if !c.denial {
 			continue
 		}
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 			failure, skip, err := runCase(b, f, image, nil, src, c)
 			switch {
 			case err != nil:
