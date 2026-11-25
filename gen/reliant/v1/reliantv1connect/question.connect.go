@@ -84,12 +84,14 @@ func NewQuestionServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+QuestionServiceListPendingQuestionsProcedure,
 			connect.WithSchema(questionServiceMethods.ByName("ListPendingQuestions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listAsyncQuestions: connect.NewClient[v1.ListAsyncQuestionsRequest, v1.ListAsyncQuestionsResponse](
 			httpClient,
 			baseURL+QuestionServiceListAsyncQuestionsProcedure,
 			connect.WithSchema(questionServiceMethods.ByName("ListAsyncQuestions")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -151,12 +153,14 @@ func NewQuestionServiceHandler(svc QuestionServiceHandler, opts ...connect.Handl
 		QuestionServiceListPendingQuestionsProcedure,
 		svc.ListPendingQuestions,
 		connect.WithSchema(questionServiceMethods.ByName("ListPendingQuestions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	questionServiceListAsyncQuestionsHandler := connect.NewUnaryHandler(
 		QuestionServiceListAsyncQuestionsProcedure,
 		svc.ListAsyncQuestions,
 		connect.WithSchema(questionServiceMethods.ByName("ListAsyncQuestions")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.QuestionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

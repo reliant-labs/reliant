@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -103,7 +105,7 @@ func TestRunScenarioTool_ExecutesOnTheRuntime(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateWorkflowScenario(ctx, stored))
 
-	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo, Scenarios: store.NewWorkflowScenarioExtStore(repo.ORM()), ScenarioRunner: RunScenario})
+	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo, Scenarios: store.NewWorkflowScenarioExtStore(repo.ORM()), WorkflowDrafts: workflowdraftstest.New(t, repo), ScenarioRunner: RunScenario})
 	resp, err := factory.RunScenario().Run(rctx.NewToolContext(ctx, "", "", nil, nil), tools.ToolCall{
 		ID:    "c1",
 		Input: `{"id":"` + draft.ID + `","name":"denied_once"}`,
@@ -133,7 +135,7 @@ func TestRunScenarioTool_WithoutRunnerIsUnavailable(t *testing.T) {
 	}
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, draft))
 
-	resp, err := tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo, Scenarios: store.NewWorkflowScenarioExtStore(repo.ORM())}).RunScenario().Run(
+	resp, err := tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo, Scenarios: store.NewWorkflowScenarioExtStore(repo.ORM()), WorkflowDrafts: workflowdraftstest.New(t, repo)}).RunScenario().Run(
 		rctx.NewToolContext(ctx, "", "", nil, nil),
 		tools.ToolCall{ID: "c1", Input: `{"id":"` + draft.ID + `","name":"x"}`})
 	require.NoError(t, err)

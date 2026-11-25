@@ -9,8 +9,8 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 
-import { createShopApi } from "../../Demo/demoData/shop/shopApi";
-import { DEMO_ORG, demoNow, resetDemoNowForTests } from "../../Demo/demoData/shopStory";
+import { createShopApi } from "@/fixtures/shop/model/shopApi";
+import { DEMO_ORG, demoNow, resetDemoNowForTests } from "@/fixtures/shop/shopStory";
 import { renderWithApi } from "../../Observability/__tests__/obsTestUtils";
 import { UsersCard } from "../UsersCard";
 

@@ -15,7 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/telemetry"
+	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -46,10 +46,16 @@ type InvokeToolActivity struct {
 }
 
 // NewInvokeToolActivity creates a new InvokeToolActivity.
-func NewInvokeToolActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
+// Deprecated: use NewInvokeToolActivityWithDeps.
+func NewInvokeToolActivity(storeOrDeps any, legacy ...any) *InvokeToolActivity {
 	return &InvokeToolActivity{
-		executeTools: NewExecuteToolsActivity(repo, rows, toolCalls, toolExecutor),
+		executeTools: NewExecuteToolsActivity(storeOrDeps, legacy...),
 	}
+}
+
+// NewInvokeToolActivityWithDeps creates an invoke activity with explicit dependencies.
+func NewInvokeToolActivityWithDeps(deps ExecuteToolsDeps) *InvokeToolActivity {
+	return &InvokeToolActivity{executeTools: NewExecuteToolsActivityWithDeps(deps)}
 }
 
 // WithToolCallResults gives the tool-execution path the durable-result reader;
@@ -84,6 +90,20 @@ func (a *InvokeToolActivity) WithConfigProvider(provider cfgpkg.ConfigProvider) 
 // resolve through; see ExecuteToolsActivity.WithDaemonRouter.
 func (a *InvokeToolActivity) WithDaemonRouter(router toolexec.DaemonRouter) *InvokeToolActivity {
 	a.executeTools.WithDaemonRouter(router)
+	return a
+}
+
+// WithChatProjects gives the tool-execution path the reader of a chat's
+// attached projects; see ExecuteToolsActivity.WithChatProjects.
+func (a *InvokeToolActivity) WithChatProjects(l ChatProjectLister) *InvokeToolActivity {
+	a.executeTools.WithChatProjects(l)
+	return a
+}
+
+// WithToolUsage gives the tool-execution path the tool usage ledger; see
+// ExecuteToolsActivity.WithToolUsage.
+func (a *InvokeToolActivity) WithToolUsage(r ToolUsageRecorder) *InvokeToolActivity {
+	a.executeTools.WithToolUsage(r)
 	return a
 }
 
@@ -142,26 +162,28 @@ func (a *InvokeToolActivity) Execute(ctx context.Context, input ActivityInput) (
 	toolCallID := invokeToolCallID(rtx.WorkflowID, rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration)
 
 	// The call's span (execute_tool), under this node's: no agent turn asked
-	// for it, the graph did.
-	callCtx, span := telemetry.StartToolCall(ctx, toolName, toolCallID, toolLocation(toolName), "")
-
-	// No capability set: the node's author wrote every parameter, and no
-	// model was offered a schema with some of them bound away.
-	result := a.executeTools.executeSingleTool(
-		callCtx,
-		nil,
-		rtx.ChatID,
-		rtx.Thread,
-		toolName,
-		toolInput,
-		toolCallID,
-		activityInfo.ActivityID,
-		activityInfo.WorkflowExecution.RunID,
-		int(activityInfo.Attempt),
-		rtx.ProjectPath,
-		rtx.DaemonSelector,
-	)
-	span.End(result.IsError, nil)
+	// for it, the graph did. Its duration and outcome are also its row in the
+	// tool usage ledger (tool_usage_record.go).
+	meter := newToolUsageMeter(a.executeTools.usage, a.executeTools.repo, rtx.ChatID, rtx.Thread)
+	call := meteredToolCall{name: toolName, callID: toolCallID, location: toolLocation(toolName)}
+	result := meter.run(ctx, call, func(callCtx context.Context) message.ToolResult {
+		// No capability set: the node's author wrote every parameter, and no
+		// model was offered a schema with some of them bound away.
+		return a.executeTools.executeSingleTool(
+			callCtx,
+			nil,
+			rtx.ChatID,
+			rtx.Thread,
+			toolName,
+			toolInput,
+			toolCallID,
+			activityInfo.ActivityID,
+			activityInfo.WorkflowExecution.RunID,
+			int(activityInfo.Attempt),
+			rtx.ProjectPath,
+			rtx.DaemonSelector,
+		)
+	})
 
 	output := &reliantv1.InvokeToolOutput{
 		Tool:          toolName,

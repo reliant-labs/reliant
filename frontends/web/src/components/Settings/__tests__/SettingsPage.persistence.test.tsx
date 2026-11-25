@@ -82,7 +82,7 @@ describe("remembering the settings destination", () => {
     expect(second.router.state.location.pathname).toBe("/settings/appearance");
   });
 
-  it.each(["ai?tab=models", "billing?tab=plans", "machines/d-1"])(
+  it.each(["ai?tab=models", "billing?tab=plans"])(
     "restores detail/subtab %s without replaying transient search params",
     async (path) => {
       const first = renderAt(`/settings/${path}${path.includes("?") ? "&" : "?"}checkout=success&planId=old&from=forge&returnTo=%2Fforge&notFound=old`);
@@ -97,12 +97,39 @@ describe("remembering the settings destination", () => {
     },
   );
 
-  it("honors an explicit machine link over the remembered section", async () => {
+  it("honors an explicit machine link, and keeps the remembered section for Settings", async () => {
     localStorage.setItem("reliant.settings.lastDestination", JSON.stringify({ section: "billing", tab: "plans" }));
     const { router } = renderAt("/settings/machines/explicit");
     expect(await destination()).toMatchObject({ section: "machines", params: { machineId: "explicit" } });
     expect(router.state.location.pathname).toBe("/settings/machines/explicit");
-    await waitFor(() => expect(readSettingsDestination()).toEqual({ section: "machines", machineId: "explicit" }));
+    // A machine's page is Agents › Sandboxes in the nav: never Settings' destination.
+    expect(readSettingsDestination()).toEqual({ section: "billing", tab: "plans" });
+  });
+
+  // The reported bug: once Agent sandboxes (or one machine) was the last
+  // settings page, every Settings click reopened it, a page whose nav is
+  // Agents', so Settings' sections could not be reached at all.
+  it.each([
+    ["a machine saved before this fix", JSON.stringify({ section: "machines", machineId: "d-1" })],
+    ["Agent sandboxes saved before this fix", JSON.stringify({ section: "machines" })],
+  ])("opens a Settings section, not %s", async (_name, saved) => {
+    localStorage.setItem("reliant.settings.lastDestination", saved);
+    const { router } = renderAt("/settings");
+    expect(await destination()).toMatchObject({ section: "account" });
+    expect(router.state.location.pathname).toBe("/settings/account");
+  });
+
+  it("returns Settings to the last Settings section after visiting Agent sandboxes", async () => {
+    const first = renderAt("/settings/appearance");
+    await destination();
+    await waitFor(() => expect(readSettingsDestination()).toEqual({ section: "appearance" }));
+    await act(() => first.router.navigate({ href: "/settings/machines/d-1" }));
+    await waitFor(() => expect(first.router.state.location.pathname).toBe("/settings/machines/d-1"));
+    first.unmount();
+
+    const { router } = renderAt("/settings");
+    expect(await destination()).toMatchObject({ section: "appearance" });
+    expect(router.state.location.pathname).toBe("/settings/appearance");
   });
 
   it("lets this visit's explicit tab override the saved tab", async () => {

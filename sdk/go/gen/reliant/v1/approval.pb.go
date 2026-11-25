@@ -1145,9 +1145,9 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\x17ConnectionProposalScope\x12)\n" +
 	"%CONNECTION_PROPOSAL_SCOPE_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"CONNECTION_PROPOSAL_SCOPE_PERSONAL\x10\x01\x12!\n" +
-	"\x1dCONNECTION_PROPOSAL_SCOPE_ORG\x10\x022\xa3\x05\n" +
-	"\x0fApprovalService\x12h\n" +
-	"\x13ListApprovalsByChat\x12&.reliant.v1.ListApprovalsByChatRequest\x1a'.reliant.v1.ListApprovalsByChatResponse\"\x00\x12y\n" +
+	"\x1dCONNECTION_PROPOSAL_SCOPE_ORG\x10\x022\xa6\x05\n" +
+	"\x0fApprovalService\x12k\n" +
+	"\x13ListApprovalsByChat\x12&.reliant.v1.ListApprovalsByChatRequest\x1a'.reliant.v1.ListApprovalsByChatResponse\"\x03\x90\x02\x01\x12y\n" +
 	"\aApprove\x12\x1a.reliant.v1.ApproveRequest\x1a\x1b.reliant.v1.ApproveResponse\"5\xa2\xbb\x181:/\n" +
 	"\aapprove\x12\x16\n" +
 	"\bapproval\x12\n" +

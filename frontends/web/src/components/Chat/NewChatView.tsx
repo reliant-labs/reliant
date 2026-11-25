@@ -22,13 +22,14 @@ import {
   startOptionsForMachine,
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
-import { createProjectFromRepo, useProjectDaemonInstalls } from "@/hooks/project-queries";
+import { createProjectFromRepo, getCachedProjects, useProjectDaemonInstalls } from "@/hooks/project-queries";
 import {
   canChoose,
   canSetUpElsewhere,
   isSettingUpAnywhere,
   preferredDaemonIds,
   projectPlacement,
+  setUpPathOn,
   startBlockedReason,
 } from "@/lib/projectPlacement";
 import { describeCloneError } from "../Projects/cloneTargets";
@@ -43,6 +44,10 @@ import {
 import { daemonLabel } from "../Automations/daemonChoices";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { NewChatProjectChip } from "./NewChatProjectChip";
+import { ChatProjectChips } from "./ChatProjectChips";
+import { newChatAttachedProjectIds, useDraftChatProjects } from "@/hooks/useChatProjects";
+import { setNewChatAttachedProjects } from "../../store/newChatProjectsStore";
+import { projectCheckoutMissing } from "@/lib/daemon-errors";
 import { AttachProjectFolderDialog } from "../Projects/AttachProjectFolderDialog";
 import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { MachinePicker } from "./MachinePicker";
@@ -119,6 +124,24 @@ interface NewChatViewProps {
    * Reliant. Off for a host whose chat is about something else already.
    */
   showAppTag?: boolean;
+}
+
+/** The draft's attached projects as chips beside the project chip (hooks/useChatProjects). */
+function NewChatAttachedProjects({
+  primaryId,
+  machineDaemonId,
+  noMachine,
+  orgId,
+  disabled,
+}: {
+  primaryId: string | undefined;
+  machineDaemonId: string | undefined;
+  noMachine: boolean;
+  orgId: string | undefined;
+  disabled: boolean;
+}) {
+  const control = useDraftChatProjects({ primaryId, machineDaemonId, noMachine });
+  return <ChatProjectChips control={control} orgId={orgId} showPrimary={false} disabled={disabled} />;
 }
 
 export function NewChatView({
@@ -277,16 +300,25 @@ export function NewChatView({
   const placementSettingUp = Boolean(runsOnDaemonId) && placement.stateOn(runsOnDaemonId ?? "") === "setting_up";
 
   // Set the project up on a machine that lacks it: the same clone "Clone it
-  // onto <machine>" runs (CreateProjectFromRepo), into the project's path. A
-  // plain folder has nothing to clone from, so it is only explained.
+  // onto <machine>" runs (CreateProjectFromRepo), into the project's path when
+  // that machine can have it (setUpPathOn). A plain folder has nothing to
+  // clone from, so it is only explained.
+  const platformOf = (daemonId: string) => daemons.find((d) => d.daemonId === daemonId)?.platform;
   const setUpProjectOn =
     currentProject && canSetUpElsewhere(currentProject)
       ? async (daemonId: string) => {
+          const path = setUpPathOn({
+            installs: installRows,
+            projectId: currentProject.id,
+            path: currentProject.path,
+            daemonId,
+            platformOf,
+          });
           await createProjectFromRepo({
             cloneUrl: currentProject.remote_url ?? "",
             daemonId,
             name: currentProject.name,
-            path: currentProject.path,
+            ...(path ? { path } : {}),
           });
         }
       : undefined;
@@ -405,6 +437,9 @@ export function NewChatView({
       // workspace is a checkout on one machine.
       const chatWorktreeId = noMachine ? mainWorktree?.id : selectedWorkspaceId || mainWorktree?.id;
       const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(startChoice(resolvedMachine));
+      // The projects attached beside this one in the draft (the chips): only
+      // where the project chip is, since a host without it owns the chat's project.
+      const attachedProjectIds = showProjectChip ? [...newChatAttachedProjectIds(currentProject?.id, noMachine)] : [];
 
       if (!chatWorktreeId) {
         const error = `Cannot create chat: No worktree found. worktrees.length=${worktrees.length}, mainWorktree=${mainWorktree?.id}`;
@@ -417,9 +452,11 @@ export function NewChatView({
         .startChat(chatWorktreeId, content, attachmentIds, workflowParams, workflow, undefined, {
           daemonId,
           noMachine: startNoMachine,
-        }, { appName });
+        }, { appName, attachedProjectIds });
       // The tag was for this chat; the next new chat is about no app.
       if (appName) useNewChatAppStore.getState().clear();
+      // The projects went with this chat; the next new chat starts over.
+      if (attachedProjectIds.length > 0) setNewChatAttachedProjects(null, []);
 
       trackEvent('chat_created', {
         has_attachments: Boolean(attachmentIds?.length),
@@ -441,9 +478,17 @@ export function NewChatView({
       }
     } catch (error) {
       console.error("Failed to create chat:", error);
-      const errorMessage = error instanceof Error 
-        ? error.message 
-        : "An unexpected error occurred";
+      // An attached project not on the chat's machine: say which, and where.
+      const missing = projectCheckoutMissing(error);
+      const missingAttached =
+        missing && missing.projectId !== currentProject?.id
+          ? getCachedProjects().find((p) => p.id === missing.projectId)
+          : undefined;
+      const errorMessage = missingAttached
+        ? `${missingAttached.name} isn't set up on ${machineName(missing?.daemonId ?? "")}. Remove it, or add it again to set it up there.`
+        : error instanceof Error
+          ? error.message
+          : "An unexpected error occurred";
       // Hand the text back: the composer cleared it on send, and a chat that
       // was never created has no transcript to recover it from. Attachments
       // cannot be handed back from here (the composer released them), so say so.
@@ -608,6 +653,18 @@ export function NewChatView({
                         : undefined
                     }
                     installs={installRows}
+                    platformOf={platformOf}
+                  />
+                )}
+
+                {/* The projects it works in beside that one. */}
+                {showProjectChip && (
+                  <NewChatAttachedProjects
+                    primaryId={currentProject?.id}
+                    machineDaemonId={runsOnDaemonId}
+                    noMachine={noMachine}
+                    orgId={currentProject?.org_id}
+                    disabled={isCreating}
                   />
                 )}
 

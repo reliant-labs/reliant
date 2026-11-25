@@ -25,7 +25,7 @@ import (
 func previewWithFacts(t *testing.T, facts project.MoveFacts) (*pb.ProjectOrgMoveEffects, error) {
 	t.Helper()
 	acme := "acme"
-	store := &project.MockRepository{
+	store := &stubRepo{MockRepository: &project.MockRepository{},
 		GetProjectFunc: func(context.Context, string) (*db.Project, error) {
 			return &db.Project{ID: "p-mine", UserID: "test-user", OrgID: &acme}, nil
 		},
@@ -41,7 +41,7 @@ func previewWithFacts(t *testing.T, facts project.MoveFacts) (*pb.ProjectOrgMove
 			}, nil
 		},
 	}
-	svc := project.NewTestProject(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Ledger: storeLedger, MoveFacts: facts}))
+	svc := project.NewTestProject(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Ledger: storeLedger, MoveFacts: facts}))
 	ctx := authz.WithCredentialKind(authz.WithMembership(project.AuthedContext(t), moveOrgs{}), authz.CredentialKindPerson)
 	resp, err := svc.PreviewProjectOrgMove(ctx, connect.NewRequest(&pb.PreviewProjectOrgMoveRequest{ProjectId: "p-mine", ToOrgId: "globex"}))
 	if err != nil {

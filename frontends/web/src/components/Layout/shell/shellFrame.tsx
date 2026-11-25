@@ -9,7 +9,6 @@
 
 import { createContext, useContext, type CSSProperties, type HTMLAttributes, type ReactNode } from "react";
 import { Menu } from "lucide-react";
-import { create } from "zustand";
 
 import Tooltip from "@/components/forge-ui/tooltip";
 import { NARROW_VIEWPORT_QUERY } from "@/hooks/useNarrowViewport";
@@ -20,6 +19,8 @@ import { surfaceForPath } from "@/lib/surface";
 import { cn } from "@/lib/utils";
 import { useShortcutLabel } from "@/store/shortcutsStore";
 import { useWorkspaceStateStore } from "@/store/workspaceStateStore";
+
+import { useNavDrawer } from "./navDrawer";
 
 // ── Where the frame is on ───────────────────────────────────────────────────
 
@@ -96,11 +97,8 @@ export function PageMain({ children, ...props }: HTMLAttributes<HTMLDivElement> 
 
 // ── Opening and closing the nav ─────────────────────────────────────────────
 
-/** The narrow window's drawer: open or not. Local to the frame, never persisted. */
-export const useNavDrawer = create<{ open: boolean; setOpen: (open: boolean) => void }>((set) => ({
-  open: false,
-  setOpen: (open) => set({ open }),
-}));
+/** The narrow window's drawer: open or not. Local to the frame, never persisted (navDrawer.ts). */
+export { useNavDrawer };
 
 function narrowViewport(): boolean {
   return typeof window !== "undefined" && !!window.matchMedia?.(NARROW_VIEWPORT_QUERY).matches;

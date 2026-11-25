@@ -27,6 +27,7 @@
  * something the recorder did not send.
  */
 
+import type { Transport } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { base64Decode } from "@bufbuild/protobuf/wire";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
@@ -59,8 +60,8 @@ import type {
 import type { TimeWindow } from "./types";
 import { mapClient } from "./client";
 
-function client() {
-  return obsClient(RumService);
+function client(transport?: Transport) {
+  return obsClient(RumService, transport);
 }
 
 function timestamp(ms: number): Timestamp {
@@ -197,8 +198,8 @@ export async function mapReplayPage(res: GetSessionReplayResponse): Promise<Repl
 // ── RPCs ─────────────────────────────────────────────────────────────────────
 
 /** One page of the sessions that started in the window, newest first. */
-export async function listSessions(req: ListSessionsRequest, options: { signal?: AbortSignal } = {}): Promise<SessionList> {
-  const res = await client().listSessions({
+export async function listSessions(req: ListSessionsRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<SessionList> {
+  const res = await client(transport).listSessions({
     scope: wireRumScope(req, req.window),
     hasError: req.hasError,
     hasReplay: req.hasReplay,
@@ -214,15 +215,15 @@ export async function listSessions(req: ListSessionsRequest, options: { signal?:
 }
 
 /** One session's summary. NotFound when the scope cannot see it. */
-export async function getSession(req: SessionRequest, options: { signal?: AbortSignal } = {}): Promise<SessionSummary> {
-  const res = await client().getSession({ scope: wireRumScope(req), sessionId: req.sessionId }, options);
+export async function getSession(req: SessionRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<SessionSummary> {
+  const res = await client(transport).getSession({ scope: wireRumScope(req), sessionId: req.sessionId }, options);
   if (!res.session) throw new Error("GetSession answered without a session");
   return mapSessionSummary(res.session);
 }
 
 /** One page of a session's timeline, oldest first. */
-export async function getSessionTimeline(req: TimelineRequest, options: { signal?: AbortSignal } = {}): Promise<Timeline> {
-  const res = await client().getSessionTimeline({
+export async function getSessionTimeline(req: TimelineRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<Timeline> {
+  const res = await client(transport).getSessionTimeline({
     scope: wireRumScope(req),
     sessionId: req.sessionId,
     pageSize: req.pageSize ?? 0,
@@ -232,8 +233,8 @@ export async function getSessionTimeline(req: TimelineRequest, options: { signal
 }
 
 /** One byte-bounded page of a session's rrweb events, parsed. */
-export async function getSessionReplay(req: ReplayRequest, options: { signal?: AbortSignal } = {}): Promise<ReplayPage> {
-  const res = await client().getSessionReplay({
+export async function getSessionReplay(req: ReplayRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ReplayPage> {
+  const res = await client(transport).getSessionReplay({
     scope: wireRumScope(req),
     sessionId: req.sessionId,
     maxBytes: req.maxBytes ?? 0,

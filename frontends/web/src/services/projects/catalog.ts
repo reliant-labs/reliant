@@ -305,6 +305,20 @@ export function catalogFromResponse(response: WireListProjectsWithAppsResponse):
   return { orgId: response.orgId, rows, hostedAppsState: state };
 }
 
+/** Whether a project of the person's own (not one shared with them) has a git remote: a repository they brought. */
+export function catalogHasOwnRepo(catalog: ProjectCatalog): boolean {
+  return catalog.rows.some(
+    (row) => row.kind === "project" && !row.shared && (!!row.project.remote_url || row.repos.some((r) => r.remote !== "")),
+  );
+}
+
+/** Whether any app in the catalog has been deployed (`lastDeployedAt`). */
+export function catalogHasDeployedApp(catalog: ProjectCatalog): boolean {
+  return catalog.rows.some((row) =>
+    row.kind === "app" ? !!row.app.hosted?.lastDeployedAt : row.apps.some((app) => !!app.hosted?.lastDeployedAt),
+  );
+}
+
 /**
  * A catalog of plain projects (ListProjects' rows), for when the server
  * cannot answer ListProjectsWithApps (an older server): every project, no
@@ -353,6 +367,37 @@ export const CATALOG_FILTERS: readonly { id: CatalogFilter; label: string }[] = 
 
 export function rowApps(row: CatalogRow): AppChipModel[] {
   return row.kind === "project" ? row.apps : [row.app];
+}
+
+function isRootPath(relativePath: string): boolean {
+  const path = relativePath.trim();
+  return path === "" || path === "." || path === "./";
+}
+
+/**
+ * The project's own repository: the one at its root, else its only one. A
+ * multi-repo project whose root holds no repository has none of its own.
+ */
+export function ownRepoOf(row: ProjectCatalogRow): CatalogRepo | undefined {
+  return row.repos.find((repo) => isRootPath(repo.relativePath)) ?? (row.repos.length === 1 ? row.repos[0] : undefined);
+}
+
+/**
+ * The project's OWN apps, in the server's order: every forge.yaml of its own
+ * repository (any directory of it), the app its root forge.yaml declares
+ * (`forge_project_name`), and a chip with no repository (the server's ref for
+ * that declared name before the repos were read).
+ *
+ * A nested repository's app is still one of the row's chips (the Projects
+ * page lists it there), but it is that repository's, not the project's: a
+ * parent checkout holding `reliant/` and `control-plane/` is not the
+ * control-plane app, and must not open its sections or claim its console. A
+ * partial row (repos unknown) has only the declared name to go on.
+ */
+export function ownAppsOf(row: ProjectCatalogRow): AppChipModel[] {
+  const declared = row.project.forge_project_name?.trim() || null;
+  const own = ownRepoOf(row);
+  return row.apps.filter((app) => !app.repoId || app.name === declared || (own !== undefined && app.repoId === own.id));
 }
 
 export function matchesFilter(row: CatalogRow, filter: CatalogFilter): boolean {

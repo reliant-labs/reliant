@@ -811,12 +811,12 @@ const file_services_user_v1_user_proto_rawDesc = "" +
 	" DeleteCurrentUserAccountResponse\x12C\n" +
 	"\bblockers\x18\x01 \x03(\v2'.controlplane.v1.AccountDeletionBlockerR\bblockers\x12H\n" +
 	"\x06wallet\x18\x02 \x01(\v20.controlplane.v1.AccountDeletionWalletSettlementR\x06wallet\x12%\n" +
-	"\x0erefund_pending\x18\x03 \x01(\bR\rrefundPending2\xbb\x04\n" +
+	"\x0erefund_pending\x18\x03 \x01(\bR\rrefundPending2\xc0\x04\n" +
 	"\vUserService\x12a\n" +
 	"\x0eGetCurrentUser\x12&.controlplane.v1.GetCurrentUserRequest\x1a'.controlplane.v1.GetCurrentUserResponse\x12^\n" +
 	"\rUpdateProfile\x12%.controlplane.v1.UpdateProfileRequest\x1a&.controlplane.v1.UpdateProfileResponse\x12m\n" +
-	"\x12CompleteOnboarding\x12*.controlplane.v1.CompleteOnboardingRequest\x1a+.controlplane.v1.CompleteOnboardingResponse\x12y\n" +
-	"\x16PreviewAccountDeletion\x12..controlplane.v1.PreviewAccountDeletionRequest\x1a/.controlplane.v1.PreviewAccountDeletionResponse\x12\x7f\n" +
+	"\x12CompleteOnboarding\x12*.controlplane.v1.CompleteOnboardingRequest\x1a+.controlplane.v1.CompleteOnboardingResponse\x12~\n" +
+	"\x16PreviewAccountDeletion\x12..controlplane.v1.PreviewAccountDeletionRequest\x1a/.controlplane.v1.PreviewAccountDeletionResponse\"\x03\x90\x02\x01\x12\x7f\n" +
 	"\x18DeleteCurrentUserAccount\x120.controlplane.v1.DeleteCurrentUserAccountRequest\x1a1.controlplane.v1.DeleteCurrentUserAccountResponseB\xcf\x01\n" +
 	"\x13com.controlplane.v1B\tUserProtoP\x01ZPgithub.com/reliant-labs/reliant/gen/controlplane/services/user/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 

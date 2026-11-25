@@ -568,7 +568,7 @@ func (m *MockProjectReconcileRepo) SetRepoForgeApps(ctx context.Context, repoID 
 var _ ProjectReconcileRepo = (*MockProjectReconcileRepo)(nil)
 
 // forge:section MockAttachments
-// forge:hash=d8c7a3681cf19751cdd2cf89f7f14fb7d7bfec32e75b729d5186f3b8427942ed
+// forge:hash=e6eefebcd27d45fa5af0241413d8a09563451cdce20b09374b65d2a127a8d8d0
 
 // MockAttachments is a test mock for the Attachments interface.
 //
@@ -578,11 +578,12 @@ var _ ProjectReconcileRepo = (*MockProjectReconcileRepo)(nil)
 // "MockAttachments.<Method>Func not set" error.
 type MockAttachments struct {
 	contractkit.Recorder
-	RenewDaemonAttachmentFunc     func(context.Context, *core.DaemonAttachment) (bool, error)
-	ReleaseDaemonAttachmentFunc   func(context.Context, string, time.Time) error
-	SetDaemonAttachmentPortsFunc  func(context.Context, string, []uint32) error
-	SetDaemonAttachmentMemoryFunc func(context.Context, string, int64, int64, bool) error
-	SetDaemonAttachmentHealthFunc func(context.Context, string, core.MachineHealth) error
+	RenewDaemonAttachmentFunc        func(context.Context, *core.DaemonAttachment) (bool, error)
+	ReleaseDaemonAttachmentFunc      func(context.Context, string, time.Time) error
+	SetDaemonAttachmentPortsFunc     func(context.Context, string, []uint32) error
+	SetDaemonAttachmentMemoryFunc    func(context.Context, string, int64, int64, bool) error
+	SetDaemonAttachmentHealthFunc    func(context.Context, string, core.MachineHealth) error
+	SetDaemonAttachmentResourcesFunc func(context.Context, string, string) error
 }
 
 // RenewDaemonAttachment records the call and delegates to RenewDaemonAttachmentFunc when set.
@@ -628,6 +629,15 @@ func (m *MockAttachments) SetDaemonAttachmentHealth(ctx context.Context, daemonI
 		return m.SetDaemonAttachmentHealthFunc(ctx, daemonID, health)
 	}
 	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentHealth")
+}
+
+// SetDaemonAttachmentResources records the call and delegates to SetDaemonAttachmentResourcesFunc when set.
+func (m *MockAttachments) SetDaemonAttachmentResources(ctx context.Context, daemonID string, statsJSON string) error {
+	m.Recorder.Record("SetDaemonAttachmentResources", ctx, daemonID, statsJSON)
+	if m.SetDaemonAttachmentResourcesFunc != nil {
+		return m.SetDaemonAttachmentResourcesFunc(ctx, daemonID, statsJSON)
+	}
+	return contractkit.MockNotSet("MockAttachments", "SetDaemonAttachmentResources")
 }
 
 // Compile-time check.

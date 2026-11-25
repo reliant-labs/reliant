@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { configReadError, getWorkloadConfig, validateWorkloadConfig, type ConfigReader, type WorkloadConfig, type WorkloadConfigRequest } from "@/services/forge/workloadConfig";
 
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, Note, Panel } from "../Releases/releaseParts";
@@ -22,7 +24,10 @@ export function WorkloadConfigViewer(props: Props) {
   return <ConfigSession key={JSON.stringify([props.orgId, props.project, props.environmentId, props.workload])} {...props} />;
 }
 
-function ConfigSession({ orgId, environmentId, environmentName, workload, readConfig = getWorkloadConfig }: Props) {
+function ConfigSession({ orgId, environmentId, environmentName, workload, readConfig: provided }: Props) {
+  // Without a seam, the real read, over the nearest TransportScope's transport.
+  const transport = useTransport(appTransport);
+  const readConfig: ConfigReader = provided ?? ((request, signal) => getWorkloadConfig(transport, request, signal));
   const [config, setConfig] = useState<WorkloadConfig | null>(null);
   const [comparison, setComparison] = useState<{ historical: WorkloadConfig; current: WorkloadConfig; rows: ConfigDiffRow[] } | null>(null);
   const [release, setRelease] = useState("");

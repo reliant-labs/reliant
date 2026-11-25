@@ -98,6 +98,9 @@ type ProjectDaemon = core.ProjectDaemon
 // ProjectDaemonDetachment is a project the user detached from a machine.
 type ProjectDaemonDetachment = core.ProjectDaemonDetachment
 
+// ChatProject is a project attached to a chat beside its primary project.
+type ChatProject = core.ChatProject
+
 // ProjectConfigRecord is an alias to the shared core project config record.
 type ProjectConfigRecord = core.ProjectConfigRecord
 

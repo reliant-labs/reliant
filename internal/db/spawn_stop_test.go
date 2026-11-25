@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestCancelStoppedSpawn pins what a stopped spawn's bookkeeping commits: the
@@ -118,7 +119,7 @@ func TestCancelStoppedSpawnResolvesTheSubtreesQueuedMail(t *testing.T) {
 
 	queue := func(id, to string) {
 		t.Helper()
-		if err := repo.EnqueueAgentMessage(ctx, &AgentMessage{
+		if err := store.EnqueueAgentMessage(ctx, repo.ORM(), &AgentMessage{
 			ID: id, ChatID: chatID, FromThreadID: "th-ssm-root", ToThreadID: to,
 			Kind: core.AgentMessageKindMessage, Body: "status?", Status: core.AgentMessageStatusQueued, CreatedAt: time.Now(),
 		}); err != nil {
@@ -138,7 +139,7 @@ func TestCancelStoppedSpawnResolvesTheSubtreesQueuedMail(t *testing.T) {
 		"am-ssm-grandchild": core.AgentMessageStatusUndelivered,
 		"am-ssm-root":       core.AgentMessageStatusQueued,
 	} {
-		msg, err := repo.GetAgentMessage(ctx, id)
+		msg, err := store.GetAgentMessage(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetAgentMessage(%s): %v", id, err)
 		}
@@ -147,7 +148,7 @@ func TestCancelStoppedSpawnResolvesTheSubtreesQueuedMail(t *testing.T) {
 		}
 	}
 
-	orphaned, err := repo.ListThreadsWithOrphanedAgentMessages(ctx)
+	orphaned, err := store.ListThreadsWithOrphanedAgentMessages(ctx, repo.ORM())
 	if err != nil {
 		t.Fatalf("ListThreadsWithOrphanedAgentMessages: %v", err)
 	}

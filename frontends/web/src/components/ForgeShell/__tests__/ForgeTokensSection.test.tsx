@@ -99,10 +99,16 @@ describe("ForgeTokensSection", () => {
     renderSection();
     await screen.findByText("No tokens yet.");
 
-    for (const group of ["deploy", "secrets", "domains", "observability", "data", "identity", "billing", "admin", "reliant", "machines", "sourcemaps"]) {
+    for (const group of [
+      "deploy", "secrets", "domains", "observability", "security", "tests", "changes", "data", "identity", "billing", "admin",
+      "reliant", "machines", "sourcemaps",
+    ]) {
       expect(screen.getByTestId(`forge-token-group-${group}`)).toBeTruthy();
     }
-    for (const scope of ["obs:read", "obs:triage", "obs:write", "db:query", "sourcemaps:write", "runs:start", "billing:read"]) {
+    for (const scope of [
+      "obs:read", "obs:triage", "obs:write", "db:query", "sourcemaps:write", "runs:start", "billing:read", "vuln:read",
+      "tests:read", "tests:write", "changes:write", "changes:launch",
+    ]) {
       expect(screen.getByRole("checkbox", { name: scope })).toBeTruthy();
     }
     expect(screen.queryByRole("checkbox", { name: "proxy:port" })).toBeNull();
@@ -148,6 +154,31 @@ describe("ForgeTokensSection", () => {
 
     expect((await screen.findByTestId("forge-token-secret")).textContent).toContain("rlat_maps");
     expect(orgCreate).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, name: "desktop-maps", scopes: ["sourcemaps:write"] }));
+    expect(myCreate).not.toHaveBeenCalled();
+  });
+
+  it("tests:write stands alone and mints an org token through CreateToken", async () => {
+    const orgCreate = vi.fn(() => ({ secret: "rlat_tests" }));
+    const myCreate = vi.fn(() => ({ secret: "rlt_mine" }));
+    setTransport(
+      mockTransport({
+        "AccessTokenService.ListMyTokens": { response: { tokens: [] } },
+        "AccessTokenService.CreateToken": orgCreate,
+        "AccessTokenService.CreateMyToken": myCreate,
+      }),
+    );
+    renderSection();
+    await screen.findByText("No tokens yet.");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "sourcemaps:write" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "tests:write" }));
+    expect((screen.getByRole("checkbox", { name: "sourcemaps:write" }) as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByRole("checkbox", { name: "deploy:read" }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByTestId("forge-token-org-note")).toBeTruthy();
+    createToken("pr-tests");
+
+    expect((await screen.findByTestId("forge-token-secret")).textContent).toContain("rlat_tests");
+    expect(orgCreate).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG, name: "pr-tests", scopes: ["tests:write"] }));
     expect(myCreate).not.toHaveBeenCalled();
   });
 

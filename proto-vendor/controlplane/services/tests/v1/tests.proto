@@ -93,6 +93,7 @@ service TestsService {
   // the flaky and quarantined counts and the last run. The console's Tests
   // Overview and the project Overview's Tests card read it.
   rpc GetTestSummary(GetTestSummaryRequest) returns (GetTestSummaryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -106,6 +107,7 @@ service TestsService {
   // recorded by RecordTestRun and read through the org-scoped, grant-checked
   // reads of this service.
   rpc ListTestRuns(ListTestRunsRequest) returns (ListTestRunsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -118,6 +120,7 @@ service TestsService {
   //
   // forge:custom — see ListTestRuns.
   rpc GetTestRun(GetTestRunRequest) returns (GetTestRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -129,6 +132,7 @@ service TestsService {
   // (packages or directories, then files), with statements, combined and
   // per-lane coverage and, when a base is named, diff coverage.
   rpc GetCoverage(GetCoverageRequest) returns (GetCoverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -140,6 +144,7 @@ service TestsService {
   // base. Never source text: it returns the file's git blob id, which a
   // viewer fetches from the linked repository.
   rpc GetFileCoverage(GetFileCoverageRequest) returns (GetFileCoverageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -151,6 +156,7 @@ service TestsService {
   // delta, new failures and new flaky tests. Release detail's Tests tab and
   // the releases list's Tests column read it.
   rpc GetReleaseTests(GetReleaseTestsRequest) returns (GetReleaseTestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -160,6 +166,7 @@ service TestsService {
   // ListFlakyTests lists the project's tests that are, or were, flaky, by
   // flake state. Every filter is optional. Paged.
   rpc ListFlakyTests(ListFlakyTestsRequest) returns (ListFlakyTestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -170,6 +177,7 @@ service TestsService {
   // state and events, its failure signatures grouped, and its quarantine
   // entry and issue.
   rpc GetTest(GetTestRequest) returns (GetTestResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -255,6 +263,17 @@ enum TestCaseStatus {
   TEST_CASE_STATUS_PASS = 1;
   TEST_CASE_STATUS_FAIL = 2;
   TEST_CASE_STATUS_SKIP = 3;
+}
+
+// TestQuarantineMode is forge.yaml `tests.flakes.quarantine`.
+enum TestQuarantineMode {
+  // Treated as SUGGEST.
+  TEST_QUARANTINE_MODE_UNSPECIFIED = 0;
+  // Show the quarantine command; never make one (the default).
+  TEST_QUARANTINE_MODE_SUGGEST = 1;
+  // Open the quarantine pull request (a `ci/quarantine/...` file) through
+  // the project's GitHub connection.
+  TEST_QUARANTINE_MODE_PR = 2;
 }
 
 // TestFlakeState is a test's flake state (forge pkg/testreport).
@@ -376,6 +395,18 @@ message TestRunCI {
   string run_url = 3 [(buf.validate.field).string.max_len = 2048];
   // The provider's attempt number of a re-run, from 1.
   int32 attempt = 4 [(buf.validate.field).int32.gte = 0];
+}
+
+// TestFlakePolicy is forge.yaml `tests.flakes`: what the product does about
+// a flaky test on the project's behalf. Both are off by default; forge,
+// control-plane and reliant turn both on, and then act at SUSPECTED.
+message TestFlakePolicy {
+  // `tests.flakes.issues: true`: file or update one `flake:suspected` issue
+  // per suspected or flaky test, and close it when the test leaves those
+  // states.
+  bool issues = 1;
+  // `tests.flakes.quarantine`.
+  TestQuarantineMode quarantine = 2 [(buf.validate.field).enum.defined_only = true];
 }
 
 // TestStatementCoverage is covered over instrumented statements. With
@@ -633,6 +664,18 @@ message RecordTestRunRequest {
   // org. A person must be a member of it; a machine credential may name only
   // its own org.
   optional string org_id = 18;
+
+  // The project's forge.yaml `tests.flakes`, as the forge that captured the
+  // run read it. It travels with every upload because these settings are
+  // forge.yaml, never written through this API. The daily flake sweep acts
+  // on the newest ingested default-branch run's policy: unset (an older
+  // forge) is the default, which files no issue and opens no pull request.
+  TestFlakePolicy flake_policy = 19;
+  // The Go module path of the project's root go.mod, when it has one. A
+  // flake issue's title and a quarantine entry's path name a package
+  // relative to it (forge internal/testflakes IssueTitle and EntryPath), so
+  // without it the sweep files nothing for the project's Go tests.
+  string go_module = 20 [(buf.validate.field).string.max_len = 512];
 }
 
 message RecordTestRunResponse {

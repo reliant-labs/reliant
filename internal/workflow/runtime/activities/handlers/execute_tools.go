@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/orgfunding"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -281,6 +282,7 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	preemption   MailboxPreempter
 	rows         WorkspaceRows
 	toolCalls    ToolCalls
 	toolExecutor toolexec.ToolExecutor
@@ -303,6 +305,20 @@ type ExecuteToolsActivity struct {
 	// preemptionPoll is how often a preemptable call checks for mail; zero
 	// means preemptionPollInterval. Only tests set it.
 	preemptionPoll time.Duration
+	// chatProjects reads the projects attached to a chat, which a call's
+	// `project` can route it to (routeCallProject). Set by WithChatProjects;
+	// nil makes every chat its primary project alone.
+	chatProjects ChatProjectLister
+	// usage records each call in the tool usage ledger. Set by
+	// WithToolUsage; nil records nothing.
+	usage ToolUsageRecorder
+}
+
+// WithToolUsage gives the tool-execution path the tool usage ledger, which
+// records every call it runs (tool_usage_record.go).
+func (a *ExecuteToolsActivity) WithToolUsage(r ToolUsageRecorder) *ExecuteToolsActivity {
+	a.usage = r
+	return a
 }
 
 // WithToolCallResults gives the tool-execution path the reader of the durable
@@ -345,14 +361,43 @@ func (a *ExecuteToolsActivity) WithWorktreeReviver(r WorktreeReviver) *ExecuteTo
 	return a
 }
 
-// NewExecuteToolsActivity creates a new ExecuteToolsActivity; toolCalls is the
-// tool-call records it reads and writes (NewToolCalls).
-func NewExecuteToolsActivity(repo ExecuteToolsStore, rows WorkspaceRows, toolCalls ToolCalls, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
+// NewExecuteToolsActivity creates a new ExecuteToolsActivity; deps.ToolCalls is
+// the tool-call records it reads and writes (NewToolCalls).
+// NewExecuteToolsActivity accepts explicit dependencies or the original
+// store, rows, tool calls and executor arguments.
+// Deprecated: use NewExecuteToolsActivityWithDeps.
+func NewExecuteToolsActivity(storeOrDeps any, legacy ...any) *ExecuteToolsActivity {
+	if deps, ok := storeOrDeps.(ExecuteToolsDeps); ok {
+		return NewExecuteToolsActivityWithDeps(deps)
+	}
+	var deps ExecuteToolsDeps
+	if storeOrDeps != nil {
+		deps.Store = storeOrDeps.(ExecuteToolsStore)
+		deps.Preemption, _ = storeOrDeps.(MailboxPreempter)
+	}
+	if len(legacy) != 3 {
+		panic("NewExecuteToolsActivity requires store, rows, tool calls and executor")
+	}
+	if legacy[0] != nil {
+		deps.Rows = legacy[0].(WorkspaceRows)
+	}
+	if legacy[1] != nil {
+		deps.ToolCalls = legacy[1].(ToolCalls)
+	}
+	if legacy[2] != nil {
+		deps.ToolExecutor = legacy[2].(toolexec.ToolExecutor)
+	}
+	return NewExecuteToolsActivityWithDeps(deps)
+}
+
+// NewExecuteToolsActivityWithDeps creates a tool activity with explicit dependencies.
+func NewExecuteToolsActivityWithDeps(deps ExecuteToolsDeps) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
-		repo:         repo,
-		rows:         rows,
-		toolCalls:    toolCalls,
-		toolExecutor: toolExecutor,
+		repo:         deps.Store,
+		rows:         deps.Rows,
+		toolCalls:    deps.ToolCalls,
+		preemption:   deps.Preemption,
+		toolExecutor: deps.ToolExecutor,
 	}
 }
 
@@ -474,7 +519,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 
 	// Mail for the thread ends the batch's waits early; see
 	// execute_tools_preemption.go.
-	ctx = withBatchPreemption(ctx, newBatchPreemption(a.repo, rtx.Thread, a.preemptionPoll))
+	ctx = withBatchPreemption(ctx, newBatchPreemption(a.preemption, rtx.Thread, a.preemptionPoll))
+
+	// Each call's row in the tool usage ledger (tool_usage_record.go).
+	meter := newToolUsageMeter(a.usage, a.repo, rtx.ChatID, rtx.Thread)
 
 	// Execute all tool calls in parallel using goroutines
 	// This significantly improves performance when multiple tools are called together
@@ -547,13 +595,16 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 					// for it: refusals included, so a refused call is visible
 					// as one. The gateway's round trip to the daemon is its
 					// child (ctx carries it into the dispatch).
+					// The span's duration and the call's outcome are also
+					// its row in the tool usage ledger (meter.run).
 					location := toolLocation(toolName)
 					if responseToolSet[toolName] {
 						location = telemetry.ToolLocationLocal
 					}
-					callCtx, span := telemetry.StartToolCall(ctx, toolName, toolCallID, location, turnTraceParent(rtx))
-					result := a.runToolCall(callCtx, rtx, toolCall, caps, refusedByWorkflow[toolCallID], responseToolSet[toolName], responseToolSchemas[toolName], workspace.blocked, activityID, workflowRunID, attemptNumber, workingPath)
-					span.End(result.IsError, nil)
+					call := meteredToolCall{name: toolName, callID: toolCallID, location: location, response: responseToolSet[toolName], turnParent: turnTraceParent(rtx)}
+					result := meter.run(ctx, call, func(callCtx context.Context) message.ToolResult {
+						return a.runToolCall(callCtx, rtx, toolCall, caps, refusedByWorkflow[toolCallID], responseToolSet[toolName], responseToolSchemas[toolName], workspace.blocked, activityID, workflowRunID, attemptNumber, workingPath)
+					})
 
 					resultsChan <- toolCallResult{
 						index:  job.index,
@@ -689,10 +740,12 @@ func (a *ExecuteToolsActivity) runToolCall(
 	// included, without running any. A response tool answered here would end
 	// the agent's loop before it read the message it was interrupted for.
 	if rtx.InterruptedTurn {
+		noteToolCancelled(ctx)
 		return a.settleInterruptedCall(ctx, rtx, toolCall)
 	}
 
 	if refusal != "" {
+		noteToolError(ctx, store.ToolErrorRefused)
 		return a.refuseToolCall(ctx, rtx, toolCall, refusal)
 	}
 
@@ -705,17 +758,28 @@ func (a *ExecuteToolsActivity) runToolCall(
 	// refused here instead of running. The tier is part of the
 	// set: a tool above it is never offered.
 	if reason := capabilityRefusal(caps, toolCall); reason != "" {
+		noteToolError(ctx, store.ToolErrorRefused)
 		return a.refuseToolCall(ctx, rtx, toolCall, reason)
 	}
 
 	// Response tools: identified via expected_response_tools list from workflow config.
 	// Execute inline (return input as metadata); no external tool call.
 	if responseTool {
+		// Its only failure is input its schema refuses.
+		noteToolError(ctx, store.ToolErrorInvalidInput)
 		return executeResponseToolInline(toolCall.ID, toolCall.Name, toolCall.Input, responseSchema)
 	}
 
 	if blocked != "" && tools.NeedsMachine(toolCall.Name) {
-		return a.refuseToolCall(ctx, rtx, toolCall, blocked)
+		// The batch's workspace check is the primary project's. A call that
+		// names its project may run in an attached one, which that check
+		// says nothing about: it is refused only once routed to the primary
+		// (executeSingleTool).
+		if !namesProject(toolCall) {
+			noteToolError(ctx, store.ToolErrorNoWorkspace)
+			return a.refuseToolCall(ctx, rtx, toolCall, blocked)
+		}
+		ctx = withBatchBlocked(ctx, blocked)
 	}
 
 	// Execute the tool via normal toolexec path
@@ -785,6 +849,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 			"tool_call_id", toolCallID,
 			"tool_name", toolName,
 			"attempt", attemptNumber)
+		noteToolError(ctx, store.ToolErrorInterrupted)
 		result := a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil, nil)
 		a.recordInterruptedRetry(ctx, chatID, thread, toolCallID, toolName, result.Content)
 		return result
@@ -792,12 +857,14 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 
 	// Check for cancellation before starting work
 	if ctx.Err() != nil {
+		noteToolCancelled(ctx)
 		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Cancelled: %v", ctx.Err()), "", true, nil, nil)
 	}
 
 	// Validate tool input JSON
 	var inputMap map[string]interface{}
 	if err := json.Unmarshal([]byte(toolInput), &inputMap); err != nil {
+		noteToolError(ctx, store.ToolErrorInvalidInput)
 		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Failed to parse tool inputs: %v", err), "", true, nil, nil)
 	}
 
@@ -805,6 +872,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// projectPath override allows sub-workflows to run tools in a different directory
 	tec, errMsg := a.loadToolExecutionContext(ctx, chatID, thread, toolName, toolInput, toolCallID, projectPath)
 	if errMsg != "" {
+		noteToolError(ctx, store.ToolErrorInternal)
 		return a.buildToolResult(toolCallID, toolName, errMsg, "", true, nil, nil)
 	}
 
@@ -821,6 +889,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	if tec.chat.NoMachine {
 		ctx = nomachine.With(ctx)
 		if tools.NeedsMachine(toolName) {
+			noteToolError(ctx, store.ToolErrorRefused)
 			result := a.buildToolResult(toolCallID, toolName, nomachine.Refusal(toolName), "", true, nil, nil)
 			completedAt := time.Now()
 			a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
@@ -838,6 +907,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// no-machine refusal above.
 	dispatchInput, refusal := a.boundToolInput(ctx, caps, tec)
 	if refusal != "" {
+		noteToolError(ctx, store.ToolErrorRefused)
 		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
 		completedAt := time.Now()
 		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
@@ -863,15 +933,37 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	}
 	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, chatDaemonSelector(tec.chat, daemonSel)))
 
-	// The machine that selector reaches and the project's checkout on it:
-	// the directory the call runs in is resolved there, and the call is
-	// pinned to it. A machine call to a machine with no checkout is refused
-	// with the reason and the way out — the conversation carries on, and
-	// the next call re-resolves (cloning or switching machine unblocks it).
-	// A call in a branch worktree (Path set) runs without the main checkout.
-	tec.checkout = resolveCallCheckout(ctx, a.repo, a.machines, tec.project, tec.daemonSelector, tec.worktree.Path == "")
+	// Which of the chat's projects the call runs in (its `project`; omitted
+	// is the primary), the machine that selector reaches and that project's
+	// checkout on it: the directory the call runs in is resolved there, and
+	// the call is pinned to it. A machine call to a machine with no checkout
+	// is refused with the reason and the way out — the conversation carries
+	// on, and the next call re-resolves (cloning or switching machine
+	// unblocks it). A call in a branch worktree (Path set) runs without the
+	// main checkout.
+	attached, refusal := a.routeCallProject(ctx, tec)
+	if refusal == "" && !attached && tools.NeedsMachine(toolName) {
+		// A call that named its project skipped the batch's workspace check
+		// in runToolCall, which is the primary's: applied here, once it is
+		// known to run there.
+		refusal = batchBlockedFrom(ctx)
+	}
+	if refusal != "" {
+		noteToolError(ctx, store.ToolErrorNoWorkspace)
+		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
+		completedAt := time.Now()
+		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
+			completedAt:  &completedAt,
+			errorMessage: refusal,
+		}, &toolCallResultWrite{content: result.Content, isError: true})
+		return result
+	}
 	if tec.checkout.missing != nil && tools.NeedsMachine(toolName) {
 		refusal := missingRefusal(tec.checkout.missing)
+		if attached {
+			refusal = attachedMissingRefusal(tec.checkout.missing)
+		}
+		noteToolError(ctx, store.ToolErrorNoWorkspace)
 		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
 		completedAt := time.Now()
 		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
@@ -1025,6 +1117,8 @@ func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, cha
 	activity.GetLogger(ctx).Info("[ExecuteTools] Tool call already terminal, returning recorded result instead of re-executing",
 		"tool_call_id", toolCallID,
 		"status", call.Status)
+	// Not run again, so not counted again: its execution was.
+	noteToolReplayed(ctx)
 
 	result, err := a.findToolCallResult(ctx, toolCallID)
 	if errors.Is(err, errNoToolCallResults) {
@@ -1121,6 +1215,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	// per-tool cancel signal below still distinguishes "this tool was the
 	// cancellation target" from "a sibling was."
 	if ctx.Err() != nil && (execResult == nil || !execResult.Success) {
+		noteToolCancelled(ctx)
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "cancelled")
 		completedAt := time.Now()
 		result := a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution cancelled: %v", ctx.Err()), "", true, nil, nil)
@@ -1136,6 +1231,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 
 	// Check for execution error
 	if execErr != nil {
+		noteExecError(ctx, execErr)
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "failed")
 		result := a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution failed: %v", execErr), "", true, nil, nil)
 		completedAt := time.Now()
@@ -1165,6 +1261,10 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	// The tool ran. Decide the outcome BEFORE announcing it.
 	isError := !execResult.Success || execResult.IsError
 	content := execResult.Content
+	if isError {
+		// Classified on what the tool answered, before anything is added.
+		noteToolError(ctx, ranErrorClass(content))
+	}
 	if isError && tools.CapabilitiesFrom(ctx).Offers(tools.ToolWaitForMachine) && daemonoffline.IsToolResultContent(content) {
 		// Appended, never replaced: the breaker counts the original text. It
 		// is added here, before the model's copy and the durable row are both

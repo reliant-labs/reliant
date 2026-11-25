@@ -273,9 +273,9 @@ const file_reliant_v1_coverage_source_proto_rawDesc = "" +
 	" COVERAGE_SOURCE_UNAVAILABLE_GONE\x10\x03\x12'\n" +
 	"#COVERAGE_SOURCE_UNAVAILABLE_REVOKED\x10\x04\x121\n" +
 	"-COVERAGE_SOURCE_UNAVAILABLE_NOT_YET_AVAILABLE\x10\x05\x12)\n" +
-	"%COVERAGE_SOURCE_UNAVAILABLE_TOO_LARGE\x10\x062\xc5\x01\n" +
-	"\x15CoverageSourceService\x12\xab\x01\n" +
-	"\x11GetCoverageSource\x12$.reliant.v1.GetCoverageSourceRequest\x1a%.reliant.v1.GetCoverageSourceResponse\"I\xa2\xbb\x18E:C:Aread-only: one covered file's source from GitHub; changes nothingB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"%COVERAGE_SOURCE_UNAVAILABLE_TOO_LARGE\x10\x062\xc8\x01\n" +
+	"\x15CoverageSourceService\x12\xae\x01\n" +
+	"\x11GetCoverageSource\x12$.reliant.v1.GetCoverageSourceRequest\x1a%.reliant.v1.GetCoverageSourceResponse\"L\xa2\xbb\x18E:C:Aread-only: one covered file's source from GitHub; changes nothing\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_coverage_source_proto_rawDescOnce sync.Once

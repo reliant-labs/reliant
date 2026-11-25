@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -193,7 +194,7 @@ func TestExecuteToolsActivity_Idempotency(t *testing.T) {
 	mockExecutor := newMockToolExecutor()
 
 	// Create activity
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -269,7 +270,7 @@ func TestExecuteToolsActivity_NoReExecutionOnRetry(t *testing.T) {
 	// Create mock executor with side effect tracking
 	mockExecutor := newMockToolExecutor()
 
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -347,7 +348,7 @@ func TestExecuteToolsActivity_MultipleToolCalls(t *testing.T) {
 	}
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	input := ExecuteToolsInput{
 		ChatID:    chatID,
@@ -430,7 +431,7 @@ func TestExecuteToolsActivity_ToolExecutionFailure(t *testing.T) {
 		}
 	}
 
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	input := ExecuteToolsInput{
 		ChatID:    chatID,
@@ -482,7 +483,7 @@ func TestExecuteToolsActivity_MissingToolCallBlock(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	// With the new implementation, tool info comes from ToolCall struct directly.
 	// Even without a block in DB, the tool can execute with valid ToolCall data.
@@ -554,7 +555,7 @@ func TestExecuteToolsActivity_InvalidBlockType(t *testing.T) {
 	require.NoError(t, err)
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -625,7 +626,7 @@ func TestExecuteToolsActivity_IncompleteToolCallBlock(t *testing.T) {
 	require.NoError(t, err)
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -689,7 +690,7 @@ func TestExecuteToolsActivity_ExecutorError(t *testing.T) {
 	mockExecutor := newMockToolExecutor()
 	mockExecutor.SetError(toolCallID, fmt.Errorf("executor failed: connection timeout"))
 
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	input := ExecuteToolsInput{
 		ChatID: chatID,
@@ -738,7 +739,7 @@ func TestExecuteToolsActivity_EmptyToolCalls(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	mockExecutor := newMockToolExecutor()
-	activityInstance := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 
 	input := ExecuteToolsInput{
 		ChatID:    chatID,

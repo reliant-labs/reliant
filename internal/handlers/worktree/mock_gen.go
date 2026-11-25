@@ -171,6 +171,32 @@ func (m *MockRepoLister) ListReposByProject(ctx context.Context, projectID strin
 // Compile-time check.
 var _ RepoLister = (*MockRepoLister)(nil)
 
+// forge:section MockPRLinker
+// forge:hash=f473f32a1064e54c17083bae27b721715064cb3610d47b5a820d0d2e53b8ee73
+
+// MockPRLinker is a test mock for the PRLinker interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPRLinker.<Method>Func not set" error.
+type MockPRLinker struct {
+	contractkit.Recorder
+	LinkWorktreePRFunc func(context.Context, string, string, string) (int, error)
+}
+
+// LinkWorktreePR records the call and delegates to LinkWorktreePRFunc when set.
+func (m *MockPRLinker) LinkWorktreePR(ctx context.Context, userID string, worktreeID string, prURL string) (int, error) {
+	m.Recorder.Record("LinkWorktreePR", ctx, userID, worktreeID, prURL)
+	if m.LinkWorktreePRFunc != nil {
+		return m.LinkWorktreePRFunc(ctx, userID, worktreeID, prURL)
+	}
+	return 0, contractkit.MockNotSet("MockPRLinker", "LinkWorktreePR")
+}
+
+// Compile-time check.
+var _ PRLinker = (*MockPRLinker)(nil)
+
 // forge:section MockDaemonReader
 // forge:hash=e7c6818aa320be6cd27d2945b6a2237c57f8a2bfbf47102a40451474f24c3fa2
 

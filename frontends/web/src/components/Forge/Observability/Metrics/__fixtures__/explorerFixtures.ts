@@ -16,7 +16,7 @@
  *                and a dashboard someone else keeps saving
  *                (version_conflict).
  *
- * Deterministic, so a test and the __preview__ see the same screens.
+ * Deterministic, so a test sees the same screens on every run.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";

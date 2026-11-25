@@ -607,6 +607,8 @@ func messageRow(msg *core.Message) *Message {
 		SenderThreadID:    msg.SenderThreadID,
 		SenderKind:        msg.SenderKind,
 		SenderSubject:     msg.SenderSubject,
+		AuthorUserID:      msg.AuthorUserID,
+		AuthorName:        validUTF8Ptr(msg.AuthorName),
 		CreatedAt:         msg.CreatedAt,
 		UpdatedAt:         msg.UpdatedAt,
 	}
@@ -636,6 +638,8 @@ func messageFromRow(row *Message) *core.Message {
 		SenderThreadID:    row.SenderThreadID,
 		SenderKind:        row.SenderKind,
 		SenderSubject:     row.SenderSubject,
+		AuthorUserID:      row.AuthorUserID,
+		AuthorName:        row.AuthorName,
 		CreatedAt:         row.CreatedAt,
 		UpdatedAt:         row.UpdatedAt,
 	}

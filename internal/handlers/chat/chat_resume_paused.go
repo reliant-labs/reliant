@@ -8,6 +8,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -141,7 +142,7 @@ func (s *Service) resumePausedRunForMessage(ctx context.Context, userID string, 
 	if outcome.Kind != runs.OutcomeResumed {
 		logging.WarnContext(ctx, "A paused chat could not be resumed in place for a queued message; withdrawing it",
 			"chatID", chat.ID, "threadID", threadID, "outcome", outcome.Kind)
-		if _, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
+		if _, err := s.deps.AgentMessages.CancelQueuedAgentMessage(ctx, messageID, chat.ID); err != nil {
 			logging.WarnContext(ctx, "Could not withdraw the queued message", "error", err, "chatID", chat.ID, "messageID", messageID)
 		}
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{

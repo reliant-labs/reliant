@@ -254,6 +254,9 @@ older one is refused with ` + "`lease_unsupported: true`" + ` before anything is
 ` + "`GIT_TERMINAL_PROMPT=0`" + `, an empty ` + "`GH_CONFIG_DIR`" + `. A ` + "`git push`" + ` or ` + "`gh pr merge`" + ` from it fails to
 authenticate at once and never prompts. Set it for an agent's shell with ` + "`tools_config.tools.shell`" + ` (bound, so
 the model is never shown it) and on a ` + "`run`" + ` node with ` + "`credentials: none`" + `.
+A step that runs a vendor agent CLI needs ` + "`credentials: inherit`" + `: the sandbox hides Claude Code's, Codex's
+and the GitHub CLI's sign-ins, and from the next minor release Gemini CLI's, Cursor Agent's and Copilot
+CLI's too (until then a ` + "`credentials: none`" + ` command prints a notice naming them on its stderr).
 
 ` + "```yaml" + `
 tools_config:

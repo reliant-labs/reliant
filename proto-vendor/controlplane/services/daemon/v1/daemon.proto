@@ -24,9 +24,11 @@ service DaemonService {
     };
   }
   rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc ListDaemons(ListDaemonsRequest) returns (ListDaemonsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   rpc UpdateDaemon(UpdateDaemonRequest) returns (UpdateDaemonResponse) {
@@ -99,6 +101,7 @@ service DaemonService {
     };
   }
   rpc ListPortAccessRules(ListPortAccessRulesRequest) returns (ListPortAccessRulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
   // SetDefaultPortAccess sets the workspace-level default port-access mode

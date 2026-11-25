@@ -208,12 +208,14 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TriggerServiceGetTriggerProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("GetTrigger")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listTriggers: connect.NewClient[v1.ListTriggersRequest, v1.ListTriggersResponse](
 			httpClient,
 			baseURL+TriggerServiceListTriggersProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("ListTriggers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateTrigger: connect.NewClient[v1.UpdateTriggerRequest, v1.UpdateTriggerResponse](
@@ -244,12 +246,14 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TriggerServiceListTriggerEventsProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("ListTriggerEvents")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getLaunchEvent: connect.NewClient[v1.GetLaunchEventRequest, v1.GetLaunchEventResponse](
 			httpClient,
 			baseURL+TriggerServiceGetLaunchEventProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		rotateWebhookToken: connect.NewClient[v1.RotateWebhookTokenRequest, v1.RotateWebhookTokenResponse](
@@ -281,6 +285,7 @@ func NewTriggerServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+TriggerServiceListReplayEventsProcedure,
 			connect.WithSchema(triggerServiceMethods.ByName("ListReplayEvents")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		previewReplay: connect.NewClient[v1.PreviewReplayRequest, v1.PreviewReplayResponse](
@@ -518,12 +523,14 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		TriggerServiceGetTriggerProcedure,
 		svc.GetTrigger,
 		connect.WithSchema(triggerServiceMethods.ByName("GetTrigger")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServiceListTriggersHandler := connect.NewUnaryHandler(
 		TriggerServiceListTriggersProcedure,
 		svc.ListTriggers,
 		connect.WithSchema(triggerServiceMethods.ByName("ListTriggers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServiceUpdateTriggerHandler := connect.NewUnaryHandler(
@@ -554,12 +561,14 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		TriggerServiceListTriggerEventsProcedure,
 		svc.ListTriggerEvents,
 		connect.WithSchema(triggerServiceMethods.ByName("ListTriggerEvents")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServiceGetLaunchEventHandler := connect.NewUnaryHandler(
 		TriggerServiceGetLaunchEventProcedure,
 		svc.GetLaunchEvent,
 		connect.WithSchema(triggerServiceMethods.ByName("GetLaunchEvent")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServiceRotateWebhookTokenHandler := connect.NewUnaryHandler(
@@ -591,6 +600,7 @@ func NewTriggerServiceHandler(svc TriggerServiceHandler, opts ...connect.Handler
 		TriggerServiceListReplayEventsProcedure,
 		svc.ListReplayEvents,
 		connect.WithSchema(triggerServiceMethods.ByName("ListReplayEvents")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	triggerServicePreviewReplayHandler := connect.NewUnaryHandler(

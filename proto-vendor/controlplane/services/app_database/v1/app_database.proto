@@ -142,6 +142,10 @@ service AppDatabaseService {
   // QueryDatabase runs one read-only statement and returns its rows, bounded by
   // max_rows and timeout_ms.
   rpc QueryDatabase(QueryDatabaseRequest) returns (QueryDatabaseResponse) {
+    // Deliberately NOT NO_SIDE_EFFECTS: data access must always write its
+    // audit_log row, and NO_SIDE_EFFECTS would let Connect serve this read
+    // over HTTP GET, where a cache or proxy could replay the response without
+    // one.
     option (forge.v1.method) = {
       auth_required: true
       activity: {
@@ -170,6 +174,10 @@ service AppDatabaseService {
   // records one dashboard_db_access event per person, dashboard, environment
   // and day instead. The audit_log row is written for every request.
   rpc QueryDatabasePanel(QueryDatabasePanelRequest) returns (QueryDatabasePanelResponse) {
+    // Deliberately NOT NO_SIDE_EFFECTS: data access must always write its
+    // audit_log row, and NO_SIDE_EFFECTS would let Connect serve this read
+    // over HTTP GET, where a cache or proxy could replay the response without
+    // one.
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -179,6 +187,7 @@ service AppDatabaseService {
   // QueryDatabasePanel, without the database/placement steps for databases that
   // are not enabled: those are simply absent.
   rpc ListDashboardDatabases(ListDashboardDatabasesRequest) returns (ListDashboardDatabasesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: true};
   }
 
@@ -210,9 +219,10 @@ service AppDatabaseService {
   // ERRORS: every step of the data browser's admission except step 9.
   // InvalidArgument when a bound is out of range.
   rpc DescribeDatabase(DescribeDatabaseRequest) returns (DescribeDatabaseResponse) {
-    // A read: the console's hook is a query. Each call still writes its
-    // audit_log row and activity event, which no caller observes.
-    option idempotency_level = NO_SIDE_EFFECTS;
+    // Deliberately NOT NO_SIDE_EFFECTS: data access must always write its
+    // audit_log row, and NO_SIDE_EFFECTS would let Connect serve this read
+    // over HTTP GET, where a cache or proxy could replay the response without
+    // one.
     option (forge.v1.method) = {
       auth_required: true
       activity: {
@@ -245,9 +255,10 @@ service AppDatabaseService {
   // cannot read in the table; a filter whose values do not fit its op; or a
   // value Postgres cannot convert to the column's type.
   rpc BrowseTable(BrowseTableRequest) returns (BrowseTableResponse) {
-    // A read: the console's hook is a query. Each call still writes its
-    // audit_log row, which no caller observes.
-    option idempotency_level = NO_SIDE_EFFECTS;
+    // Deliberately NOT NO_SIDE_EFFECTS: data access must always write its
+    // audit_log row, and NO_SIDE_EFFECTS would let Connect serve this read
+    // over HTTP GET, where a cache or proxy could replay the response without
+    // one.
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "a page view: every call writes its audit_log row (with the reason), and the feed's one line per opened database is DescribeDatabase's"}

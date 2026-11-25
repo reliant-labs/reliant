@@ -9,14 +9,38 @@
  * projects' summary; Observability's views and Dashboards are the org-wide
  * pages (an in-page app filter); every other app page opens the focused
  * project's, with its in-page picker (PAGES); the chat list groups by project.
+ *
+ * Settings' sections are not here but in settings.tsx, which only hybrid.ts
+ * imports: they are Settings' own list (Settings/SettingsNavigation), and a
+ * nav built from these items alone (the public demo's) must not pull it in.
  */
 
 import {
   Activity,
   ArrowUpRight,
   BarChart3,
+  Bell,
+  BookOpen,
   Boxes,
+  Bug,
+  ChartLine,
+  Flame,
+  GitPullRequest,
+  History,
   Inbox,
+  MonitorPlay,
+  MousePointerClick,
+  Network,
+  Package,
+  PieChart,
+  Puzzle,
+  Route,
+  ScrollText,
+  Split,
+  TrendingUp,
+  Users,
+  Waypoints,
+  Zap,
   Plug,
   ShieldCheck,
   CreditCard,
@@ -37,7 +61,7 @@ import {
   Workflow,
   Wrench,
 } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import { connectorsPath, homePath, inboxPath, projectChatsPath, projectPath, projectsPath, runsPath, sandboxesPath, settingsPath, usageBillingPath, withSearch, workflowLibraryPath } from "@/lib/paths";
 import { changesUIEnabled } from "@/lib/changesFeature";
@@ -45,8 +69,6 @@ import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
 import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, authPath, consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
-import { isSettingsItemCurrent, settingsItemEntry, settingsNavGroups, type SectionItem } from "../../../Settings/SettingsNavigation";
-import type { SettingsTab } from "../../../../routeSchemas";
 import { isAt, isAtOrBelow } from "../navLocation";
 import { isChatPage } from "../shellProject";
 import { BrandMark } from "../../../icons/BrandMark";
@@ -65,7 +87,7 @@ const consoleHref = (page: ConsoleTarget) => (ctx: NavCtx) =>
 const pageIs = (...kinds: ConsolePage["kind"][]) => (ctx: NavCtx) => !!ctx.page && kinds.includes(ctx.page.kind);
 
 function consoleRow(id: string, label: string, page: ConsolePage, rowIcon: ReactNode | undefined, kinds: ConsolePage["kind"][]): NavRow {
-  return { kind: "row", id, label, icon: rowIcon, href: consoleHref(page), match: pageIs(...kinds), available: hasApp };
+  return { kind: "row", id, label, icon: rowIcon, href: consoleHref(page), match: pageIs(...kinds), page: page.kind, available: hasApp };
 }
 
 export const heading = (id: string, label: string): NavHeading => ({ kind: "heading", id, label });
@@ -78,6 +100,7 @@ export const overview: NavRow = {
   kind: "row",
   id: "overview",
   testId: "sidebar-home-button",
+  tour: "nav-overview",
   label: "Overview",
   icon: icon(LayoutDashboard),
   href: (ctx) => {
@@ -111,8 +134,10 @@ export const previews: NavRow = {
   kind: "row",
   id: "previews",
   label: "Previews",
+  flatIcon: icon(GitPullRequest),
   href: (ctx) => (ctx.app ? withSearch(consolePath(ctx.app, { kind: "environments" }), { env: ctx.console?.env, show: "previews" }) : undefined),
   match: (ctx) => (ctx.page?.kind === "environments" && showsPreviews(ctx)) || isPreviewEnv(ctx),
+  page: "environments",
   available: hasApp,
 };
 
@@ -124,6 +149,7 @@ export const previews: NavRow = {
 export const deploymentsGroup: NavGroup = {
   kind: "group",
   id: "deployments",
+  tour: "nav-deployments",
   label: "Deployments",
   icon: icon(Rocket),
   available: hasApp,
@@ -142,11 +168,23 @@ export const auth: NavRow = {
   icon: icon(UserRound),
   href: (ctx) => (ctx.app ? withSearch(authPath(ctx.app), { env: ctx.console?.env }) : undefined),
   match: pageIs("auth", "users"),
+  page: "auth",
   available: hasApp,
 };
 
-/** Inbox: a top-level row with its count, under Overview (owner, 15:02Z); the one place it is. */
+/**
+ * Inbox: a top-level row with its count, under Overview (owner, 15:02Z), and
+ * again inside Agents › (agentsInbox, owner 2026-11-24), so a chat's drill-in
+ * reaches it in one click. The Inbox page is not an Agents route: on /inbox
+ * the nav is the top level and this row is the one lit.
+ */
 export const inbox: NavSlot = slot("inbox");
+/**
+ * Agents' Inbox row: the same slot (row, count, route) under its own id, ids
+ * being unique within a config. The two never draw together: the top level
+ * and the Agents drill-in replace one another.
+ */
+export const agentsInbox: NavSlot = { kind: "slot", id: "slot-agents-inbox", slot: "inbox" };
 /** Its href and match, for the slot's row and the tests. */
 export const inboxRow: NavRow = { kind: "row", id: "inbox", label: "Inbox", icon: icon(Inbox), href: () => inboxPath(), match: (ctx) => isAtOrBelow(ctx.pathname, inboxPath()) };
 export const activity = consoleRow("activity", "Activity", { kind: "activity" }, icon(Activity), ["activity"]);
@@ -157,6 +195,7 @@ export const projectUsage = consoleRow("project-usage", "Usage", { kind: "usage"
 export const configureGroup: NavGroup = {
   kind: "group",
   id: "configure",
+  tour: "nav-configure",
   label: "Configure",
   icon: icon(Wrench),
   available: hasApp,
@@ -177,6 +216,7 @@ const securityRows = (ctx: NavCtx): NavRow[] => registeredRows(ctx, "security");
 export const securityGroup: NavGroup = {
   kind: "group",
   id: "security",
+  tour: "nav-security",
   label: "Security",
   icon: icon(ShieldCheck),
   available: (ctx) => hasApp(ctx) && securityRows(ctx).length > 0,
@@ -212,6 +252,7 @@ export const dashboards: NavGroup = {
       kind: "row",
       id: "dashboards-all",
       label: "All dashboards",
+      flatIcon: icon(LayoutGrid),
       href: (c) => (c.mode !== "one" ? orgPath({ kind: "obs-view", view: "dashboards" }) : consoleHref({ kind: "dashboards" })(c)),
       match: (c) =>
         (c.page?.kind === "obs-view" && c.page.view === "dashboards") ||
@@ -223,6 +264,7 @@ export const dashboards: NavGroup = {
         kind: "row",
         id: `dashboard-${dashboard.dashKind}-${dashboard.key}`,
         label: dashboard.title,
+        flatIcon: icon(ChartLine),
         href: consoleHref({ kind: "dashboard", dashKind: dashboard.dashKind, key: dashboard.key }),
         match: (c) => c.page?.kind === "dashboard" && c.page.dashKind === dashboard.dashKind && c.page.key === dashboard.key,
       }),
@@ -233,11 +275,26 @@ export const dashboards: NavGroup = {
 // ── Observability ───────────────────────────────────────────────────────────
 
 /** One Observability view: the focused app's, or the org-wide page across several projects. */
+/** The flat nav's icon for each Observability view (NavRow `flatIcon`). */
+const OBS_VIEW_ICONS: Record<ObsNavView, typeof Activity> = {
+  graph: Network,
+  rpc: Route,
+  errors: Bug,
+  sessions: MonitorPlay,
+  logs: ScrollText,
+  traces: Waypoints,
+  metrics: ChartLine,
+  profiles: Flame,
+  dashboards: LayoutGrid,
+  alerts: Bell,
+};
+
 function obsRow(view: ObsNavView, extra: Partial<NavRow> = {}): NavRow {
   return {
     kind: "row",
     id: `obs-${view}`,
     label: OBS_NAV_LABELS[view],
+    flatIcon: icon(OBS_VIEW_ICONS[view]),
     href: (ctx) => (ctx.mode !== "one" ? orgPath({ kind: "obs-view", view }) : consoleHref({ kind: "obs-view", view })(ctx)),
     match: (ctx) =>
       (ctx.page?.kind === "obs-view" && ctx.page.view === view) || (ctx.orgPage?.kind === "obs-view" && ctx.orgPage.view === view),
@@ -250,8 +307,10 @@ const speedInsights: NavRow = {
   kind: "row",
   id: "speed-insights",
   label: "Speed insights",
+  flatIcon: icon(Zap),
   href: consoleHref({ kind: "speed-insights" }),
   match: pageIs("speed-insights"),
+  page: "speed-insights",
   available: hasApp,
 };
 
@@ -289,6 +348,7 @@ export const obsOverview: NavRow = {
   kind: "row",
   id: "obs-overview",
   label: "Overview",
+  flatIcon: icon(LayoutDashboard),
   href: (ctx) =>
     ctx.mode !== "one" ? orgPath({ kind: "observability" }) : ctx.app ? withSearch(obsOverviewPath(ctx.app), { env: ctx.console?.env }) : undefined,
   match: isObsOverview,
@@ -307,6 +367,7 @@ export const isObservabilityRoute = (ctx: NavCtx): boolean =>
 export const observabilityArea: NavArea = {
   kind: "area",
   id: "observability",
+  tour: "nav-observability",
   label: "Observability",
   icon: icon(Gauge),
   match: isObservabilityRoute,
@@ -321,13 +382,24 @@ const analyticsTabOf = (ctx: NavCtx): AnalyticsTab | null =>
   ctx.page?.kind === "analytics" ? (ctx.page.tab ?? "overview") : ctx.page?.kind === "events" ? "events" : null;
 
 /** One Analytics tab as a row (Product overview, Users, Product, Acquisition, Events & metrics). */
+/** The flat nav's icon for each Analytics tab (NavRow `flatIcon`). */
+const ANALYTICS_TAB_ICONS: Record<AnalyticsTab, typeof Activity> = {
+  overview: PieChart,
+  users: Users,
+  product: Package,
+  acquisition: TrendingUp,
+  events: MousePointerClick,
+};
+
 function analyticsTabRow(tab: AnalyticsTab): NavRow {
   return {
     kind: "row",
     id: `analytics-${tab}`,
     label: ANALYTICS_TAB_LABELS[tab],
+    flatIcon: icon(ANALYTICS_TAB_ICONS[tab]),
     href: consoleHref({ kind: "analytics", tab }),
     match: (ctx) => analyticsTabOf(ctx) === tab,
+    page: "analytics",
     available: hasApp,
   };
 }
@@ -352,6 +424,7 @@ function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
       kind: "row" as const,
       id: `registered-${entry.id}`,
       label: entry.label,
+      flatIcon: entry.icon ?? icon(Puzzle),
       href: consoleHref(consoleNavEntryTarget(entry)),
       match: (c: NavCtx) => consoleNavEntryLights(entry, c.page),
     }));
@@ -362,7 +435,10 @@ function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
  * the web config's CHANGES_UI, as the console's own navs list it
  * (ConsoleShell experimentsListed), and always while one of its pages is open.
  */
-const experimentsRow = consoleRow("experiments", "Experiments", { kind: "experiments" }, undefined, ["experiments", "experiment"]);
+const experimentsRow: NavRow = {
+  ...consoleRow("experiments", "Experiments", { kind: "experiments" }, undefined, ["experiments", "experiment"]),
+  flatIcon: icon(Split),
+};
 const experimentsShown = (ctx: NavCtx): boolean => changesUIEnabled() || pageIs("experiments", "experiment")(ctx);
 
 const analyticsChildren = (ctx: NavCtx): readonly NavItem[] => [
@@ -398,8 +474,8 @@ export const workflowsGroup: NavGroup = {
   icon: icon(Workflow),
   trail: "workflows-pill",
   children: [
-    { kind: "row", id: "workflows-runs", label: "Runs", href: () => runsPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "runs" },
-    { kind: "row", id: "workflows-library", label: "Library", href: () => workflowLibraryPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "workflows" },
+    { kind: "row", id: "workflows-runs", label: "Runs", flatIcon: icon(History), href: () => runsPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "runs" },
+    { kind: "row", id: "workflows-library", label: "Library", flatIcon: icon(BookOpen), href: () => workflowLibraryPath(), match: (ctx) => workflowsTabForPath(ctx.pathname) === "workflows" },
   ],
 };
 
@@ -430,7 +506,8 @@ export const isAgentsRoute = (ctx: NavCtx): boolean =>
 
 /** Agents' rows; the chat list last, so in the drill-in it takes the rest of the column. */
 // AI providers left Agents (U6e, owner): it lives in Settings only.
-const agentsChildren: readonly NavItem[] = [slot("new-chat"), workflowsGroup, sandboxes, connectors, slot("chat-list")];
+// Inbox joined it under New chat (owner, 2026-11-24); it stays at the top level too.
+const agentsChildren: readonly NavItem[] = [slot("new-chat"), agentsInbox, workflowsGroup, sandboxes, connectors, slot("chat-list")];
 
 /** Agents › — one of the two drill-ins; its mark is Reliant's, to set it apart. */
 export const agentsArea: NavArea = {
@@ -457,40 +534,12 @@ export const usageBilling: NavRow = {
 };
 
 /**
- * One Settings entry as a row. A section with two entries (Settings → AI:
- * Personal accounts, its providers tab; Models & tools, its models and local
- * tabs) gets one row per entry, each lit on its own tabs.
+ * Settings' sections take the column here (navConfig/settings.tsx), except
+ * Agent sandboxes: Agents owns that page and must be the only area lit there.
+ * Keep this matcher independent of Settings' modules for the public demo.
  */
-function settingsRow(item: SectionItem): NavRow {
-  const { tab } = settingsItemEntry(item);
-  const Icon: ComponentType<{ className?: string }> = item.icon;
-  return {
-    kind: "row",
-    id: tab ? `settings-${item.id}-${tab}` : `settings-${item.id}`,
-    label: item.label,
-    icon: <Icon className="size-4" aria-hidden="true" />,
-    href: () => withSearch(settingsPath(item.id), { tab }),
-    match: (ctx) =>
-      isAtOrBelow(ctx.pathname, settingsPath(item.id)) &&
-      isSettingsItemCurrent(item, item.id, typeof ctx.search.tab === "string" ? (ctx.search.tab as SettingsTab) : undefined),
-  };
-}
-
-/** Settings' sections, from Settings' own list (SettingsNavigation), as the drill-in's rows. */
-function settingsChildren(): readonly NavItem[] {
-  const { groups, about } = settingsNavGroups();
-  const items: NavItem[] = [];
-  for (const group of groups) {
-    const rows = group.items.map(settingsRow);
-    const id = `settings-group-${group.label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    if (group.collapsible) items.push({ kind: "group", id, label: group.label, children: rows });
-    else items.push(heading(id, group.label), ...rows);
-  }
-  items.push(settingsRow(about));
-  return items;
-}
-
-const isSettingsRoute = (ctx: NavCtx) => isAtOrBelow(ctx.pathname, settingsPath());
+export const isSettingsRoute = (ctx: NavCtx) =>
+  isAtOrBelow(ctx.pathname, settingsPath()) && !isAtOrBelow(ctx.pathname, sandboxesPath());
 
 /** Settings: a plain link (U6d, owner); bare /settings opens the section last visited. */
 export const settings: NavRow = {
@@ -504,15 +553,10 @@ export const settings: NavRow = {
   testId: "sidebar-settings-button",
 };
 
-/** On a Settings page its sections take the nav column, as Vercel's do: a section page, not a drill-in row. */
-export const settingsSections: NavArea = {
-  kind: "area",
-  id: "settings",
-  label: "Settings",
-  match: isSettingsRoute,
-  children: settingsChildren,
-};
-
-export const footer: readonly NavItem[] = [usageBilling, settings];
+/**
+ * The footer. Help sits beside Settings: the journeys, the docs and the
+ * shortcuts, and the way back to a dismissed Setup Guide.
+ */
+export const footer: readonly NavItem[] = [usageBilling, slot("help"), settings];
 
 export const externalMark = <ArrowUpRight className="size-3.5" aria-hidden="true" />;
