@@ -148,5 +148,5 @@ export function rollOutChangeRequest(changeId: string, input: RollOutInput): Mes
 
 /** Never blocked: no approval, and no revision unless the caller names one. */
 export function stopChangeRequest(changeId: string, expectedRevision?: number): MessageInitShape<typeof StopChangeRequestSchema> {
-  return expectedRevision ? { changeId, expectedRevision: revision(expectedRevision) } : { changeId };
+  return expectedRevision !== undefined ? { changeId, expectedRevision: revision(expectedRevision) } : { changeId };
 }
