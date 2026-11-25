@@ -61859,6 +61859,17 @@
     },
     {
       "consumer": "Trigger",
+      "field": "FiringReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.FiringReads",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Firings",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Firings",
       "methods": [],
@@ -61961,6 +61972,17 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Registrations",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.RegistrationReads",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Repository",
       "methods": [],
@@ -61998,6 +62020,17 @@
       "consumer": "Trigger",
       "field": "TriggerWrites",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.TriggerWrites",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Trigger",
+      "field": "Triggers",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.Triggers",
       "methods": [],
       "candidates": [],
       "providers": [
