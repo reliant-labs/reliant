@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -31,7 +32,7 @@ func newWebhookFixture(t *testing.T, filter string) (*fireFixture, *EventFirer, 
 	})
 	// newFireFixture stored a schedule config; a webhook trigger has none.
 	f.trigger.Config = json.RawMessage(`{}`)
-	require.NoError(t, f.repo.UpdateTrigger(context.Background(), f.trigger))
+	require.NoError(t, triggertest.Update(context.Background(), f.repo, f.trigger))
 	launcher := launch.New(launch.Deps{Store: f.repo, Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	starter := &recordingStarter{}
 	return f, NewEventFirer(NewStores(f.repo), launcher), NewIntake(NewStores(f.repo), starter, "test-queue"), starter
@@ -95,7 +96,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			f := newFireFixture(t, func(tr *core.Trigger, _ *core.ScheduleConfig) { tr.Kind = kind })
 			ctx := context.Background()
 			f.trigger.Config = json.RawMessage(`{}`)
-			require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
+			require.NoError(t, triggertest.Update(ctx, f.repo, f.trigger))
 			runs := &recordingStarter{}
 			firer := NewEventFirer(NewStores(f.repo), launch.New(launch.Deps{Store: f.repo, Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
 			fires := &recordingStarter{}

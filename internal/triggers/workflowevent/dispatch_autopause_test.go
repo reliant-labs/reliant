@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
@@ -39,7 +40,7 @@ func TestDispatch_PausesATriggerWhoseCreatorLeftItsOrg(t *testing.T) {
 		Message: "react to the source run", DaemonID: f.daemonID, Config: config,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, f.repo.CreateTrigger(context.Background(), tr))
+	require.NoError(t, triggertest.Create(context.Background(), f.repo, tr))
 	ctx := authz.WithMembership(context.Background(), liveIn{"home": true})
 
 	results, err := f.dispatcher.Dispatch(ctx, f.finish(f.humanRun("code-review"), core.RunEventFinished))

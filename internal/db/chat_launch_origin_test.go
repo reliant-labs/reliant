@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // chats_with_activity carries the chat's origin — launch_kind and trigger_id
@@ -59,7 +60,7 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 	ctx := context.Background()
 
 	triggerID := "trg-origin"
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
 
 	createActivityTestChat(t, repo, "origin-schedule")
 	recordLaunchEvent(t, repo, "origin-schedule", core.TriggerEventKindSchedule, &triggerID, time.Now().UTC())
@@ -110,7 +111,7 @@ func TestChatLaunchOriginUsesEarliestEventAndSurvivesTriggerDeletion(t *testing.
 	ctx := context.Background()
 
 	triggerID := "trg-delete"
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(triggerID, "test-user", "test-project", "doomed")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(triggerID, "test-user", "test-project", "doomed")))
 	createActivityTestChat(t, repo, "origin-two-events")
 	now := time.Now().UTC()
 	recordLaunchEvent(t, repo, "origin-two-events", core.TriggerEventKindSchedule, &triggerID, now.Add(-time.Hour))
@@ -141,7 +142,7 @@ func TestListChatsExcludeAutomations(t *testing.T) {
 	ctx := context.Background()
 
 	triggerID := "trg-exclude"
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
 	now := time.Now().UTC()
 
 	createActivityTestChat(t, repo, "x-interactive")

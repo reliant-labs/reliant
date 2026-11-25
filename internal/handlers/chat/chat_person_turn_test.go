@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // A person's send into a chat a trigger or an agent launched makes it
@@ -71,7 +72,7 @@ func launchByTrigger(t *testing.T, ctx context.Context, repo *db.Repo, chatID st
 	t.Helper()
 	at := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
 	triggerID := "trg-" + chatID
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: "test-user", ProjectID: mustChatProject(t, ctx, repo, chatID),
 		Name: "nightly", Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: at, UpdatedAt: at,

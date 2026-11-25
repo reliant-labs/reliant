@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -104,7 +105,7 @@ func TestReconcilerRecoversAFireStuckPending(t *testing.T) {
 		Message:  "Audit the dependency tree.",
 		DaemonID: daemonID, Config: config, CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, trigger))
+	require.NoError(t, triggertest.Create(ctx, repo, trigger))
 
 	starter := &switchableStarter{}
 	firer := triggers.NewFirer(triggers.NewStores(repo), launch.New(launch.Deps{Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: discardRunRecorder{}, TaskQueue: "test-queue"}))

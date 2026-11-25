@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -55,7 +56,7 @@ func TestSendMessage_RestartOfCompletedChatCarriesLaunchTrigger(t *testing.T) {
 
 	scheduledAt := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
 	triggerID := "trg-restart"
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: "test-user", ProjectID: mustChatProject(t, ctx, repo, fx.chatID),
 		Name: "nightly", Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: scheduledAt, UpdatedAt: scheduledAt,
@@ -139,7 +140,7 @@ func TestListChatsAndGetChatCarryLaunchOriginAndExcludeAutomations(t *testing.T)
 
 	scheduledAt := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
 	triggerID := "trg-wire"
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: "test-user", ProjectID: projectID, Name: "nightly",
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: scheduledAt, UpdatedAt: scheduledAt,
@@ -186,7 +187,7 @@ func seedScheduledChat(t *testing.T, ctx context.Context, repo *db.Repo, chatID 
 	t.Helper()
 	at := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
 	triggerID := "trg-adopt-" + chatID
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{
 		ID: triggerID, UserID: "test-user", ProjectID: mustChatProject(t, ctx, repo, chatID),
 		Name: "nightly", Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: at, UpdatedAt: at,

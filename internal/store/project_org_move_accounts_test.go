@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // The provider-account clause of moving a project to another org
@@ -68,7 +69,7 @@ func (f *credFixture) mvTrigger(id, projectID string) {
 	require.NoError(f.t, err)
 	now := credT0
 	org := mvSrc
-	require.NoError(f.t, f.env.Repo.CreateTrigger(context.Background(), &core.Trigger{
+	require.NoError(f.t, triggertest.Create(context.Background(), f.env.Repo, &core.Trigger{
 		ID: id, UserID: mvOwner, ProjectID: projectID, Name: id, Kind: core.TriggerKindSchedule,
 		Enabled: true, Workflow: "nightly", Config: config, OrgID: &org, CreatedAt: now, UpdatedAt: now,
 	}))

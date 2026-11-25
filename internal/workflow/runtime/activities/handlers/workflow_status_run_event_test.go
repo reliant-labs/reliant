@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -45,7 +46,7 @@ func newRunEventFixture(t *testing.T, withTrigger bool) *runEventFixture {
 	if withTrigger {
 		allowWorkflowEventKind(t, h)
 		now := time.Now().UTC()
-		require.NoError(t, h.Repo().CreateTrigger(ctx, &core.Trigger{
+		require.NoError(t, triggertest.Create(ctx, h.Repo(), &core.Trigger{
 			ID: uuid.NewString(), UserID: f.userID, ProjectID: f.project, Name: "on-review",
 			Kind: runevents.TriggerKind, Enabled: true, Workflow: "builtin://agent",
 			Message: "react", DaemonID: "d1", Config: json.RawMessage(`{}`), CreatedAt: now, UpdatedAt: now,

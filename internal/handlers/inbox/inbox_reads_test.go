@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // countingRepo counts the reads a workflow resolution makes.
@@ -82,7 +83,7 @@ func TestListInbox_ReadsEachCatalogOnce(t *testing.T) {
 	for i := 0; i < workflows; i++ {
 		for j := 0; j < 2; j++ {
 			name := "merged"
-			require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+			require.NoError(t, triggertest.Create(f.ctx, f.repo, &core.Trigger{
 				ID: fmt.Sprintf("act-%d-%d", i, j), UserID: f.userID, ProjectID: f.project(), Name: fmt.Sprintf("Release %d/%d", i, j),
 				Kind: core.TriggerKindSchedule, Enabled: true, Workflow: fmt.Sprintf("release-%d", i), WorkflowTrigger: &name,
 				DaemonID: daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
@@ -140,7 +141,7 @@ func TestListInbox_BatchedDraftReadListsTheSame(t *testing.T) {
 	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
 	for i, workflow := range []string{"release", "deploy", "triage", "gone", "release"} {
 		name := "merged"
-		require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+		require.NoError(t, triggertest.Create(f.ctx, f.repo, &core.Trigger{
 			ID: fmt.Sprintf("act-%d", i), UserID: f.userID, ProjectID: f.project(), Name: fmt.Sprintf("%s %d", workflow, i),
 			Kind: core.TriggerKindSchedule, Enabled: true, Workflow: workflow, WorkflowTrigger: &name,
 			DaemonID: daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
