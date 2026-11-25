@@ -51,7 +51,6 @@ func mockDeps(repo Repository) Deps {
 func realStorage(repo Repository) worktreesweep.Stores {
 	r := repo.(interface {
 		ORM() *orm.Client
-		ListReposByProject(context.Context, string) ([]*core.Repo, error)
 		UpdateWorktreeCleanupMetadata(context.Context, string, *core.CleanupMetadata) error
 		ListAttachedDaemonIDsForUser(context.Context, string, time.Duration) ([]string, error)
 		TryAdvisoryLock(context.Context, int64) (func(), bool, error)
