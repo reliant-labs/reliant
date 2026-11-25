@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { LLMGatewayService } from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
@@ -154,17 +155,18 @@ describe("orgInterceptor", () => {
   });
 
   it("keeps a created secret's org and rotated/revoked resource identity through deferred auth", async () => {
-    const { chooseActiveOrg } = await load("org-a");
+    const { connectClient, chooseActiveOrg } = await load("org-a");
     const { setAuthTokenProvider } = await import("@/api/authProvider");
     let release!: (token: string) => void;
     const token = new Promise<string>((resolve) => { release = resolve; });
     const getToken = vi.fn(() => token);
     setAuthTokenProvider({ getToken, hasSession: async () => true, refresh: async () => null });
-    const { createManagedLLMKey, rotateLLMKey, revokeLLMKey } = await import("@/services/controlPlane/reliantAI");
+    // The requests useCreateLLMKey / useRotateLLMKey / useRevokeLLMKey send.
+    const gateway = connectClient(LLMGatewayService);
     const pending = [
-      createManagedLLMKey({ orgId: "org-a", name: "App", models: [] }),
-      rotateLLMKey("org-a-key", "24h"),
-      revokeLLMKey("org-a-key"),
+      gateway.createLLMKey({ orgId: "org-a", name: "App", models: [], budgetDuration: "" }),
+      gateway.rotateLLMKey({ keyId: "org-a-key", gracePeriod: "24h" }),
+      gateway.revokeLLMKey({ keyId: "org-a-key" }),
     ];
     await vi.waitFor(() => expect(getToken).toHaveBeenCalledTimes(3));
     chooseActiveOrg("org-b");
