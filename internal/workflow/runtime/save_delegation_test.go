@@ -42,7 +42,7 @@ func newDelegationHarness(t *testing.T) *delegationHarness {
 	h.env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	registerFinalizeCapture(h.env)
 
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	registry.SetMessageWriter(h.writer)
 	registerWrapped(h.env, registry, "CallLLM",
 		func(context.Context, types.ActivityInput) (*reliantv1.CallLLMOutput, error) {

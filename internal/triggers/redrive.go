@@ -68,6 +68,9 @@ func NewRedriver(repo EventFireRepo, starter RedriveStarter, taskQueue string) *
 func (r *Redriver) RedriveOnce(ctx context.Context) error {
 	now := r.now()
 	var errs []error
+	// Every event this pass settles is a trigger.fire span of its own,
+	// linked to the pass, and names its trigger (read once per pass).
+	triggers := map[string]*core.Trigger{}
 	// Reconcile occupied capacity BEFORE listing the queue heads, so a slot
 	// whose run has finished is filled by this pass rather than the next one.
 	// Capacity reconciliation cannot prevent unrelated delivery recovery.
@@ -80,8 +83,12 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 	// Expire waiting capacity events before listing the heads. The listing
 	// returns one head per scope in admission order, so a low-priority event
 	// behind a stream of higher ones would never reach the expiry check below.
-	if _, err := r.repo.ExpirePendingTriggerCapacityEvents(ctx, capacityExpiredBefore(now), capacityExpiredDetail, redriveBatch); err != nil {
+	expired, err := r.repo.ExpirePendingTriggerCapacityEvents(ctx, capacityExpiredBefore(now), capacityExpiredDetail, redriveBatch)
+	if err != nil {
 		errs = append(errs, err)
+	}
+	for _, ev := range expired {
+		traceSettled(ctx, settledTrigger(ctx, r.repo, triggers, ev), ev, ev.Outcome, ev.OutcomeDetail)
 	}
 	stale, err := r.repo.ListStalePendingTriggerEvents(ctx, now.Add(-redriveAfter), redriveBatch)
 	if err != nil {
@@ -89,9 +96,7 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 	}
 	for _, ev := range stale {
 		if ev.TriggerID == nil {
-			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventSkipped, "trigger deleted", nil); err != nil {
-				errs = append(errs, err)
-			}
+			r.settle(ctx, ev, triggers, core.TriggerEventSkipped, "trigger deleted", &errs)
 			continue
 		}
 		// An event that has not launched within redriveGiveUp expires, a delivery
@@ -100,10 +105,7 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 		// A launched capacity start still awaiting its binding is not waiting: it
 		// keeps being redriven so its slot is bound or recovered.
 		if ev.CreatedAt.Before(capacityExpiredBefore(now)) && (ev.CapacityOrder == nil || ev.Outcome == core.TriggerEventPending) {
-			if _, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, core.TriggerEventFailed,
-				capacityExpiredDetail, nil); err != nil {
-				errs = append(errs, err)
-			}
+			r.settle(ctx, ev, triggers, core.TriggerEventFailed, capacityExpiredDetail, &errs)
 			continue
 		}
 		if err := refireEvent(ctx, r.starter, r.taskQueue, ev, now); err != nil {
@@ -111,6 +113,20 @@ func (r *Redriver) RedriveOnce(ctx context.Context) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// settle records the redriver's own verdict on a pending event nobody will
+// fire, and its trigger.fire span when it applied (triggers caches the pass's
+// trigger reads).
+func (r *Redriver) settle(ctx context.Context, ev *core.TriggerEvent, triggers map[string]*core.Trigger, outcome core.TriggerEventOutcome, detail string, errs *[]error) {
+	settled, err := r.repo.SettlePendingTriggerEvent(ctx, ev.ID, outcome, detail, nil)
+	if err != nil {
+		*errs = append(*errs, err)
+		return
+	}
+	if settled {
+		traceSettled(ctx, settledTrigger(ctx, r.repo, triggers, ev), ev, outcome, detail)
+	}
 }
 
 // refireEvent starts the fire of a recorded event that has not launched: a

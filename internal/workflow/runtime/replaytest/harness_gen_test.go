@@ -350,7 +350,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 
 	waitForWorkerPollers(t, s.Temporal, workersetup.TaskQueueName(taskQueueSuffix))
 
-	pause := workflow.NewPauseService(s.Temporal, s.Repo)
+	pause := workflow.NewPauseService(workflow.PauseServiceDeps{Temporal: s.Temporal, Store: s.Repo, Workflows: store.NewWorkflowExtStore(s.Repo.ORM())})
 	// No daemon router: the replay harness has no daemon. A new chat's run
 	// still schedules the greenfield probe (StartChat asks for it on every
 	// first turn); the worker above has no router either, so the activity

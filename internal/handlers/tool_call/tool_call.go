@@ -75,7 +75,7 @@ func (s *Service) cancelChildWorkflowForToolCall(ctx context.Context, toolCallID
 	// link (CreateWorkflowWithThread always sets it, new or resumed), so read
 	// it rather than assuming the two ids coincide.
 	childThreadID := childWorkflowID
-	if wf, wfErr := s.deps.Repo.GetWorkflow(ctx, childWorkflowID); wfErr == nil && wf != nil && wf.Thread != "" {
+	if wf, wfErr := s.deps.Workflows.LoadWorkflow(ctx, childWorkflowID); wfErr == nil && wf != nil && wf.Thread != "" {
 		childThreadID = wf.Thread
 	}
 

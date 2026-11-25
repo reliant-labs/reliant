@@ -23,6 +23,8 @@ type Deps struct {
 
 	// Repo reads runs, the chats that own them and the run lists.
 	Repo Repository
+	// Workflows reads the run an rpc names.
+	Workflows WorkflowLoader
 	// ChatRows and ChatViews read the chat a run belongs to (store.ChatExtStore,
 	// store.ChatsWithActivityExtStore).
 	ChatRows  ChatRows
@@ -52,6 +54,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("run: Deps.Repo is required")
+	}
+	if d.Workflows == nil {
+		return fmt.Errorf("run: Deps.Workflows is required")
 	}
 	if d.Chats == nil {
 		return fmt.Errorf("run: Deps.Chats is required")

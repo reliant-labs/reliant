@@ -1,38 +1,53 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The console's nav grouped by what a reader is after, each page keeping its
- * technical name with a plain line under its title (PAGE_SUBTITLES):
+ * The console's nav for a host with no shell around it (the public demo):
+ * the shell's groups, in the shell's order (Layout/sidebar/navConfig/hybrid.ts),
+ * so a visitor who signs up meets the same map. Each page keeps its technical
+ * name, with a plain line under its title (PAGE_SUBTITLES):
  *
- *   Overview                the summary: health, what needs attention, a strip of the services
- *   Services                everything the app runs, live (services, workers, jobs, the site, the database)
- *   Storage                 the app's object storage buckets (databases are Data)
- *   Dashboards        ▸     the app's own and starred dashboards — the ONE place (U6c bug 4)
- *   Issues            ▾     Errors · Alerts
- *   Performance       ▾     Traces · RPC explorer
- *   Sessions
- *   Product analytics ▸     Insights (the Users · Product · Acquisition hub, when the project has it) ·
- *                           Events & metrics · registered rows (Experiments: consoleNavRegistry.ts `group`)
- *   Experiments             Forge Changes, behind the web config's CHANGES_UI until the control plane serves them
- *   Releases
- *   Data · Users
- *   More tools        ▸     Logs · Metrics · Profiles · Service graph
- *   ── Configure            Environments › · Secrets · Domains · Usage
- *   footer                  Activity
+ *   Overview
+ *   Dashboards        ▸   the app's own and starred dashboards — the ONE place (U6c bug 4)
+ *   Observability     ▾   Overview · Service graph · Metrics · Logs · RPC explorer · Profiles ·
+ *                         Errors · Alerts · Traces · Speed insights · Sessions
+ *   Analytics         ▾   Product overview · Users · Product · Acquisition · Events & metrics ·
+ *                         Experiments (CHANGES_UI) · registered rows (consoleNavRegistry.ts `group`)
+ *   Deployments       ▾   Services · Releases · Environments › (each long-lived one, previews as one row)
+ *   Tests             ▾   Overview · Coverage · Runs · Flaky tests
+ *   Data · Storage · Auth
+ *   Security          ▾   its registered rows (Vulnerabilities, SBOMs); not drawn without one
+ *   Configure         ▾   Secrets · Domains · Usage · Activity
  *
- * The same rows, IA and links as buildConsoleNav, regrouped: a reader who
- * knows the term finds it, and one who does not learns it from the subtitle.
+ * The shell's Inbox and Agents, and its footer (Usage & billing, Settings),
+ * are the signed-in product's, not an app's: they have no row here. The
+ * shell's Observability is a drill-in; here it is a group, like the rest.
+ * A group opens by itself on one of its pages. A host can leave out pages it
+ * does not serve (`hiddenPages`: the demo's Usage).
+ *
  * Nothing renders it unless a host turns the led console on (ledConsole.tsx).
  */
 
 import type { ReactNode } from "react";
-import { Activity, BarChart3, Boxes, CircleAlert, Database, FlaskConical, HardDrive, LayoutDashboard, LayoutGrid, PlayCircle, Receipt, Tag as TagIcon, Timer, Users, Wrench } from "lucide-react";
+import { Activity, BarChart3, Database, FlaskConical, Gauge, HardDrive, LayoutDashboard, LayoutGrid, Rocket, ShieldCheck, UserRound, Wrench } from "lucide-react";
 
 import type { SidebarNavItem } from "@/components/forge-ui/sidebar_layout";
 
-import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, CONSOLE_NAV_ANCHORS, type ConsoleNavAnchor, type ConsoleNavEntry } from "./consoleNavRegistry";
+import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, CONSOLE_NAV_ANCHORS, type ConsoleNavAnchor, type ConsoleNavEntry, type ConsoleNavGroup } from "./consoleNavRegistry";
 import { configureNavRows, experimentsListed, NAV_STARRED_MAX, type ConsoleNavDashboard, type ConsoleNavInput } from "./ConsoleShell";
-import { consolePath, OBS_NAV_LABELS, withSearch, type ConsolePage, type ObsNavView } from "./paths";
+import {
+  ANALYTICS_TAB_LABELS,
+  ANALYTICS_TABS,
+  consolePath,
+  OBS_NAV_LABELS,
+  TESTS_VIEW_KINDS,
+  TESTS_VIEW_LABELS,
+  TESTS_VIEW_PAGE,
+  TESTS_VIEWS,
+  withSearch,
+  type AnalyticsTab,
+  type ConsolePage,
+  type ObsNavView,
+} from "./paths";
 
 const icon = (Icon: typeof Activity) => <Icon className="h-4 w-4" aria-hidden="true" />;
 
@@ -60,14 +75,14 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   experiments: "Turn things on for some people, and compare versions",
 };
 
-/** The Product analytics hub: the dashboard its row opens, and every dashboard key that is one of its tabs. */
+/** The Product analytics hub: the dashboard it opens on, and every dashboard key that is one of its tabs. */
 export interface ProductAnalyticsHub {
   open: ConsolePage;
   keys: readonly string[];
 }
 
 export interface GroupedNavInput extends ConsoleNavInput {
-  /** Omitted, the project has no Product analytics hub: the group has no Insights row. */
+  /** The project's Product analytics hub, when it has one: its dashboards light their Analytics tab. */
   productAnalytics?: ProductAnalyticsHub;
   /** A host page (one that is not a console page) is open: no console row is the current one. */
   hostPageActive?: boolean;
@@ -75,22 +90,14 @@ export interface GroupedNavInput extends ConsoleNavInput {
   customDashboards?: readonly ConsoleNavDashboard[];
   /** Rows other modules registered (consoleNavRegistry.ts); omitted, the registry's. */
   extensions?: readonly ConsoleNavEntry[];
-  /**
-   * Live counts other parts of the console hand the nav for its badges,
-   * keyed by the source's id (e.g. `tests`). Each is read from data a page
-   * already holds (a React Query cache entry its page reads anyway), so a
-   * badge never costs a request of its own. Filled in useConsoleNavModel;
-   * read by a nav item's `badge` (navConfig/types.ts) as
-   * `ctx.console?.navCounts?.<id>`. Absent or 0: no badge.
-   */
-  navCounts?: Readonly<Partial<Record<string, number>>>;
+  /** Pages the host does not serve: their rows are left out (the public demo's Usage). */
+  hiddenPages?: readonly ConsolePage["kind"][];
 }
 
 /** A nav group that shows its rows on every page, not only while one is open (the app's own dashboards). */
 export type OpenNavItem = SidebarNavItem & { alwaysOpen?: boolean };
 
-/** The group each view sits in, for the breadcrumb ("Performance & issues › Errors"). */
-// The groups of the shell's nav (Layout/sidebar/navConfig/hybrid.ts, U6d), not this nav's own Issues / Performance / More tools.
+/** The group each view sits in, for the breadcrumb: the shell's (Layout/sidebar/navConfig/items.tsx). */
 const GROUP_OF: Partial<Record<ObsNavView, string>> = {
   errors: "Performance & issues",
   alerts: "Performance & issues",
@@ -105,25 +112,36 @@ const GROUP_OF: Partial<Record<ObsNavView, string>> = {
 
 const isHubPage = (page: ConsolePage, hub: ProductAnalyticsHub | undefined) => !!hub && page.kind === "dashboard" && hub.keys.includes(page.key);
 
+/** The Analytics tab a hub dashboard is (its key, or `product-overview` for the first tab). */
+const hubTab = (key: string): AnalyticsTab | null => {
+  const tab = key === "product-overview" ? "overview" : key;
+  return (ANALYTICS_TABS as readonly string[]).includes(tab) ? (tab as AnalyticsTab) : null;
+};
+
+/** A top-level row, with the registry anchors it stands for and the registry group it is. */
+interface Placed {
+  item: SidebarNavItem;
+  anchors?: readonly ConsoleNavAnchor[];
+  group?: ConsoleNavGroup;
+}
+
 export function buildGroupedConsoleNav(input: GroupedNavInput): { items: SidebarNavItem[]; footer: SidebarNavItem[] } {
-  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, experiments = false, linkTo, productAnalytics, hostPageActive = false, customDashboards = [] } = input;
+  const { project, page, env, alertsFiring = 0, starred = [], optionalViews, experiments = false, linkTo, productAnalytics, hostPageActive = false, customDashboards = [], hiddenPages = [], navCounts } = input;
   const href = linkTo ?? ((target: ConsolePage) => withSearch(consolePath(project, target), { env }));
   // On a host page, every console row is a way out, none the current one.
   const lit = (active: boolean) => !hostPageActive && active;
+  // The rows of pages the host does not serve, pruned once the tree is built.
+  const hidden = new WeakSet<SidebarNavItem>();
   const isObs = (view: ObsNavView) => page.kind === "obs-view" && page.view === view;
-  const row = (label: string, target: ConsolePage, rowIcon: ReactNode, active: boolean, extra: Partial<SidebarNavItem> = {}): SidebarNavItem => ({
-    label,
-    href: href(target),
-    icon: rowIcon,
-    active: lit(active),
-    ...extra,
-  });
-  const obs = (view: ObsNavView, extra: Partial<SidebarNavItem> = {}): SidebarNavItem => ({
-    label: OBS_NAV_LABELS[view],
-    href: href({ kind: "obs-view", view }),
-    active: lit(isObs(view)),
-    ...extra,
-  });
+  const row = (label: string, target: ConsolePage, rowIcon: ReactNode | undefined, active: boolean, extra: Partial<SidebarNavItem> = {}): SidebarNavItem => {
+    const item: SidebarNavItem = { label, href: href(target), ...(rowIcon ? { icon: rowIcon } : {}), active: lit(active), ...extra };
+    if (hiddenPages.includes(target.kind)) hidden.add(item);
+    return item;
+  };
+  const prune = (items: SidebarNavItem[]): SidebarNavItem[] =>
+    items.filter((item) => !hidden.has(item)).map((item) => (item.children ? { ...item, children: prune(item.children) } : item));
+  const obs = (view: ObsNavView, extra: Partial<SidebarNavItem> = {}): SidebarNavItem => row(OBS_NAV_LABELS[view], { kind: "obs-view", view }, undefined, isObs(view), extra);
+  const firing = alertsFiring > 0 ? { type: "count" as const, value: alertsFiring, tone: "danger" as const, label: "firing" } : undefined;
 
   const nested = starred.slice(0, NAV_STARRED_MAX);
   const onHub = isHubPage(page, productAnalytics);
@@ -148,103 +166,123 @@ export function buildGroupedConsoleNav(input: GroupedNavInput): { items: Sidebar
   // Profiles hides on a definite empty read, as in the console's own nav, unless it is the open page.
   const profiles = optionalViews?.profiles !== false || isObs("profiles");
 
-  const items: SidebarNavItem[] = [
-    row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview"),
-    row("Services", { kind: "services" }, icon(Boxes), page.kind === "services" || page.kind === "service" || page.kind === "workload"),
-    row("Storage", { kind: "storage" }, icon(HardDrive), page.kind === "storage"),
-    dashboards,
-    {
-      label: "Issues",
-      icon: icon(CircleAlert),
-      defaultExpanded: true,
-      children: [
-        obs("errors"),
-        obs("alerts", { badge: alertsFiring > 0 ? { type: "count" as const, value: alertsFiring, tone: "danger" as const, label: "firing" } : undefined }),
-      ],
-    },
-    { label: "Performance", icon: icon(Timer), defaultExpanded: true, children: [obs("traces"), obs("rpc")] },
-    row("Sessions", { kind: "obs-view", view: "sessions" }, icon(PlayCircle), isObs("sessions")),
-    {
-      // Insights opens the built-in hub; the group opens by itself on one of its pages.
-      label: "Product analytics",
-      href: href(productAnalytics?.open ?? { kind: "events" }),
-      icon: icon(BarChart3),
-      children: [
-        ...(productAnalytics ? [{ label: "Insights", href: href(productAnalytics.open), active: lit(onHub) }] : []),
-        { label: "Events & metrics", href: href({ kind: "events" }), active: lit(page.kind === "events") },
-      ],
-    },
-    ...(experimentsListed(page, experiments)
-      ? [row("Experiments", { kind: "experiments" }, icon(FlaskConical), page.kind === "experiments" || page.kind === "experiment")]
-      : []),
-    row("Releases", { kind: "releases" }, icon(TagIcon), page.kind === "releases" || page.kind === "release"),
-    row("Data", { kind: "data" }, icon(Database), page.kind === "data"),
-    row("Auth", { kind: "auth" }, icon(Users), page.kind === "auth" || page.kind === "users"),
-    {
-      // No page of its own: the row opens and closes the group, which opens by itself on one of its pages.
-      label: "More tools",
-      icon: icon(Wrench),
-      children: [obs("logs"), obs("metrics"), ...(profiles ? [obs("profiles")] : []), obs("graph")],
-    },
-    ...configureNavRows(input, href).map((item) => ({ ...item, active: lit(!!item.active), children: item.children?.map((child) => ({ ...child, active: lit(!!child.active) })) })),
-    { ...row("Usage", { kind: "usage" }, icon(Receipt), page.kind === "usage"), section: "Configure" },
-  ];
-  return { items: withExtensions(items, input, href, lit), footer: [row("Activity", { kind: "activity" }, icon(Activity), page.kind === "activity")] };
-}
+  // Observability: the shell's drill-in rows, in its order; the firing count shows on the group while it is folded.
+  const observability: SidebarNavItem = {
+    label: "Observability",
+    icon: icon(Gauge),
+    badge: firing,
+    children: [
+      row("Overview", { kind: "obs-overview" }, undefined, page.kind === "obs-overview"),
+      obs("graph"),
+      obs("metrics"),
+      obs("logs"),
+      obs("rpc"),
+      ...(profiles ? [obs("profiles")] : []),
+      obs("errors"),
+      obs("alerts", { badge: firing }),
+      obs("traces"),
+      row("Speed insights", { kind: "speed-insights" }, undefined, page.kind === "speed-insights"),
+      obs("sessions"),
+    ],
+  };
 
-/** The anchor each built-in row is, by its label. */
-const ANCHOR_OF_LABEL: Readonly<Record<string, ConsoleNavAnchor>> = {
-  Overview: "overview",
-  Services: "services",
-  Dashboards: "dashboards",
-  Issues: "issues",
-  Performance: "performance",
-  Sessions: "sessions",
-  "Product analytics": "product-analytics",
-  Releases: "releases",
-  Data: "data",
-  Users: "users",
-  "More tools": "more-tools",
-};
+  // Analytics: the Analytics page's tabs (a hub dashboard lights its tab), then Experiments.
+  const tabOpen = (tab: AnalyticsTab) =>
+    (page.kind === "analytics" && (page.tab ?? "overview") === tab) || (tab === "events" && page.kind === "events") || (onHub && page.kind === "dashboard" && hubTab(page.key) === tab);
+  const analytics: SidebarNavItem = {
+    label: "Analytics",
+    icon: icon(BarChart3),
+    children: [
+      ...ANALYTICS_TABS.map((tab) => row(ANALYTICS_TAB_LABELS[tab], { kind: "analytics", tab }, undefined, tabOpen(tab))),
+      ...(experimentsListed(page, experiments) ? [row("Experiments", { kind: "experiments" }, undefined, page.kind === "experiments" || page.kind === "experiment")] : []),
+    ],
+  };
+
+  // Environments (each long-lived one, previews as one row): the console's own row, out of its Configure section.
+  const { section: _section, icon: _icon, ...environments } = configureNavRows(input, href)[0]!;
+  const deployments: SidebarNavItem = {
+    label: "Deployments",
+    icon: icon(Rocket),
+    children: [
+      row("Services", { kind: "services" }, undefined, page.kind === "services" || page.kind === "service" || page.kind === "workload"),
+      row("Releases", { kind: "releases" }, undefined, page.kind === "releases" || page.kind === "release"),
+      {
+        ...environments,
+        active: lit(!!environments.active),
+        children: environments.children?.map(({ trailing: _trailing, ...child }) => ({ ...child, active: lit(!!child.active) })),
+        // The sidebar draws no mark on a third-level row: an environment's queued deploy is marked on Environments.
+        trailing: environments.children?.find((child) => child.trailing)?.trailing,
+      },
+    ],
+  };
+
+  const testsCount = navCounts?.tests ?? 0;
+  const tests: SidebarNavItem = {
+    label: "Tests",
+    icon: icon(FlaskConical),
+    // Not the danger tone: a flaky test is work, not an outage (navConfig/tests.tsx).
+    badge: testsCount > 0 ? { type: "count", value: testsCount, label: testsCount === 1 ? "test needing attention" : "tests needing attention" } : undefined,
+    children: TESTS_VIEWS.map((view) => row(TESTS_VIEW_LABELS[view], TESTS_VIEW_PAGE[view], undefined, TESTS_VIEW_KINDS[view].includes(page.kind))),
+  };
+
+  const configure: SidebarNavItem = {
+    label: "Configure",
+    icon: icon(Wrench),
+    // Activity (the audit log) stays its last row, as in the shell's nav.
+    children: (["secrets", "domains", "usage", "activity"] as const).map((kind) =>
+      row({ secrets: "Secrets", domains: "Domains", usage: "Usage", activity: "Activity" }[kind], { kind }, undefined, page.kind === kind)
+    ),
+  };
+
+  const placed: Placed[] = [
+    { item: row("Overview", { kind: "overview" }, icon(LayoutDashboard), page.kind === "overview"), anchors: ["overview"] },
+    { item: dashboards, anchors: ["dashboards"] },
+    { item: observability, anchors: ["issues", "performance", "sessions", "more-tools"] },
+    { item: analytics, anchors: ["product-analytics"], group: "product-analytics" },
+    { item: deployments, anchors: ["services", "releases"] },
+    { item: tests },
+    { item: row("Data", { kind: "data" }, icon(Database), page.kind === "data"), anchors: ["data"] },
+    { item: row("Storage", { kind: "storage" }, icon(HardDrive), page.kind === "storage") },
+    { item: row("Auth", { kind: "auth" }, icon(UserRound), page.kind === "auth" || page.kind === "users"), anchors: ["users"] },
+    { item: { label: "Security", icon: icon(ShieldCheck), children: [] }, group: "security" },
+    { item: configure },
+  ];
+  const items = prune(withExtensions(placed, input, href, lit).map((entry) => entry.item))
+    // A group with no rows (Security until its pages register) is not drawn, so no group is ever empty.
+    .filter((item) => item.href || (item.children?.length ?? 0) > 0);
+  return { items, footer: [] };
+}
 
 /**
  * The registered rows (consoleNavRegistry.ts) merged in: each one the app
- * has (`available`) — inside its `group` when it names one the nav draws
- * (as the group's last child), else after its anchor, or, when this app's
- * nav does not draw that anchor, after the nearest one before it that it does.
+ * has (`available`) — inside its `group` (Analytics, Security) as the
+ * group's last child, else after the row that stands for its anchor, or,
+ * when this nav draws no row for that anchor, after the row for the nearest
+ * anchor before it.
  */
-function withExtensions(
-  items: SidebarNavItem[],
-  input: GroupedNavInput,
-  href: (target: ConsolePage) => string,
-  lit: (active: boolean) => boolean,
-): SidebarNavItem[] {
+function withExtensions(placed: Placed[], input: GroupedNavInput, href: (target: ConsolePage) => string, lit: (active: boolean) => boolean): Placed[] {
   const extensions = (input.extensions ?? consoleNavEntries()).filter((entry) => entry.available?.(input) ?? true);
-  if (extensions.length === 0) return items;
-  const out = [...items];
+  const out = [...placed];
   for (const entry of extensions) {
     const rowItem: SidebarNavItem = {
       label: entry.label,
       href: href(consoleNavEntryTarget(entry)),
-      icon: entry.icon,
       active: lit(consoleNavEntryLights(entry, input.page)),
     };
-    const group = entry.group ? out.findIndex((item) => ANCHOR_OF_LABEL[item.label] === entry.group && !item.section && item.children) : -1;
+    const group = entry.group ? out.findIndex((candidate) => candidate.group === entry.group) : -1;
     if (group >= 0) {
       const parent = out[group]!;
-      out[group] = { ...parent, children: [...(parent.children ?? []), { label: rowItem.label, href: rowItem.href, active: rowItem.active }] };
+      out[group] = { ...parent, item: { ...parent.item, children: [...(parent.item.children ?? []), rowItem] } };
       continue;
     }
-    // The last row at or before the anchor, by the anchors' order; the top of the list with none.
-    const rank = CONSOLE_NAV_ANCHORS.indexOf(entry.after);
+    // The row for the anchor, or for the nearest anchor before it; the top of the list with none.
     let at = -1;
-    out.forEach((item, i) => {
-      const anchor = ANCHOR_OF_LABEL[item.label];
-      if (anchor && !item.section && CONSOLE_NAV_ANCHORS.indexOf(anchor) <= rank) at = i;
-    });
+    for (let rank = CONSOLE_NAV_ANCHORS.indexOf(entry.after); rank >= 0 && at < 0; rank--) {
+      at = out.findIndex((candidate) => candidate.anchors?.includes(CONSOLE_NAV_ANCHORS[rank]!));
+    }
     // After rows registered to the same anchor before it.
-    while (at + 1 < out.length && extensions.some((other) => other.label === out[at + 1].label && other.after === entry.after)) at += 1;
-    out.splice(at + 1, 0, rowItem);
+    while (at + 1 < out.length && extensions.some((other) => other.label === out[at + 1]!.item.label && other.after === entry.after)) at += 1;
+    out.splice(at + 1, 0, { item: { ...rowItem, icon: entry.icon } });
   }
   return out;
 }
@@ -262,6 +300,8 @@ export function groupedCrumbs(page: ConsolePage, own: Crumb[], productAnalytics?
     return group ? [{ label: group }, { label: OBS_NAV_LABELS[page.view] }] : [{ label: OBS_NAV_LABELS[page.view] }];
   }
   if (isHubPage(page, productAnalytics)) return [{ label: "Analytics" }, ...own.slice(-1)];
+  // Events & metrics is a tab of Analytics, as in the shell's nav.
+  if (page.kind === "events") return [{ label: "Analytics" }, { label: "Events & metrics" }];
   // Services, Releases and Environments sit in the shell nav's Deployments ▾ (U6e).
   if (
     page.kind === "services" ||

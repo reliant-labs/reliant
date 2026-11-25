@@ -134,6 +134,7 @@ func NewOrgPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+OrgPolicyServiceGetOrgPolicyProcedure,
 			connect.WithSchema(orgPolicyServiceMethods.ByName("GetOrgPolicy")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateOrgPolicy: connect.NewClient[v1.UpdateOrgPolicyRequest, v1.UpdateOrgPolicyResponse](
@@ -146,18 +147,21 @@ func NewOrgPolicyServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			httpClient,
 			baseURL+OrgPolicyServicePreviewOrgPolicyProcedure,
 			connect.WithSchema(orgPolicyServiceMethods.ByName("PreviewOrgPolicy")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getMyPolicyUsage: connect.NewClient[v1.GetMyPolicyUsageRequest, v1.GetMyPolicyUsageResponse](
 			httpClient,
 			baseURL+OrgPolicyServiceGetMyPolicyUsageProcedure,
 			connect.WithSchema(orgPolicyServiceMethods.ByName("GetMyPolicyUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listOrgPolicyDenials: connect.NewClient[v1.ListOrgPolicyDenialsRequest, v1.ListOrgPolicyDenialsResponse](
 			httpClient,
 			baseURL+OrgPolicyServiceListOrgPolicyDenialsProcedure,
 			connect.WithSchema(orgPolicyServiceMethods.ByName("ListOrgPolicyDenials")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -257,6 +261,7 @@ func NewOrgPolicyServiceHandler(svc OrgPolicyServiceHandler, opts ...connect.Han
 		OrgPolicyServiceGetOrgPolicyProcedure,
 		svc.GetOrgPolicy,
 		connect.WithSchema(orgPolicyServiceMethods.ByName("GetOrgPolicy")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	orgPolicyServiceUpdateOrgPolicyHandler := connect.NewUnaryHandler(
@@ -269,18 +274,21 @@ func NewOrgPolicyServiceHandler(svc OrgPolicyServiceHandler, opts ...connect.Han
 		OrgPolicyServicePreviewOrgPolicyProcedure,
 		svc.PreviewOrgPolicy,
 		connect.WithSchema(orgPolicyServiceMethods.ByName("PreviewOrgPolicy")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	orgPolicyServiceGetMyPolicyUsageHandler := connect.NewUnaryHandler(
 		OrgPolicyServiceGetMyPolicyUsageProcedure,
 		svc.GetMyPolicyUsage,
 		connect.WithSchema(orgPolicyServiceMethods.ByName("GetMyPolicyUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	orgPolicyServiceListOrgPolicyDenialsHandler := connect.NewUnaryHandler(
 		OrgPolicyServiceListOrgPolicyDenialsProcedure,
 		svc.ListOrgPolicyDenials,
 		connect.WithSchema(orgPolicyServiceMethods.ByName("ListOrgPolicyDenials")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/controlplane.v1.OrgPolicyService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

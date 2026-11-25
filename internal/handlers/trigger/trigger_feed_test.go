@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // seedFiring records a schedule firing; when status is non-nil it also creates
@@ -201,8 +202,8 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 		done := db.Completed()
 		env.seedFiring(t, trig.Id, time.Now().UTC(), core.TriggerEventLaunched, &done)
 	}
-	counting := &triggerQueryCounter{Repository: env.repo}
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: counting, Projects: projectaccesstest.For(counting), Syncer: env.backend, Fires: env.backend}))
+	counting := &triggerQueryCounter{Firings: store.NewTriggerEventExtStore(env.repo.ORM())}
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Firings: counting, Projects: projectaccesstest.For(env.repo), Syncer: env.backend, Fires: env.backend})))
 	resp, err := svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Triggers, 6)
@@ -213,15 +214,15 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 // The per-trigger read it replaced (GetLatestTriggerEvent) is not in
 // Repository (deps.go) at all, so the handlers cannot fall back to it.
 type triggerQueryCounter struct {
-	Repository
+	Firings
 	recent int
 }
 
-var _ Repository = (*triggerQueryCounter)(nil)
+var _ Firings = (*triggerQueryCounter)(nil)
 
 func (c *triggerQueryCounter) RecentTriggerFirings(ctx context.Context, userID string, ids []string, n int) (map[string][]*core.TriggerEventWithRun, error) {
 	c.recent++
-	return c.Repository.RecentTriggerFirings(ctx, userID, ids, n)
+	return c.Firings.RecentTriggerFirings(ctx, userID, ids, n)
 }
 
 func TestTriggerFeedHidesOtherUsersData(t *testing.T) {

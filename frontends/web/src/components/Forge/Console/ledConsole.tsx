@@ -41,7 +41,7 @@ import { useForgeConsole } from "./consoleContext";
 import { ConsoleNavExtrasProvider, useConsoleNavExtras, type ConsoleNavExtras } from "./consoleNavExtras";
 import { ENV_ALL } from "./envScope";
 import { buildGroupedConsoleNav, groupedCrumbs, PAGE_SUBTITLES, type ProductAnalyticsHub } from "./groupedNav";
-import type { ObsNavView } from "./paths";
+import type { ConsolePage, ObsNavView } from "./paths";
 
 type Crumb = { label: string; href?: string };
 
@@ -63,6 +63,8 @@ export interface LedConsoleHost {
   releasesExplainer?: { href: string; label: string };
   envOrder?: readonly string[];
   drawerAppendix?: ReactNode;
+  /** Console pages the host does not serve: the nav has no row for them (the demo's Usage). */
+  hiddenPages?: readonly ConsolePage["kind"][];
 }
 
 const CHART_DENSITY: ChartDensity = { maxSeries: 2, headline: true };
@@ -136,7 +138,7 @@ export function ledNavExtras(host: LedConsoleHost, search: Record<string, unknow
     envOrder: host.envOrder,
     drawerAppendix: host.drawerAppendix,
     nav: (input) => {
-      const grouped = buildGroupedConsoleNav({ ...input, productAnalytics, hostPageActive: !!hostPage });
+      const grouped = buildGroupedConsoleNav({ ...input, productAnalytics, hostPageActive: !!hostPage, hiddenPages: host.hiddenPages });
       return { items: [...(host.navLead ?? []), ...grouped.items], footer: [...(host.navFooter ?? []), ...grouped.footer] };
     },
     crumbs: (page, own) => (hostPage ? hostPage.crumbs : groupedCrumbs(page, own, productAnalytics)),

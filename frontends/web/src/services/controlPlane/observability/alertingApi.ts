@@ -11,6 +11,7 @@
  * `reliant_*` label.
  */
 
+import type { Transport } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
@@ -38,8 +39,8 @@ import type {
   UpdateReceiverInput,
 } from "./alertingTypes";
 
-function client() {
-  return getControlPlaneClient(AlertingService);
+function client(transport?: Transport) {
+  return getControlPlaneClient(AlertingService, transport);
 }
 
 function timestamp(ms: number): Timestamp {
@@ -94,13 +95,13 @@ const TRANSITIONS: readonly AlertTransition[] = ["pending", "firing", "resolved"
 
 // ── Receivers ────────────────────────────────────────────────────────────────
 
-export async function listReceivers(orgId: string): Promise<Receiver[]> {
-  const res = await client().listReceivers({ orgId });
+export async function listReceivers(orgId: string, transport?: Transport): Promise<Receiver[]> {
+  const res = await client(transport).listReceivers({ orgId });
   return res.receivers.map(mapReceiver);
 }
 
-export async function createReceiver(orgId: string, input: CreateReceiverInput): Promise<Receiver> {
-  const res = await client().createReceiver({
+export async function createReceiver(orgId: string, input: CreateReceiverInput, transport?: Transport): Promise<Receiver> {
+  const res = await client(transport).createReceiver({
     orgId,
     name: input.name,
     type: TYPE_TO_WIRE[input.type],
@@ -110,8 +111,8 @@ export async function createReceiver(orgId: string, input: CreateReceiverInput):
   return mapReceiver(res.receiver!);
 }
 
-export async function updateReceiver(orgId: string, input: UpdateReceiverInput): Promise<Receiver> {
-  const res = await client().updateReceiver({
+export async function updateReceiver(orgId: string, input: UpdateReceiverInput, transport?: Transport): Promise<Receiver> {
+  const res = await client(transport).updateReceiver({
     orgId,
     id: input.id,
     setSettings: input.settings !== undefined,
@@ -121,24 +122,24 @@ export async function updateReceiver(orgId: string, input: UpdateReceiverInput):
   return mapReceiver(res.receiver!);
 }
 
-export async function deleteReceiver(orgId: string, id: string): Promise<void> {
-  await client().deleteReceiver({ orgId, id });
+export async function deleteReceiver(orgId: string, id: string, transport?: Transport): Promise<void> {
+  await client(transport).deleteReceiver({ orgId, id });
 }
 
-export async function testReceiver(orgId: string, id: string): Promise<TestReceiverResult> {
-  const res = await client().testReceiver({ orgId, id });
+export async function testReceiver(orgId: string, id: string, transport?: Transport): Promise<TestReceiverResult> {
+  const res = await client(transport).testReceiver({ orgId, id });
   return { accepted: res.accepted, receiverLive: res.receiverLive };
 }
 
 // ── Silences ─────────────────────────────────────────────────────────────────
 
-export async function listSilences(orgId: string, includeExpired: boolean): Promise<Silence[]> {
-  const res = await client().listSilences({ orgId, includeExpired: includeExpired || undefined });
+export async function listSilences(orgId: string, includeExpired: boolean, transport?: Transport): Promise<Silence[]> {
+  const res = await client(transport).listSilences({ orgId, includeExpired: includeExpired || undefined });
   return res.silences.map(mapSilence);
 }
 
-export async function createSilence(orgId: string, input: CreateSilenceInput): Promise<Silence> {
-  const res = await client().createSilence({
+export async function createSilence(orgId: string, input: CreateSilenceInput, transport?: Transport): Promise<Silence> {
+  const res = await client(transport).createSilence({
     orgId,
     matchers: input.matchers,
     startsAt: input.startsAtMs !== undefined ? timestamp(input.startsAtMs) : undefined,
@@ -148,14 +149,14 @@ export async function createSilence(orgId: string, input: CreateSilenceInput): P
   return mapSilence(res.silence!);
 }
 
-export async function expireSilence(orgId: string, id: string): Promise<void> {
-  await client().expireSilence({ orgId, id });
+export async function expireSilence(orgId: string, id: string, transport?: Transport): Promise<void> {
+  await client(transport).expireSilence({ orgId, id });
 }
 
 // ── Alerts and history ───────────────────────────────────────────────────────
 
-export async function listAlerts(orgId: string, envId?: string): Promise<AlertInstance[]> {
-  const res = await client().listAlerts({ orgId, envId });
+export async function listAlerts(orgId: string, envId?: string, transport?: Transport): Promise<AlertInstance[]> {
+  const res = await client(transport).listAlerts({ orgId, envId });
   return res.alerts.map((a) => ({
     envId: a.envId,
     rule: a.rule,
@@ -172,9 +173,10 @@ export async function listAlerts(orgId: string, envId?: string): Promise<AlertIn
 
 export async function listAlertHistory(
   orgId: string,
-  opts: { envId?: string; sinceMs?: number; limit?: number } = {}
+  opts: { envId?: string; sinceMs?: number; limit?: number } = {},
+  transport?: Transport,
 ): Promise<AlertEvent[]> {
-  const res = await client().listAlertHistory({
+  const res = await client(transport).listAlertHistory({
     orgId,
     envId: opts.envId,
     since: opts.sinceMs !== undefined ? timestamp(opts.sinceMs) : undefined,
@@ -193,8 +195,8 @@ export async function listAlertHistory(
 
 // ── In-app notifications ─────────────────────────────────────────────────────
 
-export async function listNotifications(orgId: string, opts: { unreadOnly?: boolean; limit?: number } = {}): Promise<NotificationList> {
-  const res = await client().listNotifications({ orgId, unreadOnly: opts.unreadOnly || undefined, limit: opts.limit ?? 50 });
+export async function listNotifications(orgId: string, opts: { unreadOnly?: boolean; limit?: number } = {}, transport?: Transport): Promise<NotificationList> {
+  const res = await client(transport).listNotifications({ orgId, unreadOnly: opts.unreadOnly || undefined, limit: opts.limit ?? 50 });
   return {
     unread: res.unread,
     notifications: res.notifications.map((n) => ({
@@ -213,7 +215,7 @@ export async function listNotifications(orgId: string, opts: { unreadOnly?: bool
 }
 
 /** Marks these read; with no ids, every unread notification of the org. Returns how many changed. */
-export async function markNotificationsRead(orgId: string, ids: string[] = []): Promise<number> {
-  const res = await client().markNotificationsRead({ orgId, ids });
+export async function markNotificationsRead(orgId: string, ids: string[] = [], transport?: Transport): Promise<number> {
+  const res = await client(transport).markNotificationsRead({ orgId, ids });
   return res.marked;
 }

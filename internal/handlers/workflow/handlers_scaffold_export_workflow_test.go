@@ -15,7 +15,7 @@ import (
 func TestExportWorkflow_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(draftsRepo(callerDraft(t, "mine")).deps()))
+	svc := workflow.NewTestWorkflow(t, withDeps(draftsRepo(callerDraft(t, "mine")).deps()))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ExportWorkflowRequest, pb.ExportWorkflowResponse]{
 		{

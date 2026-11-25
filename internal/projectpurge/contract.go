@@ -7,8 +7,6 @@
 // decides who may (authz.ProjectDelete); this records and executes it, over
 // the store's project_schedule queries (internal/store/project_schedule.go).
 // Handlers that held *db.Repo got these from its project_schedule methods.
-//
-//forge:provided
 package projectpurge
 
 import (

@@ -15,6 +15,7 @@ import { create, type StateCreator } from "zustand";
 import { persist } from "zustand/middleware";
 import { logger } from "../lib/logger";
 import { structurallyEqual } from "../lib/structuralEqual";
+import { contextProjectDefault } from "../lib/urlState/shellScope";
 import type { NavigationTab } from "../components/Layout/NavigationBar";
 import type { ViewerType } from "./viewerStore";
 
@@ -95,11 +96,13 @@ interface WorkspaceStateStore {
   version: number;
 
   // === Global State ===
+  /** This page load's last project; read through lastProjectOfTab (not persisted since v9). */
   lastProjectId: string | null;
   /**
    * The sidebar's project filter: the one project whose chats it lists, or
    * null for "All projects". A view setting, separate from the project the
-   * open chat runs in (projectStore.currentProject).
+   * open chat runs in (projectStore.currentProject). The URL's
+   * (`/project/<id>`), held for this page load only (not persisted since v9).
    */
   projectFilterId: string | null;
   /**
@@ -338,7 +341,21 @@ function getWorktreeKey(worktreeId: string | null): string {
 // Store Implementation
 // ============================================================================
 
-const CURRENT_VERSION = 8;
+const CURRENT_VERSION = 9;
+
+/** The last project a v8 blob remembered for every tab, read once by the v9 migration. */
+let legacyLastProject: string | null = null;
+
+/**
+ * The project this tab last worked in, for a page whose URL names none:
+ * this page load's, else this tab's own (sessionStorage), else the last one
+ * any tab used (the seed of a new tab: lib/urlState/shellScope.ts
+ * contextProjectDefault), else (once, after an upgrade) the one old builds
+ * remembered for every tab.
+ */
+export function lastProjectOfTab(): string | null {
+  return useWorkspaceStateStore.getState().lastProjectId ?? contextProjectDefault.get() ?? legacyLastProject;
+}
 
 type WorkspaceStateWrite =
   | Partial<WorkspaceStateStore>
@@ -392,6 +409,9 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
       // === Global Actions ===
       setLastProject: (projectId) => {
         logger.info("[WorkspaceState] setLastProject", { projectId });
+        // Per tab (and the seed of a new tab), never shared live: not persisted here.
+        contextProjectDefault.set(projectId ?? undefined);
+        if (!projectId) legacyLastProject = null;
         set({ lastProjectId: projectId });
       },
 
@@ -946,8 +966,6 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
       version: CURRENT_VERSION,
       partialize: (state) => ({
         version: state.version,
-        lastProjectId: state.lastProjectId,
-        projectFilterId: state.projectFilterId,
         machineFilterIds: state.machineFilterIds,
         leftSidebarExpanded: state.leftSidebarExpanded,
         projects: state.projects,
@@ -999,6 +1017,20 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
             }
           }
           logger.info("[WorkspaceState] Migrated to v8: right panel closed by default");
+        }
+
+        // Migration v8 -> v9: the last project and the sidebar's project
+        // filter were one value for every tab, so one tab's choice replaced
+        // another's on its next load. They are view state now: the URL's,
+        // with per-tab defaults (lib/urlState/shellScope.ts). The last
+        // project is kept for this page load only, as a tab's fallback.
+        if (version < 9) {
+          const state = persistedState as Record<string, unknown> | null;
+          if (state) {
+            if (typeof state.lastProjectId === "string" && state.lastProjectId) legacyLastProject = state.lastProjectId;
+            delete state.lastProjectId;
+            delete state.projectFilterId;
+          }
         }
 
         return persistedState as WorkspaceStateStore;

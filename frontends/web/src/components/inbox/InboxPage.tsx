@@ -33,7 +33,7 @@ import {
 } from "@/hooks/inbox-queries";
 import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
-import { useProjectStore } from "@/store/projectStore";
+import { useShellCurrentProject } from "../Layout/sidebar/useShellCurrentProject";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
@@ -135,8 +135,10 @@ const TOUCH_TARGET = "[@media(pointer:coarse)]:min-h-[44px]";
 export function InboxView({ titled = true }: { titled?: boolean } = {}) {
   const scope = useInboxScopeStore((state) => state.scope);
   const setScope = useInboxScopeStore((state) => state.setScope);
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const projectId = useInboxProjectId();
+  // The shell's project, also on a cold load, where no context project is
+  // selected yet (reliant#3445).
+  const currentProject = useShellCurrentProject();
+  const projectId = useInboxProjectId(currentProject?.id ?? null);
   const inbox = useInbox(projectId);
   const dismiss = useDismissInboxItems();
   const restore = useRestoreInboxItems();
@@ -204,7 +206,9 @@ export function InboxView({ titled = true }: { titled?: boolean } = {}) {
           </Button>
         )}
         {/* Nothing waiting is a calm state, and still a place to start (U6d). */}
-        <ProjectEmptyCtaRow learn="agents/chats" className="mt-4" testId="inbox-empty-cta" />
+        {/* The page's project, never the first cached one: that fallback is read
+            once, so on a cold load it raced the project list (reliant#3445). */}
+        <ProjectEmptyCtaRow learn="agents/chats" projectId={currentProject?.id} className="mt-4" testId="inbox-empty-cta" />
       </Card>
     );
   } else {

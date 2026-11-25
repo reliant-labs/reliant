@@ -98,7 +98,7 @@ func TestActivityWrapper_StopNudgeStopsTheActivity(t *testing.T) {
 
 	hub := stopnudge.NewHub()
 	var cancelRequested atomic.Bool
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	registry.SetStopNudges(hub)
 	registry.directHeartbeat = func(context.Context, any) error {
 		if cancelRequested.Load() {
@@ -149,7 +149,7 @@ func TestActivityWrapper_StopNudgeForAnotherWorkflowIsIgnored(t *testing.T) {
 
 	hub := stopnudge.NewHub()
 	var probes atomic.Int32
-	registry := NewActivityRegistry(&wrapperTestRepo{})
+	registry := NewActivityRegistry(ActivityRegistryDeps{Store: &wrapperTestRepo{}, Workflows: &wrapperTestRepo{}})
 	registry.SetStopNudges(hub)
 	registry.directHeartbeat = func(context.Context, any) error {
 		probes.Add(1)

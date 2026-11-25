@@ -41,9 +41,10 @@ const maxOrgGateEntries = 4096
 // and kind and nothing else, so the client can drop the item. The cursor
 // moves past a withheld update either way, as for every filtered one.
 type orgGate struct {
-	repo   Repository
-	userID string
-	orgs   map[string]string
+	repo     Repository
+	projects Projects
+	userID   string
+	orgs     map[string]string
 	// unassigned is when each resource was last read as having no org. It
 	// is read again only once recheck has passed, so a chatty legacy chat
 	// costs one read per recheck, and a stamp the backfill writes is seen
@@ -53,8 +54,8 @@ type orgGate struct {
 	now        func() time.Time
 }
 
-func newOrgGate(repo Repository, userID string, recheck time.Duration) *orgGate {
-	return &orgGate{repo: repo, userID: userID, orgs: map[string]string{}, unassigned: map[string]time.Time{}, recheck: recheck, now: time.Now}
+func newOrgGate(repo Repository, projects Projects, userID string, recheck time.Duration) *orgGate {
+	return &orgGate{repo: repo, projects: projects, userID: userID, orgs: map[string]string{}, unassigned: map[string]time.Time{}, recheck: recheck, now: time.Now}
 }
 
 // allows reports whether update may be delivered, stripping it to a
@@ -83,7 +84,7 @@ func (g *orgGate) allows(ctx context.Context, update *db.UserUpdate) bool {
 		id := *update.ProjectID
 		key = "project:" + id
 		read = func() (*string, error) {
-			project, err := g.repo.GetProject(ctx, id)
+			project, err := g.projects.GetProject(ctx, id)
 			if err != nil {
 				return nil, err
 			}

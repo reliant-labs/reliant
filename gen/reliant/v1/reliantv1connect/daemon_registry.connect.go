@@ -165,12 +165,14 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 			httpClient,
 			baseURL+DaemonRegistryServiceListDaemonsProcedure,
 			connect.WithSchema(daemonRegistryServiceMethods.ByName("ListDaemons")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getDaemon: connect.NewClient[v1.GetDaemonRequest, v1.GetDaemonResponse](
 			httpClient,
 			baseURL+DaemonRegistryServiceGetDaemonProcedure,
 			connect.WithSchema(daemonRegistryServiceMethods.ByName("GetDaemon")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		resolveDaemon: connect.NewClient[v1.ResolveDaemonRequest, v1.ResolveDaemonResponse](
@@ -412,12 +414,14 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 		DaemonRegistryServiceListDaemonsProcedure,
 		svc.ListDaemons,
 		connect.WithSchema(daemonRegistryServiceMethods.ByName("ListDaemons")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	daemonRegistryServiceGetDaemonHandler := connect.NewUnaryHandler(
 		DaemonRegistryServiceGetDaemonProcedure,
 		svc.GetDaemon,
 		connect.WithSchema(daemonRegistryServiceMethods.ByName("GetDaemon")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	daemonRegistryServiceResolveDaemonHandler := connect.NewUnaryHandler(

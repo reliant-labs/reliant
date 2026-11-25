@@ -17,11 +17,14 @@ import (
 	"testing"
 	"time"
 
+	ormstore "github.com/reliant-labs/reliant/internal/store"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
+
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/credentials/connectionvault"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -60,7 +63,7 @@ func newEnv(t *testing.T) *env {
 	store := db.TestConnections(t, repo)
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
-	resolver := connections.NewResolver(repo, store, tokens)
+	resolver := connections.NewResolver(connections.ResolverDeps{Owners: repo, Runs: ormstore.NewWorkflowExtStore(repo.ORM()), Store: store, Tokens: tokens})
 	return &env{t: t, repo: repo, svc: connections.NewService(store, v, providers, tokens, broker, nil), resolver: resolver, source: connauth.New(connauth.Deps{Resolver: resolver})}
 }
 

@@ -10,15 +10,28 @@ import (
 
 // WokenStatusStore is what MarkWokenRunActive writes through.
 type WokenStatusStore interface {
-	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus db.WorkflowStatus) (bool, error)
+}
+
+// FacadeWorkflows adapts a store that reads workflows as GetWorkflow (the
+// *db.Repo facade) to WorkflowLoader, for StatusBeforeWake callers that do
+// not yet take a WorkflowLoader role of their own.
+type FacadeWorkflows struct {
+	Repo interface {
+		GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
+	}
+}
+
+// LoadWorkflow reads the row through the wrapped store's GetWorkflow.
+func (f FacadeWorkflows) LoadWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
+	return f.Repo.GetWorkflow(ctx, id)
 }
 
 // StatusBeforeWake is the workflow row's status read before the caller wakes
 // its run (a signal, a reset), for MarkWokenRunActive. ok is false when it
 // could not be read; the caller then writes nothing after the wake.
-func StatusBeforeWake(ctx context.Context, store WokenStatusStore, workflowID string) (status db.WorkflowStatus, ok bool) {
-	wf, err := store.GetWorkflow(ctx, workflowID)
+func StatusBeforeWake(ctx context.Context, workflows WorkflowLoader, workflowID string) (status db.WorkflowStatus, ok bool) {
+	wf, err := workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || wf == nil {
 		return db.WorkflowStatus{}, false
 	}

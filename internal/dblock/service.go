@@ -9,8 +9,12 @@
 // it protects (store.LockProjectCatalog, store.LockMachineCheckouts, ...), and
 // must run inside the caller's transaction.
 //
-// Built by hand, by internal/app's providers and the composition root through
-// dblock.New(Deps): never a node compose.go constructs.
+// forge:provided because Deps.Sessions is the repo's session pool, which no
+// graph node produces. forge's orm.Context resolution does not apply: the
+// pool is a *sql.DB of dedicated sessions, not the ORM, and *db.Repo cannot
+// be the node that satisfies Sessions because it builds its own locker from
+// that pool (a cycle). The providers that lock (providers_api.go) and db.Repo
+// build it with dblock.New(Deps).
 //
 //forge:provided
 package dblock

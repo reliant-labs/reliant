@@ -11,6 +11,7 @@
  * a change they have not seen.
  */
 
+import type { Transport } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
@@ -61,8 +62,8 @@ import type {
 } from "./issuesTypes";
 import { mapClient } from "./client";
 
-function client() {
-  return obsClient(IssuesService);
+function client(transport?: Transport) {
+  return obsClient(IssuesService, transport);
 }
 
 function timestamp(ms: number): Timestamp {
@@ -232,8 +233,8 @@ export function mapIssueDetail(res: GetIssueResponse): IssueDetail {
 }
 
 /** One page of the scope's issues. No statuses is the server's default: the open ones. */
-export async function listIssues(req: ListIssuesRequest, options: { signal?: AbortSignal } = {}): Promise<IssueList> {
-  const res = await client().listIssues({
+export async function listIssues(req: ListIssuesRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<IssueList> {
+  const res = await client(transport).listIssues({
     scope: {
       orgId: req.orgId,
       projectId: req.projectId || undefined,
@@ -257,8 +258,8 @@ export async function listIssues(req: ListIssuesRequest, options: { signal?: Abo
 }
 
 /** One issue, with counts and trend over `window` (the server's 24 hours when absent). */
-export async function getIssue(req: { issueId: string; window?: { startMs: number; endMs: number } }, options: { signal?: AbortSignal } = {}): Promise<IssueDetail> {
-  const res = await client().getIssue({
+export async function getIssue(req: { issueId: string; window?: { startMs: number; endMs: number } }, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<IssueDetail> {
+  const res = await client(transport).getIssue({
     issueId: req.issueId,
     timeRange: req.window ? { start: timestamp(req.window.startMs), end: timestamp(req.window.endMs) } : undefined,
   }, options);
@@ -266,8 +267,8 @@ export async function getIssue(req: { issueId: string; window?: { startMs: numbe
 }
 
 /** One issue's events, newest first, a page at a time (default range: its first to its last event). */
-export async function listIssueEvents(req: { issueId: string; pageSize?: number; pageToken?: string; userId?: string }, options: { signal?: AbortSignal } = {}): Promise<IssueEventList> {
-  const res = await client().listIssueEvents({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "", userId: req.userId || undefined }, options);
+export async function listIssueEvents(req: { issueId: string; pageSize?: number; pageToken?: string; userId?: string }, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<IssueEventList> {
+  const res = await client(transport).listIssueEvents({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "", userId: req.userId || undefined }, options);
   return { events: res.events.map(mapIssueEvent), nextPageToken: res.nextPageToken };
 }
 
@@ -295,44 +296,44 @@ export function wireStatusUpdate(req: UpdateIssueStatusRequest) {
 }
 
 /** Resolve, ignore or reopen; answers the issue as it now stands. */
-export async function updateIssueStatus(req: UpdateIssueStatusRequest): Promise<Issue> {
-  const res = await client().updateIssueStatus(wireStatusUpdate(req));
+export async function updateIssueStatus(req: UpdateIssueStatusRequest, transport?: Transport): Promise<Issue> {
+  const res = await client(transport).updateIssueStatus(wireStatusUpdate(req));
   if (!res.issue) throw new Error("UpdateIssueStatus answered without an issue");
   return mapIssue(res.issue);
 }
 
-export async function addIssueComment(req: AddIssueCommentRequest): Promise<IssueComment> {
-  const res = await client().addIssueComment({ issueId: req.issueId, body: req.body });
+export async function addIssueComment(req: AddIssueCommentRequest, transport?: Transport): Promise<IssueComment> {
+  const res = await client(transport).addIssueComment({ issueId: req.issueId, body: req.body });
   if (!res.comment) throw new Error("AddIssueComment answered without a comment");
   return mapComment(res.comment);
 }
 
-export async function updateIssueComment(req: UpdateIssueCommentRequest): Promise<IssueComment> {
-  const res = await client().updateIssueComment({ issueId: req.issueId, commentId: req.commentId, body: req.body });
+export async function updateIssueComment(req: UpdateIssueCommentRequest, transport?: Transport): Promise<IssueComment> {
+  const res = await client(transport).updateIssueComment({ issueId: req.issueId, commentId: req.commentId, body: req.body });
   if (!res.comment) throw new Error("UpdateIssueComment answered without a comment");
   return mapComment(res.comment);
 }
 
-export async function deleteIssueComment(req: DeleteIssueCommentRequest): Promise<void> {
-  await client().deleteIssueComment({ issueId: req.issueId, commentId: req.commentId });
+export async function deleteIssueComment(req: DeleteIssueCommentRequest, transport?: Transport): Promise<void> {
+  await client(transport).deleteIssueComment({ issueId: req.issueId, commentId: req.commentId });
 }
 
 /** Set or clear (empty `assigneeUserId`) the assignee; answers the issue as it now stands. A stale version is Aborted. */
-export async function assignIssue(req: AssignIssueRequest): Promise<Issue> {
-  const res = await client().assignIssue({ issueId: req.issueId, assigneeUserId: req.assigneeUserId, expectedVersion: req.expectedVersion });
+export async function assignIssue(req: AssignIssueRequest, transport?: Transport): Promise<Issue> {
+  const res = await client(transport).assignIssue({ issueId: req.issueId, assigneeUserId: req.assigneeUserId, expectedVersion: req.expectedVersion });
   if (!res.issue) throw new Error("AssignIssue answered without an issue");
   return mapIssue(res.issue);
 }
 
-export async function linkIssueChat(req: LinkIssueChatRequest): Promise<LinkIssueChatResult> {
-  const res = await client().linkIssueChat({ issueId: req.issueId, chatId: req.chatId, chatTitle: req.chatTitle ?? "" });
+export async function linkIssueChat(req: LinkIssueChatRequest, transport?: Transport): Promise<LinkIssueChatResult> {
+  const res = await client(transport).linkIssueChat({ issueId: req.issueId, chatId: req.chatId, chatTitle: req.chatTitle ?? "" });
   if (!res.link) throw new Error("LinkIssueChat answered without a link");
   return { link: mapChatLink(res.link), created: res.created };
 }
 
 /** One page of an issue's timeline, oldest first. A merged issue answers with the issue it was merged into (`issueId`). */
-export async function listIssueTimeline(req: { issueId: string; pageSize?: number; pageToken?: string }): Promise<IssueTimelineList> {
-  const res = await client().listIssueTimeline({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" });
+export async function listIssueTimeline(req: { issueId: string; pageSize?: number; pageToken?: string }, transport?: Transport): Promise<IssueTimelineList> {
+  const res = await client(transport).listIssueTimeline({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" });
   const entries = res.entries.map(mapTimelineEntry).filter((e): e is IssueTimelineEntry => e !== null);
   return { entries, nextPageToken: res.nextPageToken, issueId: res.issueId || req.issueId };
 }

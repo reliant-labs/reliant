@@ -110,24 +110,28 @@ func NewObservabilityBillingServiceClient(httpClient connect.HTTPClient, baseURL
 			httpClient,
 			baseURL+ObservabilityBillingServiceGetObservabilityUsageProcedure,
 			connect.WithSchema(observabilityBillingServiceMethods.ByName("GetObservabilityUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listObservabilityUsage: connect.NewClient[v1.ListObservabilityUsageRequest, v1.ListObservabilityUsageResponse](
 			httpClient,
 			baseURL+ObservabilityBillingServiceListObservabilityUsageProcedure,
 			connect.WithSchema(observabilityBillingServiceMethods.ByName("ListObservabilityUsage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getObservabilityStorage: connect.NewClient[v1.GetObservabilityStorageRequest, v1.GetObservabilityStorageResponse](
 			httpClient,
 			baseURL+ObservabilityBillingServiceGetObservabilityStorageProcedure,
 			connect.WithSchema(observabilityBillingServiceMethods.ByName("GetObservabilityStorage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getObservabilityLimits: connect.NewClient[v1.GetObservabilityLimitsRequest, v1.GetObservabilityLimitsResponse](
 			httpClient,
 			baseURL+ObservabilityBillingServiceGetObservabilityLimitsProcedure,
 			connect.WithSchema(observabilityBillingServiceMethods.ByName("GetObservabilityLimits")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		updateObservabilityLimits: connect.NewClient[v1.UpdateObservabilityLimitsRequest, v1.UpdateObservabilityLimitsResponse](
@@ -226,24 +230,28 @@ func NewObservabilityBillingServiceHandler(svc ObservabilityBillingServiceHandle
 		ObservabilityBillingServiceGetObservabilityUsageProcedure,
 		svc.GetObservabilityUsage,
 		connect.WithSchema(observabilityBillingServiceMethods.ByName("GetObservabilityUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityBillingServiceListObservabilityUsageHandler := connect.NewUnaryHandler(
 		ObservabilityBillingServiceListObservabilityUsageProcedure,
 		svc.ListObservabilityUsage,
 		connect.WithSchema(observabilityBillingServiceMethods.ByName("ListObservabilityUsage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityBillingServiceGetObservabilityStorageHandler := connect.NewUnaryHandler(
 		ObservabilityBillingServiceGetObservabilityStorageProcedure,
 		svc.GetObservabilityStorage,
 		connect.WithSchema(observabilityBillingServiceMethods.ByName("GetObservabilityStorage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityBillingServiceGetObservabilityLimitsHandler := connect.NewUnaryHandler(
 		ObservabilityBillingServiceGetObservabilityLimitsProcedure,
 		svc.GetObservabilityLimits,
 		connect.WithSchema(observabilityBillingServiceMethods.ByName("GetObservabilityLimits")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	observabilityBillingServiceUpdateObservabilityLimitsHandler := connect.NewUnaryHandler(

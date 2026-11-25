@@ -452,6 +452,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge scaffold rpc`](#reliant-forge-scaffold-rpc) | Scaffold a custom RPC on the service's handler package |
 | [`reliant forge scaffold scenario`](#reliant-forge-scaffold-scenario) | Scaffold a new frontend mock scenario |
 | [`reliant forge scaffold service`](#reliant-forge-scaffold-service) | Scaffold one or more Go services |
+| [`reliant forge scaffold variant`](#reliant-forge-scaffold-variant) | Scaffold one more configuration of an internal package as its own type (wrapper + provider in internal/app) |
 | [`reliant forge scaffold webhook`](#reliant-forge-scaffold-webhook) | Scaffold a webhook endpoint on an existing service |
 | [`reliant forge scaffold worker`](#reliant-forge-scaffold-worker) | Scaffold a new background worker |
 | [`reliant forge secret`](#reliant-forge-secret) | Manage an environment's secret store (local file or hosted control plane) |
@@ -20425,6 +20426,7 @@ With a NOUN it scaffolds exactly that one thing, no marker required:
   forge scaffold adapter `<name>`                   an outbound adapter (HTTP/queue/storage gateway)
   forge scaffold library `<name>`                   a library-shaped package (no contract.go; pre-excluded)
   forge scaffold handler-file `<svc>` `<name>`        an additional RPC-group file in handlers/`<svc>`/
+  forge scaffold variant `<pkg>` `<Name>` [--root R]  one more configuration of internal/`<pkg>`, as its own type
   forge scaffold rpc `<svc>` `<Name>`                 a custom RPC: pb-through *Service stub when the RPC is in the proto; signed stub + proto snippet otherwise
 
 Everything written is scaffold-once and yours from birth — re-running
@@ -20459,6 +20461,7 @@ reliant forge scaffold [flags]
 | [`rpc`](#reliant-forge-scaffold-rpc) | Scaffold a custom RPC on the service's handler package |
 | [`scenario`](#reliant-forge-scaffold-scenario) | Scaffold a new frontend mock scenario |
 | [`service`](#reliant-forge-scaffold-service) | Scaffold one or more Go services |
+| [`variant`](#reliant-forge-scaffold-variant) | Scaffold one more configuration of an internal package as its own type (wrapper + provider in internal/app) |
 | [`webhook`](#reliant-forge-scaffold-webhook) | Scaffold a webhook endpoint on an existing service |
 | [`worker`](#reliant-forge-scaffold-worker) | Scaffold a new background worker |
 
@@ -21048,6 +21051,47 @@ reliant forge scaffold service <name>... [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--force` | `bool` | - | Force-overwrite every scaffold output file |
 | `--resume` | `bool` | - | Resume a partial scaffold: skip files that already exist |
+
+---
+
+#### reliant forge scaffold variant
+
+Scaffold one more configuration of an internal package as its own type (wrapper + provider in internal/app)
+
+Scaffold a variant of internal/`<pkg>`: a configuration of the same component
+that some roots or consumers need wired differently (a client with and
+without a signer, a record-only and a syncing checker).
+
+The composition graph identifies a node by its Go type, so a variant is a
+type of its own. This writes internal/app/variant_`<name>`.go holding
+
+  type `<Name>` `struct{ <pkg>.Service }`      the variant's type
+  type `<Name>`Deps `struct{ ... }`            what its configuration needs
+  func New`<Name>`(`<Name>`Deps) (*`<Name>`, error)
+
+and never touches an existing file. A consumer that wants this variant
+takes a `*app.<Name>`-shaped field of that very type (declare the
+type where the consumer can import it if internal/app is out of reach).
+With --root, the provider is marked //forge:root-only `<root>`: only that
+root may reach it, and it never fills an interface field it merely
+satisfies — the other configuration keeps those.
+
+Run 'forge generate' afterwards: the provider joins the graph.
+
+Example:
+  forge scaffold variant controlplane SigningControlPlane --root worker
+  forge scaffold variant workflowcheck RecordOnlyChecker
+
+```
+reliant forge scaffold variant <pkg> <Name> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--root` | `string` | - | mark the provider //forge:root-only `<root>` (comma-separate several roots) |
 
 ---
 

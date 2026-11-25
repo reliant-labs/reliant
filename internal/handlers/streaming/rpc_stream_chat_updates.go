@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
@@ -128,7 +129,7 @@ func (s *Service) StreamChatUpdates(
 	}
 	// Each is decided as the user stream decides it (orgGate): an update
 	// about a chat of an org the caller may not read is not forwarded.
-	updateOrgs := newOrgGate(s.deps.Repo, userID, s.unassignedOrgRecheck)
+	updateOrgs := newOrgGate(s.deps.Repo, s.deps.Projects, userID, s.unassignedOrgRecheck)
 	var userUpdateCh <-chan streaming.UpdateEvent[db.UserUpdate]
 	if focus != nil && s.deps.UserUpdates != nil {
 		userUpdateSub := s.deps.UserUpdates.Subscribe(ctx, userID)

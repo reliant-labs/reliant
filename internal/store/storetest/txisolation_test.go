@@ -15,12 +15,15 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
+	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/daemonmirror/daemonmirrortest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -102,11 +105,11 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			})
 		}},
 		{"Repo.RemoveDaemon", readCommitted, func(ctx context.Context) error {
-			_, _, err := p.Repo.RemoveDaemon(ctx, "daemon-none")
+			_, _, err := daemonmirrortest.New(t, p.Repo).RemoveDaemon(ctx, "daemon-none")
 			return err
 		}},
 		{"Repo.ApplyDaemonRegistrySnapshot", readCommitted, func(ctx context.Context) error {
-			_, err := p.Repo.ApplyDaemonRegistrySnapshot(ctx, db.RegistrySnapshotApply{UserID: storetest.SeedUserID})
+			_, err := daemonmirrortest.New(t, p.Repo).ApplyDaemonRegistrySnapshot(ctx, daemonmirror.RegistrySnapshotApply{UserID: storetest.SeedUserID})
 			return err
 		}},
 		{"Repo.CreateWorkflowDraft", readCommitted, func(ctx context.Context) error {
@@ -136,6 +139,24 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			release, err := p.Repo.LockProviderKey(ctx, storetest.SeedUserID, "anthropic")
 			if err == nil {
 				release()
+			}
+			return err
+		}},
+		// The trigger owner's writes (internal/triggerowner): the trigger's
+		// row lock and the new owner's org lock serialize them, so READ
+		// COMMITTED. The trigger does not exist: the transaction is begun
+		// and the read after its lock answers not found.
+		{"triggerowner.CreateTriggerOffer", readCommitted, func(ctx context.Context) error {
+			err := triggerOwner(p).CreateTriggerOffer(ctx, &core.TriggerOffer{ID: "o-iso", TriggerID: "trg-none", PreviousOwnerUserID: "u"})
+			if errors.Is(err, core.ErrTriggerNotFound) {
+				return nil
+			}
+			return err
+		}},
+		{"triggerowner.AdoptTrigger", readCommitted, func(ctx context.Context) error {
+			err := triggerOwner(p).AdoptTrigger(ctx, &core.Trigger{ID: "trg-none", UserID: "new", ProjectID: storetest.SeedProjectID}, "old", "")
+			if errors.Is(err, core.ErrTriggerNotFound) {
+				return nil
 			}
 			return err
 		}},
@@ -263,4 +284,14 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			t.Fatalf("the ledger entry written inside the rolled-back transaction: %d rows, want 1", n)
 		}
 	})
+}
+
+// triggerOwner is the trigger owner service over the probe's database.
+func triggerOwner(p *storetest.TxProbe) triggerowner.Service {
+	stores := triggerowner.NewStores(p.ORM)
+	svc, err := triggerowner.New(triggerowner.Deps{Tx: p.ORM, Locks: stores, Triggers: stores, Offers: stores, OrgReads: stores})
+	if err != nil {
+		panic(err)
+	}
+	return svc
 }

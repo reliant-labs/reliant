@@ -27,7 +27,9 @@ service ConnectorService {
 
   // ListConnectors returns the caller's connectors, including revoked ones so
   // the UI can show history. Credentials are never returned.
-  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {}
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // RevokeConnector marks a connector revoked. It stops working on its very
   // next request; sessions are not allowed to outlive revocation.
@@ -46,11 +48,15 @@ service ConnectorService {
   // ListConnectorActivity returns the audit log — what connectors actually
   // did, including refused attempts. A burst of denials is the signal that a
   // connector has been talked into trying something it should not.
-  rpc ListConnectorActivity(ListConnectorActivityRequest) returns (ListConnectorActivityResponse) {}
+  rpc ListConnectorActivity(ListConnectorActivityRequest) returns (ListConnectorActivityResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // ListAvailableTools returns the tool catalog a connector can be granted,
   // so the UI does not hardcode a list that drifts from the server's.
-  rpc ListAvailableTools(ListAvailableToolsRequest) returns (ListAvailableToolsResponse) {}
+  rpc ListAvailableTools(ListAvailableToolsRequest) returns (ListAvailableToolsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // AuthorizeClient records which connector an OAuth client may act through.
   //
@@ -77,7 +83,9 @@ service ConnectorService {
 
   // ListAuthorizedClients returns the applications acting through the caller's
   // connectors, so a user can see what is connected.
-  rpc ListAuthorizedClients(ListAuthorizedClientsRequest) returns (ListAuthorizedClientsResponse) {}
+  rpc ListAuthorizedClients(ListAuthorizedClientsRequest) returns (ListAuthorizedClientsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 
   // RevokeClientAuthorization disconnects one application. The connector
   // survives, since it may serve several applications.

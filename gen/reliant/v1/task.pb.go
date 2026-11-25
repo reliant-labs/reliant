@@ -1336,12 +1336,12 @@ const file_reliant_v1_task_proto_rawDesc = "" +
 	"\x1bDEPENDENCY_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DEPENDENCY_TYPE_BLOCKS\x10\x01\x12\x1b\n" +
 	"\x17DEPENDENCY_TYPE_RELATED\x10\x02\x12!\n" +
-	"\x1dDEPENDENCY_TYPE_PARALLEL_WITH\x10\x032\xa3\a\n" +
+	"\x1dDEPENDENCY_TYPE_PARALLEL_WITH\x10\x032\xac\a\n" +
 	"\vTaskService\x12M\n" +
 	"\n" +
-	"CreateTask\x12\x1d.reliant.v1.CreateTaskRequest\x1a\x1e.reliant.v1.CreateTaskResponse\"\x00\x12D\n" +
-	"\aGetTask\x12\x1a.reliant.v1.GetTaskRequest\x1a\x1b.reliant.v1.GetTaskResponse\"\x00\x12J\n" +
-	"\tListTasks\x12\x1c.reliant.v1.ListTasksRequest\x1a\x1d.reliant.v1.ListTasksResponse\"\x00\x12\x81\x01\n" +
+	"CreateTask\x12\x1d.reliant.v1.CreateTaskRequest\x1a\x1e.reliant.v1.CreateTaskResponse\"\x00\x12G\n" +
+	"\aGetTask\x12\x1a.reliant.v1.GetTaskRequest\x1a\x1b.reliant.v1.GetTaskResponse\"\x03\x90\x02\x01\x12M\n" +
+	"\tListTasks\x12\x1c.reliant.v1.ListTasksRequest\x1a\x1d.reliant.v1.ListTasksResponse\"\x03\x90\x02\x01\x12\x81\x01\n" +
 	"\n" +
 	"UpdateTask\x12\x1d.reliant.v1.UpdateTaskRequest\x1a\x1e.reliant.v1.UpdateTaskResponse\"4\xa2\xbb\x180:.\n" +
 	"\x06update\x12$\n" +
@@ -1357,8 +1357,8 @@ const file_reliant_v1_task_proto_rawDesc = "" +
 	"\x14RemoveTaskDependency\x12'.reliant.v1.RemoveTaskDependencyRequest\x1a(.reliant.v1.RemoveTaskDependencyResponse\"L\xa2\xbb\x18H:F\n" +
 	"\x11remove_dependency\x12\x14\n" +
 	"\x04task\x12\ffrom_task_id*\n" +
-	"to_task_id*\x0fdependency_type\x12Y\n" +
-	"\x0eListReadyTasks\x12!.reliant.v1.ListReadyTasksRequest\x1a\".reliant.v1.ListReadyTasksResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"to_task_id*\x0fdependency_type\x12\\\n" +
+	"\x0eListReadyTasks\x12!.reliant.v1.ListReadyTasksRequest\x1a\".reliant.v1.ListReadyTasksResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_task_proto_rawDescOnce sync.Once

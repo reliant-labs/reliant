@@ -101,6 +101,11 @@ type Repository interface {
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
 	// MoveChatToProject moves an idle chat, with its plans, to another project.
 	MoveChatToProject(ctx context.Context, m db.ChatMove) (bool, error)
+	// The projects attached to a chat beside its primary (chat_projects).
+	ListChatProjects(ctx context.Context, chatID string) ([]*db.ChatProject, error)
+	AttachChatProject(ctx context.Context, cp *db.ChatProject) error
+	DetachChatProject(ctx context.Context, chatID, projectID string) error
+	CopyChatProjects(ctx context.Context, fromChatID, toChatID string) error
 
 	// Threads and the workflows that run them.
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]*db.Thread, error)
@@ -172,6 +177,9 @@ type Repository interface {
 	// GetProjectWithUserCheck is the org-aware project read the handlers and the
 	// launcher share; db.Repo delegates it to projectaccess.
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
+	// GetProject reads a project the handler already authorized (the
+	// workspace-machine and move-to-project paths).
+	GetProject(ctx context.Context, id string) (*db.Project, error)
 	daemonchoice.Reader
 	daemonplacement.WorktreeReader
 	daemonplacement.PinStore

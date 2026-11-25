@@ -104,13 +104,14 @@ func testCatalog(t *testing.T, options catalog.InputOptions) testRoute {
 func testHTTPRoutes(t *testing.T, authn *UserAuth) testRoute {
 	t.Helper()
 	routes, err := NewAPIHTTPRoutes(APIHTTPRoutesDeps{
-		Auth:    authn,
-		Repo:    drainTestRoutesStore{},
-		Router:  testRouter{},
-		OAuth:   connections.NewOAuthHTTP(nil),
-		Inbound: webhook.NewInbound(nil, nil, nil, nil, ""),
-		Grants:  testGrants{},
-		Tokens:  drainTestAuthority{},
+		Auth:      authn,
+		Repo:      drainTestRoutesStore{},
+		Placement: drainTestPlacement{},
+		Router:    testRouter{},
+		OAuth:     connections.NewOAuthHTTP(nil),
+		Inbound:   webhook.NewInbound(nil, nil, nil, nil, ""),
+		Grants:    testGrants{},
+		Tokens:    drainTestAuthority{},
 	})
 	require.NoError(t, err)
 	return func(mux *http.ServeMux, _ ...connect.HandlerOption) []string {

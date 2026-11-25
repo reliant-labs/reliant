@@ -159,7 +159,7 @@ func (m *MockSiblings) ListRecentTranscriptSiblingMessages(ctx context.Context, 
 var _ Siblings = (*MockSiblings)(nil)
 
 // forge:section MockRepository
-// forge:hash=c25c7dcfac5f0f25e7935bc6600e145c40c1ea4bc9f0c16d75ea7bbeaf60b989
+// forge:hash=de0b08285de859b14b9793409c5048dc47d43f416a21f61418594300e2d65036
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -175,7 +175,6 @@ type MockRepository struct {
 	GetChatCompactedThroughFunc                              func(context.Context, string) (int64, error)
 	GetUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
 	GetLatestUserUpdateSequenceFunc                          func(context.Context, string) (int64, error)
-	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
 	GetWorkflowDraftFunc                                     func(context.Context, string) (*db.WorkflowDraft, error)
 	ListThreadsByConversationFunc                            func(context.Context, string) ([]*db.Thread, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
@@ -274,15 +273,6 @@ func (m *MockRepository) GetLatestUserUpdateSequence(ctx context.Context, userID
 		return m.GetLatestUserUpdateSequenceFunc(ctx, userID)
 	}
 	return 0, contractkit.MockNotSet("MockRepository", "GetLatestUserUpdateSequence")
-}
-
-// GetProject records the call and delegates to GetProjectFunc when set.
-func (m *MockRepository) GetProject(ctx context.Context, id string) (*db.Project, error) {
-	m.Recorder.Record("GetProject", ctx, id)
-	if m.GetProjectFunc != nil {
-		return m.GetProjectFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetProject")
 }
 
 // GetWorkflowDraft records the call and delegates to GetWorkflowDraftFunc when set.
@@ -683,6 +673,32 @@ func (m *MockRepository) ListToolCallsByIDs(ctx context.Context, toolCallIDs []s
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockProjects
+// forge:hash=a44618419ba89183373e14bb42b74ae063329a6d7f420bbd1b0d31f9941fc533
+
+// MockProjects is a test mock for the Projects interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjects.<Method>Func not set" error.
+type MockProjects struct {
+	contractkit.Recorder
+	GetProjectFunc func(context.Context, string) (*db.Project, error)
+}
+
+// GetProject records the call and delegates to GetProjectFunc when set.
+func (m *MockProjects) GetProject(ctx context.Context, id string) (*db.Project, error) {
+	m.Recorder.Record("GetProject", ctx, id)
+	if m.GetProjectFunc != nil {
+		return m.GetProjectFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockProjects", "GetProject")
+}
+
+// Compile-time check.
+var _ Projects = (*MockProjects)(nil)
 
 // forge:section MockSenders
 // forge:hash=aa103387fd39f26c13b722609130bb879fbed7662060d3673abbe3b0a04aa5e9

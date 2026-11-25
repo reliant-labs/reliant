@@ -6,7 +6,7 @@
  * A global "New chat" starts in the sidebar filter's project, else the
  * open chat's, else the last one used.
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   selectProject: vi.fn(async (project: { id: string }) => {
@@ -67,6 +67,8 @@ vi.mock("../../hooks/chat-queries", () => ({
 }));
 
 import { useWorkspaceStateStore } from "../workspaceStateStore";
+import { useChatProjectFilterStore } from "../../hooks/useChatProjectFilter";
+import { getNewChatAttachedProjects, prepareNewChatProjects, setNewChatAttachedProjects } from "../newChatProjectsStore";
 import { ChatProjectUnavailableError, newChatTargetProjectId, openChat, openNewChat } from "../openChat";
 import { openChatInWorkspace } from "../../lib/openChatInWorkspace";
 
@@ -186,7 +188,7 @@ describe("openChat", () => {
     const chat = { id: "c9", projectId: "p2", worktreeId: "wt-9" } as never;
     await openChat(chat);
 
-    expect(mocks.selectProject).toHaveBeenCalledWith(mocks.projects[1], { restoreChat: false, restoreWorkspace: false, isCurrent: expect.any(Function) });
+    expect(mocks.selectProject).toHaveBeenCalledWith(mocks.projects[1], { opensChat: true, restoreWorkspace: false, isCurrent: expect.any(Function) });
     expect(mocks.switchWorktreeContext).toHaveBeenCalledWith("p2", { id: "wt-9", project_id: "p2" }, { isCurrent: expect.any(Function) });
     expect(mocks.selectChat).toHaveBeenCalledWith(chat, { deferPersist: true });
     expect(mocks.persistActiveChat).toHaveBeenCalledWith("c9");
@@ -221,10 +223,58 @@ describe("newChatTargetProjectId", () => {
   });
 });
 
+describe("a new chat from a choice of several projects", () => {
+  beforeEach(() => {
+    mocks.state.currentProject = { id: "p1" };
+    mocks.state.activeChatId = "open-chat";
+    useWorkspaceStateStore.setState({ projectFilterId: null, lastProjectId: null });
+    setNewChatAttachedProjects(null, []);
+  });
+  afterEach(() => {
+    useChatProjectFilterStore.setState({ many: [] });
+  });
+
+  it("starts in the open project when it is one of them, else in the first", () => {
+    useChatProjectFilterStore.setState({ many: ["p3", "p1", "p2"] });
+    expect(newChatTargetProjectId()).toBe("p1");
+    useChatProjectFilterStore.setState({ many: ["p3", "p2"] });
+    expect(newChatTargetProjectId()).toBe("p3");
+  });
+
+  it("attaches the rest of them to the new chat", async () => {
+    useChatProjectFilterStore.setState({ many: ["p2", "p1", "p3"] });
+    await openNewChat();
+    expect(getNewChatAttachedProjects("p1")).toEqual(["p2", "p3"]);
+  });
+
+  it("attaches nothing with every project (or one) shown", async () => {
+    await openNewChat();
+    expect(getNewChatAttachedProjects("p1")).toEqual([]);
+    useWorkspaceStateStore.setState({ projectFilterId: "p1" });
+    await openNewChat();
+    expect(getNewChatAttachedProjects("p1")).toEqual([]);
+  });
+
+  it("keeps what the draft attached when the draft changes its project", async () => {
+    useChatProjectFilterStore.setState({ many: ["p1", "p2", "p3"] });
+    await openNewChat();
+    expect(mocks.state.activeChatId).toBeNull();
+    // The project chip: the new chat moves to p2, which leaves the attached set.
+    await openNewChat({ projectId: "p2" });
+    expect(getNewChatAttachedProjects("p2")).toEqual(["p3"]);
+  });
+
+  it("caps the attached projects at ten", () => {
+    const ids = Array.from({ length: 13 }, (_, i) => `p${i + 1}`);
+    prepareNewChatProjects("p1", ids, false);
+    expect(getNewChatAttachedProjects("p1")).toEqual(ids.slice(1, 11));
+  });
+});
+
 describe("openNewChat", () => {
   it("starts in another project on its main workspace", async () => {
     await openNewChat({ projectId: "p2" });
-    expect(mocks.selectProject).toHaveBeenCalledWith(mocks.projects[1], { restoreChat: false, restoreWorkspace: false, isCurrent: expect.any(Function) });
+    expect(mocks.selectProject).toHaveBeenCalledWith(mocks.projects[1], { opensChat: true, restoreWorkspace: false, isCurrent: expect.any(Function) });
     expect(mocks.switchWorktreeContext).toHaveBeenCalledWith("p2", { id: "main-p2" }, { isCurrent: expect.any(Function) });
     expect(mocks.clearCurrentChat).toHaveBeenCalledWith("main-p2");
   });

@@ -17,7 +17,6 @@ type Repository interface {
 
 	GetRepo(ctx context.Context, id string) (*core.Repo, error)
 	GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*core.Repo, error)
-	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	// ListRepoForgeAppsByProject is every forge app recorded in the
 	// project's repos (repo_forge_apps), for ListRepos' Repo.forge_apps.
 	ListRepoForgeAppsByProject(ctx context.Context, projectID string) ([]core.RepoForgeApp, error)
@@ -27,6 +26,11 @@ type Repository interface {
 	// Installs is each machine's checkout of the project and who owns each
 	// machine (projectcheckout.Resolve).
 	daemonplacement.Installs
+}
+
+// RepoLister is a project's nested repos. store.RepoExtStore satisfies it.
+type RepoLister interface {
+	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 }
 
 // Sender sends one request/response command to the machine holding a

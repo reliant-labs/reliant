@@ -81,7 +81,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ChatService
-  // forge:hash=09d33b6f662839715991f26af9e36981bb159739175d9ad324390c9f9749941a
+  // forge:hash=14533d96882a061efe3415b6804b3d63e83a3bfb5fa4e58b1f6b765a63608552
   & {
     "reliant.v1.ChatService/StartChat"?: (req: import("@/gen/reliant/v1/chat_pb").StartChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").StartChatResponseSchema>>;
     "reliant.v1.ChatService/RunNow"?: (req: import("@/gen/reliant/v1/chat_pb").RunNowRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").RunNowResponseSchema>>;
@@ -121,6 +121,9 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ChatService/GetThreadWorkflowInputs"?: (req: import("@/gen/reliant/v1/chat_pb").GetThreadWorkflowInputsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").GetThreadWorkflowInputsResponseSchema>>;
     "reliant.v1.ChatService/SetChatDaemon"?: (req: import("@/gen/reliant/v1/chat_pb").SetChatDaemonRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").SetChatDaemonResponseSchema>>;
     "reliant.v1.ChatService/MoveChatToProject"?: (req: import("@/gen/reliant/v1/chat_pb").MoveChatToProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").MoveChatToProjectResponseSchema>>;
+    "reliant.v1.ChatService/ListChatProjects"?: (req: import("@/gen/reliant/v1/chat_pb").ListChatProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").ListChatProjectsResponseSchema>>;
+    "reliant.v1.ChatService/AttachProjectToChat"?: (req: import("@/gen/reliant/v1/chat_pb").AttachProjectToChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").AttachProjectToChatResponseSchema>>;
+    "reliant.v1.ChatService/DetachProjectFromChat"?: (req: import("@/gen/reliant/v1/chat_pb").DetachProjectFromChatRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/chat_pb").DetachProjectFromChatResponseSchema>>;
   }
 
   // forge:section reliant.v1.ConnectionService
@@ -469,12 +472,14 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.SharingService
-  // forge:hash=a8c4f56f818e2a3f9f646bae16f6e4a5798d2b9e41bf83c009fe1aaf0215c160
+  // forge:hash=39f3ea223726340585ba0470cf8901f4a94179a36a10015923d569ac0117f928
   & {
     "reliant.v1.SharingService/SetChatVisibility"?: (req: import("@/gen/reliant/v1/sharing_pb").SetChatVisibilityRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetChatVisibilityResponseSchema>>;
     "reliant.v1.SharingService/SetProjectVisibility"?: (req: import("@/gen/reliant/v1/sharing_pb").SetProjectVisibilityRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetProjectVisibilityResponseSchema>>;
     "reliant.v1.SharingService/ListSharedChats"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedChatsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedChatsResponseSchema>>;
     "reliant.v1.SharingService/ListSharedProjects"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedProjectsResponseSchema>>;
+    "reliant.v1.SharingService/SetWorkflowDraftSharing"?: (req: import("@/gen/reliant/v1/sharing_pb").SetWorkflowDraftSharingRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").SetWorkflowDraftSharingResponseSchema>>;
+    "reliant.v1.SharingService/ListSharedWorkflowDrafts"?: (req: import("@/gen/reliant/v1/sharing_pb").ListSharedWorkflowDraftsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/sharing_pb").ListSharedWorkflowDraftsResponseSchema>>;
   }
 
   // forge:section reliant.v1.SystemService

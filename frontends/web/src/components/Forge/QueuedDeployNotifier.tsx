@@ -25,6 +25,8 @@ import { useQueries, useQueryClient, type Query } from "@tanstack/react-query";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 
 import { forgeCloudKeys, liveViewQuery, type LiveViewResult } from "@/hooks/forge-queries";
+import { transport as appTransport } from "@/lib/connect";
+import { useTransport } from "@/lib/transportScope";
 import { showNotification } from "@/lib/notifications";
 import { hasLiveControlPlane } from "@/services/forge/live";
 import { watchPollInterval, watchedProjects, type SettledDeploy } from "@/services/forge/queuedDeploys";
@@ -37,6 +39,7 @@ const LIVE_VIEW_PREFIX = forgeCloudKeys.liveView.all;
 
 export function QueuedDeployNotifier() {
   const queryClient = useQueryClient();
+  const transport = useTransport(appTransport);
   const navigate = useNavigate();
   const { pathname } = useLocation();
 
@@ -56,7 +59,7 @@ export function QueuedDeployNotifier() {
   // queued in one org still settles after the tab moved to another.
   useQueries({
     queries: projects.map(({ orgId, forgeProject }) => ({
-      ...liveViewQuery(forgeProject, orgId || null),
+      ...liveViewQuery(transport, forgeProject, orgId || null),
       enabled: hasLiveControlPlane() && forgeProject !== "",
       refetchInterval: watchPollInterval(watched, forgeProject, orgId),
     })),

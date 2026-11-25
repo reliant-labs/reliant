@@ -166,13 +166,13 @@ function InstanceFigures({ workload, envId, orgId, app }: { workload: Workload; 
       <Fact label="CPU">
         <span className="inline-flex items-center gap-2 tabular-nums">
           {cpu !== null ? formatCores(cpu) : "—"}
-          {usage.cpu && <Sparkline values={usage.cpu.values} label={`CPU over the ${windowWords}`} />}
+          {usage.cpu && <Sparkline values={usage.cpu.values} timestamps={usage.cpu.timestamps} format={formatCores} label={`CPU over the ${windowWords}`} />}
         </span>
       </Fact>
       <Fact label="Memory">
         <span className="inline-flex items-center gap-2 tabular-nums">
           {memory !== null ? formatBytes(memory) : "—"}
-          {usage.memory && <Sparkline values={usage.memory.values} label={`Memory over the ${windowWords}`} />}
+          {usage.memory && <Sparkline values={usage.memory.values} timestamps={usage.memory.timestamps} format={formatBytes} label={`Memory over the ${windowWords}`} />}
         </span>
       </Fact>
     </>
