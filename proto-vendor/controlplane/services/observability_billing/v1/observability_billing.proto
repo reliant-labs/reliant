@@ -51,6 +51,7 @@ service ObservabilityBillingService {
   // part the spend cap kept off the bill, projected overage, a per-signal and
   // per-service breakdown, and the quota state the gateway is enforcing.
   rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -63,6 +64,7 @@ service ObservabilityBillingService {
   // days. Buckets are ordered by bucket_start, signal, service; page with
   // next_page_token. The console builds its CSV from this at day granularity.
   rpc ListObservabilityUsage(ListObservabilityUsageRequest) returns (ListObservabilityUsageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -74,6 +76,7 @@ service ObservabilityBillingService {
   // uncompressed, like the billed quantity; compressed size is Reliant's cost
   // and is never returned.
   rpc GetObservabilityStorage(GetObservabilityStorageRequest) returns (GetObservabilityStorageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -86,6 +89,7 @@ service ObservabilityBillingService {
   // token UpdateObservabilityLimits compares; it is 0 while the org has no
   // settings and runs on the defaults.
   rpc GetObservabilityLimits(GetObservabilityLimitsRequest) returns (GetObservabilityLimitsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true

@@ -33,8 +33,9 @@
 // it already sends. The daemon gateway, whose own logs land in tenant zero
 // (ServiceName daemon-gateway), writes the same two messages from those
 // heartbeats once a minute (HeartbeatLines) for the machines it is told to
-// watch: those in its MACHINE_STATS_ORGS that carry the durable label
-// MACHINE_STATS_LABEL (default monitor=platform), never a managed workspace.
+// watch: those whose org (recorded, else the owner's default org) is in its
+// MACHINE_STATS_ORGS and that carry the durable label MACHINE_STATS_LABEL
+// (default monitor=platform), never a managed workspace.
 // Those lines carry machine_source=heartbeat and the machine's name, daemon
 // id and org id; HeartbeatLines' comment has their keys.
 //

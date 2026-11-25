@@ -1,7 +1,7 @@
 /**
  * The one top bar (owner, 2026-11-23): a left-aligned project / branch path,
- * then the slot the open chat's header renders into; Settings remains
- * accessible even when the project nav is absent; and in the macOS app a
+ * then the slot the open chat's header renders into; Settings only while
+ * there is no project (the nav has it otherwise); and in the macOS app a
  * docked nav's own toggle stands in for the bar's.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
@@ -86,9 +86,11 @@ describe("Header: the one top bar", () => {
     expect(useTopBarSlot.getState().el).toBe(screen.getByTestId("topbar-chat-slot"));
   });
 
-  it("keeps Settings accessible while a project is open without the nav", () => {
+  it("leaves Settings to the nav while a project is open", () => {
+    // Owner decision, 2026-11-24 (Variant A): no header gear with a project
+    // open; Settings is the nav's footer row and ⌘, (Header.settings.test.tsx).
     render(<Header onNavigateToSettings={vi.fn()} />);
-    expect(screen.getByTestId("header-settings-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("header-settings-button")).not.toBeInTheDocument();
   });
 
   it("keeps its sidebar toggle beside a collapsed nav, and in a browser", () => {

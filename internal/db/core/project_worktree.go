@@ -219,6 +219,18 @@ type ProjectDaemonRepo struct {
 	State          NestedRepoState
 	Error          string
 	StateChangedAt time.Time
+	// LeaseUntil is until when the claim of the pass cloning it holds
+	// (state cloning); nil otherwise.
+	LeaseUntil *time.Time
+}
+
+// NestedRepoClaim is one nested repository a gateway pass claimed to clone.
+type NestedRepoClaim struct {
+	Repo *ProjectDaemonRepo
+	// InsideFailed: a repository it sits in failed to clone. It must not be
+	// cloned (its clone would create the parent's directory, and the parent
+	// could never be cloned there again); the claimer settles it failed.
+	InsideFailed bool
 }
 
 // CleanupMetadata tracks what became of an archived worktree's directory.

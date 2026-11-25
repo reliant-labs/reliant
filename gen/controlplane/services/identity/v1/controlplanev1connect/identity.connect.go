@@ -71,6 +71,9 @@ const (
 	// IdentityServiceGetExportURLProcedure is the fully-qualified name of the IdentityService's
 	// GetExportURL RPC.
 	IdentityServiceGetExportURLProcedure = "/controlplane.v1.IdentityService/GetExportURL"
+	// IdentityServiceImportUsersProcedure is the fully-qualified name of the IdentityService's
+	// ImportUsers RPC.
+	IdentityServiceImportUsersProcedure = "/controlplane.v1.IdentityService/ImportUsers"
 	// IdentityServiceCheckSocialSignInProcedure is the fully-qualified name of the IdentityService's
 	// CheckSocialSignIn RPC.
 	IdentityServiceCheckSocialSignInProcedure = "/controlplane.v1.IdentityService/CheckSocialSignIn"
@@ -133,6 +136,24 @@ type IdentityServiceClient interface {
 	// none; FailedPrecondition where export is not enabled. Needs
 	// identity:manage, as RequestExport does.
 	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
+	// ImportUsers creates or converges 1 to 500 users in the environment's
+	// identity, idempotent by user id: a re-run of the same rows converges and
+	// never duplicates, so re-running a file is how an import resumes. Each
+	// row keeps its id, password hash, verified address and social links.
+	// A row's refusal is its result (conflict, invalid, failed, with a reason);
+	// one row never aborts the rest. dry_run validates and resolves every row
+	// and writes nothing. An existing account is left alone unless
+	// update_existing, and its password hash is overwritten only with
+	// update_passwords.
+	//
+	// The rows carry credentials, so this needs identity:manage held by a
+	// person, as RequestExport does (org admin AND the identity:manage grant);
+	// a machine credential needs the identity:manage scope and its acting
+	// person the grant. The activity records the counts per outcome, never a
+	// row. FailedPrecondition where import is not enabled for the deployment
+	// (identity.import_enabled) or the instance is not ready; Aborted while
+	// another import into the same identity runs.
+	ImportUsers(context.Context, *connect.Request[v1.ImportIdentityUsersRequest]) (*connect.Response[v1.ImportIdentityUsersResponse], error)
 	// CheckSocialSignIn starts one social sign-in per applied provider of the
 	// identity (an intent at the issuer, never completed: it expires there)
 	// and reports each authorize URL the issuer built, with the redirect_uri it
@@ -160,6 +181,7 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceGetIdentityStatusProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("GetIdentityStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listIdentities: connect.NewClient[v1.ListIdentitiesRequest, v1.ListIdentitiesResponse](
@@ -173,6 +195,7 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+IdentityServiceListUsersProcedure,
 			connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getUser: connect.NewClient[v1.GetIdentityUserRequest, v1.GetIdentityUserResponse](
@@ -236,6 +259,12 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("GetExportURL")),
 			connect.WithClientOptions(opts...),
 		),
+		importUsers: connect.NewClient[v1.ImportIdentityUsersRequest, v1.ImportIdentityUsersResponse](
+			httpClient,
+			baseURL+IdentityServiceImportUsersProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("ImportUsers")),
+			connect.WithClientOptions(opts...),
+		),
 		checkSocialSignIn: connect.NewClient[v1.CheckIdentitySocialSignInRequest, v1.CheckIdentitySocialSignInResponse](
 			httpClient,
 			baseURL+IdentityServiceCheckSocialSignInProcedure,
@@ -260,6 +289,7 @@ type identityServiceClient struct {
 	revokeSessions    *connect.Client[v1.RevokeIdentitySessionsRequest, v1.RevokeIdentitySessionsResponse]
 	requestExport     *connect.Client[v1.RequestIdentityExportRequest, v1.RequestIdentityExportResponse]
 	getExportURL      *connect.Client[v1.GetIdentityExportURLRequest, v1.GetIdentityExportURLResponse]
+	importUsers       *connect.Client[v1.ImportIdentityUsersRequest, v1.ImportIdentityUsersResponse]
 	checkSocialSignIn *connect.Client[v1.CheckIdentitySocialSignInRequest, v1.CheckIdentitySocialSignInResponse]
 }
 
@@ -328,6 +358,11 @@ func (c *identityServiceClient) GetExportURL(ctx context.Context, req *connect.R
 	return c.getExportURL.CallUnary(ctx, req)
 }
 
+// ImportUsers calls controlplane.v1.IdentityService.ImportUsers.
+func (c *identityServiceClient) ImportUsers(ctx context.Context, req *connect.Request[v1.ImportIdentityUsersRequest]) (*connect.Response[v1.ImportIdentityUsersResponse], error) {
+	return c.importUsers.CallUnary(ctx, req)
+}
+
 // CheckSocialSignIn calls controlplane.v1.IdentityService.CheckSocialSignIn.
 func (c *identityServiceClient) CheckSocialSignIn(ctx context.Context, req *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error) {
 	return c.checkSocialSignIn.CallUnary(ctx, req)
@@ -390,6 +425,24 @@ type IdentityServiceHandler interface {
 	// none; FailedPrecondition where export is not enabled. Needs
 	// identity:manage, as RequestExport does.
 	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
+	// ImportUsers creates or converges 1 to 500 users in the environment's
+	// identity, idempotent by user id: a re-run of the same rows converges and
+	// never duplicates, so re-running a file is how an import resumes. Each
+	// row keeps its id, password hash, verified address and social links.
+	// A row's refusal is its result (conflict, invalid, failed, with a reason);
+	// one row never aborts the rest. dry_run validates and resolves every row
+	// and writes nothing. An existing account is left alone unless
+	// update_existing, and its password hash is overwritten only with
+	// update_passwords.
+	//
+	// The rows carry credentials, so this needs identity:manage held by a
+	// person, as RequestExport does (org admin AND the identity:manage grant);
+	// a machine credential needs the identity:manage scope and its acting
+	// person the grant. The activity records the counts per outcome, never a
+	// row. FailedPrecondition where import is not enabled for the deployment
+	// (identity.import_enabled) or the instance is not ready; Aborted while
+	// another import into the same identity runs.
+	ImportUsers(context.Context, *connect.Request[v1.ImportIdentityUsersRequest]) (*connect.Response[v1.ImportIdentityUsersResponse], error)
 	// CheckSocialSignIn starts one social sign-in per applied provider of the
 	// identity (an intent at the issuer, never completed: it expires there)
 	// and reports each authorize URL the issuer built, with the redirect_uri it
@@ -413,6 +466,7 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceGetIdentityStatusProcedure,
 		svc.GetIdentityStatus,
 		connect.WithSchema(identityServiceMethods.ByName("GetIdentityStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceListIdentitiesHandler := connect.NewUnaryHandler(
@@ -426,6 +480,7 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		IdentityServiceListUsersProcedure,
 		svc.ListUsers,
 		connect.WithSchema(identityServiceMethods.ByName("ListUsers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	identityServiceGetUserHandler := connect.NewUnaryHandler(
@@ -489,6 +544,12 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("GetExportURL")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceImportUsersHandler := connect.NewUnaryHandler(
+		IdentityServiceImportUsersProcedure,
+		svc.ImportUsers,
+		connect.WithSchema(identityServiceMethods.ByName("ImportUsers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	identityServiceCheckSocialSignInHandler := connect.NewUnaryHandler(
 		IdentityServiceCheckSocialSignInProcedure,
 		svc.CheckSocialSignIn,
@@ -523,6 +584,8 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceRequestExportHandler.ServeHTTP(w, r)
 		case IdentityServiceGetExportURLProcedure:
 			identityServiceGetExportURLHandler.ServeHTTP(w, r)
+		case IdentityServiceImportUsersProcedure:
+			identityServiceImportUsersHandler.ServeHTTP(w, r)
 		case IdentityServiceCheckSocialSignInProcedure:
 			identityServiceCheckSocialSignInHandler.ServeHTTP(w, r)
 		default:
@@ -584,6 +647,10 @@ func (UnimplementedIdentityServiceHandler) RequestExport(context.Context, *conne
 
 func (UnimplementedIdentityServiceHandler) GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.GetExportURL is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) ImportUsers(context.Context, *connect.Request[v1.ImportIdentityUsersRequest]) (*connect.Response[v1.ImportIdentityUsersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.IdentityService.ImportUsers is not implemented"))
 }
 
 func (UnimplementedIdentityServiceHandler) CheckSocialSignIn(context.Context, *connect.Request[v1.CheckIdentitySocialSignInRequest]) (*connect.Response[v1.CheckIdentitySocialSignInResponse], error) {

@@ -269,3 +269,29 @@ func (m *MockRunLookup) GetTrigger(ctx context.Context, id string) (*core.Trigge
 
 // Compile-time check.
 var _ RunLookup = (*MockRunLookup)(nil)
+
+// forge:section MockPRLinker
+// forge:hash=28fc8e2863f88d014c6780b00549e5d1db0bf33c22fe3ffc23a9c3fd3245d798
+
+// MockPRLinker is a test mock for the PRLinker interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPRLinker.<Method>Func not set" error.
+type MockPRLinker struct {
+	contractkit.Recorder
+	LinkRunPRFunc func(context.Context, string, string, core.PRRef) (int, error)
+}
+
+// LinkRunPR records the call and delegates to LinkRunPRFunc when set.
+func (m *MockPRLinker) LinkRunPR(ctx context.Context, chatID string, runID string, pr core.PRRef) (int, error) {
+	m.Recorder.Record("LinkRunPR", ctx, chatID, runID, pr)
+	if m.LinkRunPRFunc != nil {
+		return m.LinkRunPRFunc(ctx, chatID, runID, pr)
+	}
+	return 0, contractkit.MockNotSet("MockPRLinker", "LinkRunPR")
+}
+
+// Compile-time check.
+var _ PRLinker = (*MockPRLinker)(nil)

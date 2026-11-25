@@ -5934,8 +5934,10 @@ type DeploySourceAttestation struct {
 	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	RunId   string `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	// WRITE-ONLY, and empty on every read. The raw OIDC JWT the server
-	// verifies; see DeploySourceProvenance.attestation.
-	Token         string `protobuf:"bytes,4,opt,name=token,proto3" json:"token,omitempty"`
+	// verifies; see DeploySourceProvenance.attestation. forge:secret records
+	// that no read returns it, so the reads that carry this message can still
+	// declare NO_SIDE_EFFECTS.
+	Token         string `protobuf:"bytes,4,opt,name=token,proto3" json:"token,omitempty"` // forge:secret
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

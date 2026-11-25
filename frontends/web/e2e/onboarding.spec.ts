@@ -22,6 +22,19 @@ import { test, expect, type Locator, type Page, type Route } from '@playwright/t
 // Helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * The tab's last project (lib/urlState/shellScope.ts contextProjectDefault):
+ * kept per tab in sessionStorage, keyed by the signed-in user and org.
+ * Runs in the page.
+ */
+function contextProjectOfTab(): string | null {
+  for (let i = 0; i < sessionStorage.length; i++) {
+    const key = sessionStorage.key(i);
+    if (key?.startsWith('reliant.view.') && key.endsWith('.contextProject')) return sessionStorage.getItem(key);
+  }
+  return null;
+}
+
 /** The mocked server's project table, per page: CreateProject adds to it, ListProjects answers with it. */
 const mockProjects = new WeakMap<Page, unknown[]>();
 
@@ -601,7 +614,7 @@ test.describe('Onboarding Flow', () => {
     // (#289); no Continue button is rendered on this path.
     listProjects.release();
     await expect(page).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('start') === 'chat' && !url.searchParams.has('tour'), { timeout: 10_000 });
-    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('workspace-state') ?? '{}').state?.lastProjectId)).toBe('proj_existing');
+    await expect.poll(() => page.evaluate(contextProjectOfTab)).toBe('proj_existing');
     await expect(dialog).toBeHidden();
     expect(createProjectCalls).toEqual([]);
   });
@@ -937,7 +950,7 @@ test.describe('Onboarding – Project-choice branch selection', () => {
       }
 
       await expect(page).toHaveURL((url) => url.pathname === '/' && url.searchParams.get('start') === 'chat' && !url.searchParams.has('tour'), { timeout: 10_000 });
-      await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('workspace-state') ?? '{}').state?.lastProjectId)).toBe('proj_default');
+      await expect.poll(() => page.evaluate(contextProjectOfTab)).toBe('proj_default');
       await expect(dialog).toBeHidden();
     });
   }

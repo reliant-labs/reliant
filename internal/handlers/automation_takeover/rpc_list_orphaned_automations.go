@@ -34,7 +34,7 @@ func (s *Service) ListOrphanedAutomations(
 	}
 
 	var departures orgtakeover.Departures
-	stored, err := s.deps.Repo.ListOrgTriggers(ctx, orgID)
+	stored, err := s.deps.Offers.ListOrgTriggers(ctx, orgID)
 	if err != nil {
 		return nil, dbError("list the org's triggers", err)
 	}
@@ -55,7 +55,7 @@ func (s *Service) ListOrphanedAutomations(
 		for i, t := range orphans {
 			ids[i] = t.ID
 		}
-		offers, err := s.deps.Repo.ListPendingTriggerOffers(ctx, core.TriggerOfferFilters{OrgID: &orgID, TriggerIDs: ids})
+		offers, err := s.deps.Offers.ListPendingTriggerOffers(ctx, core.TriggerOfferFilters{OrgID: &orgID, TriggerIDs: ids})
 		if err != nil {
 			return nil, dbError("list the org's offers", err)
 		}
@@ -80,7 +80,7 @@ func (s *Service) ListOrphanedAutomations(
 		resp.Triggers = append(resp.Triggers, out)
 	}
 
-	drafts, err := s.deps.Repo.ListOrgWorkflowDrafts(ctx, orgID)
+	drafts, err := s.deps.Offers.ListOrgWorkflowDrafts(ctx, orgID)
 	if err != nil {
 		return nil, dbError("list the org's saved workflows", err)
 	}

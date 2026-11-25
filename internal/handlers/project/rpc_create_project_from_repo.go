@@ -108,7 +108,7 @@ func (s *Service) CreateProjectFromRepo(
 	if err != nil {
 		return nil, err
 	}
-	machine, err := s.deps.Repo.GetDaemon(ctx, daemonID)
+	machine, err := s.deps.Machines.GetDaemon(ctx, daemonID)
 	switch {
 	case err != nil && !svcerr.IsNotFound(err):
 		// Never skip the check over a failed read.
@@ -295,7 +295,7 @@ func (s *Service) createProjectForRepo(
 // "project has no git repos" whenever that adoption asked the wrong machine.
 // Best-effort: a failure leaves that adoption as the fallback.
 func (s *Service) registerClonedRootRepo(ctx context.Context, project *core.Project, cloneURL string) {
-	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
+	repos, err := s.deps.Repos.ListReposByProject(ctx, project.ID)
 	if err != nil {
 		logging.WarnContext(ctx, "CreateProjectFromRepo: could not list repos", "error", err, "project_id", project.ID)
 		return

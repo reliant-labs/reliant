@@ -27,6 +27,7 @@ const localStorageMock = vi.hoisted(() => {
 import { act } from '@testing-library/react';
 import {
   useWorkspaceStateStore,
+  lastProjectOfTab,
   createDefaultWorktreeState,
   createDefaultProjectState,
   MAIN_WORKTREE_KEY,
@@ -604,7 +605,9 @@ describe('Persisted state migration', () => {
     });
 
     const store = useWorkspaceStateStore.getState();
-    expect(store.lastProjectId).toBe('project-1');
+    // Not kept since v9 (one value for every tab): this page load's fallback only.
+    expect(store.lastProjectId).toBeNull();
+    expect(lastProjectOfTab()).toBe('project-1');
     expect(store.leftSidebarExpanded).toBe(true);
     expect(store.getWorktreeState('project-1', null).activeChatId).toBe('chat-1');
     expect(store.getExpandedLoops('project-1', null, 'wf')).toEqual([]);
@@ -676,6 +679,38 @@ describe('Right panel closed by default (v8)', () => {
     });
 
     expect(useWorkspaceStateStore.getState().getWorktreeState('project-1', null).rightPanelState.fileBrowser).toBe(true);
+  });
+});
+
+describe('View state leaves workspace-state (v9)', () => {
+  it('drops the last project and the project filter, keeping the last project for this load only', async () => {
+    localStorageMock.setItem(
+      'workspace-state',
+      JSON.stringify({
+        version: 8,
+        state: { version: 8, lastProjectId: 'project-9', projectFilterId: 'project-9', leftSidebarExpanded: false, projects: {} },
+      })
+    );
+
+    await act(async () => {
+      await useWorkspaceStateStore.persist.rehydrate();
+    });
+
+    const store = useWorkspaceStateStore.getState();
+    expect(store.lastProjectId).toBeNull();
+    expect(store.projectFilterId).toBeNull();
+    expect(store.leftSidebarExpanded).toBe(false);
+    expect(lastProjectOfTab()).toBe('project-9');
+
+    // Written back without either, so no other tab reads this one's.
+    act(() => {
+      useWorkspaceStateStore.getState().setLastProject('project-2');
+      useWorkspaceStateStore.getState().setProjectFilterId('project-2');
+    });
+    const persisted = JSON.parse(localStorageMock.getItem('workspace-state') ?? '{}');
+    expect(persisted.version).toBe(9);
+    expect(persisted.state.lastProjectId).toBeUndefined();
+    expect(persisted.state.projectFilterId).toBeUndefined();
   });
 });
 

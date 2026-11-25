@@ -1,10 +1,14 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The nav under the switcher (U6d, prototype): the owner's hybrid config
- * (navConfig/hybrid.ts), drawn by the one renderer against the route and the
+ * The nav under the switcher (U6d, prototype): a nav config (the app's is
+ * navConfig/hybrid.ts), drawn by the one renderer against the route and the
  * shell's scope, with the open app's console model (alerts, the analytics
  * hub, its env scope, the rows other modules register) when there is an app.
+ *
+ * The config is the caller's, never a default here: the app's config carries
+ * Settings' sections (navConfig/settings.tsx), and a nav that is not the app's
+ * (the public demo's) must not import them by reaching this file.
  */
 
 import { useMemo } from "react";
@@ -12,16 +16,20 @@ import { useMemo } from "react";
 import { consolePageOf, orgPageOf } from "../../Forge/Console/paths";
 import type { GroupedNavInput } from "../../Forge/Console/groupedNav";
 import { useConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
-import { hybridNav, type NavCtx } from "./navConfig";
+import type { NavConfig, NavCtx } from "./navConfig/types";
 import { NavRenderer, type NavigateOptions, type NavSlots } from "./NavRenderer";
 import type { ShellProject } from "./shellProject";
 
 export interface ShellNavBodyProps {
+  /** The nav to draw: the app's `hybridNav`, or a host's own (navConfig/types.ts). */
+  config: NavConfig;
   shell: ShellProject;
   pathname: string;
   search: Record<string, unknown>;
   slots: NavSlots;
   onNavigate: (href: string, options?: NavigateOptions) => void;
+  /** Every row drawn as a top-level row (a phone's drawer; NavRenderer `flat`). */
+  flat?: boolean;
 }
 
 export function ShellNavBody(props: ShellNavBodyProps) {
@@ -33,7 +41,7 @@ function NavWithConsole({ app, ...props }: ShellNavBodyProps & { app: string }) 
   return <NavBody {...props} console={model} />;
 }
 
-function NavBody({ shell, pathname, search, slots, onNavigate, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
+function NavBody({ config, shell, pathname, search, slots, onNavigate, flat, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
   const ctx = useMemo<NavCtx>(
     () => ({
       pathname,
@@ -48,5 +56,5 @@ function NavBody({ shell, pathname, search, slots, onNavigate, console }: ShellN
     }),
     [pathname, search, shell.mode, shell.projectId, shell.name, shell.app, console],
   );
-  return <NavRenderer config={hybridNav} ctx={ctx} slots={slots} onNavigate={onNavigate} />;
+  return <NavRenderer config={config} ctx={ctx} slots={slots} onNavigate={onNavigate} flat={flat} />;
 }

@@ -426,4 +426,10 @@ func TestRunTelemetry_TriggeredRunLinksToItsFiringSpan(t *testing.T) {
 	}
 	assert.NotEqual(t, runs["chat-org-a"].SpanContext().TraceID(), runs["chat-org-b"].SpanContext().TraceID())
 	assert.Empty(t, runs["chat-manual"].Links(), "a person's start links nothing")
+
+	// Each names the trigger_events row it was launched for, as its
+	// trigger.fire span does, so the two join by attribute too.
+	assert.Equal(t, "evt-a", spanAttrs(runs["chat-org-a"])[telemetry.AttrTriggerEventID])
+	assert.Equal(t, "evt-b", spanAttrs(runs["chat-org-b"])[telemetry.AttrTriggerEventID])
+	assert.NotContains(t, spanAttrs(runs["chat-manual"]), attribute.Key(telemetry.AttrTriggerEventID), "no event, no attribute")
 }

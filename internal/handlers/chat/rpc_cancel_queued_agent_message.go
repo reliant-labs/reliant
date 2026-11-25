@@ -40,7 +40,7 @@ func (s *Service) CancelQueuedAgentMessage(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
-	cancelled, err := s.deps.Repo.CancelQueuedAgentMessage(ctx, req.Msg.MessageId, req.Msg.ChatId)
+	cancelled, err := s.deps.AgentMessages.CancelQueuedAgentMessage(ctx, req.Msg.MessageId, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to cancel message"))
 	}

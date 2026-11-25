@@ -168,6 +168,10 @@ For an integration trigger the payload is merged over a sample of the event's de
 
 **Warning.** A `run` node with `credentials: none` calls `gemini` or `cursor-agent`, by name or by a path such as `~/.local/bin/gemini`. Their sign-ins (`~/.gemini`, and `~/.cursor` and `~/.config/cursor`) are still readable under `credentials: none` in this release. The next minor release hides them, along with Copilot CLI's `~/.copilot`, and the CLI will then run signed out. Until then the step prints a one-line notice on its stderr each time it runs. Run that step with `credentials: inherit`.
 
+### observe-invalid
+
+**Error.** An `observe:` block, on a node or on the workflow, has an expression that does not compile in its scope: a misspelled output (`output.reason` on a node with no `reason` output), a read of `nodes.*` (a node records only what its own `output` says, so a value worked out from other nodes becomes one of its outputs first), `item` outside an event's `each:`, a `when:` wrapped in `{{ }}` or not returning a bool. It also reports a block that is too large once the workflow's defaults are merged into a node's. Validation reports the same findings only as warnings, because it runs whenever a run starts and a node's observability must never stop a run; lint is where they are caught. See [Common node fields](/reference/nodes#common-node-fields).
+
 ### lint-allow-invalid
 
 **Error.** A `lint:allow` comment names a rule that does not exist (a typo silences nothing) or gives no reason. Use an ID from `reliant workflow lint --rules`, and say why after it.

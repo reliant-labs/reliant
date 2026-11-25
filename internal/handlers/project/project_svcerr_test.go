@@ -231,7 +231,7 @@ func TestProjectService_OnTheWire(t *testing.T) {
 			return json.Marshal(map[string]any{"exists": true})
 		},
 	}
-	_, client := project.NewTestProjectServer(t, project.WithProjectDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Lookups: lookups, Router: router}))
+	_, client := project.NewTestProjectServer(t, withDeps(project.Deps{Repo: store, Projects: projectaccesstest.For(store), Lookups: lookups, Router: router}))
 
 	_, err := client.CreateProject(context.Background(), connect.NewRequest(&pb.CreateProjectRequest{
 		Name: "proj", Path: "/work",

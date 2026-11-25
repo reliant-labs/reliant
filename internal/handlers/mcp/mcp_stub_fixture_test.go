@@ -75,5 +75,5 @@ func ownedProjectRepo(t *testing.T, mcpConfigs string) *ownedStore {
 // nil builds it without a daemon router.
 func newService(t *testing.T, store *ownedStore, router mcp.Router) *mcp.Service {
 	t.Helper()
-	return mcp.NewTestMCP(t, mcp.WithMCPDeps(mcp.Deps{Repo: store, Projects: projectaccesstest.For(store), ProjectConfigs: store, Router: router}))
+	return mcp.NewTestMCP(t, withDeps(mcp.Deps{Repo: store, Projects: projectaccesstest.For(store), ProjectConfigs: store, Router: router}))
 }

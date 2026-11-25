@@ -7,6 +7,7 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { transport } from "@/lib/connect";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -52,7 +53,7 @@ describe("useManagedSecrets", () => {
     await waitFor(() => expect(result.current.data?.availability).toBe("available"));
     expect(listSecretsRpc).toHaveBeenCalledWith({ environmentId: "denv_cloud" });
     const other = managedStoreTarget({ destination: "hosted", endpoint: "http://127.0.0.1:8090", environment_id: "denv_other_org" });
-    expect(managedSecretsQueryOptions(null, "prod", target).queryKey).not.toEqual(managedSecretsQueryOptions(null, "prod", other).queryKey);
+    expect(managedSecretsQueryOptions(transport, null, "prod", target).queryKey).not.toEqual(managedSecretsQueryOptions(transport, null, "prod", other).queryKey);
   });
 
   it("makes NO call for a non-hosted env, and reports not-hosted", async () => {

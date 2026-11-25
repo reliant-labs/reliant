@@ -61,7 +61,7 @@ func TestListTriggerOffers_Generated(t *testing.T) {
 	// automation_takeover *Service wired with stubbed dependencies. Override one
 	// with automation_takeover.WithAutomationTakeoverDeps(...), or per-row via Case.Setup.
 	svc := automation_takeover.NewTestAutomationTakeover(t, automation_takeover.WithAutomationTakeoverDeps(automation_takeover.Deps{
-		Repo: &automation_takeover.MockRepository{
+		Offers: &automation_takeover.MockOffers{
 			ListPendingTriggerOffersFunc: func(context.Context, core.TriggerOfferFilters) ([]*core.TriggerOffer, error) { return nil, nil },
 		},
 	}))

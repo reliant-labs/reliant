@@ -77,6 +77,7 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+InboxServiceListInboxProcedure,
 			connect.WithSchema(inboxServiceMethods.ByName("ListInbox")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		dismissInboxItem: connect.NewClient[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse](
@@ -144,6 +145,7 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 		InboxServiceListInboxProcedure,
 		svc.ListInbox,
 		connect.WithSchema(inboxServiceMethods.ByName("ListInbox")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	inboxServiceDismissInboxItemHandler := connect.NewUnaryHandler(

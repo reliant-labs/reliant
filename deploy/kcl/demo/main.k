@@ -43,7 +43,7 @@ import ..dev_sign_in as dsi
 _runtime_config = {
     # Where the console's reads come from: the built-in sample data. "remote"
     # plus DEMO_DATA_URL reads a public demo-data gateway first, falling back
-    # to the sample data (Forge/Demo/demoData/demoTransport.ts).
+    # to the sample data (Forge/Demo/demoTransport.ts).
     DEMO_DATA_SOURCE = "fixtures"
     DEMO_DATA_URL = ""
     # Browser telemetry to the platform's same-origin ingest for this site,
