@@ -39,10 +39,6 @@ vi.mock('@/components/Machines/AddMachineSheet', () => ({ AddMachineSheet: () =>
 vi.mock('@/components/Machines/PairMachinePanel', () => ({ PairMachinePanel: () => null }))
 vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { usageMeasured: true, pricingVersion: 'test-version', billingHoldReason: '', allowanceWeightedSeconds: '576000/1', remainingWeightedSeconds: '3600/1' } }), usePlans: () => ({ data: { daemonPricing: { pricingVersion: 'test-version', sizes: [{ size: 'm', costWeight: '1/1', exactHourlyPriceCents: '13/1', hourlyPriceCents: '13', storageGib: 120 }, { size: 'xl', costWeight: '4/1', exactHourlyPriceCents: '52/1', hourlyPriceCents: '52', storageGib: 180 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));
 
-vi.mock('@/services/controlPlane/billing', () => ({
-  getComputeEligibility: mocks.getComputeEligibility,
-}))
-
 vi.mock('@/lib/event-context', () => ({
   useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
 }))
@@ -92,9 +88,10 @@ import { MachinesSection } from '@/components/Settings/cloud/machines'
 import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 import { setTransport } from '@/lib/connect'
 import { daemonRegistryTransport } from '@/test/daemonRegistry'
+import { eligibilityHandlers } from '@/test/billingTransport'
 
 // The daemon list is read through connectClient(DaemonRegistryService).
-beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() })))
+beforeEach(() => setTransport(daemonRegistryTransport({ listDaemons: () => mocks.listDaemons() }, eligibilityHandlers(() => mocks.getComputeEligibility()))))
 afterEach(() => setTransport(null))
 
 const LARGE = 10 // DAEMON_SIZE_XL
