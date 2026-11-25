@@ -181,6 +181,17 @@ func relInside(root, path string) (string, bool) {
 	return rel, true
 }
 
+// aboveRepo reports whether dir is a strict ancestor of the repository root
+// top, after resolving symlinks.
+func aboveRepo(dir, top string) bool {
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false
+	}
+	_, inside := relInside(realDir, top)
+	return inside
+}
+
 // linkedWorktrees returns the real roots of the git worktrees of repos (the
 // workspace itself when repos is empty) that are not the workspace's own
 // checkouts: the worktrees `git worktree list` names for the same
