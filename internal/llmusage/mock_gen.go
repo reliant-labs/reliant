@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=6641829ff8b400c660418809f06ece84b3930f43e2c329d34b2f70eda44e001f
+// forge:hash=61d8ed18fdb1046d9633898cf88c9205b34c4835615b81c96415821aaaf24068
 
 // MockService is a test mock for the Service interface.
 //
@@ -32,6 +32,7 @@ type MockService struct {
 	PruneToolCallUsageFunc       func(context.Context, time.Time) (int64, error)
 	RecordLLMCallUsageFunc       func(context.Context, store.LLMCallUsageRecord) (bool, error)
 	PruneLLMCallUsageFunc        func(context.Context, time.Time) (int64, error)
+	FoldInsightsFunc             func(context.Context) (int64, error)
 	PruneLLMUsagePurgeFencesFunc func(context.Context, time.Time) (int64, error)
 }
 
@@ -71,6 +72,15 @@ func (m *MockService) PruneLLMCallUsage(ctx context.Context, now time.Time) (int
 	return 0, contractkit.MockNotSet("MockService", "PruneLLMCallUsage")
 }
 
+// FoldInsights records the call and delegates to FoldInsightsFunc when set.
+func (m *MockService) FoldInsights(ctx context.Context) (int64, error) {
+	m.Recorder.Record("FoldInsights", ctx)
+	if m.FoldInsightsFunc != nil {
+		return m.FoldInsightsFunc(ctx)
+	}
+	return 0, contractkit.MockNotSet("MockService", "FoldInsights")
+}
+
 // PruneLLMUsagePurgeFences records the call and delegates to PruneLLMUsagePurgeFencesFunc when set.
 func (m *MockService) PruneLLMUsagePurgeFences(ctx context.Context, now time.Time) (int64, error) {
 	m.Recorder.Record("PruneLLMUsagePurgeFences", ctx, now)
@@ -84,7 +94,7 @@ func (m *MockService) PruneLLMUsagePurgeFences(ctx context.Context, now time.Tim
 var _ Service = (*MockService)(nil)
 
 // forge:section MockLedger
-// forge:hash=cdd167cb72bf028f967fd1d001a1acaf89cb5828cfd328f816314d8d2a81cca1
+// forge:hash=7a873ed24f992de7f9b995dbe096206ee065c800f80fcdbdba65692353f72e03
 
 // MockLedger is a test mock for the Ledger interface.
 //
@@ -94,9 +104,10 @@ var _ Service = (*MockService)(nil)
 // "MockLedger.<Method>Func not set" error.
 type MockLedger struct {
 	contractkit.Recorder
-	RecordLLMCallUsageFunc       func(context.Context, store.LLMCallUsageRecord) (bool, error)
-	PruneLLMCallUsageFunc        func(context.Context, time.Time, int) (int64, error)
-	PruneLLMUsagePurgeFencesFunc func(context.Context, time.Time) (int64, error)
+	RecordLLMCallUsageFunc           func(context.Context, store.LLMCallUsageRecord) (bool, error)
+	PruneLLMCallUsageFunc            func(context.Context, time.Time, int) (int64, error)
+	PruneLLMUsagePurgeFencesFunc     func(context.Context, time.Time) (int64, error)
+	FoldLLMCallUsageIntoInsightsFunc func(context.Context, int) (int64, error)
 }
 
 // RecordLLMCallUsage records the call and delegates to RecordLLMCallUsageFunc when set.
@@ -126,11 +137,20 @@ func (m *MockLedger) PruneLLMUsagePurgeFences(ctx context.Context, now time.Time
 	return 0, contractkit.MockNotSet("MockLedger", "PruneLLMUsagePurgeFences")
 }
 
+// FoldLLMCallUsageIntoInsights records the call and delegates to FoldLLMCallUsageIntoInsightsFunc when set.
+func (m *MockLedger) FoldLLMCallUsageIntoInsights(ctx context.Context, batch int) (int64, error) {
+	m.Recorder.Record("FoldLLMCallUsageIntoInsights", ctx, batch)
+	if m.FoldLLMCallUsageIntoInsightsFunc != nil {
+		return m.FoldLLMCallUsageIntoInsightsFunc(ctx, batch)
+	}
+	return 0, contractkit.MockNotSet("MockLedger", "FoldLLMCallUsageIntoInsights")
+}
+
 // Compile-time check.
 var _ Ledger = (*MockLedger)(nil)
 
 // forge:section MockToolLedger
-// forge:hash=8b63f3d3505ca73970640bd16966e005ee408b0322b7d2d8995000c6d0bda89d
+// forge:hash=647eee8b3d8d42511f1722be47a83b528b2a8b22a0b0145967de804498a6ef20
 
 // MockToolLedger is a test mock for the ToolLedger interface.
 //
@@ -140,8 +160,9 @@ var _ Ledger = (*MockLedger)(nil)
 // "MockToolLedger.<Method>Func not set" error.
 type MockToolLedger struct {
 	contractkit.Recorder
-	RecordToolCallUsageFunc func(context.Context, store.ToolCallUsageRecord) (bool, error)
-	PruneToolCallUsageFunc  func(context.Context, time.Time, int) (int64, error)
+	RecordToolCallUsageFunc           func(context.Context, store.ToolCallUsageRecord) (bool, error)
+	PruneToolCallUsageFunc            func(context.Context, time.Time, int) (int64, error)
+	FoldToolCallUsageIntoInsightsFunc func(context.Context, int) (int64, error)
 }
 
 // RecordToolCallUsage records the call and delegates to RecordToolCallUsageFunc when set.
@@ -160,6 +181,15 @@ func (m *MockToolLedger) PruneToolCallUsage(ctx context.Context, cutoff time.Tim
 		return m.PruneToolCallUsageFunc(ctx, cutoff, batch)
 	}
 	return 0, contractkit.MockNotSet("MockToolLedger", "PruneToolCallUsage")
+}
+
+// FoldToolCallUsageIntoInsights records the call and delegates to FoldToolCallUsageIntoInsightsFunc when set.
+func (m *MockToolLedger) FoldToolCallUsageIntoInsights(ctx context.Context, batch int) (int64, error) {
+	m.Recorder.Record("FoldToolCallUsageIntoInsights", ctx, batch)
+	if m.FoldToolCallUsageIntoInsightsFunc != nil {
+		return m.FoldToolCallUsageIntoInsightsFunc(ctx, batch)
+	}
+	return 0, contractkit.MockNotSet("MockToolLedger", "FoldToolCallUsageIntoInsights")
 }
 
 // Compile-time check.

@@ -1,17 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Tooltip from "../forge-ui/tooltip";
 import { ExternalLink, Globe, Lock } from "lucide-react";
 import { type CSSProperties } from "react";
 
-import { daemonPreviewQuery } from "../../hooks/useActiveDaemonPreviewTemplate";
+import {
+  daemonServiceKeys,
+  useGetDaemon,
+  useListPortAccessRules,
+  useSetDefaultPortAccess,
+} from "../../hooks/controlplane/daemon-service-hooks_gen";
+import { DAEMON_PREVIEW_READ } from "../../hooks/useActiveDaemonPreviewTemplate";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { previewUrlForPort } from "../../lib/dev-preview";
 import { openExternalLink } from "../../lib/open-link";
 import {
-  listPortAccessRules,
-  portAccessRulesQueryKey,
   removePortAccess,
-  setDefaultPortAccess,
   setPortAccess,
   PortAccessMode,
 } from "../../services/controlPlane/environments";
@@ -51,10 +54,8 @@ export function DetectedPortsChip() {
   const ports = livePorts ?? activeDaemon?.detectedPorts?.map(Number) ?? [];
 
   const daemonId = activeDaemon?.daemonId ?? "";
-  const previewQuery = daemonPreviewQuery(daemonId);
-  const daemonPreviewQueryKey = previewQuery.queryKey;
-  const { data: daemonInfo } = useQuery({
-    ...previewQuery,
+  const { data: daemonInfo } = useGetDaemon({ daemonId }, {
+    ...DAEMON_PREVIEW_READ,
     enabled: Boolean(daemonId) && ports.length > 0,
   });
   const urlTemplate = daemonInfo?.workspaceBaseDomain;
@@ -67,14 +68,15 @@ export function DetectedPortsChip() {
   // other than an explicit PUBLIC (unset/AUTHENTICATED) is the safe owner-only
   // default.
   const isPublicDefault = daemonInfo?.daemon?.defaultPortAccess === PortAccessMode.PUBLIC;
-  const defaultMut = useMutation({
-    mutationFn: (mode: PortAccessMode) => setDefaultPortAccess({ daemonId, defaultAccessMode: mode }),
-    onSettled: () => qc.invalidateQueries({ queryKey: daemonPreviewQueryKey }),
+  // Re-read the machine's GetDaemon whether the write landed or not.
+  const defaultMut = useSetDefaultPortAccess({
+    invalidate: false,
+    onSettled: () => qc.invalidateQueries({ queryKey: daemonServiceKeys.getDaemon({ daemonId }) }),
   });
 
-  const { data: rules } = useQuery({
-    queryKey: portAccessRulesQueryKey(daemonId),
-    queryFn: () => listPortAccessRules(daemonId),
+  // Shared with Settings › Machines' Port Access panel: one entry per machine.
+  const { data: rules } = useListPortAccessRules({ daemonId }, {
+    select: (res) => res.rules,
     enabled: canManageAccess && ports.length > 0,
     staleTime: 30_000,
     retry: 0,
@@ -83,6 +85,8 @@ export function DetectedPortsChip() {
     (rules ?? []).filter((r) => r.accessMode === PortAccessMode.PUBLIC).map((r) => r.port),
   );
 
+  // Branches between SetPortAccess and RemovePortAccess, so it stays a
+  // hand-written mutation, on the generated rules key.
   const toggleMut = useMutation({
     mutationFn: async ({ port, makePublic }: { port: number; makePublic: boolean }) => {
       if (makePublic) {
@@ -91,7 +95,7 @@ export function DetectedPortsChip() {
         await removePortAccess(daemonId, port);
       }
     },
-    onSettled: () => qc.invalidateQueries({ queryKey: portAccessRulesQueryKey(daemonId) }),
+    onSettled: () => qc.invalidateQueries({ queryKey: daemonServiceKeys.listPortAccessRules({ daemonId }) }),
   });
 
   if (!activeDaemon || ports.length === 0) return null;
@@ -143,7 +147,7 @@ export function DetectedPortsChip() {
                   type="button"
                   disabled={defaultMut.isPending}
                   onClick={() => {
-                    if (isPublicDefault) defaultMut.mutate(PortAccessMode.AUTHENTICATED);
+                    if (isPublicDefault) defaultMut.mutate({ daemonId, defaultAccessMode: PortAccessMode.AUTHENTICATED });
                   }}
                   className={
                     "flex flex-1 items-center justify-center gap-1 px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
@@ -161,7 +165,7 @@ export function DetectedPortsChip() {
                   type="button"
                   disabled={defaultMut.isPending}
                   onClick={() => {
-                    if (!isPublicDefault) defaultMut.mutate(PortAccessMode.PUBLIC);
+                    if (!isPublicDefault) defaultMut.mutate({ daemonId, defaultAccessMode: PortAccessMode.PUBLIC });
                   }}
                   className={
                     "flex flex-1 items-center justify-center gap-1 border-l border-border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +

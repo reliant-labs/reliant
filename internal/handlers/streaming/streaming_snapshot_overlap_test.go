@@ -72,7 +72,7 @@ func TestChatSnapshot_UpdateHeadsDoNotHoldUpTheTranscript(t *testing.T) {
 	require.NoError(t, repo.UpdateChat(ctx, chat))
 
 	gate := &headsGateRepo{Repository: repo, blocksAsked: make(chan struct{})}
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: gate, Heads: headsGate{Heads: store.NewChatUpdateExtStore(repo.ORM()), gate: gate}}))).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: gate, ChatRows: store.NewChatExtStore(repo.ORM()), Heads: headsGate{Heads: store.NewChatUpdateExtStore(repo.ORM()), gate: gate}}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 	require.False(t, gate.heldUp, "the window's content blocks waited for the update heads")
 	require.NotEmpty(t, snapshot.Messages)

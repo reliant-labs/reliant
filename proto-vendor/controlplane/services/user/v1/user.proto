@@ -150,6 +150,24 @@ message PreviewAccountDeletionResponse {
   AccountDeletionWalletQuote wallet = 3;
 }
 
+// AccountDeletionConfirmed is a Connect error detail. control-plane attaches it
+// to the PermissionDenied refusal of a deleted account (reason
+// "account_deleted", message "this account has been deleted") when it has
+// VERIFIED the deletion: the caller's users row carries the tombstone that
+// DeleteCurrentUserAccount writes as its last step, after the wallet was
+// settled, the daemons torn down and the sign-in identity removed.
+//
+// The same refusal is also sent WITHOUT this detail, as a precaution, when
+// control-plane could not tell: the lookup of the tombstone failed, so it
+// refused rather than risk admitting a deleted account. A client must treat
+// the platform account as deleted only when this detail is present. reliant's
+// DeleteAccount resumes its local purge on it; an ambiguous refusal is a
+// failure the user retries.
+//
+// It may be sent on any RPC, because the refusal comes from the auth layer
+// before a handler runs. Empty today; a field added later is additive.
+message AccountDeletionConfirmed {}
+
 message DeleteCurrentUserAccountRequest {}
 
 message DeleteCurrentUserAccountResponse {

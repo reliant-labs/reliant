@@ -347,6 +347,11 @@ var purgeSteps = []step{
 	// chat's owner, with no foreign key to cascade them. Its writes take the
 	// same lock and fence as the model calls' above.
 	{"tool_call_usage", `DELETE FROM tool_call_usage WHERE user_id = $1`},
+	// The insights member rollups (agent-analytics.md §3.1): a member's daily
+	// totals, keyed by user. Their writes take the lock above. The team
+	// rollups name no one and stay with the org.
+	{"insights_model_calls_member_daily", `DELETE FROM insights_model_calls_member_daily WHERE user_id = $1`},
+	{"insights_tool_calls_member_daily", `DELETE FROM insights_tool_calls_member_daily WHERE user_id = $1`},
 	// A chat's question before it uses the person's own account (§10): it names
 	// their account's label. Chats cascade it too; this covers a chat kept.
 	{"chat_personal_funding", `DELETE FROM chat_personal_funding WHERE user_id = $1`},

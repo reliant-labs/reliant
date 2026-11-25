@@ -504,8 +504,27 @@ schema ReliantConfigMachineOrg:
     check:
         cross_org_cleanup != "", "cross_org_cleanup = \"\" cannot reach the process: an empty RELIANT_MACHINE_ORG_CLEANUP counts as unset, so it would load the default \"on\" — set a value, or change its default in the proto"
 
+# forge:section schema ReliantConfigIdleReclaim
+# forge:hash=e9a6340c90f11ae87170e0c7c291086d1a9147cbc821d0f580ff1ccdcc835ced
+# ReliantConfigIdleReclaim is the idle_reclaim block (IdleReclaimConfig) — author its values in config.k as `idle_reclaim.<field> = ...`.
+schema ReliantConfigIdleReclaim:
+    # Idle reclaim of scratch directories and idle worktrees' node_modules: auto (where the storage reaper runs), on, dry-run or off
+    mode: str = "auto"
+    # Idle time before a scratch directory's regenerable output and clean, pushed worktrees are removed (Go duration, minimum 24h)
+    scratch_strip_idle: str = "48h"
+    # Idle time before a whole scratch directory without a .keep file is removed (Go duration, minimum 72h)
+    scratch_remove_idle: str = "168h"
+    # Idle time before a kept worktree's node_modules are removed (Go duration, minimum 24h)
+    worktree_node_modules_idle: str = "72h"
+
+    check:
+        mode != "", "mode = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM counts as unset, so it would load the default \"auto\" — set a value, or change its default in the proto"
+        scratch_strip_idle != "", "scratch_strip_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE counts as unset, so it would load the default \"48h\" — set a value, or change its default in the proto"
+        scratch_remove_idle != "", "scratch_remove_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE counts as unset, so it would load the default \"168h\" — set a value, or change its default in the proto"
+        worktree_node_modules_idle != "", "worktree_node_modules_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE counts as unset, so it would load the default \"72h\" — set a value, or change its default in the proto"
+
 # forge:section schema ReliantConfig
-# forge:hash=0fe00f302a84a561d41c56f6ab045fa512906e15f0de663802e64716994c6bab
+# forge:hash=8e5f05c2b1de77b6022f25bc3da693beafdfcbddcc9896672935f993c479aec0
 schema ReliantConfig:
     # log config block (LogConfig). Set its fields as `log.<field> = ...`.
     log: ReliantConfigLog = ReliantConfigLog {}
@@ -519,6 +538,8 @@ schema ReliantConfig:
     worktree_reclaim: ReliantConfigWorktreeReclaim = ReliantConfigWorktreeReclaim {}
     # machine_org config block (MachineOrgConfig). Set its fields as `machine_org.<field> = ...`.
     machine_org: ReliantConfigMachineOrg = ReliantConfigMachineOrg {}
+    # idle_reclaim config block (IdleReclaimConfig). Set its fields as `idle_reclaim.<field> = ...`.
+    idle_reclaim: ReliantConfigIdleReclaim = ReliantConfigIdleReclaim {}
 
 # forge:section env-map reliantConfigEnvMap
 # forge:hash=b6d59175cfbe3674b1beacb0e82b712699f93bd21c82d21648a5b68b7da62db8
@@ -595,6 +616,13 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
         # forge:section reliantConfigEnvMap values machine_org
         # forge:hash=a6139921818fc09b818d6313869c848498bf6604100259c09613497756aa133e
         "RELIANT_MACHINE_ORG_CLEANUP" = c.machine_org.cross_org_cleanup
+
+        # forge:section reliantConfigEnvMap values idle_reclaim
+        # forge:hash=693c446689c40625e3be7ee0a2d3d35f2756de1904729c621c9e095f807a8a7b
+        "RELIANT_IDLE_RECLAIM" = c.idle_reclaim.mode
+        "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE" = c.idle_reclaim.scratch_strip_idle
+        "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE" = c.idle_reclaim.scratch_remove_idle
+        "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE" = c.idle_reclaim.worktree_node_modules_idle
 
         # forge:section reliantConfigEnvMap values (end)
         # forge:hash=e1769827ac16f2cb38e2dd9a87b234861e5af33f295889268d5884a88256e96c
@@ -2086,6 +2114,13 @@ ROOTS: {str: Root} = {
             # forge:hash=20cd0d122cc069d3d0b02868699b2a171dff10db8c0c3fd01372b643fc7b93f9
             "RELIANT_MACHINE_ORG_CLEANUP",
 
+            # forge:section root api env idle_reclaim
+            # forge:hash=2018ba99128ec8fa938fe90ff1c47c7f2ffea6152eb4c224f4290e593cae318e
+            "RELIANT_IDLE_RECLAIM",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
+            "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
+
             # forge:section root api env (root)
             # forge:hash=a06ffa2bc71de2e9597f7186c871eda017f2b74927d8f7ccbf6244488a057d08
             "JWT_PUBLIC_KEY",
@@ -2323,6 +2358,13 @@ ROOTS: {str: Root} = {
             # forge:hash=2b44a18a4f8d2fc1f4633e5cb58c7fcc875e4ec0dd8b40c363d51601e56e4941
             "RELIANT_MACHINE_ORG_CLEANUP",
 
+            # forge:section root gateway env idle_reclaim
+            # forge:hash=5e47e625fc2c7a408c61b410b06f71875a8e59390c1136f9b93f266530dfd31a
+            "RELIANT_IDLE_RECLAIM",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
+            "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
+
             # forge:section root gateway env (root)
             # forge:hash=751acacff603d412b87b85659d2724d1b9ea693dd4d7863993d4f5276f14383d
             "DATABASE_DRIVER",
@@ -2468,6 +2510,13 @@ ROOTS: {str: Root} = {
             # forge:section root worker env machine_org
             # forge:hash=f0a3e223537d73d37fc1c1379179d7b0040b192d461d77a0f3a943695a057686
             "RELIANT_MACHINE_ORG_CLEANUP",
+
+            # forge:section root worker env idle_reclaim
+            # forge:hash=01e8ef2e70a1f5d1dc473f769f3bc8c77445bdd01717bc69cd338168fd3208cf
+            "RELIANT_IDLE_RECLAIM",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
+            "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
+            "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
             # forge:section root worker env (root)
             # forge:hash=84aaf81e7e16a419f918f4ddcce4e4a5c2fb7ca9a2e408ffd246c84e9dc5f6f3

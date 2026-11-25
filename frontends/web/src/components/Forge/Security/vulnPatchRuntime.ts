@@ -29,8 +29,11 @@ export function useVulnPatchAccess(forgeProject: string, reliantProjectId: strin
   const { projects, isLoading: listing } = useProjects();
   const project = reliantProjectId ? (projects.find((candidate) => candidate.id === reliantProjectId) ?? null) : null;
   const repos = useListRepos({ projectId: project?.id ?? "" }, { enabled: !!project && !project.viewer_access });
-  const credential = useGitHubCredential();
-  const connections = useConnections("github");
+  // The caller's GitHub matters only once a project could be patched: an app no
+  // project here declares (the forge tour's sample app among them) reads none of it.
+  const patchable = !!project && !project.viewer_access;
+  const credential = useGitHubCredential({ enabled: patchable });
+  const connections = useConnections(patchable ? "github" : undefined);
   // A personal connection counts; an org's is used only where a run names it, which this one does not.
   const connected = credential.hasToken || (connections.data ?? []).some((c) => c.status === "active" && c.ownerKind === "user");
   return vulnPatchAccess({
