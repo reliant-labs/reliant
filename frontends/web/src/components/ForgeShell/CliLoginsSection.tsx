@@ -12,19 +12,23 @@
  * which this section reports instead of an empty list.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
+import {
+  accessTokenServiceKeys,
+  useListMyCLILogins,
+  useRevokeMyCLILogin,
+} from "@/hooks/controlplane/access-token-service-hooks_gen";
 import { formatRelativeTime } from "@/lib/relativeTime";
-import { cliClientLabel, listCliLogins, revokeCliLogin } from "@/services/controlPlane/cliLogins";
+import { cliClientLabel, type CliLogin, liveCliLogins } from "@/services/controlPlane/cliLogins";
+import type { ListMyCLILoginsResponse } from "@/gen/controlplane/services/access_token/v1/access_token_pb";
 
-const KEY = ["cli-logins"] as const;
+// Hoisted so the mapping reruns only when the answer changes.
+const selectLogins = (res: ListMyCLILoginsResponse): CliLogin[] => liveCliLogins(res);
 
 export function CliLoginsSection() {
-  const queryClient = useQueryClient();
-  const logins = useQuery({ queryKey: KEY, queryFn: () => listCliLogins(), retry: false });
-  const revoke = useMutation({
-    mutationFn: (id: string) => revokeCliLogin(id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: KEY }),
+  const logins = useListMyCLILogins({}, { retry: false, select: selectLogins });
+  // Refreshes the CLI logins alone, not the service's every query.
+  const revoke = useRevokeMyCLILogin({
+    invalidate: (qc) => void qc.invalidateQueries({ queryKey: accessTokenServiceKeys.listMyCLILogins.all }),
   });
 
   return (
@@ -61,7 +65,7 @@ export function CliLoginsSection() {
               </div>
               <button
                 type="button"
-                onClick={() => revoke.mutate(l.id)}
+                onClick={() => revoke.mutate({ id: l.id })}
                 disabled={revoke.isPending}
                 aria-label={`Revoke the CLI login on ${l.deviceName || "this device"}`}
                 className="rounded-md px-2 py-1 text-sm text-destructive hover:bg-destructive/10"
