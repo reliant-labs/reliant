@@ -26,17 +26,20 @@ func TestDepsRefuseAMissingFiringsOrWebhookSecretStore(t *testing.T) {
 	// Every other required dependency present: only the role under test is missing.
 	full := Deps{
 		Logger: slog.Default(), Config: &config.Config{}, Repo: &MockRepository{}, Chats: &MockChats{}, Owners: &MockOwners{},
-		Firings: store.NewTriggerEventExtStore(nil), WebhookSecrets: store.NewTriggerExtStore(nil),
+		Firings: store.NewTriggerEventExtStore(nil), WebhookSecrets: store.NewTriggerExtStore(nil), TriggerWrites: store.NewTriggerWritesExtStore(nil),
 		Projects: &projectaccess.MockService{}, OrgMoves: &MockOrgMoveResumer{}, Pools: &MockPools{},
 	}
 	require.NotContains(t, errString(full.validateDeps()), "Firings", "the full Deps passes the roles under test")
 
 	noFirings := full
 	noFirings.Firings = nil
-	require.ErrorContains(t, noFirings.validateDeps(), "Deps.Firings and Deps.WebhookSecrets are required")
+	require.ErrorContains(t, noFirings.validateDeps(), "Deps.Firings, Deps.WebhookSecrets and Deps.TriggerWrites are required")
 	noSecrets := full
 	noSecrets.WebhookSecrets = nil
-	require.ErrorContains(t, noSecrets.validateDeps(), "Deps.Firings and Deps.WebhookSecrets are required")
+	require.ErrorContains(t, noSecrets.validateDeps(), "Deps.Firings, Deps.WebhookSecrets and Deps.TriggerWrites are required")
+	noWrites := full
+	noWrites.TriggerWrites = nil
+	require.ErrorContains(t, noWrites.validateDeps(), "Deps.Firings, Deps.WebhookSecrets and Deps.TriggerWrites are required")
 }
 
 func errString(err error) string {
@@ -47,7 +50,7 @@ func errString(err error) string {
 }
 
 // realStores gives deps over a real repository the generated stores the
-// handler requires beside it (Firings and WebhookSecrets), in place of the
+// handler requires beside it (Firings, WebhookSecrets and TriggerWrites), in place of the
 // loud mocks the harness would default them to.
 func realStores(repo *db.Repo, d Deps) Deps {
 	if d.Firings == nil {
@@ -55,6 +58,9 @@ func realStores(repo *db.Repo, d Deps) Deps {
 	}
 	if d.WebhookSecrets == nil {
 		d.WebhookSecrets = store.NewTriggerExtStore(repo.ORM())
+	}
+	if d.TriggerWrites == nil {
+		d.TriggerWrites = store.NewTriggerWritesExtStore(repo.ORM())
 	}
 	return d
 }

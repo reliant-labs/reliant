@@ -226,7 +226,7 @@ func New(deps Deps) (*Service, error) {
 	}
 	return &Service{
 		deps:    deps,
-		runs:    runs.New(runs.Deps{Repo: deps.Repo, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
+		runs:    runs.New(runs.Deps{Repo: deps.Repo, Chats: deps.Repo, Workflows: deps.Workflows, Questions: deps.Questions, Temporal: deps.Temporal, Pause: deps.Pause, Waits: deps.Backoff}),
 		threads: threads.New(threads.Deps{Repo: deps.Repo, Chats: deps.Chats, Signaler: deps.Temporal, ToolCanceler: deps.Router}),
 	}, nil
 }
@@ -241,7 +241,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Chats: s.deps.Repo, Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, ProjectRows: s.deps.ProjectRows, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

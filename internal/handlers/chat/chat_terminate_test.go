@@ -151,7 +151,7 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 		// TerminateChat delegates execution state and reconciliation to the
 		// run-lifecycle service. No pause controller: terminate never signals or
 		// resets, so a nil one would be a panic rather than a silent no-op.
-		runs: runs.New(runs.Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 
 	resp, err := service.TerminateChat(ctx, connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: chatID}))

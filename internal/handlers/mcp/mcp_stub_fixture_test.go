@@ -73,7 +73,11 @@ func ownedProjectRepo(t *testing.T, mcpConfigs string) *ownedStore {
 
 // newService builds the service over store. router is the caller's daemon;
 // nil builds it without a daemon router.
-func newService(t *testing.T, store *ownedStore, router mcp.Router) *mcp.Service {
+func newService(t *testing.T, store *ownedStore, router mcp.Router, refetch ...mcp.UserRefetch) *mcp.Service {
 	t.Helper()
-	return mcp.NewTestMCP(t, withDeps(mcp.Deps{Repo: store, Projects: projectaccesstest.For(store), ProjectConfigs: store, Router: router}))
+	var r mcp.UserRefetch = &mcp.MockUserRefetch{EmitUserRefetchFunc: func(context.Context, string, core.RefetchType, core.RefetchOpts) error { return nil }}
+	if len(refetch) > 0 {
+		r = refetch[0]
+	}
+	return mcp.NewTestMCP(t, withDeps(mcp.Deps{Repo: store, Projects: projectaccesstest.For(store), ProjectConfigs: store, Router: router, Refetch: r}))
 }

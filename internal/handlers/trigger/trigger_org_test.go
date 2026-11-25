@@ -257,7 +257,7 @@ func TestListTriggers_LeavesOutALeftOrgsTriggers(t *testing.T) {
 // the user's unassigned rows with org between the handler's org decision and
 // its write: the interleaving the write's own re-check exists for.
 type backfillBeforeWrite struct {
-	Repository
+	TriggerWrites
 	repo   *db.Repo
 	userID string
 	org    string
@@ -269,17 +269,17 @@ func (r backfillBeforeWrite) UpdateTriggerInOrg(ctx context.Context, t *core.Tri
 	if err := r.repo.AssignUnassignedOrg(context.Background(), r.userID, r.org); err != nil {
 		return err
 	}
-	return r.Repository.UpdateTriggerInOrg(ctx, t, reads...)
+	return r.TriggerWrites.UpdateTriggerInOrg(ctx, t, reads...)
 }
 
 func (r backfillBeforeWrite) CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error {
 	if !r.creates {
-		return r.Repository.CreateTriggerInOrg(ctx, t, reads...)
+		return r.TriggerWrites.CreateTriggerInOrg(ctx, t, reads...)
 	}
 	if err := r.repo.AssignUnassignedOrg(context.Background(), r.userID, r.org); err != nil {
 		return err
 	}
-	return r.Repository.CreateTriggerInOrg(ctx, t, reads...)
+	return r.TriggerWrites.CreateTriggerInOrg(ctx, t, reads...)
 }
 
 // An update decided in one org is not written once a backfill commits the
@@ -310,7 +310,7 @@ func TestUpdateTrigger_ABackfillBetweenDecisionAndWriteIsRefused(t *testing.T) {
 	// The backfill stamps the user's unassigned rows acme (a default that
 	// changed under the request) after the handler decided home.
 	env.configure(t, func(d *Deps) {
-		d.Repo = backfillBeforeWrite{Repository: d.Repo, repo: env.repo, userID: env.userID, org: "acme"}
+		d.TriggerWrites = backfillBeforeWrite{TriggerWrites: d.TriggerWrites, repo: env.repo, userID: env.userID, org: "acme"}
 	})
 	update := func(tr *core.Trigger, projectID string) error {
 		_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
@@ -368,7 +368,7 @@ func TestUpdateTrigger_ABackfillAfterAnEmptyDecisionIsRefused(t *testing.T) {
 	require.Nil(t, before.OrgID, "no default: created with no org")
 
 	env.configure(t, func(d *Deps) {
-		d.Repo = backfillBeforeWrite{Repository: d.Repo, repo: env.repo, userID: env.userID, org: "acme"}
+		d.TriggerWrites = backfillBeforeWrite{TriggerWrites: d.TriggerWrites, repo: env.repo, userID: env.userID, org: "acme"}
 	})
 	_, err = env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
 		Id:      created.GetId(),
@@ -393,7 +393,7 @@ func TestCreateTrigger_ABackfillBetweenDecisionAndInsertIsRefused(t *testing.T) 
 	project := env.orgProject(t, nil)
 	env.configure(t, func(d *Deps) {
 		d.Orgs = resolver
-		d.Repo = backfillBeforeWrite{Repository: d.Repo, repo: env.repo, userID: env.userID, org: "acme", creates: true}
+		d.TriggerWrites = backfillBeforeWrite{TriggerWrites: d.TriggerWrites, repo: env.repo, userID: env.userID, org: "acme", creates: true}
 	})
 	_, err := env.createIn(env.ctx, project, nil)
 	requireDenied(t, err, connect.CodeFailedPrecondition, "")

@@ -29,7 +29,6 @@ var ErrNoWorkflow = svcerr.FailedPrecondition("chat has no workflow")
 
 // Repository is the subset of *db.Repo this service needs.
 type Repository interface {
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
 	// GetWorkflow is workflow.WokenStatusStore's read (StatusBeforeWake,
 	// MarkWokenRunActive take the repo whole); the service's own reads go

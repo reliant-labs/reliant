@@ -38,6 +38,10 @@ describe("groupOf", () => {
     expect(groupOf(summary("selfmon-db", "repo", { group: "custom" }))).toBe("custom");
   });
 
+  it("reads forge's AI hub group as its own group, not custom", () => {
+    expect(groupOf(summary("ai-models", "generated", { group: "ai" }))).toBe("ai");
+  });
+
   it("reads an unknown group as custom, never as a guess", () => {
     expect(groupOf(summary("overview", "generated", { group: "dashboards-v2" }))).toBe("custom");
   });
@@ -72,10 +76,10 @@ describe("groupIndex", () => {
       summary("org-costs", "builtin", { group: "platform" }),
     ];
     const grouped = groupIndex(index);
-    expect(grouped.map((g) => g.group)).toEqual(["overview", "services", "jobs", "product", "platform", "releases", "custom"]);
+    expect(grouped.map((g) => g.group)).toEqual(["overview", "services", "jobs", "product", "ai", "platform", "releases", "custom"]);
     expect(grouped.find((g) => g.group === "services")!.dashboards.map((d) => d.ref.key)).toEqual(["process-b", "process-a"]);
     expect(grouped.find((g) => g.group === "platform")!.dashboards.map((d) => d.ref.key)).toEqual(["org-costs", "workloads", "selfmon-db", "my-board"]);
-    expect(groupCounts(index)).toEqual({ overview: 0, services: 2, jobs: 0, product: 0, platform: 4, releases: 0, custom: 0 });
+    expect(groupCounts(index)).toEqual({ overview: 0, services: 2, jobs: 0, product: 0, ai: 0, platform: 4, releases: 0, custom: 0 });
   });
 
   it("lists Built-in first, then only the groups that hold something", () => {

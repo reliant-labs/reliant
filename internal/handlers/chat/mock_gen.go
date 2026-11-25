@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=586bfd004ddb9ce716d763e1b4715bb3446453c8f6fa15ed9398aab5c2743d56
+// forge:hash=5f0f8deeae0e599b82fdf6f24b76f41aa31b8a3eaf9df0ae81f702071226435f
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -327,7 +327,6 @@ type MockRepository struct {
 	SaveMessageAtomicFunc                                    func(context.Context, db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	GetChatFunc                                              func(context.Context, string) (*db.Chat, error)
 	UpdateChatFunc                                           func(context.Context, *db.Chat) error
 	GetWorkflowFunc                                          func(context.Context, string) (*db.Workflow, error)
 	UpdateWorkflowStatusFunc                                 func(context.Context, string, db.WorkflowStatus) error
@@ -366,6 +365,7 @@ type MockRepository struct {
 	UpdateTriggerEventPayloadFunc                            func(context.Context, string, map[string]any) error
 	UpdateWorkflowNameFunc                                   func(context.Context, string, string) error
 	WorkflowSourceDiagnosticFunc                             func(context.Context, string, string, string) (string, error)
+	GetChatFunc                                              func(context.Context, string) (*db.Chat, error)
 	GetProjectWithUserCheckFunc                              func(context.Context, string, string) (*db.Project, error)
 	GetProjectFunc                                           func(context.Context, string) (*db.Project, error)
 	GetWorktreeFunc                                          func(context.Context, string) (*db.Worktree, error)
@@ -1192,15 +1192,6 @@ func (m *MockRepository) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 	return contractkit.MockNotSet("MockRepository", "RunTx")
 }
 
-// GetChat records the call and delegates to GetChatFunc when set.
-func (m *MockRepository) GetChat(ctx context.Context, id string) (*db.Chat, error) {
-	m.Recorder.Record("GetChat", ctx, id)
-	if m.GetChatFunc != nil {
-		return m.GetChatFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetChat")
-}
-
 // UpdateChat records the call and delegates to UpdateChatFunc when set.
 func (m *MockRepository) UpdateChat(ctx context.Context, chat *db.Chat) error {
 	m.Recorder.Record("UpdateChat", ctx, chat)
@@ -1541,6 +1532,15 @@ func (m *MockRepository) WorkflowSourceDiagnostic(ctx context.Context, projectID
 		return m.WorkflowSourceDiagnosticFunc(ctx, projectID, daemonID, ref)
 	}
 	return "", contractkit.MockNotSet("MockRepository", "WorkflowSourceDiagnostic")
+}
+
+// GetChat records the call and delegates to GetChatFunc when set.
+func (m *MockRepository) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	m.Recorder.Record("GetChat", ctx, id)
+	if m.GetChatFunc != nil {
+		return m.GetChatFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockRepository", "GetChat")
 }
 
 // GetProjectWithUserCheck records the call and delegates to GetProjectWithUserCheckFunc when set.

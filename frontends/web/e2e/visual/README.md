@@ -33,6 +33,7 @@ variant of the world names an **overlay** (`harness.overlays`), registered in
 | `empty-reads` | every page: a read no fixture answers gets the empty response, as a quiet backend would |
 | `chat-attached-projects` | the fixture chat with docs attached beside shop (the composer's project chips) |
 | `new-chat-installs` | where Alex's projects are checked out, for the phone's new chat |
+| `chat-agents` | a chat opened by URL, never listed: one turn that starts twelve sub-agents (8 done, 3 running, 1 failed) |
 | `chart-hover` | a dashboard opened by URL (a figure and a two-series line) for the chart hover surfaces |
 | `sandboxes-dashboard` | the platform's Sandboxes dashboard, opened by URL, every panel answered |
 | `pending:reliant.v1.ChatService/ListChats` | the harness's own self-test: the chat list never answers |

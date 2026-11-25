@@ -27,6 +27,8 @@ type TaskQueue string
 type Deps struct {
 	// Store is everything a launch reads and writes in the database.
 	Store Store
+	// Chats reads the chat a launch starts, re-reads and reports on.
+	Chats ChatReader
 	// Workflows reads the root workflow row a launch starts.
 	Workflows WorkflowLoader
 	// Worktrees reads the worktree a chat runs in.
@@ -75,6 +77,13 @@ type ProjectReader interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 }
 
+// ChatReader reads a chat with its computed state, inside a launch
+// transaction when ctx carries one. store.ChatsWithActivityExtStore satisfies
+// it.
+type ChatReader interface {
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+}
+
 // ChatWriter creates and updates the chat a launch materializes.
 type ChatWriter interface {
 	// LockUserOrgs takes the owner's org lock for the launch's transaction,
@@ -82,7 +91,6 @@ type ChatWriter interface {
 	// decided from (db.ErrOrgChanged when a backfill changed one).
 	LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error
 	CreateChat(ctx context.Context, chat *db.Chat) error
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error
 	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)

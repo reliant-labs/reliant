@@ -30,6 +30,68 @@ export interface InstallRow {
   path?: string;
   /** Why the last clone failed, as the machine reported it. */
   install_error?: string;
+  /**
+   * The project's nested repositories on that machine, each cloned into its
+   * folder after the root. Absent from a server older than nested clones.
+   */
+  nested_repos?: NestedRepoInstall[];
+}
+
+/** One nested repository of a checkout, and how its clone went. */
+export interface NestedRepoInstall {
+  name: string;
+  /** Its folder inside the checkout ("forge", "tools/sdk"). */
+  relative_path: string;
+  install_state: ProjectInstallState;
+  /** git's words, when its clone failed. */
+  install_error?: string;
+}
+
+/** The wire shape (ProjectDaemonNestedRepo) as an install row carries it. */
+export function nestedRepoInstalls(
+  repos: ReadonlyArray<{ name: string; relativePath: string; installState: ProjectInstallState; installError: string }> | undefined,
+): NestedRepoInstall[] {
+  return (repos ?? []).map((repo) => ({
+    name: repo.name,
+    relative_path: repo.relativePath,
+    install_state: repo.installState,
+    install_error: repo.installError || undefined,
+  }));
+}
+
+/**
+ * A nested repository as the user knows it: its folder ("forge/"), and its
+ * name too when the folder is called something else ("sdk (tools/sdk/)").
+ */
+export function nestedRepoLabel(repo: { name: string; relative_path: string }): string {
+  const path = repo.relative_path.replace(/\/+$/, "");
+  if (!path) return repo.name;
+  const base = path.split("/").pop();
+  return !repo.name || base === repo.name ? `${path}/` : `${repo.name} (${path}/)`;
+}
+
+/**
+ * The machines a project would be moved off when it is set up on `targetId`:
+ * every machine that has its checkout (INSTALLED) other than the target, an
+ * online one first, so its uncommitted work can be checked.
+ */
+export function moveSourceDaemonIds(
+  installs: ReadonlyArray<InstallRow>,
+  projectId: string | undefined,
+  targetId: string | undefined,
+  isOnline: (daemonId: string) => boolean = () => false,
+): string[] {
+  if (!projectId) return [];
+  const ids = installs
+    .filter(
+      (row) =>
+        row.project_id === projectId &&
+        row.daemon_id !== targetId &&
+        row.install_state === ProjectInstallState.INSTALLED,
+    )
+    .map((row) => row.daemon_id);
+  const unique = [...new Set(ids)];
+  return [...unique.filter(isOnline), ...unique.filter((id) => !isOnline(id))];
 }
 
 /**

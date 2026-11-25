@@ -17,16 +17,18 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 type noRecoveryCredentials struct{}
@@ -46,8 +48,10 @@ func newWorktreeService(t testing.TB, repo Repository, router Router, settler ..
 	}
 	if r, ok := repo.(*db.Repo); ok {
 		deps.Rows = store.NewWorktreeExtStore(r.ORM())
+		deps.Refetch = chatupdates.NewFromORM(r.ORM(), r, nil)
 	} else {
 		deps.Rows = &MockRows{}
+		deps.Refetch = &MockUserRefetch{EmitUserRefetchFunc: func(context.Context, string, core.RefetchType, core.RefetchOpts) error { return nil }}
 	}
 	svc, err := New(WithReadRoles(deps))
 	require.NoError(t, err)
