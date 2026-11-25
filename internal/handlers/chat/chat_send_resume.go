@@ -85,7 +85,7 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	// Resolve the DB question (so it is no longer pending regardless of outcome)
 	// and persist the messages so the resumed run reads them at its next LLM
 	// boundary.
-	if err := s.deps.QuestionResolver.ResolveQuestion(ctx, question.ID, &responseData); err != nil {
+	if err := s.questionResolver().ResolveQuestion(ctx, question.ID, &responseData); err != nil {
 		logging.WarnContext(ctx, "Failed to resolve question during resume", "error", err, "questionID", question.ID)
 	}
 	if err := s.deps.Repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{

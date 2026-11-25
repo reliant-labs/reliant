@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -108,7 +109,7 @@ func TestSendMessage_PersonTurn(t *testing.T) {
 			temporal := &inputCapturingTemporalClient{
 				absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED},
 			}
-			service := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}, Temporal: temporal, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}}, runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: &MockQuestions{}, Temporal: temporal, Pause: nil})}
+			service := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}, Temporal: temporal, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}}, runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: &MockQuestions{}, Temporal: temporal, Pause: nil})}
 
 			_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "one more thing"))
 			require.NoError(t, err)

@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -96,7 +97,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(e.repo.ORM()), Announcer: e.repo}),
 			AgentMessages: store.NewAgentMessageExtStore(e.repo.ORM()),
 		}, threads: threads.New(threads.Deps{Repo: e.repo, Messages: store.NewMessageExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM())}),
-		runs: runs.New(runs.Deps{Repo: e.repo, Chats: store.NewChatsWithActivityExtStore(e.repo.ORM()), Workflows: store.NewWorkflowExtStore(e.repo.ORM()), Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: e.repo, Resolver: questions.NewFromRepo(e.repo), Chats: store.NewChatsWithActivityExtStore(e.repo.ORM()), Workflows: store.NewWorkflowExtStore(e.repo.ORM()), Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
 	}
 
 	type outcome struct {
@@ -179,7 +180,7 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
-		runs: runs.New(runs.Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
+		runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 	}
 	return svc, router, temporal, repo, ctx, fx
 }

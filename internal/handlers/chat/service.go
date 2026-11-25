@@ -245,6 +245,28 @@ func isMockReads(v any) bool {
 	return false
 }
 
+// fixtureQuestionResolver fills QuestionResolver for the tests, as
+// fixtureChatReads fills the chat reads: nil in every binary.
+var fixtureQuestionResolver func(Repository) QuestionResolver
+
+// isMockResolver reports a role the harness filled with its generated mock.
+func isMockResolver(v QuestionResolver) bool {
+	switch v.(type) {
+	case nil, *MockQuestionResolver:
+		return true
+	}
+	return false
+}
+
+// questionResolver is Deps.QuestionResolver; in this package's tests a fixture
+// that left it unnamed resolves through its own repository.
+func (s *Service) questionResolver() QuestionResolver {
+	if isMockResolver(s.deps.QuestionResolver) && fixtureQuestionResolver != nil {
+		return fixtureQuestionResolver(s.deps.Repo)
+	}
+	return s.deps.QuestionResolver
+}
+
 // chatRows is Deps.ChatRows; in this package's tests, a fixture that left it
 // unnamed gets the one fixtureChatReads builds over its repository.
 func (s *Service) chatRows() ChatRows {
@@ -269,6 +291,9 @@ func (s *Service) chatViews() ChatViews {
 func New(deps Deps) (*Service, error) {
 	if deps.Chats == nil && fixtureChats != nil {
 		deps.Chats = fixtureChats(deps.Repo)
+	}
+	if fixtureQuestionResolver != nil && isMockResolver(deps.QuestionResolver) {
+		deps.QuestionResolver = fixtureQuestionResolver(deps.Repo)
 	}
 	if fixtureChatReads != nil {
 		rows, views := fixtureChatReads(deps.Repo)
