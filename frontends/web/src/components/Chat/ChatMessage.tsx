@@ -671,15 +671,26 @@ function ChatMessageComponent({
     );
     // Mobile keeps original run order and ownership. Only successful, settled
     // work may recede into one group row; approvals, errors and live work
-    // stay directly visible.
+    // stay directly visible. Sub-agents started together (2+) are one
+    // SubAgentGroup, as on desktop, where the first of them ran: it stays
+    // open while any runs, and a failed agent stays visible when it closes.
     if (isMobile) {
+      const mobileAgents = executions.filter((exec) => isSpawnTool(exec.call.name));
+      const groupMobileAgents = mobileAgents.length > 1;
       return (
         <div className="tool-executions-container my-2 flex flex-col gap-0.5">
           {isQuietToolRun(executions) ? (
             <ToolExecutionGroup executions={executions} messageId={message.id}
               chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} />
           ) : (
-            executions.map(row)
+            executions.map((exec, idx) => {
+              if (!groupMobileAgents || !isSpawnTool(exec.call.name)) return row(exec, idx);
+              if (exec !== mobileAgents[0]) return null;
+              return (
+                <SubAgentGroup key={`${keyPrefix}-agents`} executions={mobileAgents} messageId={message.id}
+                  chatId={chatId || undefined} showRichContent onSelectThread={onSelectThread} />
+              );
+            })
           )}
         </div>
       );
