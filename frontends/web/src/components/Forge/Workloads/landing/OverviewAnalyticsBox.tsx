@@ -21,62 +21,16 @@ import { ArrowRight, BarChart3 } from "lucide-react";
 import Link from "@/components/forge-ui/link";
 import { usePanelQuery } from "@/hooks/observability-queries";
 import { LearnLink } from "@/lib/learnLinks";
-import type { ObsScope, Panel, PanelResult } from "@/services/controlPlane/observability/types";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
 
 import { EVENTS_PANEL } from "../../Analytics/EventsMetricsPage";
-import { Sparkline } from "../../LiveState/Sparkline";
+import { UPlotChart } from "../../Observability/charts/UPlotChart";
 import { formatCount } from "../../Observability/format";
+import { ANALYTICS_DAILY_PANEL, ANALYTICS_TOTALS_PANEL, dailySeries, rowNumber, topEvent } from "./overviewAnalyticsModel";
 
 const RANGE = "7d" as const;
+const DAILY_CALENDAR = { timezone: "UTC", bucketSeconds: 86_400 } as const;
 const WEEK_MS = 7 * 24 * 3600 * 1000;
-
-const SCOPE_WHERE = "Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)} AND UserId != ''";
-
-/** Active users and events over the window: one row. */
-export const ANALYTICS_TOTALS_PANEL: Panel = {
-  id: "overview-analytics-totals",
-  title: "Active users",
-  kind: "sql",
-  signal: "",
-  series: [],
-  sql: `SELECT uniqExact(UserId) AS users, count() AS events FROM product_events WHERE ${SCOPE_WHERE}`,
-};
-
-/** Active users per day over the window. */
-export const ANALYTICS_DAILY_PANEL: Panel = {
-  id: "overview-analytics-daily",
-  title: "Active users per day",
-  kind: "sql",
-  signal: "",
-  series: [],
-  minStep: "1d",
-  sql: `SELECT toStartOfDay(Timestamp) AS t, uniqExact(UserId) AS users FROM product_events WHERE ${SCOPE_WHERE} GROUP BY t ORDER BY t`,
-};
-
-/** A one-row SQL answer's numbers by column: its rows carry them in `values`, by column name. */
-export function rowNumber(result: PanelResult | undefined, column: string): number | null {
-  const i = result?.columns.indexOf(column) ?? -1;
-  return i >= 0 ? (result?.rows[0]?.values[i] ?? null) : null;
-}
-
-/** The per-day values: the first series when the server answers one, else the rows' `users` column in order. */
-export function dailyValues(result: PanelResult | undefined): (number | null)[] {
-  if (!result) return [];
-  if (result.series[0]?.values.length) return result.series[0].values;
-  const i = result.columns.indexOf("users");
-  return i >= 0 ? result.rows.map((row) => row.values[i] ?? null) : [];
-}
-
-/** The custom event sent most often, `product.` dropped; null when the app sends none. */
-export function topEvent(result: PanelResult | undefined): { name: string; events: number } | null {
-  if (!result) return null;
-  const at = result.columns.indexOf("events");
-  for (const row of result.rows) {
-    const event = row.group.event ?? "";
-    if (event.startsWith("product.")) return { name: event.slice("product.".length), events: at >= 0 ? (row.values[at] ?? 0) : 0 };
-  }
-  return null;
-}
 
 export function OverviewAnalyticsBox({ scope, analyticsHref, eventsHref }: { scope: ObsScope | null; analyticsHref: string; eventsHref: string }) {
   const totals = usePanelQuery(scope, RANGE, ANALYTICS_TOTALS_PANEL, []);
@@ -87,7 +41,7 @@ export function OverviewAnalyticsBox({ scope, analyticsHref, eventsHref }: { sco
   const users = rowNumber(totals.data, "users");
   const before = rowNumber(previous.data, "users");
   const sent = rowNumber(totals.data, "events");
-  const values = useMemo(() => dailyValues(daily.data), [daily.data]);
+  const perDay = useMemo(() => dailySeries(daily.data), [daily.data]);
   const top = useMemo(() => topEvent(events.data), [events.data]);
   const change = users !== null && before ? (users - before) / before : null;
   const loading = totals.isLoading;
@@ -138,7 +92,18 @@ export function OverviewAnalyticsBox({ scope, analyticsHref, eventsHref }: { sco
                 </div>
               )}
             </div>
-            <Sparkline values={values} label="Active users per day, last 7 days" width={112} height={36} />
+            {perDay.timestamps.length > 0 && (
+              <UPlotChart
+                compact
+                className="w-28 shrink-0"
+                height={36}
+                timestamps={perDay.timestamps}
+                series={[{ label: "Active users", values: perDay.values }]}
+                // toStartOfDay buckets: each is a UTC calendar day.
+                calendar={DAILY_CALENDAR}
+                label="Active users per day, last 7 days"
+              />
+            )}
           </div>
           <dl className="grid grid-cols-2 gap-3 border-t border-border-subtle pt-3 text-meta">
             <div className="min-w-0">

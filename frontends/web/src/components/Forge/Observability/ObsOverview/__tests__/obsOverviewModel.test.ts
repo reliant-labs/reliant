@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphEdge, GraphNode, RPCCatalog, RPCMethod, ServiceGraph } from "@/services/controlPlane/observability/graphTypes";
 
-import { dailyValues, rowNumber, topEvent } from "../../../Workloads/landing/OverviewAnalyticsBox";
+import { dailySeries, rowNumber, topEvent } from "../../../Workloads/landing/overviewAnalyticsModel";
 import { graphThumbnail, slowestEndpoints, THUMB_H, THUMB_W } from "../obsOverviewModel";
 
 const BOUNDS = [0.01, 0.1, 1];
@@ -82,9 +82,13 @@ describe("the Analytics box's reads", () => {
     expect(rowNumber(undefined, "users")).toBeNull();
   });
 
-  it("takes the per-day values from a series, else from the rows", () => {
-    expect(dailyValues(result({ series: [{ label: "users", group: {}, timestamps: [1, 2], values: [3, 4], value: null }] }))).toEqual([3, 4]);
-    expect(dailyValues(result({ columns: ["users"], rows: [{ group: {}, values: [5] }, { group: {}, values: [6] }] }))).toEqual([5, 6]);
+  it("takes the per-day values and their days from a series, else from the rows", () => {
+    expect(dailySeries(result({ series: [{ label: "users", group: {}, timestamps: [1, 2], values: [3, 4], value: null }] }))).toEqual({ timestamps: [1, 2], values: [3, 4] });
+    const day = Date.UTC(2026, 10, 20) / 1000;
+    expect(
+      dailySeries(result({ columns: ["users"], rows: [{ group: { t: "2026-11-20 00:00:00" }, values: [5] }, { group: { t: "2026-11-21T00:00:00Z" }, values: [6] }, { group: {}, values: [7] }] }))
+    ).toEqual({ timestamps: [day, day + 86_400], values: [5, 6] });
+    expect(dailySeries(undefined)).toEqual({ timestamps: [], values: [] });
   });
 
   it("names the most-sent custom event, skipping forge's own", () => {
