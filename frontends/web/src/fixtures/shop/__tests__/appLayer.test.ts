@@ -11,6 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { create, equals, fromBinary, isMessage, toBinary, type DescMessage, type DescMethod, type DescMethodStreaming, type DescMethodUnary, type DescService } from "@bufbuild/protobuf";
+import { timestampMs } from "@bufbuild/protobuf/wkt";
 import { createClient, createRouterTransport, type Transport } from "@connectrpc/connect";
 import { beforeEach, describe, expect, it } from "vitest";
 
@@ -77,7 +78,7 @@ const CONTROL_PLANE_KEYS = [
 /** The request each key is asked with: one that names something the story has. */
 const REQUESTS: Record<string, Record<string, unknown>> = {
   "reliant.v1.ApprovalService/ListApprovalsByChat": { chatId: CHAT_IDS.cartTotals },
-  "reliant.v1.AttachmentService/GetAttachment": { attachmentId: "att-c1-img" },
+  "reliant.v1.AttachmentService/GetAttachment": { id: "att-c1-img" },
   "reliant.v1.ChatService/GetChat": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.ChatService/GetWorkflowExecutions": { chatId: CHAT_IDS.cartTotals },
   "reliant.v1.ChatService/ListMessages": { chatId: CHAT_IDS.cartTotals },
@@ -221,7 +222,7 @@ describe("the app layer's data/*.json", () => {
     expect(at(DATA_ANCHOR)).toBe(JSON.parse(cartTotals).messages[0].createdAt);
     expect(Date.parse(at(DATA_ANCHOR + HOUR)) - Date.parse(at(DATA_ANCHOR))).toBe(HOUR);
     const shifted = packJson(GetAttachmentResponseSchema, checkoutTotal, DATA_ANCHOR + HOUR);
-    expect(Date.parse(shifted.attachment!.createdAt)).toBe(Date.parse(JSON.parse(checkoutTotal).attachment.createdAt) + HOUR);
+    expect(timestampMs(shifted.attachment!.createdAt!)).toBe(Date.parse(JSON.parse(checkoutTotal).attachment.createdAt) + HOUR);
     expect(DATA_ANCHOR).toBe(FIXED_NOW);
   });
 });
