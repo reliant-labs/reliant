@@ -282,13 +282,98 @@ func (m *BackgroundManager) flushProcessOutput(process *BackgroundProcess) {
 	process.flushedSeq = m.flushNewOutputLines(process, process.flushedSeq)
 }
 
+// ErrRestartingForUpdate refuses a background process while the daemon hands
+// its processes to the next image of itself: the command is not started, and
+// starting it again once the daemon is back works.
+var ErrRestartingForUpdate = errors.New("the daemon is restarting for an update; start the command again once it is back")
+
+// startGate admits new background processes, and closes for a handoff: a
+// closed gate refuses them (ErrRestartingForUpdate), and closing waits for
+// every start already admitted to register (and journal) its process, so the
+// handoff's snapshot holds every process that will outlive this image.
+type startGate struct {
+	mu       sync.Mutex
+	cond     *sync.Cond
+	closed   bool
+	inFlight int
+	// closedC closes when the gate closes; a test's signal.
+	closedC chan struct{}
+}
+
+func (g *startGate) init() {
+	if g.cond == nil {
+		g.cond = sync.NewCond(&g.mu)
+		g.closedC = make(chan struct{})
+	}
+}
+
+// admit counts a start in, unless the gate is closed; done counts it out.
+func (g *startGate) admit() bool {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.init()
+	if g.closed {
+		return false
+	}
+	g.inFlight++
+	return true
+}
+
+func (g *startGate) done() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.inFlight--
+	if g.inFlight == 0 {
+		g.cond.Broadcast()
+	}
+}
+
+// close refuses new starts and waits for the admitted ones to finish.
+func (g *startGate) close() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.init()
+	if !g.closed {
+		g.closed = true
+		close(g.closedC)
+	}
+	for g.inFlight > 0 {
+		g.cond.Wait()
+	}
+}
+
+// reopen admits starts again.
+func (g *startGate) reopen() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.init()
+	if g.closed {
+		g.closed = false
+		g.closedC = make(chan struct{})
+	}
+}
+
+// closedSignal closes once the gate is closed.
+func (g *startGate) closedSignal() <-chan struct{} {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.init()
+	return g.closedC
+}
+
 // HandOffForExec readies the background processes for this process to exec
 // a new image of itself (a self-update): each file-backed one is handed off
 // to the next image, which adopts it (BackgroundJournal.Install), and every
 // other one is stopped, as KillAllRunning would. Call it last before the
 // exec. resume takes the handoff back when the exec failed and this image
 // keeps running: the processes are tailed and waited for here again.
+//
+// New processes are refused from here on (ErrRestartingForUpdate): the exec
+// leaves the gate closed, and resume reopens it.
 func (m *BackgroundManager) HandOffForExec() (resume func()) {
+	// Before the snapshot, so no process can be registered after it.
+	m.starts.close()
+
 	m.persistenceMu.RLock()
 	cb := m.persistenceCallback
 	m.persistenceMu.RUnlock()
@@ -324,6 +409,7 @@ func (m *BackgroundManager) HandOffForExec() (resume func()) {
 		for _, process := range handed {
 			m.undoHandOff(process)
 		}
+		m.starts.reopen()
 	}
 }
 

@@ -224,6 +224,12 @@ type BackgroundManager struct {
 	// (background_survive.go).
 	fileOutDir string
 	adopted    []*BackgroundProcess
+
+	// starts gates new processes while the daemon hands its processes to
+	// the next image (startGate, background_survive.go); beforeRegister is
+	// a test's hook between a process's spawn and its registration.
+	starts         startGate
+	beforeRegister func(*BackgroundProcess)
 }
 
 // portScanGate is the state of refreshPortsGated: mu is held while a scan
@@ -435,6 +441,12 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	if err := osutil.ValidateWorkingDir(opts.WorkingDir); err != nil {
 		return nil, err
 	}
+	// Refused while the daemon hands its processes to its next image, and
+	// counted until registered, so a handoff never misses one.
+	if !m.starts.admit() {
+		return nil, ErrRestartingForUpdate
+	}
+	defer m.starts.done()
 
 	processID := uuid.New().String()
 
@@ -567,6 +579,9 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		go m.waitForProcess(process, pipes...)
 	}
 
+	if m.beforeRegister != nil {
+		m.beforeRegister(process)
+	}
 	// Store process in map
 	m.mu.Lock()
 	m.processes[processID] = process
@@ -1542,6 +1557,10 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 	if opts.WaitErrCh == nil {
 		return nil, fmt.Errorf("cannot adopt process: WaitErrCh is required to avoid calling cmd.Wait() twice")
 	}
+	if !m.starts.admit() {
+		return nil, ErrRestartingForUpdate
+	}
+	defer m.starts.done()
 
 	processID := uuid.New().String()
 	pid := opts.Cmd.Process.Pid

@@ -145,6 +145,12 @@ that their output went through pipes whose read ends are close-on-exec.
   `restartsInPlace`) starts processes with file-backed output, on Linux and
   macOS. Every other daemon keeps pipes: nothing changes for the desktop app,
   managed machines or a daemon without `--auto-update`.
+- **Start gate**: the handoff first closes the manager's start gate. A
+  `StartProcess` (or a foreground command detaching to the background) is
+  then refused with `ErrRestartingForUpdate`, and closing waits for every
+  start already admitted to register and journal its process, so the
+  handoff's snapshot misses none. A successful exec leaves the gate closed;
+  an undo reopens it.
 - **Handoff** (just before the exec): each file-backed process's output is
   read to the last whole line and journaled, and the record gets
   `handed_off` with the byte offsets to read on from. Everything else is

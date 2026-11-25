@@ -30,14 +30,11 @@ import (
 // Nothing here waits on the clock. The commands signal the test through
 // FIFOs (ready: "my output is written"; gate: "go on"), completion is the
 // process's done channel, and an image deciding not to reap is the handoff's
-// parked signal. The journal runs on a fixed clock. failureBound only fails
-// a run whose event never came.
+// parked signal. The journal runs on a fixed clock. The only bound on a wait
+// is go test's own -timeout (testWaitContext).
 
 // testEpoch is the journal's clock and restart time in these tests.
 var testEpoch = time.Date(2026, 11, 25, 0, 0, 0, 0, time.UTC)
-
-// failureBound fails a wait for an event that never came.
-const failureBound = 30 * time.Second
 
 // newTestJournal is a journal in dir on the fixed clock.
 func newTestJournal(dir string) *BackgroundJournal {
@@ -64,18 +61,32 @@ func survivingManager(t *testing.T, dir string) *BackgroundManager {
 	return m
 }
 
-// await fails the test unless ch closes within failureBound.
+// testWaitContext ends when the test does, or at the test binary's deadline
+// (go test -timeout): a wait for an event that never comes fails naming the
+// event, instead of the whole binary panicking with every goroutine's stack.
+func testWaitContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx := t.Context()
+	if deadline, ok := t.Deadline(); ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, deadline)
+		t.Cleanup(cancel)
+	}
+	return ctx
+}
+
+// await fails the test unless ch closes before the test's deadline.
 func await(t *testing.T, ch <-chan struct{}, what string) {
 	t.Helper()
 	select {
 	case <-ch:
-	case <-time.After(failureBound):
-		t.Fatalf("timed out waiting for %s", what)
+	case <-testWaitContext(t).Done():
+		t.Fatalf("the test's deadline passed waiting for %s", what)
 	}
 }
 
 // awaitReturn runs fn, which blocks on an event, failing the test unless it
-// returns within failureBound.
+// returns before the test's deadline.
 func awaitReturn(t *testing.T, what string, fn func() error) {
 	t.Helper()
 	errc := make(chan error, 1)
@@ -83,8 +94,8 @@ func awaitReturn(t *testing.T, what string, fn func() error) {
 	select {
 	case err := <-errc:
 		require.NoError(t, err, what)
-	case <-time.After(failureBound):
-		t.Fatalf("timed out waiting for %s", what)
+	case <-testWaitContext(t).Done():
+		t.Fatalf("the test's deadline passed waiting for %s", what)
 	}
 }
 
@@ -525,4 +536,78 @@ func TestBackgroundFailedHandOffOfAProcessThatExitsInTheWindowIsReapedOnce(t *te
 	require.False(t, rec.HandedOff)
 	require.Equal(t, "failed", rec.Status)
 	require.Equal(t, 3, *rec.ExitCode)
+}
+
+// startBlockedBeforeRegistration starts a command on m whose StartProcess
+// stops between the spawn and the registration until release closes. It
+// returns once the process is spawned, and the start's result arrives on the
+// returned channel.
+func startBlockedBeforeRegistration(t *testing.T, m *BackgroundManager, command string, release <-chan struct{}) <-chan *BackgroundProcess {
+	t.Helper()
+	spawned := make(chan struct{})
+	m.beforeRegister = func(*BackgroundProcess) {
+		close(spawned)
+		<-release
+	}
+	started := make(chan *BackgroundProcess, 1)
+	go func() {
+		proc, err := m.StartProcess(context.Background(), StartProcessOptions{Command: command, WorkingDir: t.TempDir()})
+		if err != nil {
+			t.Errorf("StartProcess: %v", err)
+		}
+		started <- proc
+	}()
+	await(t, spawned, "the start to spawn its process")
+	return started
+}
+
+// A start racing the handoff is never missed: one spawned but not yet
+// registered holds the handoff back until it is, and is handed off with the
+// rest; one asked for once the handoff began is refused, and works again
+// once a failed exec reopens the gate.
+func TestBackgroundStartRacingTheHandOffIsIncludedOrRefused(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "journal")
+	m := survivingManager(t, dir)
+	release := make(chan struct{})
+	started := startBlockedBeforeRegistration(t, m, "read _ < "+string(newFIFO(t, "gate")), release)
+
+	resumed := make(chan func(), 1)
+	go func() { resumed <- m.HandOffForExec() }()
+	await(t, m.starts.closedSignal(), "the handoff to close the start gate")
+
+	m.beforeRegister = nil
+	_, err := m.StartProcess(context.Background(), StartProcessOptions{Command: "true", WorkingDir: t.TempDir()})
+	require.ErrorIs(t, err, ErrRestartingForUpdate, "a start once the handoff began is refused")
+	select {
+	case <-resumed:
+		t.Fatal("the handoff took its snapshot while a start was still registering its process")
+	default:
+	}
+
+	close(release)
+	var proc *BackgroundProcess
+	select {
+	case proc = <-started:
+	case <-testWaitContext(t).Done():
+		t.Fatal("the test's deadline passed waiting for the start")
+	}
+	require.NotNil(t, proc)
+	var resume func()
+	select {
+	case resume = <-resumed:
+	case <-testWaitContext(t).Done():
+		t.Fatal("the test's deadline passed waiting for the handoff")
+	}
+	require.True(t, readJournalRecord(t, dir, proc.ID).HandedOff, "the start that raced the handoff is handed off with the rest")
+	require.True(t, alive(proc.GetPID()))
+
+	// The exec failed: the gate reopens and this image owns the process again.
+	resume()
+	again, err := m.StartProcess(context.Background(), StartProcessOptions{Command: "true", WorkingDir: t.TempDir()})
+	require.NoError(t, err, "starts work again once the handoff is undone")
+	waitDone(t, again)
+	require.NoError(t, m.KillProcess(proc.ID))
+	status, _ := waitDone(t, proc)
+	require.Equal(t, "killed", status)
+	require.Equal(t, 1, proc.handoff.reapCount())
 }
