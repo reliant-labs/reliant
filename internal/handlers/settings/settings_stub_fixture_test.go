@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 )
@@ -48,7 +50,6 @@ func (m memorySettings) repo() *settings.MockRepository {
 			}
 			return nil
 		},
-		EmitUserRefetchFunc: func(context.Context, string, db.RefetchType, db.RefetchOpts) error { return nil },
 	}
 }
 
@@ -66,6 +67,7 @@ func newSettingsServiceWith(t *testing.T, repo settings.Repository, privacy sett
 	return settings.NewTestSettings(t, settings.WithSettingsDeps(settings.Deps{
 		Repo:    repo,
 		Privacy: privacy,
+		Refetch: &settings.MockUserRefetch{EmitUserRefetchFunc: func(context.Context, string, core.RefetchType, core.RefetchOpts) error { return nil }},
 		PollCopilotDevice: func(ctx context.Context, _ string) (*copilot.GitHubTokens, error) {
 			return nil, ctx.Err()
 		},

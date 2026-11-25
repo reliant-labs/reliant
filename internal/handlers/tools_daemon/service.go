@@ -37,6 +37,9 @@ type Deps struct {
 	// their attachment leases, the projects and project configs they
 	// report (deps.go).
 	Repo Repository
+	// Refetch tells the user\'s clients to re-read what a write changed
+	// (UserRefetch, deps.go).
+	Refetch UserRefetch
 	// Attachments is the lease each connected daemon holds and what its
 	// heartbeats record on it (Attachments, deps.go). Without it no lease is
 	// written, renewed or released: the in-memory routing alone.
@@ -127,6 +130,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("tools_daemon: Deps.Repo is required")
+	}
+	if d.Refetch == nil {
+		return fmt.Errorf("tools_daemon: Deps.Refetch is required")
 	}
 	if d.Checkouts == nil {
 		return fmt.Errorf("tools_daemon: Deps.Checkouts is required")

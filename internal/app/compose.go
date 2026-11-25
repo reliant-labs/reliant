@@ -212,6 +212,7 @@ func (g *Graph) newPprof() (*serverkit.Pprof, error) {
 
 func (g *Graph) newToolsDaemon() (*tools_daemon.Service, error) {
 	return tools_daemon.New(tools_daemon.Deps{
+		Refetch:         g.chatUpdates(),
 		Logger:          g.Log,
 		Config:          g.Cfg,
 		Repo:            g.Database(),
@@ -627,6 +628,7 @@ func (g *Graph) newOrgMoves() (orgmove.Service, error) {
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		Triggers:     g.WorkerTrigger(),
 		Membership:   g.OrgResolver(),
+		Updates:      g.chatUpdates(),
 	})
 }
 
@@ -657,6 +659,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 	return NewTemporalWorker(TemporalWorkerDeps{
 		Checks:           g.RecordOnlyChecks(),
 		ConnectionVault:  g.CredentialsConnectionvault(),
+		Updates:          g.chatUpdates(),
 		ProviderAccounts: g.CredentialsProvideraccounts(),
 		OrgAccounts:      g.CredentialsOrgaccounts(),
 		Temporal:         g.TemporalClient(),
@@ -756,6 +759,21 @@ func (g *Graph) newUserAuth() (*grpcserver.UserAuth, error) {
 	return NewUserAuth(UserAuthDeps{
 		Settings: g.APISettings(),
 		Tokens:   g.TokenAuthority(),
+		Sessions: g.SignInSessions(),
+	})
+}
+
+func (g *Graph) newSignInSessions() (*SignInSessions, error) {
+	return NewSignInSessions(SignInSessionsDeps{
+		API:    g.ApiServerConfig,
+		DB:     g.Database(),
+		Logger: g.Log,
+	})
+}
+
+func (g *Graph) newControlPlaneAccounts() (*ControlPlaneAccounts, error) {
+	return NewControlPlaneAccounts(ControlPlaneAccountsDeps{
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
@@ -799,6 +817,11 @@ func (g *Graph) newAPIListener() (*grpcserver.APIListener, error) {
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies:       g.OrgPolicyResolver(),
 		ClientVersions: g.ServerProcessConfig.GetClientVersions(),
+		// Native sign-in (/auth/*), only with a configured identity.
+		SignIn:       g.SignInSessions(),
+		Accounts:     g.ControlPlaneAccounts(),
+		Auth:         g.UserAuth(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
@@ -932,6 +955,7 @@ func (g *Graph) newDaemonEventsConsumer() (*DaemonEventsConsumer, error) {
 
 func (g *Graph) newWorktreeSweep() (*worktreesweep.Sweeper, error) {
 	return NewWorktreeSweep(WorktreeSweepDeps{
+		Updates:      g.chatUpdates(),
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 		Router:       g.APIDaemonRouter(),
 		Settings:     g.APISettings(),
@@ -1141,6 +1165,7 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 		return nil, err
 	}
 	return worktree.New(worktree.Deps{
+		Refetch:        g.chatUpdates(),
 		GitCredentials: recoveryCredentials{client: credentials},
 		Logger:         g.Log,
 		Config:         g.Cfg,
@@ -1333,6 +1358,7 @@ func (g *Graph) newInbox() (*inbox.Service, error) {
 // newMCP constructs the mcp handler (internal/handlers/mcp).
 func (g *Graph) newMCP() (*mcp.Service, error) {
 	return mcp.New(mcp.Deps{
+		Refetch:        g.chatUpdates(),
 		Projects:       g.Projectaccess(),
 		ProjectConfigs: store.NewProjectConfigExtStore(g.Database().ORM()),
 		Logger:         g.Log,
@@ -1473,6 +1499,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 // a live request.
 func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 	return provider_account.New(provider_account.Deps{
+		Refetch:     g.chatUpdates(),
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Store:       g.Database(),
@@ -1495,6 +1522,7 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
+		Refetch:   g.chatUpdates(),
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Repo:      g.Database(),
@@ -1536,6 +1564,7 @@ func (g *Graph) newScenario() (*scenario.Service, error) {
 // newSettings constructs the settings handler (internal/handlers/settings).
 func (g *Graph) newSettings() (*settings.Service, error) {
 	return settings.New(settings.Deps{
+		Refetch:                 g.chatUpdates(),
 		Logger:                  g.Log,
 		Config:                  g.Cfg,
 		Repo:                    g.Database(),

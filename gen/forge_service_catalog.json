@@ -30,6 +30,7 @@
         "Connection",
         "Connector",
         "ConnectorGrants",
+        "ControlPlaneAccounts",
         "CoverageSource",
         "CredentialsAutomationtokens",
         "CredentialsConnectionvault",
@@ -91,6 +92,7 @@
         "Seatmatch",
         "Settings",
         "Sharing",
+        "SignInSessions",
         "Streaming",
         "StreamingHub",
         "System",
@@ -55684,6 +55686,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "ControlPlaneAccounts",
+      "name": "ControlPlaneAccounts",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.ControlPlaneAccounts",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewControlPlaneAccounts"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "CoverageSource",
       "name": "CoverageSource",
       "kind": "component",
@@ -56988,6 +57002,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "SignInSessions",
+      "name": "SignInSessions",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.SignInSessions",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewSignInSessions"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "StateDerivation",
       "name": "StateDerivation",
       "kind": "provider",
@@ -57691,7 +57717,9 @@
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/account.ControlPlane",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58272,7 +58300,9 @@
       "field": "Reports",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/coverage_source.Reports",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58413,7 +58443,9 @@
       "field": "IdleTimeouts",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MemberIdleTimeouts",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58435,7 +58467,9 @@
       "field": "Names",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/daemon_registry.MachineNames",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58722,7 +58756,9 @@
       "field": "MyOrgs",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.OrgLister",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -58975,6 +59011,17 @@
     },
     {
       "consumer": "MCP",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "MCP",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.Repository",
       "methods": [],
@@ -59146,6 +59193,17 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "OrgMoves",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "OrgPolicyImpact",
       "field": "Attendance",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.ChatAttendance",
@@ -59287,7 +59345,9 @@
       "field": "Prices",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_usage.ListPrices",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -59512,7 +59572,9 @@
       "field": "Apps",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.HostedApps",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -59521,7 +59583,9 @@
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.CloneDispatcher",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -59577,7 +59641,9 @@
       "field": "MoveFacts",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -59800,6 +59866,17 @@
     },
     {
       "consumer": "ProviderAccount",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "ProviderAccount",
       "field": "Store",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.Store",
       "methods": [],
@@ -59932,6 +60009,17 @@
         "Database"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Question",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Question",
@@ -60276,7 +60364,9 @@
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.LLMKeyMinter",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60292,6 +60382,17 @@
         "Privacy"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Settings",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Settings",
@@ -60727,6 +60828,17 @@
     },
     {
       "consumer": "TemporalWorker",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "TemporalWorker",
       "field": "WriteLedger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
       "methods": [],
@@ -60926,6 +61038,17 @@
     },
     {
       "consumer": "ToolsDaemon",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "ToolsDaemon",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.Repository",
       "methods": [],
@@ -61031,7 +61154,9 @@
       "field": "ControlPlane",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.AutomationTokens",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "ControlPlaneAccounts"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61822,6 +61947,17 @@
     },
     {
       "consumer": "Worktree",
+      "field": "Refetch",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.UserRefetch",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Worktree",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Repository",
       "methods": [],
@@ -61936,6 +62072,17 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "WorktreeSweep",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "WriteLedgerPrune",
       "field": "Ledger",
       "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
@@ -62033,6 +62180,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "MCP.Refetch",
+      "source": {
+        "path": "internal/handlers/mcp/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "ModelEndpoint.Credentials",
       "source": {
         "path": "internal/handlers/model_endpoint/service.go",
@@ -62045,6 +62200,14 @@
       "source": {
         "path": "internal/app/providers.go",
         "symbol": "NewNATSConn"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "OrgMoves.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewOrgMoves"
       }
     },
     {
@@ -62225,6 +62388,22 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "ProviderAccount.Refetch",
+      "source": {
+        "path": "internal/handlers/provider_account/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Question.Refetch",
+      "source": {
+        "path": "internal/handlers/question/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Seatmatch.Rollout",
       "source": {
         "path": "internal/seatmatch/service.go",
@@ -62234,6 +62413,14 @@
     {
       "code": "binding_unresolved",
       "component": "Settings.ControlPlane",
+      "source": {
+        "path": "internal/handlers/settings/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Settings.Refetch",
       "source": {
         "path": "internal/handlers/settings/service.go",
         "symbol": "New"
@@ -62337,6 +62524,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "TemporalWorker.Updates",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewTemporalWorker"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "Token.GitBotTokens",
       "source": {
         "path": "internal/handlers/token/service.go",
@@ -62348,6 +62543,14 @@
       "component": "Token.GitTokens",
       "source": {
         "path": "internal/handlers/token/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "ToolsDaemon.Refetch",
+      "source": {
+        "path": "internal/handlers/tools_daemon/service.go",
         "symbol": "New"
       }
     },
@@ -62517,6 +62720,22 @@
       "source": {
         "path": "internal/handlers/worktree/service.go",
         "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Worktree.Refetch",
+      "source": {
+        "path": "internal/handlers/worktree/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "WorktreeSweep.Updates",
+      "source": {
+        "path": "internal/app/providers_api.go",
+        "symbol": "NewWorktreeSweep"
       }
     },
     {

@@ -93,7 +93,9 @@ func TestKCLRootsDeployedCredentials(t *testing.T) {
 	base := []string{"DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD"}
 	integrations := []string{"RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"}
 	want := map[string][]string{
-		"api":     append(append([]string{"JWT_JWKS_SNAPSHOT", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET"}, base...), integrations...),
+		// IDP_BROKER_TOKEN and IDP_LOGIN_POLICY: the login broker's sensitive
+		// managed-identity credentials (ApiServerConfig, served on /auth/*).
+		"api":     append(append([]string{"JWT_JWKS_SNAPSHOT", "AUTH_API_KEY", "AUTH_DEV_JWT_SECRET", "IDP_BROKER_TOKEN", "IDP_LOGIN_POLICY"}, base...), integrations...),
 		"gateway": base,
 		"worker":  append(append([]string{}, base...), integrations...),
 	}

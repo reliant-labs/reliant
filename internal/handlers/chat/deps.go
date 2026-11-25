@@ -170,6 +170,10 @@ type Repository interface {
 	threads.Repository
 	runs.Repository
 	launch.Store
+	// GetChat is the chat read this package still makes through its
+	// repository (the handlers' own wave moves it); runs and launch take
+	// their own chat readers.
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	// GetProjectWithUserCheck is the org-aware project read the handlers and the
 	// launcher share; db.Repo delegates it to projectaccess.
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)

@@ -16,8 +16,8 @@ import (
 //     the unary calls in flight, while everything they use is still running.
 //  2. the loops — trigger redrive, reconcile and startup sync, the worktree
 //     sweep, queued delivery and the daemon-events consumer, the GitHub
-//     access refresh, the workflow reconciler, the Reliant-key sweep and the
-//     payload GC — each ending with its context. None takes traffic, and none
+//     access refresh, the workflow reconciler, the Reliant-key sweep, the
+//     payload GC and the sign-in session sweep — each ending with its context. None takes traffic, and none
 //     depends on another. A failure in one is logged, not fatal: each is
 //     repaired by its next pass or the next replica.
 //
@@ -64,6 +64,8 @@ type API struct {
 	// KeySweep is nil without a control plane.
 	KeySweep  *ReliantKeySweep
 	PayloadGC *PayloadGC
+	// SignIn sweeps ended sign-in sessions; nil without a login broker.
+	SignIn *SignInSessions
 	// LLMUsageRetention prunes per-call LLM usage past its retention period.
 	LLMUsageRetention *LLMUsageRetention
 	// OrgCredentials deletes stale org-account grants and purges gone orgs'

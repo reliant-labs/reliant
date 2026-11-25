@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=2d10bf22a8177c2b5f1c74e456737d7f5f42837df6095e4f47beaaf3f7bb62dc
+// forge:hash=af786b506a5444d2e74a3331e6504e66b20789478030e85e216ae166496a6fbd
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -38,7 +38,6 @@ type MockRepository struct {
 	SyncProjectConfigSnapshotFunc                 func(context.Context, *db.ProjectConfigRecord, bool, *core.OrgScope) (bool, error)
 	GetProjectMachineCatalogPushedAtFunc          func(context.Context, string, string) (time.Time, error)
 	CreateUserUpdateFunc                          func(context.Context, *db.UserUpdate) error
-	EmitUserRefetchFunc                           func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 	SetProjectForgeNameFunc                       func(context.Context, string, string, string) (bool, error)
 	ListProjectsFunc                              func(context.Context, db.ProjectFilters) ([]*db.Project, error)
 	RecordObservedProjectDaemonInScopeFunc        func(context.Context, string, string, string, *string, *core.OrgScope) (bool, error)
@@ -140,15 +139,6 @@ func (m *MockRepository) CreateUserUpdate(ctx context.Context, update *db.UserUp
 		return m.CreateUserUpdateFunc(ctx, update)
 	}
 	return contractkit.MockNotSet("MockRepository", "CreateUserUpdate")
-}
-
-// EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
-func (m *MockRepository) EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error {
-	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
-	if m.EmitUserRefetchFunc != nil {
-		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
-	}
-	return contractkit.MockNotSet("MockRepository", "EmitUserRefetch")
 }
 
 // SetProjectForgeName records the call and delegates to SetProjectForgeNameFunc when set.
@@ -860,3 +850,29 @@ func (m *MockProjectDaemons) ListProjectsWithUnsettledDaemonRepos(ctx context.Co
 
 // Compile-time check.
 var _ ProjectDaemons = (*MockProjectDaemons)(nil)
+
+// forge:section MockUserRefetch
+// forge:hash=033cac35f861599e4ee72a85e10b9f12c035126ba7c2043aa1d617de89e3ac3e
+
+// MockUserRefetch is a test mock for the UserRefetch interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockUserRefetch.<Method>Func not set" error.
+type MockUserRefetch struct {
+	contractkit.Recorder
+	EmitUserRefetchFunc func(context.Context, string, core.RefetchType, core.RefetchOpts) error
+}
+
+// EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
+func (m *MockUserRefetch) EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error {
+	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
+	if m.EmitUserRefetchFunc != nil {
+		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
+	}
+	return contractkit.MockNotSet("MockUserRefetch", "EmitUserRefetch")
+}
+
+// Compile-time check.
+var _ UserRefetch = (*MockUserRefetch)(nil)

@@ -29,7 +29,6 @@ import { DEMO_SIGNALS } from "@/fixtures/shop/model/busyApp";
 import { createShopApi } from "@/fixtures/shop/model/shopApi";
 import { getDemoDataStatus, resetDemoDataStatusForTests } from "../demoDataStatus";
 import { splitLogQuery } from "@/fixtures/shop/handlers/observability";
-import { isDemoRead } from "@/fixtures/readOnly";
 import { createDemoTransport, demoDataConfig } from "../demoTransport";
 
 const END_MS = Date.UTC(2026, 0, 15, 12, 0, 0);
@@ -101,15 +100,13 @@ describe("the demo scenario, through the console's real client", () => {
 });
 
 describe("the demo transport", () => {
-  it("refuses every write before the scenario sees it, and reads Lists/Gets/Searches/Queries and the like", async () => {
+  it("refuses every write before the scenario sees it, and answers the reads its proto declares", async () => {
     const client = createClient(IssuesService, createDemoTransport({ source: "fixtures", url: "" }));
     await expect(client.updateIssueStatus({ issueId: "x" } as never)).rejects.toSatisfy(
       (err: unknown) => err instanceof ConnectError && err.code === Code.PermissionDenied,
     );
     // A read is answered: the story's (handlers/issues.ts), else forge's generated default (handlers/defaults.ts).
     await expect(client.listIssues({} as never)).resolves.toBeDefined();
-    expect(["ListTraces", "GetTrace", "SearchLogs", "QueryPanel", "CompareReleases", "WatchDeploy", "StreamLogs", "PlanDeploy"].every((name) => isDemoRead({ name }))).toBe(true);
-    expect(["UpdateIssueStatus", "CreateSilence", "SaveDashboard", "MarkNotificationsRead"].some((name) => isDemoRead({ name }))).toBe(false);
   });
 
   it("asks the gateway first when the source is remote, and uses its answer", async () => {
