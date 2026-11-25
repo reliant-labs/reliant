@@ -163,12 +163,16 @@ func (ListDrillDownAuditScope) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_insights_proto_rawDescGZIP(), []int{1}
 }
 
-// InsightsCost is the cost of a bucket's ORG-FUNDED calls. Calls paid from a
-// member's own account are never priced here: their cost is blank, not zero.
+// InsightsCost is the cost of the bucket's calls the org PROVABLY PAID FOR
+// itself: on its own API keys, seats or Reliant credits, with the org
+// recorded as the payer. Calls paid from a member's own account, and calls on
+// an org-class account whose payer is unknown or another org, are never
+// priced here: their cost is blank, not zero.
 // Reported and estimated cost are separate and must never be added together.
 type InsightsCost struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Calls the org paid for: its own API keys, seats and Reliant credits.
+	// Calls the org paid for: its own API keys, seats and Reliant credits,
+	// with this org recorded as the payer.
 	OrgFundedCalls int64 `protobuf:"varint,1,opt,name=org_funded_calls,json=orgFundedCalls,proto3" json:"org_funded_calls,omitempty"`
 	// Calls paid from a member's own subscription or key, or run on their own
 	// hardware. They count as calls; their cost is not shown anywhere.
@@ -190,8 +194,13 @@ type InsightsCost struct {
 	// Org-funded calls with no per-call price (a seat the org pays for, a
 	// local model).
 	UnpricedCalls int64 `protobuf:"varint,8,opt,name=unpriced_calls,json=unpricedCalls,proto3" json:"unpriced_calls,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Calls on an org-class account (an org key, seat or Reliant credits) that
+	// this org is not known to have paid for: the payer was not recorded (the
+	// managed key outside an org, a call recorded before the payer was), or
+	// was another org. They count as calls; their cost is not shown.
+	PayerUnconfirmedCalls int64 `protobuf:"varint,9,opt,name=payer_unconfirmed_calls,json=payerUnconfirmedCalls,proto3" json:"payer_unconfirmed_calls,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *InsightsCost) Reset() {
@@ -276,6 +285,13 @@ func (x *InsightsCost) GetEstimatedUsdNanos() int64 {
 func (x *InsightsCost) GetUnpricedCalls() int64 {
 	if x != nil {
 		return x.UnpricedCalls
+	}
+	return 0
+}
+
+func (x *InsightsCost) GetPayerUnconfirmedCalls() int64 {
+	if x != nil {
+		return x.PayerUnconfirmedCalls
 	}
 	return 0
 }
@@ -1548,7 +1564,7 @@ var File_reliant_v1_insights_proto protoreflect.FileDescriptor
 const file_reliant_v1_insights_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/insights.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xb8\x03\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xf0\x03\n" +
 	"\fInsightsCost\x12(\n" +
 	"\x10org_funded_calls\x18\x01 \x01(\x03R\x0eorgFundedCalls\x126\n" +
 	"\x17personally_funded_calls\x18\x02 \x01(\x03R\x15personallyFundedCalls\x128\n" +
@@ -1557,7 +1573,8 @@ const file_reliant_v1_insights_proto_rawDesc = "" +
 	"\x12reported_usd_nanos\x18\x05 \x01(\x03H\x00R\x10reportedUsdNanos\x88\x01\x01\x12'\n" +
 	"\x0festimated_calls\x18\x06 \x01(\x03R\x0eestimatedCalls\x123\n" +
 	"\x13estimated_usd_nanos\x18\a \x01(\x03H\x01R\x11estimatedUsdNanos\x88\x01\x01\x12%\n" +
-	"\x0eunpriced_calls\x18\b \x01(\x03R\runpricedCallsB\x15\n" +
+	"\x0eunpriced_calls\x18\b \x01(\x03R\runpricedCalls\x126\n" +
+	"\x17payer_unconfirmed_calls\x18\t \x01(\x03R\x15payerUnconfirmedCallsB\x15\n" +
 	"\x13_reported_usd_nanosB\x16\n" +
 	"\x14_estimated_usd_nanos\"\x8c\x01\n" +
 	"\x0fInsightsLatency\x12\x14\n" +

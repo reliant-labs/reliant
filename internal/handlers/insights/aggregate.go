@@ -127,12 +127,14 @@ func modelStats(r db.InsightsModelRow) *pb.InsightsModelStats {
 	}
 }
 
-// cost is a row's org-funded cost. A figure is absent, never zero, when no
-// call stands behind it: a bucket of personally funded calls has a blank
-// cost, which the page labels "personally funded".
+// cost is the cost of a row's calls the org provably paid for. A figure is
+// absent, never zero, when no such call stands behind it: a bucket of
+// personally funded calls, or of calls whose payer is unknown or another org,
+// has a blank cost.
 func cost(r db.InsightsModelRow) *pb.InsightsCost {
 	c := &pb.InsightsCost{
 		OrgFundedCalls:         r.OrgFundedCalls,
+		PayerUnconfirmedCalls:  r.PayerUnconfirmedCalls,
 		PersonallyFundedCalls:  r.PersonallyFundedCalls,
 		UnrecordedFundingCalls: r.UnrecordedFundingCalls,
 		ReportedCalls:          r.ReportedCalls,
@@ -165,6 +167,7 @@ func addModel(a *db.InsightsModelRow, b db.InsightsModelRow) {
 	a.TTFTMsTotal += b.TTFTMsTotal
 	a.TTFTMsHist = addHist(a.TTFTMsHist, b.TTFTMsHist)
 	a.OrgFundedCalls += b.OrgFundedCalls
+	a.PayerUnconfirmedCalls += b.PayerUnconfirmedCalls
 	a.PersonallyFundedCalls += b.PersonallyFundedCalls
 	a.UnrecordedFundingCalls += b.UnrecordedFundingCalls
 	a.ReportedCalls += b.ReportedCalls

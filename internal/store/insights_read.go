@@ -69,17 +69,27 @@ func InsightsDimApplies(src InsightsSource, dim InsightsDim) bool {
 	return ok
 }
 
-// The funding classes, as the ledger records them (llm_call_usage.funding).
-// Cost is read for org-funded calls only (§3.6, D6): a member's own account
-// is never priced in Insights, whichever table is read.
+// Who paid, as the model rollups record it. Cost is read only for calls the
+// row's org provably paid for itself (§3.6, D6): paid_by_org, a key column of
+// both model tables, set when the call was folded only if its funding was
+// org_key, org_seat or org_wallet AND its payer (llm_call_usage.funding_org_id)
+// was the row's org. Every org-spend read below filters on it, on the member
+// table as on the team table: the member table keeps a member's cost whatever
+// paid, so without the filter a drill-down or "My analytics" would count
+// another org's payment, or one whose payer is unknown, as this org's spend.
 const (
+	insightsPaidByOrg = `paid_by_org`
+	// insightsPayerUnconfirmed is an org-class funding this org is not known
+	// to have paid: the payer is unknown (the org-less managed key, a row
+	// written before the payer was recorded) or another org.
+	insightsPayerUnconfirmed = `funding IN ('org_key', 'org_seat', 'org_wallet') AND NOT paid_by_org`
 	insightsPersonalFunded   = `funding IN ('personal', 'local')`
 	insightsUnrecordedFunded = `funding = ''`
 )
 
 // InsightsModelRow is the sum of one group's model-call rollup rows.
 // Histograms have InsightsLatencyBuckets counts. The cost columns count only
-// org-funded calls.
+// calls the org provably paid for (paid_by_org).
 type InsightsModelRow struct {
 	Key                    string  `bun:"key"`
 	Calls                  int64   `bun:"calls"`
@@ -95,6 +105,7 @@ type InsightsModelRow struct {
 	TTFTMsTotal            int64   `bun:"ttft_ms_total"`
 	TTFTMsHist             []int64 `bun:"ttft_ms_hist,array"`
 	OrgFundedCalls         int64   `bun:"org_funded_calls"`
+	PayerUnconfirmedCalls  int64   `bun:"payer_unconfirmed_calls"`
 	PersonallyFundedCalls  int64   `bun:"personally_funded_calls"`
 	UnrecordedFundingCalls int64   `bun:"unrecorded_funding_calls"`
 	ReportedCalls          int64   `bun:"reported_calls"`
@@ -128,14 +139,15 @@ const insightsModelSelect = `
 	insights_hist_sum(latency_ms_hist) AS latency_ms_hist,
 	sum(ttft_ms_total)::bigint AS ttft_ms_total,
 	insights_hist_sum(ttft_ms_hist) AS ttft_ms_hist,
-	coalesce(sum(calls) FILTER (WHERE ` + insightsOrgFunded + `), 0)::bigint AS org_funded_calls,
+	coalesce(sum(calls) FILTER (WHERE ` + insightsPaidByOrg + `), 0)::bigint AS org_funded_calls,
+	coalesce(sum(calls) FILTER (WHERE ` + insightsPayerUnconfirmed + `), 0)::bigint AS payer_unconfirmed_calls,
 	coalesce(sum(calls) FILTER (WHERE ` + insightsPersonalFunded + `), 0)::bigint AS personally_funded_calls,
 	coalesce(sum(calls) FILTER (WHERE ` + insightsUnrecordedFunded + `), 0)::bigint AS unrecorded_funding_calls,
-	coalesce(sum(reported_calls) FILTER (WHERE ` + insightsOrgFunded + `), 0)::bigint AS reported_calls,
-	coalesce(sum(reported_cost_usd_nanos) FILTER (WHERE ` + insightsOrgFunded + `), 0)::bigint AS reported_cost_usd_nanos,
-	coalesce(sum(estimated_calls) FILTER (WHERE ` + insightsOrgFunded + `), 0)::bigint AS estimated_calls,
-	coalesce(sum(estimated_cost_usd_nanos) FILTER (WHERE ` + insightsOrgFunded + `), 0)::bigint AS estimated_cost_usd_nanos,
-	coalesce(sum(unpriced_calls) FILTER (WHERE ` + insightsOrgFunded + `), 0)::bigint AS unpriced_calls`
+	coalesce(sum(reported_calls) FILTER (WHERE ` + insightsPaidByOrg + `), 0)::bigint AS reported_calls,
+	coalesce(sum(reported_cost_usd_nanos) FILTER (WHERE ` + insightsPaidByOrg + `), 0)::bigint AS reported_cost_usd_nanos,
+	coalesce(sum(estimated_calls) FILTER (WHERE ` + insightsPaidByOrg + `), 0)::bigint AS estimated_calls,
+	coalesce(sum(estimated_cost_usd_nanos) FILTER (WHERE ` + insightsPaidByOrg + `), 0)::bigint AS estimated_cost_usd_nanos,
+	coalesce(sum(unpriced_calls) FILTER (WHERE ` + insightsPaidByOrg + `), 0)::bigint AS unpriced_calls`
 
 const insightsToolSelect = `
 	sum(calls)::bigint AS calls,
@@ -201,7 +213,8 @@ func ListInsightsTeamToolCalls(ctx context.Context, db orm.Context, orgID string
 // ListInsightsMemberModelCalls sums userID's model-call rollup rows in orgID
 // over the UTC days from..to inclusive, one row per group of dim: one
 // member's own numbers, for their own view or an admin's audited drill-down.
-// Cost columns count org-funded calls only, as on the team table.
+// Cost columns count only calls the org provably paid for (paid_by_org), as
+// on the team table.
 func ListInsightsMemberModelCalls(ctx context.Context, db orm.Context, orgID, userID string, from, to time.Time, dim InsightsDim) ([]InsightsModelRow, error) {
 	if orgID == "" || userID == "" {
 		return nil, errors.New("insights: org id and user id are required")

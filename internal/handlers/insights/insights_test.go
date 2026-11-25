@@ -157,11 +157,16 @@ func (e *env) as(userID string, c auth.Credential) context.Context {
 // asPerson is userID signed in to the app.
 func (e *env) asPerson(userID string) context.Context { return e.as(userID, auth.CredentialSession) }
 
-// call is one model call's fixture fields; zero values take defaults.
+// noPayer is a call's payer when no org is recorded as having paid.
+const noPayer = "-"
+
+// call is one model call's fixture fields; zero values take defaults. payer
+// is the org recorded as paying (funding_org_id): by default the call's org
+// for an org-class funding, noPayer for none.
 type call struct {
-	user, org, project, model, funding, basis string
-	cost                                      int64
-	latency                                   int64
+	user, org, project, model, funding, basis, payer string
+	cost                                             int64
+	latency                                          int64
 }
 
 func (e *env) model(c call) {
@@ -179,11 +184,17 @@ func (e *env) model(c call) {
 	if c.latency == 0 {
 		c.latency = 1000
 	}
+	switch {
+	case c.payer == noPayer:
+		c.payer = ""
+	case c.payer == "" && (c.funding == "org_key" || c.funding == "org_seat" || c.funding == "org_wallet"):
+		c.payer = c.org
+	}
 	rec := db.LLMCallUsage{
 		ID: fmt.Sprintf("call-%d", e.seq), Attempt: 1, UserID: c.user, OrgID: c.org, ChatID: "chat-" + c.user,
 		Provider: "reliant", Model: c.model, AuthMode: store.LLMAuthModeManaged, Purpose: store.LLMPurposeChat,
 		InputTokens: 100, OutputTokens: 10, Outcome: store.LLMOutcomeSuccess, LatencyMs: c.latency,
-		Funding: c.funding, ProjectID: c.project, WorkflowName: "agent", CreatedAt: day,
+		Funding: c.funding, FundingOrgID: c.payer, ProjectID: c.project, WorkflowName: "agent", CreatedAt: day,
 	}
 	if c.basis != "" {
 		rec.CostBasis = c.basis
@@ -817,4 +828,55 @@ func TestOwnCostShownWithoutBillingRead(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, ada.GetCostHidden())
 	assert.Equal(t, int64(2_000), ada.GetModelCalls().GetTotals().GetCost().GetReportedUsdNanos())
+}
+
+// Org spend is what this org provably paid for: an org-class call whose payer
+// is unknown, or is another org, is counted as a call with its cost blank,
+// like a personally funded one, in the drill-down and in "My analytics" (the
+// member table keeps the member's cost whatever paid, so the read must
+// filter). Only a call this org is recorded as paying is priced.
+func TestOrgCostNeedsThisOrgAsThePayer(t *testing.T) {
+	cases := []struct {
+		name     string
+		payer    string
+		priced   bool
+		reported int64
+	}{
+		{"payer unknown", noPayer, false, 0},
+		{"paid by another org", other, false, 0},
+		{"paid by this org", org, true, 3_000},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.model(call{user: "m1", funding: "org_wallet", payer: tc.payer, basis: store.LLMCostBasisReported, cost: 3_000})
+			e.model(call{user: "m1", funding: "org_key", payer: tc.payer, basis: store.LLMCostBasisEstimated, cost: 5_000})
+			e.model(call{user: "m1", funding: "org_seat", payer: tc.payer, basis: store.LLMCostBasisUnpriced})
+
+			mine, err := e.mine(e.asPerson("m1"), pb.InsightsGroupBy_INSIGHTS_GROUP_BY_MODEL)
+			require.NoError(t, err)
+			drill, err := e.drill(e.asPerson("ada"), "m1")
+			require.NoError(t, err)
+			require.False(t, drill.GetCostHidden(), "ada holds billing:read")
+
+			for view, sec := range map[string]*pb.InsightsModelSection{"my analytics": mine.GetModelCalls(), "drill-down": drill.GetModelCalls()} {
+				tot := sec.GetTotals()
+				c := tot.GetCost()
+				assert.Equal(t, int64(3), tot.GetCalls(), "%s: every call counts", view)
+				if !tc.priced {
+					assert.False(t, costSeen(sec), "%s: cost the org did not provably pay is blank", view)
+					assert.Zero(t, c.GetOrgFundedCalls(), view)
+					assert.Equal(t, int64(3), c.GetPayerUnconfirmedCalls(), view)
+					assert.Zero(t, c.GetUnpricedCalls(), "%s: not this org's unpriced call", view)
+					continue
+				}
+				require.NotNil(t, c.ReportedUsdNanos, view)
+				assert.Equal(t, tc.reported, c.GetReportedUsdNanos(), view)
+				assert.Equal(t, int64(5_000), c.GetEstimatedUsdNanos(), view)
+				assert.Equal(t, int64(3), c.GetOrgFundedCalls(), view)
+				assert.Equal(t, int64(1), c.GetUnpricedCalls(), view)
+				assert.Zero(t, c.GetPayerUnconfirmedCalls(), view)
+			}
+		})
+	}
 }

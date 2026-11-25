@@ -121,11 +121,15 @@ enum InsightsGroupBy {
   INSIGHTS_GROUP_BY_TOOL_KIND = 9;
 }
 
-// InsightsCost is the cost of a bucket's ORG-FUNDED calls. Calls paid from a
-// member's own account are never priced here: their cost is blank, not zero.
+// InsightsCost is the cost of the bucket's calls the org PROVABLY PAID FOR
+// itself: on its own API keys, seats or Reliant credits, with the org
+// recorded as the payer. Calls paid from a member's own account, and calls on
+// an org-class account whose payer is unknown or another org, are never
+// priced here: their cost is blank, not zero.
 // Reported and estimated cost are separate and must never be added together.
 message InsightsCost {
-  // Calls the org paid for: its own API keys, seats and Reliant credits.
+  // Calls the org paid for: its own API keys, seats and Reliant credits,
+  // with this org recorded as the payer.
   int64 org_funded_calls = 1;
   // Calls paid from a member's own subscription or key, or run on their own
   // hardware. They count as calls; their cost is not shown anywhere.
@@ -147,6 +151,11 @@ message InsightsCost {
   // Org-funded calls with no per-call price (a seat the org pays for, a
   // local model).
   int64 unpriced_calls = 8;
+  // Calls on an org-class account (an org key, seat or Reliant credits) that
+  // this org is not known to have paid for: the payer was not recorded (the
+  // managed key outside an org, a call recorded before the payer was), or
+  // was another org. They count as calls; their cost is not shown.
+  int64 payer_unconfirmed_calls = 9;
 }
 
 // InsightsLatency is a duration distribution, from the rollups' latency
