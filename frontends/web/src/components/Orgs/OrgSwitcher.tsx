@@ -104,7 +104,7 @@ function SidebarOrgSwitcher({
           label: `Make ${active.name} my default`,
           testId: "org-make-default",
           onClick: () =>
-            setDefault.mutate(active.id, {
+            setDefault.mutate({ orgId: active.id }, {
               onError: () => toast.error("Could not change your default organization"),
             }),
         },

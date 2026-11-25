@@ -42,6 +42,8 @@ import (
 // could not be read fails it (scanProcRoot), as if there were no /proc. Each
 // process is read between two reads of its start time, so reads that straddle
 // a pid's reuse by another process are never taken for either (readProcess).
+// A service manager's identity or capabilities cannot excuse unreadable
+// references: neither proves that it holds no work directory.
 //
 // Where there is no /proc (macOS) nothing can be proven, and a go-build*
 // directory is removed by age alone, GoWorkDirAge, as before.
@@ -171,8 +173,11 @@ type workDirAudit struct {
 	// rule 2: until it exits, nothing born after it started can be proven
 	// dead.
 	OldestCreator string `json:"oldest_creator,omitempty"`
-	Stopped       string `json:"stopped,omitempty"`
-	Error         string `json:"error,omitempty"`
+	// ExplainedUnreadable is retained for audit compatibility but never populated:
+	// unreadable references now always fail the proof, regardless of identity.
+	ExplainedUnreadable []string `json:"explained_unreadable,omitempty"`
+	Stopped             string   `json:"stopped,omitempty"`
+	Error               string   `json:"error,omitempty"`
 }
 
 // goWorkDirRoots are the directories go work dirs are created in: GOTMPDIR
@@ -389,6 +394,9 @@ func logWorkDirPass(ctx context.Context, trigger string, a workDirAudit) {
 	}
 	if a.OldestCreator != "" {
 		fields = append(fields, "oldest_creator", a.OldestCreator)
+	}
+	if len(a.ExplainedUnreadable) > 0 {
+		fields = append(fields, "explained_unreadable", strings.Join(a.ExplainedUnreadable, "; "))
 	}
 	if a.Error != "" {
 		fields = append(fields, "error", a.Error)

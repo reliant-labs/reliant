@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UpdateStatus } from "../../types/electron";
-import { connectAppUpdates, nextPendingUpdate, useAppUpdateStore } from "../appUpdateStore";
+import { connectAppUpdates, isUpgradeOverdue, nextPendingUpdate, useAppUpdateStore } from "../appUpdateStore";
 
 type Listener = (status: UpdateStatus) => void;
 
@@ -187,3 +187,36 @@ describe("forceUpdate", () => {
   });
 });
 
+
+describe("the daemon's upgrade request", () => {
+  const request = { targetVersion: "1.14.0", urgency: "security", deadlineUnixMs: 1_000, reason: "fix" };
+
+  it("opens the dialog when the update the app fetched for it is downloaded", () => {
+    const { api, listeners } = fakeElectron();
+    const disconnect = connectAppUpdates();
+    listeners.status?.({ type: "available", version: "1.14.0", daemonUpgrade: request });
+    expect(useAppUpdateStore.getState().dialogOpen).toBe(false);
+    listeners.status?.({ type: "downloaded", version: "1.14.0", daemonUpgrade: request });
+    expect(useAppUpdateStore.getState().dialogOpen).toBe(true);
+    expect(api.installUpdate).not.toHaveBeenCalled();
+    disconnect();
+  });
+
+  it("opens it in a window that mounts after the download", async () => {
+    fakeElectron({
+      getUpdateStatus: vi.fn(async () => ({ type: "downloaded", version: "1.14.0", daemonUpgrade: request })),
+    });
+    const disconnect = connectAppUpdates();
+    await vi.waitFor(() => expect(useAppUpdateStore.getState().dialogOpen).toBe(true));
+    disconnect();
+  });
+
+  it("is overdue only at security or emergency urgency, past its deadline", () => {
+    expect(isUpgradeOverdue(request, 999)).toBe(false);
+    expect(isUpgradeOverdue(request, 1_000)).toBe(true);
+    expect(isUpgradeOverdue({ ...request, urgency: "emergency" }, 2_000)).toBe(true);
+    expect(isUpgradeOverdue({ ...request, urgency: "normal" }, 2_000)).toBe(false);
+    expect(isUpgradeOverdue({ ...request, deadlineUnixMs: 0 }, 2_000)).toBe(false);
+    expect(isUpgradeOverdue(undefined, 2_000)).toBe(false);
+  });
+});

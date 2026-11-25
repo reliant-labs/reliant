@@ -15,23 +15,24 @@ import {
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { getActiveOrgId, useActiveOrgStore } from "@/store/activeOrgStore";
 import { useAuthStore } from "@/store/authStore";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { myOrgsHandlers } from "@/test/orgsTransport";
 
 const listMyOrganizations = vi.fn();
 const setDefaultOrganization = vi.fn();
-vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
-  listMyOrganizations: () => listMyOrganizations(),
-  setDefaultOrganization: (id: string) => setDefaultOrganization(id),
-}));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
 const { ActiveOrgBinding } = await import("../../Orgs/ActiveOrgBinding");
 const { MobileOrgSwitcher } = await import("../MobileOrgSwitcher");
+
+beforeEach(() => setTransport(mockTransport(myOrgsHandlers({ listMyOrganizations: () => listMyOrganizations(), setDefaultOrganization: (id) => setDefaultOrganization(id) }))));
+afterEach(() => setTransport(null));
 
 const org = (id: string, name: string, over: Record<string, unknown> = {}) => ({
   id, name, slug: id, role: "owner", isOwner: true, isDefault: false, ...over,

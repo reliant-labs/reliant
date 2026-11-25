@@ -1,21 +1,23 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useQuery, type InfiniteData } from "@tanstack/react-query";
+import { useCallback } from "react";
+import { type InfiniteData } from "@tanstack/react-query";
 
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
-  getMyPolicyUsage,
-  getOrgPolicy,
   isRpcNotDeployed,
   isUsageUnavailable,
-  listOrgPolicyDenials,
-  orgPolicyKeys,
+  myPolicyUsageOf,
+  policyDenialsOf,
   policyHistoryPageOf,
   policyHistoryRequest,
+  policyRecordOf,
 } from "@/services/controlPlane/orgPolicy";
 import type { ListOrgLimitChangesResponse } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import type { GetOrgPolicyResponse } from "@/gen/controlplane/services/org_policy/v1/org_policy_pb";
 import { useListOrgLimitChangesInfinite } from "@/hooks/controlplane/billing-service-hooks_gen";
+import { useGetMyPolicyUsage, useGetOrgPolicy, useListOrgPolicyDenials } from "@/hooks/controlplane/org-policy-service-hooks_gen";
 
 const FINAL_CODES = new Set([Code.PermissionDenied, Code.Unauthenticated, Code.InvalidArgument]);
 
@@ -24,24 +26,22 @@ const FINAL_CODES = new Set([Code.PermissionDenied, Code.Unauthenticated, Code.I
  * no such rpc: that is an answer ("not available yet"), never retried.
  */
 export function useMyPolicyUsage(orgId: string, enabled = true) {
-  return useQuery({
-    queryKey: orgPolicyKeys.usage(orgId),
-    queryFn: () => getMyPolicyUsage(orgId),
-    enabled: !!orgId && enabled,
-    staleTime: 60_000,
-    // A refusal (not a member, not a person) is a verdict: asking again changes nothing.
-    retry: (count, err) => !isUsageUnavailable(err) && !(err instanceof ConnectError && FINAL_CODES.has(err.code)) && count < 2,
-  });
+  return useGetMyPolicyUsage(
+    { orgId },
+    {
+      enabled: !!orgId && enabled,
+      staleTime: 60_000,
+      // A refusal (not a member, not a person) is a verdict: asking again changes nothing.
+      retry: (count, err) => !isUsageUnavailable(err) && !(err instanceof ConnectError && FINAL_CODES.has(err.code)) && count < 2,
+      select: myPolicyUsageOf,
+    },
+  );
 }
 
 /** The org's policy document and its version. */
 export function useOrgPolicy(orgId: string) {
-  return useQuery({
-    queryKey: orgPolicyKeys.policy(orgId),
-    queryFn: () => getOrgPolicy(orgId),
-    enabled: !!orgId,
-    staleTime: 30_000,
-  });
+  const select = useCallback((res: GetOrgPolicyResponse) => policyRecordOf(orgId, res), [orgId]);
+  return useGetOrgPolicy({ orgId }, { enabled: !!orgId, staleTime: 30_000, select });
 }
 
 // Module-level, so React Query re-maps only when the pages change.
@@ -64,11 +64,13 @@ export function usePolicyHistory(orgId: string) {
  * and an older control plane are final, never retried.
  */
 export function useOrgPolicyDenials(orgId: string, days: number, enabled = true) {
-  return useQuery({
-    queryKey: orgPolicyKeys.denials(orgId, days),
-    queryFn: () => listOrgPolicyDenials(orgId, days),
-    enabled: !!orgId && enabled,
-    staleTime: 60_000,
-    retry: (count, err) => !isRpcNotDeployed(err) && !(err instanceof ConnectError && FINAL_CODES.has(err.code)) && count < 2,
-  });
+  return useListOrgPolicyDenials(
+    { orgId, days },
+    {
+      enabled: !!orgId && enabled,
+      staleTime: 60_000,
+      retry: (count, err) => !isRpcNotDeployed(err) && !(err instanceof ConnectError && FINAL_CODES.has(err.code)) && count < 2,
+      select: policyDenialsOf,
+    },
+  );
 }

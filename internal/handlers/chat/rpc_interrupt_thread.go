@@ -23,7 +23,7 @@ func (s *Service) InterruptThread(
 
 	threadsSvc := s.threads
 	if threadsSvc == nil {
-		threadsSvc = threads.New(threads.Deps{Repo: s.deps.Repo, Signaler: s.deps.Temporal, ToolCanceler: s.deps.Router})
+		threadsSvc = threads.New(threads.Deps{Repo: s.deps.Repo, Chats: s.chats(), Signaler: s.deps.Temporal, ToolCanceler: s.deps.Router})
 	}
 
 	result, err := threadsSvc.InterruptThread(ctx, threads.InterruptThreadOpts{

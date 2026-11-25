@@ -663,6 +663,58 @@ func (x *PreviewAccountDeletionResponse) GetWallet() *AccountDeletionWalletQuote
 	return nil
 }
 
+// AccountDeletionConfirmed is a Connect error detail. control-plane attaches it
+// to the PermissionDenied refusal of a deleted account (reason
+// "account_deleted", message "this account has been deleted") when it has
+// VERIFIED the deletion: the caller's users row carries the tombstone that
+// DeleteCurrentUserAccount writes as its last step, after the wallet was
+// settled, the daemons torn down and the sign-in identity removed.
+//
+// The same refusal is also sent WITHOUT this detail, as a precaution, when
+// control-plane could not tell: the lookup of the tombstone failed, so it
+// refused rather than risk admitting a deleted account. A client must treat
+// the platform account as deleted only when this detail is present. reliant's
+// DeleteAccount resumes its local purge on it; an ambiguous refusal is a
+// failure the user retries.
+//
+// It may be sent on any RPC, because the refusal comes from the auth layer
+// before a handler runs. Empty today; a field added later is additive.
+type AccountDeletionConfirmed struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AccountDeletionConfirmed) Reset() {
+	*x = AccountDeletionConfirmed{}
+	mi := &file_services_user_v1_user_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccountDeletionConfirmed) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountDeletionConfirmed) ProtoMessage() {}
+
+func (x *AccountDeletionConfirmed) ProtoReflect() protoreflect.Message {
+	mi := &file_services_user_v1_user_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountDeletionConfirmed.ProtoReflect.Descriptor instead.
+func (*AccountDeletionConfirmed) Descriptor() ([]byte, []int) {
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{12}
+}
+
 type DeleteCurrentUserAccountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -671,7 +723,7 @@ type DeleteCurrentUserAccountRequest struct {
 
 func (x *DeleteCurrentUserAccountRequest) Reset() {
 	*x = DeleteCurrentUserAccountRequest{}
-	mi := &file_services_user_v1_user_proto_msgTypes[12]
+	mi := &file_services_user_v1_user_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -683,7 +735,7 @@ func (x *DeleteCurrentUserAccountRequest) String() string {
 func (*DeleteCurrentUserAccountRequest) ProtoMessage() {}
 
 func (x *DeleteCurrentUserAccountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_user_v1_user_proto_msgTypes[12]
+	mi := &file_services_user_v1_user_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -696,7 +748,7 @@ func (x *DeleteCurrentUserAccountRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCurrentUserAccountRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCurrentUserAccountRequest) Descriptor() ([]byte, []int) {
-	return file_services_user_v1_user_proto_rawDescGZIP(), []int{12}
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{13}
 }
 
 type DeleteCurrentUserAccountResponse struct {
@@ -716,7 +768,7 @@ type DeleteCurrentUserAccountResponse struct {
 
 func (x *DeleteCurrentUserAccountResponse) Reset() {
 	*x = DeleteCurrentUserAccountResponse{}
-	mi := &file_services_user_v1_user_proto_msgTypes[13]
+	mi := &file_services_user_v1_user_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -728,7 +780,7 @@ func (x *DeleteCurrentUserAccountResponse) String() string {
 func (*DeleteCurrentUserAccountResponse) ProtoMessage() {}
 
 func (x *DeleteCurrentUserAccountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_user_v1_user_proto_msgTypes[13]
+	mi := &file_services_user_v1_user_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -741,7 +793,7 @@ func (x *DeleteCurrentUserAccountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCurrentUserAccountResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCurrentUserAccountResponse) Descriptor() ([]byte, []int) {
-	return file_services_user_v1_user_proto_rawDescGZIP(), []int{13}
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DeleteCurrentUserAccountResponse) GetBlockers() []*AccountDeletionBlocker {
@@ -806,7 +858,8 @@ const file_services_user_v1_user_proto_rawDesc = "" +
 	"\x1ePreviewAccountDeletionResponse\x12C\n" +
 	"\bblockers\x18\x01 \x03(\v2'.controlplane.v1.AccountDeletionBlockerR\bblockers\x12!\n" +
 	"\fdaemon_count\x18\x02 \x01(\x05R\vdaemonCount\x12C\n" +
-	"\x06wallet\x18\x03 \x01(\v2+.controlplane.v1.AccountDeletionWalletQuoteR\x06wallet\"!\n" +
+	"\x06wallet\x18\x03 \x01(\v2+.controlplane.v1.AccountDeletionWalletQuoteR\x06wallet\"\x1a\n" +
+	"\x18AccountDeletionConfirmed\"!\n" +
 	"\x1fDeleteCurrentUserAccountRequest\"\xd8\x01\n" +
 	" DeleteCurrentUserAccountResponse\x12C\n" +
 	"\bblockers\x18\x01 \x03(\v2'.controlplane.v1.AccountDeletionBlockerR\bblockers\x12H\n" +
@@ -832,7 +885,7 @@ func file_services_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_services_user_v1_user_proto_rawDescData
 }
 
-var file_services_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_services_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_services_user_v1_user_proto_goTypes = []any{
 	(*GetCurrentUserRequest)(nil),            // 0: controlplane.v1.GetCurrentUserRequest
 	(*GetCurrentUserResponse)(nil),           // 1: controlplane.v1.GetCurrentUserResponse
@@ -846,15 +899,16 @@ var file_services_user_v1_user_proto_goTypes = []any{
 	(*AccountDeletionWalletSettlement)(nil),  // 9: controlplane.v1.AccountDeletionWalletSettlement
 	(*PreviewAccountDeletionRequest)(nil),    // 10: controlplane.v1.PreviewAccountDeletionRequest
 	(*PreviewAccountDeletionResponse)(nil),   // 11: controlplane.v1.PreviewAccountDeletionResponse
-	(*DeleteCurrentUserAccountRequest)(nil),  // 12: controlplane.v1.DeleteCurrentUserAccountRequest
-	(*DeleteCurrentUserAccountResponse)(nil), // 13: controlplane.v1.DeleteCurrentUserAccountResponse
-	(*v1.User)(nil),                          // 14: controlplane.v1.User
-	(*structpb.Struct)(nil),                  // 15: google.protobuf.Struct
+	(*AccountDeletionConfirmed)(nil),         // 12: controlplane.v1.AccountDeletionConfirmed
+	(*DeleteCurrentUserAccountRequest)(nil),  // 13: controlplane.v1.DeleteCurrentUserAccountRequest
+	(*DeleteCurrentUserAccountResponse)(nil), // 14: controlplane.v1.DeleteCurrentUserAccountResponse
+	(*v1.User)(nil),                          // 15: controlplane.v1.User
+	(*structpb.Struct)(nil),                  // 16: google.protobuf.Struct
 }
 var file_services_user_v1_user_proto_depIdxs = []int32{
-	14, // 0: controlplane.v1.GetCurrentUserResponse.user:type_name -> controlplane.v1.User
-	14, // 1: controlplane.v1.UpdateProfileResponse.user:type_name -> controlplane.v1.User
-	15, // 2: controlplane.v1.CompleteOnboardingRequest.onboarding_data:type_name -> google.protobuf.Struct
+	15, // 0: controlplane.v1.GetCurrentUserResponse.user:type_name -> controlplane.v1.User
+	15, // 1: controlplane.v1.UpdateProfileResponse.user:type_name -> controlplane.v1.User
+	16, // 2: controlplane.v1.CompleteOnboardingRequest.onboarding_data:type_name -> google.protobuf.Struct
 	7,  // 3: controlplane.v1.AccountDeletionWalletQuote.destinations:type_name -> controlplane.v1.WalletRefundDestination
 	7,  // 4: controlplane.v1.AccountDeletionWalletSettlement.destinations:type_name -> controlplane.v1.WalletRefundDestination
 	6,  // 5: controlplane.v1.PreviewAccountDeletionResponse.blockers:type_name -> controlplane.v1.AccountDeletionBlocker
@@ -865,12 +919,12 @@ var file_services_user_v1_user_proto_depIdxs = []int32{
 	2,  // 10: controlplane.v1.UserService.UpdateProfile:input_type -> controlplane.v1.UpdateProfileRequest
 	4,  // 11: controlplane.v1.UserService.CompleteOnboarding:input_type -> controlplane.v1.CompleteOnboardingRequest
 	10, // 12: controlplane.v1.UserService.PreviewAccountDeletion:input_type -> controlplane.v1.PreviewAccountDeletionRequest
-	12, // 13: controlplane.v1.UserService.DeleteCurrentUserAccount:input_type -> controlplane.v1.DeleteCurrentUserAccountRequest
+	13, // 13: controlplane.v1.UserService.DeleteCurrentUserAccount:input_type -> controlplane.v1.DeleteCurrentUserAccountRequest
 	1,  // 14: controlplane.v1.UserService.GetCurrentUser:output_type -> controlplane.v1.GetCurrentUserResponse
 	3,  // 15: controlplane.v1.UserService.UpdateProfile:output_type -> controlplane.v1.UpdateProfileResponse
 	5,  // 16: controlplane.v1.UserService.CompleteOnboarding:output_type -> controlplane.v1.CompleteOnboardingResponse
 	11, // 17: controlplane.v1.UserService.PreviewAccountDeletion:output_type -> controlplane.v1.PreviewAccountDeletionResponse
-	13, // 18: controlplane.v1.UserService.DeleteCurrentUserAccount:output_type -> controlplane.v1.DeleteCurrentUserAccountResponse
+	14, // 18: controlplane.v1.UserService.DeleteCurrentUserAccount:output_type -> controlplane.v1.DeleteCurrentUserAccountResponse
 	14, // [14:19] is the sub-list for method output_type
 	9,  // [9:14] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
@@ -889,7 +943,7 @@ func file_services_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_user_v1_user_proto_rawDesc), len(file_services_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

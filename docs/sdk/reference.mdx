@@ -57,7 +57,7 @@ A run's progress is the update feed of the session it lives in, and its open gat
 | `QuestionService/ListPendingQuestions` | `Gates.Pending` | Lists the pending questions in a session, oldest first, each naming the thread that asked. |
 | `QuestionService/ResolveQuestion` | `Gates.Answer` | Answers a pending question. |
 | `ApprovalService/ListApprovalsByChat` | `Gates.Pending`, `Approvals.List`, `Approvals.ListForRun` | Lists a session's approvals. Reading only. |
-| `ApprovalService/Approve`, `Deny`, `BatchApprove`, `BatchDeny` | `Approvals.Approve`, `Approvals.Deny`, `Approvals.BatchApprove`, `Approvals.BatchDeny` | Decides approvals. Needs `approvals:decide` granted explicitly (`reliant:api` is not enough); a machine-bound token is refused. |
+| `ApprovalService/Approve`, `Deny`, `BatchApprove`, `BatchDeny` | `Approvals.Approve`, `Approvals.Deny`, `Approvals.BatchApprove`, `Approvals.BatchDeny` | Decides approvals. Refused to every API token, `approvals:decide` included: only a person signed in to the Reliant app decides (reason `person_required`). |
 
 ## Inbox
 
