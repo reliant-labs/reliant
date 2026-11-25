@@ -55,6 +55,10 @@ func (r *stallingRepo) GetProjectByRemoteURLAndUserInScope(context.Context, stri
 	return nil, nil
 }
 
+func (r *stallingRepo) GetProjectByRemoteKeyAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {
+	return nil, nil
+}
+
 var _ ProjectLookups = (*stallingRepo)(nil)
 
 func (r *stallingRepo) GetProjectByPathAndUserInScope(context.Context, string, string, *core.OrgScope) (*core.Project, error) {

@@ -14115,6 +14115,10 @@
             {
               "name": "is_git_repo",
               "kind": "bool"
+            },
+            {
+              "name": "remote_url",
+              "kind": "string"
             }
           ],
           "reliant.v1.DiskConsumer": [
@@ -44091,6 +44095,10 @@
             {
               "name": "is_git_repo",
               "kind": "bool"
+            },
+            {
+              "name": "remote_url",
+              "kind": "string"
             }
           ],
           "reliant.v1.DiskConsumer": [
