@@ -14,6 +14,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const BackendManager = require('../src/backend-manager');
+const { createDaemonUpgradeResponder } = require('../src/update-check');
 const {
   DAEMON_STREAM_NOTICE_PREFIX,
   DAEMON_SUPERVISOR_ENV_VAR,
@@ -114,6 +115,59 @@ test('an upgrade notice on stdout reaches the updater', () => {
   assert.deepEqual(notices, [PARSED_GO_NOTICE]);
   assert.deepEqual(streams, [], 'an upgrade notice is not a stream transition');
 });
+
+for (const failure of ['offline', 'unpublished', 'download']) {
+  test(`one Go notice retries after ${failure} without another producer emission`, async () => {
+    const { instance } = harness();
+    let timer = null;
+    const delays = [];
+    let recovered = false;
+    let checks = 0;
+    let downloads = 0;
+    let status = null;
+    let initial;
+    const respond = createDaemonUpgradeResponder({
+      getStatus: () => status,
+      isDownloading: () => false,
+      check: async () => {
+        checks++;
+        if (!recovered && failure === 'offline') throw new Error('offline');
+        return { isUpdateAvailable: recovered || failure === 'download' };
+      },
+      download: async () => {
+        downloads++;
+        if (!recovered) return { error: 'download failed' };
+        status = { type: 'downloaded' };
+        return { success: true };
+      },
+      announce: (request) => assert.deepEqual(request, PARSED_GO_NOTICE),
+      schedule: (callback, delay) => {
+        assert.equal(timer, null, 'only one retry may be scheduled');
+        timer = callback;
+        delays.push(delay);
+        return { unref() {} };
+      },
+      cancel: () => { timer = null; },
+    });
+    instance.onDaemonUpgradeNotice((request) => { initial = respond(request); });
+    // The Go producer deduplicates this request permanently: deliver it once.
+    instance.consumeDaemonStdout(`${GO_NOTICE_LINE}\n`);
+    assert.equal((await initial).outcome, failure === 'unpublished' ? 'up-to-date' : 'error');
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const retry = timer;
+      timer = null;
+      await retry();
+    }
+    assert.deepEqual(delays, [60000, 120000, 240000, 480000, 960000, 1920000, 3600000, 3600000, 3600000]);
+    recovered = true;
+    const retry = timer;
+    timer = null;
+    assert.equal((await retry()).outcome, 'downloaded');
+    assert.equal(checks, 10);
+    assert.equal(downloads, failure === 'download' ? 10 : 1);
+    assert.equal(timer, null, 'success stops retries; Later must remain the user’s choice');
+  });
+}
 
 test('a notice split across chunks, or among log lines, still reaches the updater once', () => {
   const { instance, notices } = harness();

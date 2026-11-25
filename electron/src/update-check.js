@@ -223,7 +223,9 @@ async function checkAndDownload({ getStatus, isDownloading, check, download }) {
  * is not the case here.
  *
  * Resolves the outcome of checkAndDownload. A notice while one is being acted
- * on joins it, after `announce` has recorded the newer request.
+ * on joins it, after `announce` has recorded the newer request. Failed checks,
+ * missing releases and failed downloads retry after one minute with exponential
+ * backoff capped at one hour; success stops retries without installing.
  *
  * @param {object} deps
  * @param {() => object|null} deps.getStatus   the updater's state (nextUpdateState)
@@ -232,18 +234,43 @@ async function checkAndDownload({ getStatus, isDownloading, check, download }) {
  * @param {() => Promise<{success?: boolean, error?: string}>} deps.download   the download runner; joins one in flight
  * @param {(request: object) => void} deps.announce   records the request and shows it with the update the windows have
  */
-function createDaemonUpgradeResponder({ getStatus, isDownloading, check, download, announce }) {
+function createDaemonUpgradeResponder({
+  getStatus, isDownloading, check, download, announce,
+  schedule = setTimeout, cancel = clearTimeout,
+}) {
   let inFlight = null;
+  let pendingRequest = null;
+  let retryTimer = null;
+  let retryDelay = 60 * 1000;
+  const maxRetryDelay = 60 * 60 * 1000;
 
-  return function respond(request) {
+  // The daemon emits each request only once. Electron owns retries until the
+  // download succeeds, including when the feed has not published it yet.
+  function respond(request) {
+    pendingRequest = request;
     announce(request);
     if (!inFlight) {
-      inFlight = checkAndDownload({ getStatus, isDownloading, check, download }).finally(() => {
+      if (retryTimer !== null) cancel(retryTimer);
+      retryTimer = null;
+      inFlight = checkAndDownload({ getStatus, isDownloading, check, download }).then((result) => {
+        if (result.outcome === "error" || result.outcome === "up-to-date") {
+          retryTimer = schedule(() => {
+            retryTimer = null;
+            return respond(pendingRequest);
+          }, retryDelay);
+          retryTimer.unref?.();
+          retryDelay = Math.min(retryDelay * 2, maxRetryDelay);
+        } else {
+          retryDelay = 60 * 1000;
+        }
+        return result;
+      }).finally(() => {
         inFlight = null;
       });
     }
     return inFlight;
-  };
+  }
+  return respond;
 }
 
 /**

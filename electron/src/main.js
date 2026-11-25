@@ -2614,6 +2614,13 @@ function broadcastUpdateStatus(status) {
 // in flight or done (see canCheckForUpdates).
 function runBackgroundUpdateCheck(source) {
   if (!app.isPackaged || isInstallingUpdate) return;
+  if (daemonUpgradeRequest) {
+    // An outstanding daemon request needs a download, not only a feed check.
+    // Join the responder's work and let it retain its bounded retry timer.
+    // Once ready, do not reopen a prompt the user dismissed with Later.
+    if (lastUpdateStatus?.type !== "downloaded") handleDaemonUpgradeNotice(daemonUpgradeRequest);
+    return;
+  }
   if (!canCheckForUpdates(lastUpdateStatus, downloadRunner.isInFlight())) {
     log.info(`[AutoUpdater] Skipping ${source} check: an update is downloading or downloaded`);
     return;
