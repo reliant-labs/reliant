@@ -1197,9 +1197,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 		ctx = withCatalogPin(ctx, loadedWf.CatalogPin)
 	}
-	// A run recorded before llm_gateway's removal: its run nodes that set it
-	// refuse their command rather than run without the step key.
-	ctx = withLegacyLLMGateway(ctx, recordedLLMGatewayNodes(loadedWf.WorkflowJSON))
 	nameRunOrg(ctx, loadedWf.OrgID)
 
 	// Parse the placeholder-resolved workflow to get input schemas
@@ -1207,6 +1204,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if err != nil {
 		return nil, fmt.Errorf("parse workflow for validation: %w", err)
 	}
+	// A run recorded before llm_gateway's removal: its run nodes that set it
+	// (handlers included, armed from this parse) refuse their command rather
+	// than run without the step key (removed_definition_keys.go).
+	markRecordedLLMGateway(wfWithPlaceholders, loadedWf.WorkflowJSON)
 
 	// The on_failure handler is armed as soon as the definition parses, before
 	// input validation or template resolution can fail: a run that dies there
@@ -1365,6 +1366,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	} else {
 		// No templates - use the placeholder-resolved workflow directly
 		wf = wfWithPlaceholders
+	}
+
+	// The template-resolved definition is a parse of its own: mark it too.
+	if wf != wfWithPlaceholders {
+		markRecordedLLMGateway(wf, loadedWf.WorkflowJSON)
 	}
 
 	onFailureHandler = wf.GetOnFailure()

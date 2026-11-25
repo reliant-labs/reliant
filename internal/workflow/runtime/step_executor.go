@@ -1144,7 +1144,7 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	runInputs["node_type"] = model.NodeTypeRun
 	// A node a run recorded before llm_gateway's removal declared it on:
 	// ExecuteRunStep refuses its command (removed_definition_keys.go).
-	if gw, ok := legacyLLMGateway(e.ctx, node.GetId()); ok {
+	if gw, ok := removedLLMGatewayOf(node.GetRun()); ok {
 		runInputs["llm_gateway"] = gw
 	}
 	if e.loopNodeID != "" {

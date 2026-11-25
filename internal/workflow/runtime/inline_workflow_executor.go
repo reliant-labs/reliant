@@ -751,7 +751,7 @@ func (e *InlineWorkflowExecutor) loadSubWorkflow() error {
 	}
 	// Run nodes a definition recorded before llm_gateway's removal set it on
 	// refuse their command (removed_definition_keys.go).
-	e.ctx = withLegacyLLMGateway(e.ctx, recordedLLMGatewayNodes(loadedWf.WorkflowJSON))
+	markRecordedLLMGateway(wf, loadedWf.WorkflowJSON)
 
 	e.subWorkflow = wf
 	e.logger.Debug("[InlineWorkflow] Loaded sub-workflow",

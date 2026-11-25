@@ -4,8 +4,13 @@ package runtime
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/reflect/protoreflect"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 // v1.29.0 shipped two workflow keys that were later removed: a workflow's
@@ -101,85 +106,189 @@ func dropRunLLMGateway(v interface{}) {
 	}
 }
 
-// legacyLLMGatewayKey holds, on the workflow context, the run nodes whose
-// recorded definition set the removed llm_gateway (by node id). A run
-// recorded while it existed may not have reached such a node yet; its
-// definition re-parses without the key, so ExecuteRunStep is told
-// explicitly (ExecuteRunStepInput.LegacyLLMGateway) and refuses the command
-// rather than run it without the step key it was declared with. The
-// activity is scheduled either way, so the command sequence is unchanged.
-type legacyLLMGatewayKey struct{}
+// removedRunArgsLLMGateway is RunArgs' field number for the removed
+// llm_gateway (reserved in workflow_v2.proto).
+const removedRunArgsLLMGateway protowire.Number = 7
 
-// withLegacyLLMGateway records nodes on ctx, beside any an enclosing
-// definition recorded. ctx itself when there are none.
-func withLegacyLLMGateway(ctx workflow.Context, nodes map[string]json.RawMessage) workflow.Context {
-	if len(nodes) == 0 {
-		return ctx
+var runArgsName = (&reliantv1.RunArgs{}).ProtoReflect().Descriptor().FullName()
+
+// markRecordedLLMGateway carries the removed llm_gateway a run recorded
+// before its removal declared back onto that run's parsed definition: each
+// run node whose recorded protojson (workflowJSON, from the run's history)
+// set it gets it back on its RunArgs as an unknown field 7, encoded as the
+// LLMGatewayStep it was. The node itself then says so, wherever it sits: an
+// id repeats across graph scopes (a loop body, an inline workflow, a
+// handler), a node does not. startRun passes it to ExecuteRunStep, which
+// refuses the command rather than run it without the step key it was
+// declared with. wf and the recorded JSON are the same definition, so their
+// shapes match; anywhere they do not, nothing is marked. A definition loaded
+// since the removal never carries the key, so this changes nothing for it.
+func markRecordedLLMGateway(wf *reliantv1.Workflow, workflowJSON []byte) {
+	if wf == nil || (!bytes.Contains(workflowJSON, []byte("llmGateway")) && !bytes.Contains(workflowJSON, []byte("llm_gateway"))) {
+		return
 	}
-	merged := make(map[string]json.RawMessage, len(nodes))
-	if outer, ok := ctx.Value(legacyLLMGatewayKey{}).(map[string]json.RawMessage); ok {
-		for id, gw := range outer {
-			merged[id] = gw
+	var def map[string]interface{}
+	if err := json.Unmarshal(workflowJSON, &def); err != nil {
+		return
+	}
+	markRecordedLLMGatewayIn(wf.ProtoReflect(), def)
+}
+
+func markRecordedLLMGatewayIn(m protoreflect.Message, recorded map[string]interface{}) {
+	if m.Descriptor().FullName() == runArgsName {
+		gw, ok := recorded["llmGateway"].(map[string]interface{})
+		if !ok {
+			gw, ok = recorded["llm_gateway"].(map[string]interface{})
+		}
+		if ok {
+			m.SetUnknown(append(m.GetUnknown(), encodeRemovedLLMGateway(gw)...))
 		}
 	}
-	for id, gw := range nodes {
-		merged[id] = gw
-	}
-	return workflow.WithValue(ctx, legacyLLMGatewayKey{}, merged)
-}
-
-// legacyLLMGateway is the removed llm_gateway a recorded definition set on
-// run node nodeID, if any.
-func legacyLLMGateway(ctx workflow.Context, nodeID string) (json.RawMessage, bool) {
-	if ctx == nil {
-		return nil, false
-	}
-	nodes, _ := ctx.Value(legacyLLMGatewayKey{}).(map[string]json.RawMessage)
-	gw, ok := nodes[nodeID]
-	return gw, ok
-}
-
-// recordedLLMGatewayNodes reads, from a definition's protojson, every run
-// node (at any depth) that set llm_gateway: field 7 of RunArgs, now
-// reserved, so the generated type no longer decodes it.
-func recordedLLMGatewayNodes(workflowJSON []byte) map[string]json.RawMessage {
-	if len(workflowJSON) == 0 || !bytes.Contains(workflowJSON, []byte("lmGateway")) && !bytes.Contains(workflowJSON, []byte("llm_gateway")) {
-		return nil
-	}
-	var def interface{}
-	if err := json.Unmarshal(workflowJSON, &def); err != nil {
-		return nil
-	}
-	var out map[string]json.RawMessage
-	var walk func(v interface{})
-	walk = func(v interface{}) {
-		switch t := v.(type) {
-		case map[string]interface{}:
-			if id, ok := t["id"].(string); ok {
-				if run, ok := t["run"].(map[string]interface{}); ok {
-					gw, set := run["llmGateway"]
-					if !set {
-						gw, set = run["llm_gateway"]
-					}
-					if set && gw != nil {
-						if raw, err := json.Marshal(gw); err == nil {
-							if out == nil {
-								out = map[string]json.RawMessage{}
-							}
-							out[id] = raw
-						}
-					}
+	fields := m.Descriptor().Fields()
+	for i := 0; i < fields.Len(); i++ {
+		fd := fields.Get(i)
+		if fd.Message() == nil || !m.Has(fd) {
+			continue
+		}
+		v, ok := recorded[fd.JSONName()]
+		if !ok {
+			v, ok = recorded[string(fd.Name())]
+		}
+		if !ok {
+			continue
+		}
+		switch {
+		case fd.IsMap():
+			obj, isObj := v.(map[string]interface{})
+			if fd.MapValue().Message() == nil || !isObj {
+				continue
+			}
+			m.Get(fd).Map().Range(func(k protoreflect.MapKey, val protoreflect.Value) bool {
+				if sub, ok := obj[k.String()].(map[string]interface{}); ok {
+					markRecordedLLMGatewayIn(val.Message(), sub)
+				}
+				return true
+			})
+		case fd.IsList():
+			arr, isArr := v.([]interface{})
+			list := m.Get(fd).List()
+			if !isArr || len(arr) != list.Len() {
+				continue
+			}
+			for k := range arr {
+				if sub, ok := arr[k].(map[string]interface{}); ok {
+					markRecordedLLMGatewayIn(list.Get(k).Message(), sub)
 				}
 			}
-			for _, child := range t {
-				walk(child)
-			}
-		case []interface{}:
-			for _, child := range t {
-				walk(child)
+		default:
+			if sub, ok := v.(map[string]interface{}); ok {
+				markRecordedLLMGatewayIn(m.Get(fd).Message(), sub)
 			}
 		}
 	}
-	walk(def)
-	return out
+}
+
+// encodeRemovedLLMGateway is field 7 of RunArgs holding the recorded
+// LLMGatewayStep {cli = 1, budget_usd = 2, models = 3}, wire-compatible with
+// a reader that still knows it.
+func encodeRemovedLLMGateway(gw map[string]interface{}) []byte {
+	var step []byte
+	if cli, ok := gw["cli"].(string); ok {
+		step = protowire.AppendTag(step, 1, protowire.BytesType)
+		step = protowire.AppendString(step, cli)
+	}
+	budget, ok := gw["budgetUsd"].(float64)
+	if !ok {
+		budget, ok = gw["budget_usd"].(float64)
+	}
+	if ok {
+		step = protowire.AppendTag(step, 2, protowire.Fixed64Type)
+		step = protowire.AppendFixed64(step, math.Float64bits(budget))
+	}
+	if models, ok := gw["models"].([]interface{}); ok {
+		for _, model := range models {
+			if name, ok := model.(string); ok {
+				step = protowire.AppendTag(step, 3, protowire.BytesType)
+				step = protowire.AppendString(step, name)
+			}
+		}
+	}
+	b := protowire.AppendTag(nil, removedRunArgsLLMGateway, protowire.BytesType)
+	return protowire.AppendBytes(b, step)
+}
+
+// removedLLMGatewayOf is the removed llm_gateway markRecordedLLMGateway put
+// back on run, as JSON for ExecuteRunStep's input, if any.
+func removedLLMGatewayOf(run *reliantv1.RunArgs) (json.RawMessage, bool) {
+	if run == nil {
+		return nil, false
+	}
+	for b := run.ProtoReflect().GetUnknown(); len(b) > 0; {
+		num, typ, n := protowire.ConsumeTag(b)
+		if n < 0 {
+			return nil, false
+		}
+		b = b[n:]
+		if num == removedRunArgsLLMGateway && typ == protowire.BytesType {
+			step, m := protowire.ConsumeBytes(b)
+			if m < 0 {
+				return nil, false
+			}
+			return decodeRemovedLLMGateway(step), true
+		}
+		m := protowire.ConsumeFieldValue(num, typ, b)
+		if m < 0 {
+			return nil, false
+		}
+		b = b[m:]
+	}
+	return nil, false
+}
+
+// decodeRemovedLLMGateway is an LLMGatewayStep's bytes as the JSON its run
+// node was written with ({cli, budget_usd, models}).
+func decodeRemovedLLMGateway(step []byte) json.RawMessage {
+	gw := struct {
+		CLI       string   `json:"cli,omitempty"`
+		BudgetUSD float64  `json:"budget_usd,omitempty"`
+		Models    []string `json:"models,omitempty"`
+	}{}
+	for len(step) > 0 {
+		num, typ, n := protowire.ConsumeTag(step)
+		if n < 0 {
+			break
+		}
+		step = step[n:]
+		switch {
+		case num == 1 && typ == protowire.BytesType:
+			v, m := protowire.ConsumeString(step)
+			if m < 0 {
+				return json.RawMessage(`{}`)
+			}
+			gw.CLI, step = v, step[m:]
+		case num == 2 && typ == protowire.Fixed64Type:
+			v, m := protowire.ConsumeFixed64(step)
+			if m < 0 {
+				return json.RawMessage(`{}`)
+			}
+			gw.BudgetUSD, step = math.Float64frombits(v), step[m:]
+		case num == 3 && typ == protowire.BytesType:
+			v, m := protowire.ConsumeString(step)
+			if m < 0 {
+				return json.RawMessage(`{}`)
+			}
+			gw.Models, step = append(gw.Models, v), step[m:]
+		default:
+			m := protowire.ConsumeFieldValue(num, typ, step)
+			if m < 0 {
+				return json.RawMessage(`{}`)
+			}
+			step = step[m:]
+		}
+	}
+	raw, err := json.Marshal(gw)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return raw
 }
