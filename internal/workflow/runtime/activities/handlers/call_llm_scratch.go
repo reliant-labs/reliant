@@ -20,6 +20,12 @@ import "github.com/reliant-labs/reliant/internal/db"
 // directory nobody uses, on these default thresholds, and keeps one with a
 // .keep file at its top (idlereclaim.KeepFile); the guidance says so, or an
 // agent coming back to a week-old briefing finds it gone without warning.
+//
+// It also says the agent-id subdirectories are not the reader's to delete.
+// On 2026-11-25 a root agent freeing disk space ran `for d in */; do rm -rf
+// "$d"; done` in its chat's scratch directory and took its running
+// sub-agents' briefings and a running gate's log with it (agent reports
+// 25075365, e60bb521); nothing in the prompt said whose those were.
 func scratchDirGuidance(chat *db.Chat) string {
 	dir := chatScratchDir(chat)
 	return "Put scratch you may still need later (briefings, notes, clones, background-process output) in this chat's scratch directory, " +
@@ -28,7 +34,9 @@ func scratchDirGuidance(chat *db.Chat) string {
 		"so keep only files you can lose there. " +
 		"The machine cleans up scratch nobody uses: after 2 days unused it deletes the node_modules, build output and clean, pushed git worktrees in a scratch directory, " +
 		"and after 7 days unused (counted from this chat's last tool call too) the whole directory. " +
-		"To keep a directory and everything in it, create a file named `.keep` at its top."
+		"To keep a directory and everything in it, create a file named `.keep` at its top. " +
+		"Each sub-agent of this chat keeps its own files in a subdirectory named by its agent id (briefings it was handed, its logs, a running command's output): " +
+		"never delete a subdirectory you did not create, even to free disk space, because a sub-agent may still be using it; remove only your own files, by name."
 }
 
 // chatScratchDir is the chat's scratch directory, as the prompt writes it.
