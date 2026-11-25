@@ -433,14 +433,13 @@ func (m *BackgroundManager) handOff(process *BackgroundProcess, cb *PersistenceC
 	if err := cb.OnHandOff(process.ID, offsets); err != nil {
 		// Undone first, and only then stopped: the stop then meets a
 		// process with one reaper, its waiter, whose done it waits on.
-		if m.undoHandOff(process) {
+		if exited := m.undoHandOff(process); exited {
 			// It exited during the handoff: its restarted waiter reaps it
-			// now, with its own exit status. There is nothing to stop.
-			select {
-			case <-process.done:
-				return false, true
-			case <-time.After(KillGraceTimeout):
-			}
+			// now, with its own exit status. There is nothing to stop, and
+			// it must not join the stop list: the waiter is collecting a
+			// process that has already exited, so done always closes.
+			<-process.done
+			return false, true
 		}
 		logging.Warn("Background process could not be handed off to the next daemon image; it is stopped", "id", process.ID, "error", err)
 		return false, false
