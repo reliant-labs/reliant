@@ -332,7 +332,7 @@ export type ScenarioRpcHandlers =
   }
 
   // forge:section reliant.v1.ProjectService
-  // forge:hash=1aa185b83e43d7d85cfed58cd429b5a0a23ab41f9f033f94a3ff5b9997a11daa
+  // forge:hash=70a5c32a286e4aca41b281d14ea776e742dceeecbf5a31cb5228f19f2ec9bd27
   & {
     "reliant.v1.ProjectService/CreateProject"?: (req: import("@/gen/reliant/v1/project_pb").CreateProjectRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").CreateProjectResponseSchema>>;
     "reliant.v1.ProjectService/ListProjects"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsResponseSchema>>;
@@ -368,6 +368,8 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ProjectService/GetProjectOrgMove"?: (req: import("@/gen/reliant/v1/project_pb").GetProjectOrgMoveRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").GetProjectOrgMoveResponseSchema>>;
     "reliant.v1.ProjectService/ListProjectOrgMoves"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectOrgMovesRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectOrgMovesResponseSchema>>;
     "reliant.v1.ProjectService/ListProjectsWithApps"?: (req: import("@/gen/reliant/v1/project_pb").ListProjectsWithAppsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").ListProjectsWithAppsResponseSchema>>;
+    "reliant.v1.ProjectService/PreviewProjectMerge"?: (req: import("@/gen/reliant/v1/project_pb").PreviewProjectMergeRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").PreviewProjectMergeResponseSchema>>;
+    "reliant.v1.ProjectService/MergeProjects"?: (req: import("@/gen/reliant/v1/project_pb").MergeProjectsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/project_pb").MergeProjectsResponseSchema>>;
   }
 
   // forge:section reliant.v1.ProviderAccountService

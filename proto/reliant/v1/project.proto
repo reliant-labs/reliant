@@ -446,6 +446,40 @@ service ProjectService {
   rpc ListProjectsWithApps(ListProjectsWithAppsRequest) returns (ListProjectsWithAppsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+
+  // PreviewProjectMerge says what MergeProjects would move from the source
+  // project onto the target, and what refuses the merge now. It changes
+  // nothing. The caller is admitted as for MergeProjects.
+  rpc PreviewProjectMerge(PreviewProjectMergeRequest) returns (PreviewProjectMergeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // MergeProjects folds one of the caller's projects (source) into another
+  // (target): typically two projects of one repository, made on two machines
+  // before projects were matched by repository (Project.remote_key). In one
+  // transaction every row of source (its chats, worktrees, machine
+  // checkouts, repos, triggers, catalogs, configs and settings) moves onto
+  // target, and source, left empty, is scheduled for deletion
+  // (DeleteProject; RestoreProject brings it back, empty, within the
+  // window).
+  //
+  // Both projects must be the caller's own, in one organization (NOT_FOUND
+  // otherwise, as for any project the caller may not write). It is refused
+  // with FAILED_PRECONDITION while work runs in either project, when both
+  // are checked out on one machine, or when source is target. A repeat
+  // after it succeeded is NOT_FOUND: source is scheduled for deletion.
+  rpc MergeProjects(MergeProjectsRequest) returns (MergeProjectsResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "merge"
+        target: {
+          kind: "project"
+          id: "target_project_id"
+        }
+        detail: ["source_project_id"]
+      }
+    };
+  }
 }
 
 // Project represents a project in the system
@@ -499,6 +533,13 @@ message Project {
   // cannot be restored, only purged (PurgeProjectNow resumes it). Set only
   // by ListDeletedProjects with include_purging.
   optional string purge_started_at = 20;
+  // remote_key is remote_url reduced to the repository it names: on GitHub,
+  // GitLab and Bitbucket the SSH and HTTPS forms of one repository share it;
+  // elsewhere only the same server and path do. Unset when remote_url is, or
+  // names no server (a local path). Opaque: compare it, never parse it.
+  // Read-only, computed by the server. Two of the caller's projects with one remote_key are one
+  // repository, which MergeProjects can fold into one.
+  optional string remote_key = 21;
 }
 
 // ProjectDaemon records that a daemon has a local clone of a project.
@@ -1364,4 +1405,68 @@ message HostedAppSource {
   string subpath = 2;
   string commit = 3;
   string last_seen_at = 4; // RFC 3339
+}
+
+message PreviewProjectMergeRequest {
+  // The project folded into target, and then scheduled for deletion.
+  string source_project_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The project that remains, with everything of source.
+  string target_project_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message PreviewProjectMergeResponse {
+  // What would move from source onto target.
+  ProjectMergeCounts counts = 1;
+  // What refuses the merge now; empty when it may run. MergeProjects checks
+  // again as it commits.
+  repeated ProjectMergeBlocker blockers = 2;
+}
+
+// ProjectMergeCounts is what a merge moves from source onto target.
+message ProjectMergeCounts {
+  int32 chats = 1;
+  // Worktrees (branched chats' workspaces), the main worktree included.
+  int32 worktrees = 2;
+  // The machines source is checked out on: each checkout becomes target's
+  // on that machine, at the same path.
+  repeated ProjectCheckout checkouts = 3;
+  int32 triggers = 4;
+  int32 repos = 5;
+  // Every other row of source that moves (configs, catalogs, settings,
+  // background processes and the rest).
+  int32 other_rows = 6;
+}
+
+enum ProjectMergeBlockerKind {
+  PROJECT_MERGE_BLOCKER_KIND_UNSPECIFIED = 0;
+  // A chat of either project is running, waiting for an answer or an
+  // approval, or queued; or a background process of either is running.
+  // Stop it, then merge.
+  PROJECT_MERGE_BLOCKER_KIND_RUNNING_WORK = 1;
+  // Both projects are checked out on one machine (two folders): a project
+  // has one checkout per machine. Detach one of them from it first.
+  PROJECT_MERGE_BLOCKER_KIND_SAME_MACHINE = 2;
+}
+
+// ProjectMergeBlocker is one thing that refuses a merge now.
+message ProjectMergeBlocker {
+  ProjectMergeBlockerKind kind = 1;
+  // A sentence for the person: what refuses it and what to do.
+  string message = 2;
+  // The machine, for SAME_MACHINE.
+  optional string daemon_id = 3;
+  // The chat, for RUNNING_WORK when a chat is what runs.
+  optional string chat_id = 4;
+}
+
+message MergeProjectsRequest {
+  string source_project_id = 1 [(buf.validate.field).string.min_len = 1];
+  string target_project_id = 2 [(buf.validate.field).string.min_len = 1];
+}
+
+message MergeProjectsResponse {
+  // Target, after the merge.
+  Project project = 1;
+  // What moved.
+  ProjectMergeCounts counts = 2;
 }

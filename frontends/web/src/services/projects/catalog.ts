@@ -177,6 +177,13 @@ export interface ProjectCatalogRow extends RowBase {
   project: Project;
   /** Shared with the person, not theirs: no checkouts, no remotes. */
   shared: boolean;
+  /**
+   * The repository the project's remote names, lowercase `host/path`
+   * (Project.remote_key; the SSH and HTTPS forms share it). Absent with no
+   * remote, a host-less one, or from an older server. Two of the person's own
+   * projects with one key are one repository (services/projects/projectMerge.ts).
+   */
+  remoteKey?: string;
   repos: CatalogRepo[];
   apps: AppChipModel[];
   checkouts: CatalogCheckout[];
@@ -274,6 +281,7 @@ function projectRowOf(wire: WireProjectWithApps, state: HostedAppsState): Projec
     activityAt: Math.max(time(project.last_active), ...deployed),
     project,
     shared: wire.project.viewerAccess,
+    ...(wire.project.remoteKey ? { remoteKey: wire.project.remoteKey } : {}),
     repos: wire.repos.map((r) => ({ id: r.id, name: r.name, relativePath: r.relativePath, remote: r.remote })),
     apps,
     checkouts,

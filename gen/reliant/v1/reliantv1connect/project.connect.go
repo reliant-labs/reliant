@@ -137,6 +137,12 @@ const (
 	// ProjectServiceListProjectsWithAppsProcedure is the fully-qualified name of the ProjectService's
 	// ListProjectsWithApps RPC.
 	ProjectServiceListProjectsWithAppsProcedure = "/reliant.v1.ProjectService/ListProjectsWithApps"
+	// ProjectServicePreviewProjectMergeProcedure is the fully-qualified name of the ProjectService's
+	// PreviewProjectMerge RPC.
+	ProjectServicePreviewProjectMergeProcedure = "/reliant.v1.ProjectService/PreviewProjectMerge"
+	// ProjectServiceMergeProjectsProcedure is the fully-qualified name of the ProjectService's
+	// MergeProjects RPC.
+	ProjectServiceMergeProjectsProcedure = "/reliant.v1.ProjectService/MergeProjects"
 )
 
 // ProjectServiceClient is a client for the reliant.v1.ProjectService service.
@@ -331,6 +337,25 @@ type ProjectServiceClient interface {
 	// reliant's project authorization and control-plane's app authorization.
 	// forge:custom — joins caller-visible projects with the org's hosted apps
 	ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error)
+	// PreviewProjectMerge says what MergeProjects would move from the source
+	// project onto the target, and what refuses the merge now. It changes
+	// nothing. The caller is admitted as for MergeProjects.
+	PreviewProjectMerge(context.Context, *connect.Request[v1.PreviewProjectMergeRequest]) (*connect.Response[v1.PreviewProjectMergeResponse], error)
+	// MergeProjects folds one of the caller's projects (source) into another
+	// (target): typically two projects of one repository, made on two machines
+	// before projects were matched by repository (Project.remote_key). In one
+	// transaction every row of source (its chats, worktrees, machine
+	// checkouts, repos, triggers, catalogs, configs and settings) moves onto
+	// target, and source, left empty, is scheduled for deletion
+	// (DeleteProject; RestoreProject brings it back, empty, within the
+	// window).
+	//
+	// Both projects must be the caller's own, in one organization (NOT_FOUND
+	// otherwise, as for any project the caller may not write). It is refused
+	// with FAILED_PRECONDITION while work runs in either project, when both
+	// are checked out on one machine, or when source is target. A repeat
+	// after it succeeded is NOT_FOUND: source is scheduled for deletion.
+	MergeProjects(context.Context, *connect.Request[v1.MergeProjectsRequest]) (*connect.Response[v1.MergeProjectsResponse], error)
 }
 
 // NewProjectServiceClient constructs a client for the reliant.v1.ProjectService service. By
@@ -563,6 +588,19 @@ func NewProjectServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		previewProjectMerge: connect.NewClient[v1.PreviewProjectMergeRequest, v1.PreviewProjectMergeResponse](
+			httpClient,
+			baseURL+ProjectServicePreviewProjectMergeProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("PreviewProjectMerge")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		mergeProjects: connect.NewClient[v1.MergeProjectsRequest, v1.MergeProjectsResponse](
+			httpClient,
+			baseURL+ProjectServiceMergeProjectsProcedure,
+			connect.WithSchema(projectServiceMethods.ByName("MergeProjects")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -602,6 +640,8 @@ type projectServiceClient struct {
 	getProjectOrgMove           *connect.Client[v1.GetProjectOrgMoveRequest, v1.GetProjectOrgMoveResponse]
 	listProjectOrgMoves         *connect.Client[v1.ListProjectOrgMovesRequest, v1.ListProjectOrgMovesResponse]
 	listProjectsWithApps        *connect.Client[v1.ListProjectsWithAppsRequest, v1.ListProjectsWithAppsResponse]
+	previewProjectMerge         *connect.Client[v1.PreviewProjectMergeRequest, v1.PreviewProjectMergeResponse]
+	mergeProjects               *connect.Client[v1.MergeProjectsRequest, v1.MergeProjectsResponse]
 }
 
 // CreateProject calls reliant.v1.ProjectService.CreateProject.
@@ -772,6 +812,16 @@ func (c *projectServiceClient) ListProjectOrgMoves(ctx context.Context, req *con
 // ListProjectsWithApps calls reliant.v1.ProjectService.ListProjectsWithApps.
 func (c *projectServiceClient) ListProjectsWithApps(ctx context.Context, req *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error) {
 	return c.listProjectsWithApps.CallUnary(ctx, req)
+}
+
+// PreviewProjectMerge calls reliant.v1.ProjectService.PreviewProjectMerge.
+func (c *projectServiceClient) PreviewProjectMerge(ctx context.Context, req *connect.Request[v1.PreviewProjectMergeRequest]) (*connect.Response[v1.PreviewProjectMergeResponse], error) {
+	return c.previewProjectMerge.CallUnary(ctx, req)
+}
+
+// MergeProjects calls reliant.v1.ProjectService.MergeProjects.
+func (c *projectServiceClient) MergeProjects(ctx context.Context, req *connect.Request[v1.MergeProjectsRequest]) (*connect.Response[v1.MergeProjectsResponse], error) {
+	return c.mergeProjects.CallUnary(ctx, req)
 }
 
 // ProjectServiceHandler is an implementation of the reliant.v1.ProjectService service.
@@ -966,6 +1016,25 @@ type ProjectServiceHandler interface {
 	// reliant's project authorization and control-plane's app authorization.
 	// forge:custom — joins caller-visible projects with the org's hosted apps
 	ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error)
+	// PreviewProjectMerge says what MergeProjects would move from the source
+	// project onto the target, and what refuses the merge now. It changes
+	// nothing. The caller is admitted as for MergeProjects.
+	PreviewProjectMerge(context.Context, *connect.Request[v1.PreviewProjectMergeRequest]) (*connect.Response[v1.PreviewProjectMergeResponse], error)
+	// MergeProjects folds one of the caller's projects (source) into another
+	// (target): typically two projects of one repository, made on two machines
+	// before projects were matched by repository (Project.remote_key). In one
+	// transaction every row of source (its chats, worktrees, machine
+	// checkouts, repos, triggers, catalogs, configs and settings) moves onto
+	// target, and source, left empty, is scheduled for deletion
+	// (DeleteProject; RestoreProject brings it back, empty, within the
+	// window).
+	//
+	// Both projects must be the caller's own, in one organization (NOT_FOUND
+	// otherwise, as for any project the caller may not write). It is refused
+	// with FAILED_PRECONDITION while work runs in either project, when both
+	// are checked out on one machine, or when source is target. A repeat
+	// after it succeeded is NOT_FOUND: source is scheduled for deletion.
+	MergeProjects(context.Context, *connect.Request[v1.MergeProjectsRequest]) (*connect.Response[v1.MergeProjectsResponse], error)
 }
 
 // NewProjectServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1194,6 +1263,19 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	projectServicePreviewProjectMergeHandler := connect.NewUnaryHandler(
+		ProjectServicePreviewProjectMergeProcedure,
+		svc.PreviewProjectMerge,
+		connect.WithSchema(projectServiceMethods.ByName("PreviewProjectMerge")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	projectServiceMergeProjectsHandler := connect.NewUnaryHandler(
+		ProjectServiceMergeProjectsProcedure,
+		svc.MergeProjects,
+		connect.WithSchema(projectServiceMethods.ByName("MergeProjects")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ProjectService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProjectServiceCreateProjectProcedure:
@@ -1264,6 +1346,10 @@ func NewProjectServiceHandler(svc ProjectServiceHandler, opts ...connect.Handler
 			projectServiceListProjectOrgMovesHandler.ServeHTTP(w, r)
 		case ProjectServiceListProjectsWithAppsProcedure:
 			projectServiceListProjectsWithAppsHandler.ServeHTTP(w, r)
+		case ProjectServicePreviewProjectMergeProcedure:
+			projectServicePreviewProjectMergeHandler.ServeHTTP(w, r)
+		case ProjectServiceMergeProjectsProcedure:
+			projectServiceMergeProjectsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1407,4 +1493,12 @@ func (UnimplementedProjectServiceHandler) ListProjectOrgMoves(context.Context, *
 
 func (UnimplementedProjectServiceHandler) ListProjectsWithApps(context.Context, *connect.Request[v1.ListProjectsWithAppsRequest]) (*connect.Response[v1.ListProjectsWithAppsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.ListProjectsWithApps is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) PreviewProjectMerge(context.Context, *connect.Request[v1.PreviewProjectMergeRequest]) (*connect.Response[v1.PreviewProjectMergeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.PreviewProjectMerge is not implemented"))
+}
+
+func (UnimplementedProjectServiceHandler) MergeProjects(context.Context, *connect.Request[v1.MergeProjectsRequest]) (*connect.Response[v1.MergeProjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ProjectService.MergeProjects is not implemented"))
 }
