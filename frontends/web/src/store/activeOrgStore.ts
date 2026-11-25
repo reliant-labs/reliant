@@ -244,4 +244,6 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // hooks/changes-queries.ts: the page's org, then ChangesService's reads.
   "changes",
   "controlplane.v1.ChangesService",
+  // hooks/ml-queries.ts: the page's org, the org's ML entitlement, the ML tab's reads.
+  "ml",
 ];

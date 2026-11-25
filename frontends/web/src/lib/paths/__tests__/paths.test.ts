@@ -187,6 +187,12 @@ const ROWS: Record<string, Row> = {
     template: "/forge/observability/$view",
     params: { view: "logs" },
   },
+  "orgPath(ml)": {
+    build: () => orgPath({ kind: "ml", view: "runs" }),
+    url: "/forge/ml/runs",
+    template: "/forge/ml/$view",
+    params: { view: "runs" },
+  },
   orgUsagePath: { build: () => orgUsagePath(), url: "/settings/billing", template: "/settings/$section", params: { section: "billing" } },
 };
 
@@ -225,6 +231,7 @@ const ORG_URLS: Record<string, string> = {
   "consolePath(environment)": "/o/acme/apps/shop/environments/prod",
   "orgPath(observability)": "/o/acme/observability",
   "orgPath(obs-view)": "/o/acme/observability/logs",
+  "orgPath(ml)": "/o/acme/ml/runs",
 };
 
 /** Builders that take an id, with the template the old call sites passed it to. */
@@ -252,6 +259,7 @@ function orgTemplateOf(template: string): string {
   if (template === "/") return "/o/$org";
   if (template.startsWith("/forge/p/")) return `/o/$org/apps/${template.slice("/forge/p/".length)}`;
   if (template.startsWith("/forge/observability")) return `/o/$org${template.slice("/forge".length)}`;
+  if (template.startsWith("/forge/ml")) return `/o/$org${template.slice("/forge".length)}`;
   return `/o/$org${template}`;
 }
 

@@ -56,6 +56,7 @@ import { TestsRunPage } from "../Tests/TestsRunPage";
 import { TestsRunsPage } from "../Tests/TestsRunsPage";
 import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import { ForgeLandingRoute, LegacyCommandRoute, LegacyDomainsRoute, LegacyEnvRoute, OrgObservabilityRoute } from "../Console/ForgeEntryRoutes";
+import { MlRoute } from "../Ml/MlRoute";
 import { OrgConsoleLayout } from "../Org";
 import { ForgeDomainsPage } from "../Domains/ForgeDomainsPage";
 import { ForgeEnvPage } from "../EnvPage/ForgeEnvPage";
@@ -123,6 +124,7 @@ function buildRouter(path: string) {
     experiment: ExperimentPage,
     orgLayout: OrgConsoleLayout,
     orgObservability: OrgObservabilityRoute,
+    orgMl: MlRoute,
     landing: ForgeLandingRoute,
     legacyEnv: LegacyEnvRoute,
     legacyDomains: LegacyDomainsRoute,

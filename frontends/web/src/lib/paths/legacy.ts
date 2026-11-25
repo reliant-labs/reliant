@@ -93,6 +93,8 @@ export function legacyOrgForward(pathname: string, search: Record<string, unknow
   if (path === "/forge/observability" || /^\/forge\/observability\/[^/]+$/.test(path)) {
     return APP_KEYS.some((key) => search[key] !== undefined && search[key] !== "") ? null : path;
   }
+  // The org's ML tab: its app filter is `?app=`, a filter rather than a place, so it always forwards.
+  if (path === "/forge/ml" || /^\/forge\/ml\/[^/]+$/.test(path)) return path;
   return null;
 }
 

@@ -1067,6 +1067,16 @@ export const forgeOrgObsSearchSchema = z.object({
 });
 
 /**
+ * The ML tab's pages (/forge/ml/$view, Forge/Ml). `app` narrows Runs, Models
+ * and Inference to one app (their requests' `project`). Not `project`: on an
+ * org page that key names an app to open (OrgConsoleLayout renders bare and
+ * the legacy forward leaves it to the resolver), and this is a filter.
+ */
+export const forgeOrgMlSearchSchema = z.object({
+  app: z.string().optional().catch(undefined),
+});
+
+/**
  * Which tab of one environment's page is open. In the URL because people link
  * each other to an answer ("look at prod's releases"), and a refresh should
  * not throw you back to the default.

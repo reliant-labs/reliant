@@ -39,6 +39,7 @@ import {
   dashboards,
   data,
   deploymentsGroup,
+  mlArea,
   observabilityArea,
   overview,
   securityGroup,
@@ -57,7 +58,7 @@ import { DEMO_ENVS, DEMO_PROJECT } from "@/fixtures/shop/handlers/scope";
 import type { FixturePack } from "@/fixtures/transport";
 
 import { ConsoleFrame } from "../Console/ConsoleFrame";
-import { consolePageOf, consolePath, type ConsolePage } from "../Console/paths";
+import { consolePageOf, consolePath, orgPageOf, type ConsolePage } from "../Console/paths";
 
 /** The harness's signed-in reader: a session that never changes, with no token. */
 const PREVIEW_SESSION = fixedSession({ id: "preview", email: "preview@example.com", name: "preview" });
@@ -69,7 +70,7 @@ const PREVIEW_SESSION = fixedSession({ id: "preview", email: "preview@example.co
  * billing, which a preview of the console has nothing behind.
  */
 export const PREVIEW_NAV: NavConfig = {
-  items: [overview, dashboards, observabilityArea, analyticsGroup, deploymentsGroup, testsGroup, data, storage, auth, securityGroup, configureGroup],
+  items: [overview, dashboards, observabilityArea, mlArea, analyticsGroup, deploymentsGroup, testsGroup, data, storage, auth, securityGroup, configureGroup],
   footer: [],
 };
 
@@ -79,8 +80,9 @@ const PreviewPageContext = createContext<ConsolePage | null>(null);
 function PreviewNav({ pathname, search, onNavigate }: ShellNavProps) {
   const page = useContext(PreviewPageContext);
   // A console path is the nav's own; a harness at a route of its own reads as the console page it shows.
-  const path = consolePageOf(pathname) ? pathname : consolePath(DEMO_PROJECT, page ?? { kind: "overview" });
-  const resolved = useShellProject(path, search);
+  // An org page (the ML tab, org Observability) is the nav's own too: its area lights there.
+  const path = consolePageOf(pathname) || orgPageOf(pathname) ? pathname : consolePath(DEMO_PROJECT, page ?? { kind: "overview" });
+  const resolved = useShellProject(consolePageOf(path) ? path : consolePath(DEMO_PROJECT, { kind: "overview" }), search);
   const shell = useMemo<ShellProject>(() => ({ ...resolved, mode: "one", ids: resolved.projectId ? [resolved.projectId] : [], app: DEMO_PROJECT, deployed: true }), [resolved]);
   const narrow = useNarrowViewport();
   return (

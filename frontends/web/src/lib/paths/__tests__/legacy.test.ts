@@ -30,6 +30,9 @@ const FORWARDED: [path: string, landsAt: string][] = [
   ["/new", "/o/acme/new"],
   ["/forge/observability", "/o/acme/observability"],
   ["/forge/observability/logs", "/o/acme/observability/logs"],
+  // The ML tab: its `?app=` is a filter, so it forwards whatever the query says.
+  ["/forge/ml", "/o/acme/ml"],
+  ["/forge/ml/runs", "/o/acme/ml/runs"],
   // An app's console by name: into the tab's org, which its reads already used (U18; ResolveAppOrgs, U4, refines it).
   ["/forge/p/shop", "/o/acme/apps/shop"],
   ["/forge/p/shop/releases", "/o/acme/apps/shop/releases"],

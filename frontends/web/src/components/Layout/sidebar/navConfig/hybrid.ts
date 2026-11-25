@@ -5,7 +5,7 @@
  *
  *   Find · switcher (the shell draws them above)
  *   Overview · Inbox (count) · Agents › ·
- *   Dashboards ▾ · Observability › · Analytics ▾ ·
+ *   Dashboards ▾ · Observability › · ML › · Analytics ▾ ·
  *   Deployments ▾ (Services, Releases, Environments, Previews) ·
  *   Data · Storage · Auth ·
  *   Security ▾ · Configure ▾ (Secrets, Domains, Usage, Activity)
@@ -14,7 +14,7 @@
  * Agents › also lists the Inbox (under New chat), so a chat's drill-in reaches
  * it in one click; /inbox itself is the top level, its row there the one lit.
  *
- * Only Agents and Observability drill in (their rows replace the nav, under a
+ * Only Agents, Observability and ML drill in (their rows replace the nav, under a
  * "‹ Area" header, on their routes). Everything else is an accordion or a
  * link. Settings is a plain link; on its pages its sections take the column.
  * The desktop nav, the narrow window's drawer and the phone's drawer all
@@ -31,6 +31,7 @@ import {
   deploymentsGroup,
   footer,
   inbox,
+  mlArea,
   observabilityArea,
   overview,
   securityGroup,
@@ -48,6 +49,7 @@ export const hybridNav: NavConfig = {
     agentsArea,
     dashboards,
     observabilityArea,
+    mlArea,
     analyticsGroup,
     deploymentsGroup,
     testsGroup,

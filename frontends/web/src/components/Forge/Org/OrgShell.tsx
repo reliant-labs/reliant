@@ -28,6 +28,8 @@ import { projectsHref } from "@/lib/paths";
 import {
   carriedOrgSearch,
   consolePath,
+  ML_VIEW_LABELS,
+  ML_VIEWS,
   OBS_NAV_LABELS,
   OBS_NAV_VIEWS,
   orgPath,
@@ -104,6 +106,9 @@ export function orgCrumbs(page: OrgPage, search: Record<string, unknown> = {}): 
         { label: "Observability", href: withSearch(orgPath({ kind: "observability" }), carriedOrgSearch(search)) },
         { label: OBS_NAV_LABELS[page.view] },
       ];
+    // The ML pages' filters are their own (`?app=`), not the Observability ones the org links carry.
+    case "ml":
+      return [{ label: "ML", href: orgPath({ kind: "ml", view: ML_VIEWS[0] }) }, { label: ML_VIEW_LABELS[page.view] }];
   }
 }
 

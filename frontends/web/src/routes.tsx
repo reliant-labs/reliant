@@ -204,6 +204,8 @@ const WorkloadsPreview = lazyRoute(
   () => import('./components/Forge/Workloads/__preview__/WorkloadsPreview'), 'default')
 const StoragePreview = lazyRoute(
   () => import('./components/Forge/Storage/__preview__/StoragePreview'), 'default')
+const MlPreview = lazyRoute(
+  () => import('./components/Forge/Ml/__preview__/MlPreview'), 'default')
 const SettingsPage = lazyRoute(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRoute(
@@ -858,6 +860,15 @@ const forgeMetricsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><MetricsExplorerPreview /></DevOnlyRoute>,
 })
 
+// The ML tab behind its entitlement gate — the "Reach out to Reliant for
+// access" page, a request, a revocation, and the six pages — in the real
+// console over the shop fixture pack, no control plane.
+const forgeMlPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-ml-preview',
+  component: () => <DevOnlyRoute><MlPreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -1342,6 +1353,7 @@ export const routeTree = rootRoute.addChildren([
   forgeDataPreviewRoute,
   forgeDashboardsPreviewRoute,
   forgeMetricsPreviewRoute,
+  forgeMlPreviewRoute,
   ...rootRetiredPageRoutes,
   mobileIndexRoute,
   forgeDemoRoute,

@@ -273,6 +273,7 @@ function renderAt(
     experiment: probe("experiment"),
     orgLayout: OrgLayoutStub,
     orgObservability: OrgObservabilityRoute,
+    orgMl: probe("ml"),
     landing: ForgeLandingRoute,
     legacyEnv: LegacyEnvRoute,
     legacyDomains: LegacyDomainsRoute,

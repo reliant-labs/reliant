@@ -50,6 +50,7 @@ describe("the hybrid nav's shape", () => {
       "agents",
       "dashboards",
       "observability",
+      "ml",
       "analytics",
       "deployments",
       "tests",
@@ -71,7 +72,7 @@ describe("the hybrid nav's shape", () => {
     expect(flattenIds(hybridNav.items, ctx)).not.toContain("security");
     const unregister = registerConsoleNavEntry({ id: "advisories", label: "Advisories", segment: "advisories", after: "more-tools", group: "security" });
     try {
-      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "analytics", "deployments", "tests", "data", "storage", "auth", "security", "configure"]);
+      expect(topIds(ctx)).toEqual(["overview", "slot-inbox", "agents", "dashboards", "observability", "ml", "analytics", "deployments", "tests", "data", "storage", "auth", "security", "configure"]);
       expect(flattenIds(hybridNav.items, ctx)).toContain("registered-advisories");
       // Not in Analytics: a Security row joins Security alone.
       const analytics = hybridNav.items.find((item) => item.id === "analytics")!;
@@ -86,8 +87,8 @@ describe("the hybrid nav's shape", () => {
     expect(hybridNav.footer.find((item) => item.id === "settings")?.kind).toBe("row");
   });
 
-  it("drills in only for Agents and Observability", () => {
-    expect(drillInIds(hybridNav)).toEqual(["agents", "observability"]);
+  it("drills in only for Agents, Observability and ML", () => {
+    expect(drillInIds(hybridNav)).toEqual(["agents", "observability", "ml"]);
   });
 
   it("lists Dashboards once, and Inbox once at the top level and once in Agents", () => {
@@ -262,6 +263,7 @@ describe("drill-in is derived from the route", () => {
     [logs, "observability"],
     [consolePath("shopfront", { kind: "speed-insights" }), "observability"],
     [orgPath({ kind: "obs-view", view: "traces" }), "observability"],
+    [orgPath({ kind: "ml", view: "runs" }), "ml"],
     [consolePath("shopfront", { kind: "analytics" }), null],
     [consolePath("shopfront", { kind: "obs-view", view: "dashboards" }), null],
     [inboxPath(), null],
