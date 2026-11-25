@@ -432,6 +432,7 @@ func NewWorkerRun(d WorkerRunDeps) (*WorkerRun, error) {
 		Logger:    d.Logger,
 		Config:    d.Config,
 		Repo:      d.DB,
+		RunLists:  store.NewRunListExtStore(d.DB.ORM()),
 		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
 		ChatRows:  store.NewChatExtStore(d.DB.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(d.DB.ORM()),

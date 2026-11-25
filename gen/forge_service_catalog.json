@@ -60182,6 +60182,17 @@
     },
     {
       "consumer": "Run",
+      "field": "RunLists",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/run.RunLists",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Run",
       "field": "Workflows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.WorkflowLoader",
       "methods": [],
@@ -62399,6 +62410,14 @@
       "component": "Question.Refetch",
       "source": {
         "path": "internal/handlers/question/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Run.RunLists",
+      "source": {
+        "path": "internal/handlers/run/service.go",
         "symbol": "New"
       }
     },

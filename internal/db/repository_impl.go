@@ -102,10 +102,16 @@ func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunList
 
 // ListUnlaunchedTriggerEvents is the run log's other half: the trigger
 // events that started no run, under the same filters and keyset as ListRuns.
+//
+// Deprecated: use store.RunListExtStore.ListUnlaunchedTriggerEvents; the run
+// handler reads it through Deps.RunLists.
 func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListFilters) ([]*UnlaunchedTriggerEvent, bool, error) {
 	return store.ListUnlaunchedTriggerEvents(ctx, r.ORM(), filters)
 }
 
+// LastRunPerWorkflow is store.LastRunPerWorkflow.
+//
+// Deprecated: use store.RunListExtStore.LastRunPerWorkflow.
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
 }
@@ -113,6 +119,9 @@ func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) (
 // LastRunPerWorkflowAndOrg is the newest run of each (workflow, org) pair:
 // LastRunPerWorkflow's candidates, before a caller drops the orgs a person
 // may no longer see (store.LastRunPerWorkflowAndOrg).
+//
+// Deprecated: use store.RunListExtStore.LastRunPerWorkflowAndOrg; the run
+// handler reads it through Deps.RunLists.
 func (r *Repo) LastRunPerWorkflowAndOrg(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
 	return store.LastRunPerWorkflowAndOrg(ctx, r.ORM(), filters)
 }

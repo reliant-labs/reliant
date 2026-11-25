@@ -1218,6 +1218,7 @@ func (g *Graph) newRun() (*run.Service, error) {
 		Logger:    g.Log,
 		Config:    g.Cfg,
 		Repo:      g.Database(),
+		RunLists:  store.NewRunListExtStore(g.Database().ORM()),
 		Workflows: store.NewWorkflowExtStore(g.Database().ORM()),
 		ChatRows:  store.NewChatExtStore(g.Database().ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(g.Database().ORM()),
