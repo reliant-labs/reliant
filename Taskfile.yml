@@ -1102,6 +1102,8 @@ tasks:
       - cmd: |
           # Template vars, not "${DUMP:-...}" as forge's body has it: a
           # `task ... DUMP=x` var never reaches the shell's environment.
+          # Fail before reporting completion if either decompression or restore fails.
+          set -e -o pipefail
           DUMP='{{.DUMP | default "snapshot.dump.gz"}}'
           DB='{{.SNAPSHOT_DB | default "reliant_snapshot"}}'
           if [ ! -f "$DUMP" ]; then
@@ -1123,10 +1125,10 @@ tasks:
           createdb "$DB" || exit 1
           if [[ "$DUMP" == *.gz ]]; then
             gunzip -c "$DUMP" | pg_restore -d "$DB" \
-              --no-owner --no-privileges --clean --if-exists || true
+              --no-owner --no-privileges --clean --if-exists
           else
             pg_restore -d "$DB" \
-              --no-owner --no-privileges --clean --if-exists "$DUMP" || true
+              --no-owner --no-privileges --clean --if-exists "$DUMP"
           fi
           echo "==> Restore complete. Connect with: psql -h $PGHOST -p $PGPORT -U $PGUSER -d $DB"
         silent: true
