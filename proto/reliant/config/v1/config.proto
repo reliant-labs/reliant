@@ -75,6 +75,7 @@ message ReliantConfig {
   TranscriptConfig transcript = 4;
   WorktreeReclaimConfig worktree_reclaim = 5;
   MachineOrgConfig machine_org = 6;
+  IdleReclaimConfig idle_reclaim = 7;
 }
 
 // MachineOrgConfig is how the gateway keeps a machine's project checkouts in
@@ -269,5 +270,56 @@ message WorktreeReclaimConfig {
     env_var: "RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE"
     default_value: "120h"
     description: "Idle time before a worktree with unsaved work is proposed for approval (Go duration, minimum 24h)"
+  }];
+}
+
+// IdleReclaimConfig is the daemon's idle reclaim (internal/idlereclaim): the
+// lifecycle of the per-chat scratch directories (~/.reliant/scratch/<chat>/)
+// and the node_modules strip of linked worktrees that are kept for another
+// reason. Every removal is logged and reported in
+// ~/.reliant/reclaim/idle-report.json; `reliant storage idle scan` shows what
+// a pass would do. Durations are Go durations; a value the daemon cannot use
+// is named in a warning and replaced by its default (or raised to its
+// minimum).
+message IdleReclaimConfig {
+  // auto runs it wherever the storage reaper runs (RELIANT_STORAGE_REAPER:
+  // managed daemons by default) and nowhere else; on runs it anywhere;
+  // dry-run decides and reports, removing nothing; off never runs it.
+  string mode = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_IDLE_RECLAIM"
+    default_value: "auto"
+    allowed_values: [
+      "auto",
+      "on",
+      "dry-run",
+      "off"
+    ]
+    description: "Idle reclaim of scratch directories and idle worktrees' node_modules: auto (where the storage reaper runs), on, dry-run or off"
+  }];
+
+  // How long a scratch directory must have gone unused (no file changed, no
+  // daemon work naming a path in it) before its node_modules, build output
+  // and clean, pushed git worktrees are removed.
+  string scratch_strip_idle = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE"
+    default_value: "48h"
+    description: "Idle time before a scratch directory's regenerable output and clean, pushed worktrees are removed (Go duration, minimum 24h)"
+  }];
+
+  // How long before the whole scratch directory is removed, counted also
+  // from its chat's last tool call. A .keep file at its top keeps it.
+  string scratch_remove_idle = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE"
+    default_value: "168h"
+    description: "Idle time before a whole scratch directory without a .keep file is removed (Go duration, minimum 72h)"
+  }];
+
+  // How long a linked worktree under the worktree root must have gone
+  // unused before its git-ignored node_modules are removed. Nothing else in
+  // it is touched.
+  string worktree_node_modules_idle = 4 [(forge.v1.config) = {
+    env_var: "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE"
+    default_value: "72h"
+    description: "Idle time before a kept worktree's node_modules are removed (Go duration, minimum 24h)"
   }];
 }

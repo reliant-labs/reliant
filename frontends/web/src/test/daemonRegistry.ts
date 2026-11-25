@@ -23,13 +23,13 @@ import { serviceHandlers } from "./serviceTransport";
 /**
  * A transport answering DaemonRegistryService from client-shaped fakes
  * (`{ listDaemons, clearMachineCaches, … }`), plus any other handlers the
- * test needs on the same transport.
+ * test needs on the same transport (later sets win).
  */
 export function daemonRegistryTransport(
   fakes: Record<string, (request: never) => unknown>,
-  others: MockHandlers = {},
+  ...others: MockHandlers[]
 ) {
-  return mockTransport({ ...serviceHandlers("DaemonRegistryService", fakes), ...others });
+  return mockTransport(Object.assign(serviceHandlers("DaemonRegistryService", fakes), ...others));
 }
 
 /** Seed the daemon list as a successful ListDaemons read would leave it. */
