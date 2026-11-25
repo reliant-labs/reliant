@@ -8,7 +8,7 @@
 import { create } from "@bufbuild/protobuf";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlanSchema, PlanTier, SubscriptionSchema, SubscriptionStatus } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { renderWithQuery } from "@/test/renderWithQuery";
@@ -22,11 +22,10 @@ vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
   listMyOrganizations: () => listMyOrganizations(),
 }));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
-vi.mock("@/services/controlPlane/client", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/client")>()),
-  getControlPlaneClient: () => ({ getCurrentUserComputeSubscription: () => getCurrentUserComputeSubscription() }),
-}));
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { billingHandlers } from "@/test/billingTransport";
 import { ActiveOrgBinding } from "../ActiveOrgBinding";
 import { OrgSwitcher } from "../OrgSwitcher";
 import { orgPlanLabel } from "../orgPlan";
@@ -62,11 +61,15 @@ describe("orgPlanLabel", () => {
 });
 
 describe("the sidebar header's org row", () => {
+  afterEach(() => setTransport(null));
+
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
     listMyOrganizations.mockReset().mockResolvedValue({ orgs: [ACME], defaultOrgId: "org-a" });
     getCurrentUserComputeSubscription.mockReset();
+    // The plan is read through the generated BillingService hooks.
+    setTransport(mockTransport(billingHandlers({ getCurrentUserComputeSubscription: () => getCurrentUserComputeSubscription() })));
     useAuthStore.setState({ user: { id: "alice" } as never });
     useActiveOrgStore.setState({ userId: null, chosenId: null, effectiveId: null, resolved: false, failure: null });
   });
