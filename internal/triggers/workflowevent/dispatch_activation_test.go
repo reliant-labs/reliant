@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -72,7 +73,7 @@ func (f *fixture) addNamedActivation(name, workflow, declared string, src Source
 		Message: "react to the failure", DaemonID: f.daemonID, Config: config, Params: params,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(f.t, f.repo.CreateTrigger(context.Background(), tr))
+	require.NoError(f.t, triggertest.Create(context.Background(), f.repo, tr))
 	return tr
 }
 

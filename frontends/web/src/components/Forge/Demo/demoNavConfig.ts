@@ -3,7 +3,7 @@
 /**
  * The public demo's nav: the app's own nav (Layout/sidebar/navConfig/hybrid.ts)
  * drawn from the SAME item objects, so the demo's information architecture is
- * the signed-in app's, row for row, in its order. demoNav.test pins that: with
+ * the signed-in app's, row for row, in its order. demoNavConfig.test pins that: with
  * the demo's own rows taken out, demoNav is hybridNav with rows removed, never
  * reordered or relabelled.
  *

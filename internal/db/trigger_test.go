@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // Trigger persistence is the layer every automated run passes through, and two
@@ -105,7 +106,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	want := newTestTrigger("trg-crud", "test-user", "test-project", "nightly audit")
-	if err := repo.CreateTrigger(ctx, want); err != nil {
+	if err := triggertest.Create(ctx, repo, want); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
@@ -165,7 +166,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 	got.DaemonID = "daemon-replaced"
 	got.Config = json.RawMessage(`{"interval":"1h"}`)
 	got.UpdatedAt = time.Now().UTC().Add(time.Second).Truncate(time.Microsecond)
-	if err := repo.UpdateTrigger(ctx, got); err != nil {
+	if err := triggertest.Update(ctx, repo, got); err != nil {
 		t.Fatalf("UpdateTrigger: %v", err)
 	}
 
@@ -211,7 +212,7 @@ func TestCreateTriggerNilMapsReadBackEmpty(t *testing.T) {
 	trigger.Presets = nil
 	trigger.Params = nil
 	trigger.Config = nil
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
@@ -237,7 +238,7 @@ func TestUpdateTriggerMissingReturnsNotFound(t *testing.T) {
 	defer cleanup()
 
 	missing := newTestTrigger("trg-missing", "test-user", "test-project", "ghost")
-	if err := repo.UpdateTrigger(context.Background(), missing); !errors.Is(err, core.ErrTriggerNotFound) {
+	if err := triggertest.Update(context.Background(), repo, missing); !errors.Is(err, core.ErrTriggerNotFound) {
 		t.Errorf("UpdateTrigger on missing row: got %v, want ErrTriggerNotFound", err)
 	}
 }
@@ -256,7 +257,7 @@ func TestListTriggersFiltersByUserAndProject(t *testing.T) {
 	minesOther := newTestTrigger("trg-mine-b", "test-user", "proj-other", "mine b")
 	bobs := newTestTrigger("trg-bob", "bob", "proj-bob", "bobs")
 	for _, trigger := range []*core.Trigger{mine, minesOther, bobs} {
-		if err := repo.CreateTrigger(ctx, trigger); err != nil {
+		if err := triggertest.Create(ctx, repo, trigger); err != nil {
 			t.Fatalf("CreateTrigger(%s): %v", trigger.ID, err)
 		}
 	}
@@ -302,7 +303,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 	ctx := context.Background()
 
 	trigger := newTestTrigger("trg-enable", "test-user", "test-project", "toggle me")
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
@@ -345,7 +346,7 @@ func TestCreateTriggerEventDedupes(t *testing.T) {
 	ctx := context.Background()
 
 	trigger := newTestTrigger("trg-dedupe", "test-user", "test-project", "deduped")
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
@@ -400,7 +401,7 @@ func TestGetTriggerEventByDedupe(t *testing.T) {
 	ctx := context.Background()
 
 	trigger := newTestTrigger("trg-bydedupe", "test-user", "test-project", "by dedupe")
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 	occurred := time.Now().UTC().Truncate(time.Microsecond)
@@ -446,7 +447,7 @@ func TestUpdateTriggerEventOutcome(t *testing.T) {
 	ctx := context.Background()
 
 	trigger := newTestTrigger("trg-outcome", "test-user", "test-project", "outcome")
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 	event := newTestTriggerEvent("ev-outcome", trigger.ID, "test-user", "fire-key-outcome", time.Now())
@@ -500,7 +501,7 @@ func TestListTriggerEventsOrderAndLimit(t *testing.T) {
 	trigger := newTestTrigger("trg-list-ev", "test-user", "test-project", "list events")
 	other := newTestTrigger("trg-list-ev-other", "test-user", "test-project", "other events")
 	for _, tr := range []*core.Trigger{trigger, other} {
-		if err := repo.CreateTrigger(ctx, tr); err != nil {
+		if err := triggertest.Create(ctx, repo, tr); err != nil {
 			t.Fatalf("CreateTrigger(%s): %v", tr.ID, err)
 		}
 	}
@@ -547,7 +548,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 	ctx := context.Background()
 
 	trigger := newTestTrigger("trg-latest", "test-user", "test-project", "latest")
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
@@ -614,7 +615,7 @@ func TestDeleteTriggerNullsEventTriggerID(t *testing.T) {
 	ctx := context.Background()
 
 	trigger := newTestTrigger("trg-ondelete", "test-user", "test-project", "on delete")
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 	event := newTestTriggerEvent("ev-ondelete", trigger.ID, "test-user", "fire-key-ondelete", time.Now())
@@ -658,7 +659,7 @@ func TestDeleteProjectCascadesTriggers(t *testing.T) {
 
 	createTestTriggerProject(t, repo, "proj-cascade", "test-user")
 	trigger := newTestTrigger("trg-cascade", "test-user", "proj-cascade", "cascaded")
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
@@ -683,7 +684,7 @@ func TestCreateTriggerEventRollsBackWithTransaction(t *testing.T) {
 	ctx := context.Background()
 
 	trigger := newTestTrigger("trg-runtx", "test-user", "test-project", "runtx")
-	if err := repo.CreateTrigger(ctx, trigger); err != nil {
+	if err := triggertest.Create(ctx, repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 

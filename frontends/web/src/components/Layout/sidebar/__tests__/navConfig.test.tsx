@@ -183,6 +183,9 @@ describe("the hybrid nav's shape", () => {
       ]);
       const row = childrenOf(analytics, ctx).find((item) => item.id === "experiments")!;
       expect(hrefOf(row, ctx)).toBe(experiments);
+      // Forge Changes is Beta wherever it is surfaced (owner decision); Analytics itself carries nothing.
+      expect(row.kind === "row" && row.badge?.(ctx)).toEqual({ type: "label", text: "Beta" });
+      expect(analytics.kind === "group" && analytics.badge).toBeFalsy();
       expect(isCurrent(row, ctxAt(consolePath("shopfront", { kind: "experiment", changeId: "c-1" })))).toBe(true);
     } finally {
       changesUI.on = false;

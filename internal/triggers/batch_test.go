@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // countingRepo is the real repository, counting its catalog pins and pinned
@@ -63,7 +64,7 @@ func (p *provenanceProject) webhookTriggers(t *testing.T, n int) []*core.Trigger
 		trig := *p.webhook
 		trig.ID = uuid.NewString()
 		trig.Name = fmt.Sprintf("%s %d", trig.Name, i)
-		require.NoError(t, p.repo.CreateTrigger(p.ctx, &trig))
+		require.NoError(t, triggertest.Create(p.ctx, p.repo, &trig))
 		out[i] = &trig
 	}
 	return out

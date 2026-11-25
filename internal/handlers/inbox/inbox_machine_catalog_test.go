@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 const releaseWorkflow = `name: release
@@ -60,7 +61,7 @@ func TestListInbox_ActivationOnAMachineWithoutItsWorkflowIsBroken(t *testing.T) 
 		name := "merged"
 		cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
 		now := time.Now().UTC().Truncate(time.Microsecond)
-		require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+		require.NoError(t, triggertest.Create(f.ctx, f.repo, &core.Trigger{
 			ID: id, UserID: f.userID, ProjectID: f.project(), Name: "Release " + id,
 			Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "release", WorkflowTrigger: &name,
 			DaemonID: daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
@@ -108,7 +109,7 @@ func TestListInbox_ActivationWhoseWorkflowDoesNotParseIsBroken(t *testing.T) {
 	name := "merged"
 	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(f.ctx, f.repo, &core.Trigger{
 		ID: "on-cicd", UserID: f.userID, ProjectID: f.project(), Name: "Release",
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "release", WorkflowTrigger: &name,
 		DaemonID: cicdID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,

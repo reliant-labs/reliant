@@ -26,7 +26,7 @@ import type { Plugin } from "vite";
  * one shell: the frame (Layout/shell/AppShell.tsx), the nav column and its
  * renderer (Layout/sidebar/ShellNavColumn.tsx, NavRenderer.tsx), the nav
  * config's items (Layout/sidebar/navConfig/items.tsx, with the demo's own
- * config, Forge/Demo/demoNav.ts) and the keyboard host
+ * config, Forge/Demo/demoNavConfig.ts) and the keyboard host
  * (Shortcuts/ShortcutHost.tsx). They are shared UI, not Reliant-only, so no
  * rule names them. What is app-only comes in through seams the demo leaves
  * empty: the nav body and the Setup Guide (AppShellFrame `nav`, `guide`), the

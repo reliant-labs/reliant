@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // machineCatalogCountingRepo is the real store, counting reads of a
@@ -48,7 +49,7 @@ func TestReconcilePassReadsEachMachineCatalogOnce(t *testing.T) {
 	require.NoError(t, err)
 	now := time.Date(2026, time.January, 15, 12, 0, 0, 0, time.UTC)
 	for i := range workflows {
-		require.NoError(t, p.repo.CreateTrigger(p.ctx, &core.Trigger{
+		require.NoError(t, triggertest.Create(p.ctx, p.repo, &core.Trigger{
 			ID: uuid.NewString(), UserID: p.userID, ProjectID: p.projectID, Name: fmt.Sprintf("nightly %d", i),
 			Kind: core.TriggerKindSchedule, Enabled: true, Workflow: fmt.Sprintf("release-%d", i), WorkflowTrigger: &nightly,
 			DaemonID: p.daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,

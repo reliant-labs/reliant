@@ -30,7 +30,7 @@ func (s *Service) GetPlanByChatId(
 	}
 
 	if _, denied := authz.ReadChatAccess(ctx, userID, chat); denied != nil {
-		return nil, svcerr.PermissionDenied("access denied")
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Get plans for this chat (via thread join)
@@ -45,5 +45,5 @@ func (s *Service) GetPlanByChatId(
 	}
 
 	// Return the first plan
-	return connect.NewResponse(&reliantv1.GetPlanByChatIdResponse{Plan: planToProto(plans[0], req.Msg.ChatId)}), nil
+	return connect.NewResponse(&reliantv1.GetPlanByChatIdResponse{Plan: corePlanToProto(plans[0], req.Msg.ChatId)}), nil
 }

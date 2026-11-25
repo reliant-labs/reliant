@@ -5,6 +5,8 @@ package reliant.v1;
 
 import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -34,30 +36,26 @@ enum DependencyType {
 // TaskService handles task-related operations
 service TaskService {
   // CreateTask creates a new task
-  // forge:custom — authorizes the caller through the plan's thread and chat before it writes
   rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {}
 
   // GetTask retrieves a task by ID
-  // forge:custom — authorizes through the task's plan, thread and chat
   rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
   // ListTasks lists tasks (optionally filtered by plan)
-  // forge:custom — requires plan_id and authorizes through the plan's chat before it lists
   rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
-  // UpdateTask updates an existing task
-  // forge:custom — a partial update authorized through the task's chat, which it notifies to refetch
+  // UpdateTask updates an existing task; update_mask names the fields it writes
   rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {
     option (forge.v1.method) = {
       activity: {
         verb: "update"
         target: {
           kind: "task"
-          id: "task_id"
+          id: "task.id"
           label: "response.task.title"
         }
       }
@@ -65,14 +63,13 @@ service TaskService {
   }
 
   // DeleteTask deletes a task
-  // forge:custom — authorized through the task's chat, which it notifies to refetch
   rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse) {
     option (forge.v1.method) = {
       activity: {
         verb: "delete"
         target: {
           kind: "task"
-          id: "task_id"
+          id: "id"
         }
       }
     };
@@ -113,6 +110,7 @@ service TaskService {
   }
 
   // ListReadyTasks lists tasks that are ready to work on (no unresolved blockers)
+  // forge:query-scope Task
   rpc ListReadyTasks(ListReadyTasksRequest) returns (ListReadyTasksResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -127,8 +125,8 @@ message Task {
   TaskStatus status = 5;
   int32 position = 6;
   optional string parent_task_id = 7;
-  string created_at = 8;
-  string updated_at = 9;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
   optional string metadata = 10;
   optional string assignee = 11;
 }
@@ -148,7 +146,7 @@ message CreateTaskRequest {
   string title = 2;
   string description = 3;
   TaskStatus status = 4;
-  optional int32 position = 5;
+  int32 position = 5;
   optional string parent_task_id = 6;
   optional string metadata = 7;
   optional string assignee = 8;
@@ -161,7 +159,7 @@ message CreateTaskResponse {
 
 // GetTaskRequest retrieves a task by ID
 message GetTaskRequest {
-  string task_id = 1;
+  string id = 1;
 }
 
 // GetTaskResponse returns the requested task
@@ -177,18 +175,19 @@ message ListTasksRequest {
 // ListTasksResponse returns a list of tasks
 message ListTasksResponse {
   repeated Task tasks = 1;
-  int32 total = 2;
+  int32 total_count = 2;
 }
 
 // UpdateTaskRequest updates a task
+//
+// Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+// this message took forge's native CRUD shape. Clients built before it must
+// upgrade; it is not wire-compatible with the previous layout.
 message UpdateTaskRequest {
-  string task_id = 1;
-  optional string title = 2;
-  optional string description = 3;
-  optional TaskStatus status = 4;
-  optional int32 position = 5;
-  optional string metadata = 6;
-  optional string assignee = 7;
+  // The task, carrying its id and the fields update_mask names.
+  Task task = 1;
+  // The Task fields to write (title, description, status, position, metadata, assignee).
+  google.protobuf.FieldMask update_mask = 2;
 }
 
 // UpdateTaskResponse returns the updated task
@@ -198,13 +197,11 @@ message UpdateTaskResponse {
 
 // DeleteTaskRequest deletes a task
 message DeleteTaskRequest {
-  string task_id = 1;
+  string id = 1;
 }
 
 // DeleteTaskResponse confirms deletion
-message DeleteTaskResponse {
-  bool success = 1;
-}
+message DeleteTaskResponse {}
 
 // AddTaskDependencyRequest creates a dependency between two tasks
 message AddTaskDependencyRequest {

@@ -9,6 +9,10 @@ This page gathers the limits of [Reliant hosting](/hosting/overview) and of a no
 
 Nothing here is a promise of capacity beyond what is stated. Reliant is young, and where a limit has no declared value the page says so instead of guessing.
 
+<Tip>
+Live availability of Reliant's services (the API, hosted deploys, static hosting, identity, the LLM gateway and these docs) and the history of past incidents are on the public status page, [status.reliantlabs.io](https://status.reliantlabs.io).
+</Tip>
+
 ## Deploy with no account: `--claimable`
 
 `forge env deploy prod --claimable` publishes under a temporary anonymous identity and prints a live URL and a claim link ([the walkthrough](/forge/deploy-without-an-account)). The anonymous plan is deliberately small, and a deploy that does not fit is refused before anything is built, with each offence named.
@@ -41,6 +45,7 @@ An organization with no hosting billing can publish static sites for free, with 
 | Storage | **1 GiB** per site. A release is kept three times (live, its archive, the previous release), so a release of about 340 MiB or less fits |
 | Traffic | **10 GiB** per calendar month (UTC) for the organization. The owner is told at 80% and 100%, and past the limit the site answers `429` until the month rolls over |
 | Static headers | A site can add response headers with a `_headers` file, but not `Cache-Control`, `Set-Cookie`, `Strict-Transport-Security` or `Content-Type`: the platform owns those |
+| Static redirects | A `_redirects` file declares at most **1,000** rules, **2,048** characters per line and **64 KiB** per file. Statuses 301, 302, 307 and 308 only, with exact paths or a trailing `/*` and `:splat`. No rewrites (`200`), proxying or conditions. A line the platform cannot follow fails the deploy and is named in the error. An unclaimed site may redirect only within its own hostname |
 
 ## What needs billing
 

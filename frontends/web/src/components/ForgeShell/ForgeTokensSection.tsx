@@ -16,9 +16,16 @@
  */
 
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import Button from "@/components/forge-ui/button";
+import {
+  accessTokenServiceKeys,
+  useListMyTokens,
+  useListTokens,
+  useRevokeMyToken,
+  useRevokeToken,
+} from "@/hooks/controlplane/access-token-service-hooks_gen";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import {
   createForgeToken,
@@ -27,10 +34,8 @@ import {
   FORGE_TOKEN_SCOPE_GROUPS,
   type ForgeToken,
   isOrgTokenOnlyScope,
-  listForgeTokens,
-  listOrgForgeTokens,
-  revokeForgeToken,
-  revokeOrgForgeToken,
+  liveForgeTokens,
+  liveOrgForgeTokens,
 } from "@/services/controlPlane/forgeTokens";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 
@@ -47,18 +52,20 @@ const EXPIRY_OPTIONS = [
 export function ForgeTokensSection() {
   const orgId = useActiveOrgStore((s) => s.effectiveId) ?? "";
   const queryClient = useQueryClient();
-  const key = ["forge-tokens", orgId] as const;
-  const orgKey = ["forge-org-tokens", orgId] as const;
-  const tokens = useQuery({ queryKey: key, queryFn: () => listForgeTokens(orgId), enabled: !!orgId, retry: false });
+  const key = accessTokenServiceKeys.listMyTokens({ orgId });
+  const orgKey = accessTokenServiceKeys.listTokens({ orgId });
+  const tokens = useListMyTokens({ orgId }, { enabled: !!orgId, retry: false, select: liveForgeTokens });
   // Only an admin may list the org's tokens (anyone else gets
   // PermissionDenied), so the section is shown only when the list answers.
-  const orgTokens = useQuery({ queryKey: orgKey, queryFn: () => listOrgForgeTokens(orgId), enabled: !!orgId, retry: false });
+  const orgTokens = useListTokens({ orgId }, { enabled: !!orgId, retry: false, select: liveOrgForgeTokens });
 
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>(DEFAULT_FORGE_TOKEN_SCOPES);
   const [expiresInDays, setExpiresInDays] = useState<number | null>(90);
   const [secret, setSecret] = useState<string | null>(null);
 
+  // Hand-written: one create picks CreateToken or CreateMyToken by the scopes
+  // (createForgeToken), so it is no single rpc's hook.
   const create = useMutation({
     mutationFn: () => createForgeToken({ orgId, name: name.trim(), scopes, expiresInDays }),
     onSuccess: ({ secret: created, kind }) => {
@@ -67,14 +74,9 @@ export function ForgeTokensSection() {
       void queryClient.invalidateQueries({ queryKey: kind === "org" ? orgKey : key });
     },
   });
-  const revoke = useMutation({
-    mutationFn: (id: string) => revokeForgeToken(orgId, id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: key }),
-  });
-  const revokeOrg = useMutation({
-    mutationFn: (id: string) => revokeOrgForgeToken(orgId, id),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: orgKey }),
-  });
+  // Each revoke refreshes only its own list, not the service's every query.
+  const revoke = useRevokeMyToken({ invalidate: (qc) => void qc.invalidateQueries({ queryKey: key }) });
+  const revokeOrg = useRevokeToken({ invalidate: (qc) => void qc.invalidateQueries({ queryKey: orgKey }) });
 
   // An org-token-only scope stands alone: picking it clears the rest, and
   // picking anything else clears it.
@@ -180,7 +182,7 @@ export function ForgeTokensSection() {
         ) : (tokens.data ?? []).length === 0 ? (
           <p className="px-4 py-3 text-sm text-muted-foreground">No tokens yet.</p>
         ) : (
-          <TokenList tokens={tokens.data ?? []} onRevoke={(id) => revoke.mutate(id)} revoking={revoke.isPending} testIdPrefix="forge-token" />
+          <TokenList tokens={tokens.data ?? []} onRevoke={(id) => revoke.mutate({ orgId, id })} revoking={revoke.isPending} testIdPrefix="forge-token" />
         )}
       </section>
 
@@ -195,7 +197,7 @@ export function ForgeTokensSection() {
           ) : (
             <TokenList
               tokens={orgTokens.data}
-              onRevoke={(id) => revokeOrg.mutate(id)}
+              onRevoke={(id) => revokeOrg.mutate({ orgId, id })}
               revoking={revokeOrg.isPending}
               testIdPrefix="forge-org-token"
             />

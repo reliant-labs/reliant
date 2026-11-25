@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // A broken version of a workflow file is ONE inbox item, however many
@@ -60,7 +61,7 @@ func TestListInbox_OneItemPerBrokenDefinitionVersion(t *testing.T) {
 			name := "merged"
 			tr.WorkflowTrigger = &name
 		}
-		require.NoError(t, f.repo.CreateTrigger(f.ctx, tr))
+		require.NoError(t, triggertest.Create(f.ctx, f.repo, tr))
 	}
 	create("act-1", true)
 	create("act-2", true)

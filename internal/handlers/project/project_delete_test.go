@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // Who may delete, restore and purge a project (control-plane
@@ -103,7 +104,7 @@ func newDeleteAuthFixture(t *testing.T) *deleteAuthFixture {
 	org := deleteOrg
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: f.project, UserID: f.owner, OrgID: &org, Name: "doomed",
 		Path: "/home/owner/doomed-" + s, CreatedAt: now, UpdatedAt: now, LastActive: now}))
-	require.NoError(t, repo.CreateTrigger(ctx, &core.Trigger{ID: f.trigger, UserID: f.owner, OrgID: &org, ProjectID: f.project,
+	require.NoError(t, triggertest.Create(ctx, repo, &core.Trigger{ID: f.trigger, UserID: f.owner, OrgID: &org, ProjectID: f.project,
 		Name: "nightly", Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "builtin://agent",
 		Config: []byte(`{"interval":"1h"}`), CreatedAt: now, UpdatedAt: now}))
 	return f

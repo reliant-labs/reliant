@@ -244,13 +244,11 @@ type scenarioExecStore interface {
 type createPlanStore interface {
 	CreatePlan(ctx context.Context, plan *db.Plan) error
 	CreateTask(ctx context.Context, task *db.Task) error
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // updatePlanStore is update_plan's store.
 type updatePlanStore interface {
 	threadReader
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // getPlanStore is get_plan's store.
@@ -262,7 +260,6 @@ type getPlanStore interface {
 type addTaskStore interface {
 	threadReader
 	CreateTask(ctx context.Context, task *db.Task) error
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // listTasksStore is list_tasks' store.
@@ -283,7 +280,6 @@ type updateTaskStore interface {
 	threadReader
 	GetPlan(ctx context.Context, id string) (*db.Plan, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
 }
 
@@ -291,19 +287,16 @@ type updateTaskStore interface {
 type createSubtaskStore interface {
 	taskScopeStore
 	CreateTask(ctx context.Context, task *db.Task) error
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
 }
 
 // addDependencyStore is add_dependency's store.
 type addDependencyStore interface {
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	GetTask(ctx context.Context, id string) (*db.Task, error)
 }
 
 // removeDependencyStore is remove_dependency's store.
 type removeDependencyStore interface {
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // listReadyTasksStore is list_ready_tasks' store.
@@ -545,7 +538,6 @@ type runScenarioStore interface {
 type worktreeStore interface {
 	workspacecreate.Store
 	repopkg.AdoptStore
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
@@ -560,4 +552,22 @@ type listPendingQuestionsStore interface {
 // withdrawQuestionStore is withdraw_question's store.
 type withdrawQuestionStore interface {
 	WithdrawAsyncQuestion(ctx context.Context, chatID, threadID, questionID, reason string) (db.WithdrawOutcome, error)
+}
+
+// Refetcher tells a chat's or a user's clients to re-read what a tool changed
+// (a plan, its tasks, the worktree list). chatupdates.Service satisfies it. A
+// nil Refetcher tells nobody: the row is the source of truth and clients keep
+// a fallback poll, so a missing announcement degrades latency, not correctness.
+type Refetcher interface {
+	EmitChatRefetch(ctx context.Context, chatID string, refetchType core.RefetchType) error
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
+}
+
+// emitChatRefetch announces a chat refetch through r, nil-safe: the tools run
+// without a Refetcher in the daemon runtime and in tests.
+func emitChatRefetch(r Refetcher, ctx context.Context, chatID string, t core.RefetchType) error {
+	if r == nil {
+		return nil
+	}
+	return r.EmitChatRefetch(ctx, chatID, t)
 }

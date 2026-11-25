@@ -33,7 +33,7 @@ const project = vi.hoisted(() => ({
   current: {
     id: "temp",
     name: "temp",
-    path: "/home/workspace/projects/temp",
+    path: "/Users/me/src/temp",
     default_branch: "main",
     remote_url: "https://github.com/acme/temp" as string | undefined,
   },
@@ -179,7 +179,9 @@ describe("NewChatView: the project and machine always go together", () => {
     expect(screen.getByTestId("machine-picker")).toHaveTextContent("laptop");
 
     // Setting it up clones temp there (the server's real path), into the
-    // project's own path, and chooses the machine.
+    // target's default folder, and chooses the machine. The project's path is
+    // where it sits on the laptop; sent to cicd it fails (prod, 2026-11-23:
+    // "mkdir /Users: permission denied").
     createProjectFromRepo.mockImplementationOnce(async () => {
       installState.rows = [
         ...installState.rows,
@@ -194,8 +196,8 @@ describe("NewChatView: the project and machine always go together", () => {
       cloneUrl: "https://github.com/acme/temp",
       daemonId: "d-cicd",
       name: "temp",
-      path: "/home/workspace/projects/temp",
     });
+    expect((createProjectFromRepo.mock.calls[0] as unknown[])[0]).not.toHaveProperty("path");
     expect(screen.getByTestId("machine-picker")).toHaveTextContent("cicd");
 
     // While the clone lands, the composer waits and says why.
