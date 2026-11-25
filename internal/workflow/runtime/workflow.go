@@ -4312,6 +4312,9 @@ func runSpawnInlineChild(
 	const maxBackoff = 30 * time.Second
 
 	var execErr error
+	// result is the agent's answer, fetched as soon as its loop exits when the
+	// terminal status is deferred (see subAgentOwesLateMessageTurn).
+	var result *spawnInlineResult
 	for attempt := 0; ; attempt++ {
 		// Create a fresh inline executor for each attempt.
 		// The executor is stateful, so we must re-create it after a transient error.
@@ -4358,6 +4361,23 @@ func runSpawnInlineChild(
 
 		_, execErr = inlineExecutor.Execute()
 		if execErr == nil {
+			if !deferTerminalStatus {
+				break // Success: terminal status first, then the result (below)
+			}
+			// The same activity, in the same place, as before: the loop
+			// exited, and nothing else runs before the result is fetched.
+			result = fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
+			// A message that reached the agent after its loop-exit gate is
+			// owed a turn before the agent completes.
+			if subAgentOwesLateMessageTurn(ctx, childTracker, config.childThread, pauseCtrl) {
+				logger.Info("[SpawnInline] Message reached the sub-agent after its last turn; taking one more turn before completing",
+					"toolCallID", config.toolCallID,
+					"childThread", config.childThread,
+				)
+				result = nil
+				backoff = time.Second
+				continue
+			}
 			break // Success
 		}
 
@@ -4452,11 +4472,9 @@ func runSpawnInlineChild(
 
 	if !deferTerminalStatus {
 		notifySpawnTerminal(ctx, chatID, config, prep, parentWorkflowID, "completed")
-	}
-
-	// Fetch the last message from the child's thread as the spawn result
-	result := fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
-	if deferTerminalStatus {
+		// Fetch the last message from the child's thread as the spawn result
+		result = fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
+	} else {
 		result.terminalStatus = "completed"
 	}
 
