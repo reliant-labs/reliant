@@ -87,29 +87,29 @@ export function useRequestMlAccess(orgId: string | null) {
 
 export function useMlMachines(orgId: string) {
   const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.machines(orgId), queryFn: ({ signal }) => api.getMachines({ orgId }, { signal }), ...READ });
+  return useQuery({ queryKey: mlKeys.machines(orgId), queryFn: ({ signal }) => api.getMachines({ orgId }, { signal }), enabled: !!orgId, ...READ });
 }
 
 export function useMlStack(orgId: string) {
   const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.stack(orgId), queryFn: ({ signal }) => api.getStack({ orgId }, { signal }), ...READ });
+  return useQuery({ queryKey: mlKeys.stack(orgId), queryFn: ({ signal }) => api.getStack({ orgId }, { signal }), enabled: !!orgId, ...READ });
 }
 
 export function useMlFindings(orgId: string) {
   const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.findings(orgId), queryFn: ({ signal }) => api.listFindings({ orgId }, { signal }), ...READ });
+  return useQuery({ queryKey: mlKeys.findings(orgId), queryFn: ({ signal }) => api.listFindings({ orgId }, { signal }), enabled: !!orgId, ...READ });
 }
 
 const projectReq = (orgId: string, project: string) => (project ? { orgId, project } : { orgId });
 
 export function useMlRuns(orgId: string, project = "") {
   const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.runs(orgId, project), queryFn: ({ signal }) => api.listRuns(projectReq(orgId, project), { signal }), ...READ });
+  return useQuery({ queryKey: mlKeys.runs(orgId, project), queryFn: ({ signal }) => api.listRuns(projectReq(orgId, project), { signal }), enabled: !!orgId, ...READ });
 }
 
 export function useMlModels(orgId: string, project = "") {
   const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.models(orgId, project), queryFn: ({ signal }) => api.listModels(projectReq(orgId, project), { signal }), ...READ });
+  return useQuery({ queryKey: mlKeys.models(orgId, project), queryFn: ({ signal }) => api.listModels(projectReq(orgId, project), { signal }), enabled: !!orgId, ...READ });
 }
 
 export function useMlInference(orgId: string, project = "") {
@@ -117,6 +117,7 @@ export function useMlInference(orgId: string, project = "") {
   return useQuery({
     queryKey: mlKeys.inference(orgId, project),
     queryFn: ({ signal }) => api.listInferenceServices(projectReq(orgId, project), { signal }),
+    enabled: !!orgId,
     ...READ,
   });
 }
