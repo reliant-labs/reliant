@@ -4,7 +4,7 @@ import type { AppChipModel, CatalogRow, ProjectCatalog, ProjectCatalogRow } from
 import type { Project } from "@/store/projectStore";
 
 import { pickTarget } from "../ProjectSwitcher";
-import { deployedAppOf, routeProjectOf, rowForRef, sectionsAppOf } from "../shellProject";
+import { deployedAppOf, remembersPick, routeProjectOf, rowForRef, sectionsAppOf } from "../shellProject";
 
 const chip = (name: string, state: AppChipModel["state"], link: AppChipModel["link"] = "source"): AppChipModel => ({
   name,
@@ -109,5 +109,12 @@ describe("the project shell's current project", () => {
     expect(pickTarget({ kind: "project", row: shop }, "/forge/p/docs-site/releases/v1").href).toBe("/forge/p/shopfront/releases");
     expect(pickTarget({ kind: "project", row: docs }, "/c/chat-1")).toEqual({ key: "p-docs", href: "/project/p-docs" });
     expect(pickTarget({ kind: "app", app: chip("status-page", "live", null) }, "/inbox")).toEqual({ key: "app:status-page", href: "/forge/p/status-page" });
+  });
+
+  it("never remembers the forge tour's sample app as the last pick", () => {
+    expect(routeProjectOf("/forge/p/sample_shop/releases", {})).toEqual({ ref: { kind: "app", name: "sample_shop" }, explicit: false });
+    expect(remembersPick("app:sample_shop")).toBe(false);
+    expect(remembersPick("app:shopfront")).toBe(true);
+    expect(remembersPick("p-shop")).toBe(true);
   });
 });
