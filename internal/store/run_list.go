@@ -223,14 +223,28 @@ func ListRuns(ctx context.Context, db orm.Context, filters core.RunListFilters) 
 // successfully, so leaving them out would make a healthy automation's
 // workflow read as never having run.
 func LastRunPerWorkflow(ctx context.Context, db orm.Context, filters core.RunListFilters) ([]*core.RunListItem, error) {
+	items, err := LastRunPerWorkflowAndOrg(ctx, db, filters)
+	if err != nil {
+		return nil, err
+	}
+	return core.NewestRunPerWorkflow(items), nil
+}
+
+// LastRunPerWorkflowAndOrg returns the newest run of each (workflow name,
+// org) pair, under LastRunPerWorkflow's filters: the candidates a caller
+// narrows to the orgs a person may still see before it picks each
+// workflow's newest (core.NewestRunPerWorkflow). Picking per workflow first
+// would let a newer run of an org they left hide an older one they may see.
+// A person is in few orgs, so this is a few rows per workflow.
+func LastRunPerWorkflowAndOrg(ctx context.Context, db orm.Context, filters core.RunListFilters) ([]*core.RunListItem, error) {
 	if filters.UserID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	q := selectRuns(db, filters.UserID, nil, "r.workflow_name").
+	q := selectRuns(db, filters.UserID, nil, "r.workflow_name, r.org_id").
 		Where("r.launch_kind IS DISTINCT FROM 'builder.test'").
 		Where("r.workflow_name <> ''")
 	q = whereProjectAndWorkflows(q, filters).
-		OrderExpr("r.workflow_name, r.created_at DESC, r.chat_id DESC")
+		OrderExpr("r.workflow_name, r.org_id, r.created_at DESC, r.chat_id DESC")
 
 	var rows []runRow
 	if err := q.Scan(ctx, &rows); err != nil {

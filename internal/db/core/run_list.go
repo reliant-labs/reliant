@@ -1,6 +1,7 @@
 package core
 
 import (
+	"sort"
 	"time"
 )
 
@@ -119,4 +120,23 @@ type RunListItem struct {
 	// OrgID is the org of the run's chat (nil: none yet), which decides
 	// whether its owner may still see it (authz).
 	OrgID *string
+}
+
+// NewestRunPerWorkflow keeps each workflow name's newest item (by created
+// time, then chat id, as the run lists order), ordered by workflow name.
+func NewestRunPerWorkflow(items []*RunListItem) []*RunListItem {
+	newest := make(map[string]*RunListItem, len(items))
+	for _, item := range items {
+		cur, ok := newest[item.WorkflowName]
+		if !ok || item.CreatedAt.After(cur.CreatedAt) ||
+			(item.CreatedAt.Equal(cur.CreatedAt) && item.ChatID > cur.ChatID) {
+			newest[item.WorkflowName] = item
+		}
+	}
+	out := make([]*RunListItem, 0, len(newest))
+	for _, item := range newest {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].WorkflowName < out[j].WorkflowName })
+	return out
 }

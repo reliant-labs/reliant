@@ -48,10 +48,13 @@ const LIVE_SEARCH: RunsSearch = { state: ["live"], range: "all" };
 export function AutomationActivityPill({ listedChatIds, onOpenRuns, scope = ALL_PROJECTS }: AutomationActivityPillProps) {
   const { data } = useLiveRuns(scope);
 
-  const summary = useMemo(
-    () => summarizeLiveAutomations(data?.runs ?? [], listedChatIds, !!data?.nextPageToken),
-    [data, listedChatIds],
-  );
+  // The nav's projects again on the client: a server older than
+  // ListRunsRequest.project_ids ignores it and answers every project.
+  const projectIds = scope.kind === "projects" ? scope.projectIds : null;
+  const summary = useMemo(() => {
+    const runs = (data?.runs ?? []).filter((run) => !projectIds || projectIds.includes(run.projectId));
+    return summarizeLiveAutomations(runs, listedChatIds, !!data?.nextPageToken);
+  }, [data, listedChatIds, projectIds]);
 
   if (summary.running === 0) return null;
 

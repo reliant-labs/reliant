@@ -797,7 +797,11 @@ export type LiveRunsScope =
 export function useLiveRuns(scope: LiveRunsScope = ALL_PROJECTS_SCOPE) {
   const org = useOrgScope();
   const projectIds = scope.kind === "projects" ? scope.projectIds : NO_PROJECT_IDS;
-  return useQuery(
+  // A scope with no projects (an app with no code here) reads nothing. Its
+  // request would be every project's, so it shares that cache entry, and a
+  // disabled query still returns cached data: answer none, never that count.
+  const reads = scope.kind === "all" || projectIds.length > 0;
+  const query = useQuery(
     withOrgFailure(
       runServiceQueries.listRuns(
         orgRequest(
@@ -809,14 +813,12 @@ export function useLiveRuns(scope: LiveRunsScope = ALL_PROJECTS_SCOPE) {
           },
           org.orgId,
         ),
-        {
-          enabled: orgQueryEnabled(org) && scope.kind !== "none" && (scope.kind === "all" || projectIds.length > 0),
-          select: runPageFromProto,
-        },
+        { enabled: orgQueryEnabled(org) && reads, select: runPageFromProto },
       ),
       org,
     ),
   );
+  return reads ? query : { ...query, data: undefined };
 }
 
 const ALL_PROJECTS_SCOPE: LiveRunsScope = { kind: "all" };

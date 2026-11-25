@@ -187,8 +187,10 @@ describe("RunService keys", () => {
     useActiveOrgStore.setState({ userId: "u1", chosenId: null, effectiveId: null, resolved: false, failure: null });
     try {
       const lastRuns = renderHook(() => useLastRunPerWorkflow(undefined, false, ["p1", "p2"]), { wrapper });
-      await new Promise((resolve) => setTimeout(resolve, 20));
-      expect(requests, "nothing is read before the org is known").toHaveLength(0);
+      // An enabled query starts its fetch on mount; this one waits, idle.
+      expect(lastRuns.result.current.fetchStatus, "nothing is read before the org is known").toBe("idle");
+      expect(queryClient.isFetching()).toBe(0);
+      expect(requests).toHaveLength(0);
 
       act(() => useActiveOrgStore.setState({ chosenId: "org-a", effectiveId: "org-a", resolved: true }));
       await waitFor(() => expect(lastRuns.result.current.data).toBeDefined());

@@ -146,7 +146,7 @@ func TestLastRunPerWorkflow_LeavesOutARemovedMembersOrgRuns(t *testing.T) {
 	acme, globex := "acme", "globex"
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	repo := &run.MockRepository{
-		LastRunPerWorkflowFunc: func(context.Context, db.RunListFilters) ([]*db.RunListItem, error) {
+		LastRunPerWorkflowAndOrgFunc: func(context.Context, db.RunListFilters) ([]*db.RunListItem, error) {
 			return []*db.RunListItem{
 				{ChatID: "c-acme", WorkflowName: "wf-a", CreatedAt: at, OrgID: &acme},
 				{ChatID: "c-globex", WorkflowName: "wf-b", CreatedAt: at, OrgID: &globex},
@@ -173,7 +173,7 @@ func TestLastRunPerWorkflow_LeavesOutARemovedMembersOrgRuns(t *testing.T) {
 func TestLastRunPerWorkflow_HonoursTheNamedOrgAndProjects(t *testing.T) {
 	var got db.RunListFilters
 	repo := &run.MockRepository{
-		LastRunPerWorkflowFunc: func(_ context.Context, f db.RunListFilters) ([]*db.RunListItem, error) {
+		LastRunPerWorkflowAndOrgFunc: func(_ context.Context, f db.RunListFilters) ([]*db.RunListItem, error) {
 			got = f
 			return nil, nil
 		},
@@ -216,6 +216,46 @@ func TestListRuns_PassesTheProjectSet(t *testing.T) {
 	_, err := svc.ListRuns(run.AuthedContext(t), connect.NewRequest(&pb.ListRunsRequest{ProjectIds: []string{"p-1", "p-2"}}))
 	require.NoError(t, err)
 	require.Equal(t, []string{"p-1", "p-2"}, got.ProjectIDs)
+}
+
+// A workflow whose newest run is in an org the caller left still shows its
+// newest run they may see: the left org's run is dropped before each
+// workflow's newest is picked, not after (which read it as never run). Real
+// store, so the candidates are what the query returns.
+func TestLastRunPerWorkflow_AnOlderVisibleRunOutlivesANewerRemovedOne(t *testing.T) {
+	repo := db.NewTestRepo(t)
+	resolver := orgs.New(orgSource{}) // test-user is in acme and home, not globex
+	ctx := authz.WithMembership(run.AuthedContext(t), resolver)
+	user := "test-user"
+	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: "p-last", UserID: user, Name: "proj", Path: t.TempDir(), CreatedAt: at, UpdatedAt: at, LastActive: at,
+	}))
+	for _, c := range []struct {
+		id, org string
+		at      time.Time
+	}{
+		{"c-acme-older", "acme", at},
+		{"c-globex-newer", "globex", at.Add(time.Hour)},
+	} {
+		workflow, workflowID, org := "wf", c.id, c.org
+		require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+			ID: c.id, Title: c.id, ProjectID: "p-last", UserID: user, OrgID: &org,
+			WorkflowName: &workflow, WorkflowID: &workflowID, State: db.ChatStateIdle,
+			CreatedAt: c.at, UpdatedAt: c.at, LastActive: c.at,
+		}))
+		_, err := repo.CreateThread(ctx, &db.Thread{ID: c.id, ChatID: c.id, CreatedAt: c.at})
+		require.NoError(t, err)
+		require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
+			ID: c.id, ChatID: c.id, WorkflowName: workflow, Thread: c.id, Status: db.Completed(), CreatedAt: c.at,
+		}))
+	}
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: repo, Orgs: resolver}))
+
+	got, err := svc.LastRunPerWorkflow(ctx, connect.NewRequest(&pb.LastRunPerWorkflowRequest{}))
+	require.NoError(t, err)
+	require.Len(t, got.Msg.GetRuns(), 1, "the workflow has a run the caller may see")
+	require.Equal(t, "c-acme-older", got.Msg.GetRuns()[0].GetSessionId())
 }
 
 func ptrBool(b bool) *bool { return &b }
