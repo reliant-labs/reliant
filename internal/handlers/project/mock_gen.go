@@ -746,6 +746,42 @@ func (m *MockMoveLedger) ListProjectOrgMoves(ctx context.Context, f core.Project
 // Compile-time check.
 var _ MoveLedger = (*MockMoveLedger)(nil)
 
+// forge:section MockProjectMerges
+// forge:hash=60f11b2d7ed36749dacfdea2a1716064031a7bdcce6d3d2f849e9e157ad4caaa
+
+// MockProjectMerges is a test mock for the ProjectMerges interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockProjectMerges.<Method>Func not set" error.
+type MockProjectMerges struct {
+	contractkit.Recorder
+	PreviewProjectMergeFunc func(context.Context, string, string) (*core.ProjectMergePreview, error)
+	MergeProjectsFunc       func(context.Context, core.ProjectMerge) (*core.ProjectMergeResult, error)
+}
+
+// PreviewProjectMerge records the call and delegates to PreviewProjectMergeFunc when set.
+func (m *MockProjectMerges) PreviewProjectMerge(ctx context.Context, sourceID string, targetID string) (*core.ProjectMergePreview, error) {
+	m.Recorder.Record("PreviewProjectMerge", ctx, sourceID, targetID)
+	if m.PreviewProjectMergeFunc != nil {
+		return m.PreviewProjectMergeFunc(ctx, sourceID, targetID)
+	}
+	return nil, contractkit.MockNotSet("MockProjectMerges", "PreviewProjectMerge")
+}
+
+// MergeProjects records the call and delegates to MergeProjectsFunc when set.
+func (m *MockProjectMerges) MergeProjects(ctx context.Context, p1 core.ProjectMerge) (*core.ProjectMergeResult, error) {
+	m.Recorder.Record("MergeProjects", ctx, p1)
+	if m.MergeProjectsFunc != nil {
+		return m.MergeProjectsFunc(ctx, p1)
+	}
+	return nil, contractkit.MockNotSet("MockProjectMerges", "MergeProjects")
+}
+
+// Compile-time check.
+var _ ProjectMerges = (*MockProjectMerges)(nil)
+
 // forge:section MockSharedProjects
 // forge:hash=0adff37030a3a8514d60ae4f045d1a2f530330e54941fdca584952c5d29ccbd9
 

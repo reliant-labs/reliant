@@ -70,6 +70,16 @@ vi.mock("@/hooks/useGoToBilling", () => ({ useGoToBilling: (from: string) => () 
 // The summary of several projects (the project shell's Home) has its own tests.
 vi.mock("../../Forge/Console/ProjectsOverview", () => ({ ProjectsOverview: () => null }));
 vi.mock("../../Layout/sidebar/shellProject", () => ({ useShellSeveral: () => ({ mode: state.several, rows: [] }) }));
+// The merge dialog has its own tests (MergeProjectsDialog.test.tsx); here, only which pair it opens on.
+vi.mock("../MergeProjectsDialog", () => ({
+  MergeProjectsDialog: ({ source, target, onClose }: { source: { key: string }; target: { key: string }; onClose: () => void }) => (
+    <div data-testid="merge-dialog" data-source={source.key} data-target={target.key}>
+      <button type="button" onClick={onClose}>
+        Close merge
+      </button>
+    </div>
+  ),
+}));
 
 import { ProjectsBody } from "../ProjectsPage";
 
@@ -77,7 +87,7 @@ function hosted(name: string, over: Partial<WireHostedApp> = {}): WireHostedApp 
   return { name, createdAt: "2026-01-01T00:00:00Z", environments: [], hasStaticSite: false, sources: [], warning: "", ...over };
 }
 
-function project(id: string, over: Partial<WireProjectWithApps> & { lastActive?: string; viewerAccess?: boolean } = {}): WireProjectWithApps {
+function project(id: string, over: Partial<WireProjectWithApps> & { lastActive?: string; viewerAccess?: boolean; remoteKey?: string } = {}): WireProjectWithApps {
   return {
     project: create(ProjectSchema, {
       id,
@@ -87,6 +97,7 @@ function project(id: string, over: Partial<WireProjectWithApps> & { lastActive?:
       createdAt: "2025-01-01T00:00:00Z",
       updatedAt: "2025-01-01T00:00:00Z",
       viewerAccess: over.viewerAccess ?? false,
+      remoteKey: over.remoteKey,
     }),
     repos: over.repos ?? [],
     apps: over.apps ?? [],
@@ -242,6 +253,40 @@ describe("the Projects page", () => {
     expect(screen.getByRole("link", { name: "Observability" })).toHaveAttribute("href", "/forge/observability");
     fireEvent.click(screen.getByRole("button", { name: "Add project" }));
     expect(state.openAddProject).toHaveBeenCalledWith();
+  });
+});
+
+describe("merging two projects of one repository", () => {
+  const rowOf = (key: string) => screen.getAllByTestId("projects-row").find((r) => r.getAttribute("data-row-key") === key)!;
+
+  it("offers each of the person's duplicates a merge into the other, and opens the dialog on that pair", () => {
+    state.catalog = catalogFromResponse({
+      orgId: "org-1",
+      hostedAppsState: HostedAppsState.OK,
+      projects: [
+        project("shop", { remoteKey: "github.com/acme/shop", checkouts: [{ daemonId: "d1", daemonName: "laptop", installState: ProjectInstallState.INSTALLED }] }),
+        project("shop-2", { remoteKey: "github.com/acme/shop" }),
+        project("notes", { remoteKey: "github.com/acme/notes" }),
+        project("team-shop", { remoteKey: "github.com/acme/shop", viewerAccess: true }),
+      ],
+      unlinkedApps: [],
+    });
+    render(<ProjectsBody />);
+    // One project of its repository, or a shared one: no merge.
+    for (const key of ["notes", "team-shop"]) {
+      fireEvent.click(within(rowOf(key)).getByTestId("projects-row-menu"));
+      expect(screen.queryByTestId("projects-row-merge")).toBeNull();
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    }
+    fireEvent.click(within(rowOf("shop-2")).getByTestId("projects-row-menu"));
+    const merge = screen.getAllByTestId("projects-row-merge");
+    expect(merge.map((item) => item.textContent)).toEqual(["Merge into shop…"]);
+    fireEvent.click(merge[0]);
+    const dialog = screen.getByTestId("merge-dialog");
+    expect(dialog).toHaveAttribute("data-source", "shop-2");
+    expect(dialog).toHaveAttribute("data-target", "shop");
+    fireEvent.click(screen.getByRole("button", { name: "Close merge" }));
+    expect(screen.queryByTestId("merge-dialog")).toBeNull();
   });
 });
 

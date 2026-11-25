@@ -82,6 +82,9 @@ type Deps struct {
 	// Shared lists what others shared with the caller's org for
 	// ListProjectsWithApps (SharedProjects).
 	Shared SharedProjects
+	// Merges folds one of the caller's projects into another, and previews
+	// it (ProjectMerges).
+	Merges ProjectMerges
 	// Moves starts a move's saga (orgmove.ProjectOrgMoveWorkflow). Nil — no
 	// Temporal — refuses MoveProjectToOrg.
 	// forge:optional-dep
@@ -149,6 +152,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Shared == nil {
 		return fmt.Errorf("project: Deps.Shared is required")
+	}
+	if d.Merges == nil {
+		return fmt.Errorf("project: Deps.Merges is required")
 	}
 	return nil
 }

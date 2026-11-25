@@ -20,7 +20,9 @@
  * project's code and an org app is the server's, never re-derived here.
  *
  * A row opens the project's page (projectPath), or for an app-only row the
- * app's console (appPath). One responsive page: no `/m` twin (§10.5).
+ * app's console (appPath). One responsive page: no `/m` twin (§10.5). A
+ * repository that became two of the person's own projects (one remote_key)
+ * offers "Merge into …" in each of their row menus (MergeProjectsDialog).
  *
  * In the one shell (U6) this is the nav's Projects entry. With several
  * projects chosen it is their Home, the summary rows alone (ProjectsOverview),
@@ -37,7 +39,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { Activity, AppWindow, Download, Eye, EyeOff, FolderGit2, FolderPlus, MessageSquare, MoreHorizontal, Pin, PinOff, Plus, Settings2 } from "lucide-react";
+import { Activity, AppWindow, Download, Eye, EyeOff, FolderGit2, FolderPlus, GitMerge, MessageSquare, MoreHorizontal, Pin, PinOff, Plus, Settings2 } from "lucide-react";
 
 import AlertBanner from "@/components/forge-ui/alert_banner";
 import Button from "@/components/forge-ui/button";
@@ -62,7 +64,9 @@ import {
   type CatalogFilter,
   type HostedAppsState,
   type ListedRow,
+  type ProjectCatalogRow,
 } from "@/services/projects/catalog";
+import { mergeTargetLabel, mergeTargets } from "@/services/projects/projectMerge";
 import { appCount, appSourceRemote, cloneUrlOf, projectsPageSections, type ProjectsSection } from "@/services/projects/projectsPage";
 import { openAddProject } from "@/store/addProjectDialogStore";
 
@@ -76,6 +80,7 @@ import { chatSetupNeeded } from "../OnboardingFlow/onboardingGate";
 import { SetUpChatsCard } from "../OnboardingFlow/SetUpChatsCard";
 import { useChatSetup } from "../OnboardingFlow/useChatSetup";
 import { AppChip } from "./AppChip";
+import { MergeProjectsDialog } from "./MergeProjectsDialog";
 import { ProjectRowSummary } from "./ProjectRowSummary";
 import { ADD_PROJECT_LABEL, CLONE_REPOSITORY_LABEL, OPEN_FOLDER_LABEL } from "./projectCopy";
 
@@ -150,6 +155,10 @@ export function ProjectsBody() {
   const everything = useMemo(() => (catalog ? listCatalog(catalog, prefs, { showHidden: true }) : []), [catalog, prefs]);
   const hiddenCount = everything.filter((l) => l.hidden).length;
   const sections = useMemo(() => projectsPageSections(listed), [listed]);
+  // One repository as two of the person's projects: each row offers "Merge into" the other.
+  const merges = useMemo(() => mergeTargets(catalog), [catalog]);
+  const [merging, setMerging] = useState<{ source: ProjectCatalogRow; target: ProjectCatalogRow } | null>(null);
+  const onMerge = (source: ProjectCatalogRow, target: ProjectCatalogRow) => setMerging({ source, target });
 
   const projectTotal = everything.filter((l) => l.row.kind === "project").length;
   const apps = appCount(everything);
@@ -302,11 +311,14 @@ export function ProjectsBody() {
                 onPin={setPinned}
                 onHide={setHidden}
                 onGetTheCode={getTheCode}
+                merges={merges}
+                onMerge={onMerge}
               />
             ))
           )}
         </>
       ) : null}
+      {merging && <MergeProjectsDialog source={merging.source} target={merging.target} onClose={() => setMerging(null)} />}
     </div>
   );
 }
@@ -380,9 +392,12 @@ interface SectionListProps {
   onPin: (key: string, on: boolean) => void;
   onHide: (key: string, on: boolean) => void;
   onGetTheCode: (app: AppChipModel) => void;
+  /** The projects each of the person's projects can be merged into (mergeTargets). */
+  merges: ReadonlyMap<string, ProjectCatalogRow[]>;
+  onMerge: (source: ProjectCatalogRow, target: ProjectCatalogRow) => void;
 }
 
-function ProjectsSectionList({ section, highlighted, writable, onPin, onHide, onGetTheCode }: SectionListProps) {
+function ProjectsSectionList({ section, highlighted, writable, onPin, onHide, onGetTheCode, merges, onMerge }: SectionListProps) {
   const headingId = `projects-section-${section.id}`;
   return (
     <section aria-labelledby={headingId} className="flex flex-col gap-2" data-testid={headingId}>
@@ -400,6 +415,8 @@ function ProjectsSectionList({ section, highlighted, writable, onPin, onHide, on
             onPin={onPin}
             onHide={onHide}
             onGetTheCode={onGetTheCode}
+            mergeInto={merges.get(entry.row.key)}
+            onMerge={onMerge}
           />
         ))}
       </ul>
@@ -418,9 +435,12 @@ interface RowProps {
   onPin: (key: string, on: boolean) => void;
   onHide: (key: string, on: boolean) => void;
   onGetTheCode: (app: AppChipModel) => void;
+  /** The projects this row's project can be merged into; absent when it has no duplicate. */
+  mergeInto?: ProjectCatalogRow[];
+  onMerge: (source: ProjectCatalogRow, target: ProjectCatalogRow) => void;
 }
 
-function CatalogRowItem({ entry, highlighted = false, writable, onPin, onHide, onGetTheCode }: RowProps) {
+function CatalogRowItem({ entry, highlighted = false, writable, onPin, onHide, onGetTheCode, mergeInto, onMerge }: RowProps) {
   const { row, pinned, hidden } = entry;
   const href = row.kind === "project" ? projectPath(row.key) : appPath(row.name);
   const activity = activityText(row.activityAt);
@@ -467,7 +487,7 @@ function CatalogRowItem({ entry, highlighted = false, writable, onPin, onHide, o
           Get the code
         </Button>
       )}
-      <RowMenu entry={entry} writable={writable} onPin={onPin} onHide={onHide} onGetTheCode={onGetTheCode} />
+      <RowMenu entry={entry} writable={writable} onPin={onPin} onHide={onHide} onGetTheCode={onGetTheCode} mergeInto={mergeInto} onMerge={onMerge} />
     </li>
   );
 }
@@ -507,7 +527,7 @@ function NarrowChips({ apps }: { apps: AppChipModel[] }) {
   );
 }
 
-function RowMenu({ entry, writable, onPin, onHide, onGetTheCode }: RowProps) {
+function RowMenu({ entry, writable, onPin, onHide, onGetTheCode, mergeInto, onMerge }: RowProps) {
   const { row, pinned, hidden } = entry;
   const items: MenuItem[] = [];
   if (row.kind === "project") {
@@ -534,11 +554,21 @@ function RowMenu({ entry, writable, onPin, onHide, onGetTheCode }: RowProps) {
       testId: "projects-row-hide",
     },
   ];
+  // Only the person's own projects have targets (mergeTargets), never a shared row.
+  const merges: MenuItem[] =
+    row.kind === "project" && mergeInto
+      ? mergeInto.map((target) => ({
+          label: mergeTargetLabel(row, target, mergeInto),
+          onClick: () => onMerge(row, target),
+          icon: <GitMerge className="h-3.5 w-3.5" />,
+          testId: "projects-row-merge",
+        }))
+      : [];
   return (
     <DropdownMenu
       align="right"
       label={`${row.name} actions`}
-      groups={[{ items }, { items: prefs }]}
+      groups={merges.length > 0 ? [{ items }, { label: "Same repository", items: merges }, { items: prefs }] : [{ items }, { items: prefs }]}
       trigger={(props) => (
         <button
           type="button"

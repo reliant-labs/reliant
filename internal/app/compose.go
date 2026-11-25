@@ -1424,6 +1424,7 @@ func (g *Graph) newProject() (*project.Service, error) {
 		Detachments:    store.NewProjectDaemonDetachmentExtStore(o),
 		Ledger:         store.NewProjectOrgMoveExtStore(o),
 		Shared:         store.NewShareEventExtStore(o),
+		Merges:         store.NewProjectMergeExtStore(o),
 		Router:         g.APIDaemonRouter().NATSDaemonRouter,
 		ControlPlane:   hostedControlPlane(g.ServerProcessConfig.GetControlPlane()),
 		// The Projects list reads the org's hosted apps as the caller; nil

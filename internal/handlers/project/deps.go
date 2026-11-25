@@ -160,6 +160,15 @@ type MoveLedger interface {
 	ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
 }
 
+// ProjectMerges folds one project into another (MergeProjects) and previews
+// it. Neither takes the caller: the handler admits both projects (authz)
+// first, and the merge re-checks the owner and org it was admitted on.
+// store.ProjectMergeExtStore satisfies it.
+type ProjectMerges interface {
+	PreviewProjectMerge(ctx context.Context, sourceID, targetID string) (*core.ProjectMergePreview, error)
+	MergeProjects(ctx context.Context, m core.ProjectMerge) (*core.ProjectMergeResult, error)
+}
+
 // SharedProjects is the projects others shared with an org the caller is in
 // (the sharing service's list; ListProjectsWithApps). The caller passes them
 // through authz. store.ShareEventExtStore satisfies it.

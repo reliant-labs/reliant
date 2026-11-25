@@ -59216,6 +59216,15 @@
     },
     {
       "consumer": "Project",
+      "field": "Merges",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/project.ProjectMerges",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Project",
       "field": "MoveFacts",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.MoveFacts",
       "methods": [],
@@ -61776,6 +61785,14 @@
     {
       "code": "binding_unresolved",
       "component": "Project.Machines",
+      "source": {
+        "path": "internal/handlers/project/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Project.Merges",
       "source": {
         "path": "internal/handlers/project/service.go",
         "symbol": "New"
