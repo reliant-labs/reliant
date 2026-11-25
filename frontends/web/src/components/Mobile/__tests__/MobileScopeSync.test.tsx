@@ -2,8 +2,9 @@
  * The phone's URL → store bridge (MobileScopeSync): the URL is the only view
  * state, and the stores follow it.
  *
- *   - a bare chat list is filled from the tab's last scope, else every
- *     project, with a replace (no step Back retraces);
+ *   - a bare chat list is filled from the scope the phone last showed, else
+ *     the tab's as the page loaded (never a desktop frame's before the
+ *     hand-off), else every project, with a replace (no step Back retraces);
  *   - a bare `/m/new` names the project it opens on, so Back after a pick
  *     returns to it;
  *   - the context project follows `/m/new?project=`, else the scope's one
@@ -20,8 +21,10 @@ import {
   Outlet,
   RouterProvider,
   retainSearchParams,
+  useNavigate,
   type AnyRouter,
 } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const PROJECTS = [
@@ -36,7 +39,7 @@ vi.mock("@/hooks/project-queries", async (original) => ({
 
 import { mobileNewChatSearchSchema, PROJECTS_CARRIED } from "@/routeSchemas";
 import { scopeDefault } from "@/lib/urlState/shellScope";
-import { resetShellScopeForTests, shellScopeNow } from "@/lib/urlState/shellScopeStore";
+import { publishShellScope, resetShellScopeForTests, shellScopeNow } from "@/lib/urlState/shellScopeStore";
 import { useActiveOrgStore } from "@/store/activeOrgStore";
 import { useChatStore } from "@/store/chatStore";
 import { useProjectStore } from "@/store/projectStore";
@@ -122,6 +125,50 @@ describe("MobileScopeSync", () => {
     await phoneAt("/m/chats");
     await waitFor(() => expect(at()).toBe("/m/chats?projects=all"));
     expect(selectProject).not.toHaveBeenCalled();
+  });
+
+  it("fills the phone's first bare chat list from the tab, however long the desktop frame before it lasts", async () => {
+    // A phone opens `/`: the desktop shell's nav renders first and publishes
+    // the one project it falls back to, while the hand-off to `/m/chats`
+    // waits on a startup read (a journey's settings, say). The slower that
+    // read, the more surely the nav has published before the phone fills.
+    let settingsLoaded!: () => void;
+    const settingsRead = new Promise<void>((resolve) => (settingsLoaded = resolve));
+    const root = createRootRoute({ search: { middlewares: [retainSearchParams([...PROJECTS_CARRIED]) as never] } });
+    const desktopHome = createRoute({
+      getParentRoute: () => root,
+      path: "/",
+      component: function DesktopHome() {
+        const navigate = useNavigate();
+        useEffect(() => {
+          publishShellScope({ scope: { mode: "one", projectId: "p1" }, focus: null });
+          void settingsRead.then(() => navigate({ to: "/m/chats", replace: true }));
+          return () => publishShellScope(null);
+        }, [navigate]);
+        return null;
+      },
+    });
+    const shell = createRoute({ getParentRoute: () => root, id: "_mobile", component: MobileScopeSync });
+    const chats = createRoute({ getParentRoute: () => shell, path: "/m/chats" });
+    router = createRouter({
+      routeTree: root.addChildren([desktopHome, shell.addChildren([chats])]),
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+    }) as unknown as AnyRouter;
+    await router.load();
+    render(<RouterProvider router={router} />);
+    await waitFor(() => expect(shellScopeNow()).toEqual({ mode: "one", projectId: "p1" }));
+
+    settingsLoaded();
+    // The tab had no scope when the page loaded: every project, not the desktop frame's one.
+    await waitFor(() => expect(at()).toBe("/m/chats?projects=all"));
+    expect(selectProject).not.toHaveBeenCalled();
+  });
+
+  it("fills a later bare chat list from the scope the phone last showed", async () => {
+    await phoneAt("/m/chats?projects=p2");
+    await waitFor(() => expect(shellScopeNow()).toEqual({ mode: "one", projectId: "p2" }));
+    await router.navigate({ to: "/m/chats", search: { projects: undefined } as never });
+    await waitFor(() => expect(at()).toBe("/m/chats?projects=p2"));
   });
 
   it("moves the context to the URL scope's project, and reloads the list on a change", async () => {

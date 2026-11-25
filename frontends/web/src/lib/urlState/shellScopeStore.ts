@@ -50,6 +50,10 @@ export function publishShellScope(next: PublishedScope | null): void {
   const same = !!prev && !!next && sameScope(prev.scope, next.scope) && prev.focus === next.focus;
   if (!same && (prev || next)) useShellScopeStore.setState({ published: next });
   if (!next) return;
+  // The tab's default as it was is read before this page writes over it, so
+  // a later fill (seededScope) never takes the page's own first frame: the
+  // desktop shell's, say, before a phone hands off to `/m/*`.
+  seededScope();
   scopeDefault.set(next.scope);
   if (next.focus && next.scope.mode !== "one") focusDefault.set(next.focus);
 }
