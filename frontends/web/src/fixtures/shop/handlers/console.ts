@@ -177,6 +177,24 @@ export const DEMO_DOMAINS = [
     state: DeployCustomDomainState.VERIFYING,
     age: 20 * MINUTE,
   },
+  // The storefront's other prod hostnames (its site page's Domains): one
+  // serving, one waiting on its certificate.
+  {
+    id: "dom-shop-uk",
+    hostname: "shop.example.co.uk",
+    env: "env-prod",
+    target: "shop-web",
+    state: DeployCustomDomainState.LIVE,
+    age: 12 * DAY,
+  },
+  {
+    id: "dom-sale",
+    hostname: "sale.shop.example.com",
+    env: "env-prod",
+    target: "shop-web",
+    state: DeployCustomDomainState.ISSUING,
+    age: 25 * MINUTE,
+  },
 ] as const;
 
 const releaseOf = (version: string) => demoRelease(version) ?? DEMO_RELEASES[0];
@@ -375,6 +393,12 @@ function deployments(envId: EnvId) {
             )
           : "",
         urlServingPath: w.tier === DeployTier.STATIC ? DeployServingPath.EDGE : DeployServingPath.INGRESS,
+        // The site's custom domains, as the control plane converges them (the
+        // static site's page reads them; the Domains page reads DomainService).
+        domains:
+          w.tier === DeployTier.STATIC
+            ? DEMO_DOMAINS.filter((d) => d.env === envId && d.target === w.name).map((d) => ({ domain: d.hostname, state: d.state, servingPath: DeployServingPath.EDGE }))
+            : [],
       },
     },
     verdict: DeployVerdict.CONVERGED,
@@ -385,6 +409,7 @@ function deployments(envId: EnvId) {
 
 function domain(d: (typeof DEMO_DOMAINS)[number]) {
   const live = d.state === DeployCustomDomainState.LIVE;
+  const verified = live || d.state === DeployCustomDomainState.ISSUING;
   return {
     id: d.id,
     hostname: d.hostname,
@@ -392,7 +417,7 @@ function domain(d: (typeof DEMO_DOMAINS)[number]) {
     source: DomainSource.EXTERNAL,
     createdAt: ago(d.age),
     updatedAt: ago(live ? d.age - HOUR : 2 * MINUTE),
-    verifiedAt: live ? ago(d.age - 20 * MINUTE) : undefined,
+    verifiedAt: verified ? ago(d.age - 20 * MINUTE) : undefined,
     liveSince: live ? ago(d.age - HOUR) : undefined,
     servingPath: d.target === "api" ? DeployServingPath.INGRESS : DeployServingPath.EDGE,
     requiredRecords: [
@@ -406,8 +431,8 @@ function domain(d: (typeof DEMO_DOMAINS)[number]) {
         type: "CNAME",
         name: d.hostname,
         value: "sites-edge.example.net",
-        resolved: live,
-        detail: live ? "" : "Not visible from our resolvers yet. DNS can take a few minutes.",
+        resolved: verified,
+        detail: verified ? "" : "Not visible from our resolvers yet. DNS can take a few minutes.",
       },
     ],
     binding: {

@@ -22,7 +22,9 @@
 import type { StatusTone } from "@/components/forge-ui/status";
 import type { MetricCatalogEntry } from "@/services/controlPlane/observability/metricsTypes";
 import type { Panel, ServiceHealth, Workload, WorkloadContainer, WorkloadJob } from "@/services/controlPlane/observability/types";
-import type { ForgeHostedWorkload } from "@/services/forge/topology";
+import { domainStatusLine, type DomainState, type DomainStatusLine, type ForgeDomain } from "@/services/forge/domains";
+import type { ReleasePromotion } from "@/services/forge/releases";
+import { workloadCustomDomain, workloadOpenUrl, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { ENV_ALL } from "../Console/envScope";
 import { ENV_KEY, SERVICE_KEY } from "../Observability/attributes";
@@ -63,7 +65,7 @@ export type ServicesRow =
       release: string;
     })
   | (RowBase & { type: "job"; latest: WorkloadJob; release: string })
-  | (RowBase & { type: "site"; url: string; release: string })
+  | (RowBase & { type: "site"; url: string; release: string } & SiteState)
   | (RowBase & { type: "database"; release: string });
 
 export interface ServicesEnv {
@@ -178,6 +180,7 @@ export function servicesRows({ workloads, jobs, telemetry, hosted, envs, env }: 
           status: verdict.label,
           url: deployment.url || (deployment.hostname ? `https://${deployment.hostname}` : ""),
           release: releaseOf(envName),
+          ...siteStateOf(deployment),
         });
       } else if (deployment.tier === "database") {
         rows.push({
@@ -228,6 +231,137 @@ export function sitesOf(hosted: ReadonlyMap<string, ReadonlyMap<string, ForgeHos
     if (deployment?.tier === "static") out.push({ envName, deployment });
   }
   return out;
+}
+
+// ── A static site ───────────────────────────────────────────────────────────
+
+/** One custom domain a site answers on, as GetStatus reports it. */
+export interface SiteDomain {
+  hostname: string;
+  state: DomainState;
+  /** Where its DNS points: edge | ingress | elsewhere | unknown. */
+  servingPath: string;
+}
+
+/** What GetStatus says about one static site in one environment beyond its verdict. */
+export interface SiteState {
+  /** The platform observed files other than the ones the published release asks for. */
+  drifted: boolean;
+  /** The control plane's last error, as reported (history too: callers decide when it still matters). */
+  lastError: string;
+  /** Why it is suspended (owner | no_compute_plan | billing_lapsed | claimable_expired); "" when not, or not reported. */
+  suspendReason: string;
+  domains: SiteDomain[];
+}
+
+const DOMAIN_STATES: readonly DomainState[] = ["pending-dns", "verifying", "issuing", "live", "failed", "conflict", "unknown"];
+
+export function siteStateOf(deployment: ForgeHostedWorkload): SiteState {
+  const reason = (deployment.suspend_reason ?? "").trim();
+  return {
+    drifted: deployment.drifted === true,
+    lastError: (deployment.last_error ?? "").trim(),
+    suspendReason: reason === "unspecified" ? "" : reason,
+    domains: (deployment.domains ?? [])
+      .filter((d) => (d.hostname ?? "").trim() !== "")
+      .map((d) => ({
+        hostname: d.hostname.trim().toLowerCase(),
+        state: (DOMAIN_STATES as readonly string[]).includes(d.state) ? (d.state as DomainState) : "unknown",
+        servingPath: d.serving_path || "unknown",
+      })),
+  };
+}
+
+/** One environment of a static site: what its page shows for it. */
+export interface SiteEnv extends SiteState {
+  envName: string;
+  /** The environment's control-plane id; "" when the console's environments do not list it. */
+  envId: string;
+  /** The release live there; "" when nothing was promoted. */
+  release: string;
+  tone: StatusTone;
+  status: string;
+  /** The address to open it at: its live custom domain, else the platform's URL; "" with neither. */
+  url: string;
+  /** Its live custom domain (workloadCustomDomain); "" when none serves. */
+  customDomain: string;
+  deployment: ForgeHostedWorkload;
+}
+
+/** A site's environments, in the console's order (prod leads); environments it lists not, last. */
+export function siteEnvs(entries: readonly { envName: string; deployment: ForgeHostedWorkload }[], envs: readonly { id: string; name: string; release: string }[]): SiteEnv[] {
+  const rank = (envName: string) => {
+    const index = envs.findIndex((e) => e.name === envName);
+    return index < 0 ? envs.length : index;
+  };
+  return [...entries]
+    .sort((a, b) => rank(a.envName) - rank(b.envName))
+    .map(({ envName, deployment }) => {
+      const env = envs.find((e) => e.name === envName);
+      const verdict = verdictStatus(deployment);
+      return {
+        envName,
+        envId: env?.id ?? "",
+        release: env?.release ?? "",
+        tone: verdict.tone,
+        status: verdict.label,
+        url: workloadOpenUrl(deployment),
+        customDomain: workloadCustomDomain(deployment),
+        deployment,
+        ...siteStateOf(deployment),
+      };
+    });
+}
+
+/** The environment a site's page opens on: the scope's when the site runs there, else the first with a live custom domain, else the first. */
+export function defaultSiteEnv(sites: readonly SiteEnv[], scopeEnv: string): SiteEnv | null {
+  return sites.find((s) => s.envName === scopeEnv) ?? sites.find((s) => s.customDomain !== "") ?? sites[0] ?? null;
+}
+
+/** One row of a site's Domains section. */
+export interface SiteDomainRow extends SiteDomain {
+  /** Where it is in setup, or why it is stuck (DomainService's record); null when the badge says everything. */
+  statusLine: DomainStatusLine | null;
+}
+
+/**
+ * The custom domains a site answers on in one environment: GetStatus's (with
+ * where their DNS points), joined by hostname with the org's DomainService
+ * records bound to this site there. The org's state wins when both have one:
+ * it is re-read while a domain converges. Live first, then apex before
+ * subdomains, then by name.
+ */
+export function siteDomainRows(site: Pick<SiteEnv, "domains" | "envId">, name: string, orgDomains: readonly ForgeDomain[]): SiteDomainRow[] {
+  const rows = new Map<string, SiteDomainRow>();
+  for (const d of site.domains) rows.set(d.hostname, { ...d, statusLine: null });
+  for (const d of orgDomains) {
+    const hostname = d.hostname.trim().toLowerCase();
+    const bound = d.binding?.target === name && !!site.envId && d.binding.environmentId === site.envId;
+    const known = rows.get(hostname);
+    if (!bound && !known) continue;
+    rows.set(hostname, { hostname, state: d.state, servingPath: known?.servingPath ?? "unknown", statusLine: domainStatusLine(d) });
+  }
+  return [...rows.values()].sort(
+    (a, b) => Number(b.state === "live") - Number(a.state === "live") || a.hostname.split(".").length - b.hostname.split(".").length || a.hostname.localeCompare(b.hostname)
+  );
+}
+
+/** The artifact prefix a static site's release artifacts carry (`sites/<name>/<version>`). */
+export function siteArtifactPrefix(name: string): string {
+  return `sites/${name}/`;
+}
+
+/**
+ * Whether a promotion moved `name`: a scoped deploy names its targets, and
+ * (with `artifactPrefix`) a promotion that froze artifacts must have frozen
+ * one of it, by its name or under the prefix. A promotion that froze none (an
+ * older control plane) moved everything.
+ */
+export function promotionMoves(promotion: Pick<ReleasePromotion, "targets" | "resolvedArtifacts">, name: string, artifactPrefix?: string): boolean {
+  if (promotion.targets.length > 0 && !promotion.targets.includes(name)) return false;
+  if (!artifactPrefix) return true;
+  const artifacts = Object.keys(promotion.resolvedArtifacts ?? {});
+  return artifacts.length === 0 || artifacts.some((artifact) => artifact === name || artifact.startsWith(artifactPrefix));
 }
 
 /** Sum per-container series sharing timestamps into one (the workload's), by bucket. */
