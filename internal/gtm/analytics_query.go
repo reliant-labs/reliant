@@ -33,8 +33,13 @@ const (
 const (
 	// DefaultAnalyticsWindow is the window a query with no From covers.
 	DefaultAnalyticsWindow = 7 * 24 * time.Hour
-	// MaxAnalyticsWindow is the longest window any template reads.
+	// MaxAnalyticsWindow is the longest window a funnel reads (control
+	// plane's QueryPanel funnel cap).
 	MaxAnalyticsWindow = 90 * 24 * time.Hour
+	// MaxSQLAnalyticsWindow is the longest window the sql templates
+	// (event_counts, event_trend, property_breakdown) read: control plane's
+	// QueryPanel caps sql panels at 30 days.
+	MaxSQLAnalyticsWindow = 30 * 24 * time.Hour
 	// DefaultAnalyticsRows and MaxAnalyticsRows bound a result's rows.
 	DefaultAnalyticsRows = 50
 	MaxAnalyticsRows     = 200
@@ -64,7 +69,8 @@ type AnalyticsQuery struct {
 	Property string
 	// The window, half-open: From <= event time < To. A zero To is now, a
 	// zero From is To minus DefaultAnalyticsWindow; at most
-	// MaxAnalyticsWindow long.
+	// MaxSQLAnalyticsWindow long for the sql templates and
+	// MaxAnalyticsWindow for a funnel.
 	From time.Time
 	To   time.Time
 	// Limit caps the rows; 0 is DefaultAnalyticsRows, at most
@@ -125,8 +131,12 @@ func (q AnalyticsQuery) Validate() error {
 	if !q.From.Before(q.To) {
 		return invalid("window", "from must be before to")
 	}
-	if q.To.Sub(q.From) > MaxAnalyticsWindow {
-		return invalid("window", "at most 90 days")
+	maxWindow, maxWord := MaxSQLAnalyticsWindow, "30 days"
+	if q.Template == AnalyticsFunnel {
+		maxWindow, maxWord = MaxAnalyticsWindow, "90 days"
+	}
+	if q.To.Sub(q.From) > maxWindow {
+		return invalid("window", "at most "+maxWord+" for "+string(q.Template))
 	}
 	if q.Limit < 1 || q.Limit > MaxAnalyticsRows {
 		return invalid("limit", fmt.Sprintf("1 to %d", MaxAnalyticsRows))

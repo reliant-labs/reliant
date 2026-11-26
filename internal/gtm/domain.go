@@ -455,8 +455,11 @@ type ResolveInDoubtSendInput struct {
 	ItemID string
 	// ApprovalHash is the hold's: the card the in-doubt send ran under.
 	ApprovalHash string
-	// GmailMessageID, when set, is the message found in the sent mail, and
-	// the item is recorded SENT; nil releases the hold ("it did not go out").
+	// GmailMessageID, when set, is the message the person found in the sent
+	// mail, and the item is recorded SENT with it. It is the person's manual
+	// marker, stored as given: nothing checks it against Gmail. nil releases
+	// the hold ("it did not go out"), refused while the send may still be
+	// running, and voids every earlier approval card.
 	GmailMessageID *string
 }
 

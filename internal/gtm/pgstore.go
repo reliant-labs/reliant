@@ -4,7 +4,9 @@ package gtm
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
@@ -151,13 +153,37 @@ func (p pgStore) GetItem(ctx context.Context, orgID, id string) (*store.GtmItem,
 	return one(rows, err, "gtm item")
 }
 
-func (p pgStore) SetItemSendAttempt(ctx context.Context, orgID, id string, revision int32, from, to string) error {
-	n, err := store.UpdateGtmItemWhere(ctx, p.db, &store.GtmItem{ApprovalHash: to},
-		[]string{store.GtmItemFieldApprovalHash},
-		append(atRevision(orgID, id, revision),
-			orm.WhereEq(store.GtmItemFieldStatus, string(ItemApproved)),
-			orm.WhereEq(store.GtmItemFieldApprovalHash, from))...)
-	return updated(n, err, "set gtm item send attempt")
+// The hold writes are raw statements: they set updated_at to the hold's own
+// time (the generated UpdateWhere stamps the wall clock over it) and, for an
+// invalidating release, advance the revision in the same statement.
+
+func (p pgStore) HoldItemSend(ctx context.Context, orgID, id string, revision int32, hash string, at time.Time) error {
+	res, err := p.db.Exec(ctx, `UPDATE gtm_items SET approval_hash = $1, updated_at = $2
+		WHERE org_id = $3 AND id = $4 AND revision = $5 AND status = $6 AND approval_hash = ''`,
+		hash, at, orgID, id, revision, string(ItemApproved))
+	return execUpdated(res, err, "hold gtm item send")
+}
+
+func (p pgStore) ReleaseItemSend(ctx context.Context, orgID, id string, revision int32, hash string, at time.Time, invalidate bool) error {
+	bump := 0
+	if invalidate {
+		bump = 1
+	}
+	res, err := p.db.Exec(ctx, `UPDATE gtm_items SET approval_hash = '', revision = revision + $1, updated_at = $2
+		WHERE org_id = $3 AND id = $4 AND revision = $5 AND status = $6 AND approval_hash = $7`,
+		bump, at, orgID, id, revision, string(ItemApproved), hash)
+	return execUpdated(res, err, "release gtm item send")
+}
+
+func execUpdated(res sql.Result, err error, op string) error {
+	if err != nil {
+		return classify(err, op)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return updated(n, nil, op)
 }
 
 func (p pgStore) CreateItem(ctx context.Context, row *store.GtmItem) error {

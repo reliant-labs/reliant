@@ -52,11 +52,20 @@ type fixture struct {
 	store     *fakeStore
 	email     *MockEmail
 	analytics *MockAnalytics
+	// now is the service's clock; advance moves it.
+	now time.Time
 }
+
+// advance moves the service's clock on by d.
+func (f *fixture) advance(d time.Duration) { f.now = f.now.Add(d) }
+
+// pastInFlight moves the clock past the age a hold may still be in flight.
+func (f *fixture) pastInFlight() { f.advance(2*EmailSendTimeout + time.Second) }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{
+		now:   t0,
 		store: newFakeStore(),
 		email: &MockEmail{SendFunc: sendsAs("gmail-1")},
 		analytics: &MockAnalytics{QueryFunc: func(_ context.Context, _ string, q AnalyticsQuery) (AnalyticsResult, error) {
@@ -66,7 +75,7 @@ func newFixture(t *testing.T) *fixture {
 	f.svc = New(Deps{
 		Store:     f.store,
 		Gate:      allowGate(orgA, orgB),
-		Clock:     &MockClock{NowFunc: func() time.Time { return t0 }},
+		Clock:     &MockClock{NowFunc: func() time.Time { return f.now }},
 		Analytics: f.analytics,
 		Email:     f.email,
 	})
@@ -557,7 +566,10 @@ func TestReadProductAnalytics(t *testing.T) {
 		"breakdown without prop": {Template: AnalyticsPropertyBreakdown, Events: []string{"signup"}},
 		"property elsewhere":     {Template: AnalyticsEventCounts, Property: "plan"},
 		"one-step funnel":        {Template: AnalyticsFunnel, Events: []string{"a"}},
-		"window too long":        {Template: AnalyticsEventCounts, From: t0.Add(-91 * 24 * time.Hour), To: t0},
+		"sql window over 30d":    {Template: AnalyticsEventCounts, From: t0.Add(-31 * 24 * time.Hour), To: t0},
+		"trend window over 30d":  {Template: AnalyticsEventTrend, Events: []string{"a"}, From: t0.Add(-31 * 24 * time.Hour), To: t0},
+		"breakdown over 30d":     {Template: AnalyticsPropertyBreakdown, Events: []string{"a"}, Property: "p", From: t0.Add(-31 * 24 * time.Hour), To: t0},
+		"funnel window over 90d": {Template: AnalyticsFunnel, Events: []string{"a", "b"}, From: t0.Add(-91 * 24 * time.Hour), To: t0},
 		"too many rows":          {Template: AnalyticsEventCounts, Limit: MaxAnalyticsRows + 1},
 		"too many trend events":  {Template: AnalyticsEventTrend, Events: []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"}},
 	} {
@@ -571,6 +583,20 @@ func TestReadProductAnalytics(t *testing.T) {
 	_, err = New(Deps{Store: newFakeStore(), Gate: allowGate(orgA)}).ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventCounts})
 	require.ErrorIs(t, err, ErrAnalyticsUnavailable)
 
+	t.Run("sql templates read up to 30 days, a funnel up to 90", func(t *testing.T) {
+		f := newFixture(t)
+		for _, q := range []AnalyticsQuery{
+			{Template: AnalyticsEventCounts, From: t0.Add(-MaxSQLAnalyticsWindow), To: t0},
+			{Template: AnalyticsEventTrend, Events: []string{"a"}, From: t0.Add(-30 * 24 * time.Hour), To: t0},
+			{Template: AnalyticsPropertyBreakdown, Events: []string{"a"}, Property: "p", From: t0.Add(-30 * 24 * time.Hour), To: t0},
+			{Template: AnalyticsFunnel, Events: []string{"a", "b"}, From: t0.Add(-90 * 24 * time.Hour), To: t0},
+			{Template: AnalyticsFunnel, Events: []string{"a", "b"}, From: t0.Add(-45 * 24 * time.Hour), To: t0},
+		} {
+			_, err := f.svc.ReadProductAnalytics(ctx(), agent, q)
+			require.NoError(t, err, q.Template)
+		}
+		assert.Equal(t, 30*24*time.Hour, MaxSQLAnalyticsWindow)
+	})
 	t.Run("the client's error text never reaches the caller", func(t *testing.T) {
 		f := newFixture(t)
 		f.analytics.QueryFunc = func(context.Context, string, AnalyticsQuery) (AnalyticsResult, error) {
@@ -1061,7 +1087,8 @@ func TestSendItemEmail(t *testing.T) {
 		var doubt *SendInDoubtError
 		require.ErrorAs(t, err, &doubt)
 		assert.NotContains(t, err.Error(), "10.0.0.7", "the client's text never reaches the caller")
-		assert.Contains(t, err.Error(), "check the sent mail in Gmail, then resolve")
+		assert.True(t, doubt.MayBeInFlight, "a send that just failed may still land")
+		assert.Contains(t, err.Error(), "may still be in progress; wait a few minutes, then check the sent mail in Gmail and resolve")
 		assert.NotContains(t, err.Error(), "re-approve")
 
 		f.email.SendFunc = sendsAs("gmail-2")
@@ -1077,18 +1104,109 @@ func TestSendItemEmail(t *testing.T) {
 		_, err = f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: "other"})
 		require.ErrorIs(t, err, ErrApprovalMismatch)
 
+		// Too soon: the send may still be running.
+		_, err = f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: hash})
+		var flight *SendInFlightError
+		require.ErrorAs(t, err, &flight)
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		assert.True(t, flight.ReleasableAt.Equal(t0.Add(2*EmailSendTimeout)))
+
 		// "I checked Gmail; it did not go out."
+		f.pastInFlight()
+		_, err = f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.ErrorAs(t, err, &doubt)
+		assert.False(t, doubt.MayBeInFlight, "an old hold is no longer in flight")
+		assert.Contains(t, err.Error(), "was started and not recorded")
 		released, err := f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: hash})
 		require.NoError(t, err)
 		assert.Equal(t, ItemApproved, released.Status)
 		assert.Empty(t, released.ApprovalHash)
-		assert.Equal(t, it.Revision, released.Revision)
+		assert.Equal(t, it.Revision+1, released.Revision, "a release voids every earlier card")
 		_, err = f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: hash})
 		require.ErrorIs(t, err, ErrNotHeld)
 
 		got, err := f.svc.SendItemEmail(ctx(), agent, f.send(released))
 		require.NoError(t, err)
 		assert.Equal(t, "gmail-2", got.GmailMessageID)
+	})
+	t.Run("a release during the first send's flight never lets a second email out", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		hash := ApprovalHash(it)
+		var during []error
+		f.email.SendFunc = func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+			// A duplicate send while the first is in flight.
+			_, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+			during = append(during, err)
+			// A person releases the hold mid-flight.
+			_, err = f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: hash})
+			during = append(during, err)
+			// And the duplicate tries again.
+			_, err = f.svc.SendItemEmail(ctx(), agent, f.send(it))
+			during = append(during, err)
+			return "gmail-1", nil
+		}
+		got, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.NoError(t, err)
+		assert.Equal(t, ItemSent, got.Status)
+		require.Len(t, during, 3)
+		var doubt *SendInDoubtError
+		require.ErrorAs(t, during[0], &doubt)
+		assert.True(t, doubt.MayBeInFlight)
+		assert.Contains(t, during[0].Error(), "may still be in progress; wait a few minutes")
+		require.ErrorIs(t, during[1], ErrSendMayBeInFlight, "no release while the send may be running")
+		require.ErrorIs(t, during[2], ErrSendInDoubt)
+		assert.Equal(t, 1, f.email.CallCount("Send"), "exactly one Gmail send")
+	})
+	t.Run("even a release after the in-flight age leaves the in-flight card unable to resend", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		hash := ApprovalHash(it)
+		var during []error
+		f.email.SendFunc = func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+			f.pastInFlight() // a send stuck far past its timeout
+			_, err := f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: hash})
+			during = append(during, err)
+			_, err = f.svc.SendItemEmail(ctx(), agent, f.send(it))
+			during = append(during, err)
+			return "gmail-1", nil
+		}
+		_, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		var su *SentUnrecordedError
+		require.ErrorAs(t, err, &su, "its hold was released under it, so it is not recorded")
+		require.Len(t, during, 2)
+		require.NoError(t, during[0])
+		require.ErrorIs(t, during[1], ErrRevisionConflict, "the old card is void")
+		assert.Equal(t, 1, f.email.CallCount("Send"), "exactly one Gmail send")
+	})
+	t.Run("after a timed-out send and a release, only a new card sends", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		original := f.send(it)
+		f.email.SendFunc = func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+			return "", context.DeadlineExceeded
+		}
+		_, err := f.svc.SendItemEmail(ctx(), agent, original)
+		require.ErrorIs(t, err, ErrSendInDoubt)
+
+		f.pastInFlight()
+		released, err := f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: original.ApprovalHash})
+		require.NoError(t, err)
+
+		f.email.SendFunc = sendsAs("gmail-new")
+		_, err = f.svc.SendItemEmail(ctx(), agent, original)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, ErrRevisionConflict) || errors.Is(err, ErrApprovalMismatch), "the replayed card is refused: %v", err)
+		stale := original
+		stale.ExpectedRevision = released.Revision // the old hash at the new revision
+		_, err = f.svc.SendItemEmail(ctx(), agent, stale)
+		require.ErrorIs(t, err, ErrApprovalMismatch)
+		assert.Equal(t, 1, f.email.CallCount("Send"), "exactly one send before the new card")
+
+		got, err := f.svc.SendItemEmail(ctx(), agent, f.send(released))
+		require.NoError(t, err)
+		assert.Equal(t, "gmail-new", got.GmailMessageID)
+		assert.Equal(t, 2, f.email.CallCount("Send"))
 	})
 	t.Run("a person records an in-doubt send found in Gmail", func(t *testing.T) {
 		f := newFixture(t)

@@ -97,8 +97,11 @@ type Service interface {
 	SendItemEmail(ctx context.Context, actor Actor, in SendItemEmailInput) (Item, error)
 	// ResolveInDoubtSend settles a held item: a person's call, after checking
 	// the sent mail in Gmail. The approval hash must be the hold's. With a
-	// Gmail message id it records the item SENT; without one it releases the
-	// hold (the email did not go out). An item that is not held is ErrNotHeld.
+	// Gmail message id (the person's manual marker, stored unchecked) it
+	// records the item SENT. Without one it releases the hold (the email did
+	// not go out): refused (*SendInFlightError) while the hold is younger than
+	// twice EmailSendTimeout, and it advances the revision so every earlier
+	// approval card is void. An item that is not held is ErrNotHeld.
 	ResolveInDoubtSend(ctx context.Context, actor Actor, in ResolveInDoubtSendInput) (Item, error)
 
 	// GetPositioning returns the org's positioning; revision 0 when it has none.
@@ -206,12 +209,17 @@ type Store interface {
 	ListItems(ctx context.Context, f ItemFilter) ([]*store.GtmItem, error)
 	// GetItem returns orgID's item id.
 	GetItem(ctx context.Context, orgID, id string) (*store.GtmItem, error)
-	// SetItemSendAttempt moves an APPROVED item's approval_hash from `from`
-	// to `to` where it is at revision, WITHOUT advancing the revision (the
-	// approval card's hash covers it). A non-empty approval_hash on an item
-	// that is not SENT marks a send in flight or in doubt. A row not in that
-	// state is ErrRevisionConflict.
-	SetItemSendAttempt(ctx context.Context, orgID, id string, revision int32, from, to string) error
+	// HoldItemSend puts a send hold on an APPROVED, unheld item at revision:
+	// approval_hash = hash and updated_at = at (the hold's time), WITHOUT
+	// advancing the revision (the approval card's hash covers it). A
+	// non-empty approval_hash on an item that is not SENT is a send in flight
+	// or in doubt. A row not in that state is ErrRevisionConflict.
+	HoldItemSend(ctx context.Context, orgID, id string, revision int32, hash string, at time.Time) error
+	// ReleaseItemSend lifts the hold `hash` from an APPROVED item at
+	// revision: approval_hash = '' and updated_at = at. With invalidate it
+	// also advances the revision, so every card issued before stops
+	// matching ApprovalHash. A row not in that state is ErrRevisionConflict.
+	ReleaseItemSend(ctx context.Context, orgID, id string, revision int32, hash string, at time.Time, invalidate bool) error
 	// CreateItem inserts row, assigning its ID when empty.
 	CreateItem(ctx context.Context, row *store.GtmItem) error
 	// UpdateItem is UpdateIdea for an item.

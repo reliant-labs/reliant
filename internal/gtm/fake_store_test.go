@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -178,12 +179,24 @@ func (f *fakeStore) GetItem(_ context.Context, orgID, id string) (*store.GtmItem
 	return &c, nil
 }
 
-func (f *fakeStore) SetItemSendAttempt(_ context.Context, orgID, id string, revision int32, from, to string) error {
+func (f *fakeStore) HoldItemSend(_ context.Context, orgID, id string, revision int32, hash string, at time.Time) error {
 	r, ok := f.items[id]
-	if !ok || r.OrgID != orgID || r.Revision != revision || r.Status != string(ItemApproved) || r.ApprovalHash != from {
+	if !ok || r.OrgID != orgID || r.Revision != revision || r.Status != string(ItemApproved) || r.ApprovalHash != "" {
 		return ErrRevisionConflict
 	}
-	r.ApprovalHash = to
+	r.ApprovalHash, r.UpdatedAt = hash, at
+	return nil
+}
+
+func (f *fakeStore) ReleaseItemSend(_ context.Context, orgID, id string, revision int32, hash string, at time.Time, invalidate bool) error {
+	r, ok := f.items[id]
+	if !ok || r.OrgID != orgID || r.Revision != revision || r.Status != string(ItemApproved) || r.ApprovalHash != hash {
+		return ErrRevisionConflict
+	}
+	r.ApprovalHash, r.UpdatedAt = "", at
+	if invalidate {
+		r.Revision++
+	}
 	return nil
 }
 

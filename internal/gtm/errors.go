@@ -4,6 +4,7 @@ package gtm
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
@@ -44,6 +45,11 @@ var (
 	// the sent mail in Gmail and calls ResolveInDoubtSend. Not retryable.
 	// *SendInDoubtError names the item.
 	ErrSendInDoubt = svcerr.FailedPrecondition("a send of this item was started and not recorded; check the sent mail in Gmail, then resolve the send")
+
+	// ErrSendMayBeInFlight is a release of a hold whose send may still be
+	// running (FailedPrecondition): under twice EmailSendTimeout old.
+	// *SendInFlightError says when it may be released.
+	ErrSendMayBeInFlight = svcerr.FailedPrecondition("a send of this item may still be in progress; wait a few minutes, then check the sent mail in Gmail")
 
 	// ErrNotHeld is ResolveInDoubtSend on an item with no send in doubt
 	// (FailedPrecondition).
@@ -110,15 +116,40 @@ func (e *RevisionConflictError) Unwrap() error { return ErrRevisionConflict }
 // ErrSendInDoubt.
 type SendInDoubtError struct {
 	ItemID string
+	// MayBeInFlight is true while the hold is young enough (under twice
+	// EmailSendTimeout) that its send may still be running.
+	MayBeInFlight bool
 }
 
 // Error implements error.
 func (e *SendInDoubtError) Error() string {
+	if e.MayBeInFlight {
+		return fmt.Sprintf("a send of item %s may still be in progress; wait a few minutes, then check the sent mail in Gmail and resolve the send", e.ItemID)
+	}
 	return fmt.Sprintf("a send of item %s was started and not recorded; check the sent mail in Gmail, then resolve the send", e.ItemID)
 }
 
 // Unwrap returns ErrSendInDoubt.
 func (e *SendInDoubtError) Unwrap() error { return ErrSendInDoubt }
+
+// SendInFlightError is a release (ResolveInDoubtSend with no Gmail id) of a
+// hold whose send may still be running. It is ErrSendMayBeInFlight.
+type SendInFlightError struct {
+	ItemID string
+	// HeldSince is when the send took the hold; ReleasableAt is when the
+	// hold may be released.
+	HeldSince    time.Time
+	ReleasableAt time.Time
+}
+
+// Error implements error.
+func (e *SendInFlightError) Error() string {
+	return fmt.Sprintf("a send of item %s may still be in progress; wait until %s, then check the sent mail in Gmail before releasing it",
+		e.ItemID, e.ReleasableAt.UTC().Format(time.RFC3339))
+}
+
+// Unwrap returns ErrSendMayBeInFlight.
+func (e *SendInFlightError) Unwrap() error { return ErrSendMayBeInFlight }
 
 // SentUnrecordedError is an email Gmail accepted whose SENT record did not
 // save. It is ErrSentUnrecorded and nothing else: the record's failure is

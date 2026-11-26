@@ -358,7 +358,7 @@ func (m *MockEmail) Send(ctx context.Context, actor Actor, run EmailRun, msg Ema
 var _ Email = (*MockEmail)(nil)
 
 // forge:section MockStore
-// forge:hash=fcf578be1e87e45376c23b97625dfb16be57c39a311891640a246292c5777222
+// forge:hash=a2c86b5c5872dd1a740b0ececd5671153fe67ce64751b45ed3c071f42808ce34
 
 // MockStore is a test mock for the Store interface.
 //
@@ -368,27 +368,28 @@ var _ Email = (*MockEmail)(nil)
 // "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
-	InTxFunc               func(context.Context, func(ctx context.Context) error) error
-	ListIdeasFunc          func(context.Context, IdeaFilter) ([]*store.GtmIdea, error)
-	GetIdeaFunc            func(context.Context, string, string) (*store.GtmIdea, error)
-	CreateIdeaFunc         func(context.Context, *store.GtmIdea) error
-	UpdateIdeaFunc         func(context.Context, *store.GtmIdea, int32) error
-	ListCampaignsFunc      func(context.Context, CampaignFilter) ([]*store.GtmCampaign, error)
-	GetCampaignFunc        func(context.Context, string, string) (*store.GtmCampaign, error)
-	CreateCampaignFunc     func(context.Context, *store.GtmCampaign) error
-	UpdateCampaignFunc     func(context.Context, *store.GtmCampaign, int32) error
-	ListItemsFunc          func(context.Context, ItemFilter) ([]*store.GtmItem, error)
-	GetItemFunc            func(context.Context, string, string) (*store.GtmItem, error)
-	SetItemSendAttemptFunc func(context.Context, string, string, int32, string, string) error
-	CreateItemFunc         func(context.Context, *store.GtmItem) error
-	UpdateItemFunc         func(context.Context, *store.GtmItem, int32) error
-	GetPositioningFunc     func(context.Context, string) (*store.GtmPositioning, error)
-	CreatePositioningFunc  func(context.Context, *store.GtmPositioning) error
-	UpdatePositioningFunc  func(context.Context, *store.GtmPositioning, int32) error
-	ListClaimsFunc         func(context.Context, ClaimFilter) ([]*store.GtmClaim, error)
-	GetClaimFunc           func(context.Context, string, string) (*store.GtmClaim, error)
-	CreateClaimFunc        func(context.Context, *store.GtmClaim) error
-	UpdateClaimFunc        func(context.Context, *store.GtmClaim, int32) error
+	InTxFunc              func(context.Context, func(ctx context.Context) error) error
+	ListIdeasFunc         func(context.Context, IdeaFilter) ([]*store.GtmIdea, error)
+	GetIdeaFunc           func(context.Context, string, string) (*store.GtmIdea, error)
+	CreateIdeaFunc        func(context.Context, *store.GtmIdea) error
+	UpdateIdeaFunc        func(context.Context, *store.GtmIdea, int32) error
+	ListCampaignsFunc     func(context.Context, CampaignFilter) ([]*store.GtmCampaign, error)
+	GetCampaignFunc       func(context.Context, string, string) (*store.GtmCampaign, error)
+	CreateCampaignFunc    func(context.Context, *store.GtmCampaign) error
+	UpdateCampaignFunc    func(context.Context, *store.GtmCampaign, int32) error
+	ListItemsFunc         func(context.Context, ItemFilter) ([]*store.GtmItem, error)
+	GetItemFunc           func(context.Context, string, string) (*store.GtmItem, error)
+	HoldItemSendFunc      func(context.Context, string, string, int32, string, time.Time) error
+	ReleaseItemSendFunc   func(context.Context, string, string, int32, string, time.Time, bool) error
+	CreateItemFunc        func(context.Context, *store.GtmItem) error
+	UpdateItemFunc        func(context.Context, *store.GtmItem, int32) error
+	GetPositioningFunc    func(context.Context, string) (*store.GtmPositioning, error)
+	CreatePositioningFunc func(context.Context, *store.GtmPositioning) error
+	UpdatePositioningFunc func(context.Context, *store.GtmPositioning, int32) error
+	ListClaimsFunc        func(context.Context, ClaimFilter) ([]*store.GtmClaim, error)
+	GetClaimFunc          func(context.Context, string, string) (*store.GtmClaim, error)
+	CreateClaimFunc       func(context.Context, *store.GtmClaim) error
+	UpdateClaimFunc       func(context.Context, *store.GtmClaim, int32) error
 }
 
 // InTx records the call and delegates to InTxFunc when set.
@@ -490,13 +491,22 @@ func (m *MockStore) GetItem(ctx context.Context, orgID string, id string) (*stor
 	return nil, contractkit.MockNotSet("MockStore", "GetItem")
 }
 
-// SetItemSendAttempt records the call and delegates to SetItemSendAttemptFunc when set.
-func (m *MockStore) SetItemSendAttempt(ctx context.Context, orgID string, id string, revision int32, from string, to string) error {
-	m.Recorder.Record("SetItemSendAttempt", ctx, orgID, id, revision, from, to)
-	if m.SetItemSendAttemptFunc != nil {
-		return m.SetItemSendAttemptFunc(ctx, orgID, id, revision, from, to)
+// HoldItemSend records the call and delegates to HoldItemSendFunc when set.
+func (m *MockStore) HoldItemSend(ctx context.Context, orgID string, id string, revision int32, hash string, at time.Time) error {
+	m.Recorder.Record("HoldItemSend", ctx, orgID, id, revision, hash, at)
+	if m.HoldItemSendFunc != nil {
+		return m.HoldItemSendFunc(ctx, orgID, id, revision, hash, at)
 	}
-	return contractkit.MockNotSet("MockStore", "SetItemSendAttempt")
+	return contractkit.MockNotSet("MockStore", "HoldItemSend")
+}
+
+// ReleaseItemSend records the call and delegates to ReleaseItemSendFunc when set.
+func (m *MockStore) ReleaseItemSend(ctx context.Context, orgID string, id string, revision int32, hash string, at time.Time, invalidate bool) error {
+	m.Recorder.Record("ReleaseItemSend", ctx, orgID, id, revision, hash, at, invalidate)
+	if m.ReleaseItemSendFunc != nil {
+		return m.ReleaseItemSendFunc(ctx, orgID, id, revision, hash, at, invalidate)
+	}
+	return contractkit.MockNotSet("MockStore", "ReleaseItemSend")
 }
 
 // CreateItem records the call and delegates to CreateItemFunc when set.

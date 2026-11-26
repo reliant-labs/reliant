@@ -158,7 +158,7 @@ func (s *service) UpdateItem(ctx context.Context, actor Actor, in UpdateItemInpu
 		// person too: changing it mid-send would let a second send out. Only
 		// ResolveInDoubtSend lifts the hold.
 		if held(row) {
-			return &SendInDoubtError{ItemID: row.ID}
+			return s.inDoubt(row)
 		}
 		if row.Revision != in.ExpectedRevision {
 			return conflict(in.ID, in.ExpectedRevision, row.Revision)

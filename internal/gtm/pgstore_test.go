@@ -84,7 +84,7 @@ func TestPGStore(t *testing.T) {
 		require.ErrorIs(t, st.UpdateIdea(ctx, &other, 2), ErrRevisionConflict, "another org's write matches no row")
 	})
 
-	t.Run("a send hold moves only from the hash it names, on an approved row, at its revision", func(t *testing.T) {
+	t.Run("a send hold is taken only when empty and released only by its hash, on an approved row, at its revision", func(t *testing.T) {
 		row := &store.GtmItem{
 			OrgID: orgA, Kind: string(ItemEmail), Title: "Mail", Status: string(ItemApproved),
 			EmailTo: []string{"a@example.com"}, EmailSubject: "S", Revision: 1, CreatedAt: now, UpdatedAt: now,
@@ -94,20 +94,34 @@ func TestPGStore(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{"a@example.com"}, got.EmailTo, "the app role reads the forge:secret email_to")
 
-		require.ErrorIs(t, st.SetItemSendAttempt(ctx, orgA, row.ID, 1, "not-empty", "h1"), ErrRevisionConflict, "from must match")
-		require.ErrorIs(t, st.SetItemSendAttempt(ctx, orgA, row.ID, 2, "", "h1"), ErrRevisionConflict, "revision must match")
-		require.ErrorIs(t, st.SetItemSendAttempt(ctx, orgB, row.ID, 1, "", "h1"), ErrRevisionConflict, "org must match")
-		require.NoError(t, st.SetItemSendAttempt(ctx, orgA, row.ID, 1, "", "h1"))
-		require.ErrorIs(t, st.SetItemSendAttempt(ctx, orgA, row.ID, 1, "", "h2"), ErrRevisionConflict, "a second hold loses")
+		heldAt := now.Add(-time.Hour)
+		require.ErrorIs(t, st.HoldItemSend(ctx, orgA, row.ID, 2, "h1", heldAt), ErrRevisionConflict, "revision must match")
+		require.ErrorIs(t, st.HoldItemSend(ctx, orgB, row.ID, 1, "h1", heldAt), ErrRevisionConflict, "org must match")
+		require.NoError(t, st.HoldItemSend(ctx, orgA, row.ID, 1, "h1", heldAt))
+		require.ErrorIs(t, st.HoldItemSend(ctx, orgA, row.ID, 1, "h2", heldAt), ErrRevisionConflict, "a second hold loses: approval_hash must be empty")
 		got, err = st.GetItem(ctx, orgA, row.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "h1", got.ApprovalHash)
 		assert.Equal(t, int32(1), got.Revision, "a hold never moves the revision")
-		require.NoError(t, st.SetItemSendAttempt(ctx, orgA, row.ID, 1, "h1", ""))
+		assert.True(t, got.UpdatedAt.Equal(heldAt), "the hold is stamped with its own time: %s", got.UpdatedAt)
+
+		require.ErrorIs(t, st.ReleaseItemSend(ctx, orgA, row.ID, 1, "h2", now, true), ErrRevisionConflict, "approval_hash = the hold's hash")
+		require.ErrorIs(t, st.ReleaseItemSend(ctx, orgA, row.ID, 2, "h1", now, true), ErrRevisionConflict, "revision must match")
+		require.NoError(t, st.ReleaseItemSend(ctx, orgA, row.ID, 1, "h1", now, true))
+		got, err = st.GetItem(ctx, orgA, row.ID)
+		require.NoError(t, err)
+		assert.Empty(t, got.ApprovalHash)
+		assert.Equal(t, int32(2), got.Revision, "an invalidating release moves the revision")
+
+		require.NoError(t, st.HoldItemSend(ctx, orgA, row.ID, 2, "h3", now))
+		require.NoError(t, st.ReleaseItemSend(ctx, orgA, row.ID, 2, "h3", now, false))
+		got, err = st.GetItem(ctx, orgA, row.ID)
+		require.NoError(t, err)
+		assert.Equal(t, int32(2), got.Revision, "a plain release does not")
 
 		draft := &store.GtmItem{OrgID: orgA, Kind: string(ItemEmail), Title: "D", Status: string(ItemDraft), Revision: 1, CreatedAt: now, UpdatedAt: now}
 		require.NoError(t, st.CreateItem(ctx, draft))
-		require.ErrorIs(t, st.SetItemSendAttempt(ctx, orgA, draft.ID, 1, "", "h"), ErrRevisionConflict, "only an approved row is held")
+		require.ErrorIs(t, st.HoldItemSend(ctx, orgA, draft.ID, 1, "h", now), ErrRevisionConflict, "only an approved row is held")
 	})
 
 	t.Run("an email is never scheduled or published, at the table too", func(t *testing.T) {
