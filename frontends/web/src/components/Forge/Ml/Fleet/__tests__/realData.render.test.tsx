@@ -67,10 +67,10 @@ function transportFor(answer: Answer): Transport {
       getMyOrgEntitlements: () => ({ features: [{ feature: "ml", enabled: true }] }),
     });
     service(MlEarlyAccessService, {
-      getMlFleet: or(() => fromJson(GetMlFleetResponseSchema, answer === "stale" ? staleFleet() : (fleetJson as JsonValue)), () => ({})),
-      getMlNode: or(() => fromJson(GetMlNodeResponseSchema, nodeJson as JsonValue), () => ({})),
-      getMlDevice: or(() => fromJson(GetMlDeviceResponseSchema, deviceJson as JsonValue), () => ({})),
-      getMlStack: or(() => fromJson(GetMlStackResponseSchema, stackJson as JsonValue), () => ({})),
+      getMlFleet: or(() => fromJson(GetMlFleetResponseSchema, answer === "stale" ? staleFleet() : (fleetJson as unknown as JsonValue)), () => ({})),
+      getMlNode: or(() => fromJson(GetMlNodeResponseSchema, nodeJson as unknown as JsonValue), () => ({})),
+      getMlDevice: or(() => fromJson(GetMlDeviceResponseSchema, deviceJson as unknown as JsonValue), () => ({})),
+      getMlStack: or(() => fromJson(GetMlStackResponseSchema, stackJson as unknown as JsonValue), () => ({})),
     });
   });
 }
