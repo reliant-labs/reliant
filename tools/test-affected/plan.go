@@ -248,6 +248,9 @@ type classifier struct {
 	full map[lane][]string
 	// buildAll is set by a deleted Go package (buildsModule).
 	buildAll bool
+	// forgePin is set when a pin file's Go lane narrowed to the forge
+	// packages that changed (Graph.ForgePin).
+	forgePin bool
 
 	code     *reasons // package whose built code changed: fans out to importers' tests
 	embed    *reasons // package whose embedded file changed: fans out like code
@@ -638,6 +641,16 @@ func (c *classifier) attributeToPackage(ch Change, isGo bool, rep *FileReport) b
 func (c *classifier) applyRule(ch Change, r *rule, rep *FileReport) bool {
 	claimed := false
 	for _, l := range r.full {
+		if l == laneGo && r.forgePin && isPinFile(ch.Path) && c.g.ForgePin != nil {
+			fp := c.g.ForgePin
+			if fp.Narrows() {
+				c.forgePin = true
+				rep.Note = fmt.Sprintf("forge pin move only (forge %s..%s): Go runs what the %d changed forge package(s) reach", fp.From, fp.To, len(fp.Changed))
+				continue
+			}
+			c.full[l] = append(c.full[l], fmt.Sprintf("%s: %s; not only a forge pin move: %s", ch.Path, r.reason, fp.NotNarrowed))
+			continue
+		}
 		c.full[l] = append(c.full[l], fmt.Sprintf("%s: %s", ch.Path, r.reason))
 	}
 	if r.dbFan {
@@ -760,6 +773,14 @@ func (c *classifier) attributeToReaders(ch Change) {
 
 func (c *classifier) selectGo() {
 	g := c.g
+	if c.forgePin {
+		// A changed forge package is a code change, of a package outside
+		// the module: what contains it (or imports it, under -reach
+		// direct) runs, and what builds it compiles.
+		for _, p := range sortedKeys(g.ForgePin.Changed) {
+			c.code.add(p, g.ForgePin.Changed[p])
+		}
+	}
 	if c.anyGo {
 		for _, w := range sortedKeys(g.Walkers) {
 			c.testOnly.add(w, "walks every Go file of the module")

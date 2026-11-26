@@ -115,6 +115,7 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.FileSystemService/CopyFile":                    AsOutsider,
 	"reliant.v1.FileSystemService/CreateFileOrFolder":          AsOutsider,
 	"reliant.v1.FileSystemService/DeleteFileOrFolder":          AsOutsider,
+	"reliant.v1.FileSystemService/DownloadFile":                AsOutsider,
 	"reliant.v1.FileSystemService/GetFileContent":              AsOutsider,
 	"reliant.v1.FileSystemService/GetFileMetadata":             AsOutsider,
 	"reliant.v1.FileSystemService/GetFilePreview":              AsOutsider,

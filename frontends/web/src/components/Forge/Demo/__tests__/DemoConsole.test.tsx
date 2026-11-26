@@ -262,10 +262,10 @@ describe("the forge demo console", () => {
       expect(within(crumbs).queryByText("Overview")).toBeNull();
     }, 30_000);
 
-    it("orders the environments dev, staging, prod, then All", async () => {
+    it("orders the environments as the app does: prod, dev, staging, then All", async () => {
       renderDemo("/forge/demo?view=overview");
       const scope = await screen.findByTestId("env-scope", {}, { timeout: 15_000 });
-      expect(within(scope).getAllByRole("button").map((b) => b.textContent)).toEqual(["dev", "staging", "prod", "All"]);
+      expect(within(scope).getAllByRole("button").map((b) => b.textContent)).toEqual(["prod", "dev", "staging", "All"]);
     }, 30_000);
   });
 });

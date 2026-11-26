@@ -85,7 +85,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 
 	// The real service, over the real schedule and workflow clients.
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend})))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -135,7 +135,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	var launched *core.TriggerEvent
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(ctx, triggerID, &launchedOutcome)
+		ev, err := store.GetLatestTriggerEvent(ctx, repo.ORM(), triggerID, &launchedOutcome)
 		if err == nil && ev != nil {
 			launched = ev
 			break
@@ -248,7 +248,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend})))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -291,7 +291,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 	var launched *core.TriggerEvent
 	deadline := time.Now().Add(75 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(ctx, triggerID, &launchedOutcome)
+		ev, err := store.GetLatestTriggerEvent(ctx, repo.ORM(), triggerID, &launchedOutcome)
 		if err == nil && ev != nil {
 			launched = ev
 			break
@@ -337,7 +337,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	defer w.Stop()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend})))
 
 	userID := uuid.NewString()
 	projectID := uuid.NewString()
@@ -384,7 +384,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 	var launched *core.TriggerEvent
 	deadline := time.Now().Add(90 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(ctx, triggerID, &launchedOutcome)
+		ev, err := store.GetLatestTriggerEvent(ctx, repo.ORM(), triggerID, &launchedOutcome)
 		if err == nil && ev != nil {
 			launched = ev
 			break

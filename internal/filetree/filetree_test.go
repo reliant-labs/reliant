@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -226,6 +227,105 @@ func TestWalk_NodeBudget(t *testing.T) {
 		}
 		if res.NodeCount > MaxTreeNodes {
 			t.Errorf("NodeCount %d exceeded MaxTreeNodes %d", res.NodeCount, MaxTreeNodes)
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// deadline
+// ---------------------------------------------------------------------------
+
+// stubClock makes the walk's clock read before the deadline for the first
+// `inTime` reads and after it from then on. Not parallel-safe: it replaces the
+// package clock for the test's duration.
+func stubClock(t *testing.T, deadline time.Time, inTime int) {
+	t.Helper()
+	reads := 0
+	now = func() time.Time {
+		reads++
+		if reads <= inTime {
+			return deadline.Add(-time.Second)
+		}
+		return deadline
+	}
+	t.Cleanup(func() { now = time.Now })
+}
+
+func TestWalk_Deadline(t *testing.T) {
+	t.Run("past the deadline the root is listed and nothing below it is read", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "top.txt"), "x")
+		write(t, filepath.Join(root, "a", "x.txt"), "x")
+		mkdir(t, filepath.Join(root, "empty"))
+
+		res, err := Walk(Options{Root: root, Depth: MaxDepth, Deadline: time.Unix(1, 0)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := names(res.Nodes); !slices.Equal(got, []string{"a", "empty", "top.txt"}) {
+			t.Fatalf("root = %v, want the whole root listing even out of time", got)
+		}
+		if !res.Truncated {
+			t.Error("a walk the deadline cut short must report truncation")
+		}
+		if res.NodeCount != 3 {
+			t.Errorf("NodeCount = %d, want 3 (the root's entries only)", res.NodeCount)
+		}
+		for _, name := range []string{"a", "empty"} {
+			d := find(res.Nodes, name)
+			if d.Children != nil || !d.HasChildren {
+				t.Errorf("%s: children=%v has_children=%v, want unread and expandable", name, names(d.Children), d.HasChildren)
+			}
+		}
+	})
+
+	t.Run("a directory entered in time is listed in full, later ones are left unread", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "a", "x.txt"), "x")
+		write(t, filepath.Join(root, "a", "inner", "deep.txt"), "x")
+		write(t, filepath.Join(root, "b", "y.txt"), "y")
+
+		deadline := time.Unix(1000, 0)
+		stubClock(t, deadline, 4) // root pre/post read, then "a" dispatch/pre-read
+
+		res, err := Walk(Options{Root: root, Depth: MaxDepth, Deadline: deadline})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !res.Truncated {
+			t.Error("a walk the deadline cut short must report truncation")
+		}
+		a := find(res.Nodes, "a")
+		if got := names(a.Children); !slices.Equal(got, []string{"inner", "x.txt"}) {
+			t.Fatalf("a = %v, want its full listing: it was entered before the deadline", got)
+		}
+		if inner := find(a.Children, "inner"); inner.Children != nil || !inner.HasChildren {
+			t.Errorf("a/inner: children=%v has_children=%v, want unread and expandable", names(inner.Children), inner.HasChildren)
+		}
+		if b := find(res.Nodes, "b"); b.Children != nil || !b.HasChildren {
+			t.Errorf("b: children=%v has_children=%v, want unread and expandable", names(b.Children), b.HasChildren)
+		}
+	})
+
+	t.Run("a walk that finishes in time is untouched", func(t *testing.T) {
+		root := t.TempDir()
+		write(t, filepath.Join(root, "a", "x.txt"), "x")
+		mkdir(t, filepath.Join(root, "empty"))
+
+		deadline := time.Unix(1000, 0)
+		stubClock(t, deadline, 100)
+		res, err := Walk(Options{Root: root, Depth: MaxDepth, Deadline: deadline})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.Truncated {
+			t.Error("a walk inside its deadline must not report truncation")
+		}
+		if got := names(find(res.Nodes, "a").Children); !slices.Equal(got, []string{"x.txt"}) {
+			t.Errorf("a = %v, want [x.txt]", got)
+		}
+		if find(res.Nodes, "empty").HasChildren {
+			t.Error("an empty directory read in time must not offer a chevron")
 		}
 	})
 }

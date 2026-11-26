@@ -6,14 +6,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/catalogcache"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -57,21 +58,31 @@ type copilotModelsResponse struct {
 // per LLM call. While it holds, resolution fails open (every model servable).
 const availabilityFailureTTL = 30 * time.Second
 
-// availabilityFetchTimeout caps the cache-miss fetch on the resolution path.
+// availabilityFetchTimeout caps each /models fetch.
 const availabilityFetchTimeout = 4 * time.Second
 
-type availabilityEntry struct {
+// availabilityMaxStale is how long a report past its TTL is still served while
+// a background fetch replaces it (catalogcache). Every stale answer triggers
+// the refresh, so it serves one resolution at most.
+const availabilityMaxStale = 6 * time.Hour
+
+// accountCatalog is one account's GET /models, as resolution reads it.
+type accountCatalog struct {
 	enabled   map[string]bool     // api_model id -> enabled
 	limits    map[string]int      // api_model id -> max prompt tokens, when reported
 	endpoints map[string][]string // api_model id -> supported_endpoints, when reported
-	err       error               // non-nil: a remembered failed fetch
-	fetchedAt time.Time
 }
 
-var (
-	availabilityMu    sync.Mutex
-	availabilityCache = map[string]availabilityEntry{}
-)
+// availabilityCache holds each account's catalog, stale-while-revalidate:
+// resolution reads it on the request path, so a due report is served and
+// replaced in the background rather than waited for.
+var availabilityCache = catalogcache.New[accountCatalog](catalogcache.Policy{
+	TTL:        availabilityTTL,
+	MaxStale:   availabilityMaxStale,
+	FailureTTL: availabilityFailureTTL,
+	Timeout:    availabilityFetchTimeout,
+	Verdict:    func(err error) bool { return errors.Is(err, registry.ErrCredentialRejected) },
+})
 
 // tokenKey derives a stable, non-reversible cache key from the GitHub token so
 // the raw token is not used as a map key.
@@ -91,40 +102,21 @@ func EnabledModels(ctx context.Context, githubToken string) (map[string]bool, er
 	return entry.enabled, nil
 }
 
-// accountModels returns the cached per-account /models view, fetching on a
-// miss. A failed fetch is cached for availabilityFailureTTL and returned as an
-// error each time it is read, so callers decide whether to fail open.
-func accountModels(ctx context.Context, githubToken string) (availabilityEntry, error) {
+// accountModels returns the account's cached /models view (see
+// availabilityCache). A failed fetch is returned as an error, unless an outage
+// hides behind the last good view, so callers decide whether to fail open.
+func accountModels(ctx context.Context, githubToken string) (accountCatalog, error) {
 	githubToken = strings.TrimSpace(githubToken)
 	if githubToken == "" {
-		return availabilityEntry{}, fmt.Errorf("github token is required to query copilot model availability")
+		return accountCatalog{}, fmt.Errorf("github token is required to query copilot model availability")
 	}
-
-	key := tokenKey(githubToken)
-
-	availabilityMu.Lock()
-	if entry, ok := availabilityCache[key]; ok {
-		ttl := availabilityTTL
-		if entry.err != nil {
-			ttl = availabilityFailureTTL
+	return availabilityCache.Get(ctx, tokenKey(githubToken), func(ctx context.Context) (accountCatalog, error) {
+		enabled, limits, endpoints, err := fetchEnabledModels(ctx, githubToken)
+		if err != nil {
+			return accountCatalog{}, err
 		}
-		if time.Since(entry.fetchedAt) < ttl {
-			availabilityMu.Unlock()
-			return entry, entry.err
-		}
-	}
-	availabilityMu.Unlock()
-
-	fetchCtx, cancel := context.WithTimeout(ctx, availabilityFetchTimeout)
-	defer cancel()
-	enabled, limits, endpoints, err := fetchEnabledModels(fetchCtx, githubToken)
-	entry := availabilityEntry{enabled: enabled, limits: limits, endpoints: endpoints, err: err, fetchedAt: time.Now()}
-
-	availabilityMu.Lock()
-	availabilityCache[key] = entry
-	availabilityMu.Unlock()
-
-	return entry, err
+		return accountCatalog{enabled: enabled, limits: limits, endpoints: endpoints}, nil
+	})
 }
 
 // IsModelEnabled reports whether the given Copilot api_model is enabled for the
@@ -227,23 +219,18 @@ func parseModels(body []byte) (map[string]bool, map[string]int, map[string][]str
 // a Copilot (re)connect so a freshly-authorized account is re-queried on the
 // next picker load rather than waiting out the TTL.
 func EvictAvailabilityCache(githubToken string) {
-	key := tokenKey(githubToken)
-	availabilityMu.Lock()
-	delete(availabilityCache, key)
-	availabilityMu.Unlock()
+	availabilityCache.Evict(tokenKey(githubToken))
 	logging.Debug("copilot availability cache evicted")
 }
 
 // cachedEndpoints returns the account's supported_endpoints for an api_model from
 // the availability cache WITHOUT fetching: resolution has already warmed it
 // (accountAvailability), and client construction must not add a network call.
-// nil means unknown (cold cache, failed fetch, or model not listed).
+// nil means unknown (cold cache, refused credential, or model not listed).
 func cachedEndpoints(githubToken, apiModel string) []string {
-	availabilityMu.Lock()
-	defer availabilityMu.Unlock()
-	entry, ok := availabilityCache[tokenKey(githubToken)]
-	if !ok || entry.err != nil {
+	catalog, ok := availabilityCache.Peek(tokenKey(githubToken))
+	if !ok {
 		return nil
 	}
-	return entry.endpoints[strings.TrimSpace(apiModel)]
+	return catalog.endpoints[strings.TrimSpace(apiModel)]
 }

@@ -5,18 +5,59 @@
  * projects (or all of them), Services and Storage list every project's rows
  * in one table with a Project column, narrowed by an in-page project filter
  * kept in the URL (`?only=<app>`), so Back, refresh and a shared link keep it.
- * Pages that are one project's by nature (Releases, Environments, Secrets,
- * Domains, the telemetry explorers) keep the in-page picker in the frame's
- * header (Layout/sidebar/AppPageProjectPicker.tsx) instead.
+ *
+ * No page asks the reader to pick one project instead (owner, 2026-11-25):
+ * every console page shows every project in scope, in one of three ways
+ * (severalModeOf):
+ *
+ *   self      the page aggregates itself: the Overview (ProjectsOverview),
+ *             Services and Storage (a Project column), Dashboards (the
+ *             org-wide list narrowed to the shell's apps), and Observability's
+ *             Overview and views, which hand over to the org console's page
+ *             (ToOrgObservability), where the shell's nav sends them too: one
+ *             read over every project in scope, narrowed by the panel's own
+ *             app filter.
+ *   sections  every other list page: the page itself once per project
+ *             (severalProjectSections.tsx), under one title and this filter.
+ *   one       a page about one object of one project (a release, a workload,
+ *             a dashboard…): that object, as in one-project mode.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
 
 import { ProjectMark } from "../../Layout/ProjectMark";
 import { sectionsAppOf, useShellSeveral } from "../../Layout/sidebar/shellProject";
+import { carriedObsSearch, orgPath, withSearch, type ConsolePage, type ObsNavView } from "./paths";
+
+export type SeveralMode = "self" | "sections" | "one";
+
+/** How `page` shows several projects (the module comment). */
+export function severalModeOf(page: ConsolePage): SeveralMode {
+  switch (page.kind) {
+    case "overview":
+    case "services":
+    case "storage":
+      return "self";
+    case "obs-overview":
+    case "obs-view":
+      return "self";
+    case "workload":
+    case "service":
+    case "release":
+    case "environment":
+    case "dashboard":
+    case "experiment":
+    case "vulnerability":
+    case "tests-run":
+    case "tests-flaky-test":
+      return "one";
+    default:
+      return "sections";
+  }
+}
 
 export interface SeveralApp {
   key: string;
@@ -37,7 +78,7 @@ export function useSeveralApps(): { mode: "many" | "all"; apps: SeveralApp[] } |
       }),
     [rows]
   );
-  return mode ? { mode, apps } : null;
+  return useMemo(() => (mode ? { mode, apps } : null), [mode, apps]);
 }
 
 /** The `only` filter: the apps it keeps (all of them when it names none it knows). */
@@ -78,4 +119,21 @@ export function ProjectFilter({ apps, only, onChange }: { apps: readonly Several
       ))}
     </div>
   );
+}
+
+/**
+ * Observability across several projects is the org console's page (the
+ * shell's nav links there: Layout/sidebar/navConfig/items.tsx), which reads
+ * every project in scope at once and narrows them with its app filter. An app
+ * console URL of a view (a bookmark, a link, a switch to several on the page)
+ * lands there too, with the view's window and filters.
+ */
+export function ToOrgObservability({ view }: { view?: ObsNavView }) {
+  const search = useSearch({ strict: false }) as Record<string, unknown>;
+  const navigate = useNavigate();
+  const target = withSearch(view ? orgPath({ kind: "obs-view", view }) : orgPath({ kind: "observability" }), carriedObsSearch(search));
+  useEffect(() => {
+    void navigate({ href: target, replace: true });
+  }, [navigate, target]);
+  return null;
 }

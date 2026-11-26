@@ -17,7 +17,9 @@ import {
 } from "@/gen/reliant/v1/streaming_pb";
 
 vi.mock("@/lib/connect", () => ({ connectClient: vi.fn() }));
-vi.mock("@/lib/pageActivity", () => ({ pageActivity: () => ({ noteConnectionLost: vi.fn() }) }));
+vi.mock("@/lib/pageActivity", () => ({
+  streamPageEnvironment: () => ({ onConnectionLost: vi.fn(), activeNow: () => Date.now(), resumeSignals: () => () => {} }),
+}));
 
 const { OrgFeedStream, isOrgFeedRefusal } = await import("../org-feed-stream");
 
