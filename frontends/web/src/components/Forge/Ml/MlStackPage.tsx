@@ -4,7 +4,8 @@
  * ML › Stack (MlEarlyAccessService.GetMlStack): the ML components discovered
  * in each connected cluster — adopted (found, theirs), installed by forge
  * (not found, so installed from a pinned chart), or missing — each with its
- * version, how it got there, and the KCL that declares it.
+ * version, how it got there, and the KCL `forge ml discover` is planned to
+ * propose for it (labelled planned: forge has no ML declarations yet).
  */
 
 import { useMemo } from "react";
@@ -15,6 +16,9 @@ import type { MlStackComponent } from "@/services/controlPlane/ml/types";
 
 import { COMPONENT_STATE } from "./mlModel";
 import { CodeBlock, MlFrame, MlRead, Section, useMlGate } from "./MlParts";
+
+/** A declaration's caption: the KCL is the proposal's, not a released forge API. */
+export const PLANNED_KCL_LABEL = "Planned: the KCL forge ml discover will propose (not released yet)";
 
 export function MlStackPage() {
   const { orgId } = useMlGate();
@@ -73,7 +77,7 @@ function StackRow({ component }: { component: MlStackComponent }) {
           {component.note && <span className="block">{component.note}</span>}
         </p>
       )}
-      {component.declaration && <CodeBlock code={component.declaration} label="The KCL that declares it" testId={`ml-component-kcl-${component.name}`} />}
+      {component.declaration && <CodeBlock code={component.declaration} label={PLANNED_KCL_LABEL} testId={`ml-component-kcl-${component.name}`} />}
     </li>
   );
 }

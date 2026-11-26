@@ -161,6 +161,18 @@ describe("the demo's ML story", () => {
     expect(tracing.severity).toBe(MlFindingSeverity.INFO);
     expect(tracing.fixKcl + tracing.fixCommand).toMatch(/[Kk]ubelet.?[Tt]racing|kubelet_tracing/);
     expect(findings.find((f) => f.ruleId === "shm-too-small")?.severity).toBe(MlFindingSeverity.WARNING);
+
+    // Every fix is one that exists today: no forge KCL (forge declares no ML resources yet).
+    expect(findings.filter((f) => /forge\.[A-Z]/.test(f.fixKcl + f.fixCommand)).map((f) => f.ruleId)).toEqual([]);
+    const fix = (rule: string) => findings.find((f) => f.ruleId === rule)!.fixKcl;
+    expect(fix("pod-start-slow")).toMatch(/^kind: DaemonSet$/m);
+    expect(fix("pod-start-slow")).toContain("image: vllm/vllm-openai:v0.6.3");
+    expect(fix("pod-start-slow")).toContain("eks.amazonaws.com/nodegroup: l4-pool");
+    expect(fix("shm-too-small")).toMatch(/medium: Memory\n\s+sizeLimit: 16Gi/);
+    expect(fix("shm-too-small")).toContain("mountPath: /dev/shm");
+    expect(fix("kubelet-tracing-off")).toMatch(/^kind: KubeletConfiguration$/m);
+    expect(fix("kubelet-tracing-off")).toMatch(/featureGates:\n\s+KubeletTracing: true/);
+    expect(fix("kubelet-tracing-off")).toContain("samplingRatePerMillion: 10000");
   });
 
   it("runs: one running fine-tune on 2×8 H100s, one that produced the served model, one that failed", async () => {

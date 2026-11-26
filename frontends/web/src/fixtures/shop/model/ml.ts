@@ -236,6 +236,11 @@ function machines(now: number): { clusters: ClusterInit[]; pools: PoolInit[]; ob
 
 const GPU_OPERATOR = "GPU Operator v24.9.0";
 
+/**
+ * The KCL `forge ml discover` is planned to propose for each component
+ * (forge docs/proposals/ml-workloads.md). None of it is released: the Stack
+ * page labels every declaration as planned.
+ */
 const adopt = (component: string, namespace: string) => `forge.Adopt { component = "${component}", namespace = "${namespace}" }`;
 const install = (component: string, version: string, namespace: string, extra = "") =>
   `forge.Install {\n    component = "${component}"\n    version = "${version}"\n    namespace = "${namespace}"${extra}\n}`;
@@ -293,6 +298,68 @@ export const ML_POD_START: BreakdownInit = {
     { name: "ready", p50Seconds: 2, p95Seconds: 3 },
   ],
 };
+
+// The fixes that are not a command. forge has no ML declarations yet, so each is
+// what an operator applies today: a Kubernetes manifest, a pod-template patch,
+// or the kubelet's own config. (MlFinding.fix_kcl carries them; the page
+// labels a fix by what it is.)
+
+/** pod-start-slow: pull vLLM's image onto every L4 node ahead of a scale-up. */
+const PREPULL_DAEMONSET = `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: prepull-vllm-openai
+  namespace: serving
+spec:
+  selector:
+    matchLabels:
+      app: prepull-vllm-openai
+  template:
+    metadata:
+      labels:
+        app: prepull-vllm-openai
+    spec:
+      nodeSelector:
+        eks.amazonaws.com/nodegroup: ${ML_L4_POOL}
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      initContainers:
+        # Pulling the image is the point; the container exits at once.
+        - name: pull
+          image: vllm/vllm-openai:v0.6.3
+          command: ["true"]
+      containers:
+        - name: pause
+          image: registry.k8s.io/pause:3.10
+          resources:
+            requests: { cpu: 1m, memory: 8Mi }`;
+
+/** shm-too-small: a memory-backed /dev/shm on the TrainJob's pod template. */
+const SHM_PATCH = `# Merge into the trainer pod's spec: the support-assistant-sft TrainingRuntime's JobSet template,
+# replicatedJobs[].template.spec.template.spec.
+spec:
+  volumes:
+    - name: dshm
+      emptyDir:
+        medium: Memory
+        sizeLimit: 16Gi
+  containers:
+    - name: trainer
+      volumeMounts:
+        - name: dshm
+          mountPath: /dev/shm`;
+
+/** kubelet-tracing-off: the kubelet's tracing, sent to forge's collector. */
+const KUBELET_TRACING_CONFIG = `# On EKS: set it in the ${ML_L4_POOL} node group's launch template (nodeadm NodeConfig, spec.kubelet.config).
+apiVersion: kubelet.config.k8s.io/v1beta1
+kind: KubeletConfiguration
+featureGates:
+  KubeletTracing: true
+tracing:
+  endpoint: otel-collector.forge-system:4317
+  samplingRatePerMillion: 10000`;
 
 const SEVERITY_ORDER: Record<MlFindingSeverity, number> = {
   [MlFindingSeverity.CRITICAL]: 0,
@@ -354,7 +421,7 @@ function findings(now: number): FindingInit[] {
       ruleId: "pod-start-slow",
       severity: MlFindingSeverity.WARNING,
       title: "New support-assistant replicas take 5m40s to become Ready (p95)",
-      summary: "Image pull is 62% of a replica's start: vllm/vllm-openai:v0.6.3 is 9.4 GB and the L4 nodes pull it cold. Keep it warm on the pool, or stream it.",
+      summary: "Image pull is 62% of a replica's start: vllm/vllm-openai:v0.6.3 is 9.4 GB and the L4 nodes pull it cold. Pre-pull it on the pool with a DaemonSet, so a new replica starts from a warm image.",
       clusterId: ML_SERVE_CLUSTER,
       subject: "serving/support-assistant",
       evidence: [
@@ -363,7 +430,7 @@ function findings(now: number): FindingInit[] {
         ev("Image", "vllm/vllm-openai:v0.6.3 (9.4 GB)"),
         ev("Model load", "58s p50, 80s p95 (16 GB from the registry)"),
       ],
-      fixKcl: `+forge.WarmImage {\n+    image = "vllm/vllm-openai:v0.6.3"\n+    node_pool = "${ML_L4_POOL}"\n+}`,
+      fixKcl: PREPULL_DAEMONSET,
       fixCommand: "",
       firstSeenAt: at(30 * HOUR),
       lastSeenAt: at(RUNNING["env-prod"].age - 2 * MINUTE),
@@ -382,7 +449,7 @@ function findings(now: number): FindingInit[] {
         ev("Failed run", `${ML_RUN_IDS.failed}: RuntimeError: DataLoader worker (pid 412) is killed by signal: Bus error.`),
         ev("Workaround in use", "dataloader_workers=0 (step time +18%)"),
       ],
-      fixKcl: ` forge.TrainingTemplate {\n     name = "support-assistant-sft"\n+    shm_size = "16Gi"\n }`,
+      fixKcl: SHM_PATCH,
       fixCommand: "",
       firstSeenAt: at(67 * HOUR),
       lastSeenAt: at(RUN_V3_AGO),
@@ -410,7 +477,7 @@ function findings(now: number): FindingInit[] {
       clusterId: ML_SERVE_CLUSTER,
       subject: ML_L4_POOL,
       evidence: [ev("Feature gate", "KubeletTracing=false"), ev("Kubelet", "v1.30.4-eks-a737599"), ev("Nodes", `${ML_L4_NODES.length} in ${ML_L4_POOL}`)],
-      fixKcl: ` forge.NodePool {\n     name = "${ML_L4_POOL}"\n+    kubelet_tracing = forge.KubeletTracing {\n+        endpoint = "otel-collector.forge-system:4317"\n+        sampling_rate_per_million = 10000\n+    }\n }`,
+      fixKcl: KUBELET_TRACING_CONFIG,
       fixCommand: "",
       firstSeenAt: at(12 * DAY),
       lastSeenAt: at(MINUTE),

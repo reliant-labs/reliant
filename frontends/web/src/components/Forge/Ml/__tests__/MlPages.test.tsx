@@ -33,7 +33,9 @@ vi.mock("@/lib/analytics", () => ({ trackEvent: () => {} }));
 vi.mock("@/services/controlPlane/orgs", () => ({ currentOrgId: async () => DEMO_ORG }));
 vi.mock("../../Observability/charts/UPlotChart", () => ({ UPlotChart: ({ label }: { label: string }) => <figure data-testid="chart" aria-label={label} /> }));
 
+import { fixLabel } from "../MlRecommendationsPage";
 import { MlGatedView } from "../MlRoute";
+import { PLANNED_KCL_LABEL } from "../MlStackPage";
 
 function renderView(view: MlView) {
   const scope = createTransportScope({ id: `ml-${view}`, transport: createShopTransport(), queryClient: createAppQueryClient(), readOnly: true });
@@ -56,12 +58,15 @@ describe("the ML pages on the shop pack", () => {
     expect(screen.queryByTestId("ml-access-page")).toBeNull();
   });
 
-  it("Stack: components by cluster, with state and their KCL", async () => {
+  it("Stack: components by cluster, with state and the KCL labelled planned", async () => {
     renderView("stack");
     const cluster = await screen.findByTestId(`ml-stack-${ML_TRAIN_CLUSTER}`);
     expect(within(cluster).getByTestId("ml-component-dcgm-exporter")).toHaveAttribute("data-state", "adopted");
     expect(within(cluster).getByTestId("ml-component-jobset")).toHaveAttribute("data-state", "installed");
-    expect(within(cluster).getByTestId("ml-component-kcl-dcgm-exporter")).toHaveTextContent("forge.Adopt");
+    const kcl = within(cluster).getByTestId("ml-component-kcl-dcgm-exporter");
+    expect(kcl).toHaveTextContent("forge.Adopt");
+    expect(kcl.querySelector("figcaption")).toHaveTextContent(PLANNED_KCL_LABEL);
+    expect(PLANNED_KCL_LABEL).toMatch(/^Planned: .*not released yet/);
   });
 
   it("Recommendations: worst first, with the fix and a pod-start breakdown", async () => {
@@ -72,6 +77,20 @@ describe("the ML pages on the shop pack", () => {
     expect(severities).toEqual([...severities].sort((a, b) => ["critical", "warning", "info", "unknown"].indexOf(a!) - ["critical", "warning", "info", "unknown"].indexOf(b!)));
     expect(list.querySelector('[data-testid^="ml-finding-podstart-"]')).not.toBeNull();
     expect(list.querySelector('[data-testid^="ml-finding-command-"]')).not.toBeNull();
+    // Each written fix is labelled by what it is: none is forge KCL (forge declares no ML resources yet).
+    const caption = (id: string) => screen.getByTestId(`ml-finding-kcl-${id}`).querySelector("figcaption")?.textContent;
+    expect(caption("mlf-pod-start-slow-support-assistant")).toBe("The fix, as a Kubernetes manifest");
+    expect(caption("mlf-shm-too-small-support-assistant-sft")).toBe("The fix, as a Kubernetes patch");
+    expect(caption("mlf-kubelet-tracing-off-serve")).toBe("The fix, in the kubelet config");
+    expect(list).not.toHaveTextContent("The fix, in KCL");
+    expect(list.textContent).not.toMatch(/forge\.[A-Z]/);
+  });
+
+  it("labels a fix by its content", () => {
+    expect(fixLabel("apiVersion: apps/v1\nkind: DaemonSet\nspec: {}")).toBe("The fix, as a Kubernetes manifest");
+    expect(fixLabel("apiVersion: kubelet.config.k8s.io/v1beta1\nkind: KubeletConfiguration")).toBe("The fix, in the kubelet config");
+    expect(fixLabel("# a comment\nspec:\n  volumes: []")).toBe("The fix, as a Kubernetes patch");
+    expect(fixLabel('forge.Something { name = "x" }')).toBe("The fix, in KCL");
   });
 
   it("Runs: each run with its state, labelled Early access", async () => {

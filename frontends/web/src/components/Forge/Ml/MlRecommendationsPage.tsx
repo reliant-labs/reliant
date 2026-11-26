@@ -3,9 +3,9 @@
 /**
  * ML › Recommendations (MlEarlyAccessService.ListMlFindings): the open
  * findings, worst first — each with its severity, what it is about, the
- * evidence, the fix (a KCL change, or the exact command for a setting outside
- * forge's declarations), and, for a slow start, where the pod's start time
- * goes. "Propose fix" and "Dismiss" come with the real service (slice 1).
+ * evidence, the fix (a Kubernetes manifest or patch, a config change, or the
+ * exact command; fixLabel names which), and, for a slow start, where the
+ * pod's start time goes. "Propose fix" and "Dismiss" come with the real service (slice 1).
  */
 
 import { useMemo } from "react";
@@ -17,6 +17,18 @@ import type { MlFinding } from "@/services/controlPlane/ml/types";
 import { formatAgo } from "../Observability/format";
 import { findingsWorstFirst, SEVERITY } from "./mlModel";
 import { CodeBlock, MlFrame, MlRead, Section, StageBreakdown, useMlGate } from "./MlParts";
+
+/**
+ * What a finding's written fix (MlFinding.fix_kcl) is, read from its content:
+ * the field is named for KCL, but forge declares no ML resources yet, so
+ * today's fixes are plain Kubernetes YAML or kubelet config.
+ */
+export function fixLabel(code: string): string {
+  if (/^kind:\s*KubeletConfiguration\b/m.test(code)) return "The fix, in the kubelet config";
+  if (/^apiVersion:/m.test(code) && /^kind:/m.test(code)) return "The fix, as a Kubernetes manifest";
+  if (/^\s*spec:/m.test(code)) return "The fix, as a Kubernetes patch";
+  return "The fix, in KCL";
+}
 
 export function MlRecommendationsPage({ now }: { now?: number }) {
   const { orgId } = useMlGate();
@@ -70,7 +82,7 @@ function FindingCard({ finding, now }: { finding: MlFinding; now: number }) {
           </dl>
         )}
         {finding.podStart && finding.podStart.stages.length > 0 && <StageBreakdown breakdown={finding.podStart} testId={`ml-finding-podstart-${finding.id}`} />}
-        {finding.fixKcl && <CodeBlock code={finding.fixKcl} label="The fix, in KCL" testId={`ml-finding-kcl-${finding.id}`} />}
+        {finding.fixKcl && <CodeBlock code={finding.fixKcl} label={fixLabel(finding.fixKcl)} testId={`ml-finding-kcl-${finding.id}`} />}
         {finding.fixCommand && <CodeBlock code={finding.fixCommand} label="The fix, as a command" testId={`ml-finding-command-${finding.id}`} />}
       </div>
     </Section>
