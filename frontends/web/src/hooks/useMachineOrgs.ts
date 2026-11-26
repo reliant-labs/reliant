@@ -27,15 +27,6 @@ function orgByMachineOf(res: ListDaemonsResponse): ReadonlyMap<string, string> {
 }
 
 /**
- * The read names no org on purpose (acrossAllOrgs): an unset org_id lists
- * every machine the caller runs, in every org, so a machine that belongs to
- * another org is known to, rather than merely absent from, the active org's
- * list. Per-call options are not part of the key, so this is the one reader
- * of ListDaemons({}): an org-scoped list would need a request naming its org.
- */
-const ACROSS_ALL_ORGS = () => ({ contextValues: acrossAllOrgs() });
-
-/**
  * The org that owns machine `daemonId`, given the control plane's machine →
  * org map: its recorded org, or the default org for a machine recorded before
  * machines had one (the control plane bills and lists it there). Undefined
@@ -97,12 +88,15 @@ export function useMachineOrgs(): MachineOrgs {
   const client = useContext(QueryClientContext) ?? appQueryClient;
   const { orgs, activeOrgId, defaultOrgId, canSwitch } = useActiveOrg(client);
   const multiOrg = hasControlPlane && canSwitch;
+  // An unset org_id lists the caller's machines across orgs so we can tell a
+  // machine belonging to another org from one with no recorded org. Per-call
+  // options are not part of the key: a scoped reader must name its org instead.
   const { data: orgByMachine } = useQuery(
     daemonServiceQueries.listDaemons({}, {
       select: orgByMachineOf,
       enabled: multiOrg,
       staleTime: 60_000,
-      callOptions: ACROSS_ALL_ORGS,
+      callOptions: () => ({ contextValues: acrossAllOrgs() }),
     }),
     client,
   );

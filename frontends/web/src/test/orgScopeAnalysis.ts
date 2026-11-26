@@ -56,7 +56,7 @@ export interface Site {
   gated: boolean;
   /** `placeholderData: keepPreviousData` (not org-aware). Queries only. */
   keepsAcrossOrgs: boolean;
-  /** The call opts out of the active org on purpose (`acrossAllOrgs`). Calls only. */
+  /** The client call or generated call options opt out of the active org (`acrossAllOrgs`). */
   acrossAllOrgs: boolean;
 }
 
@@ -539,7 +539,7 @@ export class OrgScopeAnalysis {
             fetchNamesOrg: true,
             gated: this.gated(opts, file) || this.imperativeAfterOrg(n, file),
             keepsAcrossOrgs: keepsAcrossOrgs(opts),
-            acrossAllOrgs: false,
+            acrossAllOrgs: this.generatedAcrossAllOrgs(opts, file),
           });
         }
         const rpc = this.rpcOfCall(n, file);
@@ -581,6 +581,21 @@ export class OrgScopeAnalysis {
       ts.forEachChild(n, visit);
     };
     visit(file.sf);
+  }
+
+  /** Match an explicit `callOptions: () => ({ contextValues: acrossAllOrgs() })`, not a mention of its name. */
+  private generatedAcrossAllOrgs(opts: ts.ObjectLiteralExpression | null, file: FileInfo): boolean {
+    if (!opts || opts.properties.some((p) => !ts.isPropertyAssignment(p) || !ts.isIdentifier(p.name))) return false;
+    const options = opts.properties.filter((p) => p.name?.getText(file.sf) === "callOptions");
+    if (options.length !== 1) return false;
+    const fn = prop(opts, "callOptions");
+    if (!fn || !ts.isArrowFunction(fn) || ts.isBlock(fn.body)) return false;
+    const result = unwrap(fn.body);
+    if (!ts.isObjectLiteralExpression(result) || result.properties.length !== 1) return false;
+    const context = prop(result, "contextValues");
+    if (!context || !ts.isCallExpression(context) || !ts.isIdentifier(context.expression)) return false;
+    const factory = this.lookup(context.expression, file);
+    return factory?.file.path === join(this.srcDir, "api/orgInterceptor.ts") && nameOf(factory.node) === "acrossAllOrgs";
   }
 
   /** `enabled` waits for the org (names it, or its readiness), or is `false`: a cache-only read that never fetches. */

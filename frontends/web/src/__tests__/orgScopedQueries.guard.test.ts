@@ -51,7 +51,15 @@ const sites = analysis.sites();
 const reads = sites.filter((site) => site.kind !== "call");
 
 const idOf = (site: Site) => `${site.where.replace(/:\d+$/, "")}#${site.fn}`;
-const allowed = (site: Site) => idOf(site) in ALLOWED;
+// The machine label map deliberately spans the authenticated owner's orgs so it
+// can distinguish a machine owned by another org from one with no recorded org.
+// Only this read may use the empty generated key, and only with the transport opt-out.
+const ownerWideMachineMap = (site: Site) =>
+  idOf(site) === "hooks/useMachineOrgs.ts#useMachineOrgs" &&
+  site.kind === "generated" &&
+  site.rpcs[0] === "controlplane.v1.DaemonService.listDaemons" &&
+  site.acrossAllOrgs;
+const allowed = (site: Site) => idOf(site) in ALLOWED || ownerWideMachineMap(site);
 const describeSite = (site: Site) => `  ${site.where} (${site.fn || "top level"}, ${site.kind}): ${site.rpcs.join(", ")}`;
 
 function report(offenders: Site[], fix: string): string {
@@ -75,6 +83,15 @@ describe("org-scoped queries", () => {
     expect(fns).toContain("generated:useMembers");
     expect(fns).toContain("handwritten:useForgeDomains");
     expect(reads.length).toBeGreaterThan(60);
+  });
+
+  it("reserves the empty generated daemon list key for the owner-wide machine map", () => {
+    const ownerWide = reads.filter(ownerWideMachineMap);
+    const withoutOrg = reads.filter((site) =>
+      site.kind === "generated" && site.rpcs[0] === "controlplane.v1.DaemonService.listDaemons" && !site.namesOrg,
+    );
+    expect(ownerWide).toHaveLength(1);
+    expect(withoutOrg).toEqual(ownerWide);
   });
 
   it("every read names the org in its key", () => {
