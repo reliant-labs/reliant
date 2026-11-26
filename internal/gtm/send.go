@@ -69,7 +69,7 @@ func sendable(row *store.GtmItem, expected int32) error {
 	if row.Revision != expected {
 		return conflict(row.ID, expected, row.Revision)
 	}
-	if ItemKind(row.Kind) != ItemEmail || ItemStatus(row.Status) != ItemApproved {
+	if !ItemFormat(row.Format).EmailType() || ItemStatus(row.Status) != ItemApproved {
 		return ErrNotApproved
 	}
 	return nil
@@ -111,6 +111,22 @@ func (s *service) holdMayBeInFlight(row *store.GtmItem) bool {
 // be running.
 func (s *service) inDoubt(row *store.GtmItem) error {
 	return &SendInDoubtError{ItemID: row.ID, MayBeInFlight: s.holdMayBeInFlight(row)}
+}
+
+// checkSendChannel is the send path's channel rule: an email-type item's
+// channel, when it has one, is ACTIVE, INTEGRATED and gmail.
+func (s *service) checkSendChannel(ctx context.Context, orgID string, row *store.GtmItem) error {
+	if row.ChannelID == nil {
+		return nil
+	}
+	ch, err := s.store.GetChannel(ctx, orgID, *row.ChannelID)
+	if err != nil {
+		return s.notFound(ctx, err, "channel", *row.ChannelID)
+	}
+	if ChannelStatus(ch.Status) != ChannelActive || ChannelMode(ch.Mode) != ChannelIntegrated || deref(ch.IntegrationKind) != GmailIntegration {
+		return ErrChannelNotSendable
+	}
+	return nil
 }
 
 // SendItemEmail sends an APPROVED email item through Email and records it,
@@ -174,6 +190,9 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 			return s.inDoubt(row)
 		}
 		if err := sendable(row, rev); err != nil {
+			return err
+		}
+		if err := s.checkSendChannel(ctx, org, row); err != nil {
 			return err
 		}
 		want := ApprovalHash(itemFromRow(row))

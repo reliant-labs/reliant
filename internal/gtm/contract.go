@@ -1,7 +1,9 @@
 // Copyright (c) 2026 Reliant Labs
 
-// Package gtm is the GTM domain: an org's ideas, campaigns, items (posts and
-// emails: the calendar), positioning and claims registry. Both the Connect
+// Package gtm is the GTM domain: an org's strategies and the campaigns under
+// them, ideas, items (posts, emails, videos: the calendar) in a format and on
+// a channel, the assets attached to items and campaigns, the org's strategy
+// library, positioning and claims registry. Both the Connect
 // handler (internal/handlers/gtm) and the agent tools call it, so access and
 // validation are decided here, once.
 //
@@ -20,7 +22,9 @@
 //     claim. An Agent creates and edits PROPOSED ideas, DRAFT / REVIEW items
 //     (content, status between the two, and scheduled_at, which records a
 //     date and never publishes) and UNVERIFIED claims, and touches nothing
-//     else. The item lifecycle is checkTransition's.
+//     else. The item lifecycle is checkTransition's. An agent creates and
+//     edits DRAFT strategies and MANUAL channels; integrations, strategy
+//     status, library imports and published URLs are a person's.
 //  5. Nothing here publishes. SENT is written only by the approved email
 //     path: SendItemEmail, or a person's ResolveInDoubtSend for a send that
 //     left without its record.
@@ -33,6 +37,7 @@ package gtm
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/featuregate"
@@ -124,6 +129,94 @@ type Service interface {
 	// ReadProductAnalytics runs one aggregate product-analytics template over
 	// the actor's org's product events, through Analytics.
 	ReadProductAnalytics(ctx context.Context, actor Actor, q AnalyticsQuery) (AnalyticsResult, error)
+
+	// ListStrategies lists the org's strategies, newest first.
+	ListStrategies(ctx context.Context, actor Actor, in ListStrategiesInput) (ListStrategiesResult, error)
+	// GetStrategy returns a strategy with its campaigns (capped, Truncated).
+	GetStrategy(ctx context.Context, actor Actor, in GetStrategyInput) (StrategyDetail, error)
+	// CreateStrategy creates a strategy, DRAFT unless a person says otherwise.
+	CreateStrategy(ctx context.Context, actor Actor, in CreateStrategyInput) (Strategy, error)
+	// UpdateStrategy edits a strategy or moves its status. An agent edits
+	// DRAFT strategies only and never changes a status.
+	UpdateStrategy(ctx context.Context, actor Actor, in UpdateStrategyInput) (Strategy, error)
+
+	// ListChannels lists the org's channels by key, seeding the defaults
+	// (DefaultChannels) for an org that has none, idempotently.
+	ListChannels(ctx context.Context, actor Actor, in ListChannelsInput) (ListChannelsResult, error)
+	// GetChannel returns one channel, seeding as ListChannels does.
+	GetChannel(ctx context.Context, actor Actor, in GetChannelInput) (Channel, error)
+	// CreateChannel creates a channel. An agent creates MANUAL channels
+	// only; a key the org holds is ErrChannelExists.
+	CreateChannel(ctx context.Context, actor Actor, in CreateChannelInput) (Channel, error)
+	// UpdateChannel edits a channel. An agent changes name,
+	// manual_instructions_md and status only, and never an integration.
+	UpdateChannel(ctx context.Context, actor Actor, in UpdateChannelInput) (Channel, error)
+
+	// ListAssets lists the assets of an item or a campaign, newest first.
+	ListAssets(ctx context.Context, actor Actor, in ListAssetsInput) (ListAssetsResult, error)
+	// GetAsset returns one asset's metadata.
+	GetAsset(ctx context.Context, actor Actor, in GetAssetInput) (Asset, error)
+	// CreateAssetUpload records a PENDING asset and returns a presigned PUT
+	// for its bytes (MaxAssetBytes; MaxOrgAssetBytes per org).
+	CreateAssetUpload(ctx context.Context, actor Actor, in CreateAssetUploadInput) (AssetUpload, error)
+	// ConfirmAssetUpload checks an uploaded object (size, sniffed type,
+	// sha256) and marks the asset READY, or deletes the object and the row.
+	ConfirmAssetUpload(ctx context.Context, actor Actor, in ConfirmAssetUploadInput) (Asset, error)
+	// GetAssetDownload returns a short-lived URL for a READY asset: inline
+	// for raster images and mp4/webm, an attachment otherwise.
+	GetAssetDownload(ctx context.Context, actor Actor, in GetAssetDownloadInput) (AssetDownload, error)
+	// AttachFromAttachment copies one of the actor's chat attachments into
+	// a READY asset of an item or a campaign (MaxCopiedAssetBytes), with the
+	// same checks as ConfirmAssetUpload. PR-7's attach_gtm_asset calls it.
+	AttachFromAttachment(ctx context.Context, actor Actor, in AttachFromAttachmentInput) (Asset, error)
+
+	// ListStrategyLibrary lists the org's strategy library, by category
+	// then name.
+	ListStrategyLibrary(ctx context.Context, actor Actor, in ListStrategyLibraryInput) (ListStrategyLibraryResult, error)
+	// GetStrategyLibraryEntry returns one library entry by key.
+	GetStrategyLibraryEntry(ctx context.Context, actor Actor, in GetStrategyLibraryEntryInput) (LibraryEntry, error)
+	// ImportStrategyLibrary upserts a batch of entries by key (a person's
+	// act), optionally pruning the keys not in it.
+	ImportStrategyLibrary(ctx context.Context, actor Actor, in ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error)
+	// UseLibraryStrategy makes a DRAFT strategy from a library entry, and
+	// optionally a first DRAFT campaign planning the matching channels.
+	UseLibraryStrategy(ctx context.Context, actor Actor, in UseLibraryStrategyInput) (UseLibraryStrategyResult, error)
+}
+
+// Connections reports whether the actor can reach an integration now, for
+// an INTEGRATED channel's connection_state (PR-12 wires it to Reliant's
+// integration connections). Display only: an error is UNKNOWN, and nothing
+// is ever authorized on it.
+type Connections interface {
+	// State is the state of connectionID ("" is the actor's default
+	// connection for integrationKind), for actor.UserID.
+	State(ctx context.Context, actor Actor, integrationKind, connectionID string) (ConnectionState, error)
+}
+
+// AssetStore holds asset bytes in the org's bucket (PR-13, over
+// pkg/blobstore). Keys are gtm/<org_id>/<asset_id>; the Service builds
+// them, and an implementation never takes a key from a client.
+type AssetStore interface {
+	// PresignPut returns a presigned PUT of exactly opts.Size bytes of
+	// opts.ContentType to key.
+	PresignPut(ctx context.Context, key string, opts PutOptions) (PresignedRequest, error)
+	// Open reads key; a missing object is ErrObjectNotFound.
+	Open(ctx context.Context, key string) (io.ReadCloser, error)
+	// Put writes key from r, which carries exactly opts.Size bytes.
+	Put(ctx context.Context, key string, r io.Reader, opts PutOptions) error
+	// Delete removes key; a missing object is not an error.
+	Delete(ctx context.Context, key string) error
+	// PresignGet returns a presigned GET of key, shaped by opts.
+	PresignGet(ctx context.Context, key string, opts GetOptions) (PresignedRequest, error)
+}
+
+// Attachments reads Reliant chat attachments for AttachFromAttachment (PR-12
+// wires it). An implementation MUST be owner-scoped: an attachment that is
+// not actor.UserID's own, or whose chat is not in actor.OrgID, is
+// ErrNotFound, indistinguishable from a missing one.
+type Attachments interface {
+	// Open returns the attachment's description and its bytes.
+	Open(ctx context.Context, actor Actor, attachmentID string) (AttachmentFile, io.ReadCloser, error)
 }
 
 // Gate is the GTM entitlement check this package makes: the part of
@@ -242,6 +335,60 @@ type Store interface {
 	// UpdateClaim is UpdateIdea for a claim; text and category are never
 	// written.
 	UpdateClaim(ctx context.Context, row *store.GtmClaim, expected int32) error
+
+	// ListStrategies returns the strategies f matches, newest first.
+	ListStrategies(ctx context.Context, f StrategyFilter) ([]*store.GtmStrategy, error)
+	// GetStrategy returns orgID's strategy id.
+	GetStrategy(ctx context.Context, orgID, id string) (*store.GtmStrategy, error)
+	// CreateStrategy inserts row, assigning its ID when empty.
+	CreateStrategy(ctx context.Context, row *store.GtmStrategy) error
+	// UpdateStrategy is UpdateIdea for a strategy.
+	UpdateStrategy(ctx context.Context, row *store.GtmStrategy, expected int32) error
+
+	// ListChannels returns the channels f matches, by key.
+	ListChannels(ctx context.Context, f ChannelFilter) ([]*store.GtmChannel, error)
+	// CountChannels counts orgID's channels.
+	CountChannels(ctx context.Context, orgID string) (int64, error)
+	// GetChannel returns orgID's channel id.
+	GetChannel(ctx context.Context, orgID, id string) (*store.GtmChannel, error)
+	// SeedChannels inserts rows, each skipped when its org already holds its
+	// key (ON CONFLICT (org_id, key) DO NOTHING).
+	SeedChannels(ctx context.Context, rows []*store.GtmChannel) error
+	// CreateChannel inserts row; a key the org holds is ErrChannelExists.
+	CreateChannel(ctx context.Context, row *store.GtmChannel) error
+	// UpdateChannel is UpdateIdea for a channel (its key is never written).
+	UpdateChannel(ctx context.Context, row *store.GtmChannel, expected int32) error
+
+	// CampaignItemCounts counts orgID's campaign's items by channel, format
+	// and status: every item, not a page.
+	CampaignItemCounts(ctx context.Context, orgID, campaignID string) ([]ItemCount, error)
+
+	// ListAssets returns the assets f matches, newest first.
+	ListAssets(ctx context.Context, f AssetFilter) ([]*store.GtmAsset, error)
+	// GetAsset returns orgID's asset id.
+	GetAsset(ctx context.Context, orgID, id string) (*store.GtmAsset, error)
+	// SumAssetBytes is the size of orgID's assets, READY and PENDING.
+	SumAssetBytes(ctx context.Context, orgID string) (int64, error)
+	// CreateAsset inserts row (its ID and object key set by the caller).
+	CreateAsset(ctx context.Context, row *store.GtmAsset) error
+	// MarkAssetReady makes a PENDING asset READY with its checked type,
+	// size and sha256; an asset that is not PENDING is ErrAssetNotPending.
+	MarkAssetReady(ctx context.Context, orgID, id, contentType string, size int64, sha256 string) error
+	// DeleteAsset removes orgID's asset id; a missing one is not an error.
+	DeleteAsset(ctx context.Context, orgID, id string) error
+
+	// ListLibrary returns the library entries f matches, by category then
+	// name then key.
+	ListLibrary(ctx context.Context, f LibraryFilter) ([]*store.GtmStrategyLibrary, error)
+	// GetLibraryEntry returns orgID's entry key.
+	GetLibraryEntry(ctx context.Context, orgID, key string) (*store.GtmStrategyLibrary, error)
+	// CreateLibraryEntry inserts row.
+	CreateLibraryEntry(ctx context.Context, row *store.GtmStrategyLibrary) error
+	// UpdateLibraryEntry rewrites the entry row.ID of row.OrgID whole.
+	UpdateLibraryEntry(ctx context.Context, row *store.GtmStrategyLibrary) error
+	// PruneLibrary removes orgID's entries whose key is not in keep, and
+	// says how many.
+	PruneLibrary(ctx context.Context, orgID string, keep []string) (int64, error)
 }
 
 // Deps are the service's collaborators.
@@ -258,4 +405,12 @@ type Deps struct {
 	// Email sends approved emails; nil means email is not configured, and
 	// SendItemEmail is ErrUnavailable.
 	Email Email
+	// Connections computes channels' connection_state; nil is UNKNOWN.
+	Connections Connections
+	// Assets holds asset bytes; nil means assets are not configured, and
+	// every byte-touching asset method is ErrAssetsUnavailable.
+	Assets AssetStore
+	// Attachments reads chat attachments; nil makes AttachFromAttachment
+	// ErrAttachmentsUnavailable.
+	Attachments Attachments
 }

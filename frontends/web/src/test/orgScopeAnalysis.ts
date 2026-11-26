@@ -380,7 +380,9 @@ export class OrgScopeAnalysis {
     while (ts.isPropertyAccessExpression(root)) root = unwrap(root.expression);
     if (!ts.isIdentifier(root)) return false;
     const d = this.lookup(root, file);
-    if (!d) return WEB_GLOBALS.has(root.text);
+    // An imported name is the module's, never the browser's, even when the
+    // import does not resolve (a package, a namespace import).
+    if (!d) return WEB_GLOBALS.has(root.text) && !file.imports.has(root.text);
     return ts.isVariableDeclaration(d.node) && !!d.node.initializer && this.onWebGlobal(d.node.initializer, d.file, depth + 1);
   }
 

@@ -22,6 +22,8 @@ type fakeStore struct {
 	positioning map[string]*store.GtmPositioning
 	claims      map[string]*store.GtmClaim
 	seq         int
+	// r2s holds the r2/r3 tables (fake_store_r2_test.go).
+	r2s *fakeR2
 	// failUpdateItem, when set, is returned by the next UpdateItem.
 	failUpdateItem error
 }
@@ -118,7 +120,8 @@ func (f *fakeStore) UpdateIdea(_ context.Context, row *store.GtmIdea, expected i
 
 func (f *fakeStore) ListCampaigns(_ context.Context, flt CampaignFilter) ([]*store.GtmCampaign, error) {
 	return sortedPage(f.campaigns, func(r *store.GtmCampaign) bool {
-		return r.OrgID == flt.OrgID && (flt.Status == "" || r.Status == string(flt.Status))
+		return r.OrgID == flt.OrgID && (flt.Status == "" || r.Status == string(flt.Status)) &&
+			(flt.StrategyID == "" || r.StrategyID == flt.StrategyID)
 	}, func(r *store.GtmCampaign) string { return r.ID }, flt.Limit, flt.Offset), nil
 }
 
@@ -156,7 +159,10 @@ func (f *fakeStore) ListItems(_ context.Context, flt ItemFilter) ([]*store.GtmIt
 		if r.OrgID != flt.OrgID || !linkMatches(flt.CampaignID, r.CampaignID) {
 			return false
 		}
-		if (flt.Kind != "" && r.Kind != string(flt.Kind)) || (flt.Status != "" && r.Status != string(flt.Status)) {
+		if !linkMatches(flt.ChannelID, r.ChannelID) {
+			return false
+		}
+		if (flt.Format != "" && r.Format != string(flt.Format)) || (flt.Status != "" && r.Status != string(flt.Status)) {
 			return false
 		}
 		if flt.ScheduledFrom != nil && (r.ScheduledAt == nil || r.ScheduledAt.Before(*flt.ScheduledFrom)) {

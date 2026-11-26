@@ -4,6 +4,7 @@ package gtm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"time"
@@ -117,6 +118,13 @@ func (q AnalyticsQuery) Validate() error {
 		if n < MinFunnelSteps || n > MaxFunnelSteps {
 			return invalid("events", fmt.Sprintf("a funnel has %d to %d steps", MinFunnelSteps, MaxFunnelSteps))
 		}
+		seen := make(map[string]bool, n)
+		for _, e := range q.Events {
+			if seen[e] {
+				return invalid("events", fmt.Sprintf("a funnel names each step once; %q is twice", e))
+			}
+			seen[e] = true
+		}
 	default:
 		return invalid("template", fmt.Sprintf("unknown template %q", q.Template))
 	}
@@ -172,6 +180,10 @@ type AnalyticsResult struct {
 	Rows []AnalyticsRow
 	// Truncated is true when rows beyond the limit were dropped.
 	Truncated bool
+	// HiddenGroups is how many groups were dropped because fewer than 3
+	// people were in them (k-anonymity, k=3). Analytics fills it in; the
+	// Service's re-cap of Rows keeps it as is.
+	HiddenGroups int
 }
 
 // ReadProductAnalytics gates, resolves and validates q, then hands it to
@@ -189,7 +201,13 @@ func (s *service) ReadProductAnalytics(ctx context.Context, actor Actor, q Analy
 	}
 	res, err := s.analytics.Query(ctx, actor.OrgID, q)
 	if err != nil {
-		// The client's text can name hosts and queries: log it, say less.
+		// The domain's own errors carry fixed, actionable messages (a refused
+		// window, name or property is the caller's to fix, not to retry):
+		// they pass through. Anything else can name hosts and queries: log
+		// it, say less.
+		if errors.Is(err, ErrInvalidArgument) || errors.Is(err, ErrAnalyticsUnavailable) || errors.Is(err, ErrAnalyticsFailed) {
+			return AnalyticsResult{}, err
+		}
 		s.log.WarnContext(ctx, "gtm: product analytics query failed", "template", string(q.Template), "error", err)
 		return AnalyticsResult{}, ErrAnalyticsFailed
 	}
