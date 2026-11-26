@@ -1603,7 +1603,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 	return streaminghandler.New(streaminghandler.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Repo:        rowreads.WithRepo(g.Database()),
 		ChatRows:    store.NewChatExtStore(g.Database().ORM()),
 		Senders:     store.NewThreadExtStore(g.Database().ORM()),
 		Projects:    store.NewProjectExtStore(g.Database().ORM()),

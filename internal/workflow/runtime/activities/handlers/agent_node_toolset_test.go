@@ -110,7 +110,7 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 		Fields: map[string]string{"api_key": "ghp_test_not_a_real_token"},
 	})
 	require.NoError(t, err)
-	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(connections.ResolverDeps{Owners: h.Repo(), Runs: dbstore.NewWorkflowExtStore(h.Repo().ORM()), Store: store, Tokens: tokens})})
+	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(connections.ResolverDeps{Owners: rowreads.WithRepo(h.Repo()), Runs: dbstore.NewWorkflowExtStore(h.Repo().ORM()), Store: store, Tokens: tokens})})
 
 	driver := &promptCaptureDriver{}
 	resolver := func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
@@ -119,7 +119,7 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo(), IntegrationCredentials: source})
 	return &nestedAgentFixture{
 		h: h, chat: chat, thread: nested, driver: driver,
-		callLLM: NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: dbstore.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())}), Spawns: dbstore.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: factory, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
+		callLLM: NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: dbstore.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(h.Repo()), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())}), Spawns: dbstore.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: factory, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
 	}
 }
 

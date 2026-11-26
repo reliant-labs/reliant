@@ -361,7 +361,7 @@ func (f *ToolsFactory) spawnStatusStore() spawnStatusStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
-	return f.opts.Repo
+	return WithChats(f.opts.Repo)
 }
 
 // spawnSendStore and spawnStopStore are store() as those tools' roles, nil when
@@ -370,14 +370,14 @@ func (f *ToolsFactory) spawnSendStore() spawnSendStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
-	return f.opts.Repo
+	return WithChats(f.opts.Repo)
 }
 
 func (f *ToolsFactory) spawnStopStore() spawnStopStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
-	return f.opts.Repo
+	return WithChats(f.opts.Repo)
 }
 
 // cloneOpts copies this factory's options so a With* helper can override one

@@ -36,7 +36,7 @@ func newSpawnWorktreeFixture(t *testing.T) *spawnWorktreeFixture {
 	return &spawnWorktreeFixture{
 		activityPlacementFixture: f,
 		chatID:                   f.chat(t, ""),
-		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), rowreads.WithRepo(f.repo), workflowRunsOf(f.repo)),
+		activity:                 NewCreateWorkflowWithThreadActivity(threads.New(threads.Deps{Repo: rowreads.WithRepo(f.repo), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), rowreads.WithRepo(f.repo), workflowRunsOf(f.repo)),
 	}
 }
 
@@ -74,7 +74,7 @@ func TestSpawnWorktree_BindsThreadByNameAndByID(t *testing.T) {
 	for _, ref := range []string{"feature-x", wtID} {
 		out := f.spawn(t, ref, "")
 		require.Empty(t, out.Refusal, ref)
-		th, err := f.repo.GetThread(context.Background(), out.ThreadID)
+		th, err := store.GetThread(context.Background(), f.repo.ORM(), out.ThreadID)
 		require.NoError(t, err)
 		require.NotNil(t, th.WorktreeID, ref)
 		assert.Equal(t, wtID, *th.WorktreeID)
@@ -88,7 +88,7 @@ func TestSpawnWorktree_OmittedLeavesThreadUnbound(t *testing.T) {
 	f.worktree(t, "feature-x", "daemon-b")
 	out := f.spawn(t, "", "")
 	require.Empty(t, out.Refusal)
-	th, err := f.repo.GetThread(context.Background(), out.ThreadID)
+	th, err := store.GetThread(context.Background(), f.repo.ORM(), out.ThreadID)
 	require.NoError(t, err)
 	assert.Nil(t, th.WorktreeID, "no worktree param keeps the inherit-the-chat default")
 }
@@ -156,7 +156,7 @@ func TestSpawnWorktree_ResumeMustMatchBinding(t *testing.T) {
 	// Different workspace: refused, binding untouched.
 	moved := f.spawn(t, "b", first.ThreadID)
 	assert.Contains(t, moved.Refusal, "already bound")
-	th, err := f.repo.GetThread(context.Background(), first.ThreadID)
+	th, err := store.GetThread(context.Background(), f.repo.ORM(), first.ThreadID)
 	require.NoError(t, err)
 	assert.Equal(t, "a", mustWorktree(t, f, *th.WorktreeID).Name)
 
@@ -189,11 +189,11 @@ func TestEffectiveWorktreeID_ThreadBeatsChat(t *testing.T) {
 	// Unbound thread and unknown thread both fall back to the chat's.
 	f.chatID = chatID
 	plain := f.spawn(t, "", "")
-	got, bound, err := effectiveWorktreeID(ctx, f.repo, chat, plain.ThreadID)
+	got, bound, err := effectiveWorktreeID(ctx, rowreads.WithRepo(f.repo), chat, plain.ThreadID)
 	require.NoError(t, err)
 	assert.False(t, bound)
 	assert.Equal(t, chatWT, *got)
-	got, bound, err = effectiveWorktreeID(ctx, f.repo, chat, "no-such-thread")
+	got, bound, err = effectiveWorktreeID(ctx, rowreads.WithRepo(f.repo), chat, "no-such-thread")
 	require.NoError(t, err)
 	assert.False(t, bound)
 	assert.Equal(t, chatWT, *got)
@@ -201,7 +201,7 @@ func TestEffectiveWorktreeID_ThreadBeatsChat(t *testing.T) {
 	// A bound thread wins, so tools route to ITS worktree's daemon.
 	spawned := f.spawn(t, "thread-wt", "")
 	require.Empty(t, spawned.Refusal)
-	got, bound, err = effectiveWorktreeID(ctx, f.repo, chat, spawned.ThreadID)
+	got, bound, err = effectiveWorktreeID(ctx, rowreads.WithRepo(f.repo), chat, spawned.ThreadID)
 	require.NoError(t, err)
 	assert.True(t, bound)
 	assert.Equal(t, threadWT, *got)
@@ -380,7 +380,7 @@ func TestSpawnWorktree_ResolvesTheLiveRowOfAReusedName(t *testing.T) {
 
 	out := f.spawn(t, "feat", "")
 	require.Empty(t, out.Refusal)
-	th, err := f.repo.GetThread(ctx, out.ThreadID)
+	th, err := store.GetThread(ctx, f.repo.ORM(), out.ThreadID)
 	require.NoError(t, err)
 	require.NotNil(t, th.WorktreeID)
 	assert.Equal(t, liveID, *th.WorktreeID)

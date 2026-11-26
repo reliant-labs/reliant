@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
@@ -97,7 +99,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 	f := seedToolBodiesStream(t, ctx, repo)
 
 	t.Run("unset is FULL, byte for byte: snapshot and update frames", func(t *testing.T) {
-		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
+		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)})))
 		chat, err := repo.GetChatRow(ctx, f.ChatID)
 		require.NoError(t, err)
 		marshal := func(mode reliantv1.ToolBodyMode) []byte {
@@ -129,7 +131,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 
 	t.Run("STUB: the snapshot stubs, a live frame stays full", func(t *testing.T) {
 		live := &fakeChatUpdates{ch: make(chan streaming.UpdateEvent[db.ChatUpdate], 1)}
-		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, ChatUpdates: live})))
+		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo), ChatUpdates: live})))
 		events := chatStreamEvents(t, svc, &reliantv1.StreamChatUpdatesRequest{
 			ChatId: f.ChatID, ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum(),
 		})
@@ -159,7 +161,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 	})
 
 	t.Run("STUB: a replay stubs results and thinking, keeps inputs", func(t *testing.T) {
-		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
+		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)})))
 		events := chatStreamEvents(t, svc, &reliantv1.StreamChatUpdatesRequest{
 			ChatId: f.ChatID, SinceSeq: f.updates[0].SequenceNumber,
 			ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum(),
@@ -180,7 +182,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 	})
 
 	t.Run("the kill switch serves STUB as FULL", func(t *testing.T) {
-		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Config: &config.Config{Transcript: &configv1.TranscriptConfig{ToolBodyStubs: "off"}}})))
+		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo), Config: &config.Config{Transcript: &configv1.TranscriptConfig{ToolBodyStubs: "off"}}})))
 		events := chatStreamEvents(t, svc, &reliantv1.StreamChatUpdatesRequest{
 			ChatId: f.ChatID, ToolBodies: reliantv1.ToolBodyMode_TOOL_BODY_MODE_STUB.Enum(),
 		})

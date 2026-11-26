@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
@@ -59,7 +61,7 @@ func (w *orgFundingWorld) title(first string) (string, error) {
 // compact runs a forced compaction of the chat's root thread once.
 func (w *orgFundingWorld) compact() (*handlers.CompactOutput, error) {
 	w.t.Helper()
-	activity := handlers.NewCompactActivity(handlers.CompactDeps{ToolResults: handlers.NewToolCalls(w.repo.ORM()), Store: w.repo, Threads: threads.New(threads.Deps{Repo: w.repo, Messages: store.NewMessageExtStore(w.repo.ORM()), Senders: store.NewThreadExtStore(w.repo.ORM())})}).WithAccountRouting(w.backgroundRouting())
+	activity := handlers.NewCompactActivity(handlers.CompactDeps{ToolResults: handlers.NewToolCalls(w.repo.ORM()), Store: rowreads.WithRepo(w.repo), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(w.repo), Messages: store.NewMessageExtStore(w.repo.ORM()), Senders: store.NewThreadExtStore(w.repo.ORM())})}).WithAccountRouting(w.backgroundRouting())
 	env := backgroundActivityEnv()
 	env.RegisterActivity(activity.Execute)
 	input := types.ActivityInput{

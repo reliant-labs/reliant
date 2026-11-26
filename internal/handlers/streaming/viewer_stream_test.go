@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -104,7 +106,7 @@ func newSharedChatService(t *testing.T) (*viewertest.Fixture, *Service) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: f.Membership})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo), Deltas: noopHub{}, Orgs: f.Membership})))
 	svc.heartbeatInterval = time.Hour // only the re-authorization ticks
 	svc.reauthorizeInterval = 10 * time.Millisecond
 	return f, svc

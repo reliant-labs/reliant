@@ -127,7 +127,7 @@ func chatSnapshotOverStream(t *testing.T, repo *db.Repo, userID, chatID string) 
 	svc, err := streaming.New(streaming.Deps{
 		Logger:     slog.Default(),
 		Config:     &typedconfig.Config{},
-		Repo:       repo,
+		Repo:       rowreads.WithRepo(repo),
 		ChatRows:   store.NewChatExtStore(repo.ORM()),
 		Senders:    store.NewThreadExtStore(repo.ORM()),
 		Heads:      store.NewChatUpdateExtStore(repo.ORM()),

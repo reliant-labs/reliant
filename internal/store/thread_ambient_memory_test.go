@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
-	"github.com/stretchr/testify/require"
 )
 
 func TestThreadAmbientMemoryExclusionMonotonicLineage(t *testing.T) {
@@ -33,7 +34,7 @@ func TestThreadAmbientMemoryExclusionMonotonicLineage(t *testing.T) {
 		excluded, err = env.Repo.ResolveThreadAmbientMemoryExclusion(ctx, "memory-chat", id, false)
 		require.NoError(t, err)
 		require.True(t, excluded, id)
-		thread, err := env.Repo.GetThread(ctx, id)
+		thread, err := store.GetThread(ctx, env.Repo.ORM(), id)
 		require.NoError(t, err)
 		require.True(t, thread.ExcludeAmbientMemory, "policy must latch, not just be computed transiently")
 	}

@@ -211,7 +211,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 	thread := chatID
 	h.CreateTestUserMessage(ctx, chatID, thread)
 
-	save := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
+	save := NewSaveMessageActivity(SaveMessageDeps{Store: rowreads.WithRepo(h.Repo()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(h.Repo()), Messages: dbstore.NewMessageExtStore(h.Repo().ORM()), Senders: dbstore.NewThreadExtStore(h.Repo().ORM())})})
 	const callID = "toolu_view_1"
 	var assistantOut SaveMessageOutput
 	require.NoError(t, h.ExecuteActivity(save.Execute, &SaveMessageInput{
@@ -243,7 +243,7 @@ func TestToolResultImageReachesTheNextPrompt(t *testing.T) {
 		ToolResults: protoToolResultsToMessage(execOut.ToolResults),
 	}, &toolOut))
 
-	msgs, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)
+	msgs, err := LoadMessagesForLLM(ctx, rowreads.WithRepo(h.Repo()), toolCallsOf(h.Repo()), chatID, thread, nil)
 	require.NoError(t, err)
 	var result *message.ToolResult
 	for i := range msgs {

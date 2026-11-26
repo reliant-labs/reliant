@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,7 +101,7 @@ func newGreenfieldRun(t *testing.T, noMachine bool) *greenfieldRun {
 		ID: chatID, UserID: userID, ProjectID: projectID, WorkflowName: &workflowName,
 		State: db.ChatStateIdle, NoMachine: noMachine, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	_, _, _, err := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: workflowName, Thread: chatID,
 			Status: db.Active(), CreatedAt: now,

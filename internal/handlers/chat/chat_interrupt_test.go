@@ -32,7 +32,7 @@ func TestInterruptThread_TranslatesServiceResult(t *testing.T) {
 	t.Cleanup(cleanup)
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
-	svc := &Service{deps: Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo), Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})}
+	svc := &Service{deps: Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo), Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})}
 
 	resp, err := svc.InterruptThread(ctx, connect.NewRequest(&reliantv1.InterruptThreadRequest{
 		ChatId:   fx.chatID,
@@ -65,22 +65,22 @@ func TestInterruptThread_ErrorCodes(t *testing.T) {
 	}
 
 	t.Run("a missing thread id is InvalidArgument", func(t *testing.T) {
-		ce := interrupt(t, threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), fx.chatID, "")
+		ce := interrupt(t, threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), fx.chatID, "")
 		assert.Equal(t, connect.CodeInvalidArgument, ce.Code())
 		assert.Equal(t, "thread_id is required", ce.Message())
 	})
 	t.Run("a chat the caller cannot see is NotFound", func(t *testing.T) {
-		ce := interrupt(t, threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), uuid.NewString(), fx.rootThreadID)
+		ce := interrupt(t, threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), uuid.NewString(), fx.rootThreadID)
 		assert.Equal(t, connect.CodeNotFound, ce.Code())
 		assert.Equal(t, "chat not found", ce.Message())
 	})
 	t.Run("a thread of another chat is NotFound", func(t *testing.T) {
-		ce := interrupt(t, threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), fx.chatID, uuid.NewString())
+		ce := interrupt(t, threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), fx.chatID, uuid.NewString())
 		assert.Equal(t, connect.CodeNotFound, ce.Code())
 		assert.Equal(t, "thread not found", ce.Message())
 	})
 	t.Run("an undeliverable signal is Unavailable, without Temporal's text", func(t *testing.T) {
-		ce := interrupt(t, threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Signaler: failingSignaler{}}), fx.chatID, fx.rootThreadID)
+		ce := interrupt(t, threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Chats: chataccess.NewFromORM(repo.ORM()), Signaler: failingSignaler{}}), fx.chatID, fx.rootThreadID)
 		assert.Equal(t, connect.CodeUnavailable, ce.Code())
 		assert.Equal(t, "interrupt undeliverable", ce.Message())
 	})

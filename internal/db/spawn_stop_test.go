@@ -73,7 +73,7 @@ func TestCancelStoppedSpawn(t *testing.T) {
 		"th-ss-spawn": ThreadStatusCancelled, "th-ss-grandchild": ThreadStatusCancelled,
 		"th-ss-paused": ThreadStatusCancelled, "th-ss-done": ThreadStatusCompleted,
 	} {
-		th, err := repo.GetThread(ctx, id)
+		th, err := store.GetThread(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetThread(%s): %v", id, err)
 		}

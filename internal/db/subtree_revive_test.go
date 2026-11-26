@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // insertTestWorkflowAt creates a workflows row with an explicit created_at and
@@ -137,7 +139,7 @@ func TestReviveSubtreeLiveAt(t *testing.T) {
 	}
 
 	for _, id := range []string{"th-sr-live", "th-sr-grandchild", rootID} {
-		th, err := repo.GetThread(ctx, id)
+		th, err := store.GetThread(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetThread(%s): %v", id, err)
 		}
@@ -174,7 +176,7 @@ func TestReviveSubtreeLiveAt(t *testing.T) {
 		if tc.threadID == "" {
 			continue
 		}
-		th, err := repo.GetThread(ctx, tc.threadID)
+		th, err := store.GetThread(ctx, repo.ORM(), tc.threadID)
 		if err != nil {
 			t.Fatalf("GetThread(%s): %v", tc.threadID, err)
 		}
@@ -219,7 +221,7 @@ func TestReviveSubtreeLiveAt_RootThreadOnly(t *testing.T) {
 		t.Errorf("threadsRevived = %d, want 1 (the root's own thread)", threadsRevived)
 	}
 
-	th, err := repo.GetThread(ctx, rootID)
+	th, err := store.GetThread(ctx, repo.ORM(), rootID)
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}

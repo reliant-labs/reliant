@@ -954,7 +954,7 @@ func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 
 	if msg.SenderThreadID != nil && msg.SenderKind != nil {
 		var title *string
-		if t, err := r.GetThread(ctx, *msg.SenderThreadID); err == nil && t != nil {
+		if t, err := store.GetThread(ctx, r.ORM(), *msg.SenderThreadID); err == nil && t != nil {
 			title = t.Title
 		}
 		var subject string

@@ -48,7 +48,7 @@ func toolsConfig(permission string, preloaded, loadable, spawn []string) *relian
 // workflow recorded for the thread, and returns its output.
 func (f *noMachineFixture) turn(t *testing.T, cfg *reliantv1.ToolsConfig, grants []string) *reliantv1.CallLLMOutput {
 	t.Helper()
-	callLLM := NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(f.h.Repo()), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: f.h.Repo(), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: f.h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: f.callLLM.driverResolver, MCPBinder: f.callLLM.mcpBinder})
+	callLLM := NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(f.h.Repo()), Mailbox: store.NewAgentMessageExtStore(f.h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(f.h.Repo()), Messages: store.NewMessageExtStore(f.h.Repo().ORM()), Senders: store.NewThreadExtStore(f.h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(f.h.Repo().ORM()), Hub: nil, ToolsFactory: tools.NewToolsFactory(&tools.ToolsOptions{Repo: f.h.Repo()}), ConfigProvider: &staticConfigProvider{}, DriverResolver: f.callLLM.driverResolver, MCPBinder: f.callLLM.mcpBinder})
 	var output CallLLMOutput
 	require.NoError(t, f.h.ExecuteActivity(callLLM.Execute, ActivityInput{
 		Runtime: RuntimeContext{ChatID: f.chat.ID, Thread: f.chat.ID, ToolGrants: grants},

@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -22,6 +24,7 @@ import (
 // still there to be counted.
 type wholeConfigRowCounter struct {
 	*db.Repo
+	rowreads.Reads
 
 	mu    sync.Mutex
 	reads int
@@ -48,7 +51,7 @@ func TestLaunchChatStartReadsOnlyTheConfigColumnsItNeeds(t *testing.T) {
 		ProjectPresetsJSON: &presets, ProjectSkillsJSON: &skills,
 	}))
 
-	counter := &wholeConfigRowCounter{Repo: repo}
+	counter := &wholeConfigRowCounter{Repo: repo, Reads: rowreads.Of(repo)}
 	starter := &fakeStarter{}
 	launcher, _ := newTestLauncher(t, counter, starter)
 

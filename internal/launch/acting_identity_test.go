@@ -4,6 +4,8 @@ package launch
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +21,7 @@ func launchAs(t *testing.T, ev Event, spec Spec) map[string]any {
 	t.Helper()
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	spec.OwnerUserID, spec.ProjectID, spec.Workflow = launchTestUserID, projectID, "builtin://agent"
 	spec.Params, spec.Messages = mockModelParams(t), userSeed("go")
 	_, err := launcher.Launch(ctx, ev, spec)
@@ -76,7 +78,7 @@ func TestLaunch_ClientParamsCannotWriteTheBotIdentity(t *testing.T) {
 
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
 		Params: params, Messages: userSeed("hi"),

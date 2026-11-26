@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,7 +72,7 @@ func TestPlanReadThrough_SubAgentSeesParentBoard(t *testing.T) {
 	childCtx := createTestContextForThread(t, chatID, childID)
 
 	t.Run("list_tasks resolves to the parent's plan", func(t *testing.T) {
-		resp, err := (&ListTasksTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(childCtx, ListTasksParams{})
+		resp, err := (&ListTasksTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(childCtx, ListTasksParams{})
 		require.NoError(t, err)
 		assert.Contains(t, resp.Content, "Implement sim",
 			"a sub-agent must see the board it was spawned from")
@@ -79,7 +81,7 @@ func TestPlanReadThrough_SubAgentSeesParentBoard(t *testing.T) {
 	})
 
 	t.Run("get_plan resolves to the parent's plan", func(t *testing.T) {
-		resp, err := (&GetPlanTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(childCtx, GetPlanParams{})
+		resp, err := (&GetPlanTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(childCtx, GetPlanParams{})
 		require.NoError(t, err)
 		assert.Contains(t, resp.Content, "Ship the feature")
 	})
@@ -89,7 +91,7 @@ func TestPlanReadThrough_SubAgentSeesParentBoard(t *testing.T) {
 	// here needs. The refusal must NOT advise create_plan — that is what
 	// fragments the parent's board into private copies.
 	t.Run("add_task refuses, and does not advise create_plan", func(t *testing.T) {
-		resp, err := (&AddTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(childCtx, AddTaskParams{Title: "sneak in a task"})
+		resp, err := (&AddTaskTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(childCtx, AddTaskParams{Title: "sneak in a task"})
 		require.NoError(t, err)
 		assert.Contains(t, resp.Content, "read-only")
 		assert.Contains(t, resp.Content, chatID, "the refusal names the owning thread")
@@ -101,7 +103,7 @@ func TestPlanReadThrough_SubAgentSeesParentBoard(t *testing.T) {
 	// "2 is mine, and now it is done" against the board it can see.
 	t.Run("update_task by ordinal resolves against the inherited plan", func(t *testing.T) {
 		assignee := "sub-agent-content"
-		resp, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(childCtx, UpdateTaskParams{
+		resp, err := (&UpdateTaskTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(childCtx, UpdateTaskParams{
 			TaskID:   "2",
 			Status:   "in_progress",
 			Assignee: assignee,
@@ -111,7 +113,7 @@ func TestPlanReadThrough_SubAgentSeesParentBoard(t *testing.T) {
 
 		// And the parent sees the claim, which is what stops it handing the
 		// same task to a second agent.
-		parentView, err := (&ListTasksTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(parentCtx, ListTasksParams{})
+		parentView, err := (&ListTasksTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(parentCtx, ListTasksParams{})
 		require.NoError(t, err)
 		assert.Contains(t, parentView.Content, assignee,
 			"assignee must be visible on the parent's board or the claim protocol is unobservable")
@@ -147,7 +149,7 @@ func TestPlanReadThrough_OwnPlanWins(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	resp, err := (&ListTasksTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(childCtx, ListTasksParams{})
+	resp, err := (&ListTasksTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(childCtx, ListTasksParams{})
 	require.NoError(t, err)
 	assert.Contains(t, resp.Content, "My own task")
 	assert.NotContains(t, resp.Content, "Parent task",
@@ -185,15 +187,15 @@ func TestPlanReadThrough_ReadySetIsStatedAsFanOut(t *testing.T) {
 
 	// Only the schema is ready while it blocks the rest, so there is no
 	// fan-out to advertise yet.
-	first, err := (&ListTasksTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, ListTasksParams{})
+	first, err := (&ListTasksTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(ctx, ListTasksParams{})
 	require.NoError(t, err)
 	assert.NotContains(t, first.Content, "ready now",
 		"one ready task is not a fan-out; advertising it would be noise")
 
-	_, err = (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{TaskID: "1", Status: "completed"})
+	_, err = (&UpdateTaskTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{TaskID: "1", Status: "completed"})
 	require.NoError(t, err)
 
-	after, err := (&ListTasksTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, ListTasksParams{})
+	after, err := (&ListTasksTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(ctx, ListTasksParams{})
 	require.NoError(t, err)
 	assert.Contains(t, after.Content, "3 tasks are ready now",
 		"once the blocker completes, the three independent tasks are the fan-out set")

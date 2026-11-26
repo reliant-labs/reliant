@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/stretchr/testify/require"
@@ -71,7 +73,7 @@ func TestChatSnapshot_UpdateHeadsDoNotHoldUpTheTranscript(t *testing.T) {
 	chat.WorkflowID = &fixture.ThreadID
 	require.NoError(t, repo.UpdateChat(ctx, chat))
 
-	gate := &headsGateRepo{Repository: repo, blocksAsked: make(chan struct{})}
+	gate := &headsGateRepo{Repository: rowreads.WithRepo(repo), blocksAsked: make(chan struct{})}
 	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: gate, ChatRows: store.NewChatExtStore(repo.ORM()), Heads: headsGate{Heads: store.NewChatUpdateExtStore(repo.ORM()), gate: gate}}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 	require.False(t, gate.heldUp, "the window's content blocks waited for the update heads")
@@ -92,7 +94,7 @@ func TestChatSnapshot_CarriesNoWorkflowState(t *testing.T) {
 	require.NoError(t, repo.CreateChatUpdate(ctx, fixture.ChatID, db.UpdateTypeWorkflowStatus, "run-1", `{"status":"completed"}`))
 	require.NoError(t, repo.CreateChatUpdate(ctx, fixture.ChatID, db.UpdateTypeApproval, "approval-1", `{"id":"approval-1","status":"pending"}`))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 	approvals := 0
 	for _, u := range snapshot.OtherUpdates {

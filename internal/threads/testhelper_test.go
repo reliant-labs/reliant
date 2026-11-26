@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -43,7 +45,7 @@ func newTestHelper(t *testing.T) *testHelper {
 	// ID would collide (chats_pkey) across every test function that builds a helper.
 	h.chatID = h.createChat("")
 
-	h.svc = New(Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	h.svc = New(Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	return h
 }
 

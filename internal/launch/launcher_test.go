@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess"
@@ -240,7 +242,7 @@ func mockModelParams(t *testing.T) map[string]*structpb.Value {
 func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, recorder := newTestLauncher(t, repo, starter)
+	launcher, recorder := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID,
@@ -279,7 +281,7 @@ func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 	assert.Equal(t, launchTestUserID, *rootRun.OwnerUserID)
 
 	// And its thread, which is what messages hang off.
-	thread, err := repo.GetThread(ctx, result.WorkflowID)
+	thread, err := store.GetThread(ctx, repo.ORM(), result.WorkflowID)
 	require.NoError(t, err)
 	assert.Equal(t, chatID, thread.ChatID)
 
@@ -323,7 +325,7 @@ func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 func TestLaunchHonorsNewChatID(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	wantID := uuid.NewString()
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
@@ -350,7 +352,7 @@ func TestLaunchHonorsNewChatID(t *testing.T) {
 func TestLaunchUnattendedSetsWorkflowInput(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID,
@@ -386,7 +388,7 @@ func TestLaunchUnattendedFollowsTheEventKind(t *testing.T) {
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			starter := &fakeStarter{}
-			launcher, _ := newTestLauncher(t, repo, starter)
+			launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 			ev := Event{Kind: tc.kind, DedupeKey: "evt-" + uuid.NewString(), OccurredAt: time.Now().UTC()}
 			if tc.kind == core.TriggerEventKindChatStart {
 				ev = chatStartEvent()
@@ -409,7 +411,7 @@ func TestLaunchGenerateTitleIsOptional(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 
 	withTitle := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, withTitle)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), withTitle)
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID:   launchTestUserID,
 		ProjectID:     projectID,
@@ -422,7 +424,7 @@ func TestLaunchGenerateTitleIsOptional(t *testing.T) {
 	assert.Contains(t, withTitle.startedIDs(), "generate-title-"+result.Chat.ID)
 
 	without := &fakeStarter{}
-	launcher2, _ := newTestLauncher(t, repo, without)
+	launcher2, _ := newTestLauncher(t, rowreads.WithRepo(repo), without)
 	result2, err := launcher2.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID,
 		ProjectID:   projectID,
@@ -440,7 +442,7 @@ func TestLaunchGenerateTitleIsOptional(t *testing.T) {
 func TestLaunchValidationFailureLeavesNoChat(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID,
@@ -469,7 +471,7 @@ func TestLaunchValidationFailureLeavesNoChat(t *testing.T) {
 // handler must not have to read the message text to tell them apart.
 func TestLaunchValidationKinds(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 
 	t.Run("a dotted param key is an invalid argument", func(t *testing.T) {
 		_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
@@ -549,7 +551,7 @@ func pendingBranch(t *testing.T, repo *db.Repo, ctx context.Context, projectID, 
 		WorktreeID: &worktreeID, WorkflowName: &workflowName, WorkflowID: &chatID,
 		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	_, _, _, err := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: workflowName, Thread: chatID,
 			Status: db.Pending(), CreatedAt: now, OwnerUserID: ptr(launchTestUserID),
@@ -576,7 +578,7 @@ func eventsFor(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) 
 func TestLaunchRecordsEventStartsWithUseExistingAndActivatesRoot(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	chatID := uuid.NewString()
 	result, err := launcher.Launch(ctx, Event{
@@ -611,7 +613,7 @@ func TestLaunchRecordsEventStartsWithUseExistingAndActivatesRoot(t *testing.T) {
 func TestLaunchStartsPendingBranchAndRefusesASecondStart(t *testing.T) {
 	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	spec := Spec{
@@ -651,7 +653,7 @@ func TestLaunchStartsPendingBranchAndRefusesASecondStart(t *testing.T) {
 func TestLaunchPendingSwitchesWorkflowAndRejectsForeignProject(t *testing.T) {
 	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
@@ -681,7 +683,7 @@ func TestLaunchPendingSwitchesWorkflowAndRejectsForeignProject(t *testing.T) {
 func TestLaunchResumesAfterTemporalStartFailure(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{failRootStarts: 1}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	chatID := uuid.NewString()
 	ev := Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}
@@ -722,7 +724,7 @@ func TestLaunchResumesAfterTemporalStartFailure(t *testing.T) {
 func TestLaunchCarriesUserJWTAndMode(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	mode := "plan"
 	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
@@ -741,7 +743,7 @@ func TestLaunchCarriesUserJWTAndMode(t *testing.T) {
 func TestLaunchCarriesTheTriggerOnWorkflowInput(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	scheduledFor := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
 	triggerID := uuid.NewString()
@@ -777,7 +779,7 @@ func TestLaunchCarriesTheTriggerOnWorkflowInput(t *testing.T) {
 
 	// An interactive start is an event too.
 	starter2 := &fakeStarter{}
-	launcher2, _ := newTestLauncher(t, repo, starter2)
+	launcher2, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter2)
 	_, err = launcher2.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
 		Params: mockModelParams(t), Messages: userSeed("hi"),
@@ -803,7 +805,7 @@ func TestLaunchMarksTheRunItStarts(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			starter := &fakeStarter{}
-			launcher, _ := newTestLauncher(t, repo, starter)
+			launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 			spec := tc.spec
 			spec.OwnerUserID, spec.ProjectID, spec.Workflow = launchTestUserID, projectID, "builtin://agent"
 			spec.Params, spec.Messages = mockModelParams(t), userSeed("go")
@@ -819,7 +821,7 @@ func TestLaunchMarksTheRunItStarts(t *testing.T) {
 func TestLoadChatTriggerReturnsTheLaunchEvent(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -840,7 +842,7 @@ func TestLoadChatTriggerReturnsTheLaunchEvent(t *testing.T) {
 func TestLaunchPinsSpecDaemonOnNewChat(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -860,7 +862,7 @@ func TestLaunchPinsSpecDaemonOnNewChat(t *testing.T) {
 func TestLaunchWithoutSpecDaemonLeavesChatUnpinned(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -878,7 +880,7 @@ func TestLaunchWithoutSpecDaemonLeavesChatUnpinned(t *testing.T) {
 func TestLaunchPinsSpecDaemonOnPendingChat(t *testing.T) {
 	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindChatStart, DedupeKey: chatID}, Spec{
@@ -904,7 +906,7 @@ func TestLaunchPinsSpecDaemonOnPendingChat(t *testing.T) {
 func TestConcurrentLaunchesOfTheSameEventConvergeOnOneChat(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	chatID := uuid.NewString()
 	ev := Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID}
@@ -955,7 +957,7 @@ func TestConcurrentLaunchesOfTheSameEventConvergeOnOneChat(t *testing.T) {
 func TestLaunchGuardDeclinesWithoutWritingAnything(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	chatID := uuid.NewString()
 	ev := Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID}
@@ -981,7 +983,7 @@ func TestLaunchRecordsThePromptOnTheStart(t *testing.T) {
 	for _, kind := range []core.TriggerEventKind{core.TriggerEventKindChatStart, core.TriggerEventKindAgentStartRun} {
 		t.Run(string(kind), func(t *testing.T) {
 			repo, ctx, projectID, _ := launchFixture(t)
-			launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+			launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 
 			chatID := uuid.NewString()
 			_, err := launcher.Launch(ctx, Event{Kind: kind, DedupeKey: chatID}, Spec{

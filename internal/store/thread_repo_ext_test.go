@@ -82,7 +82,7 @@ func TestThreadQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetThread(%s): %v", id, err)
 		}
-		twin, err := env.Repo.GetThread(ctx, id)
+		twin, err := store.GetThread(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("Repo.GetThread(%s): %v", id, err)
 		}
@@ -100,7 +100,7 @@ func TestThreadQueries(t *testing.T) {
 			_, err := store.UpdateThreadStatus(ctx, env.ORM, "th-none", core.ThreadStatusFailed, nil)
 			return err
 		},
-		"Repo.GetThread": func() error { _, err := env.Repo.GetThread(ctx, "th-none"); return err },
+		"Repo.GetThread": func() error { _, err := store.GetThread(ctx, env.Repo.ORM(), "th-none"); return err },
 	}
 	for name, miss := range misses {
 		if err := miss(); !errors.Is(err, sql.ErrNoRows) {
@@ -195,7 +195,7 @@ func TestThreadQueries(t *testing.T) {
 
 func mustThread(t *testing.T, env *storetest.Env, id string) *core.Thread {
 	t.Helper()
-	th, err := env.Repo.GetThread(context.Background(), id)
+	th, err := store.GetThread(context.Background(), env.Repo.ORM(), id)
 	if err != nil {
 		t.Fatalf("Repo.GetThread(%s): %v", id, err)
 	}

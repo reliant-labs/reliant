@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -36,21 +38,21 @@ func TestPlanTools_MissingPlanErrorNamesTheRemedy(t *testing.T) {
 		"missing plan must be svcerr.NotFound; the tool layer branches on it")
 
 	t.Run("list_tasks", func(t *testing.T) {
-		resp, err := (&ListTasksTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, ListTasksParams{})
+		resp, err := (&ListTasksTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(ctx, ListTasksParams{})
 		require.NoError(t, err)
 		assert.Contains(t, resp.Content, "create_plan")
 		assert.NotContains(t, resp.Content, "no plans found for thread")
 	})
 
 	t.Run("add_task", func(t *testing.T) {
-		resp, err := (&AddTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, AddTaskParams{Title: "orphan task"})
+		resp, err := (&AddTaskTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(ctx, AddTaskParams{Title: "orphan task"})
 		require.NoError(t, err)
 		assert.Contains(t, resp.Content, "create_plan")
 		assert.NotContains(t, resp.Content, "no plans found for thread")
 	})
 
 	t.Run("update_task by ordinal", func(t *testing.T) {
-		resp, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
+		resp, err := (&UpdateTaskTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
 			TaskID: "1",
 			Status: "completed",
 		})

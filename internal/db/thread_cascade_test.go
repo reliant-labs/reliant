@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // insertTestThreadForWorkflow creates a threads row owned by workflowID, at
@@ -63,7 +65,7 @@ func TestCascadeTerminalStatusToThreadSubtree_CascadesRecursively(t *testing.T) 
 	}
 
 	for _, id := range []string{"th-tc-root", "th-tc-child", "th-tc-grandchild"} {
-		th, err := repo.GetThread(ctx, id)
+		th, err := store.GetThread(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetThread(%s): %v", id, err)
 		}
@@ -75,7 +77,7 @@ func TestCascadeTerminalStatusToThreadSubtree_CascadesRecursively(t *testing.T) 
 		}
 	}
 
-	unrelated, err := repo.GetThread(ctx, "th-tc-unrelated")
+	unrelated, err := store.GetThread(ctx, repo.ORM(), "th-tc-unrelated")
 	if err != nil {
 		t.Fatalf("GetThread(unrelated): %v", err)
 	}
@@ -119,7 +121,7 @@ func TestCascadeTerminalStatusToThreadSubtree_TerminationIsNotCompletion(t *test
 				t.Fatalf("CascadeTerminalStatusToThreadSubtree: %v", err)
 			}
 
-			th, err := repo.GetThread(ctx, threadID)
+			th, err := store.GetThread(ctx, repo.ORM(), threadID)
 			if err != nil {
 				t.Fatalf("GetThread(%s): %v", threadID, err)
 			}
@@ -164,7 +166,7 @@ func TestCascadeTerminalStatusToThreadSubtree_FailClosed(t *testing.T) {
 		t.Fatalf("CascadeTerminalStatusToThreadSubtree: %v", err)
 	}
 
-	th, err := repo.GetThread(ctx, alreadyDoneID)
+	th, err := store.GetThread(ctx, repo.ORM(), alreadyDoneID)
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}

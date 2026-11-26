@@ -63,7 +63,7 @@ func setupBranchAtomicitySource(t *testing.T, repo *db.Repo, ctx context.Context
 		UpdatedAt: now,
 	}))
 
-	threadsSvc := threads.New(threads.Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	threadsSvc := threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Chats: chataccess.NewFromORM(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
 	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID:           chatID,
@@ -213,7 +213,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	require.NoError(t, wfErr)
 	require.NotNil(t, wf, "forked root workflow should exist for the branched chat")
 
-	thread, threadErr := repo.GetThread(ctx, branchChatID)
+	thread, threadErr := store.GetThread(ctx, repo.ORM(), branchChatID)
 	require.NoError(t, threadErr)
 	require.NotNil(t, thread, "forked root thread should exist for the branched chat")
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 
 	"github.com/stretchr/testify/require"
@@ -44,7 +46,7 @@ func TestCapacityInFlightStartHoldsSlotWhenRootLeavesPending(t *testing.T) {
 			f := newFireFixture(t, nil)
 			ctx := context.Background()
 			starter := &absentStarter{&describedStarter{flakyStarter: f.starter, descriptions: map[string]*workflowservice.DescribeWorkflowExecutionResponse{}}}
-			launcher := launch.New(launch.Deps{Store: f.repo, Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), Installs: daemonplacement.NewRecords(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
+			launcher := launch.New(launch.Deps{Store: f.repo, Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), Installs: daemonplacement.NewRecords(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(f.repo), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 			resolver := capacityResolver{wf: &reliantv1.Workflow{Concurrency: &reliantv1.WorkflowConcurrency{MaxRunning: 1}}}
 			f.firer = NewFirer(NewStores(f.repo), launcher).WithWorkflows(resolver).WithCapacityDescriptions(starter)
 			scope := store.TriggerCapacityScope{UserID: f.trigger.UserID, ProjectID: f.trigger.ProjectID, WorkflowRef: workflowref.RefKey(f.trigger.Workflow)}
