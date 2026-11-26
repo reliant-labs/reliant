@@ -13,6 +13,7 @@
  *     empty state, never invented rows.
  */
 
+import "@/components/Forge/Ml/__tests__/jsdomShims";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -92,7 +93,7 @@ describe("the ML gate", () => {
   });
 
   it("turns a FEATURE_NOT_ENTITLED read into the access page", async () => {
-    renderGate(api({ entitlement: { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 }, read: (async () => ({ kind: "not-entitled" })) as MlApi["read"] }));
+    renderGate(api({ entitlement: { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 }, read: (async () => ({ kind: "not-entitled" })) as MlApi["read"] }), "overview");
     expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
     await waitFor(() => expect(tracked.at(-1)?.props?.source).toBe("refused"));
   });

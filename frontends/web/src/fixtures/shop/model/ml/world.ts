@@ -65,7 +65,8 @@ export { DAY, HOUR, MINUTE };
 // ── Clock ─────────────────────────────────────────────────────────────────────
 
 /** Epoch ms of an offset from now (negative is the past). */
-export const msAt = (offsetMs: number, now: () => number = demoNow) => now() + offsetMs;
+/** Rounded to the ms: a Timestamp's nanos must be an integer on the wire, and story offsets are often fractional (hours × steps/hour). */
+export const msAt = (offsetMs: number, now: () => number = demoNow) => Math.round(now() + offsetMs);
 /** A Timestamp at an offset from now. */
 export const at = (offsetMs: number, now: () => number = demoNow) => timestampFromMs(msAt(offsetMs, now));
 /** Epoch seconds at an offset (a time-axis MlSeries x). */

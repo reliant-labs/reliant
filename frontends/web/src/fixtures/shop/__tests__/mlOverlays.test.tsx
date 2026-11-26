@@ -9,6 +9,7 @@
  * access" page; asking for access is still refused, as every demo write is.
  */
 
+import "@/components/Forge/Ml/__tests__/jsdomShims";
 import { createClient } from "@connectrpc/connect";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

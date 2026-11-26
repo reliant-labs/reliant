@@ -128,6 +128,7 @@ export function MlChart({ series, events, bands, label, height = 160, syncKey, a
         bars={bars}
         syncKey={syncKey}
         xFormat={xFormat}
+        annotationSummary={false}
       />
     </div>
   );
@@ -213,7 +214,7 @@ export const GANTT_STATES: Record<string, GanttStateStyle> = {
   other: { label: "Other", fill: "hsl(var(--chart-6))" },
 };
 
-const HATCH = "repeating-linear-gradient(135deg, transparent 0 3px, hsl(var(--surface) / 0.55) 3px 5px)";
+const HATCH = "repeating-linear-gradient(135deg, transparent 0 3px, hsl(var(--card) / 0.6) 3px 5px)";
 
 /** Evenly spaced ticks across [from, to]. */
 export function ticks(from: number, to: number, count = 6): number[] {
@@ -259,11 +260,12 @@ export function Gantt({
         {rows.map((row) => (
           <div
             key={row.id}
-            className={cn("group flex h-8 items-center border-b border-border-subtle last:border-0", row.onSelect && "cursor-pointer hover:bg-ink/5", row.selected && "bg-ink/5")}
+            className={cn("group flex items-center border-b border-border-subtle last:border-0", row.onSelect && "cursor-pointer hover:bg-ink/5", row.selected && "bg-ink/5")}
             onClick={row.onSelect}
+            style={{ height: row.sub ? 40 : 32 }}
             data-testid={testId ? `${testId}-row-${row.id}` : undefined}
           >
-            <div className="flex shrink-0 flex-col justify-center truncate pr-3 leading-tight" style={{ width: labelWidth }}>
+            <div className="flex min-w-0 shrink-0 flex-col justify-center overflow-hidden pr-3 leading-4" style={{ width: labelWidth }}>
               <span className="truncate text-ui text-ink">{row.label}</span>
               {row.sub && <span className="truncate text-meta text-ink-muted">{row.sub}</span>}
             </div>
@@ -279,7 +281,7 @@ export function Gantt({
                     style={{ left, width, background: style.hatched ? `${HATCH}, ${style.fill}` : style.fill }}
                     title={s.title ?? `${style.label}${s.label ? `: ${s.label}` : ""}`}
                   >
-                    {s.label && <span className="truncate text-2xs font-medium text-primary-foreground">{s.label}</span>}
+                    {s.label && <span className="truncate text-meta font-medium text-primary-foreground">{s.label}</span>}
                   </span>
                 );
                 return s.href ? (
@@ -332,7 +334,9 @@ function GanttMarkGlyph({ mark, left }: { mark: GanttMark; left: string }) {
   const shape = mark.shape ?? "tick";
   const glyph =
     shape === "diamond" ? (
-      <span className="block h-2 w-2 rotate-45 border border-surface" style={{ backgroundColor: color }} />
+      <span className="block text-meta leading-none" style={{ color }}>
+        ◆
+      </span>
     ) : shape === "cross" ? (
       <span className="block text-meta font-bold leading-none" style={{ color }}>
         ✕
@@ -389,7 +393,7 @@ export function Histogram({ histogram, height = 120, testId }: { histogram: MlHi
         ).map(([name, v]) =>
           Number.isFinite(v) && v > 0 ? (
             <div key={name} className="pointer-events-none absolute inset-y-0 border-l border-ink/60" style={{ left: at(v) }}>
-              <span className="absolute -top-0.5 left-1 whitespace-nowrap text-2xs tabular-nums text-ink-muted">
+              <span className="absolute -top-0.5 left-1 whitespace-nowrap text-meta tabular-nums text-ink-muted">
                 {name} {f(v)}
               </span>
             </div>
@@ -462,7 +466,7 @@ export function Heatmap({
             {row.cells.map((v, i) => (
               <div
                 key={i}
-                className={cn("flex-1 rounded-sm", onCell && "cursor-pointer hover:outline hover:outline-1 hover:outline-ink")}
+                className={cn("flex-1", onCell && "cursor-pointer hover:outline hover:outline-1 hover:outline-ink")}
                 style={{
                   height: cellHeight,
                   background: v === null ? "repeating-linear-gradient(135deg, transparent 0 2px, hsl(var(--border)) 2px 3px)" : `hsl(var(--chart-1) / ${0.08 + 0.92 * Math.min(1, Math.max(0, v / max))})`,

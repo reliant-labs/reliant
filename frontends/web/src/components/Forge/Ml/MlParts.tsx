@@ -91,6 +91,8 @@ export function MlFrame({
   return (
     <div className="mx-auto w-full min-w-0 max-w-screen-2xl space-y-4" data-testid={testId ?? `ml-page-${view}`}>
       <div className="space-y-1">
+        {/* A view's own page is already named by the console's top bar; a drill-down carries its path. */}
+        {crumbs && crumbs.length > 0 && (
         <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-meta text-ink-muted" data-testid="ml-crumbs">
           {trail.map((crumb, i) => (
             <span key={`${i}-${crumb.label}`} className="flex items-center gap-1">
@@ -105,6 +107,7 @@ export function MlFrame({
             </span>
           ))}
         </nav>
+        )}
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 space-y-0.5">
             <div className="flex flex-wrap items-center gap-2">

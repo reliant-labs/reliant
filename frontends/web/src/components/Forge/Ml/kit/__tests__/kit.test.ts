@@ -1,0 +1,67 @@
+// Copyright (c) 2026 Reliant Labs
+
+/** The ML kit's pure parts: number formats (not collected is "—", never 0), links for every subject kind, series alignment. */
+
+import "@/components/Forge/Ml/__tests__/jsdomShims";
+import { create } from "@bufbuild/protobuf";
+import { describe, expect, it } from "vitest";
+
+import { MlSeriesSchema, MlSubjectKind } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+
+import { alignSeries, ticks } from "../charts";
+import { fmtBytes, fmtCompact, fmtDuration, fmtGpuHours, fmtMs, fmtPct, fmtStep, fmtUnit, fmtUsd } from "../format";
+import { mlHref, searchString, subjectHref } from "../links";
+
+describe("ML number formats", () => {
+  it("never write a missing value as zero", () => {
+    for (const f of [fmtPct, fmtUsd, fmtGpuHours, fmtMs, fmtDuration]) expect(f(Number.NaN)).toBe("—");
+    expect(fmtUnit(Number.NaN, "ratio")).toBe("—");
+  });
+
+  it("read as a person reads them", () => {
+    expect(fmtCompact(41_200)).toBe("41.2k");
+    expect(fmtCompact(2_700_000_000)).toBe("2.7B");
+    expect(fmtStep(41_200)).toBe("41.2k");
+    expect(fmtStep(6_400)).toBe("6,400");
+    expect(fmtUsd(5_100)).toBe("$5.1k");
+    expect(fmtUsd(0.41)).toBe("$0.41");
+    expect(fmtGpuHours(1204.3)).toBe("1,204 GPU-h");
+    expect(fmtPct(0.834)).toBe("83%");
+    expect(fmtBytes(212 * 1024 ** 3)).toBe("212 GiB");
+    expect(fmtDuration(22_200)).toBe("6h 10m");
+    expect(fmtMs(4100)).toBe("4.1 s");
+  });
+});
+
+describe("ML links", () => {
+  it("open every subject kind's page", () => {
+    expect(subjectHref({ kind: MlSubjectKind.RUN, id: "run_1", label: "llama-8b-support-v3" })).toBe("/forge/ml/runs/llama-8b-support-v3");
+    expect(subjectHref({ kind: MlSubjectKind.PHASE, id: "run_1/sft" })).toBe("/forge/ml/runs/run_1/phases/sft");
+    expect(subjectHref({ kind: MlSubjectKind.ATTEMPT, id: "run_1/sft/3" })).toBe("/forge/ml/runs/run_1/phases/sft?attempt=3");
+    expect(subjectHref({ kind: MlSubjectKind.RANK, id: "run_1/sft/3/37" })).toBe("/forge/ml/runs/run_1/phases/sft?attempt=3&rank=37&tab=system");
+    expect(subjectHref({ kind: MlSubjectKind.NODE, id: "gke-a/node-1" })).toBe("/forge/ml/fleet/gke-a/node-1");
+    expect(subjectHref({ kind: MlSubjectKind.DEVICE, id: "GPU-1" })).toBe("/forge/ml/fleet/gpus/GPU-1");
+    expect(subjectHref({ kind: MlSubjectKind.MODEL_VERSION, id: "support-assistant/v2" })).toBe("/forge/ml/models/support-assistant/v2");
+    expect(subjectHref({ kind: MlSubjectKind.FINDING, id: "f-1" })).toBe("/forge/ml/recommendations?sel=f-1");
+    expect(subjectHref({ kind: MlSubjectKind.DATASET, id: "ds" })).toBeNull();
+    expect(subjectHref({ kind: MlSubjectKind.MODEL, id: "meta-llama/Llama-3.1-8B" })).toBe("https://huggingface.co/meta-llama/Llama-3.1-8B");
+  });
+
+  it("encode segments and drop empty search values", () => {
+    expect(mlHref("models", ["support-assistant", "v2.1-fp8"])).toBe("/forge/ml/models/support-assistant/v2.1-fp8");
+    expect(mlHref("inference", ["svc/x"])).toBe("/forge/ml/inference/svc%2Fx");
+    expect(searchString({ tab: "metrics", sel: "", attempt: undefined })).toBe("?tab=metrics");
+  });
+});
+
+describe("ML charts", () => {
+  it("align series on the union of their x values, a gap where one has none", () => {
+    const a = create(MlSeriesSchema, { key: "a", x: [1, 2, 3], y: [10, 20, 30] });
+    const b = create(MlSeriesSchema, { key: "b", x: [2, 4], y: [5, Number.NaN] });
+    expect(alignSeries([a, b])).toEqual({ xs: [1, 2, 3, 4], ys: [[10, 20, 30, null], [null, 5, null, null]] });
+  });
+
+  it("space ticks evenly", () => {
+    expect(ticks(0, 100, 5)).toEqual([0, 25, 50, 75, 100]);
+  });
+});

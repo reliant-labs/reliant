@@ -106,7 +106,8 @@ export function subjectHref(subject: Pick<MlSubject, "kind" | "id"> & { label?: 
       return mlHref("runs", [run], { tab: "checkpoints", sel: id });
     }
     case MlSubjectKind.MODEL:
-      return mlHref("models", [id]);
+      // A registry model id has no "/"; one that does is a Hugging Face repo (a base model), which lives there.
+      return id.includes("/") ? `https://huggingface.co/${id}` : mlHref("models", [id]);
     case MlSubjectKind.MODEL_VERSION: {
       const [model, version] = parts(id);
       return mlHref("models", [model, version]);

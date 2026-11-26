@@ -63,7 +63,8 @@ export function v3GradNorm(phase: string, step: number): number {
 
 /** Global tokens/s at a step of an attempt; the straggler costs ~15% after it starts. */
 export function v3TokensPerSecond(phase: string, step: number, straggling: boolean): number {
-  const base = phase === "pretrain" ? 1_180_000 : 1_090_000;
+  // tokensPerStep × world.ts V3_ATTEMPTS stepsPerHour / 3600: pretrain 500/h, sft 360/h.
+  const base = phase === "pretrain" ? 582_000 : 419_000;
   return (straggling ? base * 0.85 : base) * (1 + 0.015 * jitter(`v3-${phase}-tps`, step));
 }
 

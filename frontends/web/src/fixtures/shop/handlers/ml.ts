@@ -44,8 +44,8 @@ export function mergeAnswers(answers: readonly Record<string, unknown>[]): Recor
   return out;
 }
 
-/** An entity read: answering nothing is NotFound. Org-level reads (GetMlFleet, GetMlStack, GetMlQueues) and lists are not. */
-const isEntityRead = (m: DescMethod) => m.name.startsWith("Get") && !["GetMlFleet", "GetMlStack", "GetMlQueues"].includes(m.name);
+/** An entity read: answering nothing is NotFound. Org-level reads (GetMlFleet, GetMlStack, GetMlQueues), lineage (an empty graph) and lists are not. */
+const isEntityRead = (m: DescMethod) => m.name.startsWith("Get") && !["GetMlFleet", "GetMlStack", "GetMlQueues", "GetMlLineage"].includes(m.name);
 
 /** Answers `method` from `domains`. Exported for the world's tests. */
 export function answerMl(method: DescMethod, req: unknown, now: () => number, domains: readonly MlDomain[] = ML_DOMAINS) {

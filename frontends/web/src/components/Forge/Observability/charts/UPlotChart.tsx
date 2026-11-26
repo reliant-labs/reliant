@@ -257,6 +257,12 @@ export interface UPlotChartProps {
    * linear, not time.
    */
   xFormat?: (x: number) => string;
+  /**
+   * The one-line summary of markers and bands under the plot ("6 releases ·
+   * 2 alerts"). Default: shown. Small multiples that share one legend turn
+   * it off; the caption read to screen readers still names them.
+   */
+  annotationSummary?: boolean;
 }
 
 const NO_BANDS: readonly ChartBand[] = [];
@@ -285,6 +291,7 @@ export function UPlotChart({
   hover: hoverable = true,
   syncKey,
   xFormat,
+  annotationSummary: showAnnotationSummary = true,
 }: UPlotChartProps) {
   // Callers build these arrays afresh on every render, and the chart below is
   // rebuilt whenever one changes identity: a page re-render (a tour step, a
@@ -650,7 +657,7 @@ export function UPlotChart({
           {calendarNote}
         </p>
       )}
-      {!compact && annotationSummary && (
+      {!compact && showAnnotationSummary && annotationSummary && (
         <p className="min-w-0 truncate text-xs text-ink-muted" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
           {annotationSummary}
         </p>
