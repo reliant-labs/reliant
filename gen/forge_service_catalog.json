@@ -51138,6 +51138,10 @@
               "type_name": "reliant.v1.NodeObserve"
             },
             {
+              "name": "role",
+              "kind": "string"
+            },
+            {
               "name": "secret_refs",
               "kind": "message",
               "type_name": "reliant.v1.NodeSecretRef",
@@ -51237,6 +51241,12 @@
               "name": "git_publish",
               "kind": "message",
               "type_name": "reliant.v1.GitPublishArgs",
+              "oneof": "args"
+            },
+            {
+              "name": "review",
+              "kind": "message",
+              "type_name": "reliant.v1.ReviewArgs",
               "oneof": "args"
             }
           ],
@@ -51496,6 +51506,35 @@
               "name": "schema",
               "kind": "message",
               "type_name": "google.protobuf.Struct"
+            }
+          ],
+          "reliant.v1.ReviewArgs": [
+            {
+              "name": "prompt",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
+            },
+            {
+              "name": "with",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "google.protobuf.Value"
+            },
+            {
+              "name": "model",
+              "kind": "message",
+              "type_name": "reliant.v1.CelModelSelector"
+            },
+            {
+              "name": "max_turns",
+              "kind": "message",
+              "type_name": "reliant.v1.CelInt"
+            },
+            {
+              "name": "project",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectConfig"
             }
           ],
           "reliant.v1.RouterArgs": [
@@ -52453,6 +52492,11 @@
               "name": "observe",
               "kind": "message",
               "type_name": "reliant.v1.NodeObserve"
+            },
+            {
+              "name": "timeout",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.WorkflowAttention": [
@@ -52827,6 +52871,7 @@
           "reliant.v1.ProjectConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PropertySchema": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ResponseTool": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ReviewArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.RouterArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.RouterWorkflowCandidate": "reliant/v1/workflow_v2.proto",
           "reliant.v1.RunArgs": "reliant/v1/workflow_v2.proto",
@@ -59937,9 +59982,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60345,6 +60388,15 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "PauseService",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "Plan",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatStore",
@@ -60382,9 +60434,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatRefetcher",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60804,9 +60854,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60947,9 +60995,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/question.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61342,9 +61388,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61690,9 +61734,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ChatRefetcher",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61979,9 +62021,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -62941,9 +62981,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -63189,6 +63227,14 @@
       "source": {
         "path": "internal/handlers/org_usage/service.go",
         "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "PauseService.Updates",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewPauseService"
       }
     },
     {

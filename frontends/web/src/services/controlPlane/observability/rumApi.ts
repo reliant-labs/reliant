@@ -40,7 +40,8 @@ import {
   type SessionTimelineEntry as WireEntry,
 } from "@/gen/controlplane/services/rum/v1/rum_pb";
 
-import { obsClient } from "./obsClient";
+import { getControlPlaneClient } from "../client";
+import { obsCall } from "./obsInterceptors";
 import { msOf } from "./api";
 import { countOf } from "./issuesApi";
 import type {
@@ -61,7 +62,7 @@ import type { TimeWindow } from "./types";
 import { mapClient } from "./client";
 
 function client(transport?: Transport) {
-  return obsClient(RumService, transport);
+  return getControlPlaneClient(RumService, transport);
 }
 
 function timestamp(ms: number): Timestamp {
@@ -210,13 +211,13 @@ export async function listSessions(req: ListSessionsRequest, options: { signal?:
     frontendVersion: req.frontendVersion || undefined,
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-  }, options);
+  }, obsCall(options));
   return { sessions: res.sessions.map(mapSessionSummary), nextPageToken: res.nextPageToken };
 }
 
 /** One session's summary. NotFound when the scope cannot see it. */
 export async function getSession(req: SessionRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<SessionSummary> {
-  const res = await client(transport).getSession({ scope: wireRumScope(req), sessionId: req.sessionId }, options);
+  const res = await client(transport).getSession({ scope: wireRumScope(req), sessionId: req.sessionId }, obsCall(options));
   if (!res.session) throw new Error("GetSession answered without a session");
   return mapSessionSummary(res.session);
 }
@@ -228,7 +229,7 @@ export async function getSessionTimeline(req: TimelineRequest, options: { signal
     sessionId: req.sessionId,
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-  }, options);
+  }, obsCall(options));
   return { entries: res.entries.map(mapTimelineEntry), nextPageToken: res.nextPageToken };
 }
 
@@ -239,6 +240,6 @@ export async function getSessionReplay(req: ReplayRequest, options: { signal?: A
     sessionId: req.sessionId,
     maxBytes: req.maxBytes ?? 0,
     pageToken: req.pageToken ?? "",
-  }, options);
+  }, obsCall(options));
   return mapReplayPage(res);
 }

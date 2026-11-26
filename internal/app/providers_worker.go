@@ -68,6 +68,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/prrecords"
 	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
@@ -623,7 +624,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
-		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
@@ -797,7 +798,10 @@ type TemporalWorkerDeps struct {
 	Pollers      *webhook.Registry
 	ControlPlane *configv1.ControlPlaneConfig
 	Network      *configv1.NetworkConfig
-	Recorder     *AccountRecorder
+	// Pipeline is ServerProcessConfig.pipeline: its enabled switch turns the
+	// Reliant server actions (uses: reliant/...) on for this worker.
+	Pipeline *configv1.PipelineConfig
+	Recorder *AccountRecorder
 	// WorkflowTaskSlots and WorkflowTaskPollers are WorkerConfig's
 	// RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS and
 	// RELIANT_WORKER_WORKFLOW_TASK_POLLERS (0: workersetup's default).
@@ -952,6 +956,19 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 	return nil, &handlers.HostedDisabledError{Reason: d.reason}
 }
 
+// WorkerServerActions is the worker's Reliant server actions, as
+// NewTemporalWorker hands them to workersetup: on only when the pipeline
+// switch is, with the handlers this worker binds (none yet: each pipeline
+// task binds its own here). The dispatcher's resolver is workersetup's, over
+// the worker's database.
+func WorkerServerActions(pipeline *configv1.PipelineConfig) serveraction.Config {
+	enabled := pipeline.GetEnabled()
+	if enabled {
+		slog.Default().Info("Reliant server actions are ON (pipeline.enabled)")
+	}
+	return serveraction.Config{Enabled: enabled}
+}
+
 // NewTemporalWorker is the Temporal worker on the shared task queue
 // (workersetup.Worker: its Drain releases in-flight activities, its Ready is
 // "polling"). A scheduled trigger fire launches through the same launcher
@@ -994,6 +1011,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
+		ServerActions:          WorkerServerActions(d.Pipeline),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},

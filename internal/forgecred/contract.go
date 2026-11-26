@@ -34,6 +34,12 @@
 // server first. The server answers "not my control plane" without minting, so
 // trying candidates in order is safe.
 //
+// The first candidate that grants EVERY scope forge asked for wins. One that
+// answers with fewer (the server omits what that identity lacks) does not end
+// the search: a later session — often the daemon, after the CLI login — may
+// grant the whole set. Only when none does is the widest partial grant
+// returned (uncached), and forge tells it is partial by the response's scopes.
+//
 //forge:not-a-component: CLI-only — built by `reliant auth forge-credential`; the server never builds it
 package forgecred
 

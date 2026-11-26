@@ -10,12 +10,12 @@
  *
  * The chain composes forge's web runtime (`@reliantlabs/forge-web-runtime`)
  * with reliant's own interceptors. The order is:
- *   error-normalize → org-snapshot → timeout → auth → missing-token → client-version
- *     → daemon-last-seen → trace → error-logging → upgrade-modal → machine-wake
- *     → 401-signout → write-owner
+ *   error-normalize → org-snapshot → observability reads → timeout → auth
+ *     → missing-token → client-version → daemon-last-seen → trace
+ *     → error-logging → upgrade-modal → machine-wake → 401-signout → write-owner
  * (error-normalize and auth are the runtime's; client-version and
- * daemon-last-seen only on reliant api-server transports — see
- * TransportBackend; trace is the runtime's).
+ * daemon-last-seen only on reliant api-server transports, observability reads
+ * only on control-plane ones — see TransportBackend; trace is the runtime's).
  *
  * Why this order:
  *   - error-normalize outermost so EVERY failure a caller sees — a server
@@ -34,6 +34,13 @@
  *     an operation started in A cannot become a write in B after a switch.
  *     Explicit caller orgs win; no selection stays unset across retries.
  *     Authed routes only, since an unauthenticated call has no org;
+ *   - the observability read stage (obsInterceptors.ts: quota guard, read
+ *     queue, Forge-Poll) holds a ClickHouse read until the page's read queue
+ *     gives it a slot. Inside error-normalize, so a quota refusal reaches
+ *     callers typed; after the org snapshot, so the read names the org it was
+ *     asked in and an org page still resolving holds no slot; ahead of the
+ *     deadline, the token and the trace, so the wait for a slot is not counted
+ *     against the read's timeout or in its span;
  *   - timeout bounds the remaining lifecycle (incl. retries through inner
  *     interceptors) without recapturing the operation's org;
  *   - auth attaches the bearer before the trace stage;
@@ -79,6 +86,7 @@ import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import { createDeadlineInterceptor, type StalledCalls } from "./rpcDeadline";
 import { writeOwnerInterceptor } from "./writeOwner";
 import { isReadSlotProcedure } from "../services/controlPlane/observability/readSlots";
+import { obsReadInterceptor } from "../services/controlPlane/observability/obsInterceptors";
 import { classifyRpcFailure } from "./rpcErrorPolicy";
 import { noteUpgradeRequired, noteVersionSkew } from "./versionSkew";
 import { clientHeaderValue, upgradeRequiredInfo } from "../lib/clientVersion";
@@ -186,6 +194,9 @@ const missingTokenInterceptor: Interceptor = (next) => async (req) => {
 // Every failure leaves the chain as the runtime's typed ConnectClientError —
 // see the module comment for why this is outermost.
 const normalizeInterceptor: Interceptor = errorNormalizeInterceptor({});
+
+/** The observability read stage (obsInterceptors.ts), on control-plane transports only. Exported for the chain-shape test. */
+export const obsReadStage: Interceptor = obsReadInterceptor();
 
 // Methods that need longer timeouts (0 = no timeout, handled by streaming layer)
 const LONG_TIMEOUT_METHODS: Record<string, number> = {
@@ -920,6 +931,7 @@ export function buildInterceptors(
   const chain: Interceptor[] = [
     normalizeInterceptor,
     ...(withAuth ? [orgInterceptor] : []),
+    ...(backend === "control-plane" ? [obsReadStage] : []),
     timeoutInterceptor,
     ...(withAuth ? [authInterceptor, missingTokenInterceptor] : []),
     ...(backend === "reliant-api"

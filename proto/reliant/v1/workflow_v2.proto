@@ -361,6 +361,17 @@ message Node {
   // the workflow's observe (the node wins). See NodeObserve.
   NodeObserve observe = 30 [(reliant) = {description: "What the node records when it finishes: span attributes, events (a decision is an event named decision) and metrics, as templates over output.*. Never fails the node"}];
 
+  // Role is the engine role this node acts in. A closed set: today only
+  // "reviewer", and only on a `review` node, which requires it. Empty means
+  // no role. A role is a fact the server reads (a verdict-writing server
+  // action checks that the node it reads came from a node with
+  // role: reviewer), so it is validated, never free text: a role on any other
+  // node fails validation, and the runtime clears one it finds there.
+  string role = 31 [(reliant) = {
+    description: "The engine role this node acts in. Only reviewer, and only on a review node, which requires it"
+    enum_values: "reviewer"
+  }];
+
   // Type-specific arguments. Exactly one must be set, matching the type field.
   // SecretRefs are the declared secrets this node's activity resolves, written by
   // the parser from the workflow's `secrets:` block and never authored. An action
@@ -387,6 +398,7 @@ message Node {
     ActionArgs action = 26;
     ComputeArgs compute = 27;
     GitPublishArgs git_publish = 28;
+    ReviewArgs review = 29;
   }
 }
 
@@ -1395,6 +1407,67 @@ message SubWorkflowArgs {
   }];
 }
 
+// ReviewArgs configures a review node: a reviewer agent that reads, and only
+// reads, then returns a structured verdict.
+//
+// The engine owns everything that makes the verdict trustworthy, and none of
+// it is configurable here:
+//   - a fresh session: every execution of the node, each round of a loop
+//     included, runs the agent in a thread of its own (ambient memory
+//     excluded), never one another node or an earlier round wrote to; what
+//     earlier rounds found reaches it only through `with`;
+//   - read-only tools: a fixed allowlist the engine also enforces at every
+//     model call in the session, with nothing loadable and no spawn;
+//   - verdict-only output: the node's output is a ReviewOutput, checked
+//     against a fixed schema, and anything else fails the node.
+// The node requires role: reviewer.
+//
+// Output fields accessible via nodes.<id>.*: see ReviewOutput.
+message ReviewArgs {
+  option (node_meta) = {
+    node_type: "review"
+    display_name: "Review"
+    description: "A read-only reviewer agent, in a fresh session, that returns a structured verdict"
+    is_structural: true
+    category: "agentic"
+    icon: "eye"
+  };
+
+  // Prompt is the reviewer's task: inline text (templates allowed), or a
+  // builtin:// reference to a prompt file the engine ships
+  // (builtin://pipeline/review.md). A path in the repository is not accepted:
+  // the reviewer's instructions must not come from the change under review.
+  CelString prompt = 1 [(reliant) = {
+    description: "The reviewer's task: inline text, or builtin://<path>.md for a prompt the engine ships"
+    example: "builtin://pipeline/review.md"
+    required: true
+  }];
+  // With is the data the reviewer works from, handed to it as JSON after the
+  // prompt. Values may be templates.
+  map<string, google.protobuf.Value> with = 2 [(reliant) = {
+    description: "Data for the reviewer, handed to it as JSON after the prompt; values may be templates"
+    example: "{\"head\": \"{{ trigger.record.head_sha }}\"}"
+    type_hint: "JSON object"
+  }];
+  // Model overrides the reviewer's model (default: the flagship tag).
+  CelModelSelector model = 3 [(reliant) = {
+    description: "The reviewer's model: a tag (flagship, fast, cheap) or an explicit model ID. Defaults to flagship"
+    example: "flagship"
+  }];
+  // MaxTurns bounds the reviewer's agent loop (default 100). A reviewer that
+  // reaches it without a verdict fails the node.
+  CelInt max_turns = 4 [(reliant) = {
+    description: "The most turns the reviewer may take before it must have submitted a verdict (default 100)"
+    min_value: 1
+    max_value: 500
+  }];
+  // Project sets the working directory the reviewer reads in.
+  ProjectConfig project = 5 [(reliant) = {
+    description: "Working directory override for the reviewer"
+    visibility_contexts: "advanced"
+  }];
+}
+
 // LoopArgs configures a loop node — repeats a sub-workflow while a condition is true.
 // Extends SubWorkflowArgs with loop-specific fields.
 //
@@ -2248,6 +2321,39 @@ message WorkflowOutput {
   google.protobuf.Struct outputs = 1;
 }
 
+// ReviewOutput is the output of a review node: the reviewer's verdict, checked
+// against this shape, plus two facts the engine (never the model) records.
+message ReviewOutput {
+  // Verdict is pass, changes or close.
+  string verdict = 1;
+  // Findings are the reviewer's findings, blockers and nits.
+  repeated ReviewFinding findings = 2;
+  // RiskTier is the reviewer's risk call, low, medium or high; empty when it
+  // made none.
+  string risk_tier = 3;
+  // Summary is the reviewer's one-paragraph summary.
+  string summary = 4;
+  // SessionId is the thread the reviewer ran in: a server action checks it
+  // against the sessions that pushed to the change under review.
+  string session_id = 5;
+  // Role is the role of the node that produced this verdict (reviewer).
+  string role = 6;
+}
+
+// ReviewFinding is one finding in a ReviewOutput.
+message ReviewFinding {
+  // Id is stable across review rounds, so a later round can say a blocker is fixed.
+  string id = 1;
+  // Severity is blocker or nit.
+  string severity = 2;
+  // Path is the file the finding is about, when it is about one.
+  string path = 3;
+  // Line is the 1-based line in path, when the finding names one.
+  int32 line = 4;
+  // Body says what is wrong and why.
+  string body = 5;
+}
+
 // LoopOutput is the output from loop nodes.
 // Sequential mode: user-defined outputs are in outputs; _iterations is the system field.
 // Parallel mode: _results is a map of key → sub-workflow outputs; _completed/_failed are counts.
@@ -2450,6 +2556,18 @@ message Workflow {
   // node wins), events concatenated (defaults first). Sub-workflows follow
   // their own defaults. See NodeObserve.
   NodeObserve observe = 27;
+  // Timeout bounds a run of this workflow, as a literal Go duration ("3h",
+  // "90m"): more than zero and at most 7 days. It is measured from the run's
+  // start, across continue-as-new, and it keeps counting while the run is
+  // paused, waits for an approval, a question, a machine or capacity: it is
+  // what ends a run that is stuck. When it passes, the run is cancelled the
+  // way a stop cancels it, then ends FAILED with the error "run timeout <d>
+  // exceeded" (failure.error_code "run_timeout"); on_failure and finally
+  // still run, outside the timeout, each bounded as on any ending. It bounds
+  // the run whose root this workflow is; a workflow run by ref or spawned
+  // inside another run is bounded by that run's timeout instead. Unset, the
+  // default, means no bound.
+  CelString timeout = 28;
 }
 
 // WorkflowCheck is a GitHub check run whose lifecycle the engine owns, posted

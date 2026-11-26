@@ -59,7 +59,7 @@ func TestSavedWorkflows_OrgIsVerifiedAndListed(t *testing.T) {
 		ID: projectID, UserID: userID, Name: "P", Path: t.TempDir(),
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: resolver}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: resolver}))
 	acme, home, globex := "acme", "home", "globex"
 	// Bound to home, the default: the project (no org yet) is home's too.
 	machine := auth.WithMachineToken(ctx, &fat.Principal{OrgID: home, ActingUserID: userID})
