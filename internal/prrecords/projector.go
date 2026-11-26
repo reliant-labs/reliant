@@ -26,9 +26,11 @@ type Deps struct {
 	// into pr_pipeline and their base-branch pushes into the repository's
 	// config (pipeline.go). nil (pipeline.enabled off): neither, and the
 	// projector is exactly the records projector.
+	// forge:optional-dep
 	Pipeline PipelineStore
 	// Contents reads .reliant/pipeline.yaml from the base branch. nil (no
 	// GitHub App to read as): a push records that as the config error.
+	// forge:optional-dep
 	Contents Contents
 }
 
@@ -93,7 +95,7 @@ func (p *projector) Apply(ctx context.Context, d Delivery) error {
 // its type must carry.
 func (p *projector) decode(provider string, ev Event, now time.Time, enrolled bool) (core.PRRecordChange, bool) {
 	repository := ev.Attributes["repository"]
-	if ev.ResourceKey == "" || !(enrolled || p.scope.Includes(provider, repository)) {
+	if ev.ResourceKey == "" || (!enrolled && !p.scope.Includes(provider, repository)) {
 		return core.PRRecordChange{}, false
 	}
 	family, action, _ := strings.Cut(ev.Type, ".")

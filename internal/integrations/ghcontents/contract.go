@@ -67,11 +67,14 @@ type Deps struct {
 	// Tokens mints the App's installation token for each Read.
 	Tokens Tokens
 	// APIBaseURL overrides GitHub's API (tests). Empty is DefaultAPIBaseURL.
+	// forge:optional-dep
 	APIBaseURL string
 	// HTTPClient performs the calls. nil is an SSRF-guarded client with a
 	// 20s timeout.
+	// forge:optional-dep
 	HTTPClient *http.Client
 	// MaxBytes bounds one file. 0 is MaxBytes.
+	// forge:optional-dep
 	MaxBytes int64
 }
 

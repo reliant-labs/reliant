@@ -90,7 +90,7 @@ func newPipelineHarness(t *testing.T) *pipelineHarness {
 	env := storetest.New(t)
 	h := &pipelineHarness{t: t, env: env, contents: &fakeContents{files: map[string]string{}},
 		now: time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)}
-	h.p = New(Deps{Store: store.NewPrRecordExtStore(env.ORM), Pipeline: env.Repo, Contents: h.contents}).(*projector)
+	h.p = New(Deps{Store: store.NewPrRecordExtStore(env.ORM), Scope: NewScope(nil), Pipeline: env.Repo, Contents: h.contents}).(*projector)
 	h.p.now = func() time.Time { return h.now }
 	return h
 }
@@ -204,7 +204,7 @@ func TestPipelineProjectionFollowsAnEnrolledPR(t *testing.T) {
 		t.Fatalf("new head: %+v", row)
 	}
 	h.wantDue(row)
-	settled = h.settle(func(r *core.PRPipeline) { r.State, r.ReviewRound = core.PRPipelineReviewing, 1 })
+	h.settle(func(r *core.PRPipeline) { r.State, r.ReviewRound = core.PRPipelineReviewing, 1 })
 
 	// The same push redelivered only wakes it: the head is the row's.
 	h.now = h.now.Add(time.Minute)
