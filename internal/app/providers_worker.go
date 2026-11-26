@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghcontents"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -58,9 +59,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/natsutil"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/orgmove"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/pipeline/practions"
 	"github.com/reliant-labs/reliant/internal/planning"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/projectpurge"
@@ -958,15 +961,40 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 
 // WorkerServerActions is the worker's Reliant server actions, as
 // NewTemporalWorker hands them to workersetup: on only when the pipeline
-// switch is, with the handlers this worker binds (none yet: each pipeline
-// task binds its own here). The dispatcher's resolver is workersetup's, over
-// the worker's database.
+// switch is. Its handlers are bound by NewTemporalWorker
+// (workerServerActionHandlers); the dispatcher refuses every call while the
+// switch is off, bound or not. The dispatcher's resolver is workersetup's,
+// over the worker's database.
 func WorkerServerActions(pipeline *configv1.PipelineConfig) serveraction.Config {
 	enabled := pipeline.GetEnabled()
 	if enabled {
 		slog.Default().Info("Reliant server actions are ON (pipeline.enabled)")
 	}
 	return serveraction.Config{Enabled: enabled}
+}
+
+// workerServerActionHandlers binds the pipeline's server actions this
+// worker implements: the pr.* actions (internal/pipeline/practions), over
+// the worker's database, GitHub through the integration catalog with the
+// run's credentials (writes recorded in the write ledger, as an action
+// node's are), and the Inbox as async questions.
+func workerServerActionHandlers(d TemporalWorkerDeps, creds httpaction.CredentialSource) (map[string]serveraction.Handler, error) {
+	var runner writeledger.Runner = httpaction.NewRunner(netguard.New())
+	if d.WriteLedger != nil {
+		runner = d.WriteLedger.Wrap(runner)
+	}
+	actions, err := practions.New(practions.Deps{
+		Store:  d.DB,
+		GitHub: &practions.CatalogGitHub{Catalog: catalog.MustBuiltin(), Runner: runner, Credentials: creds},
+		Inbox: practions.QuestionInbox{
+			Writer: questions.NewFromRepo(d.DB), Reader: store.NewQuestionExtStore(d.DB.ORM()), Refetch: d.DB.UpdateWriter(),
+		},
+		Logger: slog.Default(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return actions.Handlers(), nil
 }
 
 // NewTemporalWorker is the Temporal worker on the shared task queue
@@ -987,6 +1015,12 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		slog.Default().Warn("stop nudges are DISABLED on this worker: pause and interrupt reach running activities on their next heartbeat",
 			"subject", stopnudge.Subject, "error", err)
 	}
+	serverActions := WorkerServerActions(d.Pipeline)
+	handlers, err := workerServerActionHandlers(d, creds)
+	if err != nil {
+		return nil, fmt.Errorf("server actions: %w", err)
+	}
+	serverActions.Handlers = handlers
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		OrgMoves:               d.OrgMoves,
 		StopNudges:             nudges,
@@ -1011,7 +1045,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
-		ServerActions:          WorkerServerActions(d.Pipeline),
+		ServerActions:          serverActions,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
@@ -1058,6 +1092,13 @@ type TriggerDeliveryRelayDeps struct {
 	Integrations    *IntegrationSettings
 	Membership      *orgs.Resolver
 	Policies        *orgpolicy.Resolver
+	// Pipeline is the pipeline.enabled switch: on, the PR-record projector
+	// also projects the PR pipeline's enrolled repositories (prrecords
+	// Deps.Pipeline). Off, it is exactly the records projector.
+	Pipeline *configv1.PipelineConfig
+	// ControlPlane is where the projector mints the GitHub App token it
+	// reads a repository's .reliant/pipeline.yaml with; none means no App.
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
 // TriggerDeliveryRelay gives the inbox live membership and policy context.
@@ -1081,9 +1122,19 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 		membership = d.Membership
 	}
 	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
-	if scope := prrecords.NewScope(d.Integrations.PRRecordRepositories); !scope.Empty() {
-		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(prrecords.Deps{
-			Store: store.NewPrRecordExtStore(repo.ORM()), Scope: scope})))
+	records := prrecords.Deps{Store: store.NewPrRecordExtStore(repo.ORM()), Scope: prrecords.NewScope(d.Integrations.PRRecordRepositories)}
+	if d.Pipeline.GetEnabled() {
+		records.Pipeline = repo
+		tokens, err := gitTokens(d.ControlPlane)
+		if err != nil {
+			return nil, err
+		}
+		if tokens != nil {
+			records.Contents = ghcontents.NewInstrumented(ghcontents.Deps{Tokens: tokens})
+		}
+	}
+	if !records.Scope.Empty() || records.Pipeline != nil {
+		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(records)))
 	}
 	return &TriggerDeliveryRelay{relay: relay, membership: membership, policies: d.Policies}, nil
 }

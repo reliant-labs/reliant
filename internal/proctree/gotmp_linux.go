@@ -9,10 +9,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/credsandbox"
 )
 
 // Each command's own GOTMPDIR.
@@ -28,25 +30,41 @@ import (
 // it only after the command's cgroup is retired: ownership is
 // a fact, not a guess from an mtime: at once when the cgroup can be removed as the
 // command returns, else when a bounded watcher retires it (a killed
-// command's processes still exiting; releaseGoTmp). One without a cgroup, or
-// one the command left processes running in for longer than the watcher
-// waits, stays; the daemon's go_work_dirs pass removes it
-// once no live process holds it, which every one of its processes does in its
-// environment (internal/diskwatch, gowork.go). That pass runs every 10
-// minutes whatever RELIANT_STORAGE_REAPER says, so a daemon without cgroup
-// delegation does not leak one root per command.
+// command's processes still exiting; releaseGoTmp). A root whose cgroup
+// outlives the watcher (the command left a server running) goes when this
+// process's cgroup sweep retires that cgroup, on a later command's Prepare, or
+// a later daemon's start-up sweep does (removePairedGoTmp): the root is named
+// for its cgroup, gotmp-<pid>-c<n> beside cmd-<pid>-<n>, so retiring one names
+// the other. One without a cgroup (gotmp-<pid>-<n>) stays; the daemon's
+// go_work_dirs pass removes it once no live process holds it, which every one
+// of its processes does in its environment (internal/diskwatch, gowork.go).
+// That pass runs every 10 minutes whatever RELIANT_STORAGE_REAPER says, so a
+// daemon without cgroup delegation does not leak one root per command.
+//
+// A credentials-none command (credsandbox) gets none: the sandbox points
+// GOTMPDIR into its own private /tmp and hides the machine's, so the root was
+// never used, and with no cgroup (it enters new namespaces) nothing removed it
+// when the command ended: one empty root per sandboxed command.
 //
 // Only GOTMPDIR. TMPDIR is left alone: a file an agent makes with mktemp in
 // one command is routinely read by its next one, and removing it with the
 // command would break that. The linker's go-link-* (TMPDIR) are reclaimed by
 // the reaper once proven dead.
 
-var goTmpSeq atomic.Uint64
+// pairedGoTmpMark marks the name of a root whose command has a cgroup of the
+// same number: gotmp-<pid>-c<n> is cmd-<pid>-<n>'s. Only such a root is ever
+// removed by name from its cgroup's: a root without the mark (no cgroup, or
+// made by a daemon from before the two shared a number) names no cgroup.
+const pairedGoTmpMark = "c"
 
-// prepareGoTmp gives cmd its own GOTMPDIR, unless its environment sets one.
-// It never stops the command from starting: without the root it builds
-// where it would have.
-func (t *Tree) prepareGoTmp(cmd *exec.Cmd) {
+// prepareGoTmp gives cmd its own GOTMPDIR, unless its environment sets one or
+// it is a credsandbox init (which never uses one), numbered seq like its
+// cgroup. It never stops the command from starting: without the root it
+// builds where it would have.
+func (t *Tree) prepareGoTmp(cmd *exec.Cmd, seq uint64) {
+	if credsandbox.IsInit(cmd) {
+		return
+	}
 	if cmd.Env == nil {
 		cmd.Env = os.Environ() //nolint:forbidigo // a command with no environment of its own inherits this process's; written down to add GOTMPDIR
 	}
@@ -55,21 +73,70 @@ func (t *Tree) prepareGoTmp(cmd *exec.Cmd) {
 			return
 		}
 	}
-	base := filepath.Join(os.TempDir(), fmt.Sprintf("%s%d", GoTmpBasePrefix, os.Getuid()))
-	if err := os.Mkdir(base, 0o700); err != nil && !os.IsExist(err) {
+	base, ok := goTmpBase(true)
+	if !ok {
 		return
 	}
-	// The base must be ours and a real directory: /tmp is shared, and a
-	// directory another user made there is a way to read our builds.
-	if fi, err := os.Lstat(base); err != nil || !fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 || !ownedByUs(fi) {
-		return
-	}
-	dir := filepath.Join(base, fmt.Sprintf("%s%d-%d", GoTmpPrefix, os.Getpid(), goTmpSeq.Add(1)))
+	dir := filepath.Join(base, goTmpName(os.Getpid(), seq, t.dir != ""))
 	if err := os.Mkdir(dir, 0o700); err != nil {
 		return
 	}
 	cmd.Env = append(cmd.Env, "GOTMPDIR="+dir)
 	t.goTmp = dir
+}
+
+// goTmpName is the name of the root of this process's command seq: marked when
+// the command has the cgroup cmd-<pid>-<seq>.
+func goTmpName(pid int, seq uint64, paired bool) string {
+	mark := ""
+	if paired {
+		mark = pairedGoTmpMark
+	}
+	return fmt.Sprintf("%s%d-%s%d", GoTmpPrefix, pid, mark, seq)
+}
+
+// goTmpBase is this user's root base, <temp dir>/reliant-gotmp-<uid>, made
+// when create says so. ok only when it is ours and a real directory: /tmp is
+// shared, and a directory another user made there is a way to read our builds
+// or to point a removal elsewhere.
+func goTmpBase(create bool) (string, bool) {
+	base := filepath.Join(os.TempDir(), fmt.Sprintf("%s%d", GoTmpBasePrefix, os.Getuid()))
+	if create {
+		if err := os.Mkdir(base, 0o700); err != nil && !os.IsExist(err) {
+			return "", false
+		}
+	}
+	if fi, err := os.Lstat(base); err != nil || !fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 || !ownedByUs(fi) {
+		return "", false
+	}
+	return base, true
+}
+
+// removePairedGoTmp removes, in the background, the root paired with the
+// command cgroup named cgroup (cmd-<pid>-<n>), which the caller has just
+// retired: none of that command's processes is left, as for releaseGoTmp. It
+// is how a root outlives no cgroup this process sweeps: one whose watcher gave
+// up or found no slot, and an exited daemon's, at start-up.
+func removePairedGoTmp(cgroup string) {
+	rest, ok := strings.CutPrefix(cgroup, cmdPrefix)
+	if !ok {
+		return
+	}
+	pidText, seqText, ok := strings.Cut(rest, "-")
+	pid, perr := strconv.Atoi(pidText)
+	seq, serr := strconv.ParseUint(seqText, 10, 64)
+	if !ok || perr != nil || serr != nil {
+		return
+	}
+	base, ok := goTmpBase(false)
+	if !ok {
+		return
+	}
+	root := filepath.Join(base, goTmpName(pid, seq, true))
+	if fi, err := os.Lstat(root); err != nil || !fi.IsDir() || !ownedByUs(fi) {
+		return
+	}
+	go func() { _ = os.RemoveAll(root) }()
 }
 
 // releaseGoTmp removes the command's GOTMPDIR once its cgroup proves none of
@@ -106,7 +173,9 @@ func (t *Tree) releaseGoTmp() (watched <-chan struct{}) {
 		return nil
 	}
 	// Scheduling is not proof of retirement. Keep the reference even if
-	// the watcher times out; the disk watcher remains the fallback owner.
+	// the watcher times out; the cgroup sweep that retires the cgroup later
+	// frees the root (removePairedGoTmp), and the disk watcher remains the
+	// fallback owner.
 	done, _ := watchGoTmp(t.dir, dir)
 	return done
 }
@@ -114,12 +183,12 @@ func (t *Tree) releaseGoTmp() (watched <-chan struct{}) {
 var (
 	// goTmpWatchFor bounds how long a watcher waits for a cgroup to empty:
 	// a command that left a process running for longer (a daemon it
-	// started) leaves its root to the go_work_dirs pass.
+	// started) leaves its root to the cgroup sweep (removePairedGoTmp).
 	goTmpWatchFor = 5 * time.Minute
 	// goTmpWatchPoll is how often a watcher reads the cgroup.
 	goTmpWatchPoll = time.Second
 	// goTmpWatchers bounds the watchers at once; a root that finds none
-	// free is left to the go_work_dirs pass.
+	// free is left to the cgroup sweep too.
 	goTmpWatchers = make(chan struct{}, 64)
 )
 
@@ -127,7 +196,7 @@ var (
 // proven empty, polling for at most goTmpWatchFor. ok is false when every
 // watcher is busy: root is then left where it is. done closes when the
 // watcher stops, whether it removed root or gave up. Nothing waits for it:
-// a daemon that exits first leaves root to the next daemon's pass.
+// a daemon that exits first leaves root to the next daemon's start-up sweep.
 func watchGoTmp(cgroup, root string) (done <-chan struct{}, ok bool) {
 	pool, poll, wait := goTmpWatchers, goTmpWatchPoll, goTmpWatchFor
 	select {
