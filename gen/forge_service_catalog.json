@@ -58531,9 +58531,7 @@
       "field": "ChatLists",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ChatLists",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -58731,9 +58729,7 @@
       "field": "StepExecutions",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.StepExecutions",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
