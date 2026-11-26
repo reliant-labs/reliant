@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="{{.CSP}}">
+<meta name="referrer" content="no-referrer">
+<title>{{.Doc.Page.Title}}</title>
+<link rel="alternate" type="application/atom+xml" title="{{.Doc.Page.Title}}" href="feed.atom">
+<link rel="alternate" type="application/json" title="{{.Doc.Page.Title}} (JSON)" href="status.json">
+<style>{{.CSS}}</style>
+</head>
+<body>
+<header class="top">
+<div class="wrap head">
+<h1>{{if .Doc.Page.LogoURL}}<img src="{{.Doc.Page.LogoURL}}" alt="" class="logo"> {{end}}{{.Doc.Page.Title}}</h1>
+{{- if .Doc.Page.Links}}
+<nav aria-label="Links"><ul class="links">
+{{- range .Doc.Page.Links}}
+<li><a href="{{.URL}}" rel="noopener noreferrer">{{.Label}}</a></li>
+{{- end}}
+</ul></nav>
+{{- end}}
+</div>
+</header>
+<main class="wrap">
+<section class="banner s-{{.Overall.State}}" aria-label="Overall status">
+<p><span class="icon" aria-hidden="true">{{icon .Overall.State}}</span> {{.Overall.Message}}</p>
+</section>
+{{- if .Active}}
+<section aria-labelledby="active-h">
+<h2 id="active-h">Active incidents</h2>
+{{- range .Active}}{{template "incident" .}}{{end}}
+</section>
+{{- end}}
+{{- if .Upcoming}}
+<section aria-labelledby="maint-h">
+<h2 id="maint-h">Maintenance</h2>
+{{- range .Upcoming}}{{template "maintenance" .}}{{end}}
+</section>
+{{- end}}
+<section aria-labelledby="components-h">
+<h2 id="components-h">Components</h2>
+<ul class="components">
+{{- range .Components}}
+<li class="component">
+<div class="row">
+<div><h3>{{.Name}}</h3>{{if .Description}}<p class="desc">{{.Description}}</p>{{end}}</div>
+<p class="state s-{{.State}}"><span class="icon" aria-hidden="true">{{icon .State}}</span> {{label .State}}{{if .Overridden}} <span class="note">(set manually)</span>{{end}}</p>
+</div>
+{{- if .Bars}}
+<ol class="bars" aria-label="Daily availability, {{len .Bars}} days, oldest first">
+{{- range .Bars}}
+<li class="bar b-{{.Class}}{{if .Maintenance}} b-maint{{end}}" title="{{.Title}}"><span class="sr">{{.Title}}</span></li>
+{{- end}}
+</ol>
+<p class="summary"><span>{{.Span}}</span><span>{{.Summary}}</span><span>Today</span></p>
+{{- end}}
+</li>
+{{- end}}
+</ul>
+</section>
+{{- if .History}}
+<section aria-labelledby="history-h">
+<h2 id="history-h">Past incidents</h2>
+{{- range .History}}{{template "incident" .}}{{end}}
+</section>
+{{- end}}
+{{- if .Completed}}
+<section aria-labelledby="past-maint-h">
+<h2 id="past-maint-h">Past maintenance</h2>
+{{- range .Completed}}{{template "maintenance" .}}{{end}}
+</section>
+{{- end}}
+</main>
+<footer class="wrap foot">
+<p>Updated <time datetime="{{.GeneratedISO}}">{{.Generated}}</time>. Subscribe with the <a href="feed.atom">Atom feed</a>, or read <a href="status.json">status.json</a>.</p>
+</footer>
+</body>
+</html>
+{{define "incident" -}}
+<article class="notice" id="incident-{{.ID}}">
+<h3>{{.Title}}</h3>
+<p class="meta"><span class="impact i-{{.Impact}}">{{.ImpactLabel}} impact</span>{{if .Components}} · Affects {{.Components}}{{end}} · {{.When}}</p>
+<ol class="updates">
+{{- range .Updates}}
+<li><p class="ustatus"><strong>{{.Status}}</strong> · <time datetime="{{.ISO}}">{{.At}}</time></p>{{range .Paragraphs}}<p>{{range $i, $l := .}}{{if $i}}<br>{{end}}{{$l}}{{end}}</p>{{end}}</li>
+{{- end}}
+</ol>
+</article>
+{{- end}}
+{{define "maintenance" -}}
+<article class="notice" id="maintenance-{{.ID}}">
+<h3>{{.Title}}</h3>
+<p class="meta"><span class="impact i-maint">{{.StatusLabel}}</span>{{if .Components}} · Affects {{.Components}}{{end}} · {{.When}}</p>
+{{- if .Updates}}
+<ol class="updates">
+{{- range .Updates}}
+<li><p class="ustatus"><strong>{{.Status}}</strong> · <time datetime="{{.ISO}}">{{.At}}</time></p>{{range .Paragraphs}}<p>{{range $i, $l := .}}{{if $i}}<br>{{end}}{{$l}}{{end}}</p>{{end}}</li>
+{{- end}}
+</ol>
+{{- end}}
+</article>
+{{- end}}

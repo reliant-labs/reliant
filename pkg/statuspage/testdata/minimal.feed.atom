@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>urn:forge-status:feed</id>
+  <title>Status</title>
+  <updated>2026-11-25T14:00:00Z</updated>
+  <link rel="self" type="application/atom+xml" href="feed.atom"></link>
+  <link rel="alternate" type="text/html" href="./"></link>
+  <author>
+    <name>Status</name>
+  </author>
+</feed>

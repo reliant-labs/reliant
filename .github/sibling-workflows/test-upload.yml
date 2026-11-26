@@ -1,0 +1,137 @@
+# Sends the recorded test runs of main's pushes and of the merge queue's
+# entries to the control plane, best effort.
+#
+# WHY: forge dogfoods the Tests service it ships. Its CI lanes record their
+# runs through `forge test capture` (unit and cli -race shards, the -short
+# tier and the flake gate, the integration steps, web-runtime's Vitest), and
+# on a push to main or a merge-queue entry each recording job keeps its runs
+# as a test-runs-* artifact. This workflow sends them with
+# `forge test report --upload` (scripts/ci-test-upload.sh), so the Tests pages
+# of the hosted "forge" project show the merge tier's and main's results,
+# merged coverage and flaky tests. forge has no deployed env, so the runs go
+# to Reliant cloud, forge's default control plane.
+#
+# WHY A WORKFLOW OF ITS OWN: the upload needs a credential, and ci.yml is
+# held to exposing none (internal/ciguard's
+# TestCandidateCIHasNoExposedGitHubCredentials). This runs from the default
+# branch after CI completes, never for a pull request.
+#
+# TWO JOBS, ONE TRUST BOUNDARY: no job here runs code that is not on main.
+#   - upload (a push to main) checks out the pushed commit, main's own,
+#     already merged, and is the only job that reaches the `tests-upload`
+#     environment and its FORGE_CONTROL_PLANE_TOKEN (`tests:write`, minted
+#     by the owner; never a repository secret: forge is public).
+#   - upload-merge-queue (a merge-queue entry; its CI run's head branch is
+#     gh-readonly-queue/main/...) checks out main's tip, the code this
+#     workflow file came from, and treats the entry as data: its artifacts,
+#     and its commit, fetched by sha for the diff. It gets no environment and
+#     no secret, because its input was produced by code that may never merge.
+# Both authorize with the job's own GitHub OIDC identity
+# (`id-token: write`), which forge exchanges at the control plane when no
+# token is set (event workflow_run, ref main; control-plane#3737). When
+# neither credential works, forge prints a `Test results not uploaded`
+# warning naming why, on the run's summary.
+#
+# WHAT IT NEVER DOES: change a verdict. The jobs are continue-on-error and the
+# script always exits 0. A red run's runs upload too: they are the ones its
+# flaky tests are found in.
+
+name: Test upload
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    # A push to main, and a merge-queue entry (whose head branch GitHub
+    # names gh-readonly-queue/main/pr-<n>-<sha>).
+    branches: [main, "gh-readonly-queue/main/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    name: Upload main's test results
+    if: >-
+      github.repository == 'reliant-labs/forge' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    environment: tests-upload
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+          # forge test report measures diff coverage against the merge base.
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: ./.github/actions/restore-go-caches
+        with:
+          scope: tools
+      # A run whose recording jobs all failed early keeps no artifact; the
+      # script then says there is nothing to report.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: test-runs-*
+          merge-multiple: true
+          path: .forge/tests/runs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: forge test report --upload
+        env:
+          FORGE_CONTROL_PLANE_TOKEN: ${{ secrets.FORGE_CONTROL_PLANE_TOKEN }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: scripts/ci-test-upload.sh "$HEAD_SHA"
+
+  upload-merge-queue:
+    name: Upload the merge queue's test results
+    if: >-
+      github.repository == 'reliant-labs/forge' &&
+      github.event.workflow_run.event == 'merge_group' &&
+      github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      # main's tip, never the entry's commit: the script and the forge it
+      # builds are main's own. The entry's commit is fetched as data.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: ./.github/actions/restore-go-caches
+        with:
+          scope: tools
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: test-runs-*
+          merge-multiple: true
+          path: .forge/tests/runs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: forge test report --upload
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: scripts/ci-test-upload.sh "$HEAD_SHA"

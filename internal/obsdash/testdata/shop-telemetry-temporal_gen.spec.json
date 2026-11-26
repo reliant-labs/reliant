@@ -1,0 +1,592 @@
+{
+  "version": "forge.dashboards/v1",
+  "sections": [
+    {
+      "id": "collection",
+      "title": "Collection"
+    },
+    {
+      "id": "resources",
+      "title": "Resources"
+    },
+    {
+      "id": "logs",
+      "title": "Logs"
+    },
+    {
+      "id": "traces",
+      "title": "Traces"
+    },
+    {
+      "id": "checks",
+      "title": "Checks"
+    },
+    {
+      "id": "profiles",
+      "title": "Profiles"
+    }
+  ],
+  "id": "telemetry-temporal",
+  "title": "shop: temporal",
+  "description": "Declared telemetry for temporal, a system forge did not build (forge.Telemetry): collection health, CPU, memory and restarts, log volume and errors, span rate, error ratio and latency, check status, profiles. Signal-generic: what its own series mean is drawn in the dashboards the Telemetry declares.",
+  "group": "platform",
+  "tags": [
+    "telemetry",
+    "metrics",
+    "traces",
+    "checks",
+    "profiles"
+  ],
+  "filters": [
+    {
+      "id": "env",
+      "label": "deployment.environment.name",
+      "field": "deployment.environment.name"
+    }
+  ],
+  "annotations": [
+    {
+      "source": "releases",
+      "label": "Releases"
+    }
+  ],
+  "panels": [
+    {
+      "section": "collection",
+      "id": "scrape-up",
+      "title": "Scrape up",
+      "description": "1 when the endpoint's last scrape succeeded, 0 when it failed: the target is down, the scrape timed out, or it returned more samples than its sample_limit. One line per scraped endpoint (service.instance.id).",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "up",
+          "agg": "min",
+          "field": "up",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.service.instance.id"
+      ],
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "collection",
+      "id": "scrape-samples",
+      "title": "Samples per scrape",
+      "description": "Samples each scrape returned, and the ones kept after the allow/deny lists. A scrape over its sample_limit (8000) fails and stores nothing.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "scraped",
+          "agg": "max",
+          "field": "scrape_samples_scraped",
+          "metricType": "gauge"
+        },
+        {
+          "label": "kept",
+          "agg": "max",
+          "field": "scrape_samples_post_metric_relabeling",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "unit": "count",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "collection",
+      "id": "scrape-duration",
+      "title": "Scrape duration",
+      "description": "How long each scrape took; one near its timeout is about to fail.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "duration",
+          "agg": "max",
+          "field": "scrape_duration_seconds",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "groupBy": [
+        "resource.attr.service.instance.id"
+      ],
+      "unit": "s",
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "resources",
+      "id": "cpu-usage",
+      "title": "CPU usage",
+      "description": "Average CPU cores used per container, one line per workload.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "cpu",
+          "agg": "avg",
+          "field": "container.cpu.usage",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "resource.attr.k8s.workload.name",
+          "op": "in",
+          "values": [
+            "temporal"
+          ]
+        }
+      ],
+      "groupBy": [
+        "resource.attr.k8s.workload.name"
+      ],
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "resources",
+      "id": "memory-working-set",
+      "title": "Memory working set",
+      "description": "Average working-set bytes per container, one line per workload.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "memory",
+          "agg": "avg",
+          "field": "container.memory.working_set",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "resource.attr.k8s.workload.name",
+          "op": "in",
+          "values": [
+            "temporal"
+          ]
+        }
+      ],
+      "groupBy": [
+        "resource.attr.k8s.workload.name"
+      ],
+      "unit": "bytes",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "resources",
+      "id": "restarts",
+      "title": "Container restarts",
+      "description": "The highest restart count among each workload's containers; a step is a restart.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "restarts",
+          "agg": "max",
+          "field": "k8s.container.restarts",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "resource.attr.k8s.workload.name",
+          "op": "in",
+          "values": [
+            "temporal"
+          ]
+        }
+      ],
+      "groupBy": [
+        "resource.attr.k8s.workload.name"
+      ],
+      "unit": "count",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "resources",
+      "id": "restarts-by-exit-reason",
+      "title": "Restarts by last exit reason",
+      "description": "The same restart count split by why the container last terminated (OOMKilled, Error, Completed, ...).",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "restarts",
+          "agg": "max",
+          "field": "k8s.container.restarts",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "resource.attr.k8s.workload.name",
+          "op": "in",
+          "values": [
+            "temporal"
+          ]
+        }
+      ],
+      "groupBy": [
+        "metric.attr.k8s.container.last_terminated_reason"
+      ],
+      "unit": "count",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "logs",
+      "id": "log-volume",
+      "title": "Log volume by severity",
+      "description": "Log records per time bucket, one line per severity. A system whose lines are not parsed reports them unspecified; Telemetry.logs maps its levels.",
+      "kind": "line",
+      "signal": "logs",
+      "series": [
+        {
+          "label": "records",
+          "agg": "count"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "groupBy": [
+        "log.severity"
+      ],
+      "unit": "count",
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "logs",
+      "id": "error-logs",
+      "title": "Error lines",
+      "kind": "search",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        },
+        {
+          "field": "log.severity",
+          "op": "eq",
+          "value": "error"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ],
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "logs",
+      "id": "logs",
+      "title": "Recent lines",
+      "kind": "search",
+      "signal": "logs",
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "columns": [
+        "timestamp",
+        "service.name",
+        "log.severity",
+        "log.body"
+      ],
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "traces",
+      "id": "span-rate",
+      "title": "Spans by name",
+      "description": "Spans the system pushed per time bucket, one line per span name. Spans may be sampled.",
+      "kind": "line",
+      "signal": "traces",
+      "series": [
+        {
+          "label": "spans",
+          "agg": "count"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "groupBy": [
+        "span.name"
+      ],
+      "unit": "count",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "traces",
+      "id": "span-errors",
+      "title": "Span error ratio",
+      "description": "Spans with status error over all spans.",
+      "kind": "line",
+      "signal": "traces",
+      "series": [
+        {
+          "label": "errors",
+          "agg": "count",
+          "where": [
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            }
+          ]
+        },
+        {
+          "label": "spans",
+          "agg": "count"
+        }
+      ],
+      "ratio": true,
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "unit": "percent",
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "traces",
+      "id": "span-p95",
+      "title": "p95 duration by span name",
+      "kind": "line",
+      "signal": "traces",
+      "series": [
+        {
+          "label": "p95",
+          "agg": "quantile",
+          "quantile": 0.95,
+          "field": "span.duration"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "groupBy": [
+        "span.name"
+      ],
+      "unit": "ms",
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "traces",
+      "id": "spans-by-name",
+      "title": "Rate, errors and latency by span name",
+      "kind": "table",
+      "signal": "traces",
+      "series": [
+        {
+          "label": "requests",
+          "agg": "count"
+        },
+        {
+          "label": "errors",
+          "agg": "count",
+          "where": [
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            }
+          ]
+        },
+        {
+          "label": "p50",
+          "agg": "quantile",
+          "quantile": 0.5,
+          "field": "span.duration"
+        },
+        {
+          "label": "p95",
+          "agg": "quantile",
+          "quantile": 0.95,
+          "field": "span.duration"
+        },
+        {
+          "label": "p99",
+          "agg": "quantile",
+          "quantile": 0.99,
+          "field": "span.duration"
+        }
+      ],
+      "limit": 50,
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "groupBy": [
+        "span.name"
+      ],
+      "width": 24,
+      "height": 8
+    },
+    {
+      "section": "checks",
+      "id": "tcp-checks",
+      "title": "TCP checks",
+      "description": "1 when the collector connected, 0 when it could not. One line per endpoint.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "connected",
+          "agg": "min",
+          "field": "tcpcheck.status",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "groupBy": [
+        "metric.attr.tcpcheck.endpoint"
+      ],
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "checks",
+      "id": "http-checks",
+      "title": "HTTP checks",
+      "description": "1 when the endpoint answered 2xx, 0 when it answered anything else. One line per URL; a URL that did not answer at all draws no point.",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "2xx",
+          "agg": "max",
+          "field": "httpcheck.status",
+          "metricType": "sum",
+          "where": [
+            {
+              "field": "metric.attr.http.status_class",
+              "op": "eq",
+              "value": "2xx"
+            }
+          ]
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "groupBy": [
+        "metric.attr.http.url"
+      ],
+      "width": 12,
+      "height": 7
+    },
+    {
+      "section": "checks",
+      "id": "check-latency",
+      "title": "Check latency",
+      "kind": "line",
+      "signal": "metrics",
+      "series": [
+        {
+          "label": "tcp",
+          "agg": "avg",
+          "field": "tcpcheck.duration",
+          "metricType": "gauge"
+        },
+        {
+          "label": "http",
+          "agg": "avg",
+          "field": "httpcheck.duration",
+          "metricType": "gauge"
+        }
+      ],
+      "where": [
+        {
+          "field": "service.name",
+          "op": "eq",
+          "value": "temporal"
+        }
+      ],
+      "unit": "ms",
+      "width": 24,
+      "height": 7
+    },
+    {
+      "section": "profiles",
+      "id": "profiles",
+      "title": "Profiles",
+      "kind": "text",
+      "markdown": "The collector pulls this system's pprof profiles (cpu, heap) into the env's profiles store, beside forge's own services'. Export them as a flamegraph:\n\n```\nforge obs profile --service temporal --since 1h -o temporal.pb.gz\ngo tool pprof -http=: temporal.pb.gz\n```",
+      "width": 24,
+      "height": 4
+    }
+  ]
+}

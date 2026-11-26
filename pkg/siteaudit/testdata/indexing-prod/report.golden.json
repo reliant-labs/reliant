@@ -1,0 +1,203 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://prod.example",
+    "host": "prod.example",
+    "score": {
+      "seo": 44,
+      "a11y": null
+    },
+    "indexing": {
+      "expected": "index",
+      "actual": "blocked"
+    },
+    "robots": {
+      "status": "ok",
+      "blocks_root": true
+    },
+    "sitemap": {
+      "files": 0,
+      "urls": 0
+    }
+  },
+  "routes": [
+    {
+      "route": "/",
+      "url": "https://prod.example/",
+      "status": 200,
+      "score": {
+        "seo": 44,
+        "a11y": null
+      },
+      "head": {
+        "title": "Prod Example — the real site",
+        "description": "Prod Example is the production site, which must stay in search results.",
+        "canonical": "https://evil.example/",
+        "lang": "en",
+        "robots": "noindex",
+        "viewport": "width=device-width, initial-scale=1",
+        "x_robots_tag": "googlebot: noindex, nofollow",
+        "indexable": false,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/down",
+      "url": "https://prod.example/down",
+      "status": 503,
+      "score": {
+        "seo": 17,
+        "a11y": null
+      },
+      "head": {
+        "indexable": false,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/timeout",
+      "url": "https://prod.example/timeout",
+      "status": 0,
+      "score": {
+        "seo": null,
+        "a11y": null
+      },
+      "head": {
+        "indexable": false,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "indexing_mismatch",
+      "severity": "error",
+      "category": "seo",
+      "ref": "robots_txt",
+      "evidence": {
+        "actual": "robots.txt disallows /",
+        "expected": "index"
+      },
+      "fix": "Remove the noindex (meta robots, X-Robots-Tag) or the robots.txt Disallow: this host is meant to be in search results."
+    },
+    {
+      "code": "robots_no_sitemap",
+      "severity": "info",
+      "category": "seo",
+      "ref": "/robots.txt",
+      "fix": "Add \"Sitemap: https://\u003chost\u003e/sitemap.xml\" to robots.txt."
+    },
+    {
+      "code": "sitemap_missing",
+      "severity": "info",
+      "category": "seo",
+      "ref": "/sitemap.xml",
+      "fix": "Publish /sitemap.xml listing the site's pages and name it in robots.txt."
+    },
+    {
+      "code": "canonical_foreign_host",
+      "severity": "error",
+      "category": "seo",
+      "route": "/",
+      "ref": "canonical",
+      "evidence": {
+        "canonical": "https://evil.example/",
+        "expected_host": "prod.example",
+        "host": "evil.example"
+      },
+      "fix": "Point the canonical at this site's production host: as written it hands the page's ranking to another site."
+    },
+    {
+      "code": "indexing_mismatch",
+      "severity": "error",
+      "category": "seo",
+      "route": "/",
+      "ref": "meta_robots",
+      "evidence": {
+        "expected": "index",
+        "robots": "noindex"
+      },
+      "fix": "Remove the noindex (meta robots, X-Robots-Tag) or the robots.txt Disallow: this host is meant to be in search results."
+    },
+    {
+      "code": "indexing_mismatch",
+      "severity": "error",
+      "category": "seo",
+      "route": "/",
+      "ref": "x_robots_tag",
+      "evidence": {
+        "expected": "index",
+        "x_robots_tag": "googlebot: noindex, nofollow"
+      },
+      "fix": "Remove the noindex (meta robots, X-Robots-Tag) or the robots.txt Disallow: this host is meant to be in search results."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "status_error",
+      "severity": "error",
+      "category": "seo",
+      "route": "/down",
+      "evidence": {
+        "status": "503"
+      },
+      "fix": "Serve the page with a 2xx status, or stop linking to it."
+    },
+    {
+      "code": "fetch_failed",
+      "severity": "error",
+      "category": "seo",
+      "route": "/timeout",
+      "evidence": {
+        "error": "context deadline exceeded"
+      },
+      "fix": "Make the page reachable: the fetch failed."
+    }
+  ]
+}

@@ -1,0 +1,259 @@
+package auth
+
+import (
+	"context"
+	"errors"
+	"sync/atomic"
+
+	"github.com/reliant-labs/forge/pkg/apikey"
+	"github.com/reliant-labs/forge/pkg/session"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+)
+
+// Errors [Authenticator.Authenticate] fails with. Their text is what an
+// unauthenticated caller reads, so none of it says more than the caller
+// already knows.
+var (
+	// ErrAPIKeysDisabled: an API key was presented and no key validator is
+	// installed. It is the scaffold's default until a project installs one.
+	ErrAPIKeysDisabled = errors.New("API keys are not enabled on this server")
+
+	// ErrMalformedAPIKey: the credential has the API-key prefix but is too
+	// short to carry a lookup prefix, so no key validator is consulted.
+	ErrMalformedAPIKey = errors.New("malformed API key")
+
+	// ErrInvalidAPIKey: the key validator rejected the key, or failed. Its
+	// own error is kept server-side (see [Authenticator.Authenticate]).
+	ErrInvalidAPIKey = errors.New("invalid API key")
+
+	// ErrBearerTokensDisabled: a non-key credential was presented to an
+	// Authenticator built with no token validator (a key-only service).
+	ErrBearerTokensDisabled = errors.New("bearer tokens are not accepted by this server; present an API key")
+
+	// ErrInvalidSession: a session id was presented and the installed
+	// [SessionResolver] has no live session for it — it never existed,
+	// ended, or was signed out. The caller must sign in again.
+	ErrInvalidSession = errors.New("the session has ended; sign in again")
+
+	// ErrSessionUnavailable: a session id was presented and the session
+	// could not be read (its store or the issuer is unreachable). The
+	// session may be valid; the resolver's own error stays server-side.
+	ErrSessionUnavailable = errors.New("the session could not be checked; try again")
+)
+
+// SessionResolver turns a server-side session id into the access token it
+// stands for. *session.Manager implements it; [Authenticator.UseSessions]
+// installs one.
+type SessionResolver interface {
+	AccessToken(ctx context.Context, id string) (string, error)
+}
+
+// KeyValidatorFunc adapts a function to a [KeyValidator], the way
+// http.HandlerFunc adapts one to an http.Handler — so a validator that
+// closes over a database handle needs no named type.
+type KeyValidatorFunc func(ctx context.Context, key string) (*Claims, error)
+
+// ValidateKey calls f(ctx, key).
+func (f KeyValidatorFunc) ValidateKey(ctx context.Context, key string) (*Claims, error) {
+	return f(ctx, key)
+}
+
+// Authenticator checks the credential a request presents and returns its
+// [Claims]. It accepts the two credentials a forge service takes, and the
+// credential's SHAPE picks which validator checks it:
+//
+//   - an API key — a credential the installed [apikey.Format] accepts
+//     ([apikey.Format.IsKey]: its prefix, or forge's default "fk_", which
+//     every Format accepts so keys issued before a rename keep working; see
+//     [Authenticator.UseKeyFormat]) — goes to the [KeyValidator]
+//     installed with [Authenticator.UseKeyValidator], with the request's
+//     context, because checking a key is a read of the application's own
+//     store;
+//   - a server-side browser session id ("fs_…", forge/pkg/session), when a
+//     [SessionResolver] is installed with [Authenticator.UseSessions], is
+//     resolved to its session's access token, which then goes to the token
+//     validator below;
+//   - anything else goes to the token validator the Authenticator was
+//     built with — a JWT validator's Validate method.
+//
+// The channel a credential arrived on never picks the validator. A key is
+// checked as a key whether the caller sent "X-API-Key: fk_…" or
+// "Authorization: Bearer fk_…" (many API clients can only send the
+// latter), and no header can route a credential around the validator for
+// its kind. The routing cannot be ambiguous: a JWT is three base64url
+// segments, and base64url of a JSON header begins "eyJ", never "fk_" or any
+// other key prefix ([apikey.NewFormat] admits lowercase prefixes only, and
+// none that is a session id's).
+//
+// # Late binding
+//
+// A key validator reads the application's database, and the database is not
+// open when the auth interceptor is built: a forge server builds its
+// interceptor first, so that a server with no authenticator refuses to start
+// before it touches any dependency. So the key validator is installed AFTER
+// construction, once infrastructure is open, with UseKeyValidator; pass the
+// Authenticate method value to the interceptor (the ValidateContext field of
+// [github.com/reliant-labs/forge/pkg/authn.Policy]) and every later request
+// sees whatever is installed.
+// UseKeyValidator is safe to call while requests are being authenticated.
+//
+// # Failing closed
+//
+// Every path that cannot prove a principal is an error, never an anonymous
+// pass, and no failure falls through to the other validator:
+//
+//   - an API key with no key validator installed: [ErrAPIKeysDisabled];
+//   - an API key too short to carry a lookup prefix: [ErrMalformedAPIKey],
+//     before the key validator, and so the store behind it, is consulted;
+//   - an API key the key validator rejects, or fails to check:
+//     [ErrInvalidAPIKey];
+//   - a non-key credential on an Authenticator with no token validator:
+//     [ErrBearerTokensDisabled];
+//   - a validator that returns neither claims nor an error.
+//
+// A key validator's own error never reaches the caller: the text of a store
+// error (a host, a DSN, a table name) is a diagnostic, not a message for an
+// unauthenticated caller. The caller reads "invalid API key"; the error
+// stays attached as the server-only cause ([svcerr.Cause]), which is what
+// forge's logging interceptor writes beside the failure.
+//
+// The zero value is not usable; construct with [NewAuthenticator].
+type Authenticator struct {
+	tokens   func(token string) (*Claims, error)
+	keys     atomic.Pointer[keyValidatorSlot]
+	format   atomic.Pointer[apikey.Format]
+	sessions atomic.Pointer[sessionResolverSlot]
+	userInfo atomic.Pointer[UserInfo]
+}
+
+// sessionResolverSlot boxes the installed SessionResolver, as
+// keyValidatorSlot does the key validator.
+type sessionResolverSlot struct{ r SessionResolver }
+
+// keyValidatorSlot boxes the installed KeyValidator: atomic.Pointer needs a
+// concrete type, and a nil *keyValidatorSlot is "no key validator".
+type keyValidatorSlot struct{ kv KeyValidator }
+
+// NewAuthenticator returns an Authenticator that checks bearer tokens with
+// tokens — typically (*Validator).Validate from [NewValidator], [Clerk] or
+// [Firebase] — and rejects API keys until a key validator is installed.
+//
+// tokens may be nil for a service that accepts API keys only: every
+// non-key credential is then rejected with [ErrBearerTokensDisabled].
+func NewAuthenticator(tokens func(token string) (*Claims, error)) *Authenticator {
+	return &Authenticator{tokens: tokens}
+}
+
+// UseKeyValidator installs the validator API keys are checked with,
+// replacing any installed before. nil uninstalls it: API keys are then
+// rejected with [ErrAPIKeysDisabled]. Safe to call concurrently with
+// [Authenticator.Authenticate].
+func (a *Authenticator) UseKeyValidator(kv KeyValidator) {
+	if kv == nil {
+		a.keys.Store(nil)
+		return
+	}
+	a.keys.Store(&keyValidatorSlot{kv: kv})
+}
+
+// UseKeyFormat sets the shape of the API keys this server accepts, replacing
+// any set before; the default is the zero [apikey.Format], forge's "fk_".
+// Install the Format the application issues its keys with, so a credential
+// with its prefix is routed to the key validator. Keys with forge's "fk_"
+// are recognized under every Format, so switching from the default
+// preserves routing for existing "fk_" keys. Safe to call concurrently with
+// [Authenticator.Authenticate].
+func (a *Authenticator) UseKeyFormat(f apikey.Format) {
+	a.format.Store(&f)
+}
+
+// keyFormat returns the installed key format, or the zero (default) Format.
+func (a *Authenticator) keyFormat() apikey.Format {
+	if f := a.format.Load(); f != nil {
+		return *f
+	}
+	return apikey.Format{}
+}
+
+// UseSessions installs the resolver server-side browser sessions are read
+// through, replacing any installed before; nil uninstalls it. Safe to call
+// concurrently with [Authenticator.Authenticate].
+//
+// With a resolver installed, a credential shaped like a session id
+// ([session.IsID]: "fs_" and 32 random bytes) is resolved to its session's
+// access token, which is then checked by the token validator exactly as a
+// bearer token is; the claims carry [CredentialSession]. A session that has
+// ended fails with [ErrInvalidSession], one that cannot be read with
+// [ErrSessionUnavailable]. Without one, such a credential reaches the token
+// validator unchanged, as it always did.
+func (a *Authenticator) UseSessions(r SessionResolver) {
+	if r == nil {
+		a.sessions.Store(nil)
+		return
+	}
+	a.sessions.Store(&sessionResolverSlot{r: r})
+}
+
+// UseUserInfo installs the [UserInfo] that fills [Claims.Email] for a bearer
+// token that carries no email (a managed identity's access token carries
+// none). nil uninstalls it. API keys are never looked up: a key's claims are
+// the application's own. Safe to call concurrently with
+// [Authenticator.Authenticate].
+func (a *Authenticator) UseUserInfo(u *UserInfo) {
+	a.userInfo.Store(u)
+}
+
+// Authenticate checks credential — the raw value, with no "Bearer "
+// scheme — and returns the claims of the principal it proves. ctx is the
+// request's context; it reaches the key validator. See [Authenticator] for
+// how a credential is routed and every way it fails.
+func (a *Authenticator) Authenticate(ctx context.Context, credential string) (*Claims, error) {
+	if format := a.keyFormat(); format.IsKey(credential) {
+		return a.authenticateKey(ctx, format, credential)
+	}
+	cred := TokenCredential()
+	if slot := a.sessions.Load(); slot != nil && session.IsID(credential) {
+		token, err := slot.r.AccessToken(ctx, credential)
+		if errors.Is(err, session.ErrNoSession) {
+			return nil, svcerr.WithCause(ErrInvalidSession, err)
+		}
+		if err != nil {
+			return nil, svcerr.WithCause(ErrSessionUnavailable, err)
+		}
+		credential, cred = token, SessionCredential()
+	}
+	if a.tokens == nil {
+		return nil, ErrBearerTokensDisabled
+	}
+	claims, err := a.tokens(credential)
+	if err != nil {
+		return nil, err
+	}
+	if claims == nil {
+		return nil, errors.New("token validator returned no claims")
+	}
+	claims = withCredential(claims, cred)
+	if u := a.userInfo.Load(); u != nil {
+		u.fill(ctx, credential, claims)
+	}
+	return claims, nil
+}
+
+func (a *Authenticator) authenticateKey(ctx context.Context, format apikey.Format, key string) (*Claims, error) {
+	slot := a.keys.Load()
+	if slot == nil {
+		return nil, ErrAPIKeysDisabled
+	}
+	prefix, err := format.LookupPrefix(key)
+	if err != nil {
+		return nil, ErrMalformedAPIKey
+	}
+	claims, err := slot.kv.ValidateKey(ctx, key)
+	if err != nil {
+		return nil, svcerr.WithCause(ErrInvalidAPIKey, err)
+	}
+	if claims == nil {
+		return nil, svcerr.WithCause(ErrInvalidAPIKey, errors.New("key validator returned no claims"))
+	}
+	return withCredential(claims, APIKeyCredential(prefix)), nil
+}

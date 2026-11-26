@@ -1,0 +1,42 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Adapter contract; canonical pattern in `forge skill load architecture`.
+// forge:outbound-io
+//
+// {{.Name}} is an outbound adapter — it owns the implementation of a
+// third-party boundary (HTTP API, queue, storage, etc.) behind a narrow
+// Go interface.
+//
+// The marker above asserts one thing: this package calls OUT and serves
+// nothing inbound. Callers depend on Service, never on the concrete
+// type. That keeps business logic free of vendor specifics and keeps
+// this package unit-testable with mocked downstreams.
+//
+// Conventions:
+//   - No RPC handlers in this package (lint-enforced via
+//     forgeconv-outbound-io-no-rpc).
+//   - Translate vendor errors at the boundary; surface domain-typed
+//     errors or wrapped svcerr sentinels.
+//   - An error that is an ANSWER rather than a failure (a lookup that
+//     found nothing) is declared expected in observe_chain.go —
+//     observe.WithExpectedErrors(ErrNotFound) — so it logs below Error
+//     and real failures stay visible.
+//   - Keep retries / timeouts / circuit breakers here, not in callers.
+//
+// Skill: forge skill load adapter
+package {{.Name}}
+
+import "context"
+
+// Service is the {{.Name}} adapter's outbound boundary. Add the methods
+// callers (interactors / services) need; keep the surface narrow — one
+// method per use-case that the downstream supports.
+type Service interface {
+	// HealthCheck verifies connectivity to the downstream system.
+	// Adapters typically expose this so the operator-level health
+	// endpoint can probe each outbound dependency without a real call.
+	HealthCheck(ctx context.Context) error
+
+	// TODO: Add adapter methods here. Examples:
+	// SendThing(ctx context.Context, in SendThingInput) (SendThingResult, error)
+	// FetchThing(ctx context.Context, id string) (Thing, error)
+}

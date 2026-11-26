@@ -1,0 +1,303 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://acme.example",
+    "host": "acme.example",
+    "score": {
+      "seo": 89,
+      "a11y": null
+    },
+    "indexing": {
+      "expected": "index",
+      "actual": "index"
+    },
+    "robots": {
+      "status": "ok",
+      "sitemaps": [
+        "https://acme.example/sitemap.xml"
+      ]
+    },
+    "sitemap": {
+      "files": 1,
+      "urls": 3
+    },
+    "not_found": "not_found"
+  },
+  "routes": [
+    {
+      "route": "/",
+      "url": "https://acme.example/",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Acme — rockets for road runners",
+        "description": "Acme — built with Forge. Replace this description.",
+        "canonical": "https://acme.example/",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "social": {
+          "og:description": "Rockets, anvils and portable holes.",
+          "og:image": "https://acme.example/og.png",
+          "og:title": "Acme",
+          "og:type": "website",
+          "og:url": "https://acme.example/",
+          "twitter:card": "summary_large_image"
+        },
+        "jsonld_types": [
+          "WebSite"
+        ],
+        "indexable": true,
+        "og_complete": true
+      }
+    },
+    {
+      "route": "/about/",
+      "url": "https://acme.example/about/",
+      "status": 200,
+      "score": {
+        "seo": 75,
+        "a11y": null
+      },
+      "head": {
+        "title": "About Acme — who builds the rockets",
+        "description": "Acme has made rockets, anvils and portable holes for road runners since 1949.",
+        "canonical": "https://acme.example/about/",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "social": {
+          "og:description": "Who builds the rockets.",
+          "og:image": "/og-about.png",
+          "og:title": "About Acme",
+          "og:type": "website",
+          "og:url": "https://acme.example/about/",
+          "twitter:card": "summary_large_image"
+        },
+        "indexable": true,
+        "og_complete": true
+      }
+    },
+    {
+      "route": "/blog/hello/",
+      "url": "https://acme.example/blog/hello/",
+      "status": 200,
+      "score": {
+        "seo": 91,
+        "a11y": null
+      },
+      "head": {
+        "title": "Hello from Acme",
+        "description": "Acme has made rockets, anvils and portable holes for road runners since 1949.",
+        "canonical": "https://acme.example/",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "social": {
+          "og:image": "https://acme.example/og-hello.png",
+          "og:title": "Hello from Acme",
+          "og:type": "article",
+          "og:url": "https://acme.example/blog/hello/"
+        },
+        "jsonld_types": [
+          "BlogPosting"
+        ],
+        "indexable": true,
+        "og_complete": true
+      }
+    },
+    {
+      "route": "/old/",
+      "url": "https://acme.example/old/",
+      "status": 404,
+      "score": {
+        "seo": 83,
+        "a11y": null
+      },
+      "head": {
+        "indexable": false,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "description_placeholder",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "description",
+      "evidence": {
+        "description": "Acme — built with Forge. Replace this description."
+      },
+      "fix": "Replace the scaffolded description with a real one."
+    },
+    {
+      "code": "og_image_placeholder",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:image",
+      "evidence": {
+        "url": "https://acme.example/og.png"
+      },
+      "fix": "Replace the scaffolded og.png with a 1200×630 image for this site."
+    },
+    {
+      "code": "description_duplicate",
+      "severity": "info",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "description",
+      "evidence": {
+        "also_on": "/blog/hello/",
+        "count": "2",
+        "value": "Acme has made rockets, anvils and portable holes for road runners since 1949."
+      },
+      "fix": "Give each page its own description."
+    },
+    {
+      "code": "image_alt_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "/home.svg",
+      "fix": "Add alt text describing the image, or alt=\"\" when it is decorative."
+    },
+    {
+      "code": "image_alt_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "/team.jpg",
+      "fix": "Add alt text describing the image, or alt=\"\" when it is decorative."
+    },
+    {
+      "code": "link_broken",
+      "severity": "error",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "https://acme.example/old/",
+      "evidence": {
+        "scope": "internal",
+        "status": "404"
+      },
+      "fix": "Fix or remove the link: its target answers with an error."
+    },
+    {
+      "code": "link_broken",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "https://gone.example/page",
+      "evidence": {
+        "error": "dial tcp: no such host",
+        "scope": "external",
+        "status": "0"
+      },
+      "fix": "Fix or remove the link: its target answers with an error."
+    },
+    {
+      "code": "link_not_crawlable",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "\u003ca onclick\u003e",
+      "evidence": {
+        "text": "Fake link"
+      },
+      "fix": "Give the link a real href; crawlers do not follow javascript: links or click handlers."
+    },
+    {
+      "code": "link_not_crawlable",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "javascript:void(0)",
+      "evidence": {
+        "text": "Also fake"
+      },
+      "fix": "Give the link a real href; crawlers do not follow javascript: links or click handlers."
+    },
+    {
+      "code": "link_text_empty",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "https://acme.example/",
+      "fix": "Give the link text, an aria-label, or an image with alt text."
+    },
+    {
+      "code": "link_text_generic",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "https://acme.example/blog/hello/",
+      "evidence": {
+        "text": "click here"
+      },
+      "fix": "Describe the target in the link text instead of \"click here\" or \"read more\"."
+    },
+    {
+      "code": "og_image_relative",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "og:image",
+      "evidence": {
+        "og:image": "/og-about.png"
+      },
+      "fix": "Make og:image an absolute https URL: scrapers do not resolve relative ones."
+    },
+    {
+      "code": "canonical_to_root",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/blog/hello/",
+      "ref": "canonical",
+      "evidence": {
+        "canonical": "https://acme.example/"
+      },
+      "fix": "Point the canonical at this page, not the home page: search engines would drop the page as a duplicate of /."
+    },
+    {
+      "code": "description_duplicate",
+      "severity": "info",
+      "category": "seo",
+      "route": "/blog/hello/",
+      "ref": "description",
+      "evidence": {
+        "also_on": "/about/",
+        "count": "2",
+        "value": "Acme has made rockets, anvils and portable holes for road runners since 1949."
+      },
+      "fix": "Give each page its own description."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/blog/hello/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/blog/hello/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "status_error",
+      "severity": "error",
+      "category": "seo",
+      "route": "/old/",
+      "evidence": {
+        "status": "404"
+      },
+      "fix": "Serve the page with a 2xx status, or stop linking to it."
+    }
+  ]
+}

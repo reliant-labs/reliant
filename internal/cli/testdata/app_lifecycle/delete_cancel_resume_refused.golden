@@ -1,0 +1,5 @@
+--- stdout
+Cancelled the deletion of app "shop"; it is kept.
+Its stopped deployments were NOT started again: failed_precondition: your plan does not include running 3 workloads
+  Resolve that, then start each env with `forge env start <env>`.
+--- error

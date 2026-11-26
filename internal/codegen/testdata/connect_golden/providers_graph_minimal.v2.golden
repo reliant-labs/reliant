@@ -1,0 +1,180 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file.
+// Every `func New<X>(<X>Deps) (T, error)` here is a PROVIDER: a graph node whose Deps fields forge
+// resolves BY TYPE and wires in compose.go. Add a dependency (a client, an adapter) by adding a
+// provider. Nothing is built unless a root reaches it; a value with Run/Drain/Close/Ready methods is
+// supervised. Depth: `forge skill load architecture`.
+package app
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+
+	"github.com/reliant-labs/forge/pkg/authn"
+	fmw "github.com/reliant-labs/forge/pkg/middleware"
+	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/serverkit"
+
+	"example.com/shop/pkg/config"
+	"example.com/shop/pkg/middleware"
+)
+
+// keep context imported for providers that take the boot context.
+var _ context.Context
+
+// HTTPClientDeps is empty: the client needs nothing from the graph.
+type HTTPClientDeps struct{}
+
+// NewHTTPClient is the outbound *http.Client an adapter's Deps field resolves
+// to: one instrumented transport for the process — one connection pool, an
+// OTel client span and W3C trace-context propagation on every request, and
+// X-Request-Id forwarding so a third-party call's logs stitch onto the
+// request that caused it. A consumer that wants a different timeout copies it
+// (`c := *d.HTTPClient; c.Timeout = …`) rather than editing the shared one.
+//
+//forge:standby
+func NewHTTPClient(HTTPClientDeps) (*http.Client, error) {
+	return observe.NewHTTPClient(observe.HTTPClientOptions{}), nil
+}
+
+// UserAuth authenticates the user audience — your product's signed-in users:
+// SetupAuth's bearer-token validator (auth.go) behind the fail-closed interceptor.
+type UserAuth struct{ serverkit.AuthenticatorV2 }
+
+// UserAuthDeps is what the authenticator reads.
+type UserAuthDeps struct {
+	Config *config.Config
+}
+
+// NewUserAuth builds the user audience's authenticator. AnonymousOK: false is
+// FAIL-CLOSED: a request must present a valid token unless the rpc it names
+// declared `auth_required: false` in its proto. A server with no validator is
+// a boot error (NewAuthInterceptorV2 refuses), never a running process.
+//
+// The audience directive names the trust domain it authenticates, so
+// `forge lint --graph` can prove every service a listener serves through a
+// chain over it declares the same audience.
+//
+//forge:audience user
+func NewUserAuth(d UserAuthDeps) (*UserAuth, error) {
+	// pkg/middleware declares no NewAuthInterceptor of its own, so this is
+	// forge's (authn) over the generated allow-list: the bearer token (or
+	// API key) is the credential, and no claims enrichment runs.
+	policy := authn.Policy{Unauthenticated: middleware.UnauthenticatedProcedures}
+	authenticator, err := SetupAuth(d.Config)
+	if err != nil {
+		return nil, fmt.Errorf("auth setup: %w", err)
+	}
+	if authenticator != nil {
+		policy.ValidatorConfigured, policy.ValidateContext = true, authenticator.Authenticate
+		authenticator.UseKeyValidator(APIKeyValidator())
+	}
+	// AuthPolicyV2 reads the caller back the way the policy stashes it,
+	// for the chain's audit and activity slots.
+	a, err := serverkit.AuthPolicyV2(serverkit.AudienceUser, policy)
+	if err != nil {
+		return nil, fmt.Errorf("auth configuration: %w", err)
+	}
+	return &UserAuth{a}, nil
+}
+
+// UserChain is the interceptor chain the API listener builds every user
+// route with (serverkit.NewChainV2): trace → recovery → request-id → logging →
+// metrics → deadline → auth → audit → rate-limit → activity → stream-drain →
+// protovalidate, plus the payload caps. Every slot has forge's default except
+// Auth; a field you set replaces that slot, and the NoAudit, NoTrace,
+// NoDeadline, NoActivity, NoStreamDrain and NoValidate fields drop one.
+type UserChain struct{ *serverkit.ChainV2 }
+
+// UserChainDeps is the chain's authenticator and settings.
+type UserChainDeps struct {
+	Auth      *UserAuth
+	Config    *config.Config
+	ServerCfg serverkit.Config
+	Logger    *slog.Logger
+}
+
+// NewUserChain builds the user audience's chain.
+func NewUserChain(d UserChainDeps) (*UserChain, error) {
+	chain, err := serverkit.NewChainV2(serverkit.ChainDepsV2{
+		Auth:   d.Auth,
+		Logger: d.Logger,
+		// Each rpc's `(forge.v1.method).timeout`; the rest get the slot's
+		// default (30s unary, streams unbounded). It runs ahead of Auth, so
+		// the budget bounds the credential lookup too.
+		Deadline: serverkit.Deadline{Procedures: middleware.ProcedureDeadlines},
+		// connect-go decodes a whole body before any interceptor can reject
+		// it, so an uncapped handler turns one anonymous request into an
+		// OOMKill. Zero is 4 MiB.
+		ReadMaxBytes: d.ServerCfg.ReadMaxBytes,
+		SendMaxBytes: d.ServerCfg.SendMaxBytes,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("interceptor chain: %w", err)
+	}
+	return &UserChain{chain}, nil
+}
+
+// APIListener is the process's public HTTP listener: the user routes behind
+// the user chain, the probes in front of the edge, on ServerCfg's address.
+// Its Drain stops accepting, ends long-lived streams soft-then-hard and drains
+// unary requests inside the shutdown budget.
+type APIListener struct{ *serverkit.Listener }
+
+// APIListenerDeps is what the listener serves and how.
+type APIListenerDeps struct {
+	Config    *config.Config
+	ServerCfg serverkit.Config
+	Logger    *slog.Logger
+	Chain     *UserChain
+	Routes    *UserRoutes
+	Probes    *serverkit.Probes
+}
+
+// NewAPIListener mounts the user routes with the user chain — refusing to
+// boot when a mounted service declares another audience — and puts the
+// probes and /metrics in front of the edge (CORS, security headers, request
+// id), where a kubelet or scraper reaches them without credentials.
+func NewAPIListener(d APIListenerDeps) (*APIListener, error) {
+	if d.Probes == nil {
+		return nil, fmt.Errorf("APIListener: Deps.Probes is required: the API listener serves the process's probes")
+	}
+	edge, err := serverkit.Edge{
+		RequestID: fmw.RequestIDMiddleware,
+	}.Wrap(d.ServerCfg)
+	if err != nil {
+		return nil, err
+	}
+	l, err := serverkit.NewListener(serverkit.ListenerDeps{
+		Config: d.ServerCfg.Listener(),
+		ChainV2: d.Chain.ChainV2,
+		RoutesV2: serverkit.RoutesFuncV2(func(m *mountkit.MuxV2) []string {
+			mounted := d.Routes.RegisterV2(m)
+			return mounted
+		}),
+		Logger: d.Logger,
+		Edge:   edge,
+		Front:  d.Probes.Front(),
+		REST:   false,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &APIListener{l}, nil
+}
+
+// PprofDeps is the pprof endpoint's address.
+type PprofDeps struct {
+	ServerCfg serverkit.Config
+	Logger    *slog.Logger
+}
+
+// NewPprof is pprof on its own loopback listener (PPROF_ADDR, default
+// 127.0.0.1:6060) — never the app port. Always on, because "what is holding
+// the memory" can only be answered while the process is alive; a bind failure
+// is logged and skipped, never fatal.
+func NewPprof(d PprofDeps) (*serverkit.Pprof, error) {
+	return serverkit.NewPprof(d.ServerCfg, d.Logger), nil
+}

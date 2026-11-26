@@ -1,0 +1,19 @@
+package items
+
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	itemsv1connect "example.com/v2app/gen/services/items/v1/itemsv1connect"
+)
+
+// Chat implements the Chat bidirectional streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=items.Chat
+func (s *Service) Chat(
+	ctx context.Context,
+	stream itemsv1connect.ItemsServiceChatServerStream,
+) error {
+	return svcerr.Wrap(svcerr.ScaffoldStub("Chat"))
+}

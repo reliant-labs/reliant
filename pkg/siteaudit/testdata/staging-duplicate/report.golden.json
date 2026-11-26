@@ -1,0 +1,168 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://acme-staging.sites.example.dev",
+    "host": "acme-staging.sites.example.dev",
+    "score": {
+      "seo": 100,
+      "a11y": null
+    },
+    "indexing": {
+      "expected": "index",
+      "actual": "index"
+    },
+    "robots": {},
+    "sitemap": {
+      "files": 0,
+      "urls": 0
+    }
+  },
+  "routes": [
+    {
+      "route": "/",
+      "url": "https://acme-staging.sites.example.dev/",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Acme — rockets for road runners",
+        "description": "Acme has made rockets, anvils and portable holes for road runners since 1949.",
+        "canonical": "https://acme-staging.sites.example.dev/",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "indexable": true,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/about/",
+      "url": "https://acme-staging.sites.example.dev/about/",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "About Acme — who builds the rockets",
+        "description": "Who builds Acme's rockets, anvils and portable holes, and where they are made.",
+        "canonical": "https://acme.example/about/",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "indexable": true,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "duplicate_without_canonical",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "canonical",
+      "evidence": {
+        "canonical_host": "acme.example",
+        "host": "acme-staging.sites.example.dev"
+      },
+      "fix": "This non-production host is indexable: add a canonical to the production URL so search engines do not index it as a duplicate."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/about/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    }
+  ]
+}

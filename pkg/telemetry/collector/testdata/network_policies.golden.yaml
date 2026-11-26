@@ -1,0 +1,42 @@
+policies:
+- apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    labels:
+      app.kubernetes.io/managed-by: forge
+      forge.dev/telemetry-service: openbao
+    name: telemetry-openbao-07a80d4ee0cb5801
+    namespace: openbao
+  spec:
+    ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            kubernetes.io/metadata.name: forge-observability
+        podSelector:
+          matchLabels:
+            app.kubernetes.io/name: otel-agent
+      ports:
+      - port: 8200
+        protocol: TCP
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: openbao
+    policyTypes:
+    - Ingress
+skipped:
+- 'telemetry observability (service openbao-anywhere): network_policy needs the namespaces
+  its pods run in'
+- 'telemetry observability (service alertmanager): network_policy needs pods to select;
+  an address has none'
+workload_rule:
+  from:
+  - namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: forge-observability
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: otel-agent
+  ports:
+  - port: 8080
+    protocol: TCP

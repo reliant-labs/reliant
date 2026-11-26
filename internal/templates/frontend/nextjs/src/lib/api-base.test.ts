@@ -1,0 +1,175 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// Pins where the browser sends API traffic (src/lib/api-base.ts): this page's
+// own origin while `next dev` proxies the API, the runtime config's API_URL in
+// every build.
+
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { chooseApiBase, chooseApiBaseFor, credentialsFor } from "./api-base";
+import { BASE_PATH } from "./basepath_gen";
+
+const preview = "https://3000-abc123.workspaces.reliantapi.com";
+// Any mount prefix will do for the pure function. Deliberately not a real
+// one: this project's own base path lives only in basepath_gen.ts, never as a
+// hand-written literal.
+const mount = "/mount";
+
+describe("chooseApiBase", () => {
+  it("sends dev traffic to the page's own origin, whatever the config names", () => {
+    expect(
+      chooseApiBase({
+        devProxyPath: "/_api",
+        origin: preview,
+        basePath: "",
+        configured: "http://localhost:8080",
+      }),
+    ).toBe(`${preview}/_api`);
+  });
+
+  it("keeps the frontend's base path in front of the proxy path", () => {
+    expect(
+      chooseApiBase({ devProxyPath: "/_api", origin: preview, basePath: mount, configured: "" }),
+    ).toBe(`${preview}${mount}/_api`);
+  });
+
+  it("is relative when there is no window to name an origin", () => {
+    expect(chooseApiBase({ devProxyPath: "/_api", origin: "", basePath: "", configured: "" })).toBe(
+      "/_api",
+    );
+  });
+
+  it("uses the configured API URL when nothing proxies it", () => {
+    expect(
+      chooseApiBase({
+        devProxyPath: "",
+        origin: preview,
+        basePath: "",
+        configured: "https://api.example.com/",
+      }),
+    ).toBe("https://api.example.com");
+  });
+
+  // Reliant hosting's config.js: the API on this page's own origin, on every
+  // host the site answers on, so it must stay a path.
+  it("keeps the platform's same-origin /_api path as a path", () => {
+    for (const configured of ["/_api", "/_api/"]) {
+      expect(
+        chooseApiBase({ devProxyPath: "", origin: preview, basePath: mount, configured }),
+      ).toBe("/_api");
+    }
+  });
+
+  it("leaves an empty configured URL empty, which means same-origin", () => {
+    expect(chooseApiBase({ devProxyPath: "", origin: preview, basePath: "", configured: "" })).toBe(
+      "",
+    );
+  });
+});
+
+describe("apiBase", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  // next.config.ts inlines FORGE_DEV_API_PROXY; stubbing the env and
+  // re-importing is the closest a test gets to each bundle.
+  async function apiBaseUnder(nodeEnv: string, proxy: string) {
+    vi.stubEnv("NODE_ENV", nodeEnv);
+    vi.stubEnv("FORGE_DEV_API_PROXY", proxy);
+    vi.resetModules();
+    return (await import("./api-base")).apiBase;
+  }
+
+  it("goes through this origin under `next dev`", async () => {
+    const apiBase = await apiBaseUnder("development", "/_api");
+    expect(apiBase("http://localhost:8080")).toBe(`${window.location.origin}${BASE_PATH}/_api`);
+  });
+
+  it("reads the configured URL in a production build, even if the variable leaked", async () => {
+    const apiBase = await apiBaseUnder("production", "/_api");
+    expect(apiBase("https://api.example.com")).toBe("https://api.example.com");
+  });
+
+  it("reads the configured URL when the dev proxy is off", async () => {
+    const apiBase = await apiBaseUnder("development", "");
+    expect(apiBase("http://localhost:8080")).toBe("http://localhost:8080");
+  });
+});
+
+// Named same-origin APIs (Frontend.apis): /_api/@<name> beside /_api.
+describe("chooseApiBaseFor", () => {
+  it("proxies a named API under the dev proxy path, after an @", () => {
+    expect(
+      chooseApiBaseFor("billing", {
+        devProxyPath: "/_api",
+        origin: preview,
+        basePath: "",
+        configured: "http://localhost:8090",
+      }),
+    ).toBe(`${preview}/_api/@billing`);
+  });
+
+  it("keeps the platform's same-origin path as a path in a build", () => {
+    expect(
+      chooseApiBaseFor("billing", {
+        devProxyPath: "",
+        origin: preview,
+        basePath: "",
+        configured: "/_api/@billing/",
+      }),
+    ).toBe("/_api/@billing");
+  });
+});
+
+describe("apiBaseFor", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
+
+  async function apiBaseForUnder(dev: string, proxy: string, apis?: Record<string, string>) {
+    vi.stubEnv("NODE_ENV", dev);
+    vi.stubEnv("FORGE_DEV_API_PROXY", proxy);
+    vi.stubGlobal("__FORGE_CONFIG__", apis ? { apis } : {});
+    vi.resetModules();
+    return (await import("./api-base")).apiBaseFor;
+  }
+
+  it("goes through this origin under the dev server", async () => {
+    const apiBaseFor = await apiBaseForUnder("development", "/_api");
+    expect(apiBaseFor("billing")).toBe(`${window.location.origin}${BASE_PATH}/_api/@billing`);
+  });
+
+  it("reads config.js's apis in a build", async () => {
+    const apiBaseFor = await apiBaseForUnder("production", "", { billing: "/_api/@billing" });
+    expect(apiBaseFor("billing")).toBe("/_api/@billing");
+  });
+
+  it("refuses a name the environment does not declare", async () => {
+    const apiBaseFor = await apiBaseForUnder("production", "", { billing: "/_api/@billing" });
+    expect(() => apiBaseFor("biling")).toThrow(/no API named "biling"/);
+  });
+});
+
+describe("credentialsFor", () => {
+  const page = "https://notes.sites.example.dev";
+
+  it("sends the cookie on this page's own origin without asking for a credentialed grant", () => {
+    expect(credentialsFor("/_api/notes.v1.NoteService/ListNotes", page)).toBe("same-origin");
+    expect(credentialsFor(`${page}/_api/notes.v1.NoteService/ListNotes`, page)).toBe("same-origin");
+  });
+
+  it("includes the cookie for an API on another origin", () => {
+    expect(credentialsFor("https://api.example.dev/notes.v1.NoteService/ListNotes", page)).toBe(
+      "include",
+    );
+    expect(credentialsFor("http://localhost:8080/x", "http://localhost:3000")).toBe("include");
+  });
+
+  it("includes the cookie when there is no page to compare with", () => {
+    expect(credentialsFor("/_api/x", "")).toBe("include");
+  });
+});

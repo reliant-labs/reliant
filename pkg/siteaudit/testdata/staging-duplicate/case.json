@@ -1,0 +1,8 @@
+{
+  "site": "https://acme-staging.sites.example.dev",
+  "expect": {"indexing": "index", "canonical_host": "acme.example"},
+  "pages": [
+    {"url": "https://acme-staging.sites.example.dev/", "status": 200, "raw": "page.html"},
+    {"url": "https://acme-staging.sites.example.dev/about/", "status": 200, "raw": "prod-canonical.html"}
+  ]
+}

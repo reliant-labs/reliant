@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src &#39;none&#39;; style-src &#39;sha256-33NjQneAVf0Wf1yYOji6uUhWvu6a5TzwMKtvGn2Ukk4=&#39;; img-src https:; base-uri &#39;none&#39;; form-action &#39;none&#39;">
+<meta name="referrer" content="no-referrer">
+<title>Status</title>
+<link rel="alternate" type="application/atom+xml" title="Status" href="feed.atom">
+<link rel="alternate" type="application/json" title="Status (JSON)" href="status.json">
+<style>:root{--accent:#59636e;--fg:#1f2328;--muted:#59636e;--line:#d1d9e0;--ok:#1a7f37;--warn:#9a6700;--bad:#cf222e;--maint:#0969da;--none:#59636e}
+*{box-sizing:border-box}
+body{margin:0;font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--fg);background:#fff}
+.wrap{max-width:52rem;margin:0 auto;padding:0 1rem}
+.top{border-top:6px solid var(--accent);border-bottom:1px solid var(--line)}
+.head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.5rem;padding-block:1rem}
+h1{font-size:1.5rem;margin:0;display:flex;align-items:center;gap:.5rem}
+.logo{height:2rem;width:auto}
+.links{display:flex;flex-wrap:wrap;gap:1rem;list-style:none;margin:0;padding:0}
+a{color:#0550ae}
+h2{font-size:1.15rem;margin:2rem 0 .75rem}
+h3{font-size:1rem;margin:0}
+.banner{margin-top:1.5rem;border-radius:6px;color:#fff;font-weight:600;font-size:1.1rem}
+.banner p{margin:0;padding:1rem 1.25rem}
+.banner.s-operational{background:var(--ok)}.banner.s-degraded{background:var(--warn)}.banner.s-outage{background:var(--bad)}.banner.s-maintenance{background:var(--maint)}.banner.s-no_data{background:var(--none)}
+.components{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:6px}
+.component{padding:1rem 1.25rem}
+.component+.component{border-top:1px solid var(--line)}
+.row{display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}
+.desc{margin:.1rem 0 0;color:var(--muted);font-size:.9rem}
+.state{margin:0;font-weight:600;white-space:nowrap}
+.s-operational{color:var(--ok)}.s-degraded{color:var(--warn)}.s-outage{color:var(--bad)}.s-maintenance{color:var(--maint)}.s-no_data{color:var(--none)}
+.note{font-weight:400;color:var(--muted)}
+.bars{display:flex;gap:2px;list-style:none;margin:.75rem 0 0;padding:0;height:2rem}
+.bar{flex:1;border-radius:2px;min-width:2px}
+.b-ok{background:var(--ok)}.b-warn{background:#bf8700}.b-bad{background:var(--bad)}.b-none{background:#d1d9e0}
+.b-maint{box-shadow:inset 0 -6px 0 var(--maint)}
+.summary{display:flex;justify-content:space-between;margin:.25rem 0 0;color:var(--muted);font-size:.8rem}
+.notice{border:1px solid var(--line);border-radius:6px;padding:1rem 1.25rem;margin-bottom:.75rem}
+.meta{margin:.25rem 0 0;color:var(--muted);font-size:.9rem}
+.impact{font-weight:600}.i-minor{color:var(--warn)}.i-major,.i-critical{color:var(--bad)}.i-maint{color:var(--maint)}
+.updates{list-style:none;margin:.75rem 0 0;padding:0}
+.updates li+li{margin-top:.75rem}
+.updates p{margin:.25rem 0 0}
+.ustatus{text-transform:capitalize}
+.foot{color:var(--muted);font-size:.85rem;padding-block:2rem}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style>
+</head>
+<body>
+<header class="top">
+<div class="wrap head">
+<h1>Status</h1>
+</div>
+</header>
+<main class="wrap">
+<section class="banner s-operational" aria-label="Overall status">
+<p><span class="icon" aria-hidden="true">✓</span> All systems operational</p>
+</section>
+<section aria-labelledby="components-h">
+<h2 id="components-h">Components</h2>
+<ul class="components">
+<li class="component">
+<div class="row">
+<div><h3>Website</h3></div>
+<p class="state s-operational"><span class="icon" aria-hidden="true">✓</span> Operational</p>
+</div>
+<ol class="bars" aria-label="Daily availability, 7 days, oldest first">
+<li class="bar b-ok" title="2026-11-19: 100% available"><span class="sr">2026-11-19: 100% available</span></li>
+<li class="bar b-ok" title="2026-11-20: 100% available"><span class="sr">2026-11-20: 100% available</span></li>
+<li class="bar b-ok" title="2026-11-21: 100% available"><span class="sr">2026-11-21: 100% available</span></li>
+<li class="bar b-ok" title="2026-11-22: 100% available"><span class="sr">2026-11-22: 100% available</span></li>
+<li class="bar b-ok" title="2026-11-23: 100% available"><span class="sr">2026-11-23: 100% available</span></li>
+<li class="bar b-ok" title="2026-11-24: 100% available"><span class="sr">2026-11-24: 100% available</span></li>
+<li class="bar b-ok" title="2026-11-25: 100% available"><span class="sr">2026-11-25: 100% available</span></li>
+</ol>
+<p class="summary"><span>6 days ago</span><span>100% average daily availability</span><span>Today</span></p>
+</li>
+</ul>
+</section>
+</main>
+<footer class="wrap foot">
+<p>Updated <time datetime="2026-11-25T14:00:00Z">2026-11-25 14:00 UTC</time>. Subscribe with the <a href="feed.atom">Atom feed</a>, or read <a href="status.json">status.json</a>.</p>
+</footer>
+</body>
+</html>
+
+

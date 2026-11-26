@@ -1,0 +1,81 @@
+# Uploads main's full-mode Go coverage to Codecov, best effort.
+#
+# WHY: a public coverage report (the README's Codecov badge, and the link
+# awesome-go and other indexes ask for). The coverage already exists: main's
+# full lanes record it (scripts/ci-test-full-shard.sh and ci.yml's integration
+# steps write -covermode=atomic profiles into .forge/tests/runs/), and each
+# recording job keeps its runs as a test-runs-* artifact for test-upload.yml.
+# This workflow reads the same artifacts, so no test runs twice and ci.yml
+# gains no step.
+#
+# WHY A WORKFLOW OF ITS OWN: the upload authenticates with a GitHub OIDC token
+# (`use_oidc`, so no Codecov token secret exists), which needs
+# `id-token: write`, and ci.yml grants its jobs no credential
+# (internal/ciguard). This runs from the default branch after CI completes,
+# only for a push to main, so what it checks out and runs is main's own,
+# already merged. internal/ciguard's TestCoverageUploadTrustBoundary holds it
+# to that.
+#
+# WHAT IT NEVER DOES: change a verdict. The job is continue-on-error, and
+# codecov.yml makes both statuses informational. A red main's coverage
+# uploads too: the lanes that passed still measured what they ran.
+#
+# OWNER STEP: Codecov's GitHub App (https://github.com/apps/codecov) must be
+# installed on reliant-labs/forge, or Codecov refuses the OIDC upload. Until
+# then the upload step fails with a warning and nothing else changes.
+
+name: Coverage
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  codecov:
+    name: Upload main's coverage to Codecov
+    if: >-
+      github.repository == 'reliant-labs/forge' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.conclusion != 'cancelled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+      # A run whose recording jobs all failed early keeps no artifact; the
+      # merge then says there is nothing to upload.
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          pattern: test-runs-*
+          merge-multiple: true
+          path: .forge/tests/runs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - name: Merge the full lanes' profiles
+        run: scripts/ci-coverage-merge.sh .forge/tests/runs coverage.out
+      # Pinned by digest: this step holds the job's OIDC token. override_*
+      # name the CI run's commit, not this workflow_run's (main's tip when
+      # it started, which may already be a later commit).
+      - name: Upload to Codecov
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          use_oidc: true
+          files: coverage.out
+          disable_search: true
+          flags: go
+          override_commit: ${{ github.event.workflow_run.head_sha }}
+          override_branch: main
+          fail_ci_if_error: true

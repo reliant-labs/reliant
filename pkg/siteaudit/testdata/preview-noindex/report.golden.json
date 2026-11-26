@@ -1,0 +1,167 @@
+{
+  "rules_version": "1",
+  "site": {
+    "url": "https://abc123.reliantpreview.example",
+    "host": "abc123.reliantpreview.example",
+    "score": {
+      "seo": 100,
+      "a11y": null
+    },
+    "indexing": {
+      "expected": "noindex",
+      "actual": "index"
+    },
+    "robots": {},
+    "sitemap": {
+      "files": 0,
+      "urls": 0
+    }
+  },
+  "routes": [
+    {
+      "route": "/",
+      "url": "https://abc123.reliantpreview.example/",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Preview of Acme",
+        "description": "A preview build of Acme's site, which search engines should never index.",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "indexable": true,
+        "og_complete": false
+      }
+    },
+    {
+      "route": "/sent-noindex",
+      "url": "https://abc123.reliantpreview.example/sent-noindex",
+      "status": 200,
+      "score": {
+        "seo": 100,
+        "a11y": null
+      },
+      "head": {
+        "title": "Preview of Acme",
+        "description": "A preview build of Acme's site, which search engines should never index.",
+        "lang": "en",
+        "viewport": "width=device-width, initial-scale=1",
+        "x_robots_tag": "noindex",
+        "indexable": false,
+        "og_complete": false
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "preview_indexable",
+      "severity": "info",
+      "category": "seo",
+      "ref": "host",
+      "evidence": {
+        "examples": "/",
+        "host": "abc123.reliantpreview.example",
+        "indexable_routes": "1"
+      },
+      "fix": "This host is meant to stay out of search results and is indexable; the platform is expected to send noindex here."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/sent-noindex",
+      "ref": "og:description",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/sent-noindex",
+      "ref": "og:image",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "warn",
+      "category": "seo",
+      "route": "/sent-noindex",
+      "ref": "og:title",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/sent-noindex",
+      "ref": "og:type",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "og_tag_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/sent-noindex",
+      "ref": "og:url",
+      "fix": "Add the Open Graph tag to the served HTML so link previews in Slack, X, LinkedIn and Facebook show the page."
+    },
+    {
+      "code": "twitter_card_missing",
+      "severity": "info",
+      "category": "seo",
+      "route": "/sent-noindex",
+      "ref": "twitter:card",
+      "fix": "Add \u003cmeta name=\"twitter:card\" content=\"summary_large_image\"\u003e for a large preview on X."
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Anvil, 50 kg — Shop Example</title>
+    <meta name="description" content="A 50 kg forged steel anvil. Drops reliably from any height; ships the same day." />
+    <link rel="canonical" href="https://shop.example/products/anvil" />
+    <script type="application/ld+json">
+      [
+        {"@context": "https://schema.org", "@type": "Product", "name": "Anvil, 50 kg", "image": "https://shop.example/anvil.png"},
+        {
+          "@context": "https://schema.org",
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "Products", "item": "https://shop.example/products"},
+            {"@type": "ListItem", "name": "Heavy things"},
+            {"@type": "ListItem", "position": 3, "item": {"@id": "https://shop.example/products/anvil", "name": "Anvil"}}
+          ]
+        },
+        {"@context": "https://schema.org", "@type": ["Article", "NewsArticle"], "author": "Wile E."}
+      ]
+    </script>
+  </head>
+  <body><main><h1>Anvil</h1></main></body>
+</html>

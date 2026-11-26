@@ -1,0 +1,11 @@
+{
+  "name": "llm-app",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "openai": "^4.77.0"
+  }
+}

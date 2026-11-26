@@ -1,0 +1,515 @@
+{
+  "matches": [
+    {
+      "vulnerability": {
+        "id": "CVE-2026-4738",
+        "dataSource": "https://security.alpinelinux.org/vuln/CVE-2026-4738",
+        "namespace": "alpine:distro:alpine:3.21",
+        "severity": "Critical",
+        "cvss": [
+          {
+            "version": "4.0",
+            "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:P/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H/E:A/CR:X/IR:X/AR:X/MAV:X/MAC:X/MAT:X/MPR:X/MUI:X/MVC:X/MVI:X/MVA:X/MSC:X/MSI:X/MSA:X/S:P/AU:Y/R:U/V:C/RE:L/U:Amber",
+            "metrics": {
+              "baseScore": 9.4
+            }
+          }
+        ],
+        "epss": [
+          {
+            "cve": "CVE-2026-4738",
+            "epss": 0.00269,
+            "percentile": 0.19248,
+            "date": "2026-11-18"
+          }
+        ],
+        "knownExploited": null,
+        "fix": {
+          "versions": [
+            "1.4-r0"
+          ],
+          "state": "fixed",
+          "available": [
+            {
+              "version": "1.4-r0",
+              "date": "2026-11-07",
+              "kind": "first-observed"
+            }
+          ]
+        }
+      },
+      "relatedVulnerabilities": [
+        {
+          "id": "CVE-2026-4738",
+          "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2026-4738",
+          "namespace": "nvd:cpe",
+          "severity": "Critical",
+          "cvss": [
+            {
+              "version": "4.0",
+              "metrics": {
+                "baseScore": 9.4
+              }
+            }
+          ],
+          "epss": [
+            {
+              "cve": "CVE-2026-4738",
+              "epss": 0.00269,
+              "percentile": 0.19248,
+              "date": "2026-11-18"
+            }
+          ]
+        }
+      ],
+      "matchDetails": [
+        {
+          "type": "exact-direct-match",
+          "matcher": "apk-matcher"
+        },
+        {
+          "type": "exact-indirect-match",
+          "matcher": "apk-matcher"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:apk/alpine/zlib@1.3.2-r1?arch=x86_64&distro=alpine-3.21.10&package-id=48d894d2dabfb6c4",
+        "name": "zlib",
+        "version": "1.3.2-r1",
+        "type": "apk",
+        "purl": "pkg:apk/alpine/zlib@1.3.2-r1?arch=x86_64&distro=alpine-3.21.10",
+        "locations": [
+          {
+            "path": "/lib/apk/db/installed"
+          }
+        ]
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2025-60876",
+        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2025-60876",
+        "namespace": "nvd:cpe",
+        "severity": "Medium",
+        "cvss": [
+          {
+            "version": "3.1",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+            "metrics": {
+              "baseScore": 6.5
+            }
+          }
+        ],
+        "epss": [
+          {
+            "cve": "CVE-2025-60876",
+            "epss": 0.00312,
+            "percentile": 0.24493,
+            "date": "2026-11-18"
+          }
+        ],
+        "knownExploited": null,
+        "fix": {
+          "versions": [],
+          "state": ""
+        }
+      },
+      "relatedVulnerabilities": [],
+      "matchDetails": [
+        {
+          "type": "cpe-match",
+          "matcher": "apk-matcher"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:apk/alpine/busybox@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10&package-id=6ca5b246959782cd",
+        "name": "busybox",
+        "version": "1.37.0-r14",
+        "type": "apk",
+        "purl": "pkg:apk/alpine/busybox@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10",
+        "locations": [
+          {
+            "path": "/lib/apk/db/installed"
+          }
+        ]
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2025-60876",
+        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2025-60876",
+        "namespace": "nvd:cpe",
+        "severity": "Medium",
+        "cvss": [
+          {
+            "version": "3.1",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+            "metrics": {
+              "baseScore": 6.5
+            }
+          }
+        ],
+        "epss": [
+          {
+            "cve": "CVE-2025-60876",
+            "epss": 0.00312,
+            "percentile": 0.24493,
+            "date": "2026-11-18"
+          }
+        ],
+        "knownExploited": null,
+        "fix": {
+          "versions": [],
+          "state": ""
+        }
+      },
+      "relatedVulnerabilities": [],
+      "matchDetails": [
+        {
+          "type": "cpe-match",
+          "matcher": "apk-matcher"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:apk/alpine/busybox-binsh@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10&package-id=647e208285fe9a62&upstream=busybox",
+        "name": "busybox-binsh",
+        "version": "1.37.0-r14",
+        "type": "apk",
+        "purl": "pkg:apk/alpine/busybox-binsh@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10&upstream=busybox",
+        "locations": [
+          {
+            "path": "/lib/apk/db/installed"
+          }
+        ]
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2025-60876",
+        "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2025-60876",
+        "namespace": "nvd:cpe",
+        "severity": "Medium",
+        "cvss": [
+          {
+            "version": "3.1",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+            "metrics": {
+              "baseScore": 6.5
+            }
+          }
+        ],
+        "epss": [
+          {
+            "cve": "CVE-2025-60876",
+            "epss": 0.00312,
+            "percentile": 0.24493,
+            "date": "2026-11-18"
+          }
+        ],
+        "knownExploited": null,
+        "fix": {
+          "versions": [],
+          "state": ""
+        }
+      },
+      "relatedVulnerabilities": [],
+      "matchDetails": [
+        {
+          "type": "cpe-match",
+          "matcher": "apk-matcher"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:apk/alpine/ssl_client@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10&package-id=75b5ba1004bc765a&upstream=busybox",
+        "name": "ssl_client",
+        "version": "1.37.0-r14",
+        "type": "apk",
+        "purl": "pkg:apk/alpine/ssl_client@1.37.0-r14?arch=x86_64&distro=alpine-3.21.10&upstream=busybox",
+        "locations": [
+          {
+            "path": "/lib/apk/db/installed"
+          }
+        ]
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "GHSA-96hv-2xvq-fx4p",
+        "dataSource": "https://github.com/advisories/GHSA-96hv-2xvq-fx4p",
+        "namespace": "github:language:javascript",
+        "severity": "High",
+        "cvss": [
+          {
+            "version": "3.1",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+            "metrics": {
+              "baseScore": 7.5
+            }
+          }
+        ],
+        "epss": [
+          {
+            "cve": "CVE-2026-48779",
+            "epss": 0.01426,
+            "percentile": 0.73475,
+            "date": "2026-11-18"
+          }
+        ],
+        "knownExploited": null,
+        "fix": {
+          "versions": [
+            "8.21.0"
+          ],
+          "state": "fixed",
+          "available": [
+            {
+              "version": "8.21.0",
+              "date": "2026-06-15",
+              "kind": "first-observed"
+            }
+          ]
+        }
+      },
+      "relatedVulnerabilities": [
+        {
+          "id": "CVE-2026-48779",
+          "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2026-48779",
+          "namespace": "nvd:cpe",
+          "severity": "High",
+          "cvss": [
+            {
+              "version": "3.1",
+              "metrics": {
+                "baseScore": 7.5
+              }
+            },
+            {
+              "version": "3.1",
+              "metrics": {
+                "baseScore": 7.5
+              }
+            }
+          ],
+          "epss": [
+            {
+              "cve": "CVE-2026-48779",
+              "epss": 0.01426,
+              "percentile": 0.73475,
+              "date": "2026-11-18"
+            }
+          ]
+        }
+      ],
+      "matchDetails": [
+        {
+          "type": "exact-direct-match",
+          "matcher": "javascript-matcher"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:npm/ws@8.20.0?package-id=09e06c0c36c6fbef",
+        "name": "ws",
+        "version": "8.20.0",
+        "type": "npm",
+        "purl": "pkg:npm/ws@8.20.0",
+        "locations": [
+          {
+            "path": "/package-lock.json"
+          }
+        ]
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "GHSA-chx6-hx7r-mcp5",
+        "dataSource": "https://github.com/advisories/GHSA-chx6-hx7r-mcp5",
+        "namespace": "github:language:javascript",
+        "severity": "High",
+        "cvss": [
+          {
+            "version": "4.0",
+            "vector": "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+            "metrics": {
+              "baseScore": 8.7
+            }
+          }
+        ],
+        "epss": [
+          {
+            "cve": "CVE-2026-55685",
+            "epss": 0.00708,
+            "percentile": 0.5418,
+            "date": "2026-11-18"
+          }
+        ],
+        "knownExploited": null,
+        "fix": {
+          "versions": [
+            "7.18.0"
+          ],
+          "state": "fixed",
+          "available": [
+            {
+              "version": "7.18.0",
+              "date": "2026-07-24",
+              "kind": "first-observed"
+            }
+          ]
+        }
+      },
+      "relatedVulnerabilities": [
+        {
+          "id": "CVE-2026-55685",
+          "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2026-55685",
+          "namespace": "nvd:cpe",
+          "severity": "High",
+          "cvss": [
+            {
+              "version": "3.1",
+              "metrics": {
+                "baseScore": 7.5
+              }
+            },
+            {
+              "version": "4.0",
+              "metrics": {
+                "baseScore": 8.7
+              }
+            }
+          ],
+          "epss": [
+            {
+              "cve": "CVE-2026-55685",
+              "epss": 0.00708,
+              "percentile": 0.5418,
+              "date": "2026-11-18"
+            }
+          ]
+        }
+      ],
+      "matchDetails": [
+        {
+          "type": "exact-direct-match",
+          "matcher": "javascript-matcher"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:npm/react-router@7.14.0?package-id=b02ae35c9dd4eae5",
+        "name": "react-router",
+        "version": "7.14.0",
+        "type": "npm",
+        "purl": "pkg:npm/react-router@7.14.0",
+        "locations": [
+          {
+            "path": "/package-lock.json"
+          }
+        ]
+      }
+    },
+    {
+      "vulnerability": {
+        "id": "CVE-2026-82560",
+        "dataSource": "https://security-tracker.debian.org/tracker/CVE-2026-82560",
+        "namespace": "debian:distro:debian:13",
+        "severity": "High",
+        "cvss": [
+          {
+            "version": "3.1",
+            "vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+            "metrics": {
+              "baseScore": 7.5
+            }
+          }
+        ],
+        "epss": [
+          {
+            "cve": "CVE-2026-82560",
+            "epss": 0.0063,
+            "percentile": 0.50919,
+            "date": "2026-11-18"
+          }
+        ],
+        "knownExploited": null,
+        "fix": {
+          "versions": [],
+          "state": "wont-fix"
+        }
+      },
+      "relatedVulnerabilities": [
+        {
+          "id": "CVE-2026-82560",
+          "dataSource": "https://nvd.nist.gov/vuln/detail/CVE-2026-82560",
+          "namespace": "nvd:cpe",
+          "severity": "High",
+          "cvss": [
+            {
+              "version": "3.1",
+              "metrics": {
+                "baseScore": 7.5
+              }
+            }
+          ],
+          "epss": [
+            {
+              "cve": "CVE-2026-82560",
+              "epss": 0.0063,
+              "percentile": 0.50919,
+              "date": "2026-11-18"
+            }
+          ]
+        }
+      ],
+      "matchDetails": [
+        {
+          "type": "exact-indirect-match",
+          "matcher": "dpkg-matcher"
+        }
+      ],
+      "artifact": {
+        "id": "pkg:deb/debian/perl-base@5.40.1-6%2Bdeb13u1?arch=amd64&distro=debian-13.7&package-id=1ed310f43f3fc66d&upstream=perl",
+        "name": "perl-base",
+        "version": "5.40.1-6+deb13u1",
+        "type": "deb",
+        "purl": "pkg:deb/debian/perl-base@5.40.1-6%2Bdeb13u1?arch=amd64&distro=debian-13.7&upstream=perl",
+        "locations": [
+          {
+            "path": "/var/lib/dpkg/info/perl-base.list"
+          },
+          {
+            "path": "/var/lib/dpkg/status"
+          },
+          {
+            "path": "/usr/share/doc/perl-base/copyright"
+          },
+          {
+            "path": "/var/lib/dpkg/info/perl-base.md5sums"
+          }
+        ]
+      }
+    }
+  ],
+  "source": {
+    "type": "sbom"
+  },
+  "distro": {
+    "name": "alpine",
+    "version": "3.21.10",
+    "idLike": [
+      "alpine"
+    ]
+  },
+  "descriptor": {
+    "name": "grype",
+    "version": "0.122.1",
+    "db": {
+      "status": {
+        "schemaVersion": "v6.1.10",
+        "from": "https://grype.anchore.io/databases/v6/vulnerability-db_v6.1.10_2026-11-19T00:22:15Z_1795113665.tar.zst?checksum=sha256%3A757eb920ea050a3b9d145ced71649be659539140a173d159f88eb8afa900e2e4",
+        "built": "2026-11-19T18:41:05Z",
+        "path": "/cache/grype/6/vulnerability.db",
+        "valid": true
+      }
+    },
+    "timestamp": "2026-11-20T07:00:11.41065994Z"
+  }
+}
