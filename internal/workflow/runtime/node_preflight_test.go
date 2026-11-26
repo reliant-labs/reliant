@@ -261,3 +261,25 @@ nodes:
 	assert.Equal(t, &types.DaemonSelector{ID: "m-b"}, rec.selectors["work"][0])
 	assert.Equal(t, []int32{1}, pf.runAttempts["ExecuteRunStep"])
 }
+
+// Review B1 on #3790: the pool a failed preflight may move a node within is
+// found even when the routing value carries no PlacedPool.
+func TestPreflightPool(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name     string
+		own, sel *DaemonSelectorValue
+		want     string
+	}{
+		{"the node's own pool", &DaemonSelectorValue{Pool: "builders"}, &DaemonSelectorValue{ID: "m-a", Placed: true}, "builders"},
+		{"a placed machine's pool", nil, &DaemonSelectorValue{ID: "m-a", Placed: true, PlacedPool: "builders"}, "builders"},
+		{"an inherited pool selector not yet placed", nil, &DaemonSelectorValue{Pool: "builders"}, "builders"},
+		{"a placed machine that lost its pool, with no run placement to read", nil, &DaemonSelectorValue{ID: "m-a", Placed: true}, ""},
+		{"a fixed machine", nil, &DaemonSelectorValue{ID: "m-a"}, ""},
+		{"no machine", nil, nil, ""},
+	} {
+		if got := preflightPool(nil, testWorkflowID, tt.own, tt.sel); got != tt.want {
+			t.Errorf("%s: pool = %q, want %q", tt.name, got, tt.want)
+		}
+	}
+}

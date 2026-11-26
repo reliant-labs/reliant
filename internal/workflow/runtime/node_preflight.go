@@ -122,6 +122,31 @@ func (r *runPlacements) movedSelector(workflowID, scope string) (*DaemonSelector
 	return entry.moved, true
 }
 
+// preflightPool is the pool a node may move to when its preflight fails
+// (review B1 on #3790): its own selector's pool, else the pool its machine
+// was placed from. A routing value can lose PlacedPool (it is in-memory
+// only, and an inherited selector may arrive serialized, or come from a
+// placement recorded before Pool was kept), so the run's own workflow-level
+// placement is read too. "" when the node is not on a pool at all.
+func preflightPool(r *runPlacements, workflowID string, own, sel *DaemonSelectorValue) string {
+	switch {
+	case own.NeedsPlacement():
+		return own.Pool
+	case sel != nil && sel.Placed && sel.PlacedPool != "":
+		return sel.PlacedPool
+	case sel.NeedsPlacement():
+		return sel.Pool
+	}
+	if own == nil {
+		if entry, ok := r.lookup(workflowID, ""); ok && entry.placement != nil {
+			if sel == nil || sel.ID == "" || sel.ID == entry.placement.DaemonID {
+				return entry.placement.Pool
+			}
+		}
+	}
+	return ""
+}
+
 // preflightNode checks the machine sel routes node to, and returns the
 // machine the node runs on: sel when it passed, another member of its pool
 // when it did not and one passed there. A node that sets no preflight gets
@@ -142,13 +167,7 @@ func preflightNode(ctx workflow.Context, chatID, workflowID, scope string, node 
 	if state.moved != nil {
 		sel = state.moved
 	}
-	pool := ""
-	switch {
-	case own.NeedsPlacement():
-		pool = own.Pool
-	case sel != nil && sel.Placed:
-		pool = sel.PlacedPool
-	}
+	pool := preflightPool(runPlacementsFrom(ctx), workflowID, own, sel)
 	logger := workflow.GetLogger(ctx)
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: machinePreflightTimeout,
