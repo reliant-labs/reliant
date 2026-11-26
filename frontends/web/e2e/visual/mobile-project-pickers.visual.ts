@@ -5,7 +5,8 @@
  * on the mobile project, and compares no pixels.
  *
  *   - the shell's project switcher (the drawer on /usage, /connectors,
- *     /projects) lands on the chat list scoped to the pick;
+ *     /projects, and the phone's own drawer on /m/chats, the same column)
+ *     lands on the chat list scoped to the pick;
  *   - a /m/projects pick is the chat list's `?projects=`, and survives a reload;
  *   - a /m/new pick is `?project=`: it survives a reload, Back undoes it, and
  *     the chat starts in it;
@@ -53,7 +54,7 @@ test.describe('mobile project pickers', () => {
     throw new Error('Run the picker flows through scripts/visual-docker.sh (VISUAL_ALLOW_HOST=1 to debug on the host).')
   })
 
-  for (const start of ['/usage', '/connectors', '/projects']) {
+  for (const start of ['/usage', '/connectors', '/projects', '/m/chats']) {
     test(`the shell switcher on ${start} scopes the chat list to the pick`, { tag: '@mobile' }, async ({ page }) => {
       await installHarness(page, PICKERS)
       await page.goto(start)
@@ -75,9 +76,9 @@ test.describe('mobile project pickers', () => {
     // A bare list is filled from the tab's default: every project, here.
     await expect.poll(() => query(page)).toEqual({ projects: 'all' })
     await settle(page)
-    await openMenu(page)
-    await page.getByTestId('mobile-nav-project').click()
-    await expect(page).toHaveURL(/\/m\/projects/)
+    // The drawer's project row is the shell's switcher now (covered above); the screen is a URL of its own.
+    await page.goto('/m/projects')
+    await settle(page)
     await page.getByText('docs', { exact: true }).first().click()
 
     await expect.poll(() => pathOf(page)).toBe('/m/chats')
