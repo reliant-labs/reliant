@@ -73,6 +73,12 @@ describe("IdeasView", () => {
     expect(screen.queryByText("Launch post")).not.toBeInTheDocument();
     expect(screen.getByText("Docs views are high but few create a flow.")).toBeInTheDocument();
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG }));
+    expect(screen.queryByTestId("gtm-ideas-truncated")).not.toBeInTheDocument();
+  });
+
+  it("says when it shows only the first page", async () => {
+    renderGtm(<IdeasView />, { ...lists, "GtmService.ListIdeas": { response: { ideas: [proposed], nextPageToken: "next" } } }, { path: "/gtm/ideas" });
+    expect(await screen.findByTestId("gtm-ideas-truncated")).toHaveTextContent("Showing the first 200 ideas.");
   });
 
   it("asks the agent in a new chat, the prompt waiting unsent", async () => {

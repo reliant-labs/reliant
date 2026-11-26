@@ -138,6 +138,11 @@ export function IdeasView() {
           emptyMessage={tab === "all" ? "No ideas yet. Ask the agent for some, or add your own in a chat." : "No ideas with this status."}
         />
       )}
+      {ideasQ.data?.nextPageToken ? (
+        <p className="text-xs text-ink-muted" data-testid="gtm-ideas-truncated">
+          Showing the first {IDEAS_PAGE} ideas.
+        </p>
+      ) : null}
       <AskForIdeasDialog open={asking} onClose={() => setAsking(false)} />
     </>
   );
