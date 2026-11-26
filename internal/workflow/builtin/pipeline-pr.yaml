@@ -61,9 +61,13 @@ triggers:
       integration: github
       events: [pull_request.opened, pull_request.reopened, pull_request.ready_for_review, pull_request.synchronize, pull_request.closed]
       match: {repository: {input: repos}}
-    inputs: &pr_of_event
-      repository: "{{ trigger.payload.attributes.repository }}"
-      number: "{{ trigger.payload.data.pull_request.number }}"
+    inputs: &pr_of_record
+      repository: "{{ trigger.record.repository }}"
+      number: "{{ trigger.record.number }}"
+  - name: due
+    description: The PR's pipeline row came due (pr_pipeline.next_action_at)
+    record_due: {table: pr_pipeline}
+    inputs: *pr_of_record
   - name: pr-comment
     description: You, or someone you trust, comments on a PR's conversation
     integration:
@@ -74,8 +78,8 @@ triggers:
       trigger.sender.verified && trigger.sender.id != ''
       && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)
     inputs:
-      repository: "{{ trigger.payload.attributes.repository }}"
-      number: "{{ trigger.payload.data.issue.number }}"
+      repository: "{{ trigger.record.repository }}"
+      number: "{{ trigger.record.number }}"
       comment: &comment >-
         {{ {'id': string(trigger.payload.data.comment.id), 'body': trigger.payload.data.comment.body, 'author': trigger.payload.attributes.sender} }}
   - name: pr-line-comment
@@ -86,8 +90,8 @@ triggers:
       match: {repository: {input: repos}}
     filter: *trusted
     inputs:
-      repository: "{{ trigger.payload.attributes.repository }}"
-      number: "{{ trigger.payload.data.pull_request.number }}"
+      repository: "{{ trigger.record.repository }}"
+      number: "{{ trigger.record.number }}"
       comment: *comment
 
 entry: [decide]
