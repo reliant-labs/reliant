@@ -1,12 +1,16 @@
 package architecture
 
 import (
+	"archive/tar"
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
 	"sort"
@@ -35,10 +39,11 @@ import (
 //
 // This test reads the source, so it sees every construction whatever its
 // build tags and however slow its test is, and runs on every Go change
-// (test-affected selects packages that walk every Go file). A field of a
-// Deps struct is required unless it is marked `// forge:optional-dep` (forge's
-// convention: an optional dep's consumer handles nil) or listed in
-// depsFieldsNotEverywhere below. Every composite literal of a Deps type
+// (test-affected selects packages that walk every Go file). It reports only
+// missing fields added relative to the queue base, so unrelated queued changes
+// cannot fail this PR. A field is required unless marked `// forge:optional-dep`
+// (forge's convention: an optional dep's consumer handles nil).
+// Every composite literal of a Deps type
 // outside its own package, and every one passed to a call inside it (directly
 // or through local bindings and the returns of bare, package-qualified and method helpers), must name each required field. A literal inside the
 // package that builds a Service by hand (`&Service{deps: Deps{Repo: r}}`) is
@@ -48,6 +53,8 @@ import (
 // construction this test names, or mark it `// forge:optional-dep` (its
 // consumer must then handle nil), in the pull request that adds it.
 
+// Historical baseline, retained for reference only; the guard now compares
+// against the queue base instead of applying these broad directory exemptions.
 // depsFieldsNotEverywhere names the Deps fields ("<package dir>.<Field>")
 // that constructions in the listed package directories left unset when this
 // test was added (2026-11-26), on purpose (a unit test that calls one method,
@@ -57,7 +64,7 @@ import (
 // that sets the field everywhere now, so delete it then. Never add a field a
 // pull request introduces: wire it everywhere, or mark it
 // `// forge:optional-dep`.
-var depsFieldsNotEverywhere = map[string][]string{
+var _ = map[string][]string{
 	// Existing local-variable and wrapper constructions, newly covered by B1.
 	"cmd/reliant/cmd.Cmd":                          {"cmd/reliant/cmd"},
 	"internal/handlers/account.Purger":             {"internal/handlers/account"},
@@ -472,42 +479,115 @@ func TestEveryConstructionSetsEveryRequiredDepsField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	exempt := map[string]bool{} // "<field key> <constructing dir>"
-	for key, dirs := range depsFieldsNotEverywhere {
-		for _, dir := range dirs {
-			exempt[key+" "+dir] = true
+	// Read the baseline through git, not the live main checkout. In a merge
+	// group HEAD^1 is the queue base; locally use the branch's merge base.
+	base := os.Getenv("DEPS_GUARD_BASE")
+	if base == "" {
+		if os.Getenv("GITHUB_EVENT_NAME") == "merge_group" {
+			base = "HEAD^1"
+		} else {
+			base = strings.TrimSpace(string(depsGit(t, repo, "merge-base", "origin/main", "HEAD")))
 		}
 	}
-	used := map[string]bool{}
-	for _, f := range findings {
-		var unlisted []string
+	baseline := map[string][]byte{}
+	archive := tar.NewReader(bytes.NewReader(depsGit(t, repo, "archive", base)))
+	for {
+		header, err := archive.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Use exactly the live walk's input set (including build-tagged files).
+		if _, ok := files[header.Name]; !ok {
+			continue
+		}
+		src, err := io.ReadAll(archive)
+		if err != nil {
+			t.Fatal(err)
+		}
+		baseline[header.Name] = src
+	}
+	previous, err := missingDepsFields(module, baseline)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range newDepsFindings(findings, previous) {
+		t.Errorf("%s builds %s.Deps without %s (new relative to %s). Set every required dep, including in slow and build-tagged tests, or mark the field // forge:optional-dep if its consumer handles nil.",
+			f.pos, path.Base(f.pkgDir), strings.Join(f.missing, ", "), base)
+	}
+}
+
+func depsGit(t *testing.T, repo string, args ...string) []byte {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repo
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return out
+}
+
+// Compare counts per file, type and field rather than line numbers, which move
+// on unrelated edits. A new required field is absent from the baseline and
+// therefore still checks every existing construction, not just edited files.
+func newDepsFindings(current, baseline []depsFinding) []depsFinding {
+	key := func(f depsFinding, field string) string { return f.file + " " + f.pkgDir + "." + field }
+	remaining := map[string]int{}
+	for _, f := range baseline {
 		for _, field := range f.missing {
-			key := f.pkgDir + "." + field + " " + path.Dir(f.file)
-			if exempt[key] {
-				used[key] = true
-				continue
+			remaining[key(f, field)]++
+		}
+	}
+	var out []depsFinding
+	for _, f := range current {
+		var added []string
+		for _, field := range f.missing {
+			k := key(f, field)
+			if remaining[k] > 0 {
+				remaining[k]--
+			} else {
+				added = append(added, field)
 			}
-			unlisted = append(unlisted, field)
 		}
-		if len(unlisted) > 0 {
-			t.Errorf("%s builds %s.Deps without %s. Every construction sets every Deps field that is not "+
-				"`// forge:optional-dep`, slow and build-tagged tests included: the merge gate does not run those, "+
-				"and a missing dep is a nil panic at the release gate (#3589, #3605). Set it here, or mark the "+
-				"field `// forge:optional-dep` if its consumer handles nil.",
-				f.pos, path.Base(f.pkgDir), strings.Join(unlisted, ", "))
+		if len(added) > 0 {
+			f.missing = added
+			out = append(out, f)
 		}
 	}
-	var stale []string
-	for key := range exempt {
-		if !used[key] {
-			stale = append(stale, key)
-		}
+	return out
+}
+
+func TestDepsGuardIgnoresQueueBaselineButFindsRegressions(t *testing.T) {
+	files := map[string][]byte{
+		"svc/service.go":     []byte("package svc; type Deps struct { Repo any }; func New(Deps) {}"),
+		"svc/queued_test.go": []byte("package svc; func queued() { New(Deps{}) }"),
 	}
-	sort.Strings(stale)
-	for _, key := range stale {
-		field, dir, _ := strings.Cut(key, " ")
-		t.Errorf("depsFieldsNotEverywhere exempts %s in %s, but every construction there sets it now (or it is gone): delete %q from its entry",
-			field, dir, dir)
+	baseline, err := missingDepsFields("example", files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := newDepsFindings(baseline, baseline); len(got) != 0 {
+		t.Fatalf("unrelated queued construction failed: %v", got)
+	}
+	files["svc/new_test.go"] = []byte("//go:build integration\npackage svc; func added() { New(Deps{}) }")
+	current, err := missingDepsFields("example", files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := newDepsFindings(current, baseline); len(got) != 1 || got[0].file != "svc/new_test.go" {
+		t.Fatalf("new tagged construction not detected: %v", got)
+	}
+	delete(files, "svc/new_test.go")
+	files["svc/service.go"] = []byte("package svc; type Deps struct { Repo any; Chats any }; func New(Deps) {}")
+	current, err = missingDepsFields("example", files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := newDepsFindings(current, baseline); len(got) != 1 || strings.Join(got[0].missing, ",") != "Chats" {
+		t.Fatalf("new field must check unchanged constructions: %v", got)
 	}
 }
 

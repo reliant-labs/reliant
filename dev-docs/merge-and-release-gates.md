@@ -445,9 +445,12 @@ These are the trade-offs. Each is caught by the release gate:
   whatever its build tags, and fails a `Deps` literal that leaves out a field
   not marked `// forge:optional-dep`: every one outside the declaring package,
   and every one passed to `New` inside it. It runs on every Go change (a
-  walker), in under a second. Fields some packages already left out when it
-  landed are exempt in those packages only (`depsFieldsNotEverywhere`); a new
-  field is never exempt, so wire it everywhere or mark it optional. It cannot
+  walker). It reports only additional missing fields relative to the queue
+  base (`HEAD^1` on `merge_group`, otherwise the merge base with origin/main;
+  `DEPS_GUARD_BASE` overrides it). Baseline findings from unrelated queued PRs
+  cannot fail it. Counts are compared per file, Deps type and field, ignoring
+  line shifts. Adding a required field still checks unchanged constructions
+  everywhere; wire it everywhere or mark it optional. It cannot
   see a construction that builds `Deps` field by field, nor tell which methods
   need a field: `threads.Deps.Chats` (needed only by the interrupt and pause
   paths) is exempt in `internal/threads`, whose tests mostly build a
