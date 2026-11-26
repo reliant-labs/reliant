@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // An automation that fails every hour must notify once per failure streak, not
@@ -113,7 +114,7 @@ func (f *streakFixture) reply(chatID, status string) (bool, string) {
 	require.NoError(f.t, f.h.Repo().UpdateChatUnread(ctx, chatID, false, "opened"))
 	in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "started", Thread: chatID}
 	var out WorkflowStatusOutput
-	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
+	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(f.h.Repo()))).Execute, in, &out))
 	return f.report(chatID, status, false)
 }
 
@@ -125,7 +126,7 @@ func (f *streakFixture) report(chatID, status string, launchRun bool) (bool, str
 		LaunchRun: launchRun,
 	}
 	var out WorkflowStatusOutput
-	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
+	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(f.h.Repo()))).Execute, in, &out))
 	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), chatID)
 	require.NoError(f.t, err)
 	reason := ""
@@ -398,7 +399,7 @@ func TestWorkflowStatus_FailureOutcomeRecordsTheFiringAsFailed(t *testing.T) {
 			chatID := f.launch(core.TriggerEventKindIntegration, db.Active())
 
 			var out WorkflowStatusOutput
-			require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, WorkflowStatusInput{
+			require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(f.h.Repo()))).Execute, WorkflowStatusInput{
 				ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Thread: chatID,
 				Status: tc.status, Outcome: tc.outcome, LaunchRun: true,
 			}, &out))

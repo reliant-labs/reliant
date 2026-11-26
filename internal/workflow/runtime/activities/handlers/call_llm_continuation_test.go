@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
 )
 
@@ -414,7 +415,7 @@ func TestCallLLM_MailboxDeliveryPreservesContinuationTracking(t *testing.T) {
 // nudgeSaveFailingRepo fails every save of a hidden continuation nudge (its
 // activity id carries "|continuation-") and passes every other write through.
 type nudgeSaveFailingRepo struct {
-	*db.Repo
+	triggerreads.Repo
 	failed int
 	mu     sync.Mutex
 }
@@ -452,7 +453,7 @@ func TestCallLLM_UnsavedNudgeFailsTheAttemptInsteadOfContinuing(t *testing.T) {
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 	saveTextOnlyAssistantMessage(t, h, chat.ID, chat.ID, "part 1")
 
-	repo := &nudgeSaveFailingRepo{Repo: h.Repo()}
+	repo := &nudgeSaveFailingRepo{Repo: triggerreads.Of(h.Repo())}
 	activityInstance := NewCallLLMActivity(CallLLMDeps{Store: repo, Mailbox: store.NewAgentMessageExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Spawns: store.NewToolCallExtStore(repo.ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: turnScriptResolver(driver), MCPBinder: nil})
 
 	for range maxTruncationContinuations + 1 {

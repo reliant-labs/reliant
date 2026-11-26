@@ -2744,10 +2744,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
 }
 
-func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
-	return store.GetTrigger(ctx, r.ORM(), id)
-}
-
 func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
 	if f.UserID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
@@ -2778,22 +2774,6 @@ func (r *Repo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEve
 		return nil, fmt.Errorf("trigger event dedupe key cannot be empty")
 	}
 	return store.GetTriggerEventByDedupe(ctx, r.ORM(), kind, dedupeKey)
-}
-
-func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
-}
-
-// GetTriggerEventByChat returns the event of the given kind that launched
-// chatID (core.ErrTriggerEventNotFound when none did).
-func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
 // UpdateTriggerEventOutcome is store.UpdateTriggerEventOutcome.

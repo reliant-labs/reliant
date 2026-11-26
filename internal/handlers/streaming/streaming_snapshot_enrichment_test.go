@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // TestChatSnapshot_CarriesSpawnChildWorkflowID pins the bug that made a LIVE
@@ -83,7 +84,7 @@ func TestChatSnapshot_CarriesSpawnChildWorkflowID(t *testing.T) {
 		RequestedAt:     now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)})))
 	snapshot, _, err := svc.buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
@@ -129,7 +130,7 @@ func TestChatSnapshot_ToolCallUpdateUsesDurableStatus(t *testing.T) {
 		Status:     db.ToolCallStatusExecuting,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, fixture.ChatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)}))).buildChatSnapshotByID(ctx, fixture.ChatID)
 	require.NoError(t, err)
 
 	var block *reliantv1.ContentBlock

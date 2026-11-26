@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 const moveUser = "move-user"
@@ -41,7 +42,7 @@ func newMoveFixture(t *testing.T) *moveFixture {
 		t:       t,
 		ctx:     context.WithValue(context.Background(), auth.UserIDContextKey, moveUser),
 		repo:    repo,
-		service: &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})},
+		service: &Service{deps: Deps{Repo: triggerreads.Of(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})},
 		now:     time.Now().UTC(),
 	}
 }
@@ -212,7 +213,7 @@ func TestMoveChatToProject_NoteFailureLeavesTheChatWhereItWas(t *testing.T) {
 	f.install(from, laptop, "/home/me/billing")
 	f.install(to, laptop, "/home/me/properties")
 	chatID := f.chat(from, fromMain, &laptop)
-	f.service.deps.Repo = noteFailingRepo{Repository: f.repo}
+	f.service.deps.Repo = noteFailingRepo{Repository: triggerreads.Of(f.repo)}
 
 	_, err := f.move(&reliantv1.MoveChatToProjectRequest{ChatId: chatID, ProjectId: to})
 	requireCode(t, err, connect.CodeInternal)

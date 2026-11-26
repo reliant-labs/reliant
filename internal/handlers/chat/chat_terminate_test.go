@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // terminateTestTemporalClient reports one live execution and records terminates.
@@ -140,7 +141,7 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 	temporal := &terminateTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // fullConfigRowReads records every read of the WHOLE project config record,
@@ -22,7 +23,7 @@ import (
 // presets column. getSpawnTool alone (every orchestrating turn) was 3.3 GB of
 // worker allocation per 22 minutes.
 type fullConfigRowReads struct {
-	*db.Repo
+	triggerreads.Repo
 
 	mu      sync.Mutex
 	callers []string
@@ -54,7 +55,7 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 		ProjectID: "test-project", DaemonID: "daemon-1",
 		ProjectPresetsJSON: &presets, ProjectSkillsJSON: &skills,
 	}))
-	spy := &fullConfigRowReads{Repo: repo}
+	spy := &fullConfigRowReads{Repo: triggerreads.Of(repo)}
 
 	// CallLLM: the spawn tool's description lists the project preset's own.
 	spawn := (&CallLLMActivity{repo: spy}).getSpawnTool(ctx, spawnPresetSource{projectID: "test-project"}, &SpawnConfig{Presets: []string{"project-reviewer"}})

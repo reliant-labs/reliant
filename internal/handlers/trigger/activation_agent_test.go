@@ -68,7 +68,7 @@ func TestAgentActivationValidationAuditAndMachineBinding(t *testing.T) {
 	require.Equal(t, "pause", changes[0].Operation)
 	require.NotEmpty(t, changes[0].BeforeState)
 	// The storage row lock also protects the gap between preview and write.
-	stored, e := env.repo.GetTrigger(env.ctx, created.ID)
+	stored, e := store.GetTrigger(env.ctx, env.repo.ORM(), created.ID)
 	require.NoError(t, e)
 	staleCtx := automationpolicy.WithRevision(env.ctx, stored.UpdatedAt.Add(-time.Second))
 	require.ErrorContains(t, store.EnableTrigger(staleCtx, env.repo.ORM(), created.ID, true), "changed after approval")

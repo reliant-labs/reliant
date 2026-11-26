@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // A person's send into a chat a trigger or an agent launched makes it
@@ -110,7 +111,7 @@ func TestSendMessage_PersonTurn(t *testing.T) {
 			temporal := &inputCapturingTemporalClient{
 				absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED},
 			}
-			service := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}, Temporal: temporal, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}}, runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: &MockQuestions{}, Temporal: temporal, Pause: nil})}
+			service := &Service{deps: Deps{Repo: triggerreads.Of(repo), Chats: chataccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}, Temporal: temporal, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}}, runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: &MockQuestions{}, Temporal: temporal, Pause: nil})}
 
 			_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "one more thing"))
 			require.NoError(t, err)

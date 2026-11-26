@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // fakeWorkflowRun is a minimal client.WorkflowRun for tests that just need
@@ -114,7 +115,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 		LastActive: now,
 	}))
 
-	failingRepo := &failAfterUserUpdateRepo{Repository: repo, shouldFail: true}
+	failingRepo := &failAfterUserUpdateRepo{Repository: triggerreads.Of(repo), shouldFail: true}
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
@@ -199,7 +200,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 		LastActive: now,
 	}))
 
-	failingRepo := &failAfterUserUpdateRepo{Repository: repo, shouldFail: false}
+	failingRepo := &failAfterUserUpdateRepo{Repository: triggerreads.Of(repo), shouldFail: false}
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{

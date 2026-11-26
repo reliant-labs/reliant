@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -89,7 +90,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	router := newCodePresenceHangingRouter(t, e.router)
 	e.svc = &Service{
 		deps: Deps{
-			Repo:        e.repo,
+			Repo:        triggerreads.Of(e.repo),
 			Workflows:   store.NewWorkflowExtStore(e.repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(e.repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(e.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(e.repo.ORM()),
@@ -172,7 +173,7 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 	}}
 	svc := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

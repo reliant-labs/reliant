@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -73,7 +74,7 @@ func newStartDaemonEnv(t *testing.T) *startDaemonEnv {
 	return &startDaemonEnv{
 		svc: &Service{
 			deps: Deps{
-				Repo:        repo,
+				Repo:        triggerreads.Of(repo),
 				Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 				Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 				ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // The snapshot must identify a spawned thread as a spawn even when the stored
@@ -71,7 +72,7 @@ func TestChatSnapshot_ThreadUpdateCarriesOriginFromThreadsTable(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnThreadID, string(legacy)))
 
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)})))
 	snapshot, _, err := svc.buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
@@ -142,7 +143,7 @@ func TestChatSnapshot_ThreadUpdateUsesThreadsTableLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(stale)))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -199,7 +200,7 @@ func TestChatSnapshot_ThreadUpdateKeepsStoredOrigin(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, threadID, string(stored)))
 
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)})))
 	snapshot, _, err := svc.buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 

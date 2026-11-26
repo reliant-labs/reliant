@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // orderRecordingPauseController wraps *toolexectest.Recorder-style order recording
@@ -123,7 +124,7 @@ func TestPauseChat_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
 
 	service := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

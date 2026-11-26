@@ -76,6 +76,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -1006,7 +1007,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 		triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), triggerreads.Of(repo), d.Integrations.GitHubAppSlug)),
 		d.Pollers, d.Vault, d.Integrations.PublicURL).
 		WithDeliveryInbox(ws).
 		WithConnectionSecrets(d.Connections.Tokens).

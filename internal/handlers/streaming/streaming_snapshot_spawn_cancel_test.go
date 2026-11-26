@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // The snapshot must carry a spawn's originating tool call id, so the cancel
@@ -102,7 +103,7 @@ func TestChatSnapshot_ThreadUpdateCarriesSpawnedByToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(lifecycle)))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -192,7 +193,7 @@ func TestChatSnapshot_ResumedSpawnUsesNewestToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, firstWorkflowID, string(lifecycle)))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	var payload map[string]any
@@ -264,7 +265,7 @@ func TestChatSnapshot_ThreadUpdateKeepsStoredSpawnedByToolCallID(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(stated)))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	for _, u := range snapshot.OtherUpdates {

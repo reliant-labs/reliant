@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // mockLocalExecutor is a ToolExecutor that is NOT a RemoteExecutor.
@@ -54,7 +55,7 @@ func TestPreflightDaemonCheck_NonRemoteExecutor(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}))
 
-	activity := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), &mockLocalExecutor{})
+	activity := NewPreflightDaemonCheckActivity(triggerreads.Of(repo), workspaceRowsOf(repo), &mockLocalExecutor{})
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -76,7 +77,7 @@ func TestPreflightDaemonCheck_ChatNotFound(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
-	activity := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), &mockLocalExecutor{})
+	activity := NewPreflightDaemonCheckActivity(triggerreads.Of(repo), workspaceRowsOf(repo), &mockLocalExecutor{})
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()

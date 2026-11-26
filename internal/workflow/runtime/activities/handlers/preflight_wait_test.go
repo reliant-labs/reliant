@@ -17,7 +17,9 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errclass"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -65,6 +67,10 @@ type markerRepo struct {
 	*db.Repo
 	mu     sync.Mutex
 	writes []bool
+}
+
+func (r *markerRepo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
+	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *markerRepo) SetChatDaemonBlocked(_ context.Context, _ string, blocked bool) error {

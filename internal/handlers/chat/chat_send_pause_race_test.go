@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // gatedPauseController behaves like workflow.PauseService in the one respect
@@ -141,7 +142,7 @@ func TestSendMessage_RacingAnInFlightPauseResumesTheRun(t *testing.T) {
 	pause := newGatedPauseController(repo)
 	service := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

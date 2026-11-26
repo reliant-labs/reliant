@@ -110,7 +110,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
-	got, err := repo.GetTrigger(ctx, want.ID)
+	got, err := store.GetTrigger(ctx, repo.ORM(), want.ID)
 	if err != nil {
 		t.Fatalf("GetTrigger: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 		t.Fatalf("UpdateTrigger: %v", err)
 	}
 
-	updated, err := repo.GetTrigger(ctx, want.ID)
+	updated, err := store.GetTrigger(ctx, repo.ORM(), want.ID)
 	if err != nil {
 		t.Fatalf("GetTrigger after update: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 	if err := store.RemoveTrigger(ctx, repo.ORM(), want.ID); err != nil {
 		t.Fatalf("DeleteTrigger: %v", err)
 	}
-	if _, err := repo.GetTrigger(ctx, want.ID); !errors.Is(err, core.ErrTriggerNotFound) {
+	if _, err := store.GetTrigger(ctx, repo.ORM(), want.ID); !errors.Is(err, core.ErrTriggerNotFound) {
 		t.Errorf("GetTrigger after delete: got %v, want ErrTriggerNotFound", err)
 	}
 }
@@ -216,7 +216,7 @@ func TestCreateTriggerNilMapsReadBackEmpty(t *testing.T) {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
-	got, err := repo.GetTrigger(ctx, trigger.ID)
+	got, err := store.GetTrigger(ctx, repo.ORM(), trigger.ID)
 	if err != nil {
 		t.Fatalf("GetTrigger: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 	if err := store.EnableTrigger(ctx, repo.ORM(), trigger.ID, false); err != nil {
 		t.Fatalf("SetTriggerEnabled(false): %v", err)
 	}
-	got, err := repo.GetTrigger(ctx, trigger.ID)
+	got, err := store.GetTrigger(ctx, repo.ORM(), trigger.ID)
 	if err != nil {
 		t.Fatalf("GetTrigger: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 	if err := store.EnableTrigger(ctx, repo.ORM(), trigger.ID, true); err != nil {
 		t.Fatalf("SetTriggerEnabled(true): %v", err)
 	}
-	got, err = repo.GetTrigger(ctx, trigger.ID)
+	got, err = store.GetTrigger(ctx, repo.ORM(), trigger.ID)
 	if err != nil {
 		t.Fatalf("GetTrigger: %v", err)
 	}
@@ -667,7 +667,7 @@ func TestDeleteProjectCascadesTriggers(t *testing.T) {
 		t.Fatalf("delete project: %v", err)
 	}
 
-	if _, err := repo.GetTrigger(ctx, trigger.ID); !errors.Is(err, core.ErrTriggerNotFound) {
+	if _, err := store.GetTrigger(ctx, repo.ORM(), trigger.ID); !errors.Is(err, core.ErrTriggerNotFound) {
 		t.Errorf("GetTrigger after project delete: got %v, want ErrTriggerNotFound", err)
 	}
 }

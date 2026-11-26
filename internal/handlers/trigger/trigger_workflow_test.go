@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -699,7 +700,7 @@ func TestDisableWorkflowPausesOnlyThatWorkflowsActivations(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, resp.Msg.Paused, 3)
 
-	after, err := env.repo.GetTrigger(context.Background(), unrelated.GetId())
+	after, err := store.GetTrigger(context.Background(), env.repo.ORM(), unrelated.GetId())
 	require.NoError(t, err)
 	assert.True(t, after.Enabled, "another workflow's automation is untouched")
 }

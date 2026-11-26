@@ -227,7 +227,7 @@ func TestTriggerNamesJoined(t *testing.T) {
 	project, err := repo.GetProjectWithUserCheck(ctx, "test-project", "test-user")
 	require.NoError(t, err)
 
-	got, err := repo.GetTrigger(ctx, named.ID)
+	got, err := store.GetTrigger(ctx, repo.ORM(), named.ID)
 	require.NoError(t, err)
 	assert.Equal(t, project.Name, got.ProjectName)
 	assert.Equal(t, "build-box", got.DaemonName)
@@ -297,13 +297,13 @@ func TestTrigger_NotifyOnCompleteRoundTrips(t *testing.T) {
 	tr.NotifyOnComplete = true
 	require.NoError(t, triggertest.Create(ctx, repo, tr))
 
-	got, err := repo.GetTrigger(ctx, tr.ID)
+	got, err := store.GetTrigger(ctx, repo.ORM(), tr.ID)
 	require.NoError(t, err)
 	assert.True(t, got.NotifyOnComplete)
 
 	got.NotifyOnComplete = false
 	require.NoError(t, triggertest.Update(ctx, repo, got))
-	got, err = repo.GetTrigger(ctx, tr.ID)
+	got, err = store.GetTrigger(ctx, repo.ORM(), tr.ID)
 	require.NoError(t, err)
 	assert.False(t, got.NotifyOnComplete)
 }

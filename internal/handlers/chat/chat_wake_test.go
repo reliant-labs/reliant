@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // wakeRecordingRouter is a daemon router that can also wake, recording each
@@ -58,7 +59,7 @@ func newAttendedSendFixture(t *testing.T, wakeErr error) (*Service, *wakeRecordi
 	router := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}, err: wakeErr}
 	svc := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

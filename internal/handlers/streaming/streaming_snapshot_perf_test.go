@@ -26,6 +26,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // largeChatShape sizes one seeded chat. The defaults are the shape the
@@ -314,7 +315,7 @@ func TestChatOpenLargeChatPerf(t *testing.T) {
 		require.NoError(t, err)
 	}
 	repo := perfRepo(t, dsn, rtt/2)
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)})))
 
 	// The chat_snapshot.* / chat_stream.* spans, averaged per name.
 	recorder := tracetest.NewSpanRecorder()

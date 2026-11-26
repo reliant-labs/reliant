@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/signaltest"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
@@ -114,7 +115,7 @@ func TestSendMessage_RunningWorkflowWakesTargetThread(t *testing.T) {
 	}
 	service := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -163,7 +164,7 @@ func TestSendMessage_PausedWorkflowWakesTargetThreadOnResume(t *testing.T) {
 	}
 	service := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -209,7 +210,7 @@ func TestSendMessage_NewRunDoesNotWake(t *testing.T) {
 	}
 	service := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -247,7 +248,7 @@ func TestSendMessage_WakeFailureStillSavesMessage(t *testing.T) {
 	}
 	service := &Service{
 		deps: Deps{
-			Repo:        repo,
+			Repo:        triggerreads.Of(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

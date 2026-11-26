@@ -74,6 +74,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/triggertools"
@@ -389,7 +390,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
 		Logger:           d.Logger,
 		Config:           d.Config,
-		Repo:             d.DB,
+		Repo:             triggerreads.Of(d.DB),
 		Chats:            chataccess.NewFromORM(d.DB.ORM()),
 		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -540,7 +541,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), triggerreads.Of(repo), d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -1056,7 +1057,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
+		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), triggerreads.Of(repo), d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {
 		membership = d.Membership

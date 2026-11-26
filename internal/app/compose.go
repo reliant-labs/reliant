@@ -125,6 +125,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -1195,7 +1196,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
 		Logger:           g.Log,
 		Config:           g.Cfg,
-		Repo:             g.Database(),
+		Repo:             triggerreads.Of(g.Database()),
 		Chats:            chataccess.NewFromORM(g.Database().ORM()),
 		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
@@ -1601,7 +1602,7 @@ func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 	return streaminghandler.New(streaminghandler.Deps{
 		Logger:      g.Log,
 		Config:      g.Cfg,
-		Repo:        g.Database(),
+		Repo:        triggerreads.Of(g.Database()),
 		ChatRows:    store.NewChatExtStore(g.Database().ORM()),
 		Senders:     store.NewThreadExtStore(g.Database().ORM()),
 		Projects:    store.NewProjectExtStore(g.Database().ORM()),
@@ -1755,7 +1756,7 @@ func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
 	return automation_takeover.New(automation_takeover.Deps{
 		Logger:   g.Log,
 		Config:   g.Cfg,
-		Repo:     g.Database(),
+		Repo:     triggerreads.Of(g.Database()),
 		Offers:   g.Triggerowner(),
 		Triggers: g.Trigger(),
 		Now:      nil, // optional — no provider

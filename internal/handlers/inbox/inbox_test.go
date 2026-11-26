@@ -385,7 +385,7 @@ func TestListInbox_LaunchFailedItemCountsTheEpisode(t *testing.T) {
 func (f *inboxFixture) notifyingTrigger(t *testing.T, id string, notify bool) {
 	t.Helper()
 	f.trigger(t, id)
-	tr, err := f.repo.GetTrigger(f.ctx, id)
+	tr, err := store.GetTrigger(f.ctx, f.repo.ORM(), id)
 	require.NoError(t, err)
 	tr.NotifyOnComplete = notify
 	require.NoError(t, triggertest.Update(f.ctx, f.repo, tr))

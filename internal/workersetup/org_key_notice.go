@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Emailing an org's owners and admins about a rejected org key
@@ -218,7 +219,9 @@ func noticeSweeps(cfg *Config, q orgKeyNoticeQueue) []func(context.Context) {
 		sweeps = append(sweeps, func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) })
 	}
 	if cfg.Database != nil {
-		sweeps = append(sweeps, func(ctx context.Context) { sweepPauseNotices(ctx, newPauseStores(cfg.Database, cfg.Database.ORM()), q) })
+		sweeps = append(sweeps, func(ctx context.Context) {
+			sweepPauseNotices(ctx, newPauseStores(store.NewTriggerExtStore(cfg.Database.ORM()), cfg.Database.ORM()), q)
+		})
 	}
 	return sweeps
 }

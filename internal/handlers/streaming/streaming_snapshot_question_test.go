@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // questionStatusesInSnapshot returns the status of every question update the
@@ -109,7 +110,7 @@ func TestChatSnapshot_DoesNotReplayAnsweredQuestion(t *testing.T) {
 		QuestionID: questionID, ChatID: chatID, Status: "resolved",
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
@@ -146,7 +147,7 @@ func TestChatSnapshot_StillDeliversUnansweredQuestion(t *testing.T) {
 		Metadata: `{"type":"ask_user","questions":[{"question":"Which branch?"}]}`,
 	}))
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)
@@ -192,7 +193,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 	require.Equal(t, db.QuestionStatusResolved, q.Status,
 		"terminate must void the pending question")
 
-	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo}))).buildChatSnapshotByID(ctx, chatID)
+	snapshot, _, err := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo)}))).buildChatSnapshotByID(ctx, chatID)
 	require.NoError(t, err)
 
 	statuses := questionStatusesInSnapshot(t, snapshot)

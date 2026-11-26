@@ -3,6 +3,7 @@ package trigger
 
 import (
 	"context"
+	"github.com/reliant-labs/reliant/internal/store"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -88,7 +89,7 @@ func TestCreateTrigger_NoMachineAcceptsAServerOnlyWorkflow(t *testing.T) {
 	assert.True(t, got.GetNoMachine())
 	assert.Empty(t, got.GetDaemonId())
 
-	stored, err := env.repo.GetTrigger(context.Background(), got.GetId())
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), got.GetId())
 	require.NoError(t, err)
 	assert.True(t, stored.NoMachine)
 	assert.Empty(t, stored.DaemonID)

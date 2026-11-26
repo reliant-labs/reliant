@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -55,7 +56,7 @@ func newOrgFeedService(t *testing.T) (*viewertest.Fixture, reliantv1connect.Stre
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: f.Membership})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo), Deltas: noopHub{}, Orgs: f.Membership})))
 	svc.heartbeatInterval = time.Hour
 	svc.orgFeedPollInterval = 10 * time.Millisecond
 	return f, sharedStreams(t, svc, f.Membership)
@@ -217,7 +218,7 @@ func TestStreamOrgUpdates_EndsWhenMembershipIsNotConfirmed(t *testing.T) {
 			t.Cleanup(cleanup)
 			f := viewertest.New(t, repo)
 			m := &flippableFeedMembership{Resolver: f.Membership, afterMember: tc.member, afterOK: tc.ok, afterErr: tc.err}
-			svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: m})))
+			svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo), Deltas: noopHub{}, Orgs: m})))
 			svc.heartbeatInterval = time.Hour
 			svc.orgFeedPollInterval = 10 * time.Millisecond
 			svc.reauthorizeInterval = 10 * time.Millisecond
@@ -254,7 +255,7 @@ func TestStreamOrgUpdates_OpenRefusesUnconfirmedMembership(t *testing.T) {
 	f := viewertest.New(t, repo)
 	m := &flippableFeedMembership{Resolver: f.Membership, afterMember: true, afterOK: false}
 	m.flipped.Store(true)
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: m})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo), Deltas: noopHub{}, Orgs: m})))
 	client := sharedStreams(t, svc, f.Membership)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	t.Cleanup(cancel)

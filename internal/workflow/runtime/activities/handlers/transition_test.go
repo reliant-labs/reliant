@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // ============================================================================
@@ -74,7 +75,7 @@ func TestWorkflowStatus_TransitionToOnCompletion(t *testing.T) {
 		Status:       db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
 	input := WorkflowStatusInput{
 		ChatID:       chatID,
 		WorkflowID:   workflowID,
@@ -134,7 +135,7 @@ func TestWorkflowStatus_NoTransitionWhenTargetAbsent(t *testing.T) {
 		Status:       db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
 	var out WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID:       chatID,
@@ -177,7 +178,7 @@ func TestWorkflowStatus_ChildCompletionDoesNotTransition(t *testing.T) {
 		ID: childID, ParentID: &parentID, ChatID: chatID, WorkflowName: oneShotWF, Thread: childID, Status: db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
 	var out WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID:           chatID,

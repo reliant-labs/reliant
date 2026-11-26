@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 const builderTestDraftYAML = `name: bt-draft
@@ -52,7 +53,7 @@ func newBuilderTestFixture(t *testing.T) *builderTestFixture {
 		repo: repo, ctx: ctx, projectID: projectID,
 		service: &Service{
 			deps: Deps{
-				Repo:        repo,
+				Repo:        triggerreads.Of(repo),
 				Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 				Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 				ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -102,7 +103,7 @@ func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
 	chatID := resp.Msg.GetChat().GetId()
 
 	assert.Equal(t, "builder.test", f.launchKind(t, chatID))
-	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
+	event, err := store.GetTriggerEventByChatID(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventKindBuilderTest, event.Kind)
 	assert.Equal(t, chatID, event.DedupeKey, "attended: deduped on the chat id, like chat.start")

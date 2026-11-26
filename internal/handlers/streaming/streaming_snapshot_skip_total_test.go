@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // StreamChatUpdatesRequest.skip_total: the snapshot of a stream that sets it
@@ -43,7 +44,7 @@ func TestChatSnapshotSkipTotal(t *testing.T) {
 
 	open := func(t *testing.T, skipTotal bool) (*reliantv1.ChatSyncSnapshot, int32) {
 		t.Helper()
-		spy := &countSpyRepo{Repository: repo}
+		spy := &countSpyRepo{Repository: triggerreads.Of(repo)}
 		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: spy, ChatRows: store.NewChatExtStore(repo.ORM())})))
 		events := chatStreamEvents(t, svc, &reliantv1.StreamChatUpdatesRequest{ChatId: f.ChatID, SkipTotal: skipTotal})
 		snapshot := nextChatEvent(t, events).GetSnapshot()

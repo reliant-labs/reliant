@@ -58,6 +58,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
@@ -360,7 +361,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	chatSvc, err := chat.New(chat.Deps{
 		Logger:           slog.Default(),
 		Config:           &typedconfig.Config{},
-		Repo:             s.Repo,
+		Repo:             triggerreads.Of(s.Repo),
 		Chats:            chataccess.NewFromORM(s.Repo.ORM()),
 		ChatRows:         store.NewChatExtStore(s.Repo.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(s.Repo.ORM()),
