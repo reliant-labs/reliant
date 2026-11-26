@@ -1435,3 +1435,7 @@ var generatedKnownTags = []string{
 	"web",
 	"workflow",
 }
+
+// generatedFeatureGated maps each feature-gated tool to its feature,
+// projected from the registry's feature-gated map (tools.FeatureGate).
+var generatedFeatureGated = map[string]string{}

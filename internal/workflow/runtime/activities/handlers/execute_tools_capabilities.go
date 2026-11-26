@@ -26,6 +26,11 @@ import (
 func capabilityRefusal(caps *tools.Capabilities, toolCall message.ToolCall) string {
 	name := toolCall.Name
 	if caps == nil {
+		// A batch with no set entitles no feature, so a feature-gated tool is
+		// refused exactly as a tool that does not exist.
+		if _, gated := tools.FeatureGate(name); gated {
+			return tools.LegacyCapabilities(false).Explain(name)
+		}
 		if required := tools.MinimumPermissionForTool(name); !tools.PermissionAtLeast(tools.PermissionMutating, required) {
 			return fmt.Sprintf("Tool '%s' requires '%s' permission, but the current permission level is '%s'.",
 				name, required, tools.PermissionMutating)

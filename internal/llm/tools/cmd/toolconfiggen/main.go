@@ -104,6 +104,18 @@ func generate() ([]byte, error) {
 	}
 	buf.WriteString("}\n")
 
+	// The feature-gated tools, so validation can keep a gated name out of
+	// its suggestions without importing the registry.
+	buf.WriteString("\n")
+	buf.WriteString("// generatedFeatureGated maps each feature-gated tool to its feature,\n")
+	buf.WriteString("// projected from the registry's feature-gated map (tools.FeatureGate).\n")
+	buf.WriteString("var generatedFeatureGated = map[string]string{\n")
+	for _, name := range featureGatedNames() {
+		f, _ := tools.FeatureGate(name)
+		fmt.Fprintf(&buf, "\t%q: %q,\n", name, string(f))
+	}
+	buf.WriteString("}\n")
+
 	formatted, err := format.Source(buf.Bytes())
 	if err != nil {
 		return nil, fmt.Errorf("format generated source: %w\n%s", err, buf.String())
@@ -123,6 +135,17 @@ func knownTags() []string {
 	}
 	sort.Strings(tags)
 	return tags
+}
+
+// featureGatedNames is every feature-gated tool, sorted.
+func featureGatedNames() []string {
+	gated := tools.FeatureGatedTools()
+	names := make([]string, 0, len(gated))
+	for name := range gated {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // collect instantiates every registered tool and reads its parameter schema.

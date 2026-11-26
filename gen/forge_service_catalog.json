@@ -52040,6 +52040,11 @@
             {
               "name": "spawn_depth_exhausted",
               "kind": "bool"
+            },
+            {
+              "name": "entitled_features",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ToolResultMsg": [
@@ -58582,6 +58587,15 @@
     },
     {
       "consumer": "Catalog",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Catalog",
       "field": "InputOptions",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/catalog.InputOptions",
       "methods": [],
@@ -62976,6 +62990,14 @@
       "component": "Account.Purger",
       "source": {
         "path": "internal/handlers/account/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Catalog.Gate",
+      "source": {
+        "path": "internal/handlers/catalog/service.go",
         "symbol": "New"
       }
     },

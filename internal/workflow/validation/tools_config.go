@@ -224,11 +224,16 @@ func unbindableMessage(toolName, paramName string) string {
 
 // didYouMeanTool suggests a real tool name for a misspelled one. A bare
 // "no such tool" against a fifty-entry registry sends the author to grep;
-// naming the near-miss usually ends the problem on the spot.
+// naming the near-miss usually ends the problem on the spot. A feature-gated
+// tool is never suggested: its exact name validates, so an entitled owner's
+// workflow stays valid, but to anyone else it does not exist.
 func didYouMeanTool(toolName string) string {
 	lowered := strings.ToLower(toolName)
 	var near []string
 	for _, candidate := range toolcatalog.Tools() {
+		if _, gated := toolcatalog.FeatureGated(candidate); gated {
+			continue
+		}
 		if strings.Contains(strings.ToLower(candidate), lowered) ||
 			strings.Contains(lowered, strings.ToLower(candidate)) {
 			near = append(near, candidate)

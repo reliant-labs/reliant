@@ -6,12 +6,15 @@ import (
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // ListTools returns all available tools
 //
-// forge:auth-unscoped-ok: the tool registry is built into the binary and the same for every caller
+// forge:auth-unscoped-ok: the tool registry is built into the binary; the only caller-dependent part is that a feature-gated tool is listed only to a member of an org entitled to its feature (Gate.AllowedForUser)
 func (s *Service) ListTools(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListToolsRequest],
@@ -20,8 +23,14 @@ func (s *Service) ListTools(
 	toolRegistry := tools.GetToolRegistry()
 
 	builder := s.toolBuilder()
+	entitled := s.entitledFeatures(ctx)
 	var toolList []*reliantv1.ToolInfo
 	for _, toolDef := range toolRegistry {
+		// A feature-gated tool does not exist for a caller entitled to no
+		// org with its feature, so it is not listed.
+		if f, gated := tools.FeatureGate(toolDef.Name); gated && !entitled(f) {
+			continue
+		}
 		// Create tool instance to get its description
 		tool := builder.ToolFor(toolDef)
 		description := ""
@@ -70,4 +79,31 @@ func (s *Service) ListTools(
 		Total: int32(len(toolList)),
 	}
 	return connect.NewResponse(resp), nil
+}
+
+// entitledFeatures answers, per feature and at most once each, whether the
+// caller is a member of some org entitled to it. The request names no org, so
+// this is Gate.AllowedForUser. It fails closed: no gate, no caller, a refusal
+// or an error is "no".
+func (s *Service) entitledFeatures(ctx context.Context) func(featuregate.Feature) bool {
+	answers := map[featuregate.Feature]bool{}
+	return func(f featuregate.Feature) bool {
+		if allowed, asked := answers[f]; asked {
+			return allowed
+		}
+		allowed := false
+		if s.deps.Gate != nil {
+			if userID, ok := auth.GetUserIDFromContext(ctx); ok && userID != "" {
+				var err error
+				allowed, err = s.deps.Gate.AllowedForUser(ctx, f, userID)
+				if err != nil {
+					logging.WarnContext(ctx, "[ListTools] Could not establish whether the caller is entitled to a feature; leaving its tools out",
+						"feature", string(f), "error", err)
+					allowed = false
+				}
+			}
+		}
+		answers[f] = allowed
+		return allowed
+	}
 }

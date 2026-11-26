@@ -369,6 +369,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
 		Orgs:               g.OrgResolver(),
+		Gate:               nil, // optional — no provider
 	})
 }
 
