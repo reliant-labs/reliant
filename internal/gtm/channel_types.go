@@ -2,12 +2,14 @@
 
 package gtm
 
-import "github.com/reliant-labs/reliant/internal/store"
+import (
+	"slices"
 
-// The gtm_channels.channel_types column arrives with the next PR-2 head.
-// Until it does, a channel's types are not persisted; these two are where
-// the row mapping goes once it lands.
+	"github.com/reliant-labs/reliant/internal/store"
+)
 
-func setChannelTypes(_ *store.GtmChannel, _ []string) {}
+// setChannelTypes writes a channel's types (gtm_channels.channel_types).
+func setChannelTypes(r *store.GtmChannel, types []string) { r.ChannelTypes = nonNil(types) }
 
-func channelTypesOf(_ *store.GtmChannel) []string { return nil }
+// channelTypesOf reads a channel's types.
+func channelTypesOf(r *store.GtmChannel) []string { return slices.Clone(r.ChannelTypes) }

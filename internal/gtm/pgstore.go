@@ -52,6 +52,7 @@ var (
 	channelUpdateCols = []string{
 		store.GtmChannelFieldKey, store.GtmChannelFieldName, store.GtmChannelFieldMode, store.GtmChannelFieldIntegrationKind,
 		store.GtmChannelFieldConnectionID, store.GtmChannelFieldManualInstructionsMd, store.GtmChannelFieldStatus,
+		store.GtmChannelFieldChannelTypes,
 		store.GtmChannelFieldRevision,
 	}
 	positioningUpdateCols = []string{

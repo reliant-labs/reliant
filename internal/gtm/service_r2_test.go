@@ -318,6 +318,10 @@ func TestChannels(t *testing.T) {
 			assert.Equal(t, ChannelActive, ch.Status)
 		}
 		assert.Equal(t, []string{"blog", "email", "hacker-news", "linkedin", "reddit", "x", "youtube"}, keys)
+		for _, d := range DefaultChannels {
+			assert.Equal(t, d.ChannelTypes, f.channel(t, d.Key).ChannelTypes, d.Key)
+		}
+		assert.Equal(t, []string{"forum", "community"}, f.channel(t, "reddit").ChannelTypes)
 		email := f.channel(t, "email")
 		assert.Equal(t, ChannelIntegrated, email.Mode)
 		assert.Equal(t, GmailIntegration, email.IntegrationKind)
@@ -353,9 +357,13 @@ func TestChannels(t *testing.T) {
 		assert.Equal(t, agent.UserID, ch.CreatedBy)
 		_, err = f.svc.CreateChannel(ctx(), agent, CreateChannelInput{Key: "mail2", Name: "Mail", Mode: ChannelIntegrated, IntegrationKind: "gmail"})
 		require.ErrorIs(t, err, ErrPersonOnly)
-		ch, err = f.svc.UpdateChannel(ctx(), agent, UpdateChannelInput{ID: ch.ID, ExpectedRevision: ch.Revision, Key: ptr("devto"), Name: ptr("DEV"), Status: ptr(ChannelPaused)})
+		ch, err = f.svc.UpdateChannel(ctx(), agent, UpdateChannelInput{ID: ch.ID, ExpectedRevision: ch.Revision, Key: ptr("devto"), Name: ptr("DEV"), Status: ptr(ChannelPaused), ChannelTypes: &[]string{"forum", "blog"}})
 		require.NoError(t, err)
 		assert.Equal(t, "devto", ch.Key)
+		assert.Equal(t, []string{"forum", "blog"}, ch.ChannelTypes)
+		ch, err = f.svc.UpdateChannel(ctx(), agent, UpdateChannelInput{ID: ch.ID, ExpectedRevision: ch.Revision, ChannelTypes: &[]string{}})
+		require.NoError(t, err)
+		assert.Empty(t, ch.ChannelTypes, "an empty list clears them")
 		for name, in := range map[string]UpdateChannelInput{
 			"mode":       {Mode: ptr(ChannelIntegrated), IntegrationKind: ptr("gmail")},
 			"kind":       {IntegrationKind: ptr("gmail")},
@@ -393,6 +401,15 @@ func TestChannels(t *testing.T) {
 			"integrated no kind": {Key: "k", Name: "n", Mode: ChannelIntegrated},
 			"long name":          {Key: "k", Name: strings.Repeat("n", 101), Mode: ChannelManual},
 			"bad type":           {Key: "k", Name: "n", Mode: ChannelManual, ChannelTypes: []string{"Social Media"}},
+			"empty type":         {Key: "k", Name: "n", Mode: ChannelManual, ChannelTypes: []string{""}},
+			"type twice":         {Key: "k", Name: "n", Mode: ChannelManual, ChannelTypes: []string{"forum", "forum"}},
+			"33 types": {Key: "k", Name: "n", Mode: ChannelManual, ChannelTypes: func() []string {
+				ts := make([]string, 33)
+				for i := range ts {
+					ts[i] = fmt.Sprint("t", i)
+				}
+				return ts
+			}()},
 		} {
 			_, err := f.svc.CreateChannel(ctx(), person, in)
 			require.ErrorIs(t, err, ErrInvalidArgument, name)
@@ -694,9 +711,24 @@ func TestStrategyLibrary(t *testing.T) {
 		require.ErrorIs(t, err, ErrNotFound)
 	})
 	t.Run("plannedChannels matches by key or by a shared channel type", func(t *testing.T) {
-		chs := []*store.GtmChannel{{ID: "1", Key: "reddit"}, {ID: "2", Key: "hacker-news"}, {ID: "3", Key: "blog"}}
+		chs := []*store.GtmChannel{{ID: "1", Key: "reddit", ChannelTypes: []string{"forum"}}, {ID: "2", Key: "hacker-news", ChannelTypes: []string{"forum"}}, {ID: "3", Key: "blog"}}
 		assert.Equal(t, []string{"3", "1"}, plannedChannels([]string{"blog", "reddit", "blog"}, chs))
+		assert.Equal(t, []string{"1", "2"}, plannedChannels([]string{"forum"}, chs))
 		assert.Empty(t, plannedChannels([]string{"podcast"}, chs))
+	})
+	t.Run("use plans the org's ACTIVE channels whose types fit", func(t *testing.T) {
+		f := newFixture(t)
+		e := libEntry("forums", CategoryCommunityEvents)
+		e.ChannelTypes = []string{"forum", "video"}
+		_, err := f.svc.ImportStrategyLibrary(ctx(), person, ImportStrategyLibraryInput{SourceRevision: "r", Entries: []LibraryEntry{e}})
+		require.NoError(t, err)
+		hn := f.channel(t, "hacker-news")
+		_, err = f.svc.UpdateChannel(ctx(), person, UpdateChannelInput{ID: hn.ID, ExpectedRevision: hn.Revision, Status: ptr(ChannelArchived)})
+		require.NoError(t, err)
+		res, err := f.svc.UseLibraryStrategy(ctx(), agent, UseLibraryStrategyInput{LibraryKey: "forums", CreateFirstCampaign: true})
+		require.NoError(t, err)
+		assert.Equal(t, []string{f.channel(t, "reddit").ID, f.channel(t, "youtube").ID}, res.Campaign.PlannedChannelIDs,
+			"reddit is a forum, youtube a video; the archived hacker-news is left out")
 	})
 }
 

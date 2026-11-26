@@ -18,14 +18,14 @@ var (
 	channelModes    = []ChannelMode{ChannelIntegrated, ChannelManual}
 	channelStatuses = []ChannelStatus{ChannelActive, ChannelPaused, ChannelArchived}
 	channelKey      = regexp.MustCompile(`^[a-z0-9-]{1,32}$`)
-	channelType     = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
+	channelType     = regexp.MustCompile(`^[a-z0-9-]{1,32}$`)
 	integrationKind = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
 )
 
 const (
 	maxChannelNameLen  = 100
 	maxConnectionIDLen = 200
-	maxChannelTypes    = 20
+	maxChannelTypes    = 32
 	// GmailIntegration is the integration an email-type item is sent through.
 	GmailIntegration = "gmail"
 )
@@ -318,12 +318,12 @@ func checkChannelKey(key string) error {
 
 func checkChannelTypes(types []string) error {
 	if len(types) > maxChannelTypes {
-		return invalid("channel_types", "at most 20")
+		return invalid("channel_types", "at most 32")
 	}
 	seen := map[string]bool{}
 	for _, t := range types {
 		if !channelType.MatchString(t) {
-			return invalid("channel_types", "each a lowercase slug of at most 64")
+			return invalid("channel_types", "each a slug: lowercase letters, digits and '-', 1 to 32")
 		}
 		if seen[t] {
 			return invalid("channel_types", "each type once")

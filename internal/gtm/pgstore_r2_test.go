@@ -48,6 +48,7 @@ func TestPGStoreR2(t *testing.T) {
 		email := channelByKey(t, res.Channels, "email")
 		assert.Equal(t, GmailIntegration, email.IntegrationKind)
 		assert.Empty(t, email.ConnectionID, "NULL is the user's default")
+		assert.Equal(t, []string{"email", "newsletter"}, email.ChannelTypes, "types round-trip")
 	})
 
 	t.Run("links, coverage and the asset quota", func(t *testing.T) {
