@@ -14,7 +14,9 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { mobileChatPath } from "../../lib/paths";
+import { BranchNavigationProvider } from "../Chat/MessageChrome";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { useThreads } from "../Chat/thread-views";
 import { useThreadNavigation } from "../Chat/useThreadNavigation";
@@ -44,6 +46,7 @@ export function MobileChatScreen() {
   // `/_authenticated/_mobile/m/chats/$chatId`; passing the *path* threw
   // "Could not find an active match" and took down the whole screen.
   const { chatId } = useParams({ strict: false });
+  const navigate = useNavigate();
   const chat = useChat(chatId);
   const machineName = useChatMachineName(chat);
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
@@ -193,12 +196,14 @@ export function MobileChatScreen() {
         {/* The top bar and Chat sheet replace ChatHeader entirely, so the
             container renders no header row; the thread they pick is owned
             here and drives the container's timeline and composer. */}
-        <ChatContainer
-          tabId={chatId}
-          hideHeader
-          selectedThreadId={selectedThreadId}
-          onSelectThread={setSelectedThreadId}
-        />
+        <BranchNavigationProvider onNavigate={(newChatId) => { void navigate({ to: mobileChatPath(newChatId) }); }}>
+          <ChatContainer
+            tabId={chatId}
+            hideHeader
+            selectedThreadId={selectedThreadId}
+            onSelectThread={setSelectedThreadId}
+          />
+        </BranchNavigationProvider>
       </div>
     </FloatingChromeFrame>
   );

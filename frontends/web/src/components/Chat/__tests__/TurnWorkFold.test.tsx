@@ -6,6 +6,17 @@ import { ToolCallStatus, type Message } from "../../../gen/reliant/v1/chat_pb";
 import type { TurnWork } from "../thread-views/simplifiedTurns";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 
+vi.mock("../../../services/settingsSync", () => ({}));
+vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
+vi.mock("../../../lib/telemetry", () => ({ trackEvent: vi.fn() }));
+vi.mock("../ToolExecution", () => ({
+  DiffStatText: ({ stat }: { stat: { added: number; removed: number } }) => (
+    <span aria-label={`${stat.added} lines added, ${stat.removed} removed`}>+{stat.added} −{stat.removed}</span>
+  ),
+  workflowLifecycleToDisplayStatus: () => undefined,
+}));
+vi.mock("../../../hooks/content-block-bodies", () => ({ elidedBlockIdsOf: () => [], prefetchContentBlockBodies: vi.fn() }));
+
 vi.mock("../ChatMessage", () => ({
   ChatMessage: ({ message, slice }: { message: Message; slice?: { role: string; segmentIndexes: number[]; callIds?: string[]; ungrouped?: boolean } }) => (
     <div
@@ -123,6 +134,13 @@ describe("TurnWorkFold", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Branch from message" }));
     fireEvent.click(screen.getByRole("button", { name: "Branch in place" }));
+    expect(branchChat).toHaveBeenCalledWith("chat-1", "m2");
+  });
+
+  it("offers mobile actions for a folded work-only message", () => {
+    render(<SurfaceProvider surface="mobile"><TurnWorkFold work={makeWork()} chatId="chat-1" /></SurfaceProvider>);
+    fireEvent.click(screen.getByRole("button", { name: "Activity actions" }));
+    fireEvent.click(screen.getByText("Branch in place"));
     expect(branchChat).toHaveBeenCalledWith("chat-1", "m2");
   });
 

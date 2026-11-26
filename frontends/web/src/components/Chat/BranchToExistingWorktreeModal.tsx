@@ -16,6 +16,7 @@ interface BranchToExistingWorktreeModalProps {
   messageId: string;
   projectId: string;
   sourceWorktreeId?: string; // The worktree ID of the chat we're branching from
+  onBranched?: (chatId: string) => void;
 }
 
 export function BranchToExistingWorktreeModal({
@@ -25,6 +26,7 @@ export function BranchToExistingWorktreeModal({
   messageId,
   projectId,
   sourceWorktreeId,
+  onBranched,
 }: BranchToExistingWorktreeModalProps) {
   const branchChat = useBranchChat();
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
@@ -85,7 +87,8 @@ export function BranchToExistingWorktreeModal({
 
       // Navigate to the branched chat
       useChatStore.getState().selectChat(newChat);
-      
+      onBranched?.(newChat.id);
+
       onClose();
     } catch (err) {
       logger.error("Failed to branch chat to existing worktree:", err);

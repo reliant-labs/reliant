@@ -17,7 +17,7 @@ import {
   summarizeTurnWork,
   type TurnWorkExecution,
 } from "./turnWorkSummary";
-import { BranchFromMessageButton, MessageTimestamp } from "./MessageChrome";
+import { BranchFromMessageButton, MessageTimestamp, MobileWorkBranchActions } from "./MessageChrome";
 import { QuietRow } from "./QuietRow";
 import type { MessageSlice, TurnWork } from "./thread-views/simplifiedTurns";
 import type { Approval } from "../../gen/reliant/v1/approval_pb";
@@ -193,8 +193,7 @@ function TurnWorkFoldComponent({
     ? `${summary.failed} ${summary.failed === 1 ? "failed step" : "failed steps"}`
     : "";
 
-  // Branching from the run's last assistant message. Not on the phone, which
-  // shows a message's chrome in its actions sheet and cannot branch.
+  // A work-only run has no prose toolbar; its last message supplies the branch point.
   const showChrome = surface !== "mobile";
   const branchFrom = canBranch ? work.parts[work.parts.length - 1]?.message : undefined;
 
@@ -269,6 +268,9 @@ function TurnWorkFoldComponent({
               />
             )}
             {branchButton}
+            {surface === "mobile" && branchFrom && !branchFrom.id.startsWith("optimistic-") && (
+              <MobileWorkBranchActions chatId={chatId} messageId={branchFrom.id} />
+            )}
           </>
         }
         detailTestId="turn-work-body"
