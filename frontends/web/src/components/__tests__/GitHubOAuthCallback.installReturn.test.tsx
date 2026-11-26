@@ -49,12 +49,10 @@ vi.mock("@/services/controlPlane/git", () => ({
   },
 }));
 
-vi.mock("@/lib/supabase", () => ({
-  supabase: {
-    auth: {
-      getSession: async () => ({ data: { session: mocks.session } }),
-    },
-  },
+// Who is signed in, by the active provider (lib/auth/use-auth); the forge
+// provider's case is GitHubOAuthCallback.forgeAuth.test.tsx.
+vi.mock("@/lib/auth/use-auth", () => ({
+  restoredAuthIdentity: async () => (mocks.session ? { id: "u-1" } : null),
 }));
 
 vi.mock("@/lib/logger", () => ({

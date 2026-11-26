@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { CheckCircle2 } from 'lucide-react'
 import { gitService } from '@/services/controlPlane/git'
-import { supabase } from '@/lib/supabase'
+import { restoredAuthIdentity } from '@/lib/auth/use-auth'
 import { logger } from '@/lib/logger'
 import { decodeGitHubState, ORG_INSTALL_STATE_KIND, parseLoopbackRedirect } from '@/lib/githubOAuthState'
 import { isSafeReturnTo } from '@/lib/returnTo'
@@ -86,12 +86,15 @@ const INSTALL_RETURN_KEY = 'reliant:github-install-return'
 
 type Terminal = 'relayed' | 'connected' | 'installed'
 
+/**
+ * Whether anyone is signed in to Reliant in this browser, by the active
+ * sign-in provider (lib/auth/use-auth): a Supabase session, or the forge login
+ * broker's cookie session, restored first. Reading Supabase alone told a
+ * signed-in forge-auth browser it had no session.
+ */
 async function hasSession(): Promise<boolean> {
   try {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    return !!session
+    return (await restoredAuthIdentity()) !== null
   } catch {
     return false
   }

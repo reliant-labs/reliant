@@ -118,6 +118,7 @@ const FORKS_POOL_FILES = [
   "src/components/__tests__/AppOutOfDateModal.test.tsx",
   "src/components/__tests__/ConnectionOAuthCallback.test.tsx",
   "src/components/__tests__/GitHubOAuthCallback.desktopAndInstall.test.tsx",
+  "src/components/__tests__/GitHubOAuthCallback.forgeAuth.test.tsx",
   "src/components/__tests__/GitHubOAuthCallback.installReturn.test.tsx",
   "src/components/__tests__/NewBuildPrompt.test.tsx",
   "src/components/__tests__/UpgradeAccount.test.tsx",
