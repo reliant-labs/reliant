@@ -134,9 +134,16 @@ CREATE TABLE gtm_channels (
     key TEXT NOT NULL CONSTRAINT gtm_channels_key_slug CHECK (key ~ '^[a-z0-9-]{1,32}$'),
     name TEXT NOT NULL CHECK (btrim(name) <> ''),
     mode TEXT NOT NULL CHECK (mode IN ('GTM_CHANNEL_MODE_INTEGRATED', 'GTM_CHANNEL_MODE_MANUAL')),
-    integration_kind TEXT,
-    connection_id TEXT,
+    -- NULL, never '' (an empty value on the wire is stored as NULL).
+    integration_kind TEXT CONSTRAINT gtm_channels_integration_kind_not_empty CHECK (integration_kind IS NULL OR integration_kind <> ''),
+    connection_id TEXT CONSTRAINT gtm_channels_connection_id_not_empty CHECK (connection_id IS NULL OR connection_id <> ''),
     manual_instructions_md TEXT NOT NULL DEFAULT '',
+    -- The kinds of channel it is (slugs), matched against a library entry's
+    -- channel_types. An array element cannot carry a regex CHECK in a plain
+    -- constraint, so the service checks the slug shape; empty strings are
+    -- refused here.
+    channel_types TEXT[] NOT NULL DEFAULT '{}'
+        CONSTRAINT gtm_channels_channel_types_not_empty CHECK (NOT ('' = ANY (channel_types))),
     status TEXT NOT NULL DEFAULT 'GTM_CHANNEL_STATUS_ACTIVE'
         CHECK (status IN ('GTM_CHANNEL_STATUS_ACTIVE', 'GTM_CHANNEL_STATUS_PAUSED', 'GTM_CHANNEL_STATUS_ARCHIVED')),
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
@@ -269,6 +276,10 @@ CREATE TABLE gtm_items (
     -- An email-type item is dated while APPROVED and goes out as SENT; it is
     -- never SCHEDULED or PUBLISHED (GtmItemStatus).
     CONSTRAINT gtm_items_email_never_scheduled CHECK (NOT (format IN ('GTM_ITEM_FORMAT_EMAIL', 'GTM_ITEM_FORMAT_COLD_OUTREACH') AND status = 'GTM_ITEM_STATUS_SCHEDULED')),
+    -- Backstops for the send path: an approval card is only ever made for an
+    -- email-type item, and it is only held by an APPROVED (in-doubt) or SENT one.
+    CONSTRAINT gtm_items_approval_hash_is_email CHECK (approval_hash = '' OR format IN ('GTM_ITEM_FORMAT_EMAIL', 'GTM_ITEM_FORMAT_COLD_OUTREACH')),
+    CONSTRAINT gtm_items_approval_hash_status CHECK (approval_hash = '' OR status IN ('GTM_ITEM_STATUS_APPROVED', 'GTM_ITEM_STATUS_SENT')),
     CONSTRAINT gtm_items_email_never_published CHECK (NOT (format IN ('GTM_ITEM_FORMAT_EMAIL', 'GTM_ITEM_FORMAT_COLD_OUTREACH') AND status = 'GTM_ITEM_STATUS_PUBLISHED')),
     -- The target of gtm_assets' same-org item link.
     CONSTRAINT gtm_items_org_id_id_key UNIQUE (org_id, id)
