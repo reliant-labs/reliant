@@ -62044,6 +62044,15 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Intake",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.EventIntake",
       "methods": [],
@@ -63380,6 +63389,14 @@
     {
       "code": "binding_unresolved",
       "component": "Trigger.Fires",
+      "source": {
+        "path": "internal/handlers/trigger/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Trigger.Gate",
       "source": {
         "path": "internal/handlers/trigger/service.go",
         "symbol": "New"

@@ -1283,6 +1283,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		OrgGitHubApps: apps,
 		// Binding is off until every replica and the rollback target honour it.
 		OrgRollout: TriggerOrgRollout(g.ApiServerConfig),
+		Gate:       nil, // optional — no provider
 	})
 }
 
