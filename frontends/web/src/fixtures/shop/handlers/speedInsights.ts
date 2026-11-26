@@ -30,7 +30,7 @@ import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport
 import { ObservabilityService, QueryPanelResponseSchema, type QueryPanelRequest } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
 import { DAY, demoNow } from "../shopStory";
-import { msOf } from "./wire";
+import { msOf, windowOf } from "./wire";
 
 type Vital = "lcp" | "inp" | "cls" | "fcp" | "ttfb";
 const VITALS: Vital[] = ["lcp", "inp", "cls", "fcp", "ttfb"];
@@ -131,8 +131,9 @@ export function speedInsightsPanel(req: QueryPanelRequest, now: number = demoNow
   if (!id.startsWith("speed-insights-")) return undefined;
   const ask = askOf(req.panel?.sql ?? "");
   const range = req.scope?.timeRange;
-  const end = range?.end ? msOf(range.end) : now;
-  const start = range?.start ? msOf(range.start) : end - 7 * DAY;
+  const window = windowOf(range, now);
+  const end = window?.endMs ?? (range?.end ? msOf(range.end) : now);
+  const start = window?.startMs ?? (range?.start ? msOf(range.start) : end - 7 * DAY);
   const share = Math.min(4, (end - start) / (7 * DAY));
   const answer = (rows: { group: Record<string, string>; values: number[] }[], columns = COLUMNS) =>
     create(QueryPanelResponseSchema, { kind: "sql", columns, rows: rows.map((row) => ({ ...row, missingValueIndexes: [] })) });

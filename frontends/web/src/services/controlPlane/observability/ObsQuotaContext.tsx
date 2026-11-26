@@ -23,6 +23,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { ObsPollRegistry } from "./pollRegistry";
 import { quotaOf } from "./quota";
+import { READ_SLOT_SERVICES } from "./readSlots";
 import { obsQuotaStore, type ObsQuotaState, type ObsQuotaStore } from "./quotaStore";
 
 export interface ObsQuota {
@@ -61,7 +62,7 @@ export function ObsQuotaProvider({
     () =>
       client.getQueryCache().subscribe((event) => {
         if (event.type !== "updated" || event.action.type !== "error") return;
-        if (event.query.queryKey[0] !== "observability") return;
+        if (!isObservabilityQuery(event.query.queryKey)) return;
         const exhaustion = quotaOf(event.action.error, now());
         if (exhaustion) store.report(exhaustion);
       }),
@@ -89,8 +90,7 @@ export function ObsQuotaProvider({
         scheduledReset = undefined;
         store.clear();
         void client.invalidateQueries({
-          queryKey: ["observability"],
-          predicate: (query) => query.state.status === "error" && quotaOf(query.state.error) !== null,
+          predicate: (query) => isObservabilityQuery(query.queryKey) && query.state.status === "error" && quotaOf(query.state.error) !== null,
         }, { cancelRefetch: false });
       }, wait);
     };
@@ -103,6 +103,16 @@ export function ObsQuotaProvider({
   }, [client, store, random, now]);
 
   return <ObsQuotaContext.Provider value={quota}>{children}</ObsQuotaContext.Provider>;
+}
+
+/**
+ * A read whose refusal the quota watches and whose recovery it owes: a
+ * hand-written observability read (`["observability", …]`) or a generated
+ * one of a quota-spending service (`["controlplane.v1.ObservabilityService", …]`).
+ */
+function isObservabilityQuery(queryKey: readonly unknown[]): boolean {
+  const root = queryKey[0];
+  return root === "observability" || (typeof root === "string" && READ_SLOT_SERVICES.has(root));
 }
 
 export function useObsQuota(): ObsQuota {
