@@ -166,6 +166,19 @@ export function invalidateObsScope(client: QueryClient, scope: ObsScope | null):
 }
 
 /**
+ * Every observability read, whatever its scope: the hand-written ones under
+ * `["observability"]` and ObservabilityService's generated ones (workloads, a
+ * workload, the overview, …), which that prefix no longer covers. For a write
+ * that changes what all of them show (a workload restart).
+ */
+export function invalidateAllObservability(client: QueryClient): Promise<void> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: ["observability"] }),
+    client.invalidateQueries({ queryKey: observabilityServiceKeys.all }),
+  ]).then(() => undefined);
+}
+
+/**
  * The call options of every read on a generated hook: the read marked, at the
  * moment it starts, as a poll, a prefetch or a person's read, for the
  * control-plane transport's read stage (obsInterceptors.ts). The runtime calls

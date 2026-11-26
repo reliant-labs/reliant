@@ -83,7 +83,7 @@ function rig(random = () => 0.5): Rig {
   // read from the fixture (the shop pack's wire handlers over it). It records the
   // overview reads that reach it, and refuses them the way the server does in
   // "quota"/"soft". The test's QueryClient reads it, as the generated hooks read the app's.
-  const handlers = observabilityHandlers(api, { now: Date.now }) as Record<string, (req: unknown) => Promise<unknown>>;
+  const handlers = observabilityHandlers(api, { clock: START }) as Record<string, (req: unknown) => Promise<unknown>>;
   const impl: Record<string, (req: unknown, ctx: HandlerContext) => Promise<unknown>> = {};
   for (const method of ObservabilityService.methods) {
     const handler = handlers[`${ObservabilityService.typeName}/${method.name}`];
