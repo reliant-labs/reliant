@@ -231,6 +231,20 @@ enum TestRunSource {
   TEST_RUN_SOURCE_CONFIRM = 4;
 }
 
+// TestRunCIProvenance says who vouches for a run's CI fields (TestRunCI, and
+// TestRunSummary's ci_repository, ci_ref, ci_sha and ci_event).
+enum TestRunCIProvenance {
+  TEST_RUN_CI_PROVENANCE_UNSPECIFIED = 0;
+  // The uploader said so, and nothing checked it: every run a hand-minted
+  // token or a person records.
+  TEST_RUN_CI_PROVENANCE_ASSERTED = 1;
+  // The claims of a verified GitHub Actions ID token, which the uploading
+  // credential was exchanged for (AccessTokenService.ExchangeFederatedToken).
+  // The run's ci (provider "github", run_id, run_url, attempt) is derived from
+  // the claims too, whatever the upload said.
+  TEST_RUN_CI_PROVENANCE_GITHUB_OIDC = 2;
+}
+
 // TestRunOutcome is a run's verdict, as forge's `test report` exit codes
 // define it. Coverage never decides it.
 enum TestRunOutcome {
@@ -509,6 +523,23 @@ message TestRunSummary {
   // Who recorded it: the token's name, or the person.
   string uploaded_by = 21;
   google.protobuf.Timestamp created_at = 22;
+  // Who vouches for the run's CI fields. Output only: the server sets it
+  // from the uploading credential, never from the request.
+  // forge:read-only
+  TestRunCIProvenance ci_provenance = 23;
+  // The verified repository (owner/name), ref ("refs/heads/main"), commit
+  // and triggering event ("push", "pull_request", ...): set only when
+  // ci_provenance is GITHUB_OIDC, empty otherwise. Output only. ci_sha is
+  // the commit the workflow ran on, which for a pull_request event is
+  // GitHub's merge commit, not necessarily git_commit.
+  // forge:read-only
+  string ci_repository = 24;
+  // forge:read-only
+  string ci_ref = 25;
+  // forge:read-only
+  string ci_sha = 26;
+  // forge:read-only
+  string ci_event = 27;
 }
 
 // TestReleaseMarker places a release on a coverage trend.
