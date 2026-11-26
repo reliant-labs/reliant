@@ -47,7 +47,9 @@ const (
 
 // Deps is what the lock service is built from.
 type Deps struct {
+	// forge:optional-dep
 	Logger *slog.Logger
+	// forge:optional-dep
 	Config *config.Config
 
 	// Sessions is the pool the lock's connection comes from. Required.

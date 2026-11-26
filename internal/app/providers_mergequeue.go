@@ -68,6 +68,7 @@ func NewMergeQueue(d MergeQueueDeps) (*MergeQueue, error) {
 	clients := &queuetoken.Clients{Source: source}
 	gate := mergequeue.DispatchGate{Dispatcher: gaterun.NewDispatcher(gaterun.Deps{
 		Repos: mergequeue.GateRepos{Store: d.DB}, Pools: store.NewMachinePoolExtStore(d.DB.ORM()), Daemons: d.Router,
+		PollInterval: 0, // gaterun's default, 15s
 	})}
 	land, err := lander.New(lander.Deps{
 		Store: d.DB, Credentials: clients, Verifier: mergequeue.GateVerifier{Gate: gate}, Logger: logger,
@@ -75,7 +76,7 @@ func NewMergeQueue(d MergeQueueDeps) (*MergeQueue, error) {
 	if err != nil {
 		return nil, fmt.Errorf("merge queue: %w", err)
 	}
-	locks, err := dblock.NewInstrumented(dblock.Deps{Logger: logger, Config: nil, Sessions: d.DB.SessionPool()})
+	locks, err := dblock.NewInstrumented(dblock.Deps{Sessions: d.DB.SessionPool()})
 	if err != nil {
 		return nil, fmt.Errorf("merge queue: %w", err)
 	}

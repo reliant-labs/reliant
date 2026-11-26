@@ -361,7 +361,7 @@ func landable(b *core.QueueBatch) error {
 	case b.State != core.QueueBatchPassed:
 		return fmt.Errorf("%w: batch %s is %s, not passed", ErrNotLandable, b.ID, b.State)
 	case b.IsolationBackend != core.QueueIsolationSysbox && b.IsolationBackend != core.QueueIsolationVM &&
-		!(b.IsolationBackend == core.QueueIsolationRunc && unisolatedAccepted(b)):
+		(b.IsolationBackend != core.QueueIsolationRunc || !unisolatedAccepted(b)):
 		return fmt.Errorf("%w: batch %s was gated in %q, not an isolation boundary", ErrNotLandable, b.ID, b.IsolationBackend)
 	case b.Kind != core.QueueBatchNormal && b.Kind != core.QueueBatchBisect && b.Kind != core.QueueBatchRerun:
 		return fmt.Errorf("%w: batch %s is a %s batch", ErrNotLandable, b.ID, b.Kind)
