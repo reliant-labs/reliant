@@ -4,8 +4,6 @@ package gtm
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -55,10 +53,6 @@ var (
 
 func (p pgStore) InTx(ctx context.Context, fn func(ctx context.Context) error) error {
 	return p.db.RunTx(ctx, orm.Serializable, fn)
-}
-
-func (p pgStore) InLockedTx(ctx context.Context, fn func(ctx context.Context) error) error {
-	return p.db.RunTx(ctx, orm.ReadCommitted, fn)
 }
 
 // --- ideas ---
@@ -157,20 +151,13 @@ func (p pgStore) GetItem(ctx context.Context, orgID, id string) (*store.GtmItem,
 	return one(rows, err, "gtm item")
 }
 
-func (p pgStore) LockItem(ctx context.Context, orgID, id string) (*store.GtmItem, error) {
-	var row store.GtmItem
-	err := p.db.Bun().NewSelect().Model(&row).
-		Where("? = ?", bun.Ident(store.GtmItemFieldOrgID), orgID).
-		Where("? = ?", bun.Ident(store.GtmItemFieldID), id).
-		For("UPDATE").
-		Scan(ctx)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, ErrNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("lock gtm item: %w", err)
-	}
-	return &row, nil
+func (p pgStore) SetItemSendAttempt(ctx context.Context, orgID, id string, revision int32, from, to string) error {
+	n, err := store.UpdateGtmItemWhere(ctx, p.db, &store.GtmItem{ApprovalHash: to},
+		[]string{store.GtmItemFieldApprovalHash},
+		append(atRevision(orgID, id, revision),
+			orm.WhereEq(store.GtmItemFieldStatus, string(ItemApproved)),
+			orm.WhereEq(store.GtmItemFieldApprovalHash, from))...)
+	return updated(n, err, "set gtm item send attempt")
 }
 
 func (p pgStore) CreateItem(ctx context.Context, row *store.GtmItem) error {

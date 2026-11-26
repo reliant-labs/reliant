@@ -38,6 +38,25 @@ var (
 	// (FailedPrecondition). A send is recorded once.
 	ErrAlreadySent = svcerr.FailedPrecondition("the item was already sent")
 
+	// ErrSendInDoubt is a send of an item whose earlier send was started and
+	// never recorded (FailedPrecondition): the email may have gone out. A
+	// person checks the sent mail and re-approves (any person's UpdateItem
+	// clears the hold) before it can be sent again. Not retryable.
+	ErrSendInDoubt = svcerr.FailedPrecondition("a send of this item was started and not recorded; check the sent mail, then re-approve it")
+
+	// ErrSentUnrecorded is an email that was sent whose SENT record failed
+	// to save (DataLoss). The item stays held (ErrSendInDoubt). Never retry
+	// it: *SentUnrecordedError names the Gmail message.
+	ErrSentUnrecorded = svcerr.DataLoss("the email was sent but its send record was not saved")
+
+	// ErrEmailNotSent is what an Email wraps when it is certain the message
+	// did not leave; SendItemEmail then releases the item's hold.
+	ErrEmailNotSent = svcerr.FailedPrecondition("the email was not sent")
+
+	// ErrInvalidTransition is an item status change the lifecycle does not
+	// allow (FailedPrecondition). *TransitionError names it.
+	ErrInvalidTransition = svcerr.FailedPrecondition("this status change is not allowed")
+
 	// ErrSentIsFinal is a change to a SENT item, which is a record
 	// (FailedPrecondition).
 	ErrSentIsFinal = svcerr.FailedPrecondition("a sent item cannot be changed")
@@ -70,6 +89,41 @@ func (e *RevisionConflictError) Error() string {
 
 // Unwrap returns ErrRevisionConflict.
 func (e *RevisionConflictError) Unwrap() error { return ErrRevisionConflict }
+
+// SentUnrecordedError is an email Gmail accepted whose SENT record did not
+// save. It is ErrSentUnrecorded; the cause is kept server-side.
+type SentUnrecordedError struct {
+	ItemID         string
+	GmailMessageID string
+}
+
+// Error implements error.
+func (e *SentUnrecordedError) Error() string {
+	return fmt.Sprintf("item %s was sent as Gmail message %s but its send record was not saved; do not resend", e.ItemID, e.GmailMessageID)
+}
+
+// Unwrap returns ErrSentUnrecorded.
+func (e *SentUnrecordedError) Unwrap() error { return ErrSentUnrecorded }
+
+// TransitionError is an item status change the lifecycle refuses. It is
+// ErrInvalidTransition.
+type TransitionError struct {
+	From   ItemStatus
+	To     ItemStatus
+	Reason string
+}
+
+// Error implements error.
+func (e *TransitionError) Error() string {
+	msg := fmt.Sprintf("an item cannot move from %s to %s", statusWord(e.From), statusWord(e.To))
+	if e.Reason != "" {
+		msg += ": " + e.Reason
+	}
+	return msg
+}
+
+// Unwrap returns ErrInvalidTransition.
+func (e *TransitionError) Unwrap() error { return ErrInvalidTransition }
 
 // PersonOnlyError is an agent doing what only a person may. It is
 // ErrPersonOnly.

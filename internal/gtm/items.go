@@ -4,8 +4,11 @@ package gtm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
+	"strings"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -125,10 +128,11 @@ func (s *service) CreateItem(ctx context.Context, actor Actor, in CreateItemInpu
 	return out, err
 }
 
-// UpdateItem changes an item. A person may do anything but write SENT or
-// touch a SENT item. An agent edits DRAFT and REVIEW items (and sets only
-// those statuses), and on any other unsent, unpublished item moves only
-// scheduled_at.
+// UpdateItem changes an item's fields and moves its status along the
+// lifecycle (checkTransition). An agent touches DRAFT and REVIEW items only.
+// A content change to an APPROVED or SCHEDULED item drops it to REVIEW; a
+// date alone does not, so a person may date an APPROVED email and it stays
+// APPROVED. A SENT item is final.
 func (s *service) UpdateItem(ctx context.Context, actor Actor, in UpdateItemInput) (Item, error) {
 	if err := s.admit(ctx, actor); err != nil {
 		return Item{}, err
@@ -159,12 +163,33 @@ func (s *service) UpdateItem(ctx context.Context, actor Actor, in UpdateItemInpu
 			return conflict(in.ID, in.ExpectedRevision, row.Revision)
 		}
 		if !actor.Person() && !agentEditable(cur) {
-			if cur == ItemPublished || !onlyReschedules(in) {
-				return personOnly("edit an item a person has approved")
-			}
+			return personOnly("change an item that is " + statusWord(cur))
 		}
+		before := itemContent(row)
 		if err := s.applyItemUpdate(ctx, actor.OrgID, row, in); err != nil {
 			return err
+		}
+		// Changed content needs a new review: an approved (or scheduled)
+		// item drops back to REVIEW, and any status asked for moves from there.
+		from := cur
+		if itemContent(row) != before && (cur == ItemApproved || cur == ItemScheduled) {
+			from = ItemReview
+			row.Status = string(ItemReview)
+		}
+		if in.Status != nil && *in.Status != from {
+			if err := checkTransition(actor.Person(), ItemKind(row.Kind), from, *in.Status); err != nil {
+				return err
+			}
+			row.Status = string(*in.Status)
+		}
+		if ItemKind(row.Kind) == ItemEmail && (ItemStatus(row.Status) == ItemScheduled || ItemStatus(row.Status) == ItemPublished) {
+			return &TransitionError{From: cur, To: ItemStatus(row.Status), Reason: "an email is never scheduled or published; it stays APPROVED until it is sent"}
+		}
+		// A person's edit releases a send hold (SendItemEmail): having checked
+		// the sent mail, they re-approve, and the new revision needs a new
+		// approval card anyway. An agent's edit never does.
+		if actor.Person() {
+			row.ApprovalHash = ""
 		}
 		if err := checkEmailFields(ItemKind(row.Kind), row.EmailTo, row.EmailSubject); err != nil {
 			return err
@@ -209,11 +234,51 @@ func checkItemUpdate(in UpdateItemInput) error {
 	return firstErr(checks...)
 }
 
-// onlyReschedules reports whether in changes nothing but scheduled_at.
-func onlyReschedules(in UpdateItemInput) bool {
-	return in.Kind == nil && in.Title == nil && in.BodyMD == nil && in.Channel == nil &&
-		in.CampaignID == nil && in.IdeaID == nil && in.EmailTo == nil && in.EmailSubject == nil &&
-		in.Status == nil
+// itemContent is what an approval approves: the words and where they go.
+// Links and the date are not content.
+func itemContent(r *store.GtmItem) string {
+	return strings.Join([]string{r.Kind, r.Title, r.BodyMd, r.Channel, r.EmailSubject, strings.Join(r.EmailTo, "\x00")}, "\x01")
+}
+
+func statusWord(st ItemStatus) string {
+	return strings.ToLower(strings.TrimPrefix(string(st), "GTM_ITEM_STATUS_"))
+}
+
+// checkTransition is the item lifecycle. An agent moves between DRAFT and
+// REVIEW only. A person also approves a DRAFT or REVIEW item; schedules an
+// APPROVED one; marks an APPROVED or SCHEDULED one PUBLISHED (a manual
+// marker: GTM never publishes); pauses anything; and returns a PAUSED item
+// to DRAFT. An email is never SCHEDULED or PUBLISHED, and SENT is never
+// written here.
+func checkTransition(person bool, kind ItemKind, from, to ItemStatus) error {
+	draftish := from == ItemDraft || from == ItemReview
+	if draftish && (to == ItemDraft || to == ItemReview) {
+		return nil
+	}
+	if !person {
+		if to == ItemApproved {
+			return personOnly("approve an item")
+		}
+		return personOnly("set an item's status to " + statusWord(to))
+	}
+	email := kind == ItemEmail
+	switch {
+	case to == ItemApproved && draftish:
+		return nil
+	case to == ItemScheduled && from == ItemApproved && !email:
+		return nil
+	case to == ItemPublished && (from == ItemApproved || from == ItemScheduled) && !email:
+		return nil
+	case to == ItemPaused:
+		return nil
+	case to == ItemDraft && from == ItemPaused:
+		return nil
+	}
+	reason := ""
+	if email && (to == ItemScheduled || to == ItemPublished) {
+		reason = "an email is never scheduled or published; it stays APPROVED until it is sent"
+	}
+	return &TransitionError{From: from, To: to, Reason: reason}
 }
 
 func (s *service) applyItemUpdate(ctx context.Context, orgID string, row *store.GtmItem, in UpdateItemInput) error {
@@ -252,9 +317,6 @@ func (s *service) applyItemUpdate(ctx context.Context, orgID string, row *store.
 	}
 	if in.EmailSubject != nil {
 		row.EmailSubject = *in.EmailSubject
-	}
-	if in.Status != nil {
-		row.Status = string(*in.Status)
 	}
 	return nil
 }
@@ -318,6 +380,11 @@ func (s *service) markSent(ctx context.Context, actor Actor, row *store.GtmItem,
 	if err := sendable(row, in.ExpectedRevision); err != nil {
 		return Item{}, err
 	}
+	// A hold left by another send attempt, under another card, is not ours
+	// to record over.
+	if row.ApprovalHash != "" && row.ApprovalHash != in.ApprovalHash {
+		return Item{}, ErrSendInDoubt
+	}
 	now := s.now()
 	row.Status = string(ItemSent)
 	row.GmailMessageID = in.GmailMessageID
@@ -327,10 +394,31 @@ func (s *service) markSent(ctx context.Context, actor Actor, row *store.GtmItem,
 	return s.writeItem(ctx, actor.OrgID, row, in.ExpectedRevision)
 }
 
-// SendItemEmail sends an APPROVED email item through Email and records it.
-// The item's row is locked from the check to the record, so two sends of one
-// item cannot both go out: the second waits, then finds it SENT. The
-// transaction is attempted once, so a send is never retried by it.
+// EmailSendTimeout bounds one Email.Send. A send that times out is in doubt
+// (it may have left), so the item stays held.
+const EmailSendTimeout = 60 * time.Second
+
+// SendItemEmail sends an APPROVED email item through Email and records it,
+// in three steps, so that no failure can lead to a second email:
+//
+//  1. Hold: in one transaction, check the item is sendable and has no hold,
+//     and write the card's hash to approval_hash (revision unchanged). The
+//     hash on an unsent item is the hold: a concurrent or later send of the
+//     item finds it and is ErrSendInDoubt, so at most one Send ever runs.
+//  2. Send, bounded by EmailSendTimeout, outside any transaction (a
+//     serializable retry must never re-send). An error that wraps
+//     ErrEmailNotSent means nothing left, and the hold is released; any
+//     other error, a timeout included, may have sent, so the hold stays.
+//  3. Record SENT in a second transaction, detached from ctx's cancellation
+//     so a caller that gives up after the send still gets it recorded. If
+//     that fails the error is a *SentUnrecordedError naming the Gmail
+//     message: never retried, and the hold keeps the item from a resend.
+//
+// The remaining window: a crash or record failure after Gmail accepted the
+// message leaves the item APPROVED with a hold and no SENT record. Nothing
+// resends it; a person resolves it by checking the sent mail and either
+// marking it (MarkItemSent with the same hash) or editing / re-approving it
+// (a person's UpdateItem clears the hold), which takes a new approval card.
 func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEmailInput) (Item, error) {
 	if err := s.admit(ctx, actor); err != nil {
 		return Item{}, err
@@ -346,15 +434,20 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 	); err != nil {
 		return Item{}, err
 	}
-	var out Item
-	var sentID string
-	err := s.store.InLockedTx(ctx, func(ctx context.Context) error {
-		row, err := s.store.LockItem(ctx, actor.OrgID, in.ItemID)
+	org, id, rev, hash := actor.OrgID, in.ItemID, in.ExpectedRevision, in.ApprovalHash
+
+	// 1. Hold.
+	var msg EmailMessage
+	err := s.store.InTx(ctx, func(ctx context.Context) error {
+		row, err := s.store.GetItem(ctx, org, id)
 		if err != nil {
 			return readErr(err, "item")
 		}
-		if err := sendable(row, in.ExpectedRevision); err != nil {
+		if err := sendable(row, rev); err != nil {
 			return err
+		}
+		if row.ApprovalHash != "" {
+			return ErrSendInDoubt
 		}
 		if len(row.EmailTo) == 0 {
 			return invalid("email_to", "an email needs recipients")
@@ -362,32 +455,54 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 		if row.EmailSubject == "" {
 			return invalid("email_subject", "an email needs a subject")
 		}
-		sentID, err = s.email.Send(ctx, in.Run, EmailMessage{
-			To:      slices.Clone(row.EmailTo),
-			Subject: row.EmailSubject,
-			BodyMD:  row.BodyMd,
-		})
-		if err != nil {
-			return fmt.Errorf("send email: %w", err)
+		msg = EmailMessage{To: slices.Clone(row.EmailTo), Subject: row.EmailSubject, BodyMD: row.BodyMd}
+		if err := s.store.SetItemSendAttempt(ctx, org, id, rev, "", hash); err != nil {
+			if errors.Is(err, ErrRevisionConflict) {
+				return ErrSendInDoubt
+			}
+			return err
 		}
-		if sentID == "" {
-			return svcerr.Internal("the email client returned no message id")
+		return nil
+	})
+	if err != nil {
+		return Item{}, err
+	}
+
+	// 2. Send.
+	sendCtx, cancel := context.WithTimeout(ctx, EmailSendTimeout)
+	sentID, err := s.email.Send(sendCtx, in.Run, msg)
+	cancel()
+	detached := context.WithoutCancel(ctx)
+	if err != nil {
+		if errors.Is(err, ErrEmailNotSent) {
+			// Best effort: a hold that stays only costs a re-approval.
+			_ = s.store.InTx(detached, func(ctx context.Context) error {
+				return s.store.SetItemSendAttempt(ctx, org, id, rev, hash, "")
+			})
+			return Item{}, fmt.Errorf("send email: %w", err)
+		}
+		return Item{}, svcerr.WithCause(ErrSendInDoubt, fmt.Errorf("send email: %w", err))
+	}
+	if sentID == "" {
+		return Item{}, svcerr.WithCause(ErrSendInDoubt, errors.New("the email client returned no message id"))
+	}
+
+	// 3. Record.
+	var out Item
+	err = s.store.InTx(detached, func(ctx context.Context) error {
+		row, err := s.store.GetItem(ctx, org, id)
+		if err != nil {
+			return readErr(err, "item")
 		}
 		out, err = s.markSent(ctx, actor, row, MarkItemSentInput{
-			ItemID:           in.ItemID,
-			ExpectedRevision: in.ExpectedRevision,
-			GmailMessageID:   sentID,
-			ApprovalHash:     in.ApprovalHash,
+			ItemID: id, ExpectedRevision: rev, GmailMessageID: sentID, ApprovalHash: hash,
 		})
 		return err
 	})
-	if err != nil && sentID != "" {
-		// The email went out and its record did not land: say so, with the
-		// Gmail id, rather than invite a resend.
-		return Item{}, svcerr.WithCause(
-			svcerr.Internal(fmt.Sprintf("the email was sent (Gmail message %s) but recording it failed", sentID)), err)
+	if err != nil {
+		return Item{}, svcerr.WithCause(&SentUnrecordedError{ItemID: id, GmailMessageID: sentID}, err)
 	}
-	return out, err
+	return out, nil
 }
 
 // writeItem writes row at expected and reads back what was stored.

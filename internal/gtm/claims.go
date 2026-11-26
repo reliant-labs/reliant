@@ -5,6 +5,7 @@ package gtm
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/gtm/claimcheck"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -57,8 +58,13 @@ func (s *service) UpsertClaim(ctx context.Context, actor Actor, in UpsertClaimIn
 	if err := checkClaimInput(in); err != nil {
 		return UpsertClaimResult{}, err
 	}
-	if in.Status != nil && *in.Status == ClaimVerified && !actor.Person() {
-		return UpsertClaimResult{}, personOnly("verify a claim")
+	// An agent drafts the registry: it creates and edits UNVERIFIED claims,
+	// and never verifies, retires or touches a verified or retired one.
+	if in.Status != nil && *in.Status != ClaimUnverified && !actor.Person() {
+		if *in.Status == ClaimVerified {
+			return UpsertClaimResult{}, personOnly("verify a claim")
+		}
+		return UpsertClaimResult{}, personOnly("retire a claim")
 	}
 	if in.ID == "" {
 		return s.createClaim(ctx, actor, in)
@@ -82,8 +88,8 @@ func (s *service) UpsertClaim(ctx context.Context, actor Actor, in UpsertClaimIn
 			return invalid("category", "a claim's category never changes; create a new claim")
 		}
 		evidence := in.SourceURL != nil || in.SourceKind != nil || in.ExpiresOrRecheckAt != nil || in.ClearExpiresOrRecheckAt
-		if !actor.Person() && ClaimStatus(row.Status) == ClaimVerified && evidence {
-			return personOnly("change a verified claim's evidence")
+		if !actor.Person() && ClaimStatus(row.Status) != ClaimUnverified {
+			return personOnly("change a claim that is " + strings.ToLower(strings.TrimPrefix(row.Status, "GTM_CLAIM_STATUS_")))
 		}
 		becomesVerified := in.Status != nil && *in.Status == ClaimVerified && ClaimStatus(row.Status) != ClaimVerified
 		applyClaimUpdate(row, in)

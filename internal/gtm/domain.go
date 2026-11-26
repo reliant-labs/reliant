@@ -181,16 +181,16 @@ type CampaignDetail struct {
 
 // Item is a post, an email, a launch: with ScheduledAt it is on the calendar.
 type Item struct {
-	ID string
+	ID    string
 	OrgID string
 	// CampaignID and IdeaID are "" for none.
-	CampaignID string
-	IdeaID     string
-	Kind       ItemKind
-	Channel    string
-	Title      string
-	BodyMD     string
-	Status     ItemStatus
+	CampaignID  string
+	IdeaID      string
+	Kind        ItemKind
+	Channel     string
+	Title       string
+	BodyMD      string
+	Status      ItemStatus
 	ScheduledAt *time.Time
 	// EmailTo and EmailSubject are an EMAIL item's.
 	EmailTo      []string
@@ -268,7 +268,7 @@ const (
 
 	// MaxCampaignIdeas and MaxCampaignItems cap GetCampaign's lists.
 	MaxCampaignIdeas = 200
-	MaxCampaignItems = 500
+	MaxCampaignItems = 200
 	// MaxCheckedClaims caps the registry CheckClaims matches against.
 	MaxCheckedClaims = 5000
 )

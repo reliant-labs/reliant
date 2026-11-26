@@ -15,10 +15,12 @@
 //     transaction (and the composite foreign keys hold it too).
 //  3. A write names the revision it read; a row that moved on is a
 //     *RevisionConflictError carrying the current revision.
-//  4. Only a Person moves an idea to ACCEPTED or REJECTED, approves an item
-//     or verifies a claim. An Agent creates and edits PROPOSED ideas and
-//     DRAFT / REVIEW items, and may set an item's scheduled_at, which records
-//     a date and never publishes.
+//  4. Only a Person moves an idea to ACCEPTED or REJECTED, approves,
+//     schedules, publishes or pauses an item, or verifies or retires a
+//     claim. An Agent creates and edits PROPOSED ideas, DRAFT / REVIEW items
+//     (content, status between the two, and scheduled_at, which records a
+//     date and never publishes) and UNVERIFIED claims, and touches nothing
+//     else. The item lifecycle is checkTransition's.
 //  5. Nothing here publishes. SENT is written only by MarkItemSent (through
 //     SendItemEmail, the approved email path).
 //
@@ -72,9 +74,13 @@ type Service interface {
 	GetItem(ctx context.Context, actor Actor, in GetItemInput) (Item, error)
 	// CreateItem creates a DRAFT item.
 	CreateItem(ctx context.Context, actor Actor, in CreateItemInput) (Item, error)
-	// UpdateItem changes an item's fields and status. APPROVED is a person's
-	// call; SENT is never set here (MarkItemSent). An agent edits DRAFT and
-	// REVIEW items, and moves only scheduled_at on the others.
+	// UpdateItem changes an item's fields and status along the lifecycle
+	// (DRAFT <-> REVIEW; a person: -> APPROVED, APPROVED -> SCHEDULED and
+	// APPROVED/SCHEDULED -> PUBLISHED for non-emails, any -> PAUSED,
+	// PAUSED -> DRAFT); a refused move is a *TransitionError. A content
+	// change to an APPROVED or SCHEDULED item drops it to REVIEW. SENT is
+	// never set here (MarkItemSent), and a SENT item is final. An agent
+	// touches DRAFT and REVIEW items only.
 	UpdateItem(ctx context.Context, actor Actor, in UpdateItemInput) (Item, error)
 	// MarkItemSent records that an APPROVED email item, at exactly the
 	// revision named, was sent: SENT with its Gmail message id, sender and the
@@ -82,10 +88,13 @@ type Service interface {
 	// so a send is recorded once. It sends nothing.
 	MarkItemSent(ctx context.Context, actor Actor, in MarkItemSentInput) (Item, error)
 	// SendItemEmail sends an APPROVED email item, at exactly the revision
-	// named, through Email with the run's credential, then records it with
-	// MarkItemSent. The message is built from the stored item, never from the
-	// caller. The approval card (and the hash it binds) is the caller's: this
-	// assumes the person approved this revision's content and stores the hash.
+	// named, through Email with the run's credential, then records it as
+	// MarkItemSent does. The message is built from the stored item, never
+	// from the caller. The approval card (and the hash it binds) is the
+	// caller's: this assumes the person approved this revision's content and
+	// stores the hash. A send that may have left without its record landing
+	// holds the item (ErrSendInDoubt, *SentUnrecordedError) rather than
+	// risk a second email.
 	SendItemEmail(ctx context.Context, actor Actor, in SendItemEmailInput) (Item, error)
 
 	// GetPositioning returns the org's positioning; revision 0 when it has none.
@@ -96,8 +105,10 @@ type Service interface {
 
 	// ListClaims lists the org's claims registry.
 	ListClaims(ctx context.Context, actor Actor, in ListClaimsInput) (ListClaimsResult, error)
-	// UpsertClaim creates a claim (no ID) or changes one. VERIFIED is a
-	// person's call and needs a source; text and category never change.
+	// UpsertClaim creates a claim (no ID) or changes one. VERIFIED (with a
+	// source and the person as verifier) and RETIRED are a person's call; an
+	// agent creates and edits UNVERIFIED claims only. Text and category never
+	// change, and a text the org holds is ErrClaimExists.
 	UpsertClaim(ctx context.Context, actor Actor, in UpsertClaimInput) (UpsertClaimResult, error)
 	// CheckClaims checks a text against the org's claims (claimcheck). It
 	// stores nothing.
@@ -140,7 +151,10 @@ type Analytics interface {
 // never from the message, and a run with no Gmail connection is refused.
 // It is called only by SendItemEmail, for an approved item.
 type Email interface {
-	// Send sends msg and returns Gmail's message id.
+	// Send sends msg and returns Gmail's message id. An error that wraps
+	// ErrEmailNotSent says the message certainly did not leave (no
+	// connection, a request Gmail refused); any other error leaves the send
+	// in doubt, and the item is held until a person re-approves it.
 	Send(ctx context.Context, run EmailRun, msg EmailMessage) (gmailMessageID string, err error)
 }
 
@@ -156,10 +170,6 @@ type Store interface {
 	// conflict: fn may run more than once and must do nothing outside the
 	// database. Store calls with the ctx fn receives join it.
 	InTx(ctx context.Context, fn func(ctx context.Context) error) error
-	// InLockedTx runs fn in one READ COMMITTED transaction, attempted once,
-	// whose correctness comes from the row locks fn takes (LockItem). It is
-	// for a write around a call that must not be repeated (a send).
-	InLockedTx(ctx context.Context, fn func(ctx context.Context) error) error
 
 	// ListIdeas returns the ideas f matches, newest first.
 	ListIdeas(ctx context.Context, f IdeaFilter) ([]*store.GtmIdea, error)
@@ -185,9 +195,12 @@ type Store interface {
 	ListItems(ctx context.Context, f ItemFilter) ([]*store.GtmItem, error)
 	// GetItem returns orgID's item id.
 	GetItem(ctx context.Context, orgID, id string) (*store.GtmItem, error)
-	// LockItem is GetItem holding the row's lock (FOR UPDATE) until the
-	// transaction ends. Only inside InLockedTx.
-	LockItem(ctx context.Context, orgID, id string) (*store.GtmItem, error)
+	// SetItemSendAttempt moves an APPROVED item's approval_hash from `from`
+	// to `to` where it is at revision, WITHOUT advancing the revision (the
+	// approval card's hash covers it). A non-empty approval_hash on an item
+	// that is not SENT marks a send in flight or in doubt. A row not in that
+	// state is ErrRevisionConflict.
+	SetItemSendAttempt(ctx context.Context, orgID, id string, revision int32, from, to string) error
 	// CreateItem inserts row, assigning its ID when empty.
 	CreateItem(ctx context.Context, row *store.GtmItem) error
 	// UpdateItem is UpdateIdea for an item.
