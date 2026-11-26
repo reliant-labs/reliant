@@ -421,6 +421,23 @@ tasks:
       - task: test
       - task: test:integration
 
+  test:report:
+    # Test runs are recorded. `task test` and `task test:integration` run
+    # their commands through `forge test capture`, which changes nothing
+    # about how the tests run or what they exit with, and records each lane
+    # under .forge/tests/runs/<id>/ (gitignored): the results, the coverage,
+    # the command and its exit status. FORGE_TESTS=off records nothing.
+    #
+    # This summarises them: results, coverage merged across lanes, diff
+    # coverage against your base. `task test:report -- --upload` also sends
+    # the clean-tree runs to the project's control plane (no source: results,
+    # coverage counts and changed line ranges), with your `forge login` or a
+    # FORGE_CONTROL_PLANE_TOKEN holding tests:write. CI uploads by default;
+    # without a credential that is one line on stderr, never a failure.
+    desc: "Summarise the recorded test runs (results, merged coverage); -- --upload sends them to the control plane"
+    cmds:
+      - '{{.FORGE}} test report {{.CLI_ARGS}}'
+
   coverage:
     desc: Run Go unit tests with coverage and emit coverage.html
     cmds:
