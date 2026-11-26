@@ -62,7 +62,10 @@ func init() {
 // store over a *db.Repo's ORM, or the repository itself when it answers the
 // read (a hand fixture). A test that needs another answer names the role.
 func init() {
-	fixtureTriggerReads = func(repo Repository) TriggerReads {
+	fixtureTriggerReads = func(repo Repository, reads TriggerReads) TriggerReads {
+		if mock, ok := reads.(*MockTriggerReads); reads != nil && (!ok || mock.GetTriggerEventByChatIDFunc != nil) {
+			return reads
+		}
 		if client := ormOf(repo); client != nil {
 			return store.NewTriggerEventExtStore(client)
 		}

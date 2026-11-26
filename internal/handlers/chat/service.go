@@ -297,16 +297,13 @@ func (s *Service) chatViews() ChatViews {
 
 // fixtureTriggerReads fills TriggerReads for the tests (nil in every binary:
 // validateDeps refuses a nil one), as fixtureChatReads fills the chat reads.
-var fixtureTriggerReads func(Repository) TriggerReads
+var fixtureTriggerReads func(Repository, TriggerReads) TriggerReads
 
 // triggerReads is Deps.TriggerReads; in this package's tests a fixture that
 // left it unnamed (the harness's mock) reads through its own repository.
 func (s *Service) triggerReads() TriggerReads {
 	if fixtureTriggerReads != nil {
-		mock, isMock := s.deps.TriggerReads.(*MockTriggerReads)
-		if s.deps.TriggerReads == nil || (isMock && mock.GetTriggerEventByChatIDFunc == nil) {
-			return fixtureTriggerReads(s.deps.Repo)
-		}
+		return fixtureTriggerReads(s.deps.Repo, s.deps.TriggerReads)
 	}
 	return s.deps.TriggerReads
 }
