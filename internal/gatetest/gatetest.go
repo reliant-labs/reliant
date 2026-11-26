@@ -40,10 +40,10 @@ const (
 func DockerUnavailable(t testing.TB, format string, args ...any) {
 	t.Helper()
 	why := fmt.Sprintf(format, args...)
-	if os.Getenv(envGate) != "1" {
+	if os.Getenv(envGate) != "1" { //nolint:forbidigo // the gate's environment (gaterun.GateEnv), not this program's configuration
 		t.Skip(why)
 	}
-	if log := os.Getenv(envDockerSkips); log != "" {
+	if log := os.Getenv(envDockerSkips); log != "" { //nolint:forbidigo // set per stage by the gate's stage script, not configuration
 		// One short O_APPEND write per skip: concurrent test processes
 		// cannot interleave inside a line.
 		if f, err := os.OpenFile(log, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644); err == nil {
