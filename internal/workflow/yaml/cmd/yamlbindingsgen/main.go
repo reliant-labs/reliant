@@ -72,6 +72,7 @@ func generate() ([]byte, error) {
 	fmt.Fprintf(&buf, "const yamlKeyTolerateFailure = %q\n", nodeFields.ByName("tolerate_failure").Name())
 	fmt.Fprintf(&buf, "const yamlKeyObserve = %q\n", nodeFields.ByName("observe").Name())
 	fmt.Fprintf(&buf, "const yamlKeyRole = %q\n", nodeFields.ByName("role").Name())
+	fmt.Fprintf(&buf, "const yamlKeyPreflight = %q\n", nodeFields.ByName("preflight").Name())
 	fmt.Fprintf(&buf, "const yamlKeyArgs = %q\n", argsOneof.Name())
 	fmt.Fprintf(&buf, "const yamlKeyFrom = %q\n", edgeFields.ByName("from").Name())
 	fmt.Fprintf(&buf, "const yamlKeyCases = %q\n", edgeFields.ByName("cases").Name())
@@ -81,7 +82,7 @@ func generate() ([]byte, error) {
 	buf.WriteString("\n")
 
 	buf.WriteString("var generatedNodeBaseFieldKeys = map[string]struct{}{\n")
-	baseKeys := []string{string(nodeFields.ByName("id").Name()), string(nodeFields.ByName("type").Name()), string(nodeFields.ByName("condition").Name()), string(nodeFields.ByName("timeout").Name()), string(nodeFields.ByName("save_message").Name()), string(nodeFields.ByName("daemon").Name()), string(nodeFields.ByName("outcome").Name()), string(nodeFields.ByName("tolerate_failure").Name()), string(nodeFields.ByName("observe").Name())}
+	baseKeys := []string{string(nodeFields.ByName("id").Name()), string(nodeFields.ByName("type").Name()), string(nodeFields.ByName("condition").Name()), string(nodeFields.ByName("timeout").Name()), string(nodeFields.ByName("save_message").Name()), string(nodeFields.ByName("daemon").Name()), string(nodeFields.ByName("outcome").Name()), string(nodeFields.ByName("tolerate_failure").Name()), string(nodeFields.ByName("observe").Name()), string(nodeFields.ByName("preflight").Name())}
 	sort.Strings(baseKeys)
 	for _, key := range baseKeys {
 		fmt.Fprintf(&buf, "\t%q: {},\n", key)
