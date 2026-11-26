@@ -182,6 +182,13 @@ export function GitHubOAuthCallback() {
       // `code` beside it is not exchanged. That page links the installation;
       // replace, so Back does not return here.
       if (state && decodeGitHubState(state)?.kind === ORG_INSTALL_STATE_KIND) {
+        // Started from the desktop app, the install finishes in a system
+        // browser with no Reliant session: the app lists the new installation
+        // to link when the person goes back to it.
+        if (!(await hasSession())) {
+          setTerminal('installed')
+          return
+        }
         const target = new URLSearchParams({ link_state: state })
         if (installationId) target.set('installation_id', installationId)
         logger.info('[GitHubOAuthCallback] GitHub App installed for an organization', {

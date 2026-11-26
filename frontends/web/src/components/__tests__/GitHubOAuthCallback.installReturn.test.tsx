@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   assign: vi.fn(),
   replace: vi.fn(),
   navigate: vi.fn(),
+  session: { access_token: "t" } as { access_token: string } | null,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -51,7 +52,7 @@ vi.mock("@/services/controlPlane/git", () => ({
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     auth: {
-      getSession: async () => ({ data: { session: { access_token: "t" } } }),
+      getSession: async () => ({ data: { session: mocks.session } }),
     },
   },
 }));
@@ -80,6 +81,7 @@ function landedAt(): string {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.search = {};
+  mocks.session = { access_token: "t" };
   Object.defineProperty(window, "location", {
     configurable: true,
     value: { origin: "https://app.reliantlabs.io", assign: mocks.assign, replace: mocks.replace },
@@ -158,6 +160,17 @@ describe("an org install of the App — ?installation_id&setup_action&state, sta
     expect(target.searchParams.get("link_state")).toBe(state);
     expect(mocks.exchangeGithubOAuthCode).not.toHaveBeenCalled();
     expect(mocks.assign).not.toHaveBeenCalled();
+  });
+
+  it("in a browser with no Reliant session (a desktop install), says it is installed and links nothing here", async () => {
+    mocks.session = null;
+    mocks.search = { installation_id: "166627811", setup_action: "install", state: signedState({ k: "org_install", org: "org-a", uid: "u-1" }) };
+
+    render(<GitHubOAuthCallback />);
+
+    expect(await screen.findByText("GitHub App installed")).toBeInTheDocument();
+    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(mocks.exchangeGithubOAuthCode).not.toHaveBeenCalled();
   });
 
   it("leaves a connect-flow state (no kind) to the exchange", async () => {
