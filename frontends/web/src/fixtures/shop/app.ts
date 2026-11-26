@@ -10,6 +10,7 @@
  *                       their transcripts, the open streams, workflows and
  *                       runs, settings and models, machines (workspace.ts
  *                       tells that side of the story)
+ *                       (GtmService: gtm.ts, with in-memory writes, GTM_ANSWERS)
  *   handlers/billing.ts BillingService and ObservabilityBillingService
  *   handlers/account.ts UserService (who is signed in)
  *
@@ -22,6 +23,7 @@ import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
+import { GtmService } from "@/gen/reliant/v1/gtm_pb";
 import { MCPService } from "@/gen/reliant/v1/mcp_pb";
 import { ProjectService } from "@/gen/reliant/v1/project_pb";
 import { SettingsService } from "@/gen/reliant/v1/settings_pb";
@@ -32,6 +34,7 @@ import { defineFixturePack, type FixturePack } from "../transport";
 import { accountScenarioHandlers } from "./handlers/account";
 import { billingScenarioHandlers } from "./handlers/billing";
 import { reliantScenarioHandlers } from "./handlers/reliant";
+import { GTM_ANSWERS } from "./handlers/reliant/gtm";
 import { streamingImpl } from "./handlers/reliant/streaming";
 import { shopPack, type ShopPackOptions } from "./index";
 
@@ -99,10 +102,11 @@ export const APP_LAYER_ANSWERS = [
   "controlplane.v1.BillingService/GetCurrentUserReliantOverview",
   "controlplane.v1.BillingService/ListCurrentUserInvoices",
   "controlplane.v1.BillingService/GetCurrentUserComputeSubscription",
+  ...GTM_ANSWERS,
 ] as const;
 
 /** The services APP_LAYER_ANSWERS names, so the transport checks each name against the proto. */
-const ANSWERED_SERVICES = [ProjectService, WorktreeService, SettingsService, ForgeService, MCPService, UserService, BillingService];
+const ANSWERED_SERVICES = [ProjectService, WorktreeService, SettingsService, ForgeService, MCPService, UserService, BillingService, GtmService];
 
 /** The app layer's own answers, "pkg.Service/Method" keyed. */
 export function appLayerScenarioHandlers(): MockHandlers {
