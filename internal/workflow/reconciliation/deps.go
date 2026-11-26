@@ -85,15 +85,18 @@ type Deps struct {
 	RunEvents runevents.Store
 	// Runs stops one exact execution of a chat's run: the stall watchdog's
 	// enforce mode (runs.Service.TerminateExecution). nil: enforce reports.
+	// forge:optional-dep
 	Runs RunTerminator
 	// Observations is where the stall watchdog records each stalled run
 	// (node_observations, source "reconciler"). nil: logs and metrics only.
+	// forge:optional-dep
 	Observations StallRecorder
 	// DataConverter decodes a run's start input, from which the stall
 	// watchdog learns the run id its record counts under: the Temporal
 	// client's own converter, claim-check store included. nil: a converter
 	// with no store, which decodes every input below the claim-check
 	// threshold and fails (the record then names no run) on one above it.
+	// forge:optional-dep
 	DataConverter converter.DataConverter
 }
 

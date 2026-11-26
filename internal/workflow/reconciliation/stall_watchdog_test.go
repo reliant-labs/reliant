@@ -210,14 +210,22 @@ func TestParseStallWatchdogMode(t *testing.T) {
 
 func TestStallWatchdog_DefaultsOff(t *testing.T) {
 	assert.Equal(t, StallWatchdogMode(""), DefaultConfig().StallWatchdog)
-	r := New(Deps{Config: DefaultConfig()})
+	withConfig := func(cfg *ReconcilerConfig) *Reconciler {
+		repo := newMockRepo()
+		return New(Deps{
+			Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo,
+			Questions: repo, Mailbox: repo, Orphans: repo, Config: cfg,
+			Temporal: &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{}},
+		})
+	}
+	r := withConfig(DefaultConfig())
 	assert.Equal(t, StallWatchdogOff, r.stallMode)
 
 	// An unknown value stays off; enforce with nothing to stop runs through
 	// reports instead of failing open or panicking.
-	r = New(Deps{Config: &ReconcilerConfig{StallWatchdog: "kill"}})
+	r = withConfig(&ReconcilerConfig{StallWatchdog: "kill"})
 	assert.Equal(t, StallWatchdogOff, r.stallMode)
-	r = New(Deps{Config: &ReconcilerConfig{StallWatchdog: StallWatchdogEnforce}})
+	r = withConfig(&ReconcilerConfig{StallWatchdog: StallWatchdogEnforce})
 	assert.Equal(t, StallWatchdogReport, r.stallMode)
 }
 
