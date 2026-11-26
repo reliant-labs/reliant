@@ -100,19 +100,34 @@ func (s *service) markSent(ctx context.Context, actor Actor, row *store.GtmItem,
 	return s.writeItem(ctx, actor.OrgID, row, expected)
 }
 
+// holdMayBeInFlight reports whether row's hold is young enough that the send
+// which took it may still be running: under twice the send timeout. A held
+// item is frozen, so its updated_at is the hold's time.
+func (s *service) holdMayBeInFlight(row *store.GtmItem) bool {
+	return s.now().Sub(row.UpdatedAt) < 2*s.sendTimeout
+}
+
+// inDoubt is the refusal for a held row, saying whether its send may still
+// be running.
+func (s *service) inDoubt(row *store.GtmItem) error {
+	return &SendInDoubtError{ItemID: row.ID, MayBeInFlight: s.holdMayBeInFlight(row)}
+}
+
 // SendItemEmail sends an APPROVED email item through Email and records it,
 // in three steps, so that no failure can lead to a second email:
 //
 //  1. Hold: in one transaction, re-read the item; check it is sendable at
 //     the approved revision, not already held, and that the card's hash is
 //     ApprovalHash of what is stored now; then write the hash to
-//     approval_hash (revision unchanged). The hash on an unsent item is the
-//     hold: it freezes the item (UpdateItem refuses it) and makes any other
-//     send of it SendInDoubtError, so at most one Send ever runs.
+//     approval_hash, stamped with the hold's time (revision unchanged). The
+//     hash on an unsent item is the hold: it freezes the item (UpdateItem
+//     refuses it) and makes any other send of it a SendInDoubtError, so at
+//     most one Send runs per card.
 //  2. Send, bounded by EmailSendTimeout, outside any transaction (a
 //     serializable retry must never re-send), as the actor. An error that
-//     wraps ErrEmailNotSent means nothing left, and the hold is released;
-//     any other error, a timeout included, may have sent, so the hold stays.
+//     wraps ErrEmailNotSent means nothing left, and the hold is released
+//     (the same card may try again); any other error, a timeout included,
+//     may have sent, so the hold stays.
 //  3. Record SENT in a second transaction, detached from ctx's cancellation
 //     so a caller that gives up after the send still gets it recorded. If
 //     that fails the error is a *SentUnrecordedError naming the Gmail
@@ -121,8 +136,13 @@ func (s *service) markSent(ctx context.Context, actor Actor, row *store.GtmItem,
 // The remaining window: a crash or record failure after Gmail accepted the
 // message leaves the item APPROVED and held with no SENT record. Nothing
 // resends it. A person checks the sent mail in Gmail and calls
-// ResolveInDoubtSend: with the message id it records SENT, without one it
-// releases the hold.
+// ResolveInDoubtSend: with the message id it records SENT; without one it
+// releases the hold, which it refuses while the send may still be running
+// (a hold younger than twice EmailSendTimeout), and which voids every card
+// issued so far (the revision moves), so only a new approval sends again.
+// A person who releases a hold whose send did in fact go out, and then
+// approves a new card, sends a second email: that is their call, made with
+// Gmail in front of them.
 //
 // Clients' error text never reaches the caller: each failure is a sentinel
 // with a fixed message, and the cause is logged.
@@ -150,11 +170,11 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 		if err != nil {
 			return s.notFound(ctx, err, "item", id)
 		}
+		if held(row) {
+			return s.inDoubt(row)
+		}
 		if err := sendable(row, rev); err != nil {
 			return err
-		}
-		if held(row) {
-			return &SendInDoubtError{ItemID: id}
 		}
 		want := ApprovalHash(itemFromRow(row))
 		if subtle.ConstantTimeCompare([]byte(want), []byte(hash)) != 1 {
@@ -167,9 +187,9 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 			return invalid("email_subject", "an email needs a subject")
 		}
 		msg = EmailMessage{To: slices.Clone(row.EmailTo), Subject: row.EmailSubject, BodyMD: row.BodyMd}
-		if err := s.store.SetItemSendAttempt(ctx, org, id, rev, "", hash); err != nil {
+		if err := s.store.HoldItemSend(ctx, org, id, rev, hash, s.now()); err != nil {
 			if errors.Is(err, ErrRevisionConflict) {
-				return &SendInDoubtError{ItemID: id}
+				return &SendInDoubtError{ItemID: id, MayBeInFlight: true}
 			}
 			return err
 		}
@@ -188,7 +208,7 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 		if errors.Is(err, ErrEmailNotSent) {
 			s.log.WarnContext(ctx, "gtm: email not sent; releasing the hold", "item_id", id, "error", err)
 			if relErr := s.store.InTx(detached, func(ctx context.Context) error {
-				return s.store.SetItemSendAttempt(ctx, org, id, rev, hash, "")
+				return s.store.ReleaseItemSend(ctx, org, id, rev, hash, s.now(), false)
 			}); relErr != nil {
 				// A hold that stays costs a person's resolve, never a resend.
 				s.log.WarnContext(ctx, "gtm: releasing a send hold failed", "item_id", id, "error", relErr)
@@ -196,11 +216,11 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 			return Item{}, ErrEmailNotSent
 		}
 		s.log.ErrorContext(ctx, "gtm: email send failed; the send is in doubt and the item held", "item_id", id, "error", err)
-		return Item{}, &SendInDoubtError{ItemID: id}
+		return Item{}, &SendInDoubtError{ItemID: id, MayBeInFlight: true}
 	}
 	if sentID == "" {
 		s.log.ErrorContext(ctx, "gtm: the email client returned no message id; the item is held", "item_id", id)
-		return Item{}, &SendInDoubtError{ItemID: id}
+		return Item{}, &SendInDoubtError{ItemID: id, MayBeInFlight: true}
 	}
 
 	// 3. Record.
@@ -214,17 +234,33 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 		return err
 	})
 	if err != nil {
-		s.log.ErrorContext(ctx, "gtm: an email was sent but its record was not saved; the item is held",
-			"item_id", id, "gmail_message_id", sentID, "error", err)
+		attrs := []any{"item_id", id, "gmail_message_id", sentID, "error", err}
+		switch {
+		case errors.Is(err, ErrAlreadySent):
+			s.log.ErrorContext(ctx, "gtm: an email was sent but the item was already recorded SENT (a person resolved it during the send); this send is not recorded", attrs...)
+		case errors.Is(err, ErrSendInDoubt):
+			s.log.ErrorContext(ctx, "gtm: an email was sent but its hold was released or replaced during the send; the send is not recorded", attrs...)
+		default:
+			s.log.ErrorContext(ctx, "gtm: an email was sent but its record was not saved; the item stays held", attrs...)
+		}
 		return Item{}, &SentUnrecordedError{ItemID: id, GmailMessageID: sentID}
 	}
 	return out, nil
 }
 
 // ResolveInDoubtSend settles a held item, a person's call after checking
-// the sent mail in Gmail. With a Gmail message id the item is recorded SENT
-// under the hold's hash; without one the hold is released ("it did not go
-// out"), and the item can be sent again under a new card.
+// the sent mail in Gmail.
+//
+// With a Gmail message id the item is recorded SENT under the hold's hash.
+// The id is the person's manual marker of what they found in the sent mail:
+// it is stored as given, and nothing checks it against Gmail.
+//
+// Without one the hold is released ("it did not go out"). That is refused
+// with *SendInFlightError while the hold is younger than twice
+// EmailSendTimeout, since its send may still be running; and a release
+// advances the revision, so every approval card issued before it, the one
+// the in-doubt send ran under included, stops matching ApprovalHash, and
+// only a new approval sends the item again.
 func (s *service) ResolveInDoubtSend(ctx context.Context, actor Actor, in ResolveInDoubtSendInput) (Item, error) {
 	if err := s.admit(ctx, actor); err != nil {
 		return Item{}, err
@@ -261,7 +297,10 @@ func (s *service) ResolveInDoubtSend(ctx context.Context, actor Actor, in Resolv
 			out, err = s.markSent(ctx, actor, row, sendRecord{GmailMessageID: *in.GmailMessageID, ApprovalHash: in.ApprovalHash})
 			return err
 		}
-		if err := s.store.SetItemSendAttempt(ctx, actor.OrgID, row.ID, row.Revision, row.ApprovalHash, ""); err != nil {
+		if s.holdMayBeInFlight(row) {
+			return &SendInFlightError{ItemID: row.ID, HeldSince: row.UpdatedAt, ReleasableAt: row.UpdatedAt.Add(2 * s.sendTimeout)}
+		}
+		if err := s.store.ReleaseItemSend(ctx, actor.OrgID, row.ID, row.Revision, row.ApprovalHash, s.now(), true); err != nil {
 			return s.writeErr(err, row.ID, row.Revision, func() (int32, error) {
 				cur, err := s.store.GetItem(ctx, actor.OrgID, row.ID)
 				if err != nil {
