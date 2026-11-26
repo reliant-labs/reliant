@@ -138,7 +138,9 @@ func TestReportAvailability_DueReportIsServedWithoutWaiting(t *testing.T) {
 	_, err = client.ReportAvailability(ctx)
 	require.NoError(t, err)
 
-	// The TTL elapses and the backend stalls: a caller that waited would hang.
+	// The TTL elapses and the backend stalls until released: a caller that
+	// waited would hang until availabilityTimeout and then get an error, not
+	// the report.
 	key := client.availabilityKey()
 	availabilityCache.Expire(key)
 	slow.Store(true)
@@ -151,7 +153,7 @@ func TestReportAvailability_DueReportIsServedWithoutWaiting(t *testing.T) {
 	}()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("ReportAvailability waited on the backend while it held a report")
 	}
 

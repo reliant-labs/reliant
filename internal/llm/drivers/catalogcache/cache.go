@@ -30,6 +30,11 @@
 // Fetches run on a context detached from the caller's cancellation (bounded by
 // Policy.Timeout), so a caller that gives up never fails the fetch other
 // callers share.
+//
+// Leaf utility package: a generic in-memory cache with no collaborator to fake.
+// Its callers' fetches are the seam their tests replace.
+//
+//forge:exclude-contract: generic in-memory stale-while-revalidate cache; callers inject the fetch
 package catalogcache
 
 import (
