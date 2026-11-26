@@ -204,7 +204,6 @@ type ApprovalCreateStore interface {
 	CreateApproval(ctx context.Context, approval *db.Approval) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
-	runevents.Store
 }
 
 // ApprovalLookup finds the approval raised for an entity (idempotent raising).
@@ -217,6 +216,8 @@ type ApprovalLookup interface {
 type ApprovalCreateDeps struct {
 	Repo      ApprovalCreateStore
 	Approvals ApprovalLookup
+	// RunEvents records the blocked run event (runevents.NewStore).
+	RunEvents runevents.Store
 }
 
 // ToolCallResults reads the durable result recorded for a tool call.
@@ -484,14 +485,12 @@ type PreflightDaemonCheckStore interface {
 
 // QuestionCreateStore is what QuestionCreateActivity reads and writes; the
 // blocked run event goes through runevents.EmitBlocked, and an async question
-// is announced to the owner's inbox instead (GetChat comes with
-// runevents.Store).
+// is announced to the owner's inbox instead.
 type QuestionCreateStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-	runevents.Store
 }
 
 // QuestionResolveStore is what QuestionResolveActivity reads and writes.
@@ -580,12 +579,24 @@ type AttentionRecorder interface {
 	ApplyAttentionUpdate(ctx context.Context, update core.AttentionUpdate) (core.AttentionResult, error)
 }
 
+// TriggerPauser pauses a trigger with a system reason (core.TriggerPaused*);
+// paused is false when it was already paused. store.TriggerWritesExtStore
+// satisfies it.
+type TriggerPauser interface {
+	SystemPauseTrigger(ctx context.Context, id, reason string) (paused bool, err error)
+}
+
 // WorkflowStatusDeps is what NewWorkflowStatusActivity takes.
 type WorkflowStatusDeps struct {
 	Repo      WorkflowStatusStore
 	Runs      RunRecords
 	Workflows WorkflowRuns
 	Attention AttentionRecorder
+	// RunEvents records the terminal run event (runevents.NewStore).
+	RunEvents runevents.Store
+	// Pauser pauses a trigger whose unattended run an org policy ended. Nil
+	// pauses nothing: the next refused run records the failure only.
+	Pauser TriggerPauser
 }
 
 type runRecords struct {
@@ -628,7 +639,6 @@ type WorkflowStatusStore interface {
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	threads.Repository
-	runevents.Store
 	ChatTransitioner
 	TransitionMessageWriter
 }

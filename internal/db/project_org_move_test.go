@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // Moving a project to another org (control-plane
@@ -100,7 +101,7 @@ func (f *moveFixture) trigger(id, projectID string, enabled bool, connectionID *
 	tr.Enabled = enabled
 	tr.ConnectionID = connectionID
 	tr.OrgID = strp(moveSrc)
-	require.NoError(f.t, f.repo.CreateTrigger(context.Background(), tr))
+	require.NoError(f.t, triggertest.Create(context.Background(), f.repo, tr))
 }
 
 // prepared records a move of projectID from src to dst and advances it to
@@ -193,7 +194,7 @@ func TestMoveProjectOrg_RestampsWhatMovesAndLeavesWhatStays(t *testing.T) {
 	f.trigger("t-personal", "p-move", true, strp("conn-mine"))
 	f.trigger("t-person-paused", "p-move", false, nil)
 	f.trigger("t-system-paused", "p-move", true, nil)
-	paused, err := f.repo.PauseTrigger(ctx, "t-system-paused", core.TriggerPausedCreatorLeftOrg)
+	paused, err := store.NewTriggerWritesExtStore(f.repo.ORM()).SystemPauseTrigger(ctx, "t-system-paused", core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 	require.True(t, paused)
 
@@ -790,7 +791,7 @@ func TestResumeTriggerPausedBy_AnEditSinceTheCheckWins(t *testing.T) {
 	// The owner edits it, still disabled, between the check and the resume.
 	edited := *checked
 	edited.Name = "edited while the move ran"
-	require.NoError(t, f.repo.UpdateTrigger(ctx, &edited))
+	require.NoError(t, triggertest.Update(ctx, f.repo, &edited))
 	now, err := f.repo.GetTrigger(ctx, "t-edit")
 	require.NoError(t, err)
 	require.Equal(t, core.TriggerPausedOrgMove, now.PausedReason, "an edit that keeps it disabled keeps the move's pause")

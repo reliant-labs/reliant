@@ -2,7 +2,7 @@
  * Sends a signed-in user who has not finished onboarding to `/onboarding`
  * before a chat route, carrying the page they asked for as `returnTo` so the
  * wizard's exit lands them back there (leaveOnboarding). Which routes (the
- * chat routes only), and the forge brand's home: ./onboardingGate.ts.
+ * chat routes only), and the forge brand's home: ./onboardingGatePolicy.ts.
  *
  * Mounted inside the `_authenticated` layout's AuthGuard, so it only ever sees
  * a signed-in user. It never completes onboarding: the wizard is the only
@@ -17,7 +17,7 @@ import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { logger } from "@/lib/logger";
 import { isForgeShell } from "@/lib/shell";
 
-import { onboardingGateDecision, onboardingGateTarget } from "./onboardingGate";
+import { onboardingGateDecision, onboardingGateTarget } from "./onboardingGatePolicy";
 
 export function OnboardingGate({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });

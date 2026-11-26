@@ -100,11 +100,12 @@ type ApprovalResolveOutput struct {
 type ApprovalCreateActivity struct {
 	repo      ApprovalCreateStore
 	approvals ApprovalLookup
+	runEvents runevents.Store
 }
 
 // NewApprovalCreateActivity creates a new ApprovalCreateActivity
 func NewApprovalCreateActivity(deps ApprovalCreateDeps) *ApprovalCreateActivity {
-	return &ApprovalCreateActivity{repo: deps.Repo, approvals: deps.Approvals}
+	return &ApprovalCreateActivity{repo: deps.Repo, approvals: deps.Approvals, runEvents: deps.RunEvents}
 }
 
 // Name returns the activity name for registration
@@ -308,7 +309,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 
 		// The run is now waiting on a human: a workflow-event "blocked"
 		// transition, recorded with the approval it is blocked on.
-		if _, err := runevents.EmitBlocked(txCtx, a.repo, runevents.Blocked{
+		if _, err := runevents.EmitBlocked(txCtx, a.runEvents, runevents.Blocked{
 			ChatID:      input.ChatID,
 			WorkflowID:  input.WorkflowID,
 			BlockerID:   approvalID,

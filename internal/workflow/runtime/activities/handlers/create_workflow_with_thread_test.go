@@ -83,7 +83,7 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 	assert.NotEmpty(t, result.ContextWindowID)
 
 	// Verify workflow was created in DB
-	workflow, err := repo.GetWorkflow(ctx, workflowID)
+	workflow, err := store.LoadWorkflow(ctx, repo.ORM(), workflowID)
 	require.NoError(t, err)
 	assert.Equal(t, workflowID, workflow.ID)
 	assert.Equal(t, "builtin://agent", workflow.WorkflowName)
@@ -262,7 +262,7 @@ func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 	require.NoError(t, val.Get(&result))
 
 	// Verify workflow was created with parent reference
-	workflow, err := repo.GetWorkflow(ctx, childWorkflowID)
+	workflow, err := store.LoadWorkflow(ctx, repo.ORM(), childWorkflowID)
 	require.NoError(t, err)
 	assert.Equal(t, childWorkflowID, workflow.ID)
 	assert.NotNil(t, workflow.ParentID)
@@ -561,7 +561,7 @@ func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
 
 	// When ThreadID is empty, the threads service will generate a new ID
 	// but the workflow.Thread should be set to workflowID
-	workflow, err := repo.GetWorkflow(ctx, workflowID)
+	workflow, err := store.LoadWorkflow(ctx, repo.ORM(), workflowID)
 	require.NoError(t, err)
 	assert.Equal(t, workflowID, workflow.Thread)
 }

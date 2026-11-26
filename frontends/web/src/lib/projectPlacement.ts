@@ -179,8 +179,11 @@ export function canSetUpElsewhere(project: { remote_url?: string } | null | unde
  * checkout elsewhere names the folder instead; no such machine, the server's
  * default.
  *
- * Nothing to judge by (no other machine has the checkout, or the target's
- * platform is not reported) keeps `path`, as before.
+ * Nothing to judge by (no other machine has the checkout, the target's or the
+ * holder's platform is not reported) is the server's default too: it is
+ * always a folder that machine can create, and the path is not known to be.
+ * That is also what makes "Try again" after a failed set-up work: the failed
+ * row is never evidence for its own path.
  */
 export function setUpPathOn({
   installs,
@@ -204,10 +207,9 @@ export function setUpPathOn({
       row.daemon_id !== daemonId &&
       row.install_state === ProjectInstallState.INSTALLED,
   );
-  if (!target || holders.length === 0) return wanted;
-  // The project's path, where a machine like this one (or one of no known
-  // platform) has it.
-  if (wanted && holders.some((row) => (row.path ?? wanted) === wanted && (platform(row.daemon_id) ?? target) === target)) {
+  if (!target) return undefined;
+  // The project's path, where a machine like this one has it.
+  if (wanted && holders.some((row) => (row.path ?? wanted) === wanted && platform(row.daemon_id) === target)) {
     return wanted;
   }
   // Else where a machine of this platform has it.

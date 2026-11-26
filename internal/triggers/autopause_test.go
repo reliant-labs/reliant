@@ -55,9 +55,9 @@ func (m *orgMembership) set(down bool, orgIDs ...string) {
 	}
 }
 
-// PauseTrigger is the store's pause: the first call disables the trigger
+// SystemPauseTrigger is the store's pause: the first call disables the trigger
 // with the reason, a call on a paused trigger writes nothing.
-func (r *fakeRepo) PauseTrigger(_ context.Context, id, reason string) (bool, error) {
+func (r *fakeRepo) SystemPauseTrigger(_ context.Context, id, reason string) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	t, ok := r.triggers[id]

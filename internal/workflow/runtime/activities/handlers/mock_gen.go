@@ -1022,7 +1022,7 @@ func (m *MockChatTransitioner) GetWorktree(ctx context.Context, id string) (*db.
 var _ ChatTransitioner = (*MockChatTransitioner)(nil)
 
 // forge:section MockApprovalCreateStore
-// forge:hash=bfc519eab9af261bfc31b9258b0a713c4792d8a3b7f88ecbd988a09d0978de99
+// forge:hash=a6baac741e2c7378256f4b48807277f7025697acceb04b6305717ef62ebe205e
 
 // MockApprovalCreateStore is a test mock for the ApprovalCreateStore interface.
 //
@@ -1032,14 +1032,10 @@ var _ ChatTransitioner = (*MockChatTransitioner)(nil)
 // "MockApprovalCreateStore.<Method>Func not set" error.
 type MockApprovalCreateStore struct {
 	contractkit.Recorder
-	RunTxFunc                     func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	CreateApprovalFunc            func(context.Context, *db.Approval) error
-	UpdateChatUnreadFunc          func(context.Context, string, bool, string) error
-	CreateChatUpdateFunc          func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
-	HasEnabledTriggerOfKindFunc   func(context.Context, string, core.TriggerKind) (bool, error)
-	CreateRunEventFunc            func(context.Context, *core.RunEvent) (bool, error)
-	LockChatForRunEventFunc       func(context.Context, string) error
-	CountOtherPendingBlockersFunc func(context.Context, string, string) (int, error)
+	RunTxFunc            func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	CreateApprovalFunc   func(context.Context, *db.Approval) error
+	UpdateChatUnreadFunc func(context.Context, string, bool, string) error
+	CreateChatUpdateFunc func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -1076,42 +1072,6 @@ func (m *MockApprovalCreateStore) CreateChatUpdate(ctx context.Context, chatID s
 		return m.CreateChatUpdateFunc(ctx, chatID, updateType, entityID, data)
 	}
 	return contractkit.MockNotSet("MockApprovalCreateStore", "CreateChatUpdate")
-}
-
-// HasEnabledTriggerOfKind records the call and delegates to HasEnabledTriggerOfKindFunc when set.
-func (m *MockApprovalCreateStore) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
-	m.Recorder.Record("HasEnabledTriggerOfKind", ctx, userID, kind)
-	if m.HasEnabledTriggerOfKindFunc != nil {
-		return m.HasEnabledTriggerOfKindFunc(ctx, userID, kind)
-	}
-	return false, contractkit.MockNotSet("MockApprovalCreateStore", "HasEnabledTriggerOfKind")
-}
-
-// CreateRunEvent records the call and delegates to CreateRunEventFunc when set.
-func (m *MockApprovalCreateStore) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
-	m.Recorder.Record("CreateRunEvent", ctx, ev)
-	if m.CreateRunEventFunc != nil {
-		return m.CreateRunEventFunc(ctx, ev)
-	}
-	return false, contractkit.MockNotSet("MockApprovalCreateStore", "CreateRunEvent")
-}
-
-// LockChatForRunEvent records the call and delegates to LockChatForRunEventFunc when set.
-func (m *MockApprovalCreateStore) LockChatForRunEvent(ctx context.Context, chatID string) error {
-	m.Recorder.Record("LockChatForRunEvent", ctx, chatID)
-	if m.LockChatForRunEventFunc != nil {
-		return m.LockChatForRunEventFunc(ctx, chatID)
-	}
-	return contractkit.MockNotSet("MockApprovalCreateStore", "LockChatForRunEvent")
-}
-
-// CountOtherPendingBlockers records the call and delegates to CountOtherPendingBlockersFunc when set.
-func (m *MockApprovalCreateStore) CountOtherPendingBlockers(ctx context.Context, chatID string, excludeID string) (int, error) {
-	m.Recorder.Record("CountOtherPendingBlockers", ctx, chatID, excludeID)
-	if m.CountOtherPendingBlockersFunc != nil {
-		return m.CountOtherPendingBlockersFunc(ctx, chatID, excludeID)
-	}
-	return 0, contractkit.MockNotSet("MockApprovalCreateStore", "CountOtherPendingBlockers")
 }
 
 // Compile-time check.
@@ -3558,7 +3518,7 @@ func (m *MockPreflightDaemonCheckStore) SetChatDaemonBlocked(ctx context.Context
 var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 
 // forge:section MockQuestionCreateStore
-// forge:hash=4ef762afff6a7583271cdc15d0ecfb3df4e84ee1252725d24804f3b453bb5ad6
+// forge:hash=4dc7ed03f2be6fa9daa9a53a88d391a4c7e6de0c1e8371120393adc7ae66c106
 
 // MockQuestionCreateStore is a test mock for the QuestionCreateStore interface.
 //
@@ -3568,14 +3528,10 @@ var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 // "MockQuestionCreateStore.<Method>Func not set" error.
 type MockQuestionCreateStore struct {
 	contractkit.Recorder
-	RunTxFunc                     func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	UpdateChatUnreadFunc          func(context.Context, string, bool, string) error
-	EmitQuestionUpdateFunc        func(context.Context, string, db.QuestionUpdate) error
-	EmitUserRefetchFunc           func(context.Context, string, db.RefetchType, db.RefetchOpts) error
-	HasEnabledTriggerOfKindFunc   func(context.Context, string, core.TriggerKind) (bool, error)
-	CreateRunEventFunc            func(context.Context, *core.RunEvent) (bool, error)
-	LockChatForRunEventFunc       func(context.Context, string) error
-	CountOtherPendingBlockersFunc func(context.Context, string, string) (int, error)
+	RunTxFunc              func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	UpdateChatUnreadFunc   func(context.Context, string, bool, string) error
+	EmitQuestionUpdateFunc func(context.Context, string, db.QuestionUpdate) error
+	EmitUserRefetchFunc    func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3612,42 +3568,6 @@ func (m *MockQuestionCreateStore) EmitUserRefetch(ctx context.Context, userID st
 		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
 	}
 	return contractkit.MockNotSet("MockQuestionCreateStore", "EmitUserRefetch")
-}
-
-// HasEnabledTriggerOfKind records the call and delegates to HasEnabledTriggerOfKindFunc when set.
-func (m *MockQuestionCreateStore) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
-	m.Recorder.Record("HasEnabledTriggerOfKind", ctx, userID, kind)
-	if m.HasEnabledTriggerOfKindFunc != nil {
-		return m.HasEnabledTriggerOfKindFunc(ctx, userID, kind)
-	}
-	return false, contractkit.MockNotSet("MockQuestionCreateStore", "HasEnabledTriggerOfKind")
-}
-
-// CreateRunEvent records the call and delegates to CreateRunEventFunc when set.
-func (m *MockQuestionCreateStore) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
-	m.Recorder.Record("CreateRunEvent", ctx, ev)
-	if m.CreateRunEventFunc != nil {
-		return m.CreateRunEventFunc(ctx, ev)
-	}
-	return false, contractkit.MockNotSet("MockQuestionCreateStore", "CreateRunEvent")
-}
-
-// LockChatForRunEvent records the call and delegates to LockChatForRunEventFunc when set.
-func (m *MockQuestionCreateStore) LockChatForRunEvent(ctx context.Context, chatID string) error {
-	m.Recorder.Record("LockChatForRunEvent", ctx, chatID)
-	if m.LockChatForRunEventFunc != nil {
-		return m.LockChatForRunEventFunc(ctx, chatID)
-	}
-	return contractkit.MockNotSet("MockQuestionCreateStore", "LockChatForRunEvent")
-}
-
-// CountOtherPendingBlockers records the call and delegates to CountOtherPendingBlockersFunc when set.
-func (m *MockQuestionCreateStore) CountOtherPendingBlockers(ctx context.Context, chatID string, excludeID string) (int, error) {
-	m.Recorder.Record("CountOtherPendingBlockers", ctx, chatID, excludeID)
-	if m.CountOtherPendingBlockersFunc != nil {
-		return m.CountOtherPendingBlockersFunc(ctx, chatID, excludeID)
-	}
-	return 0, contractkit.MockNotSet("MockQuestionCreateStore", "CountOtherPendingBlockers")
 }
 
 // Compile-time check.
@@ -4459,8 +4379,34 @@ func (m *MockAttentionRecorder) ApplyAttentionUpdate(ctx context.Context, update
 // Compile-time check.
 var _ AttentionRecorder = (*MockAttentionRecorder)(nil)
 
+// forge:section MockTriggerPauser
+// forge:hash=16f9425fa78409238747fb5828dff117147e63f9c7e5afc111de1d9dc23703fd
+
+// MockTriggerPauser is a test mock for the TriggerPauser interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockTriggerPauser.<Method>Func not set" error.
+type MockTriggerPauser struct {
+	contractkit.Recorder
+	SystemPauseTriggerFunc func(context.Context, string, string) (bool, error)
+}
+
+// SystemPauseTrigger records the call and delegates to SystemPauseTriggerFunc when set.
+func (m *MockTriggerPauser) SystemPauseTrigger(ctx context.Context, id string, reason string) (bool, error) {
+	m.Recorder.Record("SystemPauseTrigger", ctx, id, reason)
+	if m.SystemPauseTriggerFunc != nil {
+		return m.SystemPauseTriggerFunc(ctx, id, reason)
+	}
+	return false, contractkit.MockNotSet("MockTriggerPauser", "SystemPauseTrigger")
+}
+
+// Compile-time check.
+var _ TriggerPauser = (*MockTriggerPauser)(nil)
+
 // forge:section MockWorkflowStatusStore
-// forge:hash=cbbcb232f1bc60352957f9deca880119ad6901e7c8aa092539112720b31cb4c5
+// forge:hash=beabca36626c27083933bbaaf4b96cc201fb59273a2f8c54d616489b939ae35b
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -4520,10 +4466,6 @@ type MockWorkflowStatusStore struct {
 	GetAttachmentsByIDsFunc                                  func(context.Context, []string) ([]*db.Attachment, error)
 	SaveMessageAtomicFunc                                    func(context.Context, db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
-	HasEnabledTriggerOfKindFunc                              func(context.Context, string, core.TriggerKind) (bool, error)
-	CreateRunEventFunc                                       func(context.Context, *core.RunEvent) (bool, error)
-	LockChatForRunEventFunc                                  func(context.Context, string) error
-	CountOtherPendingBlockersFunc                            func(context.Context, string, string) (int, error)
 	UpdateChatFunc                                           func(context.Context, *db.Chat) error
 	GetProjectPresetsJSONFunc                                func(context.Context, string) (*string, error)
 	GetProjectWorkflowsJSONFunc                              func(context.Context, string) (*string, error)
@@ -4986,42 +4928,6 @@ func (m *MockWorkflowStatusStore) SeedSeqCounterForFork(ctx context.Context, cha
 		return m.SeedSeqCounterForForkFunc(ctx, chatID, forkAtContextWindowID)
 	}
 	return contractkit.MockNotSet("MockWorkflowStatusStore", "SeedSeqCounterForFork")
-}
-
-// HasEnabledTriggerOfKind records the call and delegates to HasEnabledTriggerOfKindFunc when set.
-func (m *MockWorkflowStatusStore) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
-	m.Recorder.Record("HasEnabledTriggerOfKind", ctx, userID, kind)
-	if m.HasEnabledTriggerOfKindFunc != nil {
-		return m.HasEnabledTriggerOfKindFunc(ctx, userID, kind)
-	}
-	return false, contractkit.MockNotSet("MockWorkflowStatusStore", "HasEnabledTriggerOfKind")
-}
-
-// CreateRunEvent records the call and delegates to CreateRunEventFunc when set.
-func (m *MockWorkflowStatusStore) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
-	m.Recorder.Record("CreateRunEvent", ctx, ev)
-	if m.CreateRunEventFunc != nil {
-		return m.CreateRunEventFunc(ctx, ev)
-	}
-	return false, contractkit.MockNotSet("MockWorkflowStatusStore", "CreateRunEvent")
-}
-
-// LockChatForRunEvent records the call and delegates to LockChatForRunEventFunc when set.
-func (m *MockWorkflowStatusStore) LockChatForRunEvent(ctx context.Context, chatID string) error {
-	m.Recorder.Record("LockChatForRunEvent", ctx, chatID)
-	if m.LockChatForRunEventFunc != nil {
-		return m.LockChatForRunEventFunc(ctx, chatID)
-	}
-	return contractkit.MockNotSet("MockWorkflowStatusStore", "LockChatForRunEvent")
-}
-
-// CountOtherPendingBlockers records the call and delegates to CountOtherPendingBlockersFunc when set.
-func (m *MockWorkflowStatusStore) CountOtherPendingBlockers(ctx context.Context, chatID string, excludeID string) (int, error) {
-	m.Recorder.Record("CountOtherPendingBlockers", ctx, chatID, excludeID)
-	if m.CountOtherPendingBlockersFunc != nil {
-		return m.CountOtherPendingBlockersFunc(ctx, chatID, excludeID)
-	}
-	return 0, contractkit.MockNotSet("MockWorkflowStatusStore", "CountOtherPendingBlockers")
 }
 
 // UpdateChat records the call and delegates to UpdateChatFunc when set.

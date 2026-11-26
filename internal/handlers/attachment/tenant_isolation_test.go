@@ -63,8 +63,8 @@ func TestAttachmentTenantIsolation(t *testing.T) {
 	// Another user's attachment already answers NotFound, which is what a
 	// converted rpc answers too: nothing to tighten.
 	absent := viewertest.Code(connect.CodeNotFound)
-	get := func(id string) proto.Message { return &pb.GetAttachmentRequest{AttachmentId: id} }
-	del := func(id string) proto.Message { return &pb.DeleteAttachmentRequest{AttachmentId: id} }
+	get := func(id string) proto.Message { return &pb.GetAttachmentRequest{Id: id} }
+	del := func(id string) proto.Message { return &pb.DeleteAttachmentRequest{Id: id} }
 	kept := func(t *testing.T, f *viewertest.Fixture, id string, err error) {
 		require.Error(t, err)
 		require.True(t, exists(t, f, id), "a refused delete must leave the attachment")
@@ -85,8 +85,8 @@ func TestAttachmentTenantIsolation(t *testing.T) {
 		empty proto.Message
 		gone  proto.Message
 	}{
-		{"GetAttachment", &pb.GetAttachmentRequest{}, &pb.GetAttachmentRequest{AttachmentId: "absent"}},
-		{"DeleteAttachment", &pb.DeleteAttachmentRequest{}, &pb.DeleteAttachmentRequest{AttachmentId: "absent"}},
+		{"GetAttachment", &pb.GetAttachmentRequest{}, &pb.GetAttachmentRequest{Id: "absent"}},
+		{"DeleteAttachment", &pb.DeleteAttachmentRequest{}, &pb.DeleteAttachmentRequest{Id: "absent"}},
 	} {
 		rpc := rpc
 		for _, who := range []viewertest.Who{viewertest.AsOwner, viewertest.AsOtherTenant} {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -15,12 +16,13 @@ import (
 
 // AddDependencyTool allows agents to create typed dependencies between tasks
 type AddDependencyTool struct {
-	repo  addDependencyStore
-	plans addDependencyPlanning
+	repo    addDependencyStore
+	refetch Refetcher
+	plans   addDependencyPlanning
 }
 
-func NewAddDependencyTool(repo addDependencyStore, plans addDependencyPlanning) Tool {
-	return NewToolWrapper(&AddDependencyTool{repo: repo, plans: plans})
+func NewAddDependencyTool(repo addDependencyStore, plans addDependencyPlanning, refetch Refetcher) Tool {
+	return NewToolWrapper(&AddDependencyTool{repo: repo, refetch: refetch, plans: plans})
 }
 
 func (t *AddDependencyTool) Name() string { return "add_dependency" }
@@ -139,7 +141,7 @@ To: %s (%s)`,
 		responseText += fmt.Sprintf("\n\n\"%s\" must complete before \"%s\" can start.", fromTask.Title, toTask.Title)
 	}
 
-	if err := t.repo.EmitChatRefetch(rctx.Context, rctx.ChatID, db.RefetchPlanTasks); err != nil {
+	if err := emitChatRefetch(t.refetch, rctx.Context, rctx.ChatID, core.RefetchPlanTasks); err != nil {
 		logging.Warn("[AddDependencyTool] Failed to emit refetch", "error", err)
 	}
 
@@ -177,12 +179,13 @@ func (t *AddDependencyTool) resolveTask(rctx *rctx.ToolContext, taskRef string) 
 
 // RemoveDependencyTool allows agents to remove dependencies between tasks
 type RemoveDependencyTool struct {
-	repo  removeDependencyStore
-	plans removeDependencyPlanning
+	repo    removeDependencyStore
+	refetch Refetcher
+	plans   removeDependencyPlanning
 }
 
-func NewRemoveDependencyTool(repo removeDependencyStore, plans removeDependencyPlanning) Tool {
-	return NewToolWrapper(&RemoveDependencyTool{repo: repo, plans: plans})
+func NewRemoveDependencyTool(repo removeDependencyStore, plans removeDependencyPlanning, refetch Refetcher) Tool {
+	return NewToolWrapper(&RemoveDependencyTool{repo: repo, refetch: refetch, plans: plans})
 }
 
 func (t *RemoveDependencyTool) Name() string { return "remove_dependency" }
@@ -222,7 +225,7 @@ func (t *RemoveDependencyTool) Execute(rctx *rctx.ToolContext, params RemoveDepe
 	}
 
 	if rctx.ChatID != "" {
-		if err := t.repo.EmitChatRefetch(rctx.Context, rctx.ChatID, db.RefetchPlanTasks); err != nil {
+		if err := emitChatRefetch(t.refetch, rctx.Context, rctx.ChatID, core.RefetchPlanTasks); err != nil {
 			logging.Warn("[RemoveDependencyTool] Failed to emit refetch", "error", err)
 		}
 	}

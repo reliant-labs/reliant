@@ -9,7 +9,8 @@
  * attachment at once share ONE GetAttachment, and a delete drops the entry.
  */
 
-import { AttachmentService, type AttachmentInfo } from "../gen/reliant/v1/attachment_pb";
+import { AttachmentService } from "../gen/reliant/v1/attachment_pb";
+import type { Attachment as AttachmentMessage } from "../gen/reliant/v1/chat_pb";
 import { connectClient } from "../lib/connect";
 import type { AttachmentType } from "../lib/filetypes";
 import { queryClient } from "../lib/query-client";
@@ -29,7 +30,7 @@ export interface Attachment {
 
 const client = connectClient(AttachmentService);
 
-function attachmentFromProto(proto: AttachmentInfo): Attachment {
+function attachmentFromProto(proto: AttachmentMessage): Attachment {
   return {
     id: proto.id,
     filename: proto.filename,
@@ -57,8 +58,8 @@ export async function uploadAttachment(file: File): Promise<Attachment> {
 
 /** Delete an attachment, and drop its cached bytes with it. */
 export async function deleteAttachment(attachmentId: string): Promise<void> {
-  await client.deleteAttachment({ attachmentId });
-  queryClient.removeQueries({ queryKey: attachmentServiceKeys.getAttachment({ attachmentId }) });
+  await client.deleteAttachment({ id: attachmentId });
+  queryClient.removeQueries({ queryKey: attachmentServiceKeys.getAttachment({ id: attachmentId }) });
 }
 
 /**
@@ -71,7 +72,7 @@ export async function deleteAttachment(attachmentId: string): Promise<void> {
  */
 export async function fetchAttachmentBlob(attachmentId: string): Promise<Blob> {
   const response = await queryClient.fetchQuery(
-    attachmentServiceQueries.getAttachment({ attachmentId }, { staleTime: 0, gcTime: 0 }),
+    attachmentServiceQueries.getAttachment({ id: attachmentId }, { staleTime: 0, gcTime: 0 }),
   );
   if (!response.attachment) {
     throw new Error("Attachment not found");

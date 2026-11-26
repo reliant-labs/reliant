@@ -28,7 +28,7 @@ func TestSetWorkflowOutcomeRoundTrips(t *testing.T) {
 		t.Fatalf("create workflow: %v", err)
 	}
 
-	got, err := repo.GetWorkflow(ctx, "wf-outcome")
+	got, err := store.LoadWorkflow(ctx, repo.ORM(), "wf-outcome")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestSetWorkflowOutcomeRoundTrips(t *testing.T) {
 		t.Fatalf("update status: %v", err)
 	}
 
-	got, err = repo.GetWorkflow(ctx, "wf-outcome")
+	got, err = store.LoadWorkflow(ctx, repo.ORM(), "wf-outcome")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}

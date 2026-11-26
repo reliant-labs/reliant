@@ -39,6 +39,7 @@ import { approvalCodeFrom, changeFrom } from "@/services/controlPlane/changes/ch
 import { changeErrorKind, describeChangeError } from "@/services/controlPlane/changes/errors";
 
 import { FIELD } from "../controlStyles";
+import { BetaTag } from "./BetaTag";
 import { ChangeHistory } from "./ChangeHistory";
 import { ChangeResults } from "./ChangeResults";
 import { ageOf, changedFields, deliveryPhrase, MODE_LABELS, type WhoGetsIt as Who } from "./changeModel";
@@ -130,7 +131,12 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
       <PageHeader
         density="compact"
         title={<span className="font-mono">{change.key}</span>}
-        titleAccessory={<Tag>{MODE_LABELS[change.mode]}</Tag>}
+        titleAccessory={
+          <span className="inline-flex items-center gap-1.5">
+            <Tag>{MODE_LABELS[change.mode]}</Tag>
+            <BetaTag />
+          </span>
+        }
         subtitle={change.description || undefined}
         meta={
           <>

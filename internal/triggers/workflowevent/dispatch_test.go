@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/lineage"
@@ -160,7 +161,7 @@ func (f *fixture) addFilteredTrigger(userID, projectID, name, workflow string, s
 		Filter:    filter,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(f.t, f.repo.CreateTrigger(context.Background(), tr))
+	require.NoError(f.t, triggertest.Create(context.Background(), f.repo, tr))
 	return tr
 }
 
@@ -189,7 +190,7 @@ func (f *fixture) finish(chatID string, outcome core.RunEventOutcome) *core.RunE
 	if chat.WorkflowName != nil {
 		name = *chat.WorkflowName
 	}
-	created, err := runevents.EmitTerminal(ctx, f.repo, runevents.Terminal{
+	created, err := runevents.EmitTerminal(ctx, runevents.NewStore(f.repo.ORM()), runevents.Terminal{
 		ChatID: chatID, WorkflowID: chatID, WorkflowName: name, RunID: "run-" + uuid.NewString(),
 		Outcome: outcome, Summary: "all done",
 	}, time.Now().UTC())
@@ -301,7 +302,7 @@ func TestDispatch_NoMachineTriggerLaunchesANoMachineRun(t *testing.T) {
 	tr := f.addTrigger(f.userID, f.projectID, "on-review-done", "builtin://agent",
 		Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
 	tr.DaemonID, tr.NoMachine = "", true
-	require.NoError(t, f.repo.UpdateTrigger(ctx, tr))
+	require.NoError(t, triggertest.Update(ctx, f.repo, tr))
 
 	results, err := f.dispatcher.Dispatch(ctx, f.finish(f.humanRun("code-review"), core.RunEventFinished))
 	require.NoError(t, err)
@@ -492,7 +493,7 @@ func TestDispatch_LaunchCarriesTheActivationsActingIdentity(t *testing.T) {
 	tr := f.addTrigger(f.userID, f.projectID, "on-review-done", "builtin://agent",
 		Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
 	tr.ActingIdentity = core.ActingIdentityApp
-	require.NoError(t, f.repo.UpdateTrigger(ctx, tr))
+	require.NoError(t, triggertest.Update(ctx, f.repo, tr))
 
 	spec, err := f.dispatcher.buildSpec(tr, &core.RunEvent{WorkflowName: "code-review", Outcome: core.RunEventFinished},
 		launch.Event{DedupeKey: "d1"}, Spec{}, triggerspec.Scope{})

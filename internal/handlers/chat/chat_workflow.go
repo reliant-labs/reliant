@@ -19,7 +19,7 @@ import (
 // a param update has a run to signal. A pending, completed or failed run has
 // none: the update is stored and the next run starts from it.
 func (s *Service) rootRunIsLive(ctx context.Context, workflowID string) bool {
-	wf, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.deps.Workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || wf == nil {
 		return false
 	}

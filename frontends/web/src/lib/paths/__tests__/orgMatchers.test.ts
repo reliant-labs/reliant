@@ -13,7 +13,7 @@ import { describe, expect, it } from "vitest";
 import { consolePageOf, orgPageOf } from "@/components/Forge/Console/paths";
 import { isForgePath } from "@/components/Forge/QueuedDeployWatch";
 import { projectIdOfPath } from "@/components/Layout/ProjectFilterRouteSync";
-import { isOnboardingReturnTo, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
+import { isOnboardingReturnTo, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGatePolicy";
 import { shortcutScope } from "@/components/Shortcuts/ShortcutHost";
 import { mobileHandoffAllowed, mobilePathFor, shouldRedirectToMobile } from "@/lib/mobileRedirect";
 import { shouldPreloadMonaco } from "@/lib/monacoPreload";

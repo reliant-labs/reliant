@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // issue-opened payloads are the shape the GitHub integration delivers.
@@ -150,7 +151,7 @@ func TestListReplayEvents_ListsTheCallersActivationsEventsNewestFirst(t *testing
 	// Another user's trigger on a workflow of the same name must not appear.
 	otherUser := uuid.NewString()
 	foreign := uuid.NewString()
-	require.NoError(t, env.repo.CreateTrigger(context.Background(), &core.Trigger{
+	require.NoError(t, triggertest.Create(context.Background(), env.repo, &core.Trigger{
 		ID: foreign, UserID: otherUser, ProjectID: env.projectID, Name: "theirs", Kind: core.TriggerKindSchedule,
 		Workflow: "triage", WorkflowTrigger: strPtr("nightly"), Enabled: true, ActingIdentity: core.ActingIdentityOwner,
 		Config: []byte(`{"cron":["0 9 * * *"]}`),

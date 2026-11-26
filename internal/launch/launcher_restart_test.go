@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func threadTexts(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) []string {
@@ -61,7 +62,7 @@ func TestLaunchPendingNewTurnAfterFailedStartAppliesMessageAndSwitch(t *testing.
 	chat, err := repo.GetChat(ctx, chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin://structured-agent", *chat.WorkflowName)
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin://structured-agent", root.WorkflowName)
 
@@ -88,7 +89,7 @@ func TestLaunchPendingTrueRetryIsIdempotent(t *testing.T) {
 	assert.Equal(t, result.EventID, eventsFor(t, ctx, repo, chatID).ID)
 	assert.Equal(t, "builtin://structured-agent", starter.lastRootInput(t).WorkflowName)
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 }
@@ -157,7 +158,7 @@ func TestLaunchPendingConcurrentStartsDoNotLoseMessages(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, succeeded, 1, "one of the two starts must win")
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 	assert.NotNil(t, eventsFor(t, ctx, repo, chatID))
@@ -278,7 +279,7 @@ func TestLaunchDuplicateOfStartedEventIsAlreadyLaunched(t *testing.T) {
 	}
 	_, err := launcher.Launch(ctx, ev, spec)
 	require.NoError(t, err)
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.Equal(t, db.Active(), root.Status, "the winner has started")
 

@@ -77,6 +77,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/videojobs"
 	"github.com/reliant-labs/reliant/internal/workersetup"
@@ -1012,7 +1013,7 @@ func NewTriggerInbound(d TriggerInboundDeps) (*webhook.Inbound, error) {
 		// A trigger whose org's policy does not allow its integration is
 		// paused (org-policies §4.3). The API holds no schedule client, and an
 		// integration trigger's events have no schedule to pause.
-		WithAutoPause(triggers.NewAutoPause(repo, nil))
+		WithAutoPause(triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
 	if d.GitHubAccess != nil {
 		in.Access = map[string]webhook.AccessRefresher{ghaccess.IntegrationID: gitHubAccess{d.GitHubAccess}}
 	}
@@ -1420,6 +1421,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
 		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		RunEvents: runevents.NewStore(d.DB.ORM()),
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
 		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),

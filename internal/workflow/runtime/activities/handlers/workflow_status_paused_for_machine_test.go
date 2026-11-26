@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 type pausedForMachineFixture struct {
@@ -63,7 +64,7 @@ func TestWorkflowStatus_BreakerPauseMarksChatPausedForMachine(t *testing.T) {
 	f.report(t, "paused", func(in *WorkflowStatusInput) { in.PausedForMachine = true })
 
 	assert.True(t, f.marked(t))
-	wf, err := f.h.Repo().GetWorkflow(context.Background(), f.workflowID)
+	wf, err := store.LoadWorkflow(context.Background(), f.h.Repo().ORM(), f.workflowID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Paused(), wf.Status)
 }

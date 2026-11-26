@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -122,7 +123,7 @@ func TestEnableWorkflow_IdentityDefaultsToTheBotAndPreservesStoredOwner(t *testi
 	for _, row := range env.storedTriggers(t) {
 		if row.WorkflowTrigger != nil && (*row.WorkflowTrigger == "new-issue" || *row.WorkflowTrigger == "nightly") {
 			row.ActingIdentity = core.ActingIdentityOwner
-			require.NoError(t, env.repo.UpdateTrigger(env.ctx, row))
+			require.NoError(t, triggertest.Update(env.ctx, env.repo, row))
 		}
 	}
 	resp = env.enable(t, req)

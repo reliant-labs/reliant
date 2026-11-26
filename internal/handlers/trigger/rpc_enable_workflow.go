@@ -444,7 +444,9 @@ func (s *Service) restoreActivation(ctx context.Context, prev *core.Trigger) err
 	if err != nil {
 		return err
 	}
-	if err := s.deps.Repo.UpdateTrigger(ctx, prev); err != nil {
+	if err := s.writeTrigger(ctx, func(ctx context.Context) error {
+		return s.deps.TriggerWrites.UpdateTriggerInOrg(ctx, prev)
+	}); err != nil {
 		return err
 	}
 	if err := s.sync(ctx, prev.Kind, prev.ID); err != nil {

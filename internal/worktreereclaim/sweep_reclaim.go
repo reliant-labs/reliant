@@ -213,7 +213,7 @@ func (r *Reclaimer) reclaimEntry(ctx context.Context, e *SweepEntry, opts SweepO
 	paths := []string{orig, q}
 	lease, err := r.Acquire(ctx, paths)
 	if err != nil || lease == nil {
-		e.hold(ReasonInUse, "daemon work is running in it")
+		e.hold(ReasonInUse, admissionRefused("daemon work is running in it", err))
 		return
 	}
 	acquired := time.Now()
@@ -228,7 +228,7 @@ func (r *Reclaimer) reclaimEntry(ctx context.Context, e *SweepEntry, opts SweepO
 			lease.Release()
 			next, err := r.Acquire(ctx, paths)
 			if err != nil || next == nil {
-				return errors.New("daemon work started in it")
+				return errors.New(admissionRefused("daemon work started in it", err))
 			}
 			lease, acquired = next, time.Now()
 		}
@@ -420,11 +420,18 @@ func (r *Reclaimer) reclaimEntry(ctx context.Context, e *SweepEntry, opts SweepO
 	dropMarkers()
 	e.Class, e.Outcome, e.FreedBytes = class, OutcomeReclaimed, tree.bytes
 	e.Detail = "captured at " + capt.Ref + "; restore with: reliant worktree restore " + capt.Ref + " --repo " + capt.CommonDir
-	if r.Root == "" || !within(r.Root, orig) {
-		ts, _ := json.MarshalIndent(Tombstone{Path: orig, Ref: capt.Ref, CommonDir: capt.CommonDir, Repo: e.Repo, Branch: e.Branch,
-			Reason: string(class), Restore: "reliant worktree restore " + capt.Ref + " --repo " + capt.CommonDir, ReclaimedAt: r.now().UTC()}, "", "  ")
-		_ = os.WriteFile(orig+TombstoneSuffix, append(ts, '\n'), 0o600)
+	r.leaveTombstone(orig, e, capt.Ref, capt.CommonDir, string(class))
+}
+
+// leaveTombstone writes the tombstone of a reclaimed checkout that lived
+// outside the worktree root.
+func (r *Reclaimer) leaveTombstone(orig string, e *SweepEntry, ref, common, reason string) {
+	if r.Root != "" && within(r.Root, orig) {
+		return
 	}
+	ts, _ := json.MarshalIndent(Tombstone{Path: orig, Ref: ref, CommonDir: common, Repo: e.Repo, Branch: e.Branch,
+		Reason: reason, Restore: "reliant worktree restore " + ref + " --repo " + common, ReclaimedAt: r.now().UTC()}, "", "  ")
+	_ = os.WriteFile(orig+TombstoneSuffix, append(ts, '\n'), 0o600)
 }
 
 // captureIntact checks the capture ref still names the commit the capture
@@ -499,8 +506,9 @@ func needsRecovery(e SweepEntry) bool { return isReclaimingLock(e.Lock) || parke
 // recoverReclaim settles a worktree an interrupted reclaim left behind (the
 // daemon died mid-way; needsRecovery). A parked copy with no .disposing
 // marker goes back to its original path, with the lock it had; one being
-// disposed of is held, its capture named. A checkout at its own path with a
-// reclaiming lock gets its old lock back.
+// disposed of is finished when finish is set (finishDisposal), and otherwise
+// held, its capture named. A checkout at its own path with a reclaiming lock
+// gets its old lock back.
 //
 // A reclaiming lock alone cannot tell an interrupted reclaim from a live
 // one, so recovery runs under the same cross-process key lock reclaimEntry
@@ -510,7 +518,7 @@ func needsRecovery(e SweepEntry) bool { return isReclaimingLock(e.Lock) || parke
 // without the daemon's admission lease on every path involved; a process
 // with no admission (a CLI scan) recovers nothing and leaves it to the
 // daemon.
-func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry, dir string) {
+func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry, dir string, finish bool) {
 	if k, ok := parseReclaimingLock(e.Lock); ok {
 		e.Key = k.Key
 	} else if parkedBySweep(*e) {
@@ -565,6 +573,10 @@ func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry, dir strin
 		if _, err := os.Lstat(q + ".disposing"); err == nil {
 			e.Path = orig
 			e.CaptureRef = m.Ref
+			if finish {
+				r.finishDisposal(ctx, e, q, orig, common, m)
+				return
+			}
 			e.hold(ReasonQuarantined, fmt.Sprintf("a deletion was interrupted at %s; what remains is kept there, and all of it is in %s", q, m.Ref))
 			return
 		}
@@ -575,7 +587,7 @@ func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry, dir strin
 		}
 		lease, err := r.Acquire(ctx, []string{q, orig})
 		if err != nil || lease == nil {
-			e.hold(ReasonInUse, "daemon work is running in it")
+			e.hold(ReasonInUse, admissionRefused("daemon work is running in it", err))
 			return
 		}
 		defer lease.Release()
@@ -612,7 +624,7 @@ func (r *Reclaimer) recoverReclaim(ctx context.Context, e *SweepEntry, dir strin
 	// back. Its old lock is in the marker beside the parking spot, if any.
 	lease, err := r.Acquire(ctx, []string{e.Path})
 	if err != nil || lease == nil {
-		e.hold(ReasonInUse, "daemon work is running in it")
+		e.hold(ReasonInUse, admissionRefused("daemon work is running in it", err))
 		return
 	}
 	defer lease.Release()

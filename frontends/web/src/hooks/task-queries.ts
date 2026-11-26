@@ -7,6 +7,7 @@
  * its status as a string, mapped from that cache entry.
  */
 
+import { timestampDate } from "@bufbuild/protobuf/wkt";
 import { TaskStatus as ProtoTaskStatus, type ListTasksResponse, type Task } from "../gen/reliant/v1/task_pb";
 import { queryClient } from "../lib/query-client";
 import { planServiceKeys, useGetPlanByChatId } from "./plan-service-hooks_gen";
@@ -63,8 +64,8 @@ function taskItemFromProto(task: Task): TaskItem {
     title: task.title,
     status: taskStatusFromProto(task.status),
     description: task.description || undefined,
-    updatedAt: task.updatedAt,
-    createdAt: task.createdAt,
+    updatedAt: task.updatedAt ? timestampDate(task.updatedAt).toISOString() : undefined,
+    createdAt: task.createdAt ? timestampDate(task.createdAt).toISOString() : undefined,
     parentId: task.parentTaskId || undefined,
     planId: task.planId,
     position: task.position,

@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // memberOf is a Membership in which user-1 is a live member of exactly the
@@ -320,7 +321,7 @@ func TestListInbox_BrokenDefinitionListsUnderItsProjectsOrg(t *testing.T) {
 	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
 	declared := "merged"
 	acme := "acme"
-	require.NoError(t, f.repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, f.repo, &core.Trigger{
 		ID: "act-" + uuid.NewString()[:8], UserID: f.userID, ProjectID: f.project(), OrgID: &acme, Name: "Release",
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "release", WorkflowTrigger: &declared,
 		DaemonID: cicdID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg, CreatedAt: now, UpdatedAt: now,

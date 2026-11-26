@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A trigger the system paused because its creator left its org is resumed
@@ -43,7 +44,7 @@ func testResumeAfterRejoining(t *testing.T, ownOrg bool) {
 		_, err := env.repo.ORM().Bun().NewRaw(`UPDATE triggers SET org_id = NULL WHERE id = ?`, created.GetId()).Exec(context.Background())
 		require.NoError(t, err)
 	}
-	paused, err := env.repo.PauseTrigger(context.Background(), created.GetId(), core.TriggerPausedCreatorLeftOrg)
+	paused, err := store.NewTriggerWritesExtStore(env.repo.ORM()).SystemPauseTrigger(context.Background(), created.GetId(), core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 	require.True(t, paused)
 	got, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: created.GetId()}))
@@ -112,7 +113,7 @@ func TestSetTriggerEnabled_APersonsPauseClearsTheReason(t *testing.T) {
 	acme := "acme"
 	created, err := env.createIn(env.ctx, env.orgProject(t, &acme), nil)
 	require.NoError(t, err)
-	_, err = env.repo.PauseTrigger(context.Background(), created.GetId(), core.TriggerPausedCreatorLeftOrg)
+	_, err = store.NewTriggerWritesExtStore(env.repo.ORM()).SystemPauseTrigger(context.Background(), created.GetId(), core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: false}))

@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -104,7 +106,7 @@ func TestReconcilerRecoversAFireStuckPending(t *testing.T) {
 		Message:  "Audit the dependency tree.",
 		DaemonID: daemonID, Config: config, CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, trigger))
+	require.NoError(t, triggertest.Create(ctx, repo, trigger))
 
 	starter := &switchableStarter{}
 	firer := triggers.NewFirer(triggers.NewStores(repo), launch.New(launch.Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: discardRunRecorder{}, TaskQueue: "test-queue"}))
@@ -137,7 +139,7 @@ func TestReconcilerRecoversAFireStuckPending(t *testing.T) {
 	require.Equal(t, string(core.TriggerEventSkipped), skipped.Outcome,
 		"inside the bound the stuck fire reads as a start in flight: %+v", skipped)
 
-	reconciler := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Daemons: store.NewDaemonExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Orphans: store.NewAgentMessageExtStore(repo.ORM())})
+	reconciler := New(Deps{Store: repo, RunEvents: runevents.NewStore(repo.ORM()), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Daemons: store.NewDaemonExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Orphans: store.NewAgentMessageExtStore(repo.ORM())})
 
 	// Inside the bound the reconciler leaves it alone: it may yet start.
 	_, _ = reconciler.ReconcileRunningWorkflows(ctx)

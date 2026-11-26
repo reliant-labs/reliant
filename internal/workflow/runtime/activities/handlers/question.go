@@ -77,11 +77,12 @@ type QuestionCreateActivity struct {
 	repo      QuestionCreateStore
 	writer    QuestionWriter
 	questions QuestionsByStep
+	runEvents runevents.Store
 }
 
 // NewQuestionCreateActivity creates a new QuestionCreateActivity
-func NewQuestionCreateActivity(repo QuestionCreateStore, writer QuestionWriter, questions QuestionsByStep) *QuestionCreateActivity {
-	return &QuestionCreateActivity{repo: repo, writer: writer, questions: questions}
+func NewQuestionCreateActivity(repo QuestionCreateStore, writer QuestionWriter, questions QuestionsByStep, runEvents runevents.Store) *QuestionCreateActivity {
+	return &QuestionCreateActivity{repo: repo, writer: writer, questions: questions, runEvents: runEvents}
 }
 
 // Name returns the activity name for registration
@@ -259,7 +260,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 
 		// The run is now waiting on a human: a workflow-event "blocked"
 		// transition, recorded with the question it is blocked on.
-		if _, err := runevents.EmitBlocked(txCtx, a.repo, runevents.Blocked{
+		if _, err := runevents.EmitBlocked(txCtx, a.runEvents, runevents.Blocked{
 			ChatID:      input.ChatID,
 			WorkflowID:  input.WorkflowID,
 			BlockerID:   questionID,

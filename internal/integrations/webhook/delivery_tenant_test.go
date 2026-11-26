@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -53,7 +54,7 @@ nodes:
 	// Alice comes first in route order: accidentally sharing her pin would
 	// let Bob's trigger start. Two Alice rows also prove reuse within an owner.
 	for _, tc := range []struct{ id, owner string }{{"a-first", "alice"}, {"a-second", "alice"}, {"b-foreign", "bob"}} {
-		require.NoError(t, f.Repo.CreateTrigger(ctx, &core.Trigger{
+		require.NoError(t, triggertest.Create(ctx, f.Repo, &core.Trigger{
 			ID: tc.id, Name: tc.id, UserID: tc.owner, ProjectID: "receipt-project",
 			Kind: core.TriggerKindIntegration, Enabled: true, NoMachine: true,
 			Workflow: slug, WorkflowTrigger: &declaration,
@@ -119,7 +120,7 @@ func TestDeliveryInboxReplayCannotWidenSignedTwilioRoutes(t *testing.T) {
 			secrets.tokens[tc.connection], secrets.owners[tc.connection] = tc.token, tc.owner
 		}
 		connID := tc.connection
-		require.NoError(t, f.Repo.CreateTrigger(ctx, &core.Trigger{
+		require.NoError(t, triggertest.Create(ctx, f.Repo, &core.Trigger{
 			ID: tc.trigger, Name: tc.trigger, UserID: tc.owner, ProjectID: "receipt-project",
 			Kind: core.TriggerKindIntegration, Enabled: true, NoMachine: true, ConnectionID: &connID,
 			Workflow: "builtin://agent", Config: json.RawMessage(`{"integration":"twilio","events":["message.received"]}`),
@@ -162,7 +163,7 @@ func TestDeliveryInboxReplayCannotWidenSignedTwilioRoutes(t *testing.T) {
 	disabled, err := f.Repo.GetTrigger(ctx, "alice-disabled-after-receipt")
 	require.NoError(t, err)
 	disabled.Enabled = false
-	require.NoError(t, f.Repo.UpdateTrigger(ctx, disabled))
+	require.NoError(t, triggertest.Update(ctx, f.Repo, disabled))
 	f.drain(t, 1)
 	assert.Len(t, secrets.asked, calls, "relay uses receipt evidence without reopening connection secrets")
 	f.count(t, "SELECT count(*) FROM trigger_events", 1)

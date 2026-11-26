@@ -2458,10 +2458,6 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 	})
 }
 
-func (r *Repo) GetWorkflow(ctx context.Context, id string) (*Workflow, error) {
-	return store.LoadWorkflow(ctx, r.ORM(), id)
-}
-
 func (r *Repo) GetWorkflowByThread(ctx context.Context, chatID, thread string) (*Workflow, error) {
 	return store.FindWorkflowByThread(ctx, r.ORM(), chatID, thread)
 }
@@ -2500,7 +2496,7 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 		if !ok {
 			return nil // CAS failed, nothing to emit
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2563,7 +2559,7 @@ func (r *Repo) CancelStoppedSpawn(ctx context.Context, workflowID string) (bool,
 			return fmt.Errorf("resolve the mailboxes of stopped spawn %s: %w", workflowID, err)
 		}
 		if resolved > 0 {
-			if wf, err := r.GetWorkflow(txCtx, workflowID); err == nil && wf != nil && wf.ChatID != "" {
+			if wf, err := store.LoadWorkflow(txCtx, r.ORM(), workflowID); err == nil && wf != nil && wf.ChatID != "" {
 				r.announceAgentMailboxChanged(txCtx, wf.ChatID)
 			}
 		}
@@ -2598,7 +2594,7 @@ func (r *Repo) AbandonFailedWorkflowStart(ctx context.Context, id string) (bool,
 		if err != nil || !ok {
 			return err
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2622,7 +2618,7 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {
 			return err
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2645,7 +2641,7 @@ func (r *Repo) EnsureWorkflowRunning(ctx context.Context, workflowID, chatID str
 	if workflowID == "" {
 		return
 	}
-	wf, err := r.GetWorkflow(ctx, workflowID)
+	wf, err := store.LoadWorkflow(ctx, r.ORM(), workflowID)
 	if err != nil || wf == nil {
 		return // Workflow not tracked yet (WorkflowStatus "started" hasn't fired)
 	}
@@ -2766,13 +2762,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
 }
 
-// CreateTrigger inserts t with no org reads, in its own transaction.
-func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		return store.CreateTriggerInOrg(ctx, r.ORM(), t)
-	})
-}
-
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	if id == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
@@ -2785,14 +2774,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
-}
-
-// UpdateTrigger replaces the trigger's definition with no org reads, in its
-// own transaction: a write back of a row as it was (restoreActivation).
-func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		return store.UpdateTriggerInOrg(ctx, r.ORM(), t)
-	})
 }
 
 func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
@@ -2855,42 +2836,6 @@ func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID s
 		return nil
 	}
 	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
-}
-
-// PauseTrigger is the system pausing a trigger that can no longer launch as
-// written, recording reason (core.TriggerPaused*) on the row and the pause in
-// its change history. paused is false when the trigger was already paused (a
-// person did, or a concurrent fire got here first): nothing is written, so a
-// burst of refused fires records one pause.
-func (r *Repo) PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error) {
-	if id == "" {
-		return false, fmt.Errorf("trigger ID cannot be empty")
-	}
-	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
-			return err
-		}
-		before, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		if !before.Enabled {
-			return nil
-		}
-		if err := store.PauseTrigger(ctx, r.ORM(), id, reason); err != nil {
-			return err
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		paused = true
-		return store.RecordTriggerChange(ctx, r.ORM(), "pause", before, after)
-	})
-	if err != nil {
-		return false, err
-	}
-	return paused, nil
 }
 
 func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
@@ -2974,46 +2919,6 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 		return nil, false, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
-}
-
-// CreateRunEvent inserts the event, doing nothing when its DedupeKey
-// already exists. created=false means the transition was already recorded.
-func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
-	if ev == nil {
-		return false, fmt.Errorf("run event cannot be nil")
-	}
-	if ev.DedupeKey == "" {
-		// An empty key would collide every transition with every other one,
-		// and the second real event would silently read as a retry.
-		return false, fmt.Errorf("run event dedupe key cannot be empty")
-	}
-	return store.InsertRunEvent(ctx, r.ORM(), ev)
-}
-
-// HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
-// of the kind.
-func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
-	if userID == "" {
-		return false, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.HasEnabledTriggerOfKind(ctx, r.ORM(), userID, kind)
-}
-
-// LockChatForRunEvent row-locks the chat until the transaction ends.
-func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.LockChatForRunEvent(ctx, r.ORM(), chatID)
-}
-
-// CountOtherPendingBlockers counts the chat's pending approvals and
-// questions other than excludeID.
-func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
-	if chatID == "" {
-		return 0, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.CountOtherPendingBlockers(ctx, r.ORM(), chatID, excludeID)
 }
 
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.

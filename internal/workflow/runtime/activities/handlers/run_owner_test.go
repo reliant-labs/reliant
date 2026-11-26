@@ -22,7 +22,7 @@ import (
 
 func requireOwner(t *testing.T, repo *db.Repo, runID, want string) {
 	t.Helper()
-	run, err := repo.GetWorkflow(context.Background(), runID)
+	run, err := store.LoadWorkflow(context.Background(), repo.ORM(), runID)
 	require.NoError(t, err)
 	require.NotNil(t, run)
 	require.NotNil(t, run.OwnerUserID, "run %s was created without an owner", runID)

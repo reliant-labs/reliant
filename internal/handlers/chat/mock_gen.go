@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=f8e1657c4de537a8f504f02d1eb01d36cd01db1117fd9963aff98f1d27a39125
+// forge:hash=9caa28b42901e17fd2454755e586851f65ec146d312205cb8730cd70620a6f70
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -327,7 +327,6 @@ type MockRepository struct {
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	UpdateChatFunc                                           func(context.Context, *db.Chat) error
-	GetWorkflowFunc                                          func(context.Context, string) (*db.Workflow, error)
 	UpdateWorkflowStatusFunc                                 func(context.Context, string, db.WorkflowStatus) error
 	CompareAndSwapWorkflowStatusFunc                         func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
 	DeleteWorkflowCheckpointFunc                             func(context.Context, string) error
@@ -1182,15 +1181,6 @@ func (m *MockRepository) UpdateChat(ctx context.Context, chat *db.Chat) error {
 		return m.UpdateChatFunc(ctx, chat)
 	}
 	return contractkit.MockNotSet("MockRepository", "UpdateChat")
-}
-
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockRepository) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflow")
 }
 
 // UpdateWorkflowStatus records the call and delegates to UpdateWorkflowStatusFunc when set.

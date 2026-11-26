@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // Access-gated routing is a security boundary: an event about a repository
@@ -32,7 +33,7 @@ func accessTrigger(t *testing.T, repo *Repo, userID, integration string, enabled
 		Kind: core.TriggerKindIntegration, Enabled: enabled, Workflow: "builtin://agent", Message: "go",
 		DaemonID: "d", Config: cfg, ConnectionID: connectionID, CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(context.Background(), tr))
+	require.NoError(t, triggertest.Create(context.Background(), repo, tr))
 	return tr
 }
 

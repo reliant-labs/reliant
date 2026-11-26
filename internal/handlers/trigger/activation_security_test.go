@@ -136,11 +136,6 @@ func (r *approvalBarrierRepo) wait() {
 	r.once.Do(func() { close(r.atWrite); <-r.release })
 }
 
-func (r *approvalBarrierRepo) CreateTrigger(ctx context.Context, tr *core.Trigger) error {
-	r.wait()
-	return r.Repository.CreateTrigger(ctx, tr)
-}
-
 // CreateTriggerInOrg is the write an activation makes since triggers belong
 // to an org (#2537).
 func (r *approvalBarrierRepo) CreateTriggerInOrg(ctx context.Context, tr *core.Trigger, reads ...db.OrgRead) error {

@@ -76,6 +76,9 @@ type Deps struct {
 	// Chats reads a chat's owner, activity, main thread and run, with no
 	// owner check. store.ChatsWithActivityExtStore satisfies it.
 	Chats Chats
+	// RunEvents records a repaired run's terminal event, inside the repair's
+	// transaction (runevents.NewStore).
+	RunEvents runevents.Store
 }
 
 // Chats reads a chat with its computed state.
@@ -136,8 +139,6 @@ type ReconcilerStore interface {
 	handlers.ChatTransitioner
 	handlers.TransitionMessageWriter
 	handlers.WorkflowErrorWriter
-	// runevents.EmitTerminal, inside the terminal transition's transaction.
-	runevents.Store
 	// db.UpsertToolCallStatus, for the stranded and backgrounded calls.
 	db.ToolCallStatusStore
 }

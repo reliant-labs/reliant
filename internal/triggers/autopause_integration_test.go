@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -54,11 +55,11 @@ func newOrgFireFixture(t *testing.T, projectOrg, triggerOrg *string) *fireFixtur
 		tr.Presets = nil
 		tr.Params = map[string]any{"model": map[string]any{"id": "mock"}}
 	})
-	require.NoError(t, repo.CreateTrigger(ctx, trigger))
+	require.NoError(t, triggertest.Create(ctx, repo, trigger))
 
 	starter := &flakyStarter{}
 	launcher := launch.New(launch.Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
-	firer := NewFirer(NewStores(repo), launcher).WithAutoPause(NewAutoPause(repo, nil))
+	firer := NewFirer(NewStores(repo), launcher).WithAutoPause(NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
 	return &fireFixture{repo: repo, starter: starter, firer: firer, trigger: trigger}
 }
 
