@@ -599,6 +599,10 @@
       "destination": "/forge/observability/site-insights"
     },
     {
+      "source": "/features/remote-daemons",
+      "destination": "/machines/overview"
+    },
+    {
       "source": "/features/deploy-and-host",
       "destination": "/forge/overview"
     },

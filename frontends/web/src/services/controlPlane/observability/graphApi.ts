@@ -4,7 +4,8 @@ import {
   GraphNodeKind, GraphEdgeKind, GraphEvidenceKind, ObservabilityService,
   type GraphCompleteness, type GraphHistogram,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { obsClient } from "./obsClient";
+import { getControlPlaneClient } from "../client";
+import { obsCall } from "./obsInterceptors";
 import { msOf, wireScope } from "./api";
 import type { CatalogRequest, GraphEdge, GraphNode, GraphQuality, GraphRequest, RPCCatalog, ServiceGraph } from "./graphTypes";
 
@@ -36,11 +37,11 @@ function quality(q?: GraphCompleteness): GraphQuality | null {
 }
 
 export async function getServiceGraph(req: GraphRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ServiceGraph> {
-  const res = await obsClient(ObservabilityService, transport).getServiceGraph({
+  const res = await getControlPlaneClient(ObservabilityService, transport).getServiceGraph({
     scope: wireScope(req, req.window, req.services), rpcIds: req.rpcIds, rpcService: req.rpcService ?? "", includeInternal: req.includeInternal, maxEdges: 500,
     edgeKinds: [GraphEdgeKind.SYNC, GraphEdgeKind.DATABASE, GraphEdgeKind.EXTERNAL, GraphEdgeKind.ASYNC_SEND,
       GraphEdgeKind.ASYNC_CONSUME, ...(req.includeInternal ? [GraphEdgeKind.INTERNAL] : []), ...(req.includeDeclared ? [GraphEdgeKind.DECLARED] : [])],
-  }, options);
+  }, obsCall(options));
   return {
     nodes: res.nodes.map((n) => ({ id: n.id, envId: n.envId, kind: NODE_KIND[n.kind] ?? "unknown", label: n.label,
       parentId: n.parentNodeId, rpcId: n.rpcId, sourceUnavailableReason: n.sourceUnavailableReason })),
@@ -59,9 +60,9 @@ export async function getServiceGraph(req: GraphRequest, options: { signal?: Abo
 }
 
 export async function getServiceGraphCatalog(req: CatalogRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<RPCCatalog> {
-  const res = await obsClient(ObservabilityService, transport).getServiceGraphCatalog({
+  const res = await getControlPlaneClient(ObservabilityService, transport).getServiceGraphCatalog({
     scope: wireScope(req, req.window, req.services), rpcService: req.rpcService ?? "", rpcIds: req.rpcIds ?? [], maxMethods: 500,
-  }, options);
+  }, obsCall(options));
   return {
     methods: res.methods.map((m) => ({ id: m.rpcId, service: m.rpcService, method: m.method,
       processIds: m.processNodeIds, evidence: graphEvidence(m.evidence), observedCount: m.observedCount,
