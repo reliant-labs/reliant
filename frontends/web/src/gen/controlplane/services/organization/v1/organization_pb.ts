@@ -29,7 +29,152 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/organization/v1/organization.proto.
  */
 export const file_services_organization_v1_organization: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9vcmdhbml6YXRpb24vdjEvb3JnYW5pemF0aW9uLnByb3RvEg9jb250cm9scGxhbmUudjEi6QEKFUdpdEh1YkFwcEluc3RhbGxhdGlvbhIXCg9pbnN0YWxsYXRpb25faWQYASABKAMSDgoGb3JnX2lkGAIgASgJEhUKDWFjY291bnRfbG9naW4YAyABKAkSFAoMYWNjb3VudF90eXBlGAQgASgJEhkKEWxpbmtlZF9ieV91c2VyX2lkGAUgASgJEi0KCWxpbmtlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMc3VzcGVuZGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCI2ChxTdGFydEdpdEh1YkFwcEluc3RhbGxSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBIjQKHVN0YXJ0R2l0SHViQXBwSW5zdGFsbFJlc3BvbnNlEhMKC2luc3RhbGxfdXJsGAEgASgJIn8KIExpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb25SZXF1ZXN0EiAKD2luc3RhbGxhdGlvbl9pZBgBIAEoA0IHukgEIgIgABIZCgVzdGF0ZRgCIAEoCUIKgAEBukgEcgIQARITCgZvcmdfaWQYAyABKAlIAIgBAUIJCgdfb3JnX2lkImEKIUxpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb25SZXNwb25zZRI8CgxpbnN0YWxsYXRpb24YASABKAsyJi5jb250cm9scGxhbmUudjEuR2l0SHViQXBwSW5zdGFsbGF0aW9uIjsKIUxpc3RHaXRIdWJBcHBJbnN0YWxsYXRpb25zUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBASJjCiJMaXN0R2l0SHViQXBwSW5zdGFsbGF0aW9uc1Jlc3BvbnNlEj0KDWluc3RhbGxhdGlvbnMYASADKAsyJi5jb250cm9scGxhbmUudjEuR2l0SHViQXBwSW5zdGFsbGF0aW9uIl4KIlVubGlua0dpdEh1YkFwcEluc3RhbGxhdGlvblJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESIAoPaW5zdGFsbGF0aW9uX2lkGAIgASgDQge6SAQiAiAAIiUKI1VubGlua0dpdEh1YkFwcEluc3RhbGxhdGlvblJlc3BvbnNlIrMBCglPcmdNZW1iZXISDwoHdXNlcl9pZBgBIAEoCRINCgVlbWFpbBgCIAEoCRIMCgRuYW1lGAMgASgJEhIKCmF2YXRhcl91cmwYBCABKAkSDAoEcm9sZRgFIAEoCRItCglqb2luZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmlzX2ZvdW5kZXIYByABKAgSEwoLZXh0ZXJuYWxfaWQYCCABKAkiSAoJU2VhdFVzYWdlEg8KB21lbWJlcnMYASABKAUSGwoTcGVuZGluZ19pbnZpdGF0aW9ucxgCIAEoBRINCgVsaW1pdBgDIAEoBSKQAgoNT3JnSW52aXRhdGlvbhIKCgJpZBgBIAEoCRINCgVlbWFpbBgCIAEoCRIMCgRyb2xlGAMgASgJEhoKEmludml0ZWRfYnlfdXNlcl9pZBgEIAEoCRIYChBpbnZpdGVkX2J5X2VtYWlsGAUgASgJEg4KBnN0YXR1cxgGIAEoCRIuCgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpleHBpcmVzX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIwCgxsYXN0X3NlbnRfYXQYCSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkUKGUNyZWF0ZU9yZ2FuaXphdGlvblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIRCgRzbHVnGAIgASgJSACIAQFCBwoFX3NsdWciUwoaQ3JlYXRlT3JnYW5pemF0aW9uUmVzcG9uc2USNQoMb3JnYW5pemF0aW9uGAEgASgLMh8uY29udHJvbHBsYW5lLnYxLk15T3JnYW5pemF0aW9uIlMKEkxpc3RNZW1iZXJzUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIRCglwYWdlX3NpemUYAiABKAUSEgoKcGFnZV90b2tlbhgDIAEoCSKGAQoTTGlzdE1lbWJlcnNSZXNwb25zZRIrCgdtZW1iZXJzGAEgAygLMhouY29udHJvbHBsYW5lLnYxLk9yZ01lbWJlchIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSKQoFc2VhdHMYAyABKAsyGi5jb250cm9scGxhbmUudjEuU2VhdFVzYWdlIkoKE0ludml0ZU1lbWJlclJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESDQoFZW1haWwYAiABKAkSDAoEcm9sZRgDIAEoCSKCAQoUSW52aXRlTWVtYmVyUmVzcG9uc2USMgoKaW52aXRhdGlvbhgBIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5PcmdJbnZpdGF0aW9uEhIKCmVtYWlsX3NlbnQYAiABKAgSEgoKYWNjZXB0X3VybBgDIAEoCRIOCgZyZXNlbnQYBCABKAgiiwEKFkxpc3RJbnZpdGF0aW9uc1JlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESHQoQaW5jbHVkZV9yZXNvbHZlZBgCIAEoCEgAiAEBEhEKCXBhZ2Vfc2l6ZRgDIAEoBRISCgpwYWdlX3Rva2VuGAQgASgJQhMKEV9pbmNsdWRlX3Jlc29sdmVkImcKF0xpc3RJbnZpdGF0aW9uc1Jlc3BvbnNlEjMKC2ludml0YXRpb25zGAEgAygLMh4uY29udHJvbHBsYW5lLnYxLk9yZ0ludml0YXRpb24SFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIkgKF1Jldm9rZUludml0YXRpb25SZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEhUKDWludml0YXRpb25faWQYAiABKAkiGgoYUmV2b2tlSW52aXRhdGlvblJlc3BvbnNlIiUKFEdldEludml0YXRpb25SZXF1ZXN0Eg0KBXRva2VuGAEgASgJItsBChVHZXRJbnZpdGF0aW9uUmVzcG9uc2USEAoIb3JnX25hbWUYASABKAkSDAoEcm9sZRgCIAEoCRIXCg9pbnZpdGVkX2J5X25hbWUYAyABKAkSGgoSaW52aXRlZV9lbWFpbF9oaW50GAQgASgJEg4KBnN0YXR1cxgFIAEoCRIuCgpleHBpcmVzX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1lbWFpbF9tYXRjaGVzGAcgASgIEhYKDmFscmVhZHlfbWVtYmVyGAggASgIIigKF0FjY2VwdEludml0YXRpb25SZXF1ZXN0Eg0KBXRva2VuGAEgASgJInkKGEFjY2VwdEludml0YXRpb25SZXNwb25zZRI1Cgxvcmdhbml6YXRpb24YASABKAsyHy5jb250cm9scGxhbmUudjEuTXlPcmdhbml6YXRpb24SDwoHdXNlcl9pZBgCIAEoCRIVCg1pbnZpdGF0aW9uX2lkGAMgASgJIj4KE1JlbW92ZU1lbWJlclJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESDwoHdXNlcl9pZBgCIAEoCSIzChRSZW1vdmVNZW1iZXJSZXNwb25zZRIbChNyZXZva2VkX3Rva2VuX2NvdW50GAEgASgFIjIKGExlYXZlT3JnYW5pemF0aW9uUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBASJhChlMZWF2ZU9yZ2FuaXphdGlvblJlc3BvbnNlEhYKDmRlZmF1bHRfb3JnX2lkGAEgASgJEg8KB3VzZXJfaWQYAiABKAkSGwoTcmV2b2tlZF90b2tlbl9jb3VudBgDIAEoBSJQChdVcGRhdGVNZW1iZXJSb2xlUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIPCgd1c2VyX2lkGAIgASgJEgwKBHJvbGUYAyABKAkiVgoYVXBkYXRlTWVtYmVyUm9sZVJlc3BvbnNlEioKBm1lbWJlchgBIAEoCzIaLmNvbnRyb2xwbGFuZS52MS5PcmdNZW1iZXISDgoGc2NvcGVzGAIgAygJIpECCg5NeU9yZ2FuaXphdGlvbhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEgwKBHNsdWcYAyABKAkSDAoEcm9sZRgEIAEoCRISCgppc19kZWZhdWx0GAUgASgIEhAKCGlzX293bmVyGAYgASgIEi4KCmNyZWF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi0KCWpvaW5lZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJgoZY2FuX2NyZWF0ZV9ob3N0ZWRfcHJvamVjdBgJIAEoCEgAiAEBQhwKGl9jYW5fY3JlYXRlX2hvc3RlZF9wcm9qZWN0IhwKGkxpc3RNeU9yZ2FuaXphdGlvbnNSZXF1ZXN0Ip8BChtMaXN0TXlPcmdhbml6YXRpb25zUmVzcG9uc2USNgoNb3JnYW5pemF0aW9ucxgBIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5NeU9yZ2FuaXphdGlvbhIWCg5kZWZhdWx0X29yZ19pZBgCIAEoCUoECAMQBEoECAQQBVIOYmlsbGluZ19vcmdfaWRSFGJpbGxpbmdfb3JnX2V4cGxpY2l0Ii8KHVNldERlZmF1bHRPcmdhbml6YXRpb25SZXF1ZXN0Eg4KBm9yZ19pZBgBIAEoCSI4Ch5TZXREZWZhdWx0T3JnYW5pemF0aW9uUmVzcG9uc2USFgoOZGVmYXVsdF9vcmdfaWQYASABKAkiTAohTW92ZUZyZWVIb3N0aW5nRGVzaWduYXRpb25SZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEg8KB2RyeV9ydW4YAiABKAgi5wIKIk1vdmVGcmVlSG9zdGluZ0Rlc2lnbmF0aW9uUmVzcG9uc2USEwoLZnJvbV9vcmdfaWQYASABKAkSEQoJdG9fb3JnX2lkGAIgASgJEjwKDnN0b3BwaW5nX3NpdGVzGAMgAygLMiQuY29udHJvbHBsYW5lLnYxLkZyZWVIb3N0aW5nTW92ZVNpdGUSOgoMc2VydmVkX3NpdGVzGAQgAygLMiQuY29udHJvbHBsYW5lLnYxLkZyZWVIb3N0aW5nTW92ZVNpdGUSPAoOdW5zZXJ2ZWRfc2l0ZXMYBSADKAsyJC5jb250cm9scGxhbmUudjEuRnJlZUhvc3RpbmdNb3ZlU2l0ZRIYChBjb29sZG93bl9hcHBsaWVzGAYgASgIEjgKFG5leHRfbW92ZV9hbGxvd2VkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBINCgVtb3ZlZBgIIAEoCCJ1ChNGcmVlSG9zdGluZ01vdmVTaXRlEhUKDWRlcGxveW1lbnRfaWQYASABKAkSDgoGb3JnX2lkGAIgASgJEg8KB3Byb2plY3QYAyABKAkSCwoDZW52GAQgASgJEgwKBG5hbWUYBSABKAkSCwoDdXJsGAYgASgJMpEYChNPcmdhbml6YXRpb25TZXJ2aWNlEnsKE0xpc3RNeU9yZ2FuaXphdGlvbnMSKy5jb250cm9scGxhbmUudjEuTGlzdE15T3JnYW5pemF0aW9uc1JlcXVlc3QaLC5jb250cm9scGxhbmUudjEuTGlzdE15T3JnYW5pemF0aW9uc1Jlc3BvbnNlIgmQAgGiuxgCCAES3QEKFlNldERlZmF1bHRPcmdhbml6YXRpb24SLi5jb250cm9scGxhbmUudjEuU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlcXVlc3QaLy5jb250cm9scGxhbmUudjEuU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlc3BvbnNlImKiuxheCAE6WjpYYSBwZXJzb25hbCBwcmVmZXJlbmNlIGFib3V0IHdoaWNoIG9yZyByZXF1ZXN0cyBkZWZhdWx0IHRvOyBpdCBjaGFuZ2VzIG5vdGhpbmcgaW4gYW55IG9yZxL+AQoSQ3JlYXRlT3JnYW5pemF0aW9uEiouY29udHJvbHBsYW5lLnYxLkNyZWF0ZU9yZ2FuaXphdGlvblJlcXVlc3QaKy5jb250cm9scGxhbmUudjEuQ3JlYXRlT3JnYW5pemF0aW9uUmVzcG9uc2UijgGiuxiJAQgBOoQBCgpjcmVhdGVfb3JnEj4KBm1lbWJlchIYcmVzcG9uc2Uub3JnYW5pemF0aW9uLmlkGhpyZXNwb25zZS5vcmdhbml6YXRpb24ubmFtZSIYcmVzcG9uc2Uub3JnYW5pemF0aW9uLmlkKhpyZXNwb25zZS5vcmdhbml6YXRpb24uc2x1ZzACEmUKC0xpc3RNZW1iZXJzEiMuY29udHJvbHBsYW5lLnYxLkxpc3RNZW1iZXJzUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5MaXN0TWVtYmVyc1Jlc3BvbnNlIguQAgGiuxgECAEYARKwAQoMSW52aXRlTWVtYmVyEiQuY29udHJvbHBsYW5lLnYxLkludml0ZU1lbWJlclJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuSW52aXRlTWVtYmVyUmVzcG9uc2UiU6K7GE8IATpLCgZpbnZpdGUSIAoGbWVtYmVyEhZyZXNwb25zZS5pbnZpdGF0aW9uLmlkIgZvcmdfaWQqBHJvbGUqD3Jlc3BvbnNlLnJlc2VudDACEnEKD0xpc3RJbnZpdGF0aW9ucxInLmNvbnRyb2xwbGFuZS52MS5MaXN0SW52aXRhdGlvbnNSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLkxpc3RJbnZpdGF0aW9uc1Jlc3BvbnNlIguQAgGiuxgECAEYARKjAQoQUmV2b2tlSW52aXRhdGlvbhIoLmNvbnRyb2xwbGFuZS52MS5SZXZva2VJbnZpdGF0aW9uUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5SZXZva2VJbnZpdGF0aW9uUmVzcG9uc2UiOqK7GDYIAToyCg1yZXZva2VfaW52aXRlEhcKBm1lbWJlchINaW52aXRhdGlvbl9pZCIGb3JnX2lkMAISaAoNR2V0SW52aXRhdGlvbhIlLmNvbnRyb2xwbGFuZS52MS5HZXRJbnZpdGF0aW9uUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5HZXRJbnZpdGF0aW9uUmVzcG9uc2UiCKK7GAQIARgBEuMBChBBY2NlcHRJbnZpdGF0aW9uEiguY29udHJvbHBsYW5lLnYxLkFjY2VwdEludml0YXRpb25SZXF1ZXN0GikuY29udHJvbHBsYW5lLnYxLkFjY2VwdEludml0YXRpb25SZXNwb25zZSJ6orsYdggBOnIKBGpvaW4SGgoGbWVtYmVyEhByZXNwb25zZS51c2VyX2lkIhhyZXNwb25zZS5vcmdhbml6YXRpb24uaWQqGnJlc3BvbnNlLm9yZ2FuaXphdGlvbi5yb2xlKhZyZXNwb25zZS5pbnZpdGF0aW9uX2lkMAISigEKDFJlbW92ZU1lbWJlchIkLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVNZW1iZXJSZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLlJlbW92ZU1lbWJlclJlc3BvbnNlIi2iuxgpCAE6JQoGcmVtb3ZlEhEKBm1lbWJlchIHdXNlcl9pZCIGb3JnX2lkMAISoQEKEUxlYXZlT3JnYW5pemF0aW9uEikuY29udHJvbHBsYW5lLnYxLkxlYXZlT3JnYW5pemF0aW9uUmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5MZWF2ZU9yZ2FuaXphdGlvblJlc3BvbnNlIjWiuxgxCAE6LQoFbGVhdmUSGgoGbWVtYmVyEhByZXNwb25zZS51c2VyX2lkIgZvcmdfaWQwAhKeAQoQVXBkYXRlTWVtYmVyUm9sZRIoLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVNZW1iZXJSb2xlUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVNZW1iZXJSb2xlUmVzcG9uc2UiNaK7GDEIATotCghzZXRfcm9sZRIRCgZtZW1iZXISB3VzZXJfaWQiBm9yZ19pZCoEcm9sZTACEtsBChpNb3ZlRnJlZUhvc3RpbmdEZXNpZ25hdGlvbhIyLmNvbnRyb2xwbGFuZS52MS5Nb3ZlRnJlZUhvc3RpbmdEZXNpZ25hdGlvblJlcXVlc3QaMy5jb250cm9scGxhbmUudjEuTW92ZUZyZWVIb3N0aW5nRGVzaWduYXRpb25SZXNwb25zZSJUorsYUAgBOkwKEW1vdmVfZnJlZV9ob3N0aW5nEhkKA29yZxIScmVzcG9uc2UudG9fb3JnX2lkIgZvcmdfaWQqFHJlc3BvbnNlLmZyb21fb3JnX2lkEtcBChVTdGFydEdpdEh1YkFwcEluc3RhbGwSLS5jb250cm9scGxhbmUudjEuU3RhcnRHaXRIdWJBcHBJbnN0YWxsUmVxdWVzdBouLmNvbnRyb2xwbGFuZS52MS5TdGFydEdpdEh1YkFwcEluc3RhbGxSZXNwb25zZSJforsYWwgBOlc6VXJldHVybnMgYSBzaWduZWQgbGluayBhbmQgY2hhbmdlcyBub3RoaW5nOyBMaW5rR2l0SHViQXBwSW5zdGFsbGF0aW9uIHJlY29yZHMgdGhlIGxpbmsSoQIKGUxpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb24SMS5jb250cm9scGxhbmUudjEuTGlua0dpdEh1YkFwcEluc3RhbGxhdGlvblJlcXVlc3QaMi5jb250cm9scGxhbmUudjEuTGlua0dpdEh1YkFwcEluc3RhbGxhdGlvblJlc3BvbnNlIpwBorsYlwEIATqSAQoPbGlua19naXRodWJfYXBwEmEKE2dpdGh1Yl9pbnN0YWxsYXRpb24SJXJlc3BvbnNlLmluc3RhbGxhdGlvbi5pbnN0YWxsYXRpb25faWQaI3Jlc3BvbnNlLmluc3RhbGxhdGlvbi5hY2NvdW50X2xvZ2luIhxyZXNwb25zZS5pbnN0YWxsYXRpb24ub3JnX2lkEpIBChpMaXN0R2l0SHViQXBwSW5zdGFsbGF0aW9ucxIyLmNvbnRyb2xwbGFuZS52MS5MaXN0R2l0SHViQXBwSW5zdGFsbGF0aW9uc1JlcXVlc3QaMy5jb250cm9scGxhbmUudjEuTGlzdEdpdEh1YkFwcEluc3RhbGxhdGlvbnNSZXNwb25zZSILkAIBorsYBAgBGAES1QEKG1VubGlua0dpdEh1YkFwcEluc3RhbGxhdGlvbhIzLmNvbnRyb2xwbGFuZS52MS5VbmxpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb25SZXF1ZXN0GjQuY29udHJvbHBsYW5lLnYxLlVubGlua0dpdEh1YkFwcEluc3RhbGxhdGlvblJlc3BvbnNlIkuiuxhHCAE6QwoRdW5saW5rX2dpdGh1Yl9hcHASJgoTZ2l0aHViX2luc3RhbGxhdGlvbhIPaW5zdGFsbGF0aW9uX2lkIgZvcmdfaWRC3wEKE2NvbS5jb250cm9scGxhbmUudjFCEU9yZ2FuaXphdGlvblByb3RvUAFaWGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9vcmdhbml6YXRpb24vdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CitzZXJ2aWNlcy9vcmdhbml6YXRpb24vdjEvb3JnYW5pemF0aW9uLnByb3RvEg9jb250cm9scGxhbmUudjEiNQobR2V0TXlPcmdFbnRpdGxlbWVudHNSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBIlgKHEdldE15T3JnRW50aXRsZW1lbnRzUmVzcG9uc2USOAoIZmVhdHVyZXMYASADKAsyJi5jb250cm9scGxhbmUudjEuT3JnRmVhdHVyZUVudGl0bGVtZW50IpsBChVPcmdGZWF0dXJlRW50aXRsZW1lbnQSDwoHZmVhdHVyZRgBIAEoCRIPCgdlbmFibGVkGAIgASgIEjAKDHJlcXVlc3RlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZ3JhbnRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiZwocUmVxdWVzdE9yZ0VudGl0bGVtZW50UmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIXCgdmZWF0dXJlGAIgASgJQga6SAPIAQESFgoEbm90ZRgDIAEoCUIIukgFcgMY6AcikAEKHVJlcXVlc3RPcmdFbnRpdGxlbWVudFJlc3BvbnNlEjsKC2VudGl0bGVtZW50GAEgASgLMiYuY29udHJvbHBsYW5lLnYxLk9yZ0ZlYXR1cmVFbnRpdGxlbWVudBIZChFhbHJlYWR5X3JlcXVlc3RlZBgCIAEoCBIXCg9hbHJlYWR5X2VuYWJsZWQYAyABKAgi6QEKFUdpdEh1YkFwcEluc3RhbGxhdGlvbhIXCg9pbnN0YWxsYXRpb25faWQYASABKAMSDgoGb3JnX2lkGAIgASgJEhUKDWFjY291bnRfbG9naW4YAyABKAkSFAoMYWNjb3VudF90eXBlGAQgASgJEhkKEWxpbmtlZF9ieV91c2VyX2lkGAUgASgJEi0KCWxpbmtlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMc3VzcGVuZGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCI2ChxTdGFydEdpdEh1YkFwcEluc3RhbGxSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBIkgKHVN0YXJ0R2l0SHViQXBwSW5zdGFsbFJlc3BvbnNlEhMKC2luc3RhbGxfdXJsGAEgASgJEhIKBXN0YXRlGAIgASgJQgOAAQEifwogTGlua0dpdEh1YkFwcEluc3RhbGxhdGlvblJlcXVlc3QSIAoPaW5zdGFsbGF0aW9uX2lkGAEgASgDQge6SAQiAiAAEhkKBXN0YXRlGAIgASgJQgqAAQG6SARyAhABEhMKBm9yZ19pZBgDIAEoCUgAiAEBQgkKB19vcmdfaWQiYQohTGlua0dpdEh1YkFwcEluc3RhbGxhdGlvblJlc3BvbnNlEjwKDGluc3RhbGxhdGlvbhgBIAEoCzImLmNvbnRyb2xwbGFuZS52MS5HaXRIdWJBcHBJbnN0YWxsYXRpb24iOwohTGlzdEdpdEh1YkFwcEluc3RhbGxhdGlvbnNSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBImMKIkxpc3RHaXRIdWJBcHBJbnN0YWxsYXRpb25zUmVzcG9uc2USPQoNaW5zdGFsbGF0aW9ucxgBIAMoCzImLmNvbnRyb2xwbGFuZS52MS5HaXRIdWJBcHBJbnN0YWxsYXRpb24i+AEKHUxpbmthYmxlR2l0SHViQXBwSW5zdGFsbGF0aW9uEhcKD2luc3RhbGxhdGlvbl9pZBgBIAEoAxIVCg1hY2NvdW50X2xvZ2luGAIgASgJEhQKDGFjY291bnRfdHlwZRgDIAEoCRISCgphdmF0YXJfdXJsGAQgASgJEhwKFHJlcG9zaXRvcnlfc2VsZWN0aW9uGAUgASgJEhMKC2xpbmtlZF9oZXJlGAYgASgIEhgKEGxpbmtlZF9lbHNld2hlcmUYByABKAgSMAoMc3VzcGVuZGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJDCilMaXN0TGlua2FibGVHaXRIdWJBcHBJbnN0YWxsYXRpb25zUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBASJzCipMaXN0TGlua2FibGVHaXRIdWJBcHBJbnN0YWxsYXRpb25zUmVzcG9uc2USRQoNaW5zdGFsbGF0aW9ucxgBIAMoCzIuLmNvbnRyb2xwbGFuZS52MS5MaW5rYWJsZUdpdEh1YkFwcEluc3RhbGxhdGlvbiJeCiJVbmxpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb25SZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEiAKD2luc3RhbGxhdGlvbl9pZBgCIAEoA0IHukgEIgIgACIlCiNVbmxpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb25SZXNwb25zZSKzAQoJT3JnTWVtYmVyEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSDAoEbmFtZRgDIAEoCRISCgphdmF0YXJfdXJsGAQgASgJEgwKBHJvbGUYBSABKAkSLQoJam9pbmVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBISCgppc19mb3VuZGVyGAcgASgIEhMKC2V4dGVybmFsX2lkGAggASgJIkgKCVNlYXRVc2FnZRIPCgdtZW1iZXJzGAEgASgFEhsKE3BlbmRpbmdfaW52aXRhdGlvbnMYAiABKAUSDQoFbGltaXQYAyABKAUikAIKDU9yZ0ludml0YXRpb24SCgoCaWQYASABKAkSDQoFZW1haWwYAiABKAkSDAoEcm9sZRgDIAEoCRIaChJpbnZpdGVkX2J5X3VzZXJfaWQYBCABKAkSGAoQaW52aXRlZF9ieV9lbWFpbBgFIAEoCRIOCgZzdGF0dXMYBiABKAkSLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF9zZW50X2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJFChlDcmVhdGVPcmdhbml6YXRpb25SZXF1ZXN0EgwKBG5hbWUYASABKAkSEQoEc2x1ZxgCIAEoCUgAiAEBQgcKBV9zbHVnIlMKGkNyZWF0ZU9yZ2FuaXphdGlvblJlc3BvbnNlEjUKDG9yZ2FuaXphdGlvbhgBIAEoCzIfLmNvbnRyb2xwbGFuZS52MS5NeU9yZ2FuaXphdGlvbiJTChJMaXN0TWVtYmVyc1JlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESEQoJcGFnZV9zaXplGAIgASgFEhIKCnBhZ2VfdG9rZW4YAyABKAkihgEKE0xpc3RNZW1iZXJzUmVzcG9uc2USKwoHbWVtYmVycxgBIAMoCzIaLmNvbnRyb2xwbGFuZS52MS5PcmdNZW1iZXISFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEikKBXNlYXRzGAMgASgLMhouY29udHJvbHBsYW5lLnYxLlNlYXRVc2FnZSJKChNJbnZpdGVNZW1iZXJSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEg0KBWVtYWlsGAIgASgJEgwKBHJvbGUYAyABKAkiggEKFEludml0ZU1lbWJlclJlc3BvbnNlEjIKCmludml0YXRpb24YASABKAsyHi5jb250cm9scGxhbmUudjEuT3JnSW52aXRhdGlvbhISCgplbWFpbF9zZW50GAIgASgIEhIKCmFjY2VwdF91cmwYAyABKAkSDgoGcmVzZW50GAQgASgIIosBChZMaXN0SW52aXRhdGlvbnNSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEh0KEGluY2x1ZGVfcmVzb2x2ZWQYAiABKAhIAIgBARIRCglwYWdlX3NpemUYAyABKAUSEgoKcGFnZV90b2tlbhgEIAEoCUITChFfaW5jbHVkZV9yZXNvbHZlZCJnChdMaXN0SW52aXRhdGlvbnNSZXNwb25zZRIzCgtpbnZpdGF0aW9ucxgBIAMoCzIeLmNvbnRyb2xwbGFuZS52MS5PcmdJbnZpdGF0aW9uEhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSJIChdSZXZva2VJbnZpdGF0aW9uUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIVCg1pbnZpdGF0aW9uX2lkGAIgASgJIhoKGFJldm9rZUludml0YXRpb25SZXNwb25zZSIlChRHZXRJbnZpdGF0aW9uUmVxdWVzdBINCgV0b2tlbhgBIAEoCSLbAQoVR2V0SW52aXRhdGlvblJlc3BvbnNlEhAKCG9yZ19uYW1lGAEgASgJEgwKBHJvbGUYAiABKAkSFwoPaW52aXRlZF9ieV9uYW1lGAMgASgJEhoKEmludml0ZWVfZW1haWxfaGludBgEIAEoCRIOCgZzdGF0dXMYBSABKAkSLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFQoNZW1haWxfbWF0Y2hlcxgHIAEoCBIWCg5hbHJlYWR5X21lbWJlchgIIAEoCCIoChdBY2NlcHRJbnZpdGF0aW9uUmVxdWVzdBINCgV0b2tlbhgBIAEoCSJ5ChhBY2NlcHRJbnZpdGF0aW9uUmVzcG9uc2USNQoMb3JnYW5pemF0aW9uGAEgASgLMh8uY29udHJvbHBsYW5lLnYxLk15T3JnYW5pemF0aW9uEg8KB3VzZXJfaWQYAiABKAkSFQoNaW52aXRhdGlvbl9pZBgDIAEoCSI+ChNSZW1vdmVNZW1iZXJSZXF1ZXN0EhYKBm9yZ19pZBgBIAEoCUIGukgDyAEBEg8KB3VzZXJfaWQYAiABKAkiMwoUUmVtb3ZlTWVtYmVyUmVzcG9uc2USGwoTcmV2b2tlZF90b2tlbl9jb3VudBgBIAEoBSIyChhMZWF2ZU9yZ2FuaXphdGlvblJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQEiYQoZTGVhdmVPcmdhbml6YXRpb25SZXNwb25zZRIWCg5kZWZhdWx0X29yZ19pZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEhsKE3Jldm9rZWRfdG9rZW5fY291bnQYAyABKAUiUAoXVXBkYXRlTWVtYmVyUm9sZVJlcXVlc3QSFgoGb3JnX2lkGAEgASgJQga6SAPIAQESDwoHdXNlcl9pZBgCIAEoCRIMCgRyb2xlGAMgASgJIlYKGFVwZGF0ZU1lbWJlclJvbGVSZXNwb25zZRIqCgZtZW1iZXIYASABKAsyGi5jb250cm9scGxhbmUudjEuT3JnTWVtYmVyEg4KBnNjb3BlcxgCIAMoCSKRAgoOTXlPcmdhbml6YXRpb24SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIMCgRzbHVnGAMgASgJEgwKBHJvbGUYBCABKAkSEgoKaXNfZGVmYXVsdBgFIAEoCBIQCghpc19vd25lchgGIAEoCBIuCgpjcmVhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBItCglqb2luZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEiYKGWNhbl9jcmVhdGVfaG9zdGVkX3Byb2plY3QYCSABKAhIAIgBAUIcChpfY2FuX2NyZWF0ZV9ob3N0ZWRfcHJvamVjdCIcChpMaXN0TXlPcmdhbml6YXRpb25zUmVxdWVzdCKfAQobTGlzdE15T3JnYW5pemF0aW9uc1Jlc3BvbnNlEjYKDW9yZ2FuaXphdGlvbnMYASADKAsyHy5jb250cm9scGxhbmUudjEuTXlPcmdhbml6YXRpb24SFgoOZGVmYXVsdF9vcmdfaWQYAiABKAlKBAgDEARKBAgEEAVSDmJpbGxpbmdfb3JnX2lkUhRiaWxsaW5nX29yZ19leHBsaWNpdCIvCh1TZXREZWZhdWx0T3JnYW5pemF0aW9uUmVxdWVzdBIOCgZvcmdfaWQYASABKAkiOAoeU2V0RGVmYXVsdE9yZ2FuaXphdGlvblJlc3BvbnNlEhYKDmRlZmF1bHRfb3JnX2lkGAEgASgJIkwKIU1vdmVGcmVlSG9zdGluZ0Rlc2lnbmF0aW9uUmVxdWVzdBIWCgZvcmdfaWQYASABKAlCBrpIA8gBARIPCgdkcnlfcnVuGAIgASgIIucCCiJNb3ZlRnJlZUhvc3RpbmdEZXNpZ25hdGlvblJlc3BvbnNlEhMKC2Zyb21fb3JnX2lkGAEgASgJEhEKCXRvX29yZ19pZBgCIAEoCRI8Cg5zdG9wcGluZ19zaXRlcxgDIAMoCzIkLmNvbnRyb2xwbGFuZS52MS5GcmVlSG9zdGluZ01vdmVTaXRlEjoKDHNlcnZlZF9zaXRlcxgEIAMoCzIkLmNvbnRyb2xwbGFuZS52MS5GcmVlSG9zdGluZ01vdmVTaXRlEjwKDnVuc2VydmVkX3NpdGVzGAUgAygLMiQuY29udHJvbHBsYW5lLnYxLkZyZWVIb3N0aW5nTW92ZVNpdGUSGAoQY29vbGRvd25fYXBwbGllcxgGIAEoCBI4ChRuZXh0X21vdmVfYWxsb3dlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDQoFbW92ZWQYCCABKAgidQoTRnJlZUhvc3RpbmdNb3ZlU2l0ZRIVCg1kZXBsb3ltZW50X2lkGAEgASgJEg4KBm9yZ19pZBgCIAEoCRIPCgdwcm9qZWN0GAMgASgJEgsKA2VudhgEIAEoCRIMCgRuYW1lGAUgASgJEgsKA3VybBgGIAEoCTL9GwoTT3JnYW5pemF0aW9uU2VydmljZRJ7ChNMaXN0TXlPcmdhbml6YXRpb25zEisuY29udHJvbHBsYW5lLnYxLkxpc3RNeU9yZ2FuaXphdGlvbnNSZXF1ZXN0GiwuY29udHJvbHBsYW5lLnYxLkxpc3RNeU9yZ2FuaXphdGlvbnNSZXNwb25zZSIJkAIBorsYAggBEt0BChZTZXREZWZhdWx0T3JnYW5pemF0aW9uEi4uY29udHJvbHBsYW5lLnYxLlNldERlZmF1bHRPcmdhbml6YXRpb25SZXF1ZXN0Gi8uY29udHJvbHBsYW5lLnYxLlNldERlZmF1bHRPcmdhbml6YXRpb25SZXNwb25zZSJiorsYXggBOlo6WGEgcGVyc29uYWwgcHJlZmVyZW5jZSBhYm91dCB3aGljaCBvcmcgcmVxdWVzdHMgZGVmYXVsdCB0bzsgaXQgY2hhbmdlcyBub3RoaW5nIGluIGFueSBvcmcS/gEKEkNyZWF0ZU9yZ2FuaXphdGlvbhIqLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVPcmdhbml6YXRpb25SZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU9yZ2FuaXphdGlvblJlc3BvbnNlIo4BorsYiQEIATqEAQoKY3JlYXRlX29yZxI+CgZtZW1iZXISGHJlc3BvbnNlLm9yZ2FuaXphdGlvbi5pZBoacmVzcG9uc2Uub3JnYW5pemF0aW9uLm5hbWUiGHJlc3BvbnNlLm9yZ2FuaXphdGlvbi5pZCoacmVzcG9uc2Uub3JnYW5pemF0aW9uLnNsdWcwAhJlCgtMaXN0TWVtYmVycxIjLmNvbnRyb2xwbGFuZS52MS5MaXN0TWVtYmVyc1JlcXVlc3QaJC5jb250cm9scGxhbmUudjEuTGlzdE1lbWJlcnNSZXNwb25zZSILkAIBorsYBAgBGAESsAEKDEludml0ZU1lbWJlchIkLmNvbnRyb2xwbGFuZS52MS5JbnZpdGVNZW1iZXJSZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLkludml0ZU1lbWJlclJlc3BvbnNlIlOiuxhPCAE6SwoGaW52aXRlEiAKBm1lbWJlchIWcmVzcG9uc2UuaW52aXRhdGlvbi5pZCIGb3JnX2lkKgRyb2xlKg9yZXNwb25zZS5yZXNlbnQwAhJxCg9MaXN0SW52aXRhdGlvbnMSJy5jb250cm9scGxhbmUudjEuTGlzdEludml0YXRpb25zUmVxdWVzdBooLmNvbnRyb2xwbGFuZS52MS5MaXN0SW52aXRhdGlvbnNSZXNwb25zZSILkAIBorsYBAgBGAESowEKEFJldm9rZUludml0YXRpb24SKC5jb250cm9scGxhbmUudjEuUmV2b2tlSW52aXRhdGlvblJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuUmV2b2tlSW52aXRhdGlvblJlc3BvbnNlIjqiuxg2CAE6MgoNcmV2b2tlX2ludml0ZRIXCgZtZW1iZXISDWludml0YXRpb25faWQiBm9yZ19pZDACEmgKDUdldEludml0YXRpb24SJS5jb250cm9scGxhbmUudjEuR2V0SW52aXRhdGlvblJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuR2V0SW52aXRhdGlvblJlc3BvbnNlIgiiuxgECAEYARLjAQoQQWNjZXB0SW52aXRhdGlvbhIoLmNvbnRyb2xwbGFuZS52MS5BY2NlcHRJbnZpdGF0aW9uUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5BY2NlcHRJbnZpdGF0aW9uUmVzcG9uc2UieqK7GHYIATpyCgRqb2luEhoKBm1lbWJlchIQcmVzcG9uc2UudXNlcl9pZCIYcmVzcG9uc2Uub3JnYW5pemF0aW9uLmlkKhpyZXNwb25zZS5vcmdhbml6YXRpb24ucm9sZSoWcmVzcG9uc2UuaW52aXRhdGlvbl9pZDACEooBCgxSZW1vdmVNZW1iZXISJC5jb250cm9scGxhbmUudjEuUmVtb3ZlTWVtYmVyUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVNZW1iZXJSZXNwb25zZSItorsYKQgBOiUKBnJlbW92ZRIRCgZtZW1iZXISB3VzZXJfaWQiBm9yZ19pZDACEqEBChFMZWF2ZU9yZ2FuaXphdGlvbhIpLmNvbnRyb2xwbGFuZS52MS5MZWF2ZU9yZ2FuaXphdGlvblJlcXVlc3QaKi5jb250cm9scGxhbmUudjEuTGVhdmVPcmdhbml6YXRpb25SZXNwb25zZSI1orsYMQgBOi0KBWxlYXZlEhoKBm1lbWJlchIQcmVzcG9uc2UudXNlcl9pZCIGb3JnX2lkMAISngEKEFVwZGF0ZU1lbWJlclJvbGUSKC5jb250cm9scGxhbmUudjEuVXBkYXRlTWVtYmVyUm9sZVJlcXVlc3QaKS5jb250cm9scGxhbmUudjEuVXBkYXRlTWVtYmVyUm9sZVJlc3BvbnNlIjWiuxgxCAE6LQoIc2V0X3JvbGUSEQoGbWVtYmVyEgd1c2VyX2lkIgZvcmdfaWQqBHJvbGUwAhLbAQoaTW92ZUZyZWVIb3N0aW5nRGVzaWduYXRpb24SMi5jb250cm9scGxhbmUudjEuTW92ZUZyZWVIb3N0aW5nRGVzaWduYXRpb25SZXF1ZXN0GjMuY29udHJvbHBsYW5lLnYxLk1vdmVGcmVlSG9zdGluZ0Rlc2lnbmF0aW9uUmVzcG9uc2UiVKK7GFAIATpMChFtb3ZlX2ZyZWVfaG9zdGluZxIZCgNvcmcSEnJlc3BvbnNlLnRvX29yZ19pZCIGb3JnX2lkKhRyZXNwb25zZS5mcm9tX29yZ19pZBLXAQoVU3RhcnRHaXRIdWJBcHBJbnN0YWxsEi0uY29udHJvbHBsYW5lLnYxLlN0YXJ0R2l0SHViQXBwSW5zdGFsbFJlcXVlc3QaLi5jb250cm9scGxhbmUudjEuU3RhcnRHaXRIdWJBcHBJbnN0YWxsUmVzcG9uc2UiX6K7GFsIATpXOlVyZXR1cm5zIGEgc2lnbmVkIGxpbmsgYW5kIGNoYW5nZXMgbm90aGluZzsgTGlua0dpdEh1YkFwcEluc3RhbGxhdGlvbiByZWNvcmRzIHRoZSBsaW5rEqECChlMaW5rR2l0SHViQXBwSW5zdGFsbGF0aW9uEjEuY29udHJvbHBsYW5lLnYxLkxpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb25SZXF1ZXN0GjIuY29udHJvbHBsYW5lLnYxLkxpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb25SZXNwb25zZSKcAaK7GJcBCAE6kgEKD2xpbmtfZ2l0aHViX2FwcBJhChNnaXRodWJfaW5zdGFsbGF0aW9uEiVyZXNwb25zZS5pbnN0YWxsYXRpb24uaW5zdGFsbGF0aW9uX2lkGiNyZXNwb25zZS5pbnN0YWxsYXRpb24uYWNjb3VudF9sb2dpbiIccmVzcG9uc2UuaW5zdGFsbGF0aW9uLm9yZ19pZBKSAQoaTGlzdEdpdEh1YkFwcEluc3RhbGxhdGlvbnMSMi5jb250cm9scGxhbmUudjEuTGlzdEdpdEh1YkFwcEluc3RhbGxhdGlvbnNSZXF1ZXN0GjMuY29udHJvbHBsYW5lLnYxLkxpc3RHaXRIdWJBcHBJbnN0YWxsYXRpb25zUmVzcG9uc2UiC5ACAaK7GAQIARgBEqoBCiJMaXN0TGlua2FibGVHaXRIdWJBcHBJbnN0YWxsYXRpb25zEjouY29udHJvbHBsYW5lLnYxLkxpc3RMaW5rYWJsZUdpdEh1YkFwcEluc3RhbGxhdGlvbnNSZXF1ZXN0GjsuY29udHJvbHBsYW5lLnYxLkxpc3RMaW5rYWJsZUdpdEh1YkFwcEluc3RhbGxhdGlvbnNSZXNwb25zZSILkAIBorsYBAgBGAES1QEKG1VubGlua0dpdEh1YkFwcEluc3RhbGxhdGlvbhIzLmNvbnRyb2xwbGFuZS52MS5VbmxpbmtHaXRIdWJBcHBJbnN0YWxsYXRpb25SZXF1ZXN0GjQuY29udHJvbHBsYW5lLnYxLlVubGlua0dpdEh1YkFwcEluc3RhbGxhdGlvblJlc3BvbnNlIkuiuxhHCAE6QwoRdW5saW5rX2dpdGh1Yl9hcHASJgoTZ2l0aHViX2luc3RhbGxhdGlvbhIPaW5zdGFsbGF0aW9uX2lkIgZvcmdfaWQSgAEKFEdldE15T3JnRW50aXRsZW1lbnRzEiwuY29udHJvbHBsYW5lLnYxLkdldE15T3JnRW50aXRsZW1lbnRzUmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5HZXRNeU9yZ0VudGl0bGVtZW50c1Jlc3BvbnNlIguQAgGiuxgECAEYARK5AQoVUmVxdWVzdE9yZ0VudGl0bGVtZW50Ei0uY29udHJvbHBsYW5lLnYxLlJlcXVlc3RPcmdFbnRpdGxlbWVudFJlcXVlc3QaLi5jb250cm9scGxhbmUudjEuUmVxdWVzdE9yZ0VudGl0bGVtZW50UmVzcG9uc2UiQaK7GD0IATo5ChdyZXF1ZXN0X29yZ19lbnRpdGxlbWVudBINCgNvcmcSBm9yZ19pZCIGb3JnX2lkKgdmZWF0dXJlQt8BChNjb20uY29udHJvbHBsYW5lLnYxQhFPcmdhbml6YXRpb25Qcm90b1ABWlhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvb3JnYW5pemF0aW9uL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
+
+/**
+ * @generated from message controlplane.v1.GetMyOrgEntitlementsRequest
+ */
+export type GetMyOrgEntitlementsRequest = Message<"controlplane.v1.GetMyOrgEntitlementsRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.GetMyOrgEntitlementsRequest.
+ * Use `create(GetMyOrgEntitlementsRequestSchema)` to create a new message.
+ */
+export const GetMyOrgEntitlementsRequestSchema: GenMessage<GetMyOrgEntitlementsRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 0);
+
+/**
+ * @generated from message controlplane.v1.GetMyOrgEntitlementsResponse
+ */
+export type GetMyOrgEntitlementsResponse = Message<"controlplane.v1.GetMyOrgEntitlementsResponse"> & {
+  /**
+   * One entry per feature granted by request, whether or not the org has it,
+   * ordered by feature. Today: "ml".
+   *
+   * @generated from field: repeated controlplane.v1.OrgFeatureEntitlement features = 1;
+   */
+  features: OrgFeatureEntitlement[];
+};
+
+/**
+ * Describes the message controlplane.v1.GetMyOrgEntitlementsResponse.
+ * Use `create(GetMyOrgEntitlementsResponseSchema)` to create a new message.
+ */
+export const GetMyOrgEntitlementsResponseSchema: GenMessage<GetMyOrgEntitlementsResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 1);
+
+/**
+ * OrgFeatureEntitlement is what a member may know of one feature granted by
+ * request: whether the org has it, and whether it was asked for.
+ *
+ * @generated from message controlplane.v1.OrgFeatureEntitlement
+ */
+export type OrgFeatureEntitlement = Message<"controlplane.v1.OrgFeatureEntitlement"> & {
+  /**
+   * The feature key, e.g. "ml".
+   *
+   * @generated from field: string feature = 1;
+   */
+  feature: string;
+
+  /**
+   * True when Reliant granted it and has not revoked it.
+   *
+   * @generated from field: bool enabled = 2;
+   */
+  enabled: boolean;
+
+  /**
+   * When someone in the org last asked for it; unset when nobody has.
+   *
+   * @generated from field: google.protobuf.Timestamp requested_at = 3;
+   */
+  requestedAt?: Timestamp | undefined;
+
+  /**
+   * When it was granted; unset unless enabled.
+   *
+   * @generated from field: google.protobuf.Timestamp granted_at = 4;
+   */
+  grantedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.OrgFeatureEntitlement.
+ * Use `create(OrgFeatureEntitlementSchema)` to create a new message.
+ */
+export const OrgFeatureEntitlementSchema: GenMessage<OrgFeatureEntitlement> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 2);
+
+/**
+ * @generated from message controlplane.v1.RequestOrgEntitlementRequest
+ */
+export type RequestOrgEntitlementRequest = Message<"controlplane.v1.RequestOrgEntitlementRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+
+  /**
+   * The feature key, e.g. "ml".
+   *
+   * @generated from field: string feature = 2;
+   */
+  feature: string;
+
+  /**
+   * Optional context for Reliant staff (what the org wants to run), at most
+   * 1000 characters.
+   *
+   * @generated from field: string note = 3;
+   */
+  note: string;
+};
+
+/**
+ * Describes the message controlplane.v1.RequestOrgEntitlementRequest.
+ * Use `create(RequestOrgEntitlementRequestSchema)` to create a new message.
+ */
+export const RequestOrgEntitlementRequestSchema: GenMessage<RequestOrgEntitlementRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 3);
+
+/**
+ * @generated from message controlplane.v1.RequestOrgEntitlementResponse
+ */
+export type RequestOrgEntitlementResponse = Message<"controlplane.v1.RequestOrgEntitlementResponse"> & {
+  /**
+   * The feature's state after the call.
+   *
+   * @generated from field: controlplane.v1.OrgFeatureEntitlement entitlement = 1;
+   */
+  entitlement?: OrgFeatureEntitlement | undefined;
+
+  /**
+   * True when the feature had already been requested and was not re-recorded.
+   *
+   * @generated from field: bool already_requested = 2;
+   */
+  alreadyRequested: boolean;
+
+  /**
+   * True when the org already has the feature: nothing was recorded.
+   *
+   * @generated from field: bool already_enabled = 3;
+   */
+  alreadyEnabled: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.RequestOrgEntitlementResponse.
+ * Use `create(RequestOrgEntitlementResponseSchema)` to create a new message.
+ */
+export const RequestOrgEntitlementResponseSchema: GenMessage<RequestOrgEntitlementResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 4);
 
 /**
  * GitHubAppInstallation is a GitHub App installation linked to an org.
@@ -88,7 +233,7 @@ export type GitHubAppInstallation = Message<"controlplane.v1.GitHubAppInstallati
  * Use `create(GitHubAppInstallationSchema)` to create a new message.
  */
 export const GitHubAppInstallationSchema: GenMessage<GitHubAppInstallation> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 0);
+  messageDesc(file_services_organization_v1_organization, 5);
 
 /**
  * @generated from message controlplane.v1.StartGitHubAppInstallRequest
@@ -105,7 +250,7 @@ export type StartGitHubAppInstallRequest = Message<"controlplane.v1.StartGitHubA
  * Use `create(StartGitHubAppInstallRequestSchema)` to create a new message.
  */
 export const StartGitHubAppInstallRequestSchema: GenMessage<StartGitHubAppInstallRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 1);
+  messageDesc(file_services_organization_v1_organization, 6);
 
 /**
  * @generated from message controlplane.v1.StartGitHubAppInstallResponse
@@ -117,6 +262,15 @@ export type StartGitHubAppInstallResponse = Message<"controlplane.v1.StartGitHub
    * @generated from field: string install_url = 1;
    */
   installUrl: string;
+
+  /**
+   * The signed state install_url carries, for a client that links an
+   * installation the App already has (ListLinkableGitHubAppInstallations)
+   * without sending anyone to GitHub. It expires 30 minutes after issue.
+   *
+   * @generated from field: string state = 2;
+   */
+  state: string;
 };
 
 /**
@@ -124,7 +278,7 @@ export type StartGitHubAppInstallResponse = Message<"controlplane.v1.StartGitHub
  * Use `create(StartGitHubAppInstallResponseSchema)` to create a new message.
  */
 export const StartGitHubAppInstallResponseSchema: GenMessage<StartGitHubAppInstallResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 2);
+  messageDesc(file_services_organization_v1_organization, 7);
 
 /**
  * @generated from message controlplane.v1.LinkGitHubAppInstallationRequest
@@ -155,7 +309,7 @@ export type LinkGitHubAppInstallationRequest = Message<"controlplane.v1.LinkGitH
  * Use `create(LinkGitHubAppInstallationRequestSchema)` to create a new message.
  */
 export const LinkGitHubAppInstallationRequestSchema: GenMessage<LinkGitHubAppInstallationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 3);
+  messageDesc(file_services_organization_v1_organization, 8);
 
 /**
  * @generated from message controlplane.v1.LinkGitHubAppInstallationResponse
@@ -172,7 +326,7 @@ export type LinkGitHubAppInstallationResponse = Message<"controlplane.v1.LinkGit
  * Use `create(LinkGitHubAppInstallationResponseSchema)` to create a new message.
  */
 export const LinkGitHubAppInstallationResponseSchema: GenMessage<LinkGitHubAppInstallationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 4);
+  messageDesc(file_services_organization_v1_organization, 9);
 
 /**
  * @generated from message controlplane.v1.ListGitHubAppInstallationsRequest
@@ -189,7 +343,7 @@ export type ListGitHubAppInstallationsRequest = Message<"controlplane.v1.ListGit
  * Use `create(ListGitHubAppInstallationsRequestSchema)` to create a new message.
  */
 export const ListGitHubAppInstallationsRequestSchema: GenMessage<ListGitHubAppInstallationsRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 5);
+  messageDesc(file_services_organization_v1_organization, 10);
 
 /**
  * @generated from message controlplane.v1.ListGitHubAppInstallationsResponse
@@ -206,7 +360,112 @@ export type ListGitHubAppInstallationsResponse = Message<"controlplane.v1.ListGi
  * Use `create(ListGitHubAppInstallationsResponseSchema)` to create a new message.
  */
 export const ListGitHubAppInstallationsResponseSchema: GenMessage<ListGitHubAppInstallationsResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 6);
+  messageDesc(file_services_organization_v1_organization, 11);
+
+/**
+ * LinkableGitHubAppInstallation is an installation of the App the caller's
+ * GitHub account can reach, and where it is linked.
+ *
+ * @generated from message controlplane.v1.LinkableGitHubAppInstallation
+ */
+export type LinkableGitHubAppInstallation = Message<"controlplane.v1.LinkableGitHubAppInstallation"> & {
+  /**
+   * GitHub's installation id.
+   *
+   * @generated from field: int64 installation_id = 1;
+   */
+  installationId: bigint;
+
+  /**
+   * The GitHub account the App is installed on, and its kind
+   * ("Organization" or "User").
+   *
+   * @generated from field: string account_login = 2;
+   */
+  accountLogin: string;
+
+  /**
+   * @generated from field: string account_type = 3;
+   */
+  accountType: string;
+
+  /**
+   * The account's avatar; "" when GitHub sent none.
+   *
+   * @generated from field: string avatar_url = 4;
+   */
+  avatarUrl: string;
+
+  /**
+   * "all" or "selected"; "" when GitHub did not say.
+   *
+   * @generated from field: string repository_selection = 5;
+   */
+  repositorySelection: string;
+
+  /**
+   * Linked to the org the request named.
+   *
+   * @generated from field: bool linked_here = 6;
+   */
+  linkedHere: boolean;
+
+  /**
+   * Linked to some other org (which one is not said): linking it here is
+   * refused until it is unlinked there.
+   *
+   * @generated from field: bool linked_elsewhere = 7;
+   */
+  linkedElsewhere: boolean;
+
+  /**
+   * Set while GitHub reports the installation suspended.
+   *
+   * @generated from field: google.protobuf.Timestamp suspended_at = 8;
+   */
+  suspendedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.LinkableGitHubAppInstallation.
+ * Use `create(LinkableGitHubAppInstallationSchema)` to create a new message.
+ */
+export const LinkableGitHubAppInstallationSchema: GenMessage<LinkableGitHubAppInstallation> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 12);
+
+/**
+ * @generated from message controlplane.v1.ListLinkableGitHubAppInstallationsRequest
+ */
+export type ListLinkableGitHubAppInstallationsRequest = Message<"controlplane.v1.ListLinkableGitHubAppInstallationsRequest"> & {
+  /**
+   * @generated from field: string org_id = 1;
+   */
+  orgId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.ListLinkableGitHubAppInstallationsRequest.
+ * Use `create(ListLinkableGitHubAppInstallationsRequestSchema)` to create a new message.
+ */
+export const ListLinkableGitHubAppInstallationsRequestSchema: GenMessage<ListLinkableGitHubAppInstallationsRequest> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 13);
+
+/**
+ * @generated from message controlplane.v1.ListLinkableGitHubAppInstallationsResponse
+ */
+export type ListLinkableGitHubAppInstallationsResponse = Message<"controlplane.v1.ListLinkableGitHubAppInstallationsResponse"> & {
+  /**
+   * @generated from field: repeated controlplane.v1.LinkableGitHubAppInstallation installations = 1;
+   */
+  installations: LinkableGitHubAppInstallation[];
+};
+
+/**
+ * Describes the message controlplane.v1.ListLinkableGitHubAppInstallationsResponse.
+ * Use `create(ListLinkableGitHubAppInstallationsResponseSchema)` to create a new message.
+ */
+export const ListLinkableGitHubAppInstallationsResponseSchema: GenMessage<ListLinkableGitHubAppInstallationsResponse> = /*@__PURE__*/
+  messageDesc(file_services_organization_v1_organization, 14);
 
 /**
  * @generated from message controlplane.v1.UnlinkGitHubAppInstallationRequest
@@ -228,7 +487,7 @@ export type UnlinkGitHubAppInstallationRequest = Message<"controlplane.v1.Unlink
  * Use `create(UnlinkGitHubAppInstallationRequestSchema)` to create a new message.
  */
 export const UnlinkGitHubAppInstallationRequestSchema: GenMessage<UnlinkGitHubAppInstallationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 7);
+  messageDesc(file_services_organization_v1_organization, 15);
 
 /**
  * @generated from message controlplane.v1.UnlinkGitHubAppInstallationResponse
@@ -241,7 +500,7 @@ export type UnlinkGitHubAppInstallationResponse = Message<"controlplane.v1.Unlin
  * Use `create(UnlinkGitHubAppInstallationResponseSchema)` to create a new message.
  */
 export const UnlinkGitHubAppInstallationResponseSchema: GenMessage<UnlinkGitHubAppInstallationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 8);
+  messageDesc(file_services_organization_v1_organization, 16);
 
 /**
  * OrgMember is one member of an org, as its roster shows them.
@@ -306,7 +565,7 @@ export type OrgMember = Message<"controlplane.v1.OrgMember"> & {
  * Use `create(OrgMemberSchema)` to create a new message.
  */
 export const OrgMemberSchema: GenMessage<OrgMember> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 9);
+  messageDesc(file_services_organization_v1_organization, 17);
 
 /**
  * SeatUsage is how many of the org's seats are taken.
@@ -341,7 +600,7 @@ export type SeatUsage = Message<"controlplane.v1.SeatUsage"> & {
  * Use `create(SeatUsageSchema)` to create a new message.
  */
 export const SeatUsageSchema: GenMessage<SeatUsage> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 10);
+  messageDesc(file_services_organization_v1_organization, 18);
 
 /**
  * OrgInvitation is one invitation, as an org admin sees it.
@@ -402,7 +661,7 @@ export type OrgInvitation = Message<"controlplane.v1.OrgInvitation"> & {
  * Use `create(OrgInvitationSchema)` to create a new message.
  */
 export const OrgInvitationSchema: GenMessage<OrgInvitation> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 11);
+  messageDesc(file_services_organization_v1_organization, 19);
 
 /**
  * @generated from message controlplane.v1.CreateOrganizationRequest
@@ -429,7 +688,7 @@ export type CreateOrganizationRequest = Message<"controlplane.v1.CreateOrganizat
  * Use `create(CreateOrganizationRequestSchema)` to create a new message.
  */
 export const CreateOrganizationRequestSchema: GenMessage<CreateOrganizationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 12);
+  messageDesc(file_services_organization_v1_organization, 20);
 
 /**
  * @generated from message controlplane.v1.CreateOrganizationResponse
@@ -446,7 +705,7 @@ export type CreateOrganizationResponse = Message<"controlplane.v1.CreateOrganiza
  * Use `create(CreateOrganizationResponseSchema)` to create a new message.
  */
 export const CreateOrganizationResponseSchema: GenMessage<CreateOrganizationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 13);
+  messageDesc(file_services_organization_v1_organization, 21);
 
 /**
  * @generated from message controlplane.v1.ListMembersRequest
@@ -477,7 +736,7 @@ export type ListMembersRequest = Message<"controlplane.v1.ListMembersRequest"> &
  * Use `create(ListMembersRequestSchema)` to create a new message.
  */
 export const ListMembersRequestSchema: GenMessage<ListMembersRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 14);
+  messageDesc(file_services_organization_v1_organization, 22);
 
 /**
  * @generated from message controlplane.v1.ListMembersResponse
@@ -508,7 +767,7 @@ export type ListMembersResponse = Message<"controlplane.v1.ListMembersResponse">
  * Use `create(ListMembersResponseSchema)` to create a new message.
  */
 export const ListMembersResponseSchema: GenMessage<ListMembersResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 15);
+  messageDesc(file_services_organization_v1_organization, 23);
 
 /**
  * @generated from message controlplane.v1.InviteMemberRequest
@@ -537,7 +796,7 @@ export type InviteMemberRequest = Message<"controlplane.v1.InviteMemberRequest">
  * Use `create(InviteMemberRequestSchema)` to create a new message.
  */
 export const InviteMemberRequestSchema: GenMessage<InviteMemberRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 16);
+  messageDesc(file_services_organization_v1_organization, 24);
 
 /**
  * @generated from message controlplane.v1.InviteMemberResponse
@@ -576,7 +835,7 @@ export type InviteMemberResponse = Message<"controlplane.v1.InviteMemberResponse
  * Use `create(InviteMemberResponseSchema)` to create a new message.
  */
 export const InviteMemberResponseSchema: GenMessage<InviteMemberResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 17);
+  messageDesc(file_services_organization_v1_organization, 25);
 
 /**
  * @generated from message controlplane.v1.ListInvitationsRequest
@@ -612,7 +871,7 @@ export type ListInvitationsRequest = Message<"controlplane.v1.ListInvitationsReq
  * Use `create(ListInvitationsRequestSchema)` to create a new message.
  */
 export const ListInvitationsRequestSchema: GenMessage<ListInvitationsRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 18);
+  messageDesc(file_services_organization_v1_organization, 26);
 
 /**
  * @generated from message controlplane.v1.ListInvitationsResponse
@@ -636,7 +895,7 @@ export type ListInvitationsResponse = Message<"controlplane.v1.ListInvitationsRe
  * Use `create(ListInvitationsResponseSchema)` to create a new message.
  */
 export const ListInvitationsResponseSchema: GenMessage<ListInvitationsResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 19);
+  messageDesc(file_services_organization_v1_organization, 27);
 
 /**
  * @generated from message controlplane.v1.RevokeInvitationRequest
@@ -658,7 +917,7 @@ export type RevokeInvitationRequest = Message<"controlplane.v1.RevokeInvitationR
  * Use `create(RevokeInvitationRequestSchema)` to create a new message.
  */
 export const RevokeInvitationRequestSchema: GenMessage<RevokeInvitationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 20);
+  messageDesc(file_services_organization_v1_organization, 28);
 
 /**
  * @generated from message controlplane.v1.RevokeInvitationResponse
@@ -671,7 +930,7 @@ export type RevokeInvitationResponse = Message<"controlplane.v1.RevokeInvitation
  * Use `create(RevokeInvitationResponseSchema)` to create a new message.
  */
 export const RevokeInvitationResponseSchema: GenMessage<RevokeInvitationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 21);
+  messageDesc(file_services_organization_v1_organization, 29);
 
 /**
  * @generated from message controlplane.v1.GetInvitationRequest
@@ -690,7 +949,7 @@ export type GetInvitationRequest = Message<"controlplane.v1.GetInvitationRequest
  * Use `create(GetInvitationRequestSchema)` to create a new message.
  */
 export const GetInvitationRequestSchema: GenMessage<GetInvitationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 22);
+  messageDesc(file_services_organization_v1_organization, 30);
 
 /**
  * @generated from message controlplane.v1.GetInvitationResponse
@@ -752,7 +1011,7 @@ export type GetInvitationResponse = Message<"controlplane.v1.GetInvitationRespon
  * Use `create(GetInvitationResponseSchema)` to create a new message.
  */
 export const GetInvitationResponseSchema: GenMessage<GetInvitationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 23);
+  messageDesc(file_services_organization_v1_organization, 31);
 
 /**
  * @generated from message controlplane.v1.AcceptInvitationRequest
@@ -769,7 +1028,7 @@ export type AcceptInvitationRequest = Message<"controlplane.v1.AcceptInvitationR
  * Use `create(AcceptInvitationRequestSchema)` to create a new message.
  */
 export const AcceptInvitationRequestSchema: GenMessage<AcceptInvitationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 24);
+  messageDesc(file_services_organization_v1_organization, 32);
 
 /**
  * @generated from message controlplane.v1.AcceptInvitationResponse
@@ -802,7 +1061,7 @@ export type AcceptInvitationResponse = Message<"controlplane.v1.AcceptInvitation
  * Use `create(AcceptInvitationResponseSchema)` to create a new message.
  */
 export const AcceptInvitationResponseSchema: GenMessage<AcceptInvitationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 25);
+  messageDesc(file_services_organization_v1_organization, 33);
 
 /**
  * @generated from message controlplane.v1.RemoveMemberRequest
@@ -824,7 +1083,7 @@ export type RemoveMemberRequest = Message<"controlplane.v1.RemoveMemberRequest">
  * Use `create(RemoveMemberRequestSchema)` to create a new message.
  */
 export const RemoveMemberRequestSchema: GenMessage<RemoveMemberRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 26);
+  messageDesc(file_services_organization_v1_organization, 34);
 
 /**
  * @generated from message controlplane.v1.RemoveMemberResponse
@@ -844,7 +1103,7 @@ export type RemoveMemberResponse = Message<"controlplane.v1.RemoveMemberResponse
  * Use `create(RemoveMemberResponseSchema)` to create a new message.
  */
 export const RemoveMemberResponseSchema: GenMessage<RemoveMemberResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 27);
+  messageDesc(file_services_organization_v1_organization, 35);
 
 /**
  * @generated from message controlplane.v1.LeaveOrganizationRequest
@@ -861,7 +1120,7 @@ export type LeaveOrganizationRequest = Message<"controlplane.v1.LeaveOrganizatio
  * Use `create(LeaveOrganizationRequestSchema)` to create a new message.
  */
 export const LeaveOrganizationRequestSchema: GenMessage<LeaveOrganizationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 28);
+  messageDesc(file_services_organization_v1_organization, 36);
 
 /**
  * @generated from message controlplane.v1.LeaveOrganizationResponse
@@ -894,7 +1153,7 @@ export type LeaveOrganizationResponse = Message<"controlplane.v1.LeaveOrganizati
  * Use `create(LeaveOrganizationResponseSchema)` to create a new message.
  */
 export const LeaveOrganizationResponseSchema: GenMessage<LeaveOrganizationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 29);
+  messageDesc(file_services_organization_v1_organization, 37);
 
 /**
  * @generated from message controlplane.v1.UpdateMemberRoleRequest
@@ -923,7 +1182,7 @@ export type UpdateMemberRoleRequest = Message<"controlplane.v1.UpdateMemberRoleR
  * Use `create(UpdateMemberRoleRequestSchema)` to create a new message.
  */
 export const UpdateMemberRoleRequestSchema: GenMessage<UpdateMemberRoleRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 30);
+  messageDesc(file_services_organization_v1_organization, 38);
 
 /**
  * @generated from message controlplane.v1.UpdateMemberRoleResponse
@@ -947,7 +1206,7 @@ export type UpdateMemberRoleResponse = Message<"controlplane.v1.UpdateMemberRole
  * Use `create(UpdateMemberRoleResponseSchema)` to create a new message.
  */
 export const UpdateMemberRoleResponseSchema: GenMessage<UpdateMemberRoleResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 31);
+  messageDesc(file_services_organization_v1_organization, 39);
 
 /**
  * MyOrganization is one org the caller belongs to, as they see it. It
@@ -1023,7 +1282,7 @@ export type MyOrganization = Message<"controlplane.v1.MyOrganization"> & {
  * Use `create(MyOrganizationSchema)` to create a new message.
  */
 export const MyOrganizationSchema: GenMessage<MyOrganization> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 32);
+  messageDesc(file_services_organization_v1_organization, 40);
 
 /**
  * @generated from message controlplane.v1.ListMyOrganizationsRequest
@@ -1036,7 +1295,7 @@ export type ListMyOrganizationsRequest = Message<"controlplane.v1.ListMyOrganiza
  * Use `create(ListMyOrganizationsRequestSchema)` to create a new message.
  */
 export const ListMyOrganizationsRequestSchema: GenMessage<ListMyOrganizationsRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 33);
+  messageDesc(file_services_organization_v1_organization, 41);
 
 /**
  * @generated from message controlplane.v1.ListMyOrganizationsResponse
@@ -1062,7 +1321,7 @@ export type ListMyOrganizationsResponse = Message<"controlplane.v1.ListMyOrganiz
  * Use `create(ListMyOrganizationsResponseSchema)` to create a new message.
  */
 export const ListMyOrganizationsResponseSchema: GenMessage<ListMyOrganizationsResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 34);
+  messageDesc(file_services_organization_v1_organization, 42);
 
 /**
  * @generated from message controlplane.v1.SetDefaultOrganizationRequest
@@ -1079,7 +1338,7 @@ export type SetDefaultOrganizationRequest = Message<"controlplane.v1.SetDefaultO
  * Use `create(SetDefaultOrganizationRequestSchema)` to create a new message.
  */
 export const SetDefaultOrganizationRequestSchema: GenMessage<SetDefaultOrganizationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 35);
+  messageDesc(file_services_organization_v1_organization, 43);
 
 /**
  * @generated from message controlplane.v1.SetDefaultOrganizationResponse
@@ -1096,7 +1355,7 @@ export type SetDefaultOrganizationResponse = Message<"controlplane.v1.SetDefault
  * Use `create(SetDefaultOrganizationResponseSchema)` to create a new message.
  */
 export const SetDefaultOrganizationResponseSchema: GenMessage<SetDefaultOrganizationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 36);
+  messageDesc(file_services_organization_v1_organization, 44);
 
 /**
  * @generated from message controlplane.v1.MoveFreeHostingDesignationRequest
@@ -1123,7 +1382,7 @@ export type MoveFreeHostingDesignationRequest = Message<"controlplane.v1.MoveFre
  * Use `create(MoveFreeHostingDesignationRequestSchema)` to create a new message.
  */
 export const MoveFreeHostingDesignationRequestSchema: GenMessage<MoveFreeHostingDesignationRequest> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 37);
+  messageDesc(file_services_organization_v1_organization, 45);
 
 /**
  * @generated from message controlplane.v1.MoveFreeHostingDesignationResponse
@@ -1194,7 +1453,7 @@ export type MoveFreeHostingDesignationResponse = Message<"controlplane.v1.MoveFr
  * Use `create(MoveFreeHostingDesignationResponseSchema)` to create a new message.
  */
 export const MoveFreeHostingDesignationResponseSchema: GenMessage<MoveFreeHostingDesignationResponse> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 38);
+  messageDesc(file_services_organization_v1_organization, 46);
 
 /**
  * FreeHostingMoveSite is one static site under the free hosting allowance.
@@ -1242,7 +1501,7 @@ export type FreeHostingMoveSite = Message<"controlplane.v1.FreeHostingMoveSite">
  * Use `create(FreeHostingMoveSiteSchema)` to create a new message.
  */
 export const FreeHostingMoveSiteSchema: GenMessage<FreeHostingMoveSite> = /*@__PURE__*/
-  messageDesc(file_services_organization_v1_organization, 39);
+  messageDesc(file_services_organization_v1_organization, 47);
 
 /**
  * @generated from service controlplane.v1.OrganizationService
@@ -1485,6 +1744,26 @@ export const OrganizationService: GenService<{
     output: typeof ListGitHubAppInstallationsResponseSchema;
   },
   /**
+   * ListLinkableGitHubAppInstallations lists the installations of this
+   * deployment's GitHub App that the caller's OWN GitHub account can reach
+   * (the same GET /user/installations proof LinkGitHubAppInstallation
+   * makes), each marked linked to this org, to another, or to none: how an
+   * admin links an App that is already installed, which never passes
+   * through the setup redirect. To link one, take a state from
+   * StartGitHubAppInstall (its `state`) and pass it with the installation_id
+   * to LinkGitHubAppInstallation, which checks everything again. Admin or
+   * owner. Errors: PERMISSION_DENIED "admin_required" / "not_org_member";
+   * FAILED_PRECONDITION "github_app_not_configured", or the git credential
+   * reasons when the caller has not connected GitHub.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.ListLinkableGitHubAppInstallations
+   */
+  listLinkableGitHubAppInstallations: {
+    methodKind: "unary";
+    input: typeof ListLinkableGitHubAppInstallationsRequestSchema;
+    output: typeof ListLinkableGitHubAppInstallationsResponseSchema;
+  },
+  /**
    * UnlinkGitHubAppInstallation removes the link: the org's runs can no
    * longer mint bot tokens through it. The installation itself stays on
    * GitHub. Admin or owner. Unlinking one that is not linked to the org is
@@ -1496,6 +1775,34 @@ export const OrganizationService: GenService<{
     methodKind: "unary";
     input: typeof UnlinkGitHubAppInstallationRequestSchema;
     output: typeof UnlinkGitHubAppInstallationResponseSchema;
+  },
+  /**
+   * GetMyOrgEntitlements reports, for every feature that is granted by
+   * request, whether the org has it and whether someone in it asked for it.
+   * Any member may call it; a machine credential is refused (human_only).
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.GetMyOrgEntitlements
+   */
+  getMyOrgEntitlements: {
+    methodKind: "unary";
+    input: typeof GetMyOrgEntitlementsRequestSchema;
+    output: typeof GetMyOrgEntitlementsResponseSchema;
+  },
+  /**
+   * RequestOrgEntitlement asks Reliant to grant a feature to the org. It
+   * records who asked and when, once per (org, feature): a repeat answers
+   * already_requested=true and changes nothing, and asking for a feature the
+   * org already has answers already_enabled=true. Reliant staff are told, and
+   * reach out; nothing is granted by this call. Any member may call it; a
+   * machine credential is refused (human_only). An unknown feature is
+   * INVALID_ARGUMENT.
+   *
+   * @generated from rpc controlplane.v1.OrganizationService.RequestOrgEntitlement
+   */
+  requestOrgEntitlement: {
+    methodKind: "unary";
+    input: typeof RequestOrgEntitlementRequestSchema;
+    output: typeof RequestOrgEntitlementResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_services_organization_v1_organization, 0);
