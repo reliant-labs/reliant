@@ -2,8 +2,11 @@
   "summary": {
     "gpusTotal": 32,
     "gpusAllocated": 1,
-    "busyRatio": 0.75,
-    "gpusUnallocated": 31
+    "busyRatio": 0.65,
+    "gpusUnallocated": 31,
+    "usdPerDay": "NaN",
+    "idleUsdPerDay": "NaN",
+    "trainingGoodput": "NaN"
   },
   "clusters": [
     {
@@ -29,8 +32,10 @@
       "gpusTotal": 32,
       "gpusAllocated": 1,
       "smActiveP50": "NaN",
-      "busyRatio": 0.75,
-      "nodesUnhealthy": 1
+      "busyRatio": 0.65,
+      "nodesUnhealthy": 1,
+      "usdPerGpuHour": "NaN",
+      "usdPerDay": "NaN"
     }
   ],
   "unhealthy": [

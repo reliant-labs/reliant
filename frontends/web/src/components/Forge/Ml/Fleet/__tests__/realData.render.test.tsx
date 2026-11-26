@@ -124,13 +124,16 @@ describe("ML Fleet and Setup on real cluster data", () => {
   });
 
   it("GPU: utilisation and memory collected; power, temperature and Xid not collected", async () => {
+    // The fake exporter draws utilisation from the pod's 60-80 annotation, so
+    // each re-recording carries a different value: read it from the recording.
+    const util = `${Math.round((deviceJson as { device: { busyRatio: number } }).device.busyRatio * 100)}%`;
     mount("fleet", ["gpus", BURN_GPU]);
     await screen.findByTestId("ml-gpu-fields");
-    expect(screen.getByTestId("ml-field-gpu.util")).toHaveTextContent("75%");
+    expect(screen.getByTestId("ml-field-gpu.util")).toHaveTextContent(util);
     expect(screen.getByTestId("ml-field-gpu.memory.used")).toHaveTextContent("80.0 GiB");
     for (const key of ["gpu.power", "gpu.temperature", "gpu.xid.last"]) expect(screen.getByTestId(`ml-field-${key}`)).toHaveTextContent("not collected");
     const kpis = screen.getByTestId("ml-gpu-kpis");
-    expect(kpis).toHaveTextContent("75%");
+    expect(kpis).toHaveTextContent(util);
     expect(within(kpis).getAllByText(/not collected/).length).toBeGreaterThanOrEqual(3);
     expect(screen.getByTestId("ml-gpu-identity")).toHaveTextContent("gpu-train");
     noNumbersInvented(kpis);

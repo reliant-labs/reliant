@@ -4,7 +4,7 @@
     "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-1",
     "product": "NVIDIA-A100-SXM4-80GB",
     "health": "ML_HEALTH_HEALTHY",
-    "busyRatio": 0.75,
+    "busyRatio": 0.65,
     "smActive": "NaN",
     "memoryUsedGb": 80,
     "memoryTotalGb": 80,
@@ -22,7 +22,7 @@
         "key": "gpu.util",
         "label": "GPU utilisation",
         "group": "ML_FIELD_GROUP_UTILIZATION",
-        "value": 75,
+        "value": 65,
         "unit": "percent",
         "sourceField": "DCGM_FI_DEV_GPU_UTIL",
         "collection": "ML_COLLECTION_COLLECTED"
