@@ -234,12 +234,22 @@ function mobileTwinOf(path: string, query: URLSearchParams): string {
   if (path.startsWith("/settings/machines") || path.startsWith("/settings/environments")) return mobileMachinesPath();
   // Billing on a phone is a screen inside /m/settings. A visit that has a way
   // back (the claim page sends people here to subscribe) keeps it: the mobile
-  // twin opens on billing and offers the same return.
+  // twin opens on billing and offers the same return. The App hosting tab
+  // (`?tab=hosting`: "Set up hosting billing", a deploy queued on billing, a
+  // hosting checkout's return) keeps its tab, so the screen opens on the
+  // hosting card, and its `org`, which that card asks about before acting in
+  // another organization. A checkout's `checkout=` marker is not carried: it
+  // is for the desktop app's checkout window, and the card reads the server.
   if (path === "/settings/billing") {
+    const params = new URLSearchParams({ section: "billing" });
     const returnTo = query.get("returnTo");
-    if (isSafeReturnTo(returnTo)) {
-      return `${mobileSettingsPath()}?${new URLSearchParams({ section: "billing", returnTo })}`;
+    if (isSafeReturnTo(returnTo)) params.set("returnTo", returnTo);
+    if (query.get("tab") === "hosting") {
+      params.set("tab", "hosting");
+      const org = query.get("org");
+      if (org) params.set("org", org);
     }
+    return `${mobileSettingsPath()}?${params}`;
   }
   const section = /^\/settings\/([^/]+)$/.exec(path)?.[1];
   const mobileSection = section ? MOBILE_SETTINGS_SECTION_FOR[section] : undefined;
