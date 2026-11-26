@@ -193,9 +193,16 @@ func TestStaticGateAllowedForUserRespectsTheCredentialsOrg(t *testing.T) {
 	m := &fakeMembership{members: map[string]bool{member + "/" + tenantZero: true, member + "/" + otherOrg: true}}
 	gate := featuregate.NewStatic(gtmConfig(tenantZero), m)
 
-	got, err := gate.AllowedForUser(authz.WithCredentialOrg(context.Background(), otherOrg), featuregate.GTM, member)
+	ctx := authz.WithCredentialOrg(context.Background(), otherOrg)
+	got, err := gate.AllowedForUser(ctx, featuregate.GTM, member)
 	require.NoError(t, err)
 	assert.False(t, got, "a token bound to an unlisted org")
+	// The refusal of the listed org is not recorded on the caller's ctx: the
+	// edge would report it, naming an allowlisted org the caller never asked
+	// about, on any later refusal of the same request.
+	bound, refused, ok := authz.CredentialRefusal(ctx)
+	assert.False(t, ok, "refused %q", refused)
+	assert.Equal(t, otherOrg, bound)
 
 	got, err = gate.AllowedForUser(authz.WithCredentialOrg(context.Background(), tenantZero), featuregate.GTM, member)
 	require.NoError(t, err)
