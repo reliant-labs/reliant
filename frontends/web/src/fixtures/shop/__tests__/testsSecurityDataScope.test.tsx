@@ -6,9 +6,9 @@
  * each renders the shop pack's data under a scope over `createShopTransport()`,
  * while the module transport records every call and refuses it.
  *
- * The family is these pages' reads (the TestApi, VulnerabilityApi,
- * StorageBrowserApi and IdentityApi defaults, and the coverage source
- * fetch): none may reach the module transport. Reads outside the family
+ * The family is these pages' reads (the Tests pages' generated TestsService
+ * hooks, the VulnerabilityApi, StorageBrowserApi and IdentityApi defaults,
+ * and the coverage source fetch): none may reach the module transport. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
  * page makes in any scope (the person's org list, their own user) are
@@ -52,7 +52,6 @@ import { createTransportScope, TransportScopeProvider } from "@/lib/transportSco
 import type { LiveEnv } from "@/services/forge/live";
 import { controlPlaneIdentityApi, identityApiOf } from "@/services/controlPlane/identity/IdentityApiContext";
 import { controlPlaneStorageBrowserApi, storageBrowserApiOf } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
-import { controlPlaneTestApi, testApiOf } from "@/services/controlPlane/tests/TestApiContext";
 import { controlPlaneVulnerabilityApi, vulnerabilityApiOf } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import { coverageSourceFetchOf } from "@/services/coverageSource/CoverageSourceContext";
 import { fetchCoverageSource } from "@/services/coverageSource/coverageSource";
@@ -200,14 +199,12 @@ describe("the console's data and identity pages in a TransportScope", () => {
 
 describe("the scoped context defaults", () => {
   it("are the app's constants on the app's transport, and one api per scope transport", () => {
-    expect(testApiOf(appTransport)).toBe(controlPlaneTestApi);
     expect(vulnerabilityApiOf(appTransport)).toBe(controlPlaneVulnerabilityApi);
     expect(storageBrowserApiOf(appTransport)).toBe(controlPlaneStorageBrowserApi);
     expect(identityApiOf(appTransport)).toBe(controlPlaneIdentityApi);
     expect(coverageSourceFetchOf(appTransport)).toBe(fetchCoverageSource);
     const shop = createShopTransport();
     for (const [of, app] of [
-      [testApiOf, controlPlaneTestApi],
       [vulnerabilityApiOf, controlPlaneVulnerabilityApi],
       [storageBrowserApiOf, controlPlaneStorageBrowserApi],
       [identityApiOf, controlPlaneIdentityApi],

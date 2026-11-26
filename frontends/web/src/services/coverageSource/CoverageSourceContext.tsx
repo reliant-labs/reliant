@@ -4,9 +4,9 @@
  * The seam between the coverage file view (components/Forge/Tests) and
  * wherever a file's source comes from (coverageSource.ts).
  *
- * The same shape as TestApiContext: component tests and the preview hand it
- * a fixture fetcher (components/Forge/Tests/coverageFixtures.ts), and
- * production never provides anything but the real one, which today answers
+ * Component tests and the preview hand it a fixture fetcher
+ * (components/Forge/Tests/coverageFixtures.ts), and production never
+ * provides anything but the real one, which today answers
  * `not-yet-available` (reliant's GetCoverageSource is W2b). The default is
  * that fetch on the nearest TransportScope's transport, else on the app's.
  */

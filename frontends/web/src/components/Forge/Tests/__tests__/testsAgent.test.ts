@@ -11,10 +11,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { LineCoverage, TestFlake } from "@/services/controlPlane/tests/types";
+import { testDetailOf } from "@/services/controlPlane/tests/wire";
 
 import { askAgentCommands, askWorkspaceName, buildAskReliantPrompt, goRunPattern, MAX_SAMPLE_OUTPUT_CHARS } from "../../Observability/AskReliant/askReliantPrompt";
 import { FIXTURE_REFUND_PATH, FIXTURE_REFUND_SOURCE, fixtureCoverage, fixtureFileCoverage } from "../coverageFixtures";
-import { FIXTURE_PROJECT, fixtureTestApi } from "../fixtures";
+import { FIXTURE_PROJECT } from "../fixtures";
+import { fixtureTestWire } from "../runFlakeFixtures";
 import { AGENT_REASON, agentAvailability, coverageSubject, defaultCoverageTarget, filesToRead, flakyTestSubject, uncoveredRanges } from "../testsAgent";
 
 const MODULE = "github.com/acme/shopfront";
@@ -22,8 +24,7 @@ const idOf = (dir: string, name: string) => `go:${MODULE}/${dir}:${name}`;
 const COMMIT = "9f3c2a17be0d4c55a1f0e9d8c7b6a5f4e3d2c1b0";
 
 async function syncJob() {
-  const api = fixtureTestApi("report");
-  return api.getTest({ orgId: null, project: FIXTURE_PROJECT, testId: idOf("internal/jobs", "TestSyncJob") });
+  return testDetailOf(fixtureTestWire("report", { orgId: null, project: FIXTURE_PROJECT, testId: idOf("internal/jobs", "TestSyncJob") }));
 }
 
 describe("agentAvailability", () => {

@@ -10,8 +10,8 @@
  * shapes (services/controlPlane/tests/wire.ts's), so each handler decodes the
  * request into the client's plain request, asks the model, and builds the
  * generated response message from its answer. The demo then runs the pages'
- * REAL client (services/controlPlane/tests/testApi.ts and its wire.ts) over
- * the fixture transport, with no TestApiProvider in between.
+ * REAL reads (hooks/test-queries.ts, the generated TestsService hooks mapped
+ * by wire.ts) over the fixture transport, with no provider in between.
  */
 
 import { create } from "@bufbuild/protobuf";
@@ -49,7 +49,7 @@ import { DEMO_SCOPE, scopedToDemo, type PackScope } from "./scope";
 
 const rpc = (method: string) => `${TestsService.typeName}/${method}`;
 
-/** The RPCs served here: every read the Tests pages' client makes (testApi.ts). */
+/** The RPCs served here: every read the Tests pages make (hooks/test-queries.ts). */
 export const TESTS_RPCS = {
   getTestSummary: rpc("GetTestSummary"),
   listTestRuns: rpc("ListTestRuns"),

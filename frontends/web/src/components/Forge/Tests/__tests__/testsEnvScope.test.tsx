@@ -16,7 +16,7 @@ import { screen, waitFor } from "@testing-library/react";
 
 import { forgeConsoleTestsCoverageSearchSchema, forgeConsoleTestsFlakySearchSchema, forgeConsoleTestsSearchSchema } from "@/routeSchemas";
 
-import { FIXTURE_COMMIT, FIXTURE_NOW, fixtureTestApi, type FixtureTestApi } from "../fixtures";
+import { FIXTURE_COMMIT, FIXTURE_NOW, fixtureTests, type FixtureTests } from "../fixtures";
 import { FIXTURE_PREVIEW_ENV_ID } from "../runFlakeFixtures";
 import { TestsCoveragePage } from "../TestsCoveragePage";
 import { TestsFlakyPage } from "../TestsFlakyPage";
@@ -53,10 +53,10 @@ vi.mock("../../Console/consoleContext", () => ({
   }),
 }));
 
-const requestsOf = (api: FixtureTestApi, method: string) => api.calls.filter((call) => call.method === method).map((call) => call.req as Record<string, unknown>);
+const requestsOf = (api: FixtureTests, method: string) => api.calls.filter((call) => call.method === method).map((call) => call.req as Record<string, unknown>);
 
 function renderPage(component: () => ReactNode, path: string, url: string, schema: { parse: (search: unknown) => unknown }) {
-  const api = fixtureTestApi("report");
+  const api = fixtureTests("report");
   const utils = renderRoutedPage(api, { path: `/forge/p/$project/${path}`, url: `/forge/p/shopfront/${url}`, validateSearch: (search) => schema.parse(search), component });
   return { ...utils, api };
 }

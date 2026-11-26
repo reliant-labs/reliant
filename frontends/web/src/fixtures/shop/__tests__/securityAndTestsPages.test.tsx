@@ -6,7 +6,7 @@
  * never an empty or "not available" state.
  *
  * The pages run as the demo runs them: no API provider, so their default
- * clients (controlPlaneVulnerabilityApi, controlPlaneTestApi,
+ * clients (controlPlaneVulnerabilityApi, the generated TestsService hooks,
  * fetchCoverageSource) read the shop pack over its transport.
  */
 

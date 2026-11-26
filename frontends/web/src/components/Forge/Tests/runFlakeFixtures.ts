@@ -4,7 +4,7 @@
  * The Runs and Flaky tests pages' fixtures (Tests W3): shopfront's recorded
  * runs, one run's failures, its flaky tests and one test's record, as WIRE
  * messages (services/controlPlane/tests/wire.ts) like the rest of
- * fixtures.ts, whose `fixtureTestApi` answers ListTestRuns, GetTestRun,
+ * fixtures.ts, whose `fixtureTests` answers ListTestRuns, GetTestRun,
  * ListFlakyTests and GetTest from here.
  *
  * The story matches the Overview's: main's commit 9f3c… ran unit,

@@ -11,10 +11,10 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-import { TestApiProvider, type TestApi } from "@/services/controlPlane/tests/TestApiContext";
 
-import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTestApi, type TestsScenario } from "../fixtures";
+import { FIXTURE_NOW, FIXTURE_PROJECT, fixtureTests, type FixtureTests, type TestsScenario } from "../fixtures";
 import { TestsOverviewView } from "../TestsOverviewPage";
+import { renderWithTests } from "./testsTestUtils";
 
 vi.mock("@/components/forge-ui/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
@@ -40,18 +40,15 @@ const HREFS = {
   coverage: "/forge/p/shopfront/tests/coverage",
 };
 
-function renderOverview(api: TestApi, { environmentId, branch }: { environmentId?: string; branch?: string } = {}) {
+/** The Overview over `fixture`, in its scope; `null`, on the app's own transport and query client (no scope). */
+function renderOverview(fixture: FixtureTests | null, { environmentId, branch }: { environmentId?: string; branch?: string } = {}) {
+  const view = <TestsOverviewView scope={{ project: FIXTURE_PROJECT, environmentId }} branch={branch} hrefs={HREFS} now={FIXTURE_NOW} />;
+  if (fixture) return renderWithTests(fixture, view);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <TestApiProvider api={api}>
-        <TestsOverviewView scope={{ project: FIXTURE_PROJECT, environmentId }} branch={branch} hrefs={HREFS} now={FIXTURE_NOW} />
-      </TestApiProvider>
-    </QueryClientProvider>
-  );
+  return render(<QueryClientProvider client={client}>{view}</QueryClientProvider>);
 }
 
-const scenario = (name: TestsScenario) => fixtureTestApi(name);
+const scenario = (name: TestsScenario) => fixtureTests(name);
 
 describe("Tests overview: a full report", () => {
   it("leads with coverage, pass rate, flaky tests and the last run", async () => {
@@ -145,9 +142,8 @@ describe("Tests overview: nothing to show", () => {
     expect(state).toHaveTextContent("tests:read");
   });
 
-  it("the real client, until the re-vendor, answers as a control plane without the service", async () => {
-    const { controlPlaneTestApi } = await import("@/services/controlPlane/tests/TestApiContext");
-    renderOverview(controlPlaneTestApi);
+  it("with no control plane configured, the app's own reads answer as a control plane without the service", async () => {
+    renderOverview(null);
     expect(await screen.findByTestId("tests-error")).toHaveAttribute("data-kind", "not-configured");
   });
 });

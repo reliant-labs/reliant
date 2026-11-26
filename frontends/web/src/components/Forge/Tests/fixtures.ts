@@ -3,15 +3,16 @@
 /**
  * The Tests pages' fixtures, shaped like control-plane's TestsService read API
  * (control-plane#3286's proto/services/tests/v1/tests.proto) as WIRE messages
- * (services/controlPlane/tests/wire.ts), so the fixture api maps them through
- * the same wire.ts the real client will: a fixture can never say something
- * the wire cannot. ONE module, shared by the page tests and the preview (the
+ * (services/controlPlane/tests/wire.ts), served on the wire, so the pages map
+ * them through the same wire.ts they map control-plane's answers with: a
+ * fixture can never say something the wire cannot. ONE module, shared by the page tests and the preview (the
  * visual harness reads the shop pack's Tests story instead, src/fixtures/shop).
  *
- * `fixtureTestApi(scenario)` is an in-memory TestApi; hand it to
- * TestApiProvider. The project is shopfront's: main's newest report merges
- * the unit, integration and e2e lanes of commit 9f3c…, two releases sit on the
- * trend, four tests are flaky (two quarantined).
+ * `fixtureTests(scenario)` is an in-memory TestsService; a test serves it on
+ * a mock transport (__tests__/testsTestUtils.tsx). The project is
+ * shopfront's: main's newest report merges the unit, integration and e2e
+ * lanes of commit 9f3c…, two releases sit on the trend, four tests are flaky
+ * (two quarantined).
  *
  * GetTestSummary is answered here (the Overview's one read, W1); ListTestRuns,
  * GetTestRun, ListFlakyTests and GetTest from runFlakeFixtures.ts (the Runs
@@ -23,14 +24,33 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 
-import type { TestApi } from "@/services/controlPlane/tests/TestApiContext";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { GetTestSummaryResponseSchema } from "@/gen/controlplane/services/tests/v1/tests_pb";
+import type {
+  GetCoverageRequest,
+  GetFileCoverageRequest,
+  GetReleaseTestsRequest,
+  GetTestRequest,
+  GetTestRunRequest,
+  GetTestSummaryRequest,
+  ListFlakyTestsRequest,
+  ListTestRunsRequest,
+} from "@/gen/controlplane/services/tests/v1/tests_pb";
+import type {
+  CoverageRequest,
+  CoverageTarget,
+  FileCoverageRequest,
+  FlakyRequest,
+  ReleaseTestsRequest,
+  RunRequest,
+  RunsRequest,
+  SummaryRequest,
+  TestRequest,
+} from "@/services/controlPlane/tests/types";
 import {
-  flakePageOf,
-  releaseTestsOf,
-  runDetailOf,
-  runPageOf,
-  summaryOf,
-  testDetailOf,
+  FLAKE_STATE_WIRE,
+  RUN_OUTCOME_WIRE,
+  RUN_SOURCE_WIRE,
   WireIngestState,
   WireRunOutcome,
   WireRunSource,
@@ -42,7 +62,7 @@ import {
 } from "@/services/controlPlane/tests/wire";
 
 import { fixtureFlakyWire, fixtureRunsWire, fixtureRunWire, fixtureTestWire } from "./runFlakeFixtures";
-import { fixtureCoverage, fixtureFileCoverage } from "./coverageFixtures";
+import { fixtureCoverageResponse, fixtureFileCoverageResponse } from "./coverageFixtures";
 import { FIXTURE_RELEASE_COMMITS, FIXTURE_RELEASE_VERSIONS } from "./fixtureReleases";
 import { fixtureReleaseTestsWire } from "./releaseTestsFixtures";
 
@@ -247,52 +267,136 @@ export function fixtureSummaryWire(scenario: TestsScenario): WireSummaryResponse
   }
 }
 
-/** One call the fixture answered, for tests that check what was asked. */
+/** The reads the fixture answers: TestsService's methods the Tests pages call, by their generated names. */
+export type FixtureTestsMethod = "getTestSummary" | "listTestRuns" | "getTestRun" | "getCoverage" | "getFileCoverage" | "getReleaseTests" | "listFlakyTests" | "getTest";
+
+/** One call the fixture answered, for tests that check what was asked: the request as the page built it (types.ts). */
 export interface FixtureCall {
-  method: keyof TestApi;
+  method: FixtureTestsMethod;
   req: unknown;
 }
 
-export type FixtureTestApi = TestApi & { calls: FixtureCall[] };
+/** A fixture read: the request message in, the response (a wire shape the transport makes a message of) out, or a ConnectError thrown. */
+export type FixtureTestsHandler = (req: never) => unknown;
 
-export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestApi {
+/**
+ * An in-memory TestsService on the wire: `handlers` answers each read the
+ * Tests pages make (a test serves them on a mock transport, in a
+ * TransportScope: __tests__/testsTestUtils.tsx), and `calls` records each
+ * request, read back into the plain request the page built. A test may
+ * replace a handler.
+ */
+export interface FixtureTests {
+  calls: FixtureCall[];
+  handlers: Record<FixtureTestsMethod, FixtureTestsHandler>;
+}
+
+// ── Wire → the plain requests (wire.ts's request builders, inverted) ─────────
+
+const inverse = <K extends string>(map: Record<K, number>) => Object.fromEntries(Object.entries(map).map(([name, wire]) => [wire, name])) as Record<number, K>;
+const RUN_SOURCE = inverse(RUN_SOURCE_WIRE);
+const RUN_OUTCOME = inverse(RUN_OUTCOME_WIRE);
+const FLAKE_STATE = inverse(FLAKE_STATE_WIRE);
+
+const base = (req: { project: string; orgId?: string }) => ({ orgId: req.orgId ?? null, project: req.project });
+const opt = <T>(value: T | undefined): T | undefined => (value === "" || value === 0 ? undefined : value);
+
+function targetOf(target: GetCoverageRequest["target"]): CoverageTarget {
+  switch (target.case) {
+    case "gitCommit":
+      return { gitCommit: target.value };
+    case "releaseVersion":
+      return { releaseVersion: target.value };
+    case "environmentId":
+      return { environmentId: target.value };
+    default:
+      throw new ConnectError("a coverage target is required", Code.InvalidArgument);
+  }
+}
+
+const summaryRequestOf = (req: GetTestSummaryRequest): SummaryRequest => ({
+  ...base(req),
+  branch: req.branch,
+  environmentId: req.environmentId,
+  trendPoints: opt(req.trendPoints),
+  passRateRuns: opt(req.passRateRuns),
+});
+
+const runsRequestOf = (req: ListTestRunsRequest): RunsRequest => ({
+  ...base(req),
+  filters: {
+    branch: req.branch,
+    gitCommit: req.gitCommit,
+    releaseVersion: req.releaseVersion,
+    environmentId: req.environmentId,
+    lane: req.lane,
+    source: req.source === undefined ? undefined : (RUN_SOURCE[req.source] as RunsRequest["filters"]["source"]),
+    outcome: req.outcome === undefined ? undefined : RUN_OUTCOME[req.outcome],
+  },
+  pageSize: req.pageSize,
+  pageToken: req.pageToken,
+});
+
+const coverageRequestOf = (req: GetCoverageRequest): CoverageRequest => ({
+  ...base(req),
+  target: targetOf(req.target),
+  path: req.path,
+  lane: req.lane,
+  baseSha: req.baseSha,
+  changedOnly: req.changedOnly || undefined,
+});
+
+const flakyRequestOf = (req: ListFlakyTestsRequest): FlakyRequest => ({
+  ...base(req),
+  filters: { state: req.state === undefined ? undefined : (FLAKE_STATE[req.state] as FlakyRequest["filters"]["state"]), minScore: req.minScore, package: req.package },
+  pageSize: req.pageSize,
+  pageToken: req.pageToken,
+});
+
+/**
+ * The summary as the response message. `actsOnSuspected` is not in the proto
+ * yet (wire.ts), so a transport would drop it: it is set on the message
+ * itself, as the field will arrive once it lands, and the transport passes a
+ * message through unchanged.
+ */
+function summaryMessage(wire: WireSummaryResponse) {
+  const { actsOnSuspected, ...fields } = wire;
+  const message = create(GetTestSummaryResponseSchema, fields as MessageInitShape<typeof GetTestSummaryResponseSchema>);
+  return actsOnSuspected === undefined ? message : Object.assign(message, { actsOnSuspected });
+}
+
+export function fixtureTests(scenario: TestsScenario = "report"): FixtureTests {
   const calls: FixtureCall[] = [];
   const data = dataScenario(scenario);
-  const refuse = (): Promise<never> => {
-    if (scenario === "denied") return Promise.reject(new ConnectError("missing tests:read", Code.PermissionDenied));
-    return Promise.reject(new ConnectError("TestsService is not available", Code.Unimplemented));
-  };
-  // A read the scenario refuses, or the fixture's answer (a NotFound or a bad page token it throws, rejected).
-  function answer<T>(method: keyof TestApi, req: unknown, build: () => T): Promise<T> {
-    calls.push({ method, req });
-    if (scenario === "not-configured" || scenario === "denied") return refuse();
-    try {
-      return Promise.resolve(build());
-    } catch (error) {
-      return Promise.reject(error);
-    }
+  // A read the scenario refuses, or the fixture's answer (a NotFound or a bad page token it throws).
+  function answer<R, P, T>(method: FixtureTestsMethod, plain: (req: R) => P, build: (req: P) => T): (req: R) => T {
+    return (wire) => {
+      const req = plain(wire);
+      calls.push({ method, req });
+      if (scenario === "denied") throw new ConnectError("missing tests:read", Code.PermissionDenied);
+      if (scenario === "not-configured") throw new ConnectError("TestsService is not available", Code.Unimplemented);
+      return build(req);
+    };
   }
+  const noReport = (req: CoverageRequest | FileCoverageRequest) => {
+    if (data === "no-runs" || data === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
+    return req;
+  };
   return {
     calls,
-    getTestSummary: (req) => {
-      calls.push({ method: "getTestSummary", req });
-      if (scenario === "not-configured" || scenario === "denied") return refuse();
-      return Promise.resolve(summaryOf(fixtureSummaryWire(scenario)));
+    handlers: {
+      getTestSummary: answer("getTestSummary", summaryRequestOf, () => summaryMessage(fixtureSummaryWire(scenario))),
+      listTestRuns: answer("listTestRuns", runsRequestOf, (req) => fixtureRunsWire(data, req)),
+      getTestRun: answer("getTestRun", (req: GetTestRunRequest): RunRequest => ({ ...base(req), runId: req.runId }), (req) => fixtureRunWire(data, req)),
+      getCoverage: answer("getCoverage", coverageRequestOf, (req) => fixtureCoverageResponse(noReport(req) as CoverageRequest)),
+      getFileCoverage: answer(
+        "getFileCoverage",
+        (req: GetFileCoverageRequest): FileCoverageRequest => ({ ...base(req), target: targetOf(req.target), path: req.path, baseSha: req.baseSha }),
+        (req) => fixtureFileCoverageResponse(noReport(req) as FileCoverageRequest)
+      ),
+      getReleaseTests: answer("getReleaseTests", (req: GetReleaseTestsRequest): ReleaseTestsRequest => ({ ...base(req), version: req.version }), (req) => fixtureReleaseTestsWire(data, req)),
+      listFlakyTests: answer("listFlakyTests", flakyRequestOf, (req) => fixtureFlakyWire(data, req)),
+      getTest: answer("getTest", (req: GetTestRequest): TestRequest => ({ ...base(req), testId: req.testId }), (req) => fixtureTestWire(data, req)),
     },
-    listTestRuns: (req) => answer("listTestRuns", req, () => runPageOf(fixtureRunsWire(data, req))),
-    getTestRun: (req) => answer("getTestRun", req, () => runDetailOf(fixtureRunWire(data, req))),
-    getCoverage: (req) =>
-      answer("getCoverage", req, () => {
-        if (data === "no-runs" || data === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
-        return req;
-      }).then(fixtureCoverage),
-    getFileCoverage: (req) =>
-      answer("getFileCoverage", req, () => {
-        if (data === "no-runs" || data === "pending") throw new ConnectError("no report for this commit", Code.NotFound);
-        return req;
-      }).then(fixtureFileCoverage),
-    getReleaseTests: (req) => answer("getReleaseTests", req, () => releaseTestsOf(fixtureReleaseTestsWire(data, req))),
-    listFlakyTests: (req) => answer("listFlakyTests", req, () => flakePageOf(fixtureFlakyWire(data, req))),
-    getTest: (req) => answer("getTest", req, () => testDetailOf(fixtureTestWire(data, req))),
   };
 }

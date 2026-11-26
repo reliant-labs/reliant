@@ -10,13 +10,15 @@
  * answered from the bundle, never fetched.
  *
  * Every answer is asked the way the pages ask it: through their real clients
- * (controlPlaneVulnerabilityApi, controlPlaneTestApi, fetchCoverageSource)
- * over the shop pack's transport, read-only guard included.
+ * (controlPlaneVulnerabilityApi, the Tests pages' generated TestsService reads,
+ * fetchCoverageSource) over the shop pack's transport, read-only guard
+ * included.
  */
 
 import type { DescMethod } from "@bufbuild/protobuf";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createClient, type Transport } from "@connectrpc/connect";
+import { QueryClient } from "@tanstack/react-query";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
@@ -25,7 +27,27 @@ import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
 import { VulnerabilityService } from "@/gen/controlplane/services/vulnerability/v1/vulnerability_pb";
 import { CoverageSourceService } from "@/gen/reliant/v1/coverage_source_pb";
 import { setTransport } from "@/lib/connect";
-import { controlPlaneTestApi } from "@/services/controlPlane/tests/TestApiContext";
+import { testsServiceQueries } from "@/hooks/controlplane/tests-service-hooks_gen";
+import { onControlPlane } from "@/hooks/test-queries";
+import type { CoverageRequest, FileCoverageRequest, FlakyRequest, ReleaseTestsRequest, RunRequest, RunsRequest, SummaryRequest, TestRequest } from "@/services/controlPlane/tests/types";
+import {
+  coverageRequest,
+  coverageTreeOf,
+  fileCoverageOf,
+  fileCoverageRequest,
+  flakePageOf,
+  flakyRequest,
+  releaseTestsOf,
+  releaseTestsRequest,
+  runDetailOf,
+  runPageOf,
+  runRequest,
+  runsRequest,
+  summaryOf,
+  summaryRequest,
+  testDetailOf,
+  testRequest,
+} from "@/services/controlPlane/tests/wire";
 import { controlPlaneVulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import { fetchCoverageSource, gitBlobId, sourceLineCount, verifySource } from "@/services/coverageSource/coverageSource";
 
@@ -44,6 +66,23 @@ const VERSIONS = DEMO_RELEASES.map((r) => r.version);
 const COMMITS = new Set<string>(DEMO_RELEASES.flatMap((r) => r.commits.map((c) => c.sha)));
 const commitOf = (version: string) => DEMO_RELEASES.find((r) => r.version === version)!.commit;
 const ACTORS = new Set<string>([...DEMO_CAST.map((p) => p.handle), DEMO_CI_ACTOR]);
+
+/**
+ * The Tests pages' reads, asked as hooks/test-queries.ts asks them: the
+ * generated query options, fetched on a QueryClient outside any scope (so
+ * over the app's transport), each answer mapped as the page's `select` maps it.
+ */
+const testsClient = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0, gcTime: 0 } } });
+const testsApi = {
+  getTestSummary: async (r: SummaryRequest) => summaryOf(await testsClient.fetchQuery(onControlPlane(testsServiceQueries.getTestSummary(summaryRequest(r))))),
+  listTestRuns: async (r: RunsRequest) => runPageOf(await testsClient.fetchQuery(onControlPlane(testsServiceQueries.listTestRuns(runsRequest(r))))),
+  getTestRun: async (r: RunRequest) => runDetailOf(await testsClient.fetchQuery(onControlPlane(testsServiceQueries.getTestRun(runRequest(r))))),
+  getCoverage: async (r: CoverageRequest) => coverageTreeOf(await testsClient.fetchQuery(onControlPlane(testsServiceQueries.getCoverage(coverageRequest(r))))),
+  getFileCoverage: async (r: FileCoverageRequest) => fileCoverageOf(await testsClient.fetchQuery(onControlPlane(testsServiceQueries.getFileCoverage(fileCoverageRequest(r))))),
+  getReleaseTests: async (r: ReleaseTestsRequest) => releaseTestsOf(await testsClient.fetchQuery(onControlPlane(testsServiceQueries.getReleaseTests(releaseTestsRequest(r))))),
+  listFlakyTests: async (r: FlakyRequest) => flakePageOf(await testsClient.fetchQuery(onControlPlane(testsServiceQueries.listFlakyTests(flakyRequest(r))))),
+  getTest: async (r: TestRequest) => testDetailOf(await testsClient.fetchQuery(onControlPlane(testsServiceQueries.getTest(testRequest(r))))),
+};
 
 /** Every `…Ms` number and every timestamp in `value`, except an exemption's or a quarantine's expiry (meant to lie ahead). */
 function times(value: unknown, out: { path: string; ms: number }[] = [], path = ""): { path: string; ms: number }[] {
@@ -185,7 +224,7 @@ describe("the demo's Security answers", () => {
 });
 
 describe("the demo's Tests answers", () => {
-  const api = () => controlPlaneTestApi;
+  const api = () => testsApi;
 
   it("summarises main at v1.8.4's commit, with every release on the trend", async () => {
     const summary = await api().getTestSummary(req);
@@ -326,21 +365,24 @@ describe("the demo transport's Security and Tests RPCs", () => {
     listVulnerabilities: () => controlPlaneVulnerabilityApi.listVulnerabilities({ ...req, filters: {} }),
     getVulnerability: () => controlPlaneVulnerabilityApi.getVulnerability({ ...req, advisoryId: SHOP_ADVISORIES[0]!.advisory.id }),
     getReleaseVulnerabilities: () => controlPlaneVulnerabilityApi.getReleaseVulnerabilities({ ...req, version: VERSIONS[0]! }),
-    getTestSummary: () => controlPlaneTestApi.getTestSummary(req),
-    listTestRuns: () => controlPlaneTestApi.listTestRuns({ ...req, filters: {} }),
-    getTestRun: async () => controlPlaneTestApi.getTestRun({ ...req, runId: (await controlPlaneTestApi.listTestRuns({ ...req, filters: {} })).runs[0]!.runId }),
-    getCoverage: () => controlPlaneTestApi.getCoverage({ ...req, target: { gitCommit: commitOf("v1.8.4") }, path: "" }),
-    getFileCoverage: () => controlPlaneTestApi.getFileCoverage({ ...req, target: { gitCommit: commitOf("v1.8.4") }, path: SHOP_CHARGE_PATH }),
-    getReleaseTests: () => controlPlaneTestApi.getReleaseTests({ ...req, version: "v1.8.4" }),
-    listFlakyTests: () => controlPlaneTestApi.listFlakyTests({ ...req, filters: {} }),
-    getTest: () => controlPlaneTestApi.getTest({ ...req, testId: SHOP_TESTS.retryOnTimeout.id }),
+    getTestSummary: () => testsApi.getTestSummary(req),
+    listTestRuns: () => testsApi.listTestRuns({ ...req, filters: {} }),
+    getTestRun: async () => testsApi.getTestRun({ ...req, runId: (await testsApi.listTestRuns({ ...req, filters: {} })).runs[0]!.runId }),
+    getCoverage: () => testsApi.getCoverage({ ...req, target: { gitCommit: commitOf("v1.8.4") }, path: "" }),
+    getFileCoverage: () => testsApi.getFileCoverage({ ...req, target: { gitCommit: commitOf("v1.8.4") }, path: SHOP_CHARGE_PATH }),
+    getReleaseTests: () => testsApi.getReleaseTests({ ...req, version: "v1.8.4" }),
+    listFlakyTests: () => testsApi.listFlakyTests({ ...req, filters: {} }),
+    getTest: () => testsApi.getTest({ ...req, testId: SHOP_TESTS.retryOnTimeout.id }),
     fetchCoverageSource: () => fetchCoverageSource("shop", SHOP_CHARGE_BLOB),
   };
 
   it("serves every read the Security and Tests pages' clients make, and nothing else of theirs", () => {
     // A client method added without a handler fails here, not as a "Sample data isn't available" page.
     expect(Object.keys(controlPlaneVulnerabilityApi).sort()).toEqual(Object.keys(SECURITY_RPCS).sort());
-    expect(Object.keys(controlPlaneTestApi).sort()).toEqual(Object.keys(TESTS_RPCS).sort());
+    // Every generated TestsService read is a page's, but the ingest's HasCoverageBlob (CI asks it); the paged reads are their lists'.
+    const pageReads = Object.keys(testsServiceQueries).filter((method) => !method.endsWith("Infinite") && method !== "hasCoverageBlob");
+    expect(pageReads.sort()).toEqual(Object.keys(TESTS_RPCS).sort());
+    expect(Object.keys(testsApi).sort()).toEqual(Object.keys(TESTS_RPCS).sort());
     expect(Object.keys(calls).sort()).toEqual([...Object.keys(SECURITY_RPCS), ...Object.keys(TESTS_RPCS), "fetchCoverageSource"].sort());
   });
 
