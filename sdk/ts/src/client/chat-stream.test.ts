@@ -124,6 +124,32 @@ describe("ChatStream gap resync", () => {
     stream.stop();
   });
 
+  it("slows down resyncs that never move the cursor", async () => {
+    const stream = openStream(10n);
+    await flush();
+    conns()[0]!.push(caughtUpFrame(12));
+    conns()[0]!.push(updatesFrame(tools([12]), 12));
+    await flush();
+
+    // 11 is missing from every replay too: each resync ends where it began.
+    const opensAt: number[] = [];
+    let answered = 1;
+    for (let t = 0; t <= 40_000; t += 100) {
+      while (answered < conns().length) {
+        opensAt.push(t);
+        conns()[answered]!.push(updatesFrame(tools([12]), 12));
+        conns()[answered]!.push(caughtUpFrame(12));
+        answered++;
+        await flush();
+      }
+      await vi.advanceTimersByTimeAsync(100);
+    }
+    const gaps = opensAt.slice(1).map((t, i) => t - opensAt[i]!);
+    expect(gaps.slice(0, 4)).toEqual([1_000, 2_000, 4_000, 8_000]);
+    expect(stream.getLastChatSequence()).toBe(10);
+    stream.stop();
+  });
+
   it("opens a gap resync at once after an earlier network failure", async () => {
     const stream = openStream(100n);
     await flush();

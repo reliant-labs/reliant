@@ -34,7 +34,10 @@ const LOG_PREFIX_STREAM = "[📡 ChatStream]";
 // Chat gap-resync pacing. Chat gaps are exact (per-chat sequences are
 // contiguous and never filtered), so the interval only guards against
 // reconnect loops: a gap inside it is resynced when it ends, never dropped.
+// A resync that did not move the cursor (a sequence the server cannot
+// replay) doubles the interval, up to the cap, until one does.
 const CHAT_GAP_RESYNC_MIN_INTERVAL_MS = 1_000;
+const CHAT_GAP_RESYNC_MAX_INTERVAL_MS = 30_000;
 
 /**
  * The server refused the chat: StreamChatUpdates answers NotFound for a chat
@@ -162,6 +165,10 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   private gapResyncInFlight = false;
   private gapResyncThrough = 0n;
   private gapResyncTimer: ReturnType<typeof setTimeout> | null = null;
+  // The cursor the last resync started from, and how many resyncs in a row
+  // started from it (no progress), for the pacing.
+  private gapResyncFrom = -1n;
+  private gapResyncsWithoutProgress = 0;
   // How the current connection is bringing the chat up to date, for the
   // onReplayStarted / onCaughtUp hooks: null until its first snapshot or
   // update batch, and the persisted updates it delivered before caught_up.
@@ -426,7 +433,11 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
       );
       return;
     }
-    const wait = this.lastChatGapResyncAt + CHAT_GAP_RESYNC_MIN_INTERVAL_MS - Date.now();
+    const interval = Math.min(
+      CHAT_GAP_RESYNC_MIN_INTERVAL_MS * Math.pow(2, Math.min(this.gapResyncsWithoutProgress, 5)),
+      CHAT_GAP_RESYNC_MAX_INTERVAL_MS,
+    );
+    const wait = this.lastChatGapResyncAt + interval - Date.now();
     if (wait > 0) {
       this.gapResyncTimer = setTimeout(() => {
         this.gapResyncTimer = null;
@@ -446,6 +457,8 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     }
     this.lastChatGapResyncAt = Date.now();
     this.gapResyncInFlight = true;
+    this.gapResyncsWithoutProgress = this.lastChatSequence === this.gapResyncFrom ? this.gapResyncsWithoutProgress + 1 : 0;
+    this.gapResyncFrom = this.lastChatSequence;
 
     this.log.warn("Chat update sequence gap detected — resyncing from last contiguous sequence",
       {
@@ -476,6 +489,8 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   private resetGapResync(): void {
     this.gapResyncInFlight = false;
     this.gapResyncThrough = 0n;
+    this.gapResyncFrom = -1n;
+    this.gapResyncsWithoutProgress = 0;
     if (this.gapResyncTimer !== null) {
       clearTimeout(this.gapResyncTimer);
       this.gapResyncTimer = null;
