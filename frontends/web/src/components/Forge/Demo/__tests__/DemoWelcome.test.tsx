@@ -36,6 +36,8 @@ it("is one hero with an H1, then a choice that blocks nothing", async () => {
   const router = mount("/forge/demo?section=home", true);
   const home = await screen.findByTestId("demo-home");
   expect(within(home).getByRole("heading", { level: 1 })).toHaveTextContent("Ship your app safely, see what breaks, and let an agent fix it.");
+  // The lede names what the console covers today: observability, product analytics, tests, security and data.
+  expect(within(home).getByText(/gives it one console/)).toHaveTextContent(/session replays, who uses it, its tests, its security findings and its database/);
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   fireEvent.click(within(home).getByTestId("home-primary"));
