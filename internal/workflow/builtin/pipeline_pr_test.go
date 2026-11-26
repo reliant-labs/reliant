@@ -5,12 +5,18 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
+	"github.com/reliant-labs/reliant/internal/workflow/celeval"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -59,10 +65,93 @@ func TestPipelinePRConcurrency(t *testing.T) {
 	assert.EqualValues(t, 6, c.GetMaxRunning())
 	assert.Equal(t, "3h", model.CelStringValue(wf.GetTimeout()))
 
+	due := false
 	for _, tr := range wf.GetTriggers() {
 		for _, ev := range tr.GetIntegration().GetEvents() {
 			assert.NotContains(t, ev, "labeled", "trigger %s: a label is never input", tr.GetName())
 		}
+		if tr.GetName() == "due" {
+			due = true
+			assert.Equal(t, core.RecordDueTablePRPipeline, tr.GetRecordDue().GetTable(), "the due trigger wakes on the PR's pipeline row")
+		}
+	}
+	assert.True(t, due, "pipeline-pr must wake on its record_due row")
+}
+
+// pipelinePRFirings is one firing of each pipeline-pr trigger, all about PR
+// acme/app#<number>: the kind and payload its source records (the due scan's
+// recorddue.Payload; a GitHub event's attributes and data as stored).
+func pipelinePRFirings(number int) map[string]struct {
+	kind    core.TriggerEventKind
+	payload map[string]any
+} {
+	dueAt := time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)
+	type firing = struct {
+		kind    core.TriggerEventKind
+		payload map[string]any
+	}
+	n := float64(number)
+	return map[string]firing{
+		"due": {core.TriggerEventKindRecordDue, recorddue.Payload(core.RecordDueTablePRPipeline, core.DuePRPipeline{
+			Row:    &core.PRPipeline{RecordID: "rec-7", NextAction: "decide", NextActionAt: &dueAt},
+			Record: &core.PRRecord{Repository: "acme/app", Number: number, HeadSHA: "abc"},
+		})},
+		"pr-event": {core.TriggerEventKindIntegration, map[string]any{
+			"event":      "pull_request.synchronize",
+			"attributes": map[string]any{"repository": "acme/app"},
+			"data":       map[string]any{"pull_request": map[string]any{"number": n, "head": map[string]any{"sha": "def"}}},
+		}},
+		"pr-comment": {core.TriggerEventKindIntegration, map[string]any{
+			"event":      "issue_comment.created",
+			"attributes": map[string]any{"repository": "acme/app", "is_pull_request": "true"},
+			"data":       map[string]any{"issue": map[string]any{"number": n}, "comment": map[string]any{"id": float64(1), "body": "fix it"}},
+		}},
+		"pr-line-comment": {core.TriggerEventKindIntegration, map[string]any{
+			"event":      "pull_request_review_comment.created",
+			"attributes": map[string]any{"repository": "acme/app"},
+			"data":       map[string]any{"pull_request": map[string]any{"number": n}, "comment": map[string]any{"id": float64(2), "body": "nit"}},
+		}},
+	}
+}
+
+// The concurrency key names the PR, not the event: a due-scan firing and the
+// GitHub events of the same PR render one key, so they share one slot, and
+// another PR renders another. Each firing's `trigger` root is built the way
+// the capacity admission builds it (triggers.FilterInput.Root).
+func TestPipelinePRConcurrencyKeyNamesThePR(t *testing.T) {
+	t.Parallel()
+	key := loadBuiltin(t, "pipeline-pr.yaml").GetConcurrency().GetKey()
+	render := func(kind core.TriggerEventKind, payload map[string]any) string {
+		t.Helper()
+		root := triggers.FilterInput{Kind: string(kind), TriggerID: "trg", EventID: "evt", Payload: payload}.Root()
+		out, err := triggerspec.RenderConcurrencyKey(key, triggerspec.Scope{Trigger: root})
+		require.NoError(t, err)
+		return out
+	}
+
+	firings := pipelinePRFirings(7)
+	require.Len(t, firings, len(loadBuiltin(t, "pipeline-pr.yaml").GetTriggers()), "one firing per trigger")
+	want := render(firings["due"].kind, firings["due"].payload)
+	for name, f := range firings {
+		assert.Equal(t, want, render(f.kind, f.payload), "%s of acme/app#7 must share the due firing's key", name)
+	}
+	other := pipelinePRFirings(8)["due"]
+	assert.NotEqual(t, want, render(other.kind, other.payload), "another PR is another key")
+}
+
+// Every trigger starts the run on the PR its firing is about: the inputs read
+// trigger.record, the same value the concurrency key reads.
+func TestPipelinePRTriggersMapThePR(t *testing.T) {
+	t.Parallel()
+	wf := loadBuiltin(t, "pipeline-pr.yaml")
+	firings := pipelinePRFirings(7)
+	for _, wt := range wf.GetTriggers() {
+		f, ok := firings[wt.GetName()]
+		require.True(t, ok, "no firing for trigger %s", wt.GetName())
+		run := celeval.DryRunTrigger(wt, wf.GetInputs(), f.payload, nil, nil)
+		require.Empty(t, run.Errors(), "trigger %s", wt.GetName())
+		assert.Equal(t, "acme/app", run.Inputs["repository"], "trigger %s", wt.GetName())
+		assert.EqualValues(t, 7, run.Inputs["number"], "trigger %s", wt.GetName())
 	}
 }
 
