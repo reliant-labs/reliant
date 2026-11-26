@@ -1,0 +1,103 @@
+name: Merge queue test upload
+
+# Sends the merge gate's recorded test run to the control plane, best effort,
+# so the Tests pages of the reliant project show merge groups as well as main.
+#
+# WHAT: `Merge gate` (merge-queue.yml) records ONE forge test run
+# (scripts/merge-gate.sh `forge test begin`: lanes short and web-affected) and
+# keeps it as the merge-gate-test-runs-<attempt> artifact. This downloads it
+# into .forge/tests/runs and runs scripts/test-upload.sh <group sha>, which
+# asks forge to upload it with this job's GitHub Actions OIDC identity
+# (exchanged by the control plane for a short-lived tests:write token).
+#
+# WHY A WORKFLOW OF ITS OWN, NOT A JOB IN merge-queue.yml: a merge group runs
+# the CANDIDATE's own workflow and code, so merge-queue.yml is held to
+# `contents: read` and no credential (TestMergeQueueHasNoWriteCredential).
+# `id-token: write` there would let code that has not merged request a GitHub
+# OIDC token for this repository, and that token is accepted beyond the
+# control plane: build-images.yml authenticates to GCP through Workload
+# Identity Federation with the same kind of token. workflow_run executes the
+# DEFAULT BRANCH's copy of this file, and the job checks out main, so the code
+# that holds id-token is main's own, already merged.
+#
+# THE ARTIFACT IS DATA ONLY, AND CHECKED FIRST. main's
+# scripts/test-artifact-check.sh refuses one with a symlink or a manifest
+# path outside its lane before forge reads it. Nothing from it is executed or sourced: forge
+# (main's pin, through main's scripts/forge.sh) reads the run's records, and
+# `--commit <sha>` reports only the runs recorded for the group's commit, the
+# sha GitHub put in the event. The group's commit is fetched as objects for
+# diff coverage, never checked out.
+#
+# WHAT IT NEVER DOES: decide anything. It is not a check the ruleset or `CI
+# result` reads, the job is continue-on-error, and the script always exits 0
+# with a warning when it cannot upload. A failed group's run uploads too.
+on:
+  workflow_run:
+    workflows: [Merge queue]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  upload:
+    name: Upload the merge gate's test results
+    if: ${{ github.repository == 'reliant-labs/reliant' && github.event.workflow_run.event == 'merge_group' && github.event.workflow_run.conclusion != 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    permissions:
+      # The Merge queue run's artifact.
+      actions: read
+      contents: read
+      # forge's GitHub Actions OIDC exchange.
+      id-token: write
+    # Every action is pinned to a reviewed commit (internal/version's
+    # action-pin test): the job holds an OIDC identity. So Go comes from
+    # setup-go directly, not ./.github/actions/setup, whose steps run actions
+    # by tag; scripts/forge.sh builds the pinned forge.
+    steps:
+      # main's code: workflow_run's own ref, the default branch. Never the
+      # group's head.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # forge test report measures diff coverage against the run's base.
+          fetch-depth: 0
+          persist-credentials: false
+      # The group's commit, as objects only: a merged group is main's commit
+      # already; a failed one is still fetchable by its sha. The repository
+      # is public, so the fetch needs no credential.
+      - name: Fetch the group's commit
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ ${HEAD_SHA} =~ ^[0-9a-f]{40}$ ]] || { echo "::error::workflow_run.head_sha is not a commit sha"; exit 1; }
+          git cat-file -e "${HEAD_SHA}^{commit}" 2>/dev/null \
+            || git fetch --no-tags --quiet origin "${HEAD_SHA}" \
+            || echo "::warning title=Test results: no diff coverage::could not fetch ${HEAD_SHA:0:12}; forge reports without it"
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      # A group whose gate never recorded a run keeps no artifact; the script
+      # then says there is nothing to report.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          name: merge-gate-test-runs-${{ github.event.workflow_run.run_attempt }}
+          path: .forge/tests/runs
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      # The artifact is the CANDIDATE's: its capture.json files name the
+      # results and coverage files forge reads and uploads. main's check
+      # refuses (and deletes) an artifact holding a symlink or naming a path
+      # outside its lane, which would have forge send this job's environment,
+      # OIDC request credential included. The upload runs only if it passed.
+      - name: Check the test-run artifact
+        id: artifact
+        run: scripts/test-artifact-check.sh .forge/tests/runs
+      - name: forge test report --upload
+        if: ${{ steps.artifact.outcome == 'success' }}
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: scripts/test-upload.sh "${HEAD_SHA}"
