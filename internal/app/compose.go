@@ -70,6 +70,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
+	"github.com/reliant-labs/reliant/internal/handlers/pipeline"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
@@ -1086,6 +1087,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
 		ChatTrace:          g.ChatTrace(),
+		Pipeline:           g.Pipeline(),
 	})
 }
 
@@ -2103,5 +2105,17 @@ func (g *Graph) newCallerControlPlane() (*CallerControlPlane, error) {
 func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 	return NewInternalControlPlane(InternalControlPlaneDeps{
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+// newPipeline constructs the pipeline handler (internal/handlers/pipeline).
+// pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
+func (g *Graph) newPipeline() (*pipeline.Service, error) {
+	return pipeline.New(pipeline.Deps{
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Pipeline: g.ServerProcessConfig.GetPipeline(),
+		Store:    g.Database(),
+		Now:      nil, // optional — no provider
 	})
 }
