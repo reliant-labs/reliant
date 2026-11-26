@@ -150,7 +150,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 	require.NotNil(t, launched.ChatID, "a launched event must name the chat it started")
 
 	// The real launcher created a real chat, owned by the TRIGGER's user.
-	chat, err := repo.GetChat(ctx, *launched.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launched.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, userID, chat.UserID, "the run executes as the trigger's owner")
 	assert.Equal(t, projectID, chat.ProjectID)
@@ -303,7 +303,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 		"the event records the SCHEDULED time, which a cron puts on a minute boundary")
 	require.NotNil(t, launched.ChatID)
 
-	chat, err := repo.GetChat(ctx, *launched.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launched.ChatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.WorkflowID)
 	_, err = temporalClient.DescribeWorkflowExecution(ctx, *chat.WorkflowID, "")

@@ -109,7 +109,7 @@ func TestAgentActivationMachinePool(t *testing.T) {
 			require.Equal(t, pool.ID, stored.MachinePoolID)
 			require.Empty(t, stored.DaemonID)
 			require.False(t, stored.NoMachine)
-			history, err := env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+			history, err := store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 			require.NoError(t, err)
 			require.Equal(t, "auto:on_capability_change", history[0].Approval)
 			require.Empty(t, history[0].CapabilitiesAdded)

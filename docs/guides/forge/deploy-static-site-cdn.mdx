@@ -7,7 +7,7 @@ keywords: ["free static site hosting", "deploy vite app", "deploy next.js static
 
 By the end of this guide you will have a Vite single-page app live on a generated `*.sites.reliantlabs.dev` hostname, served from [Reliant hosting](/hosting/overview)'s static hosting and CDN, with a recorded release you can deploy again or promote. The same steps work for a Next.js static export.
 
-A static site is a complete Forge project with no backend. Reliant owns the bucket, the CDN and the hostname, and one static site per person is free, across the organizations you own that have no hosting plan.
+A static site is a complete Forge project with no backend. Reliant owns the bucket, the CDN and the hostname, and static sites are free in one organization per person, with no limit on how many.
 
 ## Before you begin
 
@@ -138,7 +138,7 @@ A static site is a complete Forge project with no backend. Reliant owns the buck
 
 ## The free tier and a second environment
 
-Without app hosting billing, the free tier covers one static site, counted across environments, so deploy prod first. A second environment's deploy is recorded but held: `env deploy` prints the billing link and exits **7**, and the site goes live by itself once billing is set up, with nothing to re-run. With billing in place, it deploys like the first. [Queued deploys](/hosting/overview#queued-deploys) has the details and the free tier's storage and traffic limits.
+Without app hosting billing, the free tier covers every static site, in every environment, of your free hosting organization (one per person), up to 1 GiB per site and 10 GiB in total. A site in another organization without billing is recorded but held: `env deploy` prints the billing link and exits **7**, and the site goes live by itself once billing is set up, with nothing to re-run. [Queued deploys](/hosting/overview#queued-deploys) has the details and the free tier's storage and traffic limits.
 
 ## What this does not do
 

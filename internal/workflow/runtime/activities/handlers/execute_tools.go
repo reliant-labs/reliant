@@ -17,6 +17,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/actingidentity"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
@@ -454,6 +455,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// The run's own funding order, which may only tighten what the person
 	// chose, for the run scope of its tool calls (runFunding).
 	ctx = context.WithValue(ctx, runFundingOrderKey{}, rtx.Failover.Funding)
+	// The user's session token, for the tools that act as the user (change
+	// and machine tools read auth.GetUserJWT). Hydrated per call once the
+	// chat names its user; see offerRunUserJWT.
+	ctx = context.WithValue(ctx, runUserJWTKey{}, rtx.UserJWT)
 	protoArgs := model.GetExecuteToolsArgs(input.Node)
 	if protoArgs == nil {
 		return nil, fmt.Errorf("expected execute_tools node, got %s", model.NodeType(input.Node))
@@ -877,6 +882,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 		noteToolError(ctx, store.ToolErrorInternal)
 		return a.buildToolResult(toolCallID, toolName, errMsg, "", true, nil, nil)
 	}
+	offerRunUserJWT(ctx, tec.chat)
 
 	// A run with no machine (research/DAEMONLESS_RUNS.md) was never offered a
 	// tool that needs one; a call to one anyway — named from history, or
@@ -1133,6 +1139,25 @@ func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, cha
 		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil, nil), true
 	}
 	return a.buildToolResult(toolCallID, toolName, result.Content, recordedGrantMetadata(result.GrantedTools), result.IsError, nil, nil), true
+}
+
+// runUserJWTKey carries the batch's RuntimeContext.UserJWT to each call.
+type runUserJWTKey struct{}
+
+// offerRunUserJWT puts the run's user session token into this worker
+// process's auth.GetUserJWT map before a tool runs.
+//
+// The map is per process. call_llm hydrates it on the worker that ran the
+// turn, but the batch's tool calls run on whichever worker picks up this
+// activity, so a tool that acts as the user (list_changes, manage_change,
+// manage_machine) answered "no live sign-in" whenever the two differed:
+// calls in one turn alternated between working and failing.
+func offerRunUserJWT(ctx context.Context, chat *db.Chat) {
+	jwt, _ := ctx.Value(runUserJWTKey{}).(string)
+	if jwt == "" || chat == nil {
+		return
+	}
+	auth.OfferUserJWT(chat.UserID, jwt)
 }
 
 // recordedGrantMetadata restores a replayed load_tool result's metadata from

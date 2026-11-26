@@ -45,6 +45,6 @@ func TestGetChatRowWithUserCheck_ReadsTheRowAndHidesOthersChats(t *testing.T) {
 
 	_, err = store.GetChatRowWithUserCheck(ctx, repo.ORM(), chat.ID, "someone-else")
 	require.True(t, errors.Is(err, core.ErrChatNotFound), "another user's chat: %v", err)
-	_, err = repo.GetChatRow(ctx, uuid.NewString())
+	_, err = store.GetChatRow(ctx, repo.ORM(), uuid.NewString())
 	require.True(t, errors.Is(err, core.ErrChatNotFound), "a missing chat: %v", err)
 }

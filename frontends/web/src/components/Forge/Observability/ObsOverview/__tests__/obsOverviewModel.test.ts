@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import type { GraphEdge, GraphNode, RPCCatalog, RPCMethod, ServiceGraph } from "@/services/controlPlane/observability/graphTypes";
 
-import { dailyValues, rowNumber, topEvent } from "../../../Workloads/landing/OverviewAnalyticsBox";
+import { dailySeries, rowNumber, topEvent } from "../../../Workloads/landing/overviewAnalyticsModel";
 import { graphThumbnail, slowestEndpoints, THUMB_H, THUMB_W } from "../obsOverviewModel";
 
 const BOUNDS = [0.01, 0.1, 1];
@@ -82,9 +82,41 @@ describe("the Analytics box's reads", () => {
     expect(rowNumber(undefined, "users")).toBeNull();
   });
 
-  it("takes the per-day values from a series, else from the rows", () => {
-    expect(dailyValues(result({ series: [{ label: "users", group: {}, timestamps: [1, 2], values: [3, 4], value: null }] }))).toEqual([3, 4]);
-    expect(dailyValues(result({ columns: ["users"], rows: [{ group: {}, values: [5] }, { group: {}, values: [6] }] }))).toEqual([5, 6]);
+  it("takes the per-day values and their days from a series, else from the rows", () => {
+    expect(dailySeries(result({ series: [{ label: "users", group: {}, timestamps: [1, 2], values: [3, 4], value: null }] }))).toEqual({ timestamps: [1, 2], values: [3, 4] });
+    const day = Date.UTC(2026, 10, 20) / 1000;
+    expect(
+      dailySeries(result({ columns: ["users"], rows: [{ group: { t: "2026-11-20 00:00:00" }, values: [5] }, { group: { t: "2026-11-21T00:00:00Z" }, values: [6] }, { group: {}, values: [7] }] }))
+    ).toEqual({ timestamps: [day, day + 86_400], values: [5, 6] });
+    expect(dailySeries(undefined)).toEqual({ timestamps: [], values: [] });
+  });
+
+  it.each([
+    { timestamps: [1], values: [3, 4] },
+    { timestamps: [1, 2], values: [3] },
+    { timestamps: [1], values: [] },
+    { timestamps: [], values: [3] },
+  ])("rejects mismatched daily arrays: %j", (series) => {
+    expect(dailySeries(result({ series: [{ ...series, label: "users", group: {}, value: null }] }))).toEqual({ timestamps: [], values: [] });
+  });
+
+  it("sorts shuffled daily pairs, retaining nulls without mutating the series", () => {
+    const series = { label: "users", group: {}, timestamps: [3, 1, 2], values: [30, 10, null], value: null };
+    expect(dailySeries(result({ series: [series] }))).toEqual({ timestamps: [1, 2, 3], values: [10, null, 30] });
+    expect(series.timestamps).toEqual([3, 1, 2]);
+    expect(series.values).toEqual([30, 10, null]);
+  });
+
+  it("drops non-finite daily timestamps together with their values", () => {
+    const series = { timestamps: [NaN, 2, Infinity, 1, -Infinity], values: [90, 20, 80, 10, 70] };
+    expect(dailySeries(result({ series: [series] }))).toEqual({ timestamps: [1, 2], values: [10, 20] });
+    expect(dailySeries(result({ series: [{ timestamps: [NaN], values: [90] }] }))).toEqual({ timestamps: [], values: [] });
+  });
+
+  it("sorts shuffled SQL days and drops unparseable days", () => {
+    const day = Date.UTC(2026, 10, 20) / 1000;
+    const rows = [{ group: { t: "2026-11-21" }, values: [6] }, { group: { t: "invalid" }, values: [99] }, { group: { t: "2026-11-20" }, values: [5] }];
+    expect(dailySeries(result({ columns: ["users"], rows }))).toEqual({ timestamps: [day, day + 86_400], values: [5, 6] });
   });
 
   it("names the most-sent custom event, skipping forge's own", () => {

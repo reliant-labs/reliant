@@ -230,7 +230,7 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 }
 
 func (s *Service) storedSecret(ctx context.Context, triggerID string) bool {
-	creds, err := s.deps.Repo.GetTriggerWebhookCredentials(ctx, triggerID)
+	creds, err := s.deps.Triggers.GetTriggerWebhookCredentials(ctx, triggerID)
 	return err == nil && len(creds.SecretSealed) > 0
 }
 
@@ -282,7 +282,7 @@ func (s *Service) issueWebhookToken(ctx context.Context, triggerID string) (*rel
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("could not issue a webhook token"))
 	}
-	if err := s.deps.Repo.SetTriggerWebhookTokenHash(ctx, triggerID, hash); err != nil {
+	if err := s.deps.Triggers.SetTriggerWebhookTokenHash(ctx, triggerID, hash); err != nil {
 		return nil, triggerDBError("set webhook token", err)
 	}
 	return &reliantv1.WebhookCredential{

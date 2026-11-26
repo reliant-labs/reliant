@@ -109,6 +109,9 @@ LEFT JOIN machine_pools mp ON mp.id = t.machine_pool_id
 // GetTrigger returns the trigger with its project and daemon display names,
 // or core.ErrTriggerNotFound.
 func GetTrigger(ctx context.Context, db orm.Context, id string) (*core.Trigger, error) {
+	if id == "" {
+		return nil, fmt.Errorf("trigger ID cannot be empty")
+	}
 	var row namedTrigger
 	if err := db.Bun().NewRaw(namedTriggerSQL+`WHERE t.id = ?0`, id).Scan(ctx, &row); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -124,6 +127,9 @@ func GetTrigger(ctx context.Context, db orm.Context, id string) (*core.Trigger, 
 // one user: the unscoped listing is ListAllTriggers, a separate query so "no
 // user" can never be reached by passing an empty string.
 func ListTriggersForUser(ctx context.Context, db orm.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
+	if f.UserID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
+	}
 	var rows []namedTrigger
 	// ?2 is the org a list names (NULL: no org filter); ?3 also lists the
 	// triggers with no org yet (the caller's default org, core.OrgScope).
@@ -229,6 +235,9 @@ func ReplaceTrigger(ctx context.Context, db orm.Context, t *core.Trigger) error 
 // RemoveTrigger deletes a trigger. Deleting one that does not exist is not an
 // error.
 func RemoveTrigger(ctx context.Context, db orm.Context, id string) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
 	if err := DeleteTrigger(ctx, db, id); err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return err
 	}
@@ -257,6 +266,9 @@ func PauseTrigger(ctx context.Context, db orm.Context, id, reason string) error 
 // has its own write path: no definition update can touch it, and rotating it
 // is one statement. A missing trigger is core.ErrTriggerNotFound.
 func SetTriggerWebhookTokenHash(ctx context.Context, db orm.Context, id string, hash []byte) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
 	return writeTrigger(ctx, db, &Trigger{ID: id, WebhookTokenHash: hash}, "webhook token", TriggerFieldWebhookTokenHash)
 }
 
@@ -289,6 +301,9 @@ func writeTrigger(ctx context.Context, db orm.Context, row *Trigger, what string
 // sealed secret, or core.ErrTriggerNotFound. Only the webhook receiver reads
 // these; they are never rendered.
 func GetTriggerWebhookCredentials(ctx context.Context, db orm.Context, id string) (*core.TriggerWebhookCredentials, error) {
+	if id == "" {
+		return nil, core.ErrTriggerNotFound
+	}
 	row, err := GetTriggerByID(ctx, db, id)
 	if errors.Is(err, svcerr.ErrNotFound) {
 		return nil, core.ErrTriggerNotFound

@@ -42,7 +42,7 @@ events:
       2. Create a config package
       3. Add tests
       
-      Switch to Auto or Manual mode to execute this plan.
+      Switch to Default or Manual mode to execute this plan.
 
 expect:
   outcome: completed

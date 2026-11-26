@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -52,7 +53,7 @@ func TestExecuteTools_LiveChatStaysOnMachineWhenSecondCloudRegisters(t *testing.
 		t.Helper()
 		executor.requests, executor.selectors = nil, nil
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())}).Execute, ExecuteToolsInput{
+		err := h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())}).Execute, ExecuteToolsInput{
 			ChatID: chat, Thread: chat, ProjectPath: dir,
 			ToolCalls: []message.ToolCall{bashCall("pwd")},
 			// Deliberately no DaemonSelector: this is an already-running workflow.
@@ -77,7 +78,7 @@ func TestExecuteTools_LiveChatStaysOnMachineWhenSecondCloudRegisters(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, "ws-ws-e164d47d", defaultID, "prove default resolution now chooses the new cloud machine")
 	run()
-	stored, err := h.Repo().GetChat(ctx, chat)
+	stored, err := store.GetChat(ctx, h.Repo().ORM(), chat)
 	require.NoError(t, err)
 	assert.Equal(t, original, *stored.ActiveDaemonID)
 }

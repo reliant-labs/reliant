@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // refuseTerminalWritesSQL makes the first n writes of a terminal status to
@@ -74,7 +75,7 @@ func TestWorkflowStatus_RefusedTerminalWritesFailTheActivityUntilOneLands(t *tes
 				var out WorkflowStatusOutput
 				err := h.ExecuteActivity(activity.Execute, input, &out)
 				require.Error(t, err, "attempt %d: a refused terminal write fails the activity so Temporal retries it", attempt)
-				wf, getErr := h.Repo().GetWorkflow(ctx, workflowID)
+				wf, getErr := store.LoadWorkflow(ctx, h.Repo().ORM(), workflowID)
 				require.NoError(t, getErr)
 				assert.Equal(t, db.Active(), wf.Status, "attempt %d wrote nothing", attempt)
 			}
@@ -82,7 +83,7 @@ func TestWorkflowStatus_RefusedTerminalWritesFailTheActivityUntilOneLands(t *tes
 			var out WorkflowStatusOutput
 			require.NoError(t, h.ExecuteActivity(activity.Execute, input, &out), "the attempt the database accepts succeeds")
 			assert.True(t, out.Success)
-			wf, err := h.Repo().GetWorkflow(ctx, workflowID)
+			wf, err := store.LoadWorkflow(ctx, h.Repo().ORM(), workflowID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, wf.Status, "the terminal status landed")
 		})

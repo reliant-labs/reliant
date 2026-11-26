@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Story 02: a workflow with ask enabled reaches the ask_question node, blocks
@@ -51,7 +52,7 @@ func TestStory02_AskQuestionPauseResumeCompletes(t *testing.T) {
 	require.NotNil(t, q1.Metadata, "ask_user metadata must be persisted with the question")
 	assert.Contains(t, *q1.Metadata, "ask_user")
 
-	wf, err := h.Stack.Repo.GetWorkflow(h.Ctx, workflowID)
+	wf, err := store.LoadWorkflow(h.Ctx, h.Stack.Repo.ORM(), workflowID)
 	require.NoError(t, err)
 	require.Equal(t, db.Active(), wf.Status,
 		"ask_question blocks inside a running workflow (signal-based, not a terminal pause)")

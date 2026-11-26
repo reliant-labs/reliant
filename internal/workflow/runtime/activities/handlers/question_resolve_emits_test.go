@@ -45,10 +45,6 @@ func TestQuestionResolveActivity_EmitsResolvedUpdate(t *testing.T) {
 		ID: questionID, ChatID: chatID, WorkflowID: "wf-1", ThreadID: chatID,
 		StepID: "ask", Status: db.QuestionStatusPending, CreatedAt: now,
 	}))
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
-		QuestionID: questionID, ChatID: chatID, WorkflowID: "wf-1",
-		ThreadID: chatID, StepID: "ask", Status: "pending",
-	}))
 
 	// The activity reads activity.GetLogger, so it needs a real activity
 	// context — the test environment supplies one.

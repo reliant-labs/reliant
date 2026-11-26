@@ -98,6 +98,27 @@ func retirementIdentity(a, b unix.Stat_t) bool {
 	return a.Dev == b.Dev && a.Ino == b.Ino && a.Mode == b.Mode
 }
 
+// retirementUnchanged reports whether an inventoried entry (was) is still the
+// same file with the same content (now): retirementSame, except that a file
+// that had other hard links when it was inventoried is not compared on its
+// link count or its ctime. Both belong to the inode, not to this name: every
+// link made or removed anywhere moves them. pnpm hard-links one store file
+// into every node_modules that installs it (one LICENSE file had 679 links on
+// one machine), and content-addressing gives one inode several names inside a
+// single tree, so the tree's own unlink of the first name "changed" the
+// second and every retirement of a checkout with an install stopped at its
+// first shared file (2026-11-25: 20 archive retirements on one machine
+// parked part-way on "entry changed at deletion boundary"). A write to the
+// content still
+// moves its size or mtime, which are compared. A file with one name keeps the
+// full comparison: nothing outside it can move its ctime.
+func retirementUnchanged(was, now unix.Stat_t) bool {
+	if was.Mode&unix.S_IFMT == unix.S_IFREG && was.Nlink > 1 {
+		return retirementIdentity(was, now) && was.Size == now.Size && was.Mtim == now.Mtim
+	}
+	return retirementSame(was, now)
+}
+
 // installRecord is what a package manager wrote into the node_modules it
 // populated, naming the packages it put there. It is the proof that a
 // directory in node_modules is an install's output, reproduced from the
@@ -622,7 +643,7 @@ func (t *retirementTree) validate(ctx context.Context) error {
 		return errors.New("retirement contents changed")
 	}
 	for p, e := range t.entries {
-		if got, ok := entries[p]; !ok || !retirementSame(e.stat, got.stat) {
+		if got, ok := entries[p]; !ok || !retirementUnchanged(e.stat, got.stat) {
 			return fmt.Errorf("retirement entry changed: %s", p)
 		}
 	}
@@ -675,7 +696,7 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		err = unix.Fstatat(int(dir.Fd()), base, &st, unix.AT_SYMLINK_NOFOLLOW)
 		isDir := e.stat.Mode&unix.S_IFMT == unix.S_IFDIR
 		isLink := e.stat.Mode&unix.S_IFMT == unix.S_IFLNK
-		if err == nil && ((isDir && !retirementIdentity(e.stat, st)) || (!isDir && !retirementSame(e.stat, st))) {
+		if err == nil && ((isDir && !retirementIdentity(e.stat, st)) || (!isDir && !retirementUnchanged(e.stat, st))) {
 			err = errors.New("entry changed at deletion boundary")
 		}
 		if err == nil && !isLink {

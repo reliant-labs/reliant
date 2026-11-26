@@ -200,7 +200,10 @@ function ErrorsHeadline({ open, more, resolved }: { open: readonly Issue[]; more
       </div>
       {timestamps.length > 1 ? (
         <>
-          <HeadlineBars values={values} timestamps={timestamps} label={more ? `Error events by hour, of the ${formatCount(open.length)} issues loaded` : "Error events by hour"} testId="lead-errors-chart" />
+          <HeadlineBars values={values} timestamps={timestamps} label={more ? `Error events by hour, of the ${formatCount(open.length)} issues loaded` : "Error events by hour"}
+            format={(n) => `${formatCount(n)} error event${n === 1 ? "" : "s"}`}
+            testId="lead-errors-chart"
+          />
           {more && (
             <p className="text-meta text-ink-muted" data-testid="lead-errors-partial">
               Events of the {formatCount(open.length)} issues loaded. More issues are open; the full list has them all.

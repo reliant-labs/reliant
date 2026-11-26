@@ -101,7 +101,7 @@ export function RunsHeadline({ runs, range, more }: { runs: readonly RunSummary[
           <Figure label="Needs you" value={figures.needsYou.toLocaleString()} />
         </dl>
       </div>
-      {series.values.length > 1 && <HeadlineBars values={series.values} timestamps={series.timestamps} label={`Runs started, ${window.toLowerCase()}`} testId="runs-headline-chart" />}
+      {series.values.length > 1 && <HeadlineBars values={series.values} timestamps={series.timestamps} label={`Runs started, ${window.toLowerCase()}`} format={(n) => `${n.toLocaleString()} run${n === 1 ? "" : "s"} started`} testId="runs-headline-chart" />}
     </section>
   );
 }

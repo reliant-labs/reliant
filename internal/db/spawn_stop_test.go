@@ -61,7 +61,7 @@ func TestCancelStoppedSpawn(t *testing.T) {
 	for id, want := range map[string]WorkflowStatus{
 		spawn: Cancelled(), grandchild: Cancelled(), paused: Cancelled(), done: Completed(), root: Active(),
 	} {
-		wf, err := repo.GetWorkflow(ctx, id)
+		wf, err := store.LoadWorkflow(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetWorkflow(%s): %v", id, err)
 		}

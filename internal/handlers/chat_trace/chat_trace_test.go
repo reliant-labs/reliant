@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -106,7 +107,7 @@ func setup(t *testing.T, spans Spans) (*viewertest.Fixture, *Service) {
 		chatCreated, chatCreated.Add(time.Minute), f.ChatID).Exec(context.Background())
 	require.NoError(t, err)
 	svc, err := New(Deps{
-		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{}, Store: repo, Spans: spans,
+		Logger: slog.New(slog.DiscardHandler), Config: &config.Config{}, Store: repo, Chats: store.NewChatExtStore(repo.ORM()), Spans: spans,
 		Now: func() time.Time { return now },
 	})
 	require.NoError(t, err)
@@ -387,7 +388,7 @@ func TestGetChatTrace_DoesNotTouchUnreadOrLastActive(t *testing.T) {
 	spans := &fakeSpans{}
 	f, svc := setup(t, spans)
 	ctx := context.Background()
-	before, err := f.Repo.GetChatRow(ctx, f.ChatID)
+	before, err := store.GetChatRow(ctx, f.Repo.ORM(), f.ChatID)
 	require.NoError(t, err)
 	require.True(t, before.Unread)
 
@@ -395,7 +396,7 @@ func TestGetChatTrace_DoesNotTouchUnreadOrLastActive(t *testing.T) {
 		_, err := get(svc, caller, &pb.GetChatTraceRequest{ChatId: f.ChatID})
 		require.NoError(t, err)
 	}
-	after, err := f.Repo.GetChatRow(ctx, f.ChatID)
+	after, err := store.GetChatRow(ctx, f.Repo.ORM(), f.ChatID)
 	require.NoError(t, err)
 	assert.True(t, after.Unread)
 	assert.True(t, before.LastActive.Equal(after.LastActive), "last_active %v → %v", before.LastActive, after.LastActive)
