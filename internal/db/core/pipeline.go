@@ -1,7 +1,8 @@
 package core
 
 // The pipeline's enrolment and settings vocabularies
-// (db/migrations/20261125211730_pipeline_repos_and_settings.up.sql). Each
+// (db/migrations/20261125211730_pipeline_repos_and_settings.up.sql, widened
+// by 20261126164236_pipeline_setting_changes_gate_stages.up.sql). Each
 // All* set is mirrored by a CHECK that declares it with forge:closed-set, so
 // `forge lint --closed-sets` fails the moment the two drift: a value added
 // here needs a migration widening its CHECK.
@@ -82,14 +83,20 @@ var AllPipelineReleaseApprovals = []PipelineReleaseApproval{
 	PipelineReleaseApprovalProdOnly,
 }
 
-// PipelineSetting names a pipeline_project_settings column whose change is
-// audited in pipeline_setting_changes.
+// PipelineSetting names a setting whose change is audited in
+// pipeline_setting_changes: a pipeline_project_settings column, or one of the
+// built-in gate stages a repository's pipeline.yaml turns off or back on
+// (owner D13).
 type PipelineSetting string
 
 const (
 	PipelineSettingEmergencyLandPolicy   PipelineSetting = "emergency_land_policy"
 	PipelineSettingEmergencyLandDailyCap PipelineSetting = "emergency_land_daily_cap"
 	PipelineSettingReleaseApproval       PipelineSetting = "release_approval"
+	PipelineSettingGateStageLint         PipelineSetting = "gate.stage.lint"
+	PipelineSettingGateStageTest         PipelineSetting = "gate.stage.test"
+	PipelineSettingGateStageBuild        PipelineSetting = "gate.stage.build"
+	PipelineSettingGateStageSBOMScan     PipelineSetting = "gate.stage.sbom_scan"
 )
 
 // AllPipelineSettings is every PipelineSetting
@@ -98,16 +105,36 @@ var AllPipelineSettings = []PipelineSetting{
 	PipelineSettingEmergencyLandPolicy,
 	PipelineSettingEmergencyLandDailyCap,
 	PipelineSettingReleaseApproval,
+	PipelineSettingGateStageLint,
+	PipelineSettingGateStageTest,
+	PipelineSettingGateStageBuild,
+	PipelineSettingGateStageSBOMScan,
 }
 
-// PipelineChangedVia is the surface a person changed a pipeline setting
-// from. Both are signed-in browser sessions; no machine credential may write
-// a setting.
+// PipelineGateStageSettings are the settings that change only through
+// config (PipelineChangedViaConfig), and the only ones config changes
+// (pipeline_setting_changes_config, a CHECK the closed-set lint cannot
+// read; TestPipelineSettingChangesGateStages pins the two equal).
+var PipelineGateStageSettings = []PipelineSetting{
+	PipelineSettingGateStageLint,
+	PipelineSettingGateStageTest,
+	PipelineSettingGateStageBuild,
+	PipelineSettingGateStageSBOMScan,
+}
+
+// PipelineChangedVia is how a pipeline setting changed. A project setting
+// changes only from a signed-in browser session (web, desktop); no machine
+// credential may write one. A gate stage changes only through config.
 type PipelineChangedVia string
 
 const (
 	PipelineChangedViaWeb     PipelineChangedVia = "web"
 	PipelineChangedViaDesktop PipelineChangedVia = "desktop"
+	// PipelineChangedViaConfig is a change to a repository's
+	// .reliant/pipeline.yaml that landed on its base_branch. The actor is
+	// the merging PR's author at the provider, with their Reliant user only
+	// when one maps.
+	PipelineChangedViaConfig PipelineChangedVia = "config"
 )
 
 // AllPipelineChangedVia is every PipelineChangedVia
@@ -115,4 +142,5 @@ const (
 var AllPipelineChangedVia = []PipelineChangedVia{
 	PipelineChangedViaWeb,
 	PipelineChangedViaDesktop,
+	PipelineChangedViaConfig,
 }
