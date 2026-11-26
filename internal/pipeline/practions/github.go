@@ -75,6 +75,7 @@ func (g *CatalogGitHub) PullRequest(ctx context.Context, as Caller, repo string,
 	pr.Body, _ = d["body"].(string)
 	if h, ok := d["head"].(map[string]any); ok {
 		pr.HeadSHA, _ = h["sha"].(string)
+		pr.HeadRef, _ = h["ref"].(string)
 	}
 	if b, ok := d["base"].(map[string]any); ok {
 		pr.BaseRef, _ = b["ref"].(string)

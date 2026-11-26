@@ -21,8 +21,11 @@ type Store interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 
 	GetPRRecordByID(ctx context.Context, id string) (*core.PRRecord, error)
+	GetPRRecord(ctx context.Context, provider, repository string, number int, repositoryIDs []string) (*core.PRRecord, error)
 	ListPRRecordsAtHead(ctx context.Context, provider, repositoryID, head, except string) ([]*core.PRRecord, error)
 	GetPipelineRepo(ctx context.Context, id string) (*core.PipelineRepo, error)
+	ListEnrolledPipelineRepos(ctx context.Context) ([]*core.PipelineRepo, error)
+	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 
 	GetPRPipeline(ctx context.Context, recordID string) (*core.PRPipeline, error)
 	ResetPRPipelineForHead(ctx context.Context, recordID string, version int64, head string, next core.PRPipelineNext) (*core.PRPipeline, error)
@@ -58,6 +61,8 @@ type PullRequest struct {
 	Merged  bool
 	Draft   bool
 	HeadSHA string
+	// HeadRef is the head branch's name, which the fixer checks out.
+	HeadRef string
 	BaseRef string
 	Author  string
 	Body    string
