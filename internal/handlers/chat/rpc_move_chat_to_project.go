@@ -431,7 +431,7 @@ func (s *Service) moveNoteThread(ctx context.Context, chat *db.Chat) (*noteThrea
 	if workflowID == "" {
 		return nil, nil
 	}
-	root, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
+	root, err := s.deps.Workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load the chat's run"))
 	}

@@ -40,7 +40,7 @@ func (s *Service) ListReplayEvents(
 		limit = maxReplayEventLimit
 	}
 
-	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: optionalString(msg.GetProjectId())})
+	mine, err := s.deps.Triggers.ListTriggersForUser(ctx, core.TriggerFilters{UserID: userID, ProjectID: optionalString(msg.GetProjectId())})
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
@@ -52,7 +52,7 @@ func (s *Service) ListReplayEvents(
 		if t.WorkflowTrigger == nil || !sameWorkflowRef(t.Workflow, msg.GetWorkflow()) {
 			continue
 		}
-		firings, _, err := s.deps.Repo.ListTriggerEvents(ctx, core.TriggerEventFilters{
+		firings, _, err := s.deps.FiringReads.ListTriggerEventsPage(ctx, core.TriggerEventFilters{
 			UserID: userID, TriggerID: t.ID, Limit: limit,
 		})
 		if err != nil {

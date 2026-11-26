@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -75,7 +76,7 @@ func listed(resp *pb.ListChatMembersResponse) map[string]pb.ChatMemberRole {
 // readsAs is how userID reads chatID now, at a site that serves viewers.
 func readsAs(t *testing.T, f *viewertest.Fixture, ctx context.Context, userID, chatID string) (authz.Access, error) {
 	t.Helper()
-	chat, err := f.Repo.GetChat(context.Background(), chatID)
+	chat, err := store.GetChat(context.Background(), f.Repo.ORM(), chatID)
 	require.NoError(t, err)
 	return authz.ReadChatAccess(authz.WithViewerReads(ctx), userID, chat)
 }
@@ -108,7 +109,7 @@ func TestChatMembers(t *testing.T) {
 	access, err := readsAs(t, f, f.Viewer, f.ViewerID, chat)
 	require.NoError(t, err)
 	assert.Equal(t, authz.AccessViewer, access)
-	row, err := f.Repo.GetChat(context.Background(), chat)
+	row, err := store.GetChat(context.Background(), f.Repo.ORM(), chat)
 	require.NoError(t, err)
 	assert.False(t, authz.CanOwnChat(f.Viewer, f.ViewerID, row), "a view member never writes")
 	assert.False(t, authz.CanReplyChat(f.Viewer, f.ViewerID, row), "a view member never replies")
@@ -299,7 +300,7 @@ func TestChatMembersNeedAnOrg(t *testing.T) {
 		ID: "no-org-" + f.OwnerID, UserID: f.OwnerID, ProjectID: "no-org-project-" + f.OwnerID, Title: "No org",
 		CreatedAt: at, UpdatedAt: at, LastActive: at,
 	}))
-	noOrg, err := f.Repo.GetChat(context.Background(), "no-org-"+f.OwnerID)
+	noOrg, err := store.GetChat(context.Background(), f.Repo.ORM(), "no-org-"+f.OwnerID)
 	require.NoError(t, err)
 	require.Nil(t, noOrg.OrgID, "the chat must belong to no org")
 	_, err = setMember(svc, f.Owner, "no-org-"+f.OwnerID, f.ViewerID, view)

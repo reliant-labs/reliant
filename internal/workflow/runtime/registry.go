@@ -568,6 +568,16 @@ func spuriousHeartbeatCancel(ctx context.Context, workerStopCh <-chan struct{}) 
 // The SDK closes this channel at the top of Worker.Stop(), so a closed channel
 // means any error the activity produced after that point is shutdown fallout
 // rather than a real failure of the work.
+// verdictIndependentOfShutdown reports whether execErr is an answer the
+// activity reached on its own — the user's error, or a terminal one — rather
+// than how it unwound when the worker went away. A cancellation never is.
+func verdictIndependentOfShutdown(execErr error) bool {
+	if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
+		return false
+	}
+	return errclass.Classify(execErr) == svcerr.ClassUser || isTerminal(execErr)
+}
+
 func workerStopped(ch <-chan struct{}) bool {
 	if ch == nil {
 		return false
@@ -1105,7 +1115,13 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		)
 	}
 
-	if execErr != nil && workerStopped(workerStopCh) {
+	// Only an error the shutdown can have caused, though: a verdict that does
+	// not depend on the worker — the user's error, or one already terminal —
+	// is what the activity found, and the next worker would find it again.
+	// Rewritten, a workflow name that does not exist was retried as a
+	// shutdown and lost the class that keeps it off ERROR (prod 5fc6fce4,
+	// 23295ad3).
+	if execErr != nil && workerStopped(workerStopCh) && !verdictIndependentOfShutdown(execErr) {
 		logging.InfoContext(ctx, "[ActivityWrapper] Activity aborted by worker shutdown, returning retryable error",
 			"activityType", activityType,
 			"activityID", activityID,
@@ -1369,11 +1385,18 @@ func exhaustionErrorEventID(workflowID string, err error) string {
 // drift apart silently.
 const infrastructureActivityMaxAttempts int32 = 3
 
-// preflightActivityMaxAttempts: a preflight check reports "still waiting" with
-// a successful result, so a failure is terminal and a retry would only repeat
-// the error card. It carries its own heartbeat timeout (not the graph-step
-// one), so the named switch in resolveMaxAttempts is what reaches it.
-const preflightActivityMaxAttempts int32 = 1
+// preflightActivityMaxAttempts is the ladder waitForDaemon dispatches
+// PreflightDaemonCheck with. A check reports "still waiting" with a successful
+// result, and every failure it decides itself is non-retryable
+// (handlers.PreflightDaemonCheckFailedErrType), so what this retries is a
+// lost heartbeat or a worker that died mid-slice, and a database that did not
+// answer. It carries its own heartbeat timeout (not the graph-step one), so
+// the named switch in resolveMaxAttempts is what reaches it.
+const preflightActivityMaxAttempts int32 = 3
+
+// machineResumeWakeMaxAttempts: MachineResumeWake is dispatched once
+// (machine_resume_wake.go); a failure is reported as final.
+const machineResumeWakeMaxAttempts int32 = 1
 
 // inlineSaveMessageMaxAttempts is the ladder executeSaveMessageInline
 // dispatches SaveMessage with (save_message.go). It is 5, NOT the
@@ -1446,8 +1469,10 @@ func resolveMaxAttempts(info activity.Info) int32 {
 	// No heartbeat: one of the infrastructure dispatches. These are named
 	// rather than shape-matched, because their timeouts are incidental.
 	switch info.ActivityType.Name {
-	case "PreflightDaemonCheck", "MachineResumeWake":
+	case "PreflightDaemonCheck":
 		return preflightActivityMaxAttempts
+	case "MachineResumeWake":
+		return machineResumeWakeMaxAttempts
 	case "SaveMessage":
 		return inlineSaveMessageMaxAttempts
 	case PreflightRequirementsActivityName,

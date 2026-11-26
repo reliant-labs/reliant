@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 func installationIn(t *testing.T, raw json.RawMessage) string {
@@ -85,7 +86,7 @@ func TestReconcileKeepsInstallationOnlyRouting(t *testing.T) {
 			Kind: core.TriggerKindIntegration, Enabled: true, Workflow: "triage", WorkflowTrigger: &issue,
 			Message: "go", DaemonID: "d", Config: json.RawMessage(cfg + `}`), CreatedAt: now, UpdatedAt: now,
 		}
-		require.NoError(t, repo.CreateTrigger(ctx, tr))
+		require.NoError(t, triggertest.Create(ctx, repo, tr))
 		return tr
 	}
 	bound, unbound := mk("100"), mk("")
@@ -161,7 +162,7 @@ func TestReconcileNeverOverwritesABindingCommittedAfterItsRead(t *testing.T) {
 				Enabled: true, Workflow: "triage", WorkflowTrigger: &issue, Message: "go", DaemonID: "d",
 				Config: config(tc.before), CreatedAt: now, UpdatedAt: now,
 			}
-			require.NoError(t, repo.CreateTrigger(ctx, tr))
+			require.NoError(t, triggertest.Create(ctx, repo, tr))
 
 			store := &afterRead{Stores: NewStores(repo), step: func() {
 				// What UpdateTrigger commits: the row's whole config, rebound.
@@ -198,7 +199,7 @@ func TestProjectionWriteNeverIntroducesABinding(t *testing.T) {
 		Enabled: true, Workflow: "triage", WorkflowTrigger: &issue, Message: "go", DaemonID: "d",
 		Config: json.RawMessage(`{"integration":"github","events":["issues.closed"]}`), CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, tr))
+	require.NoError(t, triggertest.Create(ctx, repo, tr))
 
 	require.NoError(t, NewStores(repo).SetTriggerProjection(ctx, tr.ID, core.TriggerProjection{
 		Config: json.RawMessage(`{"integration":"github","events":["issues.opened"],"installation":"100"}`),

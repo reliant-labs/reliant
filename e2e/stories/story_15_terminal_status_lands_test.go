@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // slowTerminalWritesSQL injects trouble into the first %[3]d writes of a
@@ -73,7 +74,7 @@ func TestStory15_TerminalStatusLandsOnASlowOrRefusingDatabase(t *testing.T) {
 			h.WaitTemporalWorkflowDone(workflowID)
 			// The run does not end until its status is written, so it is
 			// there the moment Temporal reports the run done.
-			wf, err := h.Stack.Repo.GetWorkflow(h.Ctx, workflowID)
+			wf, err := store.LoadWorkflow(h.Ctx, h.Stack.Repo.ORM(), workflowID)
 			require.NoError(t, err)
 			require.Equal(t, db.Completed(), wf.Status, "the terminal status landed before the run ended")
 		})

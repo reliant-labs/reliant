@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -31,7 +32,7 @@ func newWebhookFixture(t *testing.T, filter string) (*fireFixture, *EventFirer, 
 	})
 	// newFireFixture stored a schedule config; a webhook trigger has none.
 	f.trigger.Config = json.RawMessage(`{}`)
-	require.NoError(t, f.repo.UpdateTrigger(context.Background(), f.trigger))
+	require.NoError(t, triggertest.Update(context.Background(), f.repo, f.trigger))
 	launcher := launch.New(launch.Deps{Store: f.repo, Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	starter := &recordingStarter{}
 	return f, NewEventFirer(NewStores(f.repo), launcher), NewIntake(NewStores(f.repo), starter, "test-queue"), starter
@@ -71,7 +72,7 @@ func TestInboundDeliveryLaunchesOnceAndAdoptsTheReceiversRow(t *testing.T) {
 	}
 	assert.Equal(t, 1, f.starter.startCount(), "one delivery, however many fires, starts one run")
 
-	events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 10})
+	events, _, err := store.ListTriggerEventsPage(ctx, f.repo.ORM(), core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, events, 1, "the launch adopts the receiver's row instead of writing a second one")
 	stored := events[0].Event
@@ -95,7 +96,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			f := newFireFixture(t, func(tr *core.Trigger, _ *core.ScheduleConfig) { tr.Kind = kind })
 			ctx := context.Background()
 			f.trigger.Config = json.RawMessage(`{}`)
-			require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
+			require.NoError(t, triggertest.Update(ctx, f.repo, f.trigger))
 			runs := &recordingStarter{}
 			firer := NewEventFirer(NewStores(f.repo), launch.New(launch.Deps{Store: f.repo, Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: runs, Runs: noopRunRecorder{}, TaskQueue: "test-queue"}))
 			fires := &recordingStarter{}
@@ -109,7 +110,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			require.NoError(t, err)
 			require.Equal(t, string(core.TriggerEventLaunched), out.Outcome)
 
-			chat, err := f.repo.GetChat(ctx, out.ChatID)
+			chat, err := store.GetChat(ctx, f.repo.ORM(), out.ChatID)
 			require.NoError(t, err)
 			require.NotNil(t, chat.ActiveDaemonID, "the run is pinned to a daemon")
 			assert.Equal(t, f.trigger.DaemonID, *chat.ActiveDaemonID, "the run is pinned to the trigger's daemon")

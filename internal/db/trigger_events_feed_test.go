@@ -13,12 +13,13 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 func feedTrigger(t *testing.T, repo *Repo, id string) *core.Trigger {
 	t.Helper()
 	tr := newTestTrigger(id, "test-user", "test-project", id)
-	require.NoError(t, repo.CreateTrigger(context.Background(), tr))
+	require.NoError(t, triggertest.Create(context.Background(), repo, tr))
 	return tr
 }
 
@@ -52,7 +53,7 @@ func TestListTriggerEvents_PaginatesTiedOccurredAt(t *testing.T) {
 	var seen []string
 	var cursor *core.TriggerEventCursor
 	for page := 0; page < 10; page++ {
-		items, hasMore, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{
+		items, hasMore, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{
 			UserID: "test-user", TriggerID: tr.ID, Limit: 2, After: cursor,
 		})
 		require.NoError(t, err)
@@ -82,7 +83,7 @@ func TestListTriggerEvents_OutcomeFilter(t *testing.T) {
 	feedEvent(t, repo, "ev-f", tr.ID, "test-user", core.TriggerEventFailed, base.Add(-time.Minute))
 
 	list := func(outcomes ...core.TriggerEventOutcome) []string {
-		items, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{
+		items, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{
 			UserID: "test-user", TriggerID: tr.ID, Limit: 10, Outcomes: outcomes,
 		})
 		require.NoError(t, err)
@@ -128,7 +129,7 @@ func TestListTriggerEvents_JoinsRunState(t *testing.T) {
 	// A skipped firing has no run, and a launched firing whose chat is gone has none either.
 	feedEvent(t, repo, "ev-skipped", tr.ID, "test-user", core.TriggerEventSkipped, base.Add(time.Hour))
 
-	items, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: tr.ID, Limit: 50})
+	items, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{UserID: "test-user", TriggerID: tr.ID, Limit: 50})
 	require.NoError(t, err)
 	require.Len(t, items, 9)
 
@@ -169,7 +170,7 @@ func TestListTriggerEvents_ScopedToUser(t *testing.T) {
 	base := time.Now().UTC().Truncate(time.Microsecond)
 	feedEvent(t, repo, "ev-mine", tr.ID, "test-user", core.TriggerEventSkipped, base)
 
-	items, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "someone-else", TriggerID: tr.ID, Limit: 10})
+	items, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{UserID: "someone-else", TriggerID: tr.ID, Limit: 10})
 	require.NoError(t, err)
 	assert.Empty(t, items, "another user must never read this trigger's firings")
 
@@ -177,7 +178,7 @@ func TestListTriggerEvents_ScopedToUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, recent)
 
-	_, _, err = repo.ListTriggerEvents(ctx, core.TriggerEventFilters{TriggerID: tr.ID, Limit: 10})
+	_, _, err = store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{TriggerID: tr.ID, Limit: 10})
 	assert.Error(t, err, "an empty user must be refused, not read as 'all users'")
 }
 
@@ -215,10 +216,10 @@ func TestTriggerNamesJoined(t *testing.T) {
 	require.NoError(t, repo.UpsertDaemon(ctx, &Daemon{ID: "daemon-named", UserID: "test-user", Hostname: &host}))
 	named := newTestTrigger("trg-named", "test-user", "test-project", "named")
 	named.DaemonID = "daemon-named"
-	require.NoError(t, repo.CreateTrigger(ctx, named))
+	require.NoError(t, triggertest.Create(ctx, repo, named))
 	// No daemon row at all: the trigger must still be listed, with an empty name.
 	orphan := newTestTrigger("trg-orphan", "test-user", "test-project", "orphan")
-	require.NoError(t, repo.CreateTrigger(ctx, orphan))
+	require.NoError(t, triggertest.Create(ctx, repo, orphan))
 	// Someone else's daemon row under the same id must not lend its name.
 	otherHost := "not-yours"
 	require.NoError(t, repo.UpsertDaemon(ctx, &Daemon{ID: orphan.DaemonID, UserID: "someone-else", Hostname: &otherHost}))
@@ -294,14 +295,14 @@ func TestTrigger_NotifyOnCompleteRoundTrips(t *testing.T) {
 	ctx := context.Background()
 	tr := newTestTrigger("trg-notify", "test-user", "test-project", "notify")
 	tr.NotifyOnComplete = true
-	require.NoError(t, repo.CreateTrigger(ctx, tr))
+	require.NoError(t, triggertest.Create(ctx, repo, tr))
 
 	got, err := repo.GetTrigger(ctx, tr.ID)
 	require.NoError(t, err)
 	assert.True(t, got.NotifyOnComplete)
 
 	got.NotifyOnComplete = false
-	require.NoError(t, repo.UpdateTrigger(ctx, got))
+	require.NoError(t, triggertest.Update(ctx, repo, got))
 	got, err = repo.GetTrigger(ctx, tr.ID)
 	require.NoError(t, err)
 	assert.False(t, got.NotifyOnComplete)

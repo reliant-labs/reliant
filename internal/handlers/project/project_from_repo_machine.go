@@ -85,6 +85,55 @@ func (s *Service) machineProjectsDir(ctx context.Context, machine *db.Daemon) st
 	return dir
 }
 
+// isOtherPlatformsCheckout reports whether path is where this project is
+// checked out only on machines of another operating system than target: a
+// path copied from one of them, which target cannot create. False whenever it
+// cannot tell (target or its platform unknown, a failed read), and whenever a
+// machine of target's own OS holds the project at that path (two Macs of one
+// user commonly keep it at the same /Users/... path), so an explicit
+// destination is never overridden on a guess.
+func (s *Service) isOtherPlatformsCheckout(ctx context.Context, projectID string, target *db.Daemon, path string) bool {
+	targetOS := platformOS(target)
+	if targetOS == "" {
+		return false
+	}
+	rows, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, projectID)
+	if err != nil {
+		logging.WarnContext(ctx, "CreateProjectFromRepo: could not read the project's checkouts", "error", err, "project_id", projectID)
+		return false
+	}
+	want := ospath.Clean(path)
+	foreign := false
+	for _, row := range rows {
+		if row == nil || row.DaemonID == target.ID || ospath.Clean(row.Path) != want {
+			continue
+		}
+		holder, err := s.deps.Machines.GetDaemon(ctx, row.DaemonID)
+		if err != nil {
+			continue
+		}
+		switch platformOS(holder) {
+		case "":
+			continue
+		case targetOS:
+			return false
+		default:
+			foreign = true
+		}
+	}
+	return foreign
+}
+
+// platformOS is the operating system a daemon registered with ("darwin" of
+// "darwin/arm64"), or "" when unknown.
+func platformOS(d *db.Daemon) string {
+	if d == nil || d.Platform == nil {
+		return ""
+	}
+	goos, _, _ := strings.Cut(strings.TrimSpace(*d.Platform), "/")
+	return strings.ToLower(goos)
+}
+
 // pathWithin reports whether child is dir or inside it. Both are cleaned.
 func pathWithin(child, dir string) bool {
 	if child == dir {

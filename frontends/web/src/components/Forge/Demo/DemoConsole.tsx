@@ -13,7 +13,7 @@
  * shop was built), the Data and Storage browsers (`?browser=`), and the
  * Observability views (ObservabilityPanel) by `?view=`, all on a made-up app
  * called shop. The console's own pages (/forge/p/shop/…) are the rest of the
- * demo; the shell's nav (DemoNav, demoNav.ts) opens them.
+ * demo; the shell's nav (DemoNav, demoNavConfig.ts) opens them.
  *
  * ── NO DAEMON, NO CHAT, NO CONTROL PLANE ────────────────────────────────────
  *

@@ -23,7 +23,7 @@ numbered stories, and the agent workflows. The build story, with the real record
 Forge run, is `/forge/demo?section=built`. `/forge/p/shop` opens the running sample
 console directly; individual-page deep links remain direct. Every page, the Home
 included, renders inside the signed-in app's own shell (`AppShellFrame`, since #3519)
-with the demo's nav (`Forge/Demo/demoNav.ts`): the app's own rows in the app's order,
+with the demo's nav (`Forge/Demo/demoNavConfig.ts`): the app's own rows in the app's order,
 less the app's Inbox, Agents, Settings and billing, plus Home and "How it was built".
 There is one shell and one nav (after #3574, which deletes the console's second
 frame, `ConsoleShell`, and its grouped nav). The smoke script checks the Home, then enters

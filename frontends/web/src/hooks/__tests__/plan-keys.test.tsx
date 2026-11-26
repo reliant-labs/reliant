@@ -42,7 +42,7 @@ beforeEach(() => {
         return { plan: { id: "plan-1", chatId: CHAT_ID, title } };
       },
       "PlanService.UpdatePlan": (req) => {
-        title = (req as { title: string }).title;
+        title = (req as { plan: { title: string } }).plan.title;
         return { plan: { id: "plan-1", chatId: CHAT_ID, title } };
       },
       // The task list the plan resolves to; unrelated to these assertions.
@@ -69,7 +69,7 @@ describe("PlanService keys", () => {
     await waitFor(() => expect(plan.result.current.data?.plan?.title).toBe("Ship it"));
 
     const update = renderHook(() => useUpdatePlan(), { wrapper });
-    await update.result.current.mutateAsync({ planId: "plan-1", title: "Ship it twice" });
+    await update.result.current.mutateAsync({ plan: { id: "plan-1", title: "Ship it twice" }, updateMask: { paths: ["title"] } });
 
     await waitFor(() => expect(plan.result.current.data?.plan?.title).toBe("Ship it twice"));
     expect(planCalls).toBe(2);

@@ -145,3 +145,61 @@ func TestLogFailure_OnlyAnActivityFailureLoggedAtErrorIsAlreadyReported(t *testi
 		assert.Equal(t, tc.want, logger.records[0].level, name)
 	}
 }
+
+// A sub-agent ending on an exhausted step is reported once, by the line that
+// ends it: at WARN when the cause is the provider's capacity or the user's
+// error, at ERROR only for a server fault. endSubAgent marks what it returns,
+// so InlineLoop and SpawnInline pass it up at DEBUG: one provider overload in
+// a sub-agent was two ERROR issues (prod cc984602, eb44dcba).
+func TestSubAgentEnd_ReportedOnceAtTheCausesLevel(t *testing.T) {
+	t.Parallel()
+	for name, tc := range map[string]struct {
+		cause error
+		want  string
+	}{
+		"the provider is overloaded": {errors.New("The AI provider is currently overloaded (Overloaded)"), "WARN"},
+		"the user's error":           {svcerr.NotFound("model"), "WARN"},
+		"a server fault":             {errors.New("provider returned 500"), "ERROR"},
+	} {
+		logger := &levelLogger{}
+		logSubAgentEnd(logger, tc.cause, "[InlineLoop] Sub-agent step failed; ending this agent and reporting to its parent", "error", tc.cause)
+		require.Len(t, logger.records, 1, name)
+		assert.Equal(t, tc.want, logger.records[0].level, name)
+	}
+
+	var ts temporaltest.WorkflowTestSuite
+	env := ts.NewTestWorkflowEnvironment()
+	env.RegisterActivityWithOptions(func(context.Context, map[string]interface{}) error { return nil },
+		activity.RegisterOptions{Name: "WorkflowError"})
+	cause := errors.New("The AI provider is currently overloaded (Overloaded)")
+	var ended error
+	env.ExecuteWorkflow(func(ctx workflow.Context) error {
+		ended = endSubAgent(ctx, retryExhaustionError{Message: cause.Error(), Err: cause}, "call_llm")
+		return nil
+	})
+	require.True(t, env.IsWorkflowCompleted())
+	var exhausted *subAgentFailedError
+	require.ErrorAs(t, ended, &exhausted, "SpawnInline still recognises the exhaustion")
+	assert.True(t, providerCapacityError(ended))
+
+	logger := &levelLogger{}
+	passedUp := fmt.Errorf("sub-workflow builtin://agent failed: %w", fmt.Errorf("loop agent_loop failed: %w", ended))
+	logFailure(logger, ended, "[InlineLoop] Iteration failed, exiting loop")
+	logFailure(logger, passedUp, "[SpawnInline] Inline execution failed")
+	require.Len(t, logger.records, 2)
+	assert.Equal(t, "DEBUG", logger.records[0].level)
+	assert.Equal(t, "DEBUG", logger.records[1].level)
+}
+
+// An error the activity reached on its own survives a worker shutdown as
+// itself; only how the work unwound is rewritten to a retryable
+// WorkerShutdown. A workflow name that does not exist, rewritten, was retried
+// and lost the user class that keeps it off ERROR (prod 5fc6fce4, 23295ad3).
+func TestVerdictIndependentOfShutdown(t *testing.T) {
+	t.Parallel()
+	missing := fmt.Errorf("workflow %q: %w", "hotpath", svcerr.NotFound("no project workflow is named \"hotpath\""))
+	assert.True(t, verdictIndependentOfShutdown(missing), "the user's error")
+	assert.True(t, verdictIndependentOfShutdown(temporal.NewNonRetryableApplicationError("bad yaml", "TerminalError", nil)), "a terminal error")
+	assert.False(t, verdictIndependentOfShutdown(fmt.Errorf("query: %w", context.Canceled)), "a cancellation")
+	assert.False(t, verdictIndependentOfShutdown(errors.New("nats: connection closed")), "a fault the shutdown can cause")
+}

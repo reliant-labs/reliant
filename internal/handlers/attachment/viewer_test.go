@@ -34,7 +34,7 @@ func TestViewerCannotReadTheOwnersAttachment(t *testing.T) {
 	require.NoError(t, repo.CreateAttachment(f.Owner, att))
 
 	svc := NewTestAttachment(t, WithAttachmentDeps(RealDeps(repo)))
-	req := connect.NewRequest(&reliantv1.GetAttachmentRequest{AttachmentId: att.ID})
+	req := connect.NewRequest(&reliantv1.GetAttachmentRequest{Id: att.ID})
 
 	got, err := svc.GetAttachment(f.Owner, req)
 	require.NoError(t, err, "the owner reads their own attachment")

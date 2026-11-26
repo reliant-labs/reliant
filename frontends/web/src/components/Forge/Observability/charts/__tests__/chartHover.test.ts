@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { describeSample, formatSampleTime, indexAtFraction, nearestIndex, placeTooltip, sampleRows, stepSample } from "../chartHover";
+import { describeSample, formatSampleTime, indexAtFraction, nearestIndex, placeTooltip, sampleRows, slotAnchor, slotIndexAt, stepSample } from "../chartHover";
 
 const TIMES = [1000, 1060, 1120, 1180, 1240];
 
@@ -122,5 +122,29 @@ describe("placeTooltip", () => {
   it("stays inside the viewport at the top and bottom", () => {
     expect(placeTooltip({ x: 300, top: 0, bottom: 10 }, size, viewport).top).toBe(8);
     expect(placeTooltip({ x: 300, top: 790, bottom: 800 }, size, viewport).top).toBe(800 - 8 - 60);
+  });
+});
+
+describe("slotIndexAt and slotAnchor (a bar chart's buckets, a heatmap's columns)", () => {
+  const rect = { left: 100, width: 200, top: 10, bottom: 60 };
+
+  it("reads the slot under the pointer, clamped to the first and last", () => {
+    // Four slots, 50px each.
+    expect(slotIndexAt(rect, 100, 4)).toBe(0);
+    expect(slotIndexAt(rect, 149, 4)).toBe(0);
+    expect(slotIndexAt(rect, 150, 4)).toBe(1);
+    expect(slotIndexAt(rect, 299, 4)).toBe(3);
+    expect(slotIndexAt(rect, 40, 4)).toBe(0);
+    expect(slotIndexAt(rect, 900, 4)).toBe(3);
+  });
+
+  it("has no slot without samples or width", () => {
+    expect(slotIndexAt(rect, 150, 0)).toBeNull();
+    expect(slotIndexAt({ left: 0, width: 0 }, 0, 4)).toBeNull();
+  });
+
+  it("anchors the tooltip on the slot's centre, the plot's top and bottom", () => {
+    expect(slotAnchor(rect, 1, 4)).toEqual({ x: 175, top: 10, bottom: 60 });
+    expect(slotAnchor(rect, 4, 4)).toBeNull();
   });
 });

@@ -60,7 +60,10 @@ export interface Site {
   acrossAllOrgs: boolean;
 }
 
-const CLIENT_FACTORIES = new Set(["connectClient", "getControlPlaneClient", "createClient", "obsClient", "createPromiseClient"]);
+// `scopedClient(Service, connectClient(Service))` is the generated hooks'
+// per-call client (forge-web-runtime/transport-scope): its first argument is
+// the service too.
+const CLIENT_FACTORIES = new Set(["connectClient", "getControlPlaneClient", "createClient", "obsClient", "createPromiseClient", "scopedClient"]);
 const CLIENT_FACTORY_CALL = /\b(?:connectClient|getControlPlaneClient|createClient|obsClient|createPromiseClient)\s*[(<]/;
 
 const IMPERATIVE_READS = new Set(["fetchQuery", "ensureQueryData", "prefetchQuery", "fetchInfiniteQuery", "prefetchInfiniteQuery", "ensureInfiniteQueryData"]);
@@ -362,8 +365,9 @@ export class OrgScopeAnalysis {
     const file = path.endsWith("-hooks_gen.ts") ? this.file(path) : null;
     if (file) {
       table = { hooks: new Map(), queries: new Map() };
-      // `const client = connectClient(ProjectService);`
-      const clientDecl = file.decls.get("client");
+      // `const clientOf = scopedClient(ProjectService, connectClient(ProjectService));`,
+      // or, from a forge before #2737, `const client = connectClient(ProjectService);`
+      const clientDecl = file.decls.get("clientOf") ?? file.decls.get("client");
       const svc = clientDecl && ts.isVariableDeclaration(clientDecl) && clientDecl.initializer ? this.clientOf(clientDecl.initializer, file) : null;
       if (svc) {
         for (const [name, decl] of file.decls) {

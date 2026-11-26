@@ -73,7 +73,7 @@ func (s *Service) UpdateChat(
 			return nil, svcerr.FailedPrecondition("cannot change workflow: chat has no workflow assigned")
 		}
 
-		rootWorkflow, err := s.deps.Repo.GetWorkflow(ctx, *chat.WorkflowID)
+		rootWorkflow, err := s.deps.Workflows.LoadWorkflow(ctx, *chat.WorkflowID)
 		if err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get root workflow"))
 		}

@@ -58,7 +58,7 @@ describe("hosted rate disclosure", () => {
       "Hosted storage: $0.25/GiB-month",
       "Internet egress: $0.15/GB",
       "Static-site egress: $0.15/GB",
-      "Extra static sites: $5/month each (your first site is free)",
+      "Extra static sites: $5/month each (free in your free hosting organization)",
     ]);
   });
 

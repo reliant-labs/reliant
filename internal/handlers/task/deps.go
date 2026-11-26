@@ -8,19 +8,8 @@ package task
 import (
 	"context"
 
-	"github.com/reliant-labs/forge/pkg/orm"
-
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
-
-// TaskStore reads and writes tasks. store.TaskExtStore satisfies it.
-type TaskStore interface {
-	GetTask(ctx context.Context, id string) (*core.Task, error)
-	InsertTask(ctx context.Context, t *core.Task) error
-	ReplaceTask(ctx context.Context, t *core.Task) error
-	RemoveTask(ctx context.Context, id string) error
-	ListTasksByPlan(ctx context.Context, planID string) ([]*core.Task, error)
-}
 
 // PlanStore reads the plan a task belongs to. store.PlanExtStore satisfies
 // it.
@@ -43,10 +32,4 @@ type ChatStore interface {
 // *db.Repo satisfies it.
 type ChatRefetcher interface {
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType core.RefetchType) error
-}
-
-// TxRunner opens the transactions of the read-check-write rpcs. *orm.Client
-// satisfies it.
-type TxRunner interface {
-	RunTx(ctx context.Context, policy orm.TxPolicy, fn func(ctx context.Context) error) error
 }

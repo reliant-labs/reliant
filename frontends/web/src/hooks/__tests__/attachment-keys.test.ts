@@ -34,12 +34,12 @@ beforeEach(() => {
         getCalls++;
         await Promise.resolve();
         return {
-          attachment: { id: (req as { attachmentId: string }).attachmentId, mimeType: "image/png" },
+          attachment: { id: (req as { id: string }).id, mimeType: "image/png" },
           content: new TextEncoder().encode("png"),
         };
       },
       "AttachmentService.DeleteAttachment": (req) => {
-        deleted.push((req as { attachmentId: string }).attachmentId);
+        deleted.push((req as { id: string }).id);
         return {};
       },
       "AttachmentService.UploadAttachment": (req) => {
@@ -63,7 +63,7 @@ afterEach(() => {
   setTransport(null);
 });
 
-const key = (attachmentId: string) => attachmentServiceKeys.getAttachment({ attachmentId });
+const key = (attachmentId: string) => attachmentServiceKeys.getAttachment({ id: attachmentId });
 
 describe("AttachmentService keys", () => {
   it("concurrent reads of one attachment share a single GetAttachment", async () => {

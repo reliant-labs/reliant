@@ -84,7 +84,7 @@ func TestChatCreateGetUpdateDelete(t *testing.T) {
 	if err := store.InsertChat(ctx, env.ORM, a); err != nil {
 		t.Fatalf("InsertChat: %v", err)
 	}
-	twin, err := env.Repo.GetChat(ctx, "chat-a")
+	twin, err := store.GetChat(ctx, env.Repo.ORM(), "chat-a")
 	if err != nil {
 		t.Fatalf("Repo.GetChat: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestChatCreateGetUpdateDelete(t *testing.T) {
 	if err := env.Repo.CreateChat(ctx, convChat("chat-b", at)); err != nil {
 		t.Fatalf("Repo.CreateChat: %v", err)
 	}
-	twin, err = env.Repo.GetChat(ctx, "chat-b")
+	twin, err = store.GetChat(ctx, env.Repo.ORM(), "chat-b")
 	if err != nil {
 		t.Fatalf("Repo.GetChat(b): %v", err)
 	}
@@ -138,7 +138,7 @@ func TestChatCreateGetUpdateDelete(t *testing.T) {
 	if err := store.SaveChat(ctx, env.ORM, edit); err != nil {
 		t.Fatalf("SaveChat: %v", err)
 	}
-	twin, err = env.Repo.GetChat(ctx, "chat-b")
+	twin, err = store.GetChat(ctx, env.Repo.ORM(), "chat-b")
 	if err != nil {
 		t.Fatalf("Repo.GetChat after SaveChat: %v", err)
 	}
@@ -175,13 +175,13 @@ func TestChatCreateGetUpdateDelete(t *testing.T) {
 	if err := store.UpdateChatUnread(ctx, env.ORM, "chat-a", true); err != nil {
 		t.Fatalf("UpdateChatUnread: %v", err)
 	}
-	if twin, err := env.Repo.GetChat(ctx, "chat-a"); err != nil || !twin.Unread {
+	if twin, err := store.GetChat(ctx, env.Repo.ORM(), "chat-a"); err != nil || !twin.Unread {
 		t.Fatalf("Repo.GetChat after unread = %v, %v", twin, err)
 	}
 	if err := store.UpdateChatUnread(ctx, env.ORM, "chat-a", false); err != nil {
 		t.Fatalf("UpdateChatUnread(false): %v", err)
 	}
-	if twin, err := env.Repo.GetChat(ctx, "chat-a"); err != nil || twin.Unread {
+	if twin, err := store.GetChat(ctx, env.Repo.ORM(), "chat-a"); err != nil || twin.Unread {
 		t.Fatalf("Repo.GetChat after read = %v, %v", twin, err)
 	}
 
@@ -193,7 +193,7 @@ func TestChatCreateGetUpdateDelete(t *testing.T) {
 	if err := store.RemoveChat(ctx, env.ORM, "chat-b"); err != nil {
 		t.Fatalf("RemoveChat(again) = %v, want a no-op", err)
 	}
-	if _, err := env.Repo.GetChat(ctx, "chat-b"); !errors.Is(err, core.ErrChatNotFound) {
+	if _, err := store.GetChat(ctx, env.Repo.ORM(), "chat-b"); !errors.Is(err, core.ErrChatNotFound) {
 		t.Fatalf("Repo.GetChat after RemoveChat err = %v, want ErrChatNotFound", err)
 	}
 }
@@ -367,14 +367,14 @@ func TestChatMachineMarkers(t *testing.T) {
 	if err := store.UpdateChatActiveDaemon(ctx, env.ORM, "m-1", convStr("daemon-1")); err != nil {
 		t.Fatalf("UpdateChatActiveDaemon(pin): %v", err)
 	}
-	twin, err := env.Repo.GetChat(ctx, "m-1")
+	twin, err := store.GetChat(ctx, env.Repo.ORM(), "m-1")
 	if err != nil || twin.ActiveDaemonID == nil || *twin.ActiveDaemonID != "daemon-1" || twin.NoMachine {
 		t.Fatalf("after pin Repo.GetChat = %+v, %v", twin, err)
 	}
 	if err := store.UpdateChatActiveDaemon(ctx, env.ORM, "m-1", nil); err != nil {
 		t.Fatalf("UpdateChatActiveDaemon(clear): %v", err)
 	}
-	if twin, err := env.Repo.GetChat(ctx, "m-1"); err != nil || twin.ActiveDaemonID != nil || twin.NoMachine {
+	if twin, err := store.GetChat(ctx, env.Repo.ORM(), "m-1"); err != nil || twin.ActiveDaemonID != nil || twin.NoMachine {
 		t.Fatalf("after clear Repo.GetChat = %+v, %v", twin, err)
 	}
 
@@ -385,7 +385,7 @@ func TestChatMachineMarkers(t *testing.T) {
 	if ok, err := store.SetChatAdopted(ctx, env.ORM, "m-1", storetest.SeedUserID, true); err != nil || !ok {
 		t.Fatalf("SetChatAdopted = %v, %v", ok, err)
 	}
-	first, err := env.Repo.GetChat(ctx, "m-1")
+	first, err := store.GetChat(ctx, env.Repo.ORM(), "m-1")
 	if err != nil || first.AdoptedAt == nil {
 		t.Fatalf("Repo.GetChat after adopt = %+v, %v", first, err)
 	}
@@ -424,7 +424,7 @@ func TestChatMachineMarkers(t *testing.T) {
 			t.Fatalf("%s(missing chat) = %v, %v; want false", m.name, changed, err)
 		}
 	}
-	if twin, err := env.Repo.GetChat(ctx, "m-2"); err != nil || twin.Activity == nil {
+	if twin, err := store.GetChat(ctx, env.Repo.ORM(), "m-2"); err != nil || twin.Activity == nil {
 		t.Fatalf("Repo.GetChat(m-2) = %+v, %v", twin, err)
 	}
 
@@ -554,7 +554,7 @@ func TestChatRootStatusMapsFromTheView(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetChat(%s): %v", id, err)
 		}
-		twin, err := env.Repo.GetChat(ctx, id)
+		twin, err := store.GetChat(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("Repo.GetChat(%s): %v", id, err)
 		}
@@ -580,7 +580,7 @@ func TestSetChatRunID(t *testing.T) {
 	}
 	runID := func() string {
 		t.Helper()
-		got, err := env.Repo.GetChat(ctx, "r-1")
+		got, err := store.GetChat(ctx, env.Repo.ORM(), "r-1")
 		if err != nil || got.RunID == nil {
 			t.Fatalf("GetChat = %+v, %v", got, err)
 		}

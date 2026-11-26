@@ -152,7 +152,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	syncer, fires := TemporalBackend(temporalClient, triggers.NewStores(repo), taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
-		Repo: repo, Firings: extstore.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: extstore.NewTriggerExtStore(repo.ORM()), TriggerWrites: extstore.NewTriggerWritesExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
+		Repo: repo, Firings: extstore.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: extstore.NewTriggerExtStore(repo.ORM()), TriggerWrites: extstore.NewTriggerWritesExtStore(repo.ORM()), Triggers: extstore.NewTriggerExtStore(repo.ORM()), FiringReads: extstore.NewTriggerEventExtStore(repo.ORM()), Registrations: extstore.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
 	}))
 
@@ -245,7 +245,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, "Invoice 1234 from Acme", data["subject"], "trigger.payload.data.subject reached the run")
 	assert.Equal(t, "Billing <billing@acme.example>", data["from"])
 	assert.NotContains(t, data, "text", "no body in the payload")
-	chat, err := repo.GetChat(ctx, *launched.ChatID)
+	chat, err := extstore.GetChat(ctx, repo.ORM(), *launched.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, ann.userID, chat.UserID)
 	// The newsletter was recorded and skipped by the CEL filter.

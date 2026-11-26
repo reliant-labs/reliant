@@ -149,7 +149,7 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			t.Cleanup(cleanup)
 
 			ctx, fx := setupAbsorbFixture(t, repo, "test-user", tc.status)
-			chat, err := repo.GetChat(ctx, fx.chatID)
+			chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 			require.NoError(t, err)
 			// A synced record, as every project with a connected daemon has.
 			skills := `[{"name":"a-skill","body":"` + strings.Repeat("x", 64<<10) + `"}]`

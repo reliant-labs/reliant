@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // chats_with_activity carries the chat's origin — launch_kind and trigger_id
@@ -59,7 +60,7 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 	ctx := context.Background()
 
 	triggerID := "trg-origin"
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
 
 	createActivityTestChat(t, repo, "origin-schedule")
 	recordLaunchEvent(t, repo, "origin-schedule", core.TriggerEventKindSchedule, &triggerID, time.Now().UTC())
@@ -70,7 +71,7 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 	createActivityTestChat(t, repo, "origin-legacy") // no event: predates triggers
 
 	t.Run("GetChat schedule", func(t *testing.T) {
-		chat, err := repo.GetChat(ctx, "origin-schedule")
+		chat, err := store.GetChat(ctx, repo.ORM(), "origin-schedule")
 		require.NoError(t, err)
 		assert.Equal(t, "schedule", chat.LaunchKind)
 		require.NotNil(t, chat.TriggerID)
@@ -83,7 +84,7 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 		assert.Nil(t, chat.TriggerID)
 	})
 	t.Run("legacy chat has no origin", func(t *testing.T) {
-		chat, err := repo.GetChat(ctx, "origin-legacy")
+		chat, err := store.GetChat(ctx, repo.ORM(), "origin-legacy")
 		require.NoError(t, err)
 		assert.Empty(t, chat.LaunchKind)
 		assert.Nil(t, chat.TriggerID)
@@ -110,18 +111,18 @@ func TestChatLaunchOriginUsesEarliestEventAndSurvivesTriggerDeletion(t *testing.
 	ctx := context.Background()
 
 	triggerID := "trg-delete"
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(triggerID, "test-user", "test-project", "doomed")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(triggerID, "test-user", "test-project", "doomed")))
 	createActivityTestChat(t, repo, "origin-two-events")
 	now := time.Now().UTC()
 	recordLaunchEvent(t, repo, "origin-two-events", core.TriggerEventKindSchedule, &triggerID, now.Add(-time.Hour))
 	recordLaunchEvent(t, repo, "origin-two-events", core.TriggerEventKindChatStart, nil, now)
 
-	chat, err := repo.GetChat(ctx, "origin-two-events")
+	chat, err := store.GetChat(ctx, repo.ORM(), "origin-two-events")
 	require.NoError(t, err)
 	assert.Equal(t, "schedule", chat.LaunchKind, "the earliest event is the launch event")
 
 	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
-	chat, err = repo.GetChat(ctx, "origin-two-events")
+	chat, err = store.GetChat(ctx, repo.ORM(), "origin-two-events")
 	require.NoError(t, err)
 	assert.Equal(t, "schedule", chat.LaunchKind, "deleting the trigger keeps the origin kind")
 	assert.Nil(t, chat.TriggerID, "ON DELETE SET NULL clears the trigger id")
@@ -141,7 +142,7 @@ func TestListChatsExcludeAutomations(t *testing.T) {
 	ctx := context.Background()
 
 	triggerID := "trg-exclude"
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(triggerID, "test-user", "test-project", "nightly")))
 	now := time.Now().UTC()
 
 	createActivityTestChat(t, repo, "x-interactive")

@@ -476,7 +476,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpd
 // because the delivery may have reset-replayed the execution into a new run. Both writes are best-effort: the signal is the step that actually
 // restarts the run, and it has already succeeded.
 func (s *Service) ResumeViaSignal(ctx context.Context, in ResumeViaSignalInput) (ResumeOutcome, error) {
-	before, known := workflow.StatusBeforeWake(ctx, workflow.FacadeWorkflows{Repo: s.repo}, in.WorkflowID)
+	before, known := workflow.StatusBeforeWake(ctx, s.workflows, in.WorkflowID)
 	if err := s.pause.SignalWithRecovery(ctx, in.TargetWorkflowID, in.SignalName, in.SignalData, in.InputUpdate); err != nil {
 		logging.InfoContext(ctx, "[runs] Signal-parked run not reset-resumable — restart at checkpoint",
 			"chatID", in.ChatID, "workflowID", in.WorkflowID,
@@ -712,18 +712,6 @@ func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
 			logging.WarnContext(ctx, "[runs] Failed to resolve pending question while terminating",
 				"chatID", chatID, "questionID", q.ID, "error", err)
 			continue
-		}
-
-		if err := s.repo.EmitQuestionUpdate(ctx, q.ChatID, db.QuestionUpdate{
-			QuestionID: q.ID,
-			ChatID:     q.ChatID,
-			WorkflowID: q.WorkflowID,
-			ThreadID:   q.ThreadID,
-			StepID:     q.StepID,
-			Status:     "resolved",
-		}); err != nil {
-			logging.WarnContext(ctx, "[runs] Failed to emit question resolved update while terminating",
-				"chatID", chatID, "questionID", q.ID, "error", err)
 		}
 	}
 }

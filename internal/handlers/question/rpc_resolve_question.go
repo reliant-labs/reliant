@@ -71,17 +71,6 @@ func (s *Service) ResolveQuestion(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))
 	}
 
-	// Emit question update (resolved)
-	if err := s.deps.Repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
-		QuestionID: question.ID,
-		ChatID:     question.ChatID,
-		WorkflowID: question.WorkflowID,
-		StepID:     question.StepID,
-		Status:     "resolved",
-	}); err != nil {
-		logging.WarnContext(ctx, "[Question] Failed to emit question update", "error", err)
-	}
-
 	// For "reply" action with response_data and ask_user metadata: save user message to thread
 	if req.Msg.Action == "reply" && responseData != nil && question.Metadata != nil {
 		if isAskUserQuestion(question.Metadata) {

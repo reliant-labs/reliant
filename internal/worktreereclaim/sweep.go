@@ -333,10 +333,14 @@ func (r *Reclaimer) SweepMachine(ctx context.Context, opts SweepOptions) SweepRe
 		entries = append(entries, e)
 	}
 	// Interrupted reclaims first: a checkout parked by a crash goes home
-	// before anything else looks at its repository.
+	// before anything else looks at its repository. In mode on, an
+	// interrupted deletion is finished (finishDisposal), but only in the
+	// first half of the pass's budget: the rest is the new candidates'.
+	finishBy := time.Now().Add(opts.Budget / 2)
 	for i := range entries {
 		if needsRecovery(entries[i]) {
-			r.recoverReclaim(ctx, &entries[i], dir)
+			finish := opts.Mode == SweepOn && !opts.CaptureOnly && time.Now().Before(finishBy)
+			r.recoverReclaim(ctx, &entries[i], dir, finish)
 		}
 	}
 	// Cheapest-to-decide first is not the order that matters: what matters

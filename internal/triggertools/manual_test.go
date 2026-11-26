@@ -95,7 +95,7 @@ func TestManualToolUsesServiceOwnershipWithoutEnabling(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, e.userID)
 	_, err := e.svc.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
 	require.NoError(t, err)
-	tool := tools.NewFireTriggerTool(e.repo, triggertools.New(e.svc))
+	tool := tools.NewFireTriggerTool(tools.WithChats(e.repo), triggertools.New(e.svc))
 	before, err := e.repo.GetTrigger(context.Background(), id)
 	require.NoError(t, err)
 	resp := e.call(t, tool, tools.FireTriggerParams{TriggerID: id})

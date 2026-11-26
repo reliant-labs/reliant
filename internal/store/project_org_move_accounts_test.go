@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // The provider-account clause of moving a project to another org
@@ -68,7 +69,7 @@ func (f *credFixture) mvTrigger(id, projectID string) {
 	require.NoError(f.t, err)
 	now := credT0
 	org := mvSrc
-	require.NoError(f.t, f.env.Repo.CreateTrigger(context.Background(), &core.Trigger{
+	require.NoError(f.t, triggertest.Create(context.Background(), f.env.Repo, &core.Trigger{
 		ID: id, UserID: mvOwner, ProjectID: projectID, Name: id, Kind: core.TriggerKindSchedule,
 		Enabled: true, Workflow: "nightly", Config: config, OrgID: &org, CreatedAt: now, UpdatedAt: now,
 	}))
@@ -149,7 +150,7 @@ func TestMoveProjectOrgClearsAssignmentsAnotherOrgFunds(t *testing.T) {
 	assert.Empty(t, f.assigned("c-move-sub"), "every thread of every moved chat is cleared")
 	assert.Equal(t, map[string]string{"anthropic": "k-src"}, f.assigned("c-stay"), "a chat that did not move keeps its account")
 
-	chat, err := f.env.Repo.GetChat(ctx, "c-move")
+	chat, err := store.GetChat(ctx, f.env.Repo.ORM(), "c-move")
 	require.NoError(t, err)
 	require.NotNil(t, chat.OrgID)
 	assert.Equal(t, mvDst, *chat.OrgID, "the next call is scoped to the target org (chatScope reads the row)")

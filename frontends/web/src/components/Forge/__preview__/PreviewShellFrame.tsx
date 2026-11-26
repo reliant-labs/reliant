@@ -65,7 +65,7 @@ const PREVIEW_SESSION = fixedSession({ id: "preview", email: "preview@example.co
 /**
  * The console's rows of the app's own nav (navConfig/hybrid.ts), drawn from
  * the same item objects and in its order, as the demo's nav is
- * (Forge/Demo/demoNav.ts): without the app's chats, Inbox, Settings and
+ * (Forge/Demo/demoNavConfig.ts): without the app's chats, Inbox, Settings and
  * billing, which a preview of the console has nothing behind.
  */
 export const PREVIEW_NAV: NavConfig = {

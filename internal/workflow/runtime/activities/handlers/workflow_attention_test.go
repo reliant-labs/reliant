@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
@@ -58,7 +59,7 @@ func TestAttentionReceiptFailureRollsBackCompletedLifecycle(t *testing.T) {
 	var out WorkflowStatusOutput
 	err := f.h.ExecuteActivity(NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: f.h.Repo(), Runs: unavailableReceiptStore{NewRunRecords(f.h.Repo().ORM())}}).Execute, in, &out)
 	require.Error(t, err)
-	wf, err := f.h.Repo().GetWorkflow(ctx, chatID)
+	wf, err := store.LoadWorkflow(ctx, f.h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Equal(t, db.Active(), wf.Status, "cannot commit a completed lifecycle without its semantic fallback receipt")
 	managed, err := f.h.Repo().AttentionManagedChats(ctx, f.userID, []string{chatID})
@@ -86,7 +87,7 @@ func TestAttentionSuccessfulEscalationPersistsAtomically(t *testing.T) {
 			}
 			var out WorkflowStatusOutput
 			err := f.h.ExecuteActivity(NewWorkflowStatusActivity(deps).Execute, in, &out)
-			wf, getErr := f.h.Repo().GetWorkflow(ctx, chatID)
+			wf, getErr := store.LoadWorkflow(ctx, f.h.Repo().ORM(), chatID)
 			require.NoError(t, getErr)
 			incidents, listErr := f.h.Repo().ListAttentionIncidents(ctx, f.userID)
 			require.NoError(t, listErr)
@@ -124,13 +125,13 @@ func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T)
 	managed, err := f.h.Repo().AttentionManagedChats(ctx, f.userID, []string{chatID})
 	require.NoError(t, err)
 	require.False(t, managed[chatID], "a bare observer registration cannot permanently suppress failure")
-	wf, err := f.h.Repo().GetWorkflow(ctx, chatID)
+	wf, err := store.LoadWorkflow(ctx, f.h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Equal(t, db.Active(), wf.Status, "attention failure rolls back the false completed lifecycle")
 	// The runtime turns exhausted terminal persistence into a true Temporal
 	// failure; the existing active-row reconciler then restores failed state.
 	require.NoError(t, f.h.Repo().UpdateWorkflowStatus(ctx, chatID, db.Failed()))
-	firings, err := f.h.Repo().FiringsSinceLastUnmanagedSuccess(ctx, f.userID, []string{f.triggerID}, 20)
+	firings, err := store.FiringsSinceLastUnmanagedSuccess(ctx, f.h.Repo().ORM(), f.userID, []string{f.triggerID}, 20)
 	require.NoError(t, err)
 	require.NotEmpty(t, firings[f.triggerID], "reconciled execution failure remains available to legacy inbox")
 }
@@ -153,7 +154,7 @@ func TestAttentionPreservesFailedOutcomeWhileRepairOwnsIncident(t *testing.T) {
 		Attention: &core.AttentionUpdate{RunID: actorID, StartedAt: at, Key: "repo:one:pr:12", Phase: "finish", State: "action_required", FailureClass: "unsuccessful"}}
 	var out WorkflowStatusOutput
 	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
-	chat, err := f.h.Repo().GetChat(ctx, observer)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), observer)
 	require.NoError(t, err)
 	require.False(t, chat.Unread)
 	var status string
