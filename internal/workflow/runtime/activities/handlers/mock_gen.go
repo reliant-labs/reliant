@@ -5050,3 +5050,101 @@ func (m *MockMailboxResolver) MarkQueuedAgentMessagesUndeliveredForThread(ctx co
 
 // Compile-time check.
 var _ MailboxResolver = (*MockMailboxResolver)(nil)
+
+// forge:section MockAttendanceTriggers
+// forge:hash=85a3ccdd38d7628c07ad78f7456f6edf63eb85f0d6e266b00040bf776b6bb21c
+
+// MockAttendanceTriggers is a test mock for the AttendanceTriggers interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockAttendanceTriggers.<Method>Func not set" error.
+type MockAttendanceTriggers struct {
+	contractkit.Recorder
+	GetTriggerEventByChatFunc func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
+	GetTriggerFunc            func(context.Context, string) (*core.Trigger, error)
+}
+
+// GetTriggerEventByChat records the call and delegates to GetTriggerEventByChatFunc when set.
+func (m *MockAttendanceTriggers) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetTriggerEventByChat", ctx, kind, chatID)
+	if m.GetTriggerEventByChatFunc != nil {
+		return m.GetTriggerEventByChatFunc(ctx, kind, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockAttendanceTriggers", "GetTriggerEventByChat")
+}
+
+// GetTrigger records the call and delegates to GetTriggerFunc when set.
+func (m *MockAttendanceTriggers) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+	m.Recorder.Record("GetTrigger", ctx, id)
+	if m.GetTriggerFunc != nil {
+		return m.GetTriggerFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockAttendanceTriggers", "GetTrigger")
+}
+
+// Compile-time check.
+var _ AttendanceTriggers = (*MockAttendanceTriggers)(nil)
+
+// forge:section MockLaunchEvents
+// forge:hash=27e259a291df85d9f8f367b5d3d6fb4c1bbea27a57bc59860b40a6f134de9013
+
+// MockLaunchEvents is a test mock for the LaunchEvents interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockLaunchEvents.<Method>Func not set" error.
+type MockLaunchEvents struct {
+	contractkit.Recorder
+	GetTriggerEventByChatIDFunc func(context.Context, string) (*core.TriggerEvent, error)
+}
+
+// GetTriggerEventByChatID records the call and delegates to GetTriggerEventByChatIDFunc when set.
+func (m *MockLaunchEvents) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetTriggerEventByChatID", ctx, chatID)
+	if m.GetTriggerEventByChatIDFunc != nil {
+		return m.GetTriggerEventByChatIDFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockLaunchEvents", "GetTriggerEventByChatID")
+}
+
+// Compile-time check.
+var _ LaunchEvents = (*MockLaunchEvents)(nil)
+
+// forge:section MockStatusTriggers
+// forge:hash=69af035ef0cefe6c5c7076e06487196cdb69e64dd3b56d9187985db03a2b401d
+
+// MockStatusTriggers is a test mock for the StatusTriggers interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockStatusTriggers.<Method>Func not set" error.
+type MockStatusTriggers struct {
+	contractkit.Recorder
+	GetTriggerFunc              func(context.Context, string) (*core.Trigger, error)
+	FiringsSinceLastSuccessFunc func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+}
+
+// GetTrigger records the call and delegates to GetTriggerFunc when set.
+func (m *MockStatusTriggers) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+	m.Recorder.Record("GetTrigger", ctx, id)
+	if m.GetTriggerFunc != nil {
+		return m.GetTriggerFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockStatusTriggers", "GetTrigger")
+}
+
+// FiringsSinceLastSuccess records the call and delegates to FiringsSinceLastSuccessFunc when set.
+func (m *MockStatusTriggers) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	m.Recorder.Record("FiringsSinceLastSuccess", ctx, userID, triggerIDs, perTrigger)
+	if m.FiringsSinceLastSuccessFunc != nil {
+		return m.FiringsSinceLastSuccessFunc(ctx, userID, triggerIDs, perTrigger)
+	}
+	return nil, contractkit.MockNotSet("MockStatusTriggers", "FiringsSinceLastSuccess")
+}
+
+// Compile-time check.
+var _ StatusTriggers = (*MockStatusTriggers)(nil)

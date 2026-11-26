@@ -136,7 +136,7 @@ func TestListInbox_ReadsRunConcurrentlyWithinTheBound(t *testing.T) {
 	assert.GreaterOrEqual(t, repo.peak.Load(), int32(inboxReadConcurrency), "reads overlap")
 	assert.LessOrEqual(t, repo.peak.Load(), int32(inboxReadConcurrency+inboxHealthReadConcurrency), "up to the bound and no further")
 	// The triggers are read once for both automation sections.
-	assert.Len(t, repo.MockRepository.Calls("ListTriggers"), 1)
+	assert.Len(t, repo.notices.Calls("ListTriggersForUser"), 1)
 }
 
 // The two firing reads run together, on a budget of their own, even while the

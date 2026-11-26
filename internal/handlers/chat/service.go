@@ -295,6 +295,22 @@ func (s *Service) chatViews() ChatViews {
 	return s.deps.ChatViews
 }
 
+// fixtureTriggerReads fills TriggerReads for the tests (nil in every binary:
+// validateDeps refuses a nil one), as fixtureChatReads fills the chat reads.
+var fixtureTriggerReads func(Repository) TriggerReads
+
+// triggerReads is Deps.TriggerReads; in this package's tests a fixture that
+// left it unnamed (the harness's mock) reads through its own repository.
+func (s *Service) triggerReads() TriggerReads {
+	switch s.deps.TriggerReads.(type) {
+	case nil, *MockTriggerReads:
+		if fixtureTriggerReads != nil {
+			return fixtureTriggerReads(s.deps.Repo)
+		}
+	}
+	return s.deps.TriggerReads
+}
+
 // New creates a new chat service instance with the supplied Deps.
 // Returns an error when validateDeps rejects a nil required field.
 func New(deps Deps) (*Service, error) {

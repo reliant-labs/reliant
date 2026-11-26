@@ -197,16 +197,6 @@ type AttendanceStore interface {
 	ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error)
 }
 
-// AttendanceTriggers is the trigger side of the attendance rule: the launch
-// event of an agent.start_run chain, and the trigger that launched an
-// unattended run (for its unattended-funding stamp). NewTriggerReads answers
-// it. A nil one cannot decide, so the rule fails closed: unattended,
-// org-funded sources only.
-type AttendanceTriggers interface {
-	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
-	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
-}
-
 // attendance is who is behind a call made for a chat (org-provider-accounts
 // §11.1): attended runs follow the chat rules (§10), unattended ones draw on
 // org-funded sources only, unless anySource (§11.3).

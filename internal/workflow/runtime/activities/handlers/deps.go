@@ -744,3 +744,27 @@ type ThreadStatusDeps struct {
 	// Mailbox resolves the mail a finished thread left behind.
 	Mailbox MailboxResolver
 }
+
+// AttendanceTriggers is the trigger side of the attendance rule: the launch
+// event of an agent.start_run chain, and the trigger that launched an
+// unattended run (for its unattended-funding stamp). NewTriggerReads answers
+// it. A nil one cannot decide, so the rule fails closed: unattended,
+// org-funded sources only.
+type AttendanceTriggers interface {
+	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+}
+
+// LaunchEvents reads the launch event of a chat: what started a run decides
+// whether its machine may be woken with the automation token.
+type LaunchEvents interface {
+	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+}
+
+// StatusTriggers is what a finished run's status write reads of the trigger
+// that launched it: whether it opted in to completion notices, and the
+// failure episode its firings form.
+type StatusTriggers interface {
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+}
