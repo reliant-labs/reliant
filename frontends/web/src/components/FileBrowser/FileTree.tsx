@@ -10,6 +10,7 @@ import { isDaemonConnectingError, isNoMachineError, projectCheckoutMissing } fro
 import { ProjectCheckoutState, type ProjectCheckoutMissing } from "../../gen/reliant/v1/filesystem_pb";
 import { ProjectCheckoutMissingPanel } from "./ProjectCheckoutMissingPanel";
 import { withAncestorsExpanded } from "./treePaths";
+import { fileNodeUnavailableReason } from "./symlinks";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { useProjectStore } from "../../store/projectStore";
@@ -980,6 +981,17 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     newExpanded.add(path);
     setExpandedPaths(newExpanded);
     onPathChange(path);
+
+    // A directory a parent listing reported empty is re-read when the user
+    // opens it: files can land in it after that listing (an agent writing
+    // .reliant.local/mcp.json into the folder it just created), and a
+    // gitignored change sends no push refresh to correct the stale "empty".
+    // One depth-1 read; a directory with an unknown listing loads through
+    // the lazy effect below instead.
+    const node = findNodeByPath(treeRef.current, path);
+    if (node?.type === "directory" && node.children?.length === 0 && fileNodeUnavailableReason(node) === null) {
+      void loadChildren(path, 1);
+    }
     
     // Scroll the expanded directory into view if it's out of frame
     setTimeout(() => {
@@ -995,7 +1007,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
         }
       }
     }, 0);
-  }, [expandedPaths, setExpandedPaths, onPathChange]);
+  }, [expandedPaths, setExpandedPaths, onPathChange, loadChildren]);
 
   const handleCollapse = useCallback((path: string) => {
     const newExpanded = new Set(expandedPaths);
