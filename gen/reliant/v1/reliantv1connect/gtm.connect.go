@@ -37,6 +37,52 @@ const (
 const (
 	// GtmServiceGetGtmAccessProcedure is the fully-qualified name of the GtmService's GetGtmAccess RPC.
 	GtmServiceGetGtmAccessProcedure = "/reliant.v1.GtmService/GetGtmAccess"
+	// GtmServiceListStrategiesProcedure is the fully-qualified name of the GtmService's ListStrategies
+	// RPC.
+	GtmServiceListStrategiesProcedure = "/reliant.v1.GtmService/ListStrategies"
+	// GtmServiceGetStrategyProcedure is the fully-qualified name of the GtmService's GetStrategy RPC.
+	GtmServiceGetStrategyProcedure = "/reliant.v1.GtmService/GetStrategy"
+	// GtmServiceCreateStrategyProcedure is the fully-qualified name of the GtmService's CreateStrategy
+	// RPC.
+	GtmServiceCreateStrategyProcedure = "/reliant.v1.GtmService/CreateStrategy"
+	// GtmServiceUpdateStrategyProcedure is the fully-qualified name of the GtmService's UpdateStrategy
+	// RPC.
+	GtmServiceUpdateStrategyProcedure = "/reliant.v1.GtmService/UpdateStrategy"
+	// GtmServiceListChannelsProcedure is the fully-qualified name of the GtmService's ListChannels RPC.
+	GtmServiceListChannelsProcedure = "/reliant.v1.GtmService/ListChannels"
+	// GtmServiceGetChannelProcedure is the fully-qualified name of the GtmService's GetChannel RPC.
+	GtmServiceGetChannelProcedure = "/reliant.v1.GtmService/GetChannel"
+	// GtmServiceCreateChannelProcedure is the fully-qualified name of the GtmService's CreateChannel
+	// RPC.
+	GtmServiceCreateChannelProcedure = "/reliant.v1.GtmService/CreateChannel"
+	// GtmServiceUpdateChannelProcedure is the fully-qualified name of the GtmService's UpdateChannel
+	// RPC.
+	GtmServiceUpdateChannelProcedure = "/reliant.v1.GtmService/UpdateChannel"
+	// GtmServiceListAssetsProcedure is the fully-qualified name of the GtmService's ListAssets RPC.
+	GtmServiceListAssetsProcedure = "/reliant.v1.GtmService/ListAssets"
+	// GtmServiceGetAssetProcedure is the fully-qualified name of the GtmService's GetAsset RPC.
+	GtmServiceGetAssetProcedure = "/reliant.v1.GtmService/GetAsset"
+	// GtmServiceCreateAssetUploadProcedure is the fully-qualified name of the GtmService's
+	// CreateAssetUpload RPC.
+	GtmServiceCreateAssetUploadProcedure = "/reliant.v1.GtmService/CreateAssetUpload"
+	// GtmServiceConfirmAssetUploadProcedure is the fully-qualified name of the GtmService's
+	// ConfirmAssetUpload RPC.
+	GtmServiceConfirmAssetUploadProcedure = "/reliant.v1.GtmService/ConfirmAssetUpload"
+	// GtmServiceGetAssetDownloadProcedure is the fully-qualified name of the GtmService's
+	// GetAssetDownload RPC.
+	GtmServiceGetAssetDownloadProcedure = "/reliant.v1.GtmService/GetAssetDownload"
+	// GtmServiceListStrategyLibraryProcedure is the fully-qualified name of the GtmService's
+	// ListStrategyLibrary RPC.
+	GtmServiceListStrategyLibraryProcedure = "/reliant.v1.GtmService/ListStrategyLibrary"
+	// GtmServiceGetStrategyLibraryEntryProcedure is the fully-qualified name of the GtmService's
+	// GetStrategyLibraryEntry RPC.
+	GtmServiceGetStrategyLibraryEntryProcedure = "/reliant.v1.GtmService/GetStrategyLibraryEntry"
+	// GtmServiceImportStrategyLibraryProcedure is the fully-qualified name of the GtmService's
+	// ImportStrategyLibrary RPC.
+	GtmServiceImportStrategyLibraryProcedure = "/reliant.v1.GtmService/ImportStrategyLibrary"
+	// GtmServiceUseLibraryStrategyProcedure is the fully-qualified name of the GtmService's
+	// UseLibraryStrategy RPC.
+	GtmServiceUseLibraryStrategyProcedure = "/reliant.v1.GtmService/UseLibraryStrategy"
 	// GtmServiceListIdeasProcedure is the fully-qualified name of the GtmService's ListIdeas RPC.
 	GtmServiceListIdeasProcedure = "/reliant.v1.GtmService/ListIdeas"
 	// GtmServiceGetIdeaProcedure is the fully-qualified name of the GtmService's GetIdea RPC.
@@ -90,6 +136,83 @@ type GtmServiceClient interface {
 	// rpc an org without access gets an answer from (enabled = false); the web
 	// reads it to decide whether to show GTM at all.
 	GetGtmAccess(context.Context, *connect.Request[v1.GetGtmAccessRequest]) (*connect.Response[v1.GetGtmAccessResponse], error)
+	// ListStrategies lists the org's strategies, newest first.
+	ListStrategies(context.Context, *connect.Request[v1.ListStrategiesRequest]) (*connect.Response[v1.ListStrategiesResponse], error)
+	// GetStrategy returns one strategy with its campaigns, at most 200
+	// (truncated says when the list was cut; ListCampaigns with strategy_id
+	// pages through all of them).
+	GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.GetStrategyResponse], error)
+	// CreateStrategy adds a strategy. An agent creates DRAFT strategies only;
+	// a person may create one in any status (unset: DRAFT).
+	CreateStrategy(context.Context, *connect.Request[v1.CreateStrategyRequest]) (*connect.Response[v1.CreateStrategyResponse], error)
+	// UpdateStrategy edits a strategy or moves its status. Unset fields are
+	// left alone. An agent edits DRAFT strategies only and never changes a
+	// status; only a person moves a strategy to ACTIVE, DONE or ARCHIVED, or
+	// edits one that is not DRAFT (PermissionDenied for an agent). Several
+	// strategies may be ACTIVE at once.
+	UpdateStrategy(context.Context, *connect.Request[v1.UpdateStrategyRequest]) (*connect.Response[v1.UpdateStrategyResponse], error)
+	// ListChannels lists the org's channels by key. An allowlisted org with no
+	// channel yet is given the default set on its first List or Get (blog,
+	// email, hacker-news, reddit, linkedin, x, youtube), idempotently; nothing
+	// else differs between calls. connection_state is computed per caller.
+	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
+	// GetChannel returns one channel (seeding the defaults as ListChannels does).
+	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
+	// CreateChannel adds a channel. A key the org already holds is
+	// AlreadyExists. An agent may create a channel, always MANUAL (mode,
+	// integration_kind and connection_id are a person's to set:
+	// PermissionDenied). No agent ever connects an integration or stores a
+	// credential: connecting is Reliant's own connect flow, by a person, in the
+	// app.
+	CreateChannel(context.Context, *connect.Request[v1.CreateChannelRequest]) (*connect.Response[v1.CreateChannelResponse], error)
+	// UpdateChannel edits a channel. Unset fields are left alone. An agent may
+	// change name, key, manual_instructions_md and status; only a person sets
+	// mode INTEGRATED, integration_kind or connection_id, or changes any field
+	// of an INTEGRATED channel's integration (PermissionDenied for an agent). A
+	// new key the org already holds is AlreadyExists.
+	UpdateChannel(context.Context, *connect.Request[v1.UpdateChannelRequest]) (*connect.Response[v1.UpdateChannelResponse], error)
+	// ListAssets lists the files attached to an item or a campaign (exactly
+	// one of the two), newest first. Metadata only.
+	ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error)
+	// GetAsset returns one asset's metadata.
+	GetAsset(context.Context, *connect.Request[v1.GetAssetRequest]) (*connect.Response[v1.GetAssetResponse], error)
+	// CreateAssetUpload starts an upload: it records a PENDING asset and
+	// returns a presigned PUT for its bytes in the org's bucket (object key
+	// gtm/<org_id>/<asset_id>), conditioned on size_bytes and content_type.
+	// The client PUTs the bytes to upload_url with required_headers before
+	// expires_at, then calls ConfirmAssetUpload. Limits are the service's: 25
+	// MiB per asset (64 MiB when an agent copies a chat attachment), about 2 GiB
+	// per org (ResourceExhausted past either).
+	CreateAssetUpload(context.Context, *connect.Request[v1.CreateAssetUploadRequest]) (*connect.Response[v1.CreateAssetUploadResponse], error)
+	// ConfirmAssetUpload finishes an upload: the server reads the object,
+	// checks its size against the declared one, sniffs its type against the
+	// allowlist and computes its sha256, then marks the asset READY. If any
+	// check fails it deletes the object and the row (InvalidArgument). An asset
+	// that is not PENDING is FailedPrecondition.
+	ConfirmAssetUpload(context.Context, *connect.Request[v1.ConfirmAssetUploadRequest]) (*connect.Response[v1.ConfirmAssetUploadResponse], error)
+	// GetAssetDownload returns a short-lived URL for a READY asset's bytes:
+	// either a presigned GET on the bucket or the gated proxy handler
+	// (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
+	// settles on. A PENDING asset is FailedPrecondition.
+	GetAssetDownload(context.Context, *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error)
+	// ListStrategyLibrary lists the org's strategy library (the plays and
+	// tactics it imported), by category then name.
+	ListStrategyLibrary(context.Context, *connect.Request[v1.ListStrategyLibraryRequest]) (*connect.Response[v1.ListStrategyLibraryResponse], error)
+	// GetStrategyLibraryEntry returns one library entry by key.
+	GetStrategyLibraryEntry(context.Context, *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error)
+	// ImportStrategyLibrary upserts a batch of library entries by key, at most
+	// 500: a new key is created, a changed entry updated, an equal one left
+	// alone (each counted). With prune, the org's entries whose key is not in
+	// the batch are removed (strategies made from them keep their library_key).
+	// A person's act only (PermissionDenied for an agent).
+	ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error)
+	// UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
+	// goal (from north_star and objective), target metric (from kpis),
+	// category and library_key. With create_first_campaign it also makes a
+	// first DRAFT campaign under it (campaign_name, or the entry's name), whose
+	// planned_channel_ids are the org's channels whose key matches one of the
+	// entry's channel_types. A person or an agent may call it.
+	UseLibraryStrategy(context.Context, *connect.Request[v1.UseLibraryStrategyRequest]) (*connect.Response[v1.UseLibraryStrategyResponse], error)
 	// ListIdeas lists the org's ideas, newest first.
 	ListIdeas(context.Context, *connect.Request[v1.ListIdeasRequest]) (*connect.Response[v1.ListIdeasResponse], error)
 	// GetIdea returns one idea.
@@ -107,15 +230,21 @@ type GtmServiceClient interface {
 	ListCampaigns(context.Context, *connect.Request[v1.ListCampaignsRequest]) (*connect.Response[v1.ListCampaignsResponse], error)
 	// GetCampaign returns one campaign with the ideas and items linked to it,
 	// at most 200 of each (truncated says when either list was cut; ListIdeas
-	// and ListItems with campaign_id page through all of them).
+	// and ListItems with campaign_id page through all of them), and its
+	// coverage: what it planned (planned_channel_ids x planned_formats) against
+	// what its items are, counted by status, over ALL its items.
 	GetCampaign(context.Context, *connect.Request[v1.GetCampaignRequest]) (*connect.Response[v1.GetCampaignResponse], error)
-	// CreateCampaign adds a campaign, DRAFT unless the request says otherwise.
+	// CreateCampaign adds a campaign under a strategy of the org, DRAFT unless
+	// the request says otherwise. Every planned channel id must be a channel of
+	// the org (NotFound otherwise).
 	CreateCampaign(context.Context, *connect.Request[v1.CreateCampaignRequest]) (*connect.Response[v1.CreateCampaignResponse], error)
-	// UpdateCampaign edits a campaign. Unset fields are left alone.
+	// UpdateCampaign edits a campaign. Unset fields are left alone. It may move
+	// the campaign to another strategy of the same org.
 	UpdateCampaign(context.Context, *connect.Request[v1.UpdateCampaignRequest]) (*connect.Response[v1.UpdateCampaignResponse], error)
 	// ListItems lists the org's items. With a scheduled range it is the
 	// calendar: the items scheduled inside [scheduled_from, scheduled_to),
-	// soonest first. Without one, newest first.
+	// soonest first. Without one, newest first. Filters: campaign, format,
+	// channel, status.
 	ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error)
 	// GetItem returns one item.
 	GetItem(context.Context, *connect.Request[v1.GetItemRequest]) (*connect.Response[v1.GetItemResponse], error)
@@ -132,6 +261,8 @@ type GtmServiceClient interface {
 	//     never touches an item in any other status.
 	//   - A content edit by a person on an APPROVED or SCHEDULED item returns
 	//     it to REVIEW (it must be approved again).
+	//   - PUBLISHED on an item whose channel is MANUAL needs published_url, set
+	//     in the same UpdateItem or before (FailedPrecondition otherwise).
 	//   - SENT is never set here: only the approved email path writes it, and a
 	//     SENT item is not edited.
 	UpdateItem(context.Context, *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error)
@@ -190,6 +321,117 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			baseURL+GtmServiceGetGtmAccessProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("GetGtmAccess")),
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listStrategies: connect.NewClient[v1.ListStrategiesRequest, v1.ListStrategiesResponse](
+			httpClient,
+			baseURL+GtmServiceListStrategiesProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ListStrategies")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getStrategy: connect.NewClient[v1.GetStrategyRequest, v1.GetStrategyResponse](
+			httpClient,
+			baseURL+GtmServiceGetStrategyProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("GetStrategy")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		createStrategy: connect.NewClient[v1.CreateStrategyRequest, v1.CreateStrategyResponse](
+			httpClient,
+			baseURL+GtmServiceCreateStrategyProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("CreateStrategy")),
+			connect.WithClientOptions(opts...),
+		),
+		updateStrategy: connect.NewClient[v1.UpdateStrategyRequest, v1.UpdateStrategyResponse](
+			httpClient,
+			baseURL+GtmServiceUpdateStrategyProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("UpdateStrategy")),
+			connect.WithClientOptions(opts...),
+		),
+		listChannels: connect.NewClient[v1.ListChannelsRequest, v1.ListChannelsResponse](
+			httpClient,
+			baseURL+GtmServiceListChannelsProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ListChannels")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getChannel: connect.NewClient[v1.GetChannelRequest, v1.GetChannelResponse](
+			httpClient,
+			baseURL+GtmServiceGetChannelProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("GetChannel")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		createChannel: connect.NewClient[v1.CreateChannelRequest, v1.CreateChannelResponse](
+			httpClient,
+			baseURL+GtmServiceCreateChannelProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("CreateChannel")),
+			connect.WithClientOptions(opts...),
+		),
+		updateChannel: connect.NewClient[v1.UpdateChannelRequest, v1.UpdateChannelResponse](
+			httpClient,
+			baseURL+GtmServiceUpdateChannelProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("UpdateChannel")),
+			connect.WithClientOptions(opts...),
+		),
+		listAssets: connect.NewClient[v1.ListAssetsRequest, v1.ListAssetsResponse](
+			httpClient,
+			baseURL+GtmServiceListAssetsProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ListAssets")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getAsset: connect.NewClient[v1.GetAssetRequest, v1.GetAssetResponse](
+			httpClient,
+			baseURL+GtmServiceGetAssetProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("GetAsset")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		createAssetUpload: connect.NewClient[v1.CreateAssetUploadRequest, v1.CreateAssetUploadResponse](
+			httpClient,
+			baseURL+GtmServiceCreateAssetUploadProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("CreateAssetUpload")),
+			connect.WithClientOptions(opts...),
+		),
+		confirmAssetUpload: connect.NewClient[v1.ConfirmAssetUploadRequest, v1.ConfirmAssetUploadResponse](
+			httpClient,
+			baseURL+GtmServiceConfirmAssetUploadProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ConfirmAssetUpload")),
+			connect.WithClientOptions(opts...),
+		),
+		getAssetDownload: connect.NewClient[v1.GetAssetDownloadRequest, v1.GetAssetDownloadResponse](
+			httpClient,
+			baseURL+GtmServiceGetAssetDownloadProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("GetAssetDownload")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listStrategyLibrary: connect.NewClient[v1.ListStrategyLibraryRequest, v1.ListStrategyLibraryResponse](
+			httpClient,
+			baseURL+GtmServiceListStrategyLibraryProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ListStrategyLibrary")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getStrategyLibraryEntry: connect.NewClient[v1.GetStrategyLibraryEntryRequest, v1.GetStrategyLibraryEntryResponse](
+			httpClient,
+			baseURL+GtmServiceGetStrategyLibraryEntryProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("GetStrategyLibraryEntry")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		importStrategyLibrary: connect.NewClient[v1.ImportStrategyLibraryRequest, v1.ImportStrategyLibraryResponse](
+			httpClient,
+			baseURL+GtmServiceImportStrategyLibraryProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ImportStrategyLibrary")),
+			connect.WithClientOptions(opts...),
+		),
+		useLibraryStrategy: connect.NewClient[v1.UseLibraryStrategyRequest, v1.UseLibraryStrategyResponse](
+			httpClient,
+			baseURL+GtmServiceUseLibraryStrategyProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("UseLibraryStrategy")),
 			connect.WithClientOptions(opts...),
 		),
 		listIdeas: connect.NewClient[v1.ListIdeasRequest, v1.ListIdeasResponse](
@@ -320,31 +562,133 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // gtmServiceClient implements GtmServiceClient.
 type gtmServiceClient struct {
-	getGtmAccess      *connect.Client[v1.GetGtmAccessRequest, v1.GetGtmAccessResponse]
-	listIdeas         *connect.Client[v1.ListIdeasRequest, v1.ListIdeasResponse]
-	getIdea           *connect.Client[v1.GetIdeaRequest, v1.GetIdeaResponse]
-	createIdea        *connect.Client[v1.CreateIdeaRequest, v1.CreateIdeaResponse]
-	updateIdea        *connect.Client[v1.UpdateIdeaRequest, v1.UpdateIdeaResponse]
-	setIdeaStatus     *connect.Client[v1.SetIdeaStatusRequest, v1.SetIdeaStatusResponse]
-	listCampaigns     *connect.Client[v1.ListCampaignsRequest, v1.ListCampaignsResponse]
-	getCampaign       *connect.Client[v1.GetCampaignRequest, v1.GetCampaignResponse]
-	createCampaign    *connect.Client[v1.CreateCampaignRequest, v1.CreateCampaignResponse]
-	updateCampaign    *connect.Client[v1.UpdateCampaignRequest, v1.UpdateCampaignResponse]
-	listItems         *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
-	getItem           *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
-	createItem        *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
-	updateItem        *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
-	resolveItemSend   *connect.Client[v1.ResolveItemSendRequest, v1.ResolveItemSendResponse]
-	getPositioning    *connect.Client[v1.GetPositioningRequest, v1.GetPositioningResponse]
-	updatePositioning *connect.Client[v1.UpdatePositioningRequest, v1.UpdatePositioningResponse]
-	listClaims        *connect.Client[v1.ListClaimsRequest, v1.ListClaimsResponse]
-	upsertClaim       *connect.Client[v1.UpsertClaimRequest, v1.UpsertClaimResponse]
-	checkClaims       *connect.Client[v1.CheckClaimsRequest, v1.CheckClaimsResponse]
+	getGtmAccess            *connect.Client[v1.GetGtmAccessRequest, v1.GetGtmAccessResponse]
+	listStrategies          *connect.Client[v1.ListStrategiesRequest, v1.ListStrategiesResponse]
+	getStrategy             *connect.Client[v1.GetStrategyRequest, v1.GetStrategyResponse]
+	createStrategy          *connect.Client[v1.CreateStrategyRequest, v1.CreateStrategyResponse]
+	updateStrategy          *connect.Client[v1.UpdateStrategyRequest, v1.UpdateStrategyResponse]
+	listChannels            *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
+	getChannel              *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
+	createChannel           *connect.Client[v1.CreateChannelRequest, v1.CreateChannelResponse]
+	updateChannel           *connect.Client[v1.UpdateChannelRequest, v1.UpdateChannelResponse]
+	listAssets              *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
+	getAsset                *connect.Client[v1.GetAssetRequest, v1.GetAssetResponse]
+	createAssetUpload       *connect.Client[v1.CreateAssetUploadRequest, v1.CreateAssetUploadResponse]
+	confirmAssetUpload      *connect.Client[v1.ConfirmAssetUploadRequest, v1.ConfirmAssetUploadResponse]
+	getAssetDownload        *connect.Client[v1.GetAssetDownloadRequest, v1.GetAssetDownloadResponse]
+	listStrategyLibrary     *connect.Client[v1.ListStrategyLibraryRequest, v1.ListStrategyLibraryResponse]
+	getStrategyLibraryEntry *connect.Client[v1.GetStrategyLibraryEntryRequest, v1.GetStrategyLibraryEntryResponse]
+	importStrategyLibrary   *connect.Client[v1.ImportStrategyLibraryRequest, v1.ImportStrategyLibraryResponse]
+	useLibraryStrategy      *connect.Client[v1.UseLibraryStrategyRequest, v1.UseLibraryStrategyResponse]
+	listIdeas               *connect.Client[v1.ListIdeasRequest, v1.ListIdeasResponse]
+	getIdea                 *connect.Client[v1.GetIdeaRequest, v1.GetIdeaResponse]
+	createIdea              *connect.Client[v1.CreateIdeaRequest, v1.CreateIdeaResponse]
+	updateIdea              *connect.Client[v1.UpdateIdeaRequest, v1.UpdateIdeaResponse]
+	setIdeaStatus           *connect.Client[v1.SetIdeaStatusRequest, v1.SetIdeaStatusResponse]
+	listCampaigns           *connect.Client[v1.ListCampaignsRequest, v1.ListCampaignsResponse]
+	getCampaign             *connect.Client[v1.GetCampaignRequest, v1.GetCampaignResponse]
+	createCampaign          *connect.Client[v1.CreateCampaignRequest, v1.CreateCampaignResponse]
+	updateCampaign          *connect.Client[v1.UpdateCampaignRequest, v1.UpdateCampaignResponse]
+	listItems               *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
+	getItem                 *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
+	createItem              *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
+	updateItem              *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
+	resolveItemSend         *connect.Client[v1.ResolveItemSendRequest, v1.ResolveItemSendResponse]
+	getPositioning          *connect.Client[v1.GetPositioningRequest, v1.GetPositioningResponse]
+	updatePositioning       *connect.Client[v1.UpdatePositioningRequest, v1.UpdatePositioningResponse]
+	listClaims              *connect.Client[v1.ListClaimsRequest, v1.ListClaimsResponse]
+	upsertClaim             *connect.Client[v1.UpsertClaimRequest, v1.UpsertClaimResponse]
+	checkClaims             *connect.Client[v1.CheckClaimsRequest, v1.CheckClaimsResponse]
 }
 
 // GetGtmAccess calls reliant.v1.GtmService.GetGtmAccess.
 func (c *gtmServiceClient) GetGtmAccess(ctx context.Context, req *connect.Request[v1.GetGtmAccessRequest]) (*connect.Response[v1.GetGtmAccessResponse], error) {
 	return c.getGtmAccess.CallUnary(ctx, req)
+}
+
+// ListStrategies calls reliant.v1.GtmService.ListStrategies.
+func (c *gtmServiceClient) ListStrategies(ctx context.Context, req *connect.Request[v1.ListStrategiesRequest]) (*connect.Response[v1.ListStrategiesResponse], error) {
+	return c.listStrategies.CallUnary(ctx, req)
+}
+
+// GetStrategy calls reliant.v1.GtmService.GetStrategy.
+func (c *gtmServiceClient) GetStrategy(ctx context.Context, req *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.GetStrategyResponse], error) {
+	return c.getStrategy.CallUnary(ctx, req)
+}
+
+// CreateStrategy calls reliant.v1.GtmService.CreateStrategy.
+func (c *gtmServiceClient) CreateStrategy(ctx context.Context, req *connect.Request[v1.CreateStrategyRequest]) (*connect.Response[v1.CreateStrategyResponse], error) {
+	return c.createStrategy.CallUnary(ctx, req)
+}
+
+// UpdateStrategy calls reliant.v1.GtmService.UpdateStrategy.
+func (c *gtmServiceClient) UpdateStrategy(ctx context.Context, req *connect.Request[v1.UpdateStrategyRequest]) (*connect.Response[v1.UpdateStrategyResponse], error) {
+	return c.updateStrategy.CallUnary(ctx, req)
+}
+
+// ListChannels calls reliant.v1.GtmService.ListChannels.
+func (c *gtmServiceClient) ListChannels(ctx context.Context, req *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error) {
+	return c.listChannels.CallUnary(ctx, req)
+}
+
+// GetChannel calls reliant.v1.GtmService.GetChannel.
+func (c *gtmServiceClient) GetChannel(ctx context.Context, req *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error) {
+	return c.getChannel.CallUnary(ctx, req)
+}
+
+// CreateChannel calls reliant.v1.GtmService.CreateChannel.
+func (c *gtmServiceClient) CreateChannel(ctx context.Context, req *connect.Request[v1.CreateChannelRequest]) (*connect.Response[v1.CreateChannelResponse], error) {
+	return c.createChannel.CallUnary(ctx, req)
+}
+
+// UpdateChannel calls reliant.v1.GtmService.UpdateChannel.
+func (c *gtmServiceClient) UpdateChannel(ctx context.Context, req *connect.Request[v1.UpdateChannelRequest]) (*connect.Response[v1.UpdateChannelResponse], error) {
+	return c.updateChannel.CallUnary(ctx, req)
+}
+
+// ListAssets calls reliant.v1.GtmService.ListAssets.
+func (c *gtmServiceClient) ListAssets(ctx context.Context, req *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error) {
+	return c.listAssets.CallUnary(ctx, req)
+}
+
+// GetAsset calls reliant.v1.GtmService.GetAsset.
+func (c *gtmServiceClient) GetAsset(ctx context.Context, req *connect.Request[v1.GetAssetRequest]) (*connect.Response[v1.GetAssetResponse], error) {
+	return c.getAsset.CallUnary(ctx, req)
+}
+
+// CreateAssetUpload calls reliant.v1.GtmService.CreateAssetUpload.
+func (c *gtmServiceClient) CreateAssetUpload(ctx context.Context, req *connect.Request[v1.CreateAssetUploadRequest]) (*connect.Response[v1.CreateAssetUploadResponse], error) {
+	return c.createAssetUpload.CallUnary(ctx, req)
+}
+
+// ConfirmAssetUpload calls reliant.v1.GtmService.ConfirmAssetUpload.
+func (c *gtmServiceClient) ConfirmAssetUpload(ctx context.Context, req *connect.Request[v1.ConfirmAssetUploadRequest]) (*connect.Response[v1.ConfirmAssetUploadResponse], error) {
+	return c.confirmAssetUpload.CallUnary(ctx, req)
+}
+
+// GetAssetDownload calls reliant.v1.GtmService.GetAssetDownload.
+func (c *gtmServiceClient) GetAssetDownload(ctx context.Context, req *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error) {
+	return c.getAssetDownload.CallUnary(ctx, req)
+}
+
+// ListStrategyLibrary calls reliant.v1.GtmService.ListStrategyLibrary.
+func (c *gtmServiceClient) ListStrategyLibrary(ctx context.Context, req *connect.Request[v1.ListStrategyLibraryRequest]) (*connect.Response[v1.ListStrategyLibraryResponse], error) {
+	return c.listStrategyLibrary.CallUnary(ctx, req)
+}
+
+// GetStrategyLibraryEntry calls reliant.v1.GtmService.GetStrategyLibraryEntry.
+func (c *gtmServiceClient) GetStrategyLibraryEntry(ctx context.Context, req *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error) {
+	return c.getStrategyLibraryEntry.CallUnary(ctx, req)
+}
+
+// ImportStrategyLibrary calls reliant.v1.GtmService.ImportStrategyLibrary.
+func (c *gtmServiceClient) ImportStrategyLibrary(ctx context.Context, req *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error) {
+	return c.importStrategyLibrary.CallUnary(ctx, req)
+}
+
+// UseLibraryStrategy calls reliant.v1.GtmService.UseLibraryStrategy.
+func (c *gtmServiceClient) UseLibraryStrategy(ctx context.Context, req *connect.Request[v1.UseLibraryStrategyRequest]) (*connect.Response[v1.UseLibraryStrategyResponse], error) {
+	return c.useLibraryStrategy.CallUnary(ctx, req)
 }
 
 // ListIdeas calls reliant.v1.GtmService.ListIdeas.
@@ -448,6 +792,83 @@ type GtmServiceHandler interface {
 	// rpc an org without access gets an answer from (enabled = false); the web
 	// reads it to decide whether to show GTM at all.
 	GetGtmAccess(context.Context, *connect.Request[v1.GetGtmAccessRequest]) (*connect.Response[v1.GetGtmAccessResponse], error)
+	// ListStrategies lists the org's strategies, newest first.
+	ListStrategies(context.Context, *connect.Request[v1.ListStrategiesRequest]) (*connect.Response[v1.ListStrategiesResponse], error)
+	// GetStrategy returns one strategy with its campaigns, at most 200
+	// (truncated says when the list was cut; ListCampaigns with strategy_id
+	// pages through all of them).
+	GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.GetStrategyResponse], error)
+	// CreateStrategy adds a strategy. An agent creates DRAFT strategies only;
+	// a person may create one in any status (unset: DRAFT).
+	CreateStrategy(context.Context, *connect.Request[v1.CreateStrategyRequest]) (*connect.Response[v1.CreateStrategyResponse], error)
+	// UpdateStrategy edits a strategy or moves its status. Unset fields are
+	// left alone. An agent edits DRAFT strategies only and never changes a
+	// status; only a person moves a strategy to ACTIVE, DONE or ARCHIVED, or
+	// edits one that is not DRAFT (PermissionDenied for an agent). Several
+	// strategies may be ACTIVE at once.
+	UpdateStrategy(context.Context, *connect.Request[v1.UpdateStrategyRequest]) (*connect.Response[v1.UpdateStrategyResponse], error)
+	// ListChannels lists the org's channels by key. An allowlisted org with no
+	// channel yet is given the default set on its first List or Get (blog,
+	// email, hacker-news, reddit, linkedin, x, youtube), idempotently; nothing
+	// else differs between calls. connection_state is computed per caller.
+	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
+	// GetChannel returns one channel (seeding the defaults as ListChannels does).
+	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
+	// CreateChannel adds a channel. A key the org already holds is
+	// AlreadyExists. An agent may create a channel, always MANUAL (mode,
+	// integration_kind and connection_id are a person's to set:
+	// PermissionDenied). No agent ever connects an integration or stores a
+	// credential: connecting is Reliant's own connect flow, by a person, in the
+	// app.
+	CreateChannel(context.Context, *connect.Request[v1.CreateChannelRequest]) (*connect.Response[v1.CreateChannelResponse], error)
+	// UpdateChannel edits a channel. Unset fields are left alone. An agent may
+	// change name, key, manual_instructions_md and status; only a person sets
+	// mode INTEGRATED, integration_kind or connection_id, or changes any field
+	// of an INTEGRATED channel's integration (PermissionDenied for an agent). A
+	// new key the org already holds is AlreadyExists.
+	UpdateChannel(context.Context, *connect.Request[v1.UpdateChannelRequest]) (*connect.Response[v1.UpdateChannelResponse], error)
+	// ListAssets lists the files attached to an item or a campaign (exactly
+	// one of the two), newest first. Metadata only.
+	ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error)
+	// GetAsset returns one asset's metadata.
+	GetAsset(context.Context, *connect.Request[v1.GetAssetRequest]) (*connect.Response[v1.GetAssetResponse], error)
+	// CreateAssetUpload starts an upload: it records a PENDING asset and
+	// returns a presigned PUT for its bytes in the org's bucket (object key
+	// gtm/<org_id>/<asset_id>), conditioned on size_bytes and content_type.
+	// The client PUTs the bytes to upload_url with required_headers before
+	// expires_at, then calls ConfirmAssetUpload. Limits are the service's: 25
+	// MiB per asset (64 MiB when an agent copies a chat attachment), about 2 GiB
+	// per org (ResourceExhausted past either).
+	CreateAssetUpload(context.Context, *connect.Request[v1.CreateAssetUploadRequest]) (*connect.Response[v1.CreateAssetUploadResponse], error)
+	// ConfirmAssetUpload finishes an upload: the server reads the object,
+	// checks its size against the declared one, sniffs its type against the
+	// allowlist and computes its sha256, then marks the asset READY. If any
+	// check fails it deletes the object and the row (InvalidArgument). An asset
+	// that is not PENDING is FailedPrecondition.
+	ConfirmAssetUpload(context.Context, *connect.Request[v1.ConfirmAssetUploadRequest]) (*connect.Response[v1.ConfirmAssetUploadResponse], error)
+	// GetAssetDownload returns a short-lived URL for a READY asset's bytes:
+	// either a presigned GET on the bucket or the gated proxy handler
+	// (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
+	// settles on. A PENDING asset is FailedPrecondition.
+	GetAssetDownload(context.Context, *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error)
+	// ListStrategyLibrary lists the org's strategy library (the plays and
+	// tactics it imported), by category then name.
+	ListStrategyLibrary(context.Context, *connect.Request[v1.ListStrategyLibraryRequest]) (*connect.Response[v1.ListStrategyLibraryResponse], error)
+	// GetStrategyLibraryEntry returns one library entry by key.
+	GetStrategyLibraryEntry(context.Context, *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error)
+	// ImportStrategyLibrary upserts a batch of library entries by key, at most
+	// 500: a new key is created, a changed entry updated, an equal one left
+	// alone (each counted). With prune, the org's entries whose key is not in
+	// the batch are removed (strategies made from them keep their library_key).
+	// A person's act only (PermissionDenied for an agent).
+	ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error)
+	// UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
+	// goal (from north_star and objective), target metric (from kpis),
+	// category and library_key. With create_first_campaign it also makes a
+	// first DRAFT campaign under it (campaign_name, or the entry's name), whose
+	// planned_channel_ids are the org's channels whose key matches one of the
+	// entry's channel_types. A person or an agent may call it.
+	UseLibraryStrategy(context.Context, *connect.Request[v1.UseLibraryStrategyRequest]) (*connect.Response[v1.UseLibraryStrategyResponse], error)
 	// ListIdeas lists the org's ideas, newest first.
 	ListIdeas(context.Context, *connect.Request[v1.ListIdeasRequest]) (*connect.Response[v1.ListIdeasResponse], error)
 	// GetIdea returns one idea.
@@ -465,15 +886,21 @@ type GtmServiceHandler interface {
 	ListCampaigns(context.Context, *connect.Request[v1.ListCampaignsRequest]) (*connect.Response[v1.ListCampaignsResponse], error)
 	// GetCampaign returns one campaign with the ideas and items linked to it,
 	// at most 200 of each (truncated says when either list was cut; ListIdeas
-	// and ListItems with campaign_id page through all of them).
+	// and ListItems with campaign_id page through all of them), and its
+	// coverage: what it planned (planned_channel_ids x planned_formats) against
+	// what its items are, counted by status, over ALL its items.
 	GetCampaign(context.Context, *connect.Request[v1.GetCampaignRequest]) (*connect.Response[v1.GetCampaignResponse], error)
-	// CreateCampaign adds a campaign, DRAFT unless the request says otherwise.
+	// CreateCampaign adds a campaign under a strategy of the org, DRAFT unless
+	// the request says otherwise. Every planned channel id must be a channel of
+	// the org (NotFound otherwise).
 	CreateCampaign(context.Context, *connect.Request[v1.CreateCampaignRequest]) (*connect.Response[v1.CreateCampaignResponse], error)
-	// UpdateCampaign edits a campaign. Unset fields are left alone.
+	// UpdateCampaign edits a campaign. Unset fields are left alone. It may move
+	// the campaign to another strategy of the same org.
 	UpdateCampaign(context.Context, *connect.Request[v1.UpdateCampaignRequest]) (*connect.Response[v1.UpdateCampaignResponse], error)
 	// ListItems lists the org's items. With a scheduled range it is the
 	// calendar: the items scheduled inside [scheduled_from, scheduled_to),
-	// soonest first. Without one, newest first.
+	// soonest first. Without one, newest first. Filters: campaign, format,
+	// channel, status.
 	ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error)
 	// GetItem returns one item.
 	GetItem(context.Context, *connect.Request[v1.GetItemRequest]) (*connect.Response[v1.GetItemResponse], error)
@@ -490,6 +917,8 @@ type GtmServiceHandler interface {
 	//     never touches an item in any other status.
 	//   - A content edit by a person on an APPROVED or SCHEDULED item returns
 	//     it to REVIEW (it must be approved again).
+	//   - PUBLISHED on an item whose channel is MANUAL needs published_url, set
+	//     in the same UpdateItem or before (FailedPrecondition otherwise).
 	//   - SENT is never set here: only the approved email path writes it, and a
 	//     SENT item is not edited.
 	UpdateItem(context.Context, *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error)
@@ -544,6 +973,117 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		svc.GetGtmAccess,
 		connect.WithSchema(gtmServiceMethods.ByName("GetGtmAccess")),
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceListStrategiesHandler := connect.NewUnaryHandler(
+		GtmServiceListStrategiesProcedure,
+		svc.ListStrategies,
+		connect.WithSchema(gtmServiceMethods.ByName("ListStrategies")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceGetStrategyHandler := connect.NewUnaryHandler(
+		GtmServiceGetStrategyProcedure,
+		svc.GetStrategy,
+		connect.WithSchema(gtmServiceMethods.ByName("GetStrategy")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceCreateStrategyHandler := connect.NewUnaryHandler(
+		GtmServiceCreateStrategyProcedure,
+		svc.CreateStrategy,
+		connect.WithSchema(gtmServiceMethods.ByName("CreateStrategy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceUpdateStrategyHandler := connect.NewUnaryHandler(
+		GtmServiceUpdateStrategyProcedure,
+		svc.UpdateStrategy,
+		connect.WithSchema(gtmServiceMethods.ByName("UpdateStrategy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceListChannelsHandler := connect.NewUnaryHandler(
+		GtmServiceListChannelsProcedure,
+		svc.ListChannels,
+		connect.WithSchema(gtmServiceMethods.ByName("ListChannels")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceGetChannelHandler := connect.NewUnaryHandler(
+		GtmServiceGetChannelProcedure,
+		svc.GetChannel,
+		connect.WithSchema(gtmServiceMethods.ByName("GetChannel")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceCreateChannelHandler := connect.NewUnaryHandler(
+		GtmServiceCreateChannelProcedure,
+		svc.CreateChannel,
+		connect.WithSchema(gtmServiceMethods.ByName("CreateChannel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceUpdateChannelHandler := connect.NewUnaryHandler(
+		GtmServiceUpdateChannelProcedure,
+		svc.UpdateChannel,
+		connect.WithSchema(gtmServiceMethods.ByName("UpdateChannel")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceListAssetsHandler := connect.NewUnaryHandler(
+		GtmServiceListAssetsProcedure,
+		svc.ListAssets,
+		connect.WithSchema(gtmServiceMethods.ByName("ListAssets")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceGetAssetHandler := connect.NewUnaryHandler(
+		GtmServiceGetAssetProcedure,
+		svc.GetAsset,
+		connect.WithSchema(gtmServiceMethods.ByName("GetAsset")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceCreateAssetUploadHandler := connect.NewUnaryHandler(
+		GtmServiceCreateAssetUploadProcedure,
+		svc.CreateAssetUpload,
+		connect.WithSchema(gtmServiceMethods.ByName("CreateAssetUpload")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceConfirmAssetUploadHandler := connect.NewUnaryHandler(
+		GtmServiceConfirmAssetUploadProcedure,
+		svc.ConfirmAssetUpload,
+		connect.WithSchema(gtmServiceMethods.ByName("ConfirmAssetUpload")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceGetAssetDownloadHandler := connect.NewUnaryHandler(
+		GtmServiceGetAssetDownloadProcedure,
+		svc.GetAssetDownload,
+		connect.WithSchema(gtmServiceMethods.ByName("GetAssetDownload")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceListStrategyLibraryHandler := connect.NewUnaryHandler(
+		GtmServiceListStrategyLibraryProcedure,
+		svc.ListStrategyLibrary,
+		connect.WithSchema(gtmServiceMethods.ByName("ListStrategyLibrary")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceGetStrategyLibraryEntryHandler := connect.NewUnaryHandler(
+		GtmServiceGetStrategyLibraryEntryProcedure,
+		svc.GetStrategyLibraryEntry,
+		connect.WithSchema(gtmServiceMethods.ByName("GetStrategyLibraryEntry")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceImportStrategyLibraryHandler := connect.NewUnaryHandler(
+		GtmServiceImportStrategyLibraryProcedure,
+		svc.ImportStrategyLibrary,
+		connect.WithSchema(gtmServiceMethods.ByName("ImportStrategyLibrary")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceUseLibraryStrategyHandler := connect.NewUnaryHandler(
+		GtmServiceUseLibraryStrategyProcedure,
+		svc.UseLibraryStrategy,
+		connect.WithSchema(gtmServiceMethods.ByName("UseLibraryStrategy")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceListIdeasHandler := connect.NewUnaryHandler(
@@ -673,6 +1213,40 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		switch r.URL.Path {
 		case GtmServiceGetGtmAccessProcedure:
 			gtmServiceGetGtmAccessHandler.ServeHTTP(w, r)
+		case GtmServiceListStrategiesProcedure:
+			gtmServiceListStrategiesHandler.ServeHTTP(w, r)
+		case GtmServiceGetStrategyProcedure:
+			gtmServiceGetStrategyHandler.ServeHTTP(w, r)
+		case GtmServiceCreateStrategyProcedure:
+			gtmServiceCreateStrategyHandler.ServeHTTP(w, r)
+		case GtmServiceUpdateStrategyProcedure:
+			gtmServiceUpdateStrategyHandler.ServeHTTP(w, r)
+		case GtmServiceListChannelsProcedure:
+			gtmServiceListChannelsHandler.ServeHTTP(w, r)
+		case GtmServiceGetChannelProcedure:
+			gtmServiceGetChannelHandler.ServeHTTP(w, r)
+		case GtmServiceCreateChannelProcedure:
+			gtmServiceCreateChannelHandler.ServeHTTP(w, r)
+		case GtmServiceUpdateChannelProcedure:
+			gtmServiceUpdateChannelHandler.ServeHTTP(w, r)
+		case GtmServiceListAssetsProcedure:
+			gtmServiceListAssetsHandler.ServeHTTP(w, r)
+		case GtmServiceGetAssetProcedure:
+			gtmServiceGetAssetHandler.ServeHTTP(w, r)
+		case GtmServiceCreateAssetUploadProcedure:
+			gtmServiceCreateAssetUploadHandler.ServeHTTP(w, r)
+		case GtmServiceConfirmAssetUploadProcedure:
+			gtmServiceConfirmAssetUploadHandler.ServeHTTP(w, r)
+		case GtmServiceGetAssetDownloadProcedure:
+			gtmServiceGetAssetDownloadHandler.ServeHTTP(w, r)
+		case GtmServiceListStrategyLibraryProcedure:
+			gtmServiceListStrategyLibraryHandler.ServeHTTP(w, r)
+		case GtmServiceGetStrategyLibraryEntryProcedure:
+			gtmServiceGetStrategyLibraryEntryHandler.ServeHTTP(w, r)
+		case GtmServiceImportStrategyLibraryProcedure:
+			gtmServiceImportStrategyLibraryHandler.ServeHTTP(w, r)
+		case GtmServiceUseLibraryStrategyProcedure:
+			gtmServiceUseLibraryStrategyHandler.ServeHTTP(w, r)
 		case GtmServiceListIdeasProcedure:
 			gtmServiceListIdeasHandler.ServeHTTP(w, r)
 		case GtmServiceGetIdeaProcedure:
@@ -722,6 +1296,74 @@ type UnimplementedGtmServiceHandler struct{}
 
 func (UnimplementedGtmServiceHandler) GetGtmAccess(context.Context, *connect.Request[v1.GetGtmAccessRequest]) (*connect.Response[v1.GetGtmAccessResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.GetGtmAccess is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ListStrategies(context.Context, *connect.Request[v1.ListStrategiesRequest]) (*connect.Response[v1.ListStrategiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ListStrategies is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) GetStrategy(context.Context, *connect.Request[v1.GetStrategyRequest]) (*connect.Response[v1.GetStrategyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.GetStrategy is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) CreateStrategy(context.Context, *connect.Request[v1.CreateStrategyRequest]) (*connect.Response[v1.CreateStrategyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.CreateStrategy is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) UpdateStrategy(context.Context, *connect.Request[v1.UpdateStrategyRequest]) (*connect.Response[v1.UpdateStrategyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.UpdateStrategy is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ListChannels is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.GetChannel is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) CreateChannel(context.Context, *connect.Request[v1.CreateChannelRequest]) (*connect.Response[v1.CreateChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.CreateChannel is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) UpdateChannel(context.Context, *connect.Request[v1.UpdateChannelRequest]) (*connect.Response[v1.UpdateChannelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.UpdateChannel is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ListAssets(context.Context, *connect.Request[v1.ListAssetsRequest]) (*connect.Response[v1.ListAssetsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ListAssets is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) GetAsset(context.Context, *connect.Request[v1.GetAssetRequest]) (*connect.Response[v1.GetAssetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.GetAsset is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) CreateAssetUpload(context.Context, *connect.Request[v1.CreateAssetUploadRequest]) (*connect.Response[v1.CreateAssetUploadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.CreateAssetUpload is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ConfirmAssetUpload(context.Context, *connect.Request[v1.ConfirmAssetUploadRequest]) (*connect.Response[v1.ConfirmAssetUploadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ConfirmAssetUpload is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) GetAssetDownload(context.Context, *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.GetAssetDownload is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ListStrategyLibrary(context.Context, *connect.Request[v1.ListStrategyLibraryRequest]) (*connect.Response[v1.ListStrategyLibraryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ListStrategyLibrary is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) GetStrategyLibraryEntry(context.Context, *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.GetStrategyLibraryEntry is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ImportStrategyLibrary is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) UseLibraryStrategy(context.Context, *connect.Request[v1.UseLibraryStrategyRequest]) (*connect.Response[v1.UseLibraryStrategyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.UseLibraryStrategy is not implemented"))
 }
 
 func (UnimplementedGtmServiceHandler) ListIdeas(context.Context, *connect.Request[v1.ListIdeasRequest]) (*connect.Response[v1.ListIdeasResponse], error) {
