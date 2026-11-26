@@ -20,7 +20,7 @@ const (
 	GetRunToolName    = "get_run"
 	getRunDescription = `Check on one top-level run: its state, title, workflow, when it was created and last active, an excerpt of the last thing its agent said, and a nodes section with per-attempt status, timing and errors. Command nodes include exit codes and redacted stdout/stderr tails (up to 50 lines each). The newest 200 attempts are shown; older attempts are explicitly marked omitted.
 
-The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. An ended run also has an outcome: succeeded, failed, or failure_handled when it completed only because a node failed and its failure path ran. A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
+The state is the run's root workflow: pending, running, paused, completed, failed or cancelled. "completed" means the workflow reached its end, not that the work was right — read the excerpt. An ended run also has an outcome: succeeded, failed, failure_handled when it completed only because a node failed and its failure path ran, or skipped when it completed into a node that declares outcome: skipped (it chose not to do its work this time; not a failure). A live run blocked outside itself also says what it is waiting for (usage limit with when it retries, machine, or input) and how many of its threads are working.
 
 Only runs the user owns can be inspected. To check on a sub-agent you spawned, use spawn_status.`
 
@@ -64,8 +64,9 @@ type RunDetail struct {
 	// account there is.
 	Failure string `json:"failure,omitempty"`
 	// Outcome is how an ended run ended for whoever judges whether it
-	// worked: succeeded, failed, or failure_handled — completed, but a node
-	// in it failed and its failure path ran (reliant#2753). Empty while it
+	// worked: succeeded, failed, failure_handled — completed, but a node
+	// in it failed and its failure path ran (reliant#2753) — or skipped —
+	// completed into a declared outcome: skipped. Empty while it
 	// runs, when it was cancelled, and for a run that ended before outcomes
 	// were recorded.
 	Outcome string `json:"outcome,omitempty"`
@@ -169,9 +170,13 @@ func (g *getRunTool) Execute(rctx *rctx.ToolContext, params GetRunParams) (ToolR
 			sb.WriteString("Failure: no reason was recorded on the run.\n")
 		}
 	}
-	if detail.Outcome == core.RunOutcomeFailureHandled {
+	switch detail.Outcome {
+	case "":
+	case core.RunOutcomeFailureHandled:
 		sb.WriteString("Outcome: failure_handled: the run completed, but a node in it failed and its failure path ran. Look for the failed node below.\n")
-	} else if detail.Outcome != "" {
+	case core.RunOutcomeSkipped:
+		sb.WriteString("Outcome: skipped: the run completed into a node that declares outcome: skipped. It chose not to do its work this time and will be asked again; it is not a failure.\n")
+	default:
 		fmt.Fprintf(&sb, "Outcome: %s\n", detail.Outcome)
 	}
 	if detail.Waiting != "" {

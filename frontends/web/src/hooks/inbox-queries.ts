@@ -22,7 +22,7 @@ import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-quer
 import { create as createStore } from "zustand";
 import { persist } from "zustand/middleware";
 
-import type { ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
+import { InboxCategory, InboxItemKind, type InboxItem, type ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 import { orgQueryEnabled, orgRequest, useOrgScope, withOrgFailure } from "../lib/orgScope";
 import { queryClient as appQueryClient } from "../lib/query-client";
@@ -40,7 +40,7 @@ import {
 import { useDecideWorktreeReclaim as useDecideWorktreeReclaimRpc } from "./worktree-reclaim-service-hooks_gen";
 
 export type { InboxItem, ListInboxResponse } from "../gen/reliant/v1/inbox_pb";
-export { InboxItemKind } from "../gen/reliant/v1/inbox_pb";
+export { InboxCategory, InboxItemKind } from "../gen/reliant/v1/inbox_pb";
 
 // ── Scope ───────────────────────────────────────────────────────────────────
 
@@ -113,6 +113,12 @@ export interface InboxCounts {
   blockingCount: number;
   /** Any automation failure is waiting (the badge's dot, not a count). */
   hasInformational: boolean;
+  /**
+   * A machine has housekeeping waiting (the Agent sandboxes nav row's dot):
+   * the items the person's filters kept out of the list, or listed ones when
+   * their "housekeeping" filter is on.
+   */
+  hasHousekeeping: boolean;
 }
 
 // ── Query hooks ─────────────────────────────────────────────────────────────
@@ -151,7 +157,12 @@ export function useInbox(projectId?: string) {
 }
 
 function countsOf(response: ListInboxResponse): InboxCounts {
-  return { blockingCount: response.blockingCount, hasInformational: response.hasInformational };
+  return {
+    blockingCount: response.blockingCount,
+    hasInformational: response.hasInformational,
+    hasHousekeeping:
+      response.housekeepingCount > 0 || response.items.some((item) => item.category === InboxCategory.HOUSEKEEPING),
+  };
 }
 
 /**
@@ -172,6 +183,82 @@ export function useInboxCounts(projectId?: string) {
       org,
     ),
   );
+}
+
+// ── Machine housekeeping ────────────────────────────────────────────────────
+//
+// The Inbox keeps a machine's housekeeping out unless the person asks for it
+// (InboxCategory.HOUSEKEEPING); each sandbox's settings page lists it instead,
+// with every action the Inbox row has. One read serves every machine: the
+// sandboxes list (a dot per machine) and each machine's page select from the
+// same ListInbox entry, which every Inbox write and stream update
+// invalidates with the rest (it is under `inboxServiceKeys.listInbox.all`).
+
+/** What the machine pages ask for, regardless of Inbox preferences. */
+export const MACHINE_HOUSEKEEPING_CATEGORIES: InboxCategory[] = [InboxCategory.HOUSEKEEPING];
+
+/**
+ * The machine an item is housekeeping of: its daemon id ("" for the
+ * workspaces no machine is on record for), or null when the item is not
+ * about a machine's storage or worktrees. By kind, not category, so a server
+ * that predates `categories` (and answers with the whole Inbox) still files
+ * the same items.
+ */
+export function housekeepingMachineOf(item: InboxItem): string | null {
+  switch (item.payload.case) {
+    case "storage":
+    case "worktreeReclaim":
+    case "worktreeMarked":
+      return item.payload.value.daemonId;
+    default:
+      return null;
+  }
+}
+
+const HOUSEKEEPING_KINDS = new Set([InboxItemKind.STORAGE, InboxItemKind.WORKTREE_RECLAIM, InboxItemKind.WORKTREE_MARKED]);
+
+/** Every machine's housekeeping items, by daemon id ("" holds the ones no machine is on record for). */
+export type MachineHousekeeping = ReadonlyMap<string, InboxItem[]>;
+
+function housekeepingByMachine(response: ListInboxResponse): MachineHousekeeping {
+  const byMachine = new Map<string, InboxItem[]>();
+  for (const item of response.items) {
+    if (!HOUSEKEEPING_KINDS.has(item.kind)) continue;
+    const machine = housekeepingMachineOf(item);
+    if (machine === null) continue;
+    const list = byMachine.get(machine);
+    if (list) list.push(item);
+    else byMachine.set(machine, [item]);
+  }
+  return byMachine;
+}
+
+const NO_HOUSEKEEPING: MachineHousekeeping = new Map();
+const NO_ITEMS: InboxItem[] = [];
+
+/**
+ * Every machine's housekeeping, read once (ListInbox with
+ * MACHINE_HOUSEKEEPING_CATEGORIES, in the tab's org: a machine's items list
+ * in every org). Undefined until it has loaded.
+ */
+export function useMachineHousekeeping() {
+  const org = useOrgScope();
+  return useQuery(
+    withOrgFailure(
+      inboxServiceQueries.listInbox(orgRequest({ categories: MACHINE_HOUSEKEEPING_CATEGORIES }, org.orgId), {
+        enabled: orgQueryEnabled(org),
+        staleTime: INBOX_STALE_MS,
+        select: housekeepingByMachine,
+      }),
+      org,
+    ),
+  );
+}
+
+/** One machine's housekeeping items ("" for the workspaces no machine is on record for); none until loaded. */
+export function useMachineHousekeepingItems(daemonId: string): InboxItem[] {
+  const query = useMachineHousekeeping();
+  return (query.data ?? NO_HOUSEKEEPING).get(daemonId) ?? NO_ITEMS;
 }
 
 // ── Cache helpers ───────────────────────────────────────────────────────────

@@ -37,6 +37,9 @@ const ReasonAutomationSucceeded = "automation_succeeded"
 // (core.TriggerEventKind.Unattended): a reply a person sent later is their turn,
 // and a chat a person or their agent started is theirs to archive.
 //
+// A completion into a declared `skipped` outcome is archived like a success:
+// the run chose not to do its work, and nothing about it needs a person.
+//
 // Best-effort, like the unread mark beside it: a missed archive leaves a
 // finished run unarchived, which is what every run was before this existed.
 func (a *WorkflowStatusActivity) archiveSucceededAutomationRun(ctx context.Context, input WorkflowStatusInput) {

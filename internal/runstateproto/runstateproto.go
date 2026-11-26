@@ -52,6 +52,8 @@ func Outcome(outcome string) reliantv1.RunOutcome {
 		return reliantv1.RunOutcome_RUN_OUTCOME_FAILED
 	case core.RunOutcomeFailureHandled:
 		return reliantv1.RunOutcome_RUN_OUTCOME_FAILURE_HANDLED
+	case core.RunOutcomeSkipped:
+		return reliantv1.RunOutcome_RUN_OUTCOME_SKIPPED
 	default:
 		return reliantv1.RunOutcome_RUN_OUTCOME_UNSPECIFIED
 	}

@@ -237,7 +237,7 @@ func (m *MockItems) AttentionManagedChats(ctx context.Context, userID string, ch
 var _ Items = (*MockItems)(nil)
 
 // forge:section MockFirings
-// forge:hash=a8d7095b26d05f683b802909cf1f575621d30df3a1e7b859c727e17146ea2c0d
+// forge:hash=b663f6f02d6569e363cecfccdfa878f1a9634ec68bc706a2967532491604bda2
 
 // MockFirings is a test mock for the Firings interface.
 //
@@ -251,6 +251,7 @@ type MockFirings struct {
 	FiringsSinceLastSuccessFunc          func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
 	FiringsSinceLastUnmanagedSuccessFunc func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
 	GetLatestTriggerEventFunc            func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+	PriorTriggerFailuresFunc             func(context.Context, string, []string, []time.Time, time.Duration) ([]*time.Time, error)
 }
 
 // RecentTriggerOutcomes records the call and delegates to RecentTriggerOutcomesFunc when set.
@@ -289,8 +290,43 @@ func (m *MockFirings) GetLatestTriggerEvent(ctx context.Context, triggerID strin
 	return nil, contractkit.MockNotSet("MockFirings", "GetLatestTriggerEvent")
 }
 
+// PriorTriggerFailures records the call and delegates to PriorTriggerFailuresFunc when set.
+func (m *MockFirings) PriorTriggerFailures(ctx context.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error) {
+	m.Recorder.Record("PriorTriggerFailures", ctx, userID, triggerIDs, before, window)
+	if m.PriorTriggerFailuresFunc != nil {
+		return m.PriorTriggerFailuresFunc(ctx, userID, triggerIDs, before, window)
+	}
+	return nil, contractkit.MockNotSet("MockFirings", "PriorTriggerFailures")
+}
+
 // Compile-time check.
 var _ Firings = (*MockFirings)(nil)
+
+// forge:section MockPreferences
+// forge:hash=8b56abbee959e62245f86d965a35baf3009234f5e06fa7b6e5afcd114cdaa8a9
+
+// MockPreferences is a test mock for the Preferences interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPreferences.<Method>Func not set" error.
+type MockPreferences struct {
+	contractkit.Recorder
+	ListSettingsByKeyFunc func(context.Context, string, string) ([]*core.Setting, error)
+}
+
+// ListSettingsByKey records the call and delegates to ListSettingsByKeyFunc when set.
+func (m *MockPreferences) ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*core.Setting, error) {
+	m.Recorder.Record("ListSettingsByKey", ctx, userID, keyPattern)
+	if m.ListSettingsByKeyFunc != nil {
+		return m.ListSettingsByKeyFunc(ctx, userID, keyPattern)
+	}
+	return nil, contractkit.MockNotSet("MockPreferences", "ListSettingsByKey")
+}
+
+// Compile-time check.
+var _ Preferences = (*MockPreferences)(nil)
 
 // forge:section MockRegistrations
 // forge:hash=9ac52d5a8f5a9818c1deb430c818e0f09bb1788482b6845abc9c74856d98ef45

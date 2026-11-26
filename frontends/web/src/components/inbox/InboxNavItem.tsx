@@ -80,6 +80,40 @@ export function useInboxBadge(): InboxBadgeState {
   return { count, informational, degraded, announcement };
 }
 
+/**
+ * Whether a machine has housekeeping waiting — storage, worktree clean-up,
+ * reclaim proposals — for the Agent sandboxes nav row's dot. Read from the
+ * badge's own query (the same scope, so no second read): the items the
+ * person's filters kept out of the Inbox, or the listed ones when their
+ * housekeeping filter is on.
+ */
+export function useSandboxesHousekeeping(): boolean {
+  const counts = useInboxCounts(useInboxProjectId(useShellCurrentProject()?.id ?? null));
+  return !!counts.data?.hasHousekeeping;
+}
+
+/** The dot after the Agent sandboxes nav row while a machine has housekeeping waiting. */
+export function SandboxesHousekeepingDot() {
+  if (!useSandboxesHousekeeping()) return null;
+  return <HousekeepingDot label="A sandbox has housekeeping waiting" testId="sandboxes-housekeeping-dot" />;
+}
+
+/**
+ * The housekeeping dot: 8px, the action blue — something awaits a decision,
+ * nothing is broken, so not a warning or danger colour.
+ */
+export function HousekeepingDot({ label, testId }: { label: string; testId?: string }) {
+  return (
+    <span
+      role="img"
+      aria-label={label}
+      title={label}
+      data-testid={testId}
+      className="inline-block size-2 shrink-0 rounded-full bg-primary"
+    />
+  );
+}
+
 export function InboxNavItem({ onOpen, href, current, icon }: InboxNavItemProps) {
   const { count, informational, degraded, announcement } = useInboxBadge();
 

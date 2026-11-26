@@ -43,7 +43,7 @@ type Workflow struct {
 	// nil. nil on a read: the run's chat has no org yet.
 	OrgID *string `json:"org_id,omitempty"`
 
-	// Outcome is the run's own verdict — "success" or "failure" — stamped by
+	// Outcome is the run's own verdict — "success", "failure" or "skipped" — stamped by
 	// the terminal node it reached (Node.outcome in the workflow YAML).
 	// Orthogonal to Status: Status is the Temporal-owned lifecycle and is
 	// reconciled against Temporal, so it cannot hold a workflow-semantic
@@ -75,6 +75,10 @@ const (
 	// RunOutcomeFailureHandled: completed, but a node's last attempt failed
 	// and the run went on past it.
 	RunOutcomeFailureHandled = "failure_handled"
+	// RunOutcomeSkipped: completed into a declared outcome: skipped. The run
+	// chose not to do its work this time and will be asked again; it is
+	// neither a success nor a failure.
+	RunOutcomeSkipped = "skipped"
 )
 
 // WorkflowCheckpoint records the position a workflow run has reached: the last

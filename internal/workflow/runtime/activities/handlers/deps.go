@@ -636,6 +636,10 @@ type WorkflowStatusStore interface {
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+	// PriorTriggerFailures is each trigger's newest failed firing in the
+	// window before a bound: whether a new failure streak follows a quiet
+	// spell (failureNotifies).
+	PriorTriggerFailures(ctx context.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error)
 	threads.Repository
 	ChatTransitioner
 	TransitionMessageWriter

@@ -162,6 +162,7 @@ func TestWorkflowStatus_CompletionUnreadFollowsLaunchKind(t *testing.T) {
 		{"chat predating launch kinds notifies", "", "", true},
 		{"schedule-launched run is silent", core.TriggerEventKindSchedule, "", false},
 		{"schedule-launched declared success is silent", core.TriggerEventKindSchedule, model.OutcomeSuccess, false},
+		{"schedule-launched declared skip is silent", core.TriggerEventKindSchedule, model.OutcomeSkipped, false},
 		{"webhook-launched run is silent", core.TriggerEventKindWebhook, "", false},
 		{"integration-launched run is silent", core.TriggerEventKindIntegration, "", false},
 		{"workflow-event-launched run is silent", core.TriggerEventKindWorkflowEvent, "", false},

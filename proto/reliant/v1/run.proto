@@ -277,6 +277,14 @@ enum RunOutcome {
   // continue, a finally handler's node that failed. A run node's non-zero
   // exit code is not one. Health counts it as a failure.
   RUN_OUTCOME_FAILURE_HANDLED = 3;
+  // SKIPPED: the run completed into a node that declares outcome: skipped:
+  // it chose not to do its work this time, for a reason it expects to clear
+  // on its own (its environment is unhealthy, another run holds the work, a
+  // person must first fix something it already reported), and it will be
+  // asked again. Health counts it as neither a success nor a failure: it does
+  // not end or extend a failure streak, and a run of skips reads DEGRADED,
+  // never FAILING. It puts nothing in the Inbox.
+  RUN_OUTCOME_SKIPPED = 4;
 }
 
 // RunDisplayState is the single status vocabulary the UI shows for a run

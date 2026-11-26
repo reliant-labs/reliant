@@ -224,9 +224,11 @@ The `expect` section defines assertions:
 ```yaml
 expect:
   # Expected outcome: completed, error (a node failed, or the run errored)
-  # or failed (the run ended at a terminal node declaring outcome: failure).
-  # `completed` still matches a failed run, with a warning, so scenarios
-  # written before failed was reported keep passing; assert `failed` there.
+  # failed (the run ended at a terminal node declaring outcome: failure),
+  # or skipped (it ended at a node declaring outcome: skipped).
+  # `completed` still matches a failed or skipped run, with a warning, so
+  # scenarios written before those were reported keep passing; assert
+  # `failed` or `skipped` there.
   outcome: completed
 
   # Nodes that must have been scheduled: run, skipped or errored.

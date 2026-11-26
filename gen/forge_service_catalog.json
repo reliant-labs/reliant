@@ -3035,7 +3035,8 @@
             "RUN_OUTCOME_UNSPECIFIED",
             "RUN_OUTCOME_SUCCEEDED",
             "RUN_OUTCOME_FAILED",
-            "RUN_OUTCOME_FAILURE_HANDLED"
+            "RUN_OUTCOME_FAILURE_HANDLED",
+            "RUN_OUTCOME_SKIPPED"
           ],
           "reliant.v1.TriggerEventKind": [
             "TRIGGER_EVENT_KIND_UNSPECIFIED",
@@ -3110,7 +3111,8 @@
             0,
             1,
             2,
-            3
+            3,
+            4
           ],
           "reliant.v1.TriggerEventKind": [
             0,
@@ -18426,6 +18428,11 @@
               "Name": "org_id",
               "ProtoType": "string",
               "IsOptional": true
+            },
+            {
+              "Name": "categories",
+              "ProtoType": "[]enum",
+              "IsOptional": false
             }
           ],
           "ListInboxResponse": [
@@ -18452,6 +18459,16 @@
             },
             {
               "Name": "other_projects_count",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "housekeeping_count",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "habitual_count",
               "ProtoType": "int32",
               "IsOptional": false
             }
@@ -18840,6 +18857,15 @@
               "kind": "string"
             },
             {
+              "name": "category",
+              "kind": "enum",
+              "type_name": "reliant.v1.InboxCategory"
+            },
+            {
+              "name": "habitual",
+              "kind": "bool"
+            },
+            {
               "name": "approval",
               "kind": "message",
               "type_name": "reliant.v1.InboxApproval",
@@ -19142,6 +19168,12 @@
               "name": "org_id",
               "kind": "string",
               "optional": true
+            },
+            {
+              "name": "categories",
+              "kind": "enum",
+              "type_name": "reliant.v1.InboxCategory",
+              "repeated": true
             }
           ],
           "reliant.v1.ListInboxResponse": [
@@ -19165,6 +19197,14 @@
             },
             {
               "name": "other_projects_count",
+              "kind": "int32"
+            },
+            {
+              "name": "housekeeping_count",
+              "kind": "int32"
+            },
+            {
+              "name": "habitual_count",
               "kind": "int32"
             }
           ],
@@ -19502,6 +19542,13 @@
             "DISK_GUARD_STATE_RECLAIMING",
             "DISK_GUARD_STATE_REFUSING_HEAVY"
           ],
+          "reliant.v1.InboxCategory": [
+            "INBOX_CATEGORY_UNSPECIFIED",
+            "INBOX_CATEGORY_NEEDS_YOU",
+            "INBOX_CATEGORY_ALERT",
+            "INBOX_CATEGORY_AUTOMATION",
+            "INBOX_CATEGORY_HOUSEKEEPING"
+          ],
           "reliant.v1.InboxItemKind": [
             "INBOX_ITEM_KIND_UNSPECIFIED",
             "INBOX_ITEM_KIND_APPROVAL",
@@ -19547,6 +19594,13 @@
             1,
             2
           ],
+          "reliant.v1.InboxCategory": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.InboxItemKind": [
             0,
             1,
@@ -19588,6 +19642,10 @@
           "reliant.v1.DiskGuardState": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "DiskGuardState"
+          },
+          "reliant.v1.InboxCategory": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "InboxCategory"
           },
           "reliant.v1.InboxItemKind": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -33364,7 +33422,8 @@
             "RUN_OUTCOME_UNSPECIFIED",
             "RUN_OUTCOME_SUCCEEDED",
             "RUN_OUTCOME_FAILED",
-            "RUN_OUTCOME_FAILURE_HANDLED"
+            "RUN_OUTCOME_FAILURE_HANDLED",
+            "RUN_OUTCOME_SKIPPED"
           ],
           "reliant.v1.UnlaunchedTriggerEventOutcome": [
             "UNLAUNCHED_TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
@@ -33425,7 +33484,8 @@
             0,
             1,
             2,
-            3
+            3,
+            4
           ],
           "reliant.v1.UnlaunchedTriggerEventOutcome": [
             0,
@@ -35602,6 +35662,16 @@
               "Name": "hidden_preset_slugs",
               "ProtoType": "[]string",
               "IsOptional": false
+            },
+            {
+              "Name": "inbox_show_housekeeping",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "inbox_show_every_automation_failure",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "GetPrivacySettingsRequest": null,
@@ -36149,6 +36219,16 @@
               "Name": "hide_builtin_presets",
               "ProtoType": "bool",
               "IsOptional": true
+            },
+            {
+              "Name": "inbox_show_housekeeping",
+              "ProtoType": "bool",
+              "IsOptional": true
+            },
+            {
+              "Name": "inbox_show_every_automation_failure",
+              "ProtoType": "bool",
+              "IsOptional": true
             }
           ],
           "UpdatePreferencesResponse": [
@@ -36646,6 +36726,14 @@
               "name": "hidden_preset_slugs",
               "kind": "string",
               "repeated": true
+            },
+            {
+              "name": "inbox_show_housekeeping",
+              "kind": "bool"
+            },
+            {
+              "name": "inbox_show_every_automation_failure",
+              "kind": "bool"
             }
           ],
           "reliant.v1.GetPrivacySettingsRequest": [],
@@ -37484,6 +37572,16 @@
             },
             {
               "name": "hide_builtin_presets",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "inbox_show_housekeeping",
+              "kind": "bool",
+              "optional": true
+            },
+            {
+              "name": "inbox_show_every_automation_failure",
               "kind": "bool",
               "optional": true
             }
@@ -47889,7 +47987,8 @@
             "RUN_OUTCOME_UNSPECIFIED",
             "RUN_OUTCOME_SUCCEEDED",
             "RUN_OUTCOME_FAILED",
-            "RUN_OUTCOME_FAILURE_HANDLED"
+            "RUN_OUTCOME_FAILURE_HANDLED",
+            "RUN_OUTCOME_SKIPPED"
           ],
           "reliant.v1.TriggerEventKind": [
             "TRIGGER_EVENT_KIND_UNSPECIFIED",
@@ -47974,7 +48073,8 @@
             0,
             1,
             2,
-            3
+            3,
+            4
           ],
           "reliant.v1.TriggerEventKind": [
             0,
@@ -59445,6 +59545,19 @@
       ],
       "providers": [
         "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
+      "field": "Preferences",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Preferences",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

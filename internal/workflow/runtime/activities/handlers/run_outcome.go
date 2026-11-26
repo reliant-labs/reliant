@@ -41,6 +41,7 @@ type runOutcome struct {
 //     never read, nor an attempt recorded with no run id. Only a run with
 //     no id (a workflow that predates it) falls back to the attempts
 //     recorded since it began.
+//   - completed into a declared outcome: skipped -> skipped
 //   - completed otherwise -> succeeded
 //
 // Anything else (started, paused, cancelled) has no outcome. A failed read of
@@ -53,6 +54,10 @@ func (a *WorkflowStatusActivity) resolveRunOutcome(ctx context.Context, input Wo
 		return runOutcome{outcome: core.RunOutcomeFailed}
 	case input.Status != "completed":
 		return runOutcome{}
+	case input.Outcome == model.OutcomeSkipped:
+		// Declared, so it wins over a node failure the run went on past, as
+		// a declared failure does: the workflow said it did not do its work.
+		return runOutcome{outcome: core.RunOutcomeSkipped}
 	}
 	var since time.Time
 	if input.RunStartedAtMs > 0 {

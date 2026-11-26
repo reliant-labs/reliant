@@ -64,6 +64,8 @@ export type NavSlotId =
   | "workflows-pill"
   /** A row's trail: a dot while a chat waits on the person (Agents). */
   | "chats-need-you"
+  /** A row's trail: a dot while a machine has housekeeping waiting (Agent sandboxes). */
+  | "sandboxes-housekeeping"
   /** A row's control: the desktop app's update button (Settings). */
   | "update-button"
   /** The footer's Help row: a tour, the docs, keyboard shortcuts (sidebar/HelpMenu). */

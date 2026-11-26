@@ -514,6 +514,15 @@ message GetPreferencesResponse {
   repeated string hidden_workflow_slugs = 15;
   // List of hidden preset slugs (from hidden_items table)
   repeated string hidden_preset_slugs = 16;
+  // Inbox filter: list machine housekeeping (a disk under pressure, held
+  // or marked worktrees, worktree-reclaim proposals, a
+  // machine near its process limit) in the Inbox too. Defaults to false:
+  // they are on each machine's settings page (InboxCategory HOUSEKEEPING).
+  bool inbox_show_housekeeping = 17;
+  // Inbox filter: list every automation failure, including an automation
+  // that fails habitually (InboxItem.habitual). Defaults to false: the Inbox
+  // lists an automation when it starts failing after being healthy.
+  bool inbox_show_every_automation_failure = 18;
 }
 
 message UpdatePreferencesRequest {
@@ -538,6 +547,10 @@ message UpdatePreferencesRequest {
   optional bool hide_builtin_workflows = 13;
   // Hide builtin presets from preset pickers
   optional bool hide_builtin_presets = 14;
+  // Inbox filters (GetPreferencesResponse.inbox_show_housekeeping,
+  // inbox_show_every_automation_failure). Unset leaves each as it is.
+  optional bool inbox_show_housekeeping = 15;
+  optional bool inbox_show_every_automation_failure = 16;
 }
 
 message UpdatePreferencesResponse {

@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/askuser"
 	"github.com/reliant-labs/reliant/internal/execfollow"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/sdk/go/reliant"
 )
 
@@ -713,6 +714,8 @@ func outcomeLine(r statusReport) string {
 		return "✗ FAILURE — the run reached a terminal node that declares failure; it ran to the end and did not pass"
 	case execfollow.OutcomeSuccess:
 		return "✓ SUCCESS"
+	case model.OutcomeSkipped:
+		return "– SKIPPED — the run reached a node that declares skipped: it chose not to do its work this time; not a failure"
 	}
 	if r.Status == "completed" {
 		return "(not declared — this workflow does not state a pass/fail verdict)"

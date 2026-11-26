@@ -120,9 +120,8 @@ service InboxService {
   }
 }
 
-// InboxItemKind is declared in priority order: lower values sort first. The
-// kinds that block a live run (approval, question, waiting for machine) come
-// before the informational failures, so the badge count is a prefix of the list.
+// InboxItemKind identifies the item's payload. Within an InboxCategory, lower
+// kind values sort first.
 enum InboxItemKind {
   INBOX_ITEM_KIND_UNSPECIFIED = 0;
   // A tool or workflow-step approval is pending. Blocks a live run.
@@ -217,6 +216,35 @@ enum InboxItemKind {
   INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS = 17;
 }
 
+// InboxCategory is what an item is about, and so whether the Inbox lists it
+// by default (InboxItem.category). The Inbox is for what needs the person:
+// what waits on them first, then new errors, then an automation that has
+// started failing. Machine housekeeping lives on the machine's page.
+enum InboxCategory {
+  INBOX_CATEGORY_UNSPECIFIED = 0;
+  // Something waits on the person's answer: an approval, a question, a run
+  // waiting for its machine, a chat asking before it uses their own AI
+  // account. Always listed.
+  INBOX_CATEGORY_NEEDS_YOU = 1;
+  // A new error or something only the person can fix: a broken workflow
+  // file, an automation that needs setup or an org account, a rejected org
+  // key, or a recovery that did not finish. Always listed.
+  INBOX_CATEGORY_ALERT = 2;
+  // An automation is failing: AUTOMATION_FAILING, AUTOMATION_LAUNCH_FAILED,
+  // AUTOMATION_RUN_PAUSED. Listed when the automation was healthy before
+  // (InboxItem.habitual false); an automation that keeps failing is listed
+  // only with the person's "every automation failure" filter. Its health is
+  // on the automations page either way.
+  INBOX_CATEGORY_AUTOMATION = 3;
+  // Machine housekeeping: a disk under pressure, archived worktrees a
+  // machine holds, worktree-reclaim proposals awaiting
+  // approval, worktrees marked to be reclaimed, a machine near its process
+  // limit. Not listed in the Inbox unless the person's "housekeeping" filter
+  // is on; the machine's settings page lists them (ListInbox with
+  // categories), and ListInboxResponse.housekeeping_count lets it show a dot.
+  INBOX_CATEGORY_HOUSEKEEPING = 4;
+}
+
 message ListInboxRequest {
   // Maximum items returned. 0 returns counts only. Default (unset) is 100.
   optional int32 limit = 1;
@@ -231,11 +259,19 @@ message ListInboxRequest {
   // in any org, as before this field existed. The counts follow the same
   // scope.
   optional string org_id = 3;
+  // Only items of these categories, and every one of them: the person's
+  // Inbox filters (GetPreferencesResponse.inbox_show_housekeeping,
+  // inbox_show_every_automation_failure) do not apply, so housekeeping and
+  // habitual automation failures are included. A machine's settings page
+  // asks for HOUSEKEEPING this way. Empty,
+  // the default: the Inbox as the person's filters shape it, which is what
+  // every client before this field gets.
+  repeated InboxCategory categories = 4;
 }
 
 message ListInboxResponse {
-  // Sorted by kind (priority), then waiting_since ascending (longest-waiting
-  // first), then item_id. Group by run_id client-side.
+  // Sorted by category (priority), then kind, waiting_since ascending
+  // (longest-waiting first), and item_id. Group by run_id client-side.
   repeated InboxItem items = 1;
 
   // Approvals + questions + waiting-for-machine: the items that block a live
@@ -253,6 +289,18 @@ message ListInboxResponse {
   // With project_id set: how many items are waiting in the caller's OTHER
   // projects, so a scoped view can say what it is not showing. 0 when unscoped.
   int32 other_projects_count = 5;
+
+  // How many housekeeping items (INBOX_CATEGORY_HOUSEKEEPING) exist, in
+  // scope and not dismissed, that this response did not list because the
+  // person's filters keep them out of the Inbox. The machines settings page
+  // shows a dot when it is above 0. 0 when they were listed.
+  int32 housekeeping_count = 6;
+
+  // How many automation failure items this response did not list because
+  // their automation fails habitually (InboxItem.habitual) and the person's
+  // filters list only automations that were healthy. The Inbox can say
+  // "N automations keep failing" and link to the automations page.
+  int32 habitual_count = 7;
 }
 
 message InboxItem {
@@ -299,6 +347,18 @@ message InboxItem {
 
   // RFC 3339. When the item started waiting.
   string waiting_since = 11;
+
+  // What the item is about, which decides whether the Inbox lists it by
+  // default. Always set by a server that knows it; a client that reads
+  // UNSPECIFIED (an older server) lists the item as before.
+  InboxCategory category = 12;
+
+  // Set on an automation failure item (INBOX_CATEGORY_AUTOMATION) whose
+  // automation also failed in the day before this failure began: it fails
+  // habitually, so this is not news, and the Inbox lists it only with the
+  // person's "every automation failure" filter. False for an automation that
+  // was healthy until now: that transition is what the Inbox reports.
+  bool habitual = 13;
 
   oneof payload {
     InboxApproval approval = 20;

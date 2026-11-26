@@ -688,6 +688,8 @@ What reaches the parent then depends on how the child failed:
 
 **Make failures reach it.** A path that ends normally after a "blocked" or "could not finish" message is a success to the platform: it is auto-archived and never reaches the handler. Give that terminal node `outcome: failure`, in the graph the run starts (a nested one's verdict does not count, above).
 
+**A stand-down is not a failure.** A run that chose not to do its work this time, for a reason that clears on its own (its environment is unhealthy, another run holds the work), and will be asked again, routes to a node with `outcome: skipped`. The handler does not run, nothing notifies, no Inbox item appears, and the automation's failure streak neither ends nor grows; three skips in a row read Degraded.
+
 **Testing.** Name the handler's nodes `on_failure.<node>` in a scenario's `events`, `completed` and `messages`, and assert `expect.on_failure` (`ran`, `node_id`, `error_code`, `attempt`, `error_contains`, `handler_failed`).
 
 `on_failure` never runs for a cancelled run. To release something however the run ends, use `finally`.
@@ -784,6 +786,7 @@ edges:
 |---|---|
 | completes | `success` |
 | reaches a node with `outcome: failure` | `failure` |
+| reaches a node with `outcome: skipped` | `cancelled`: the run verified nothing |
 | fails, cannot start, or stays paused for 15 minutes | `failure`, titled "Reliant could not run this check" for an engine fault |
 | is cancelled, skipped or superseded (`concurrency: {waiting: latest}`) | `cancelled` |
 | is still going at `timeout` (default 6h) | `timed_out` |

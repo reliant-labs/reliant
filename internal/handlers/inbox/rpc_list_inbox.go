@@ -67,7 +67,9 @@ func (s *Service) ListInbox(
 	}
 	items := make([]*reliantv1.InboxItem, 0, len(read.pending)+len(read.failing)+len(read.storage)+len(read.declarations))
 	for _, p := range read.pending {
-		items = append(items, inboxItemFromPending(p))
+		it := inboxItemFromPending(p)
+		it.Habitual = read.pendingHabitual[it.ItemId]
+		items = append(items, it)
 	}
 	// The read may be shared with concurrent calls (sharedRead): this
 	// response gets its own copies.
@@ -86,13 +88,27 @@ func (s *Service) ListInbox(
 	items = read.inScope(items, scope)
 
 	resp := &reliantv1.ListInboxResponse{}
+	inProject := func(it *reliantv1.InboxItem) bool {
+		// A machine's storage, and its worktrees, are not any project's:
+		// they show in every scope.
+		return it.ProjectId == projectID || it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE ||
+			it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM
+	}
+	// What the Inbox lists of what is left: the categories asked for, or the
+	// person's filters. Every count below is of what is listed. Unscoped,
+	// every item is in scope (nil).
+	for _, it := range items {
+		it.Category = inboxCategory(it)
+	}
+	counted := inProject
+	if projectID == "" {
+		counted = nil
+	}
+	items = filterCategories(items, req.Msg.GetCategories(), read.filters, counted, resp)
 	if projectID != "" {
 		scoped := items[:0]
 		for _, it := range items {
-			// A machine's storage, and its worktrees, are not any project's:
-			// they show in every scope.
-			if it.ProjectId == projectID || it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE ||
-				it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM {
+			if inProject(it) {
 				scoped = append(scoped, it)
 			} else {
 				resp.OtherProjectsCount++
@@ -102,6 +118,9 @@ func (s *Service) ListInbox(
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Category != items[j].Category {
+			return items[i].Category < items[j].Category
+		}
 		if items[i].Kind != items[j].Kind {
 			return items[i].Kind < items[j].Kind
 		}
@@ -175,11 +194,31 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 	}
 
 	g.Go(func() error {
-		return lim.do(gctx, func() (err error) {
+		if err := lim.do(gctx, func() (err error) {
 			out.pending, err = s.deps.Items.ListInboxPending(gctx, userID)
 			out.pending = authz.Visible(gctx, userID, out.pending, reads.pending)
 			return err
+		}); err != nil {
+			return err
+		}
+		// Only when an automation's launch failed or its run paused: the
+		// usual pending read asks nothing more.
+		if candidates := pendingHabitualCandidates(out.pending); len(candidates) > 0 {
+			_ = lim.do(gctx, func() error {
+				out.pendingHabitual = s.readHabitual(gctx, userID, candidates)
+				return nil
+			})
+		}
+		return nil
+	})
+	g.Go(func() error {
+		err := lim.do(gctx, func() (err error) {
+			out.filters, err = s.readFilters(gctx, userID)
+			return err
 		})
+		// Advisory: without them the Inbox is the default one.
+		advisory("Failed to read the inbox filters; listing the default inbox", err)
+		return nil
 	})
 	g.Go(func() error {
 		// Both automation sections start from the caller's triggers; read

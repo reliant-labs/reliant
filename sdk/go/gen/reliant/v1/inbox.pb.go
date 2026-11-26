@@ -23,9 +23,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// InboxItemKind is declared in priority order: lower values sort first. The
-// kinds that block a live run (approval, question, waiting for machine) come
-// before the informational failures, so the badge count is a prefix of the list.
+// InboxItemKind identifies the item's payload. Within an InboxCategory, lower
+// kind values sort first.
 type InboxItemKind int32
 
 const (
@@ -185,6 +184,82 @@ func (InboxItemKind) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{0}
 }
 
+// InboxCategory is what an item is about, and so whether the Inbox lists it
+// by default (InboxItem.category). The Inbox is for what needs the person:
+// what waits on them first, then new errors, then an automation that has
+// started failing. Machine housekeeping lives on the machine's page.
+type InboxCategory int32
+
+const (
+	InboxCategory_INBOX_CATEGORY_UNSPECIFIED InboxCategory = 0
+	// Something waits on the person's answer: an approval, a question, a run
+	// waiting for its machine, a chat asking before it uses their own AI
+	// account. Always listed.
+	InboxCategory_INBOX_CATEGORY_NEEDS_YOU InboxCategory = 1
+	// A new error or something only the person can fix: a broken workflow
+	// file, an automation that needs setup or an org account, a rejected org
+	// key, or a recovery that did not finish. Always listed.
+	InboxCategory_INBOX_CATEGORY_ALERT InboxCategory = 2
+	// An automation is failing: AUTOMATION_FAILING, AUTOMATION_LAUNCH_FAILED,
+	// AUTOMATION_RUN_PAUSED. Listed when the automation was healthy before
+	// (InboxItem.habitual false); an automation that keeps failing is listed
+	// only with the person's "every automation failure" filter. Its health is
+	// on the automations page either way.
+	InboxCategory_INBOX_CATEGORY_AUTOMATION InboxCategory = 3
+	// Machine housekeeping: a disk under pressure, archived worktrees a
+	// machine holds, worktree-reclaim proposals awaiting
+	// approval, worktrees marked to be reclaimed, a machine near its process
+	// limit. Not listed in the Inbox unless the person's "housekeeping" filter
+	// is on; the machine's settings page lists them (ListInbox with
+	// categories), and ListInboxResponse.housekeeping_count lets it show a dot.
+	InboxCategory_INBOX_CATEGORY_HOUSEKEEPING InboxCategory = 4
+)
+
+// Enum value maps for InboxCategory.
+var (
+	InboxCategory_name = map[int32]string{
+		0: "INBOX_CATEGORY_UNSPECIFIED",
+		1: "INBOX_CATEGORY_NEEDS_YOU",
+		2: "INBOX_CATEGORY_ALERT",
+		3: "INBOX_CATEGORY_AUTOMATION",
+		4: "INBOX_CATEGORY_HOUSEKEEPING",
+	}
+	InboxCategory_value = map[string]int32{
+		"INBOX_CATEGORY_UNSPECIFIED":  0,
+		"INBOX_CATEGORY_NEEDS_YOU":    1,
+		"INBOX_CATEGORY_ALERT":        2,
+		"INBOX_CATEGORY_AUTOMATION":   3,
+		"INBOX_CATEGORY_HOUSEKEEPING": 4,
+	}
+)
+
+func (x InboxCategory) Enum() *InboxCategory {
+	p := new(InboxCategory)
+	*p = x
+	return p
+}
+
+func (x InboxCategory) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (InboxCategory) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_inbox_proto_enumTypes[1].Descriptor()
+}
+
+func (InboxCategory) Type() protoreflect.EnumType {
+	return &file_reliant_v1_inbox_proto_enumTypes[1]
+}
+
+func (x InboxCategory) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use InboxCategory.Descriptor instead.
+func (InboxCategory) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{1}
+}
+
 type CleanupStorageOutcome int32
 
 const (
@@ -221,11 +296,11 @@ func (x CleanupStorageOutcome) String() string {
 }
 
 func (CleanupStorageOutcome) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_inbox_proto_enumTypes[1].Descriptor()
+	return file_reliant_v1_inbox_proto_enumTypes[2].Descriptor()
 }
 
 func (CleanupStorageOutcome) Type() protoreflect.EnumType {
-	return &file_reliant_v1_inbox_proto_enumTypes[1]
+	return &file_reliant_v1_inbox_proto_enumTypes[2]
 }
 
 func (x CleanupStorageOutcome) Number() protoreflect.EnumNumber {
@@ -234,7 +309,7 @@ func (x CleanupStorageOutcome) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CleanupStorageOutcome.Descriptor instead.
 func (CleanupStorageOutcome) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{2}
 }
 
 type ListInboxRequest struct {
@@ -251,7 +326,15 @@ type ListInboxRequest struct {
 	// items belong to no org and list in every one. Unset lists every item,
 	// in any org, as before this field existed. The counts follow the same
 	// scope.
-	OrgId         *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	OrgId *string `protobuf:"bytes,3,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
+	// Only items of these categories, and every one of them: the person's
+	// Inbox filters (GetPreferencesResponse.inbox_show_housekeeping,
+	// inbox_show_every_automation_failure) do not apply, so housekeeping and
+	// habitual automation failures are included. A machine's settings page
+	// asks for HOUSEKEEPING this way. Empty,
+	// the default: the Inbox as the person's filters shape it, which is what
+	// every client before this field gets.
+	Categories    []InboxCategory `protobuf:"varint,4,rep,packed,name=categories,proto3,enum=reliant.v1.InboxCategory" json:"categories,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -307,10 +390,17 @@ func (x *ListInboxRequest) GetOrgId() string {
 	return ""
 }
 
+func (x *ListInboxRequest) GetCategories() []InboxCategory {
+	if x != nil {
+		return x.Categories
+	}
+	return nil
+}
+
 type ListInboxResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Sorted by kind (priority), then waiting_since ascending (longest-waiting
-	// first), then item_id. Group by run_id client-side.
+	// Sorted by category (priority), then kind, waiting_since ascending
+	// (longest-waiting first), and item_id. Group by run_id client-side.
 	Items []*InboxItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	// Approvals + questions + waiting-for-machine: the items that block a live
 	// run (an async question does not). The nav badge shows this as a number.
@@ -324,8 +414,18 @@ type ListInboxResponse struct {
 	// With project_id set: how many items are waiting in the caller's OTHER
 	// projects, so a scoped view can say what it is not showing. 0 when unscoped.
 	OtherProjectsCount int32 `protobuf:"varint,5,opt,name=other_projects_count,json=otherProjectsCount,proto3" json:"other_projects_count,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// How many housekeeping items (INBOX_CATEGORY_HOUSEKEEPING) exist, in
+	// scope and not dismissed, that this response did not list because the
+	// person's filters keep them out of the Inbox. The machines settings page
+	// shows a dot when it is above 0. 0 when they were listed.
+	HousekeepingCount int32 `protobuf:"varint,6,opt,name=housekeeping_count,json=housekeepingCount,proto3" json:"housekeeping_count,omitempty"`
+	// How many automation failure items this response did not list because
+	// their automation fails habitually (InboxItem.habitual) and the person's
+	// filters list only automations that were healthy. The Inbox can say
+	// "N automations keep failing" and link to the automations page.
+	HabitualCount int32 `protobuf:"varint,7,opt,name=habitual_count,json=habitualCount,proto3" json:"habitual_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListInboxResponse) Reset() {
@@ -393,6 +493,20 @@ func (x *ListInboxResponse) GetOtherProjectsCount() int32 {
 	return 0
 }
 
+func (x *ListInboxResponse) GetHousekeepingCount() int32 {
+	if x != nil {
+		return x.HousekeepingCount
+	}
+	return 0
+}
+
+func (x *ListInboxResponse) GetHabitualCount() int32 {
+	if x != nil {
+		return x.HabitualCount
+	}
+	return 0
+}
+
 type InboxItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Kind  InboxItemKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.InboxItemKind" json:"kind,omitempty"`
@@ -434,6 +548,16 @@ type InboxItem struct {
 	ChatTitle    string `protobuf:"bytes,10,opt,name=chat_title,json=chatTitle,proto3" json:"chat_title,omitempty"`
 	// RFC 3339. When the item started waiting.
 	WaitingSince string `protobuf:"bytes,11,opt,name=waiting_since,json=waitingSince,proto3" json:"waiting_since,omitempty"`
+	// What the item is about, which decides whether the Inbox lists it by
+	// default. Always set by a server that knows it; a client that reads
+	// UNSPECIFIED (an older server) lists the item as before.
+	Category InboxCategory `protobuf:"varint,12,opt,name=category,proto3,enum=reliant.v1.InboxCategory" json:"category,omitempty"`
+	// Set on an automation failure item (INBOX_CATEGORY_AUTOMATION) whose
+	// automation also failed in the day before this failure began: it fails
+	// habitually, so this is not news, and the Inbox lists it only with the
+	// person's "every automation failure" filter. False for an automation that
+	// was healthy until now: that transition is what the Inbox reports.
+	Habitual bool `protobuf:"varint,13,opt,name=habitual,proto3" json:"habitual,omitempty"`
 	// Types that are valid to be assigned to Payload:
 	//
 	//	*InboxItem_Approval
@@ -561,6 +685,20 @@ func (x *InboxItem) GetWaitingSince() string {
 		return x.WaitingSince
 	}
 	return ""
+}
+
+func (x *InboxItem) GetCategory() InboxCategory {
+	if x != nil {
+		return x.Category
+	}
+	return InboxCategory_INBOX_CATEGORY_UNSPECIFIED
+}
+
+func (x *InboxItem) GetHabitual() bool {
+	if x != nil {
+		return x.Habitual
+	}
+	return false
 }
 
 func (x *InboxItem) GetPayload() isInboxItem_Payload {
@@ -2799,21 +2937,26 @@ var File_reliant_v1_inbox_proto protoreflect.FileDescriptor
 const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/inbox.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"\x91\x01\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"\xcc\x01\n" +
 	"\x10ListInboxRequest\x12\x19\n" +
 	"\x05limit\x18\x01 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tH\x01R\tprojectId\x88\x01\x01\x12\x1a\n" +
-	"\x06org_id\x18\x03 \x01(\tH\x02R\x05orgId\x88\x01\x01B\b\n" +
+	"\x06org_id\x18\x03 \x01(\tH\x02R\x05orgId\x88\x01\x01\x129\n" +
+	"\n" +
+	"categories\x18\x04 \x03(\x0e2\x19.reliant.v1.InboxCategoryR\n" +
+	"categoriesB\b\n" +
 	"\x06_limitB\r\n" +
 	"\v_project_idB\t\n" +
-	"\a_org_id\"\xe4\x01\n" +
+	"\a_org_id\"\xba\x02\n" +
 	"\x11ListInboxResponse\x12+\n" +
 	"\x05items\x18\x01 \x03(\v2\x15.reliant.v1.InboxItemR\x05items\x12%\n" +
 	"\x0eblocking_count\x18\x02 \x01(\x05R\rblockingCount\x12+\n" +
 	"\x11has_informational\x18\x03 \x01(\bR\x10hasInformational\x12\x1c\n" +
 	"\ttruncated\x18\x04 \x01(\bR\ttruncated\x120\n" +
-	"\x14other_projects_count\x18\x05 \x01(\x05R\x12otherProjectsCount\"\x92\r\n" +
+	"\x14other_projects_count\x18\x05 \x01(\x05R\x12otherProjectsCount\x12-\n" +
+	"\x12housekeeping_count\x18\x06 \x01(\x05R\x11housekeepingCount\x12%\n" +
+	"\x0ehabitual_count\x18\a \x01(\x05R\rhabitualCount\"\xe5\r\n" +
 	"\tInboxItem\x12-\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x19.reliant.v1.InboxItemKindR\x04kind\x12\x17\n" +
 	"\aitem_id\x18\x02 \x01(\tR\x06itemId\x12\x17\n" +
@@ -2829,7 +2972,9 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\n" +
 	"chat_title\x18\n" +
 	" \x01(\tR\tchatTitle\x12#\n" +
-	"\rwaiting_since\x18\v \x01(\tR\fwaitingSince\x127\n" +
+	"\rwaiting_since\x18\v \x01(\tR\fwaitingSince\x125\n" +
+	"\bcategory\x18\f \x01(\x0e2\x19.reliant.v1.InboxCategoryR\bcategory\x12\x1a\n" +
+	"\bhabitual\x18\r \x01(\bR\bhabitual\x127\n" +
 	"\bapproval\x18\x14 \x01(\v2\x19.reliant.v1.InboxApprovalH\x00R\bapproval\x127\n" +
 	"\bquestion\x18\x15 \x01(\v2\x19.reliant.v1.InboxQuestionH\x00R\bquestion\x12T\n" +
 	"\x13waiting_for_machine\x18\x16 \x01(\v2\".reliant.v1.InboxWaitingForMachineH\x00R\x11waitingForMachine\x12S\n" +
@@ -3022,7 +3167,13 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	" INBOX_ITEM_KIND_PERSONAL_FUNDING\x10\x0e\x12-\n" +
 	")INBOX_ITEM_KIND_ORG_PROVIDER_KEY_REJECTED\x10\x0f\x12-\n" +
 	")INBOX_ITEM_KIND_AUTOMATION_NO_ORG_ACCOUNT\x10\x10\x124\n" +
-	"0INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS\x10\x11\"\x04\b\x06\x10\x06*\x1cINBOX_ITEM_KIND_RUN_FINISHED*\x8b\x01\n" +
+	"0INBOX_ITEM_KIND_AUTOMATIONS_ON_PERSONAL_ACCOUNTS\x10\x11\"\x04\b\x06\x10\x06*\x1cINBOX_ITEM_KIND_RUN_FINISHED*\xa7\x01\n" +
+	"\rInboxCategory\x12\x1e\n" +
+	"\x1aINBOX_CATEGORY_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18INBOX_CATEGORY_NEEDS_YOU\x10\x01\x12\x18\n" +
+	"\x14INBOX_CATEGORY_ALERT\x10\x02\x12\x1d\n" +
+	"\x19INBOX_CATEGORY_AUTOMATION\x10\x03\x12\x1f\n" +
+	"\x1bINBOX_CATEGORY_HOUSEKEEPING\x10\x04*\x8b\x01\n" +
 	"\x15CleanupStorageOutcome\x12'\n" +
 	"#CLEANUP_STORAGE_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
 	" CLEANUP_STORAGE_OUTCOME_ACCEPTED\x10\x01\x12#\n" +
@@ -3056,100 +3207,103 @@ func file_reliant_v1_inbox_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_inbox_proto_rawDescData
 }
 
-var file_reliant_v1_inbox_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_reliant_v1_inbox_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_reliant_v1_inbox_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_reliant_v1_inbox_proto_goTypes = []any{
 	(InboxItemKind)(0),                         // 0: reliant.v1.InboxItemKind
-	(CleanupStorageOutcome)(0),                 // 1: reliant.v1.CleanupStorageOutcome
-	(*ListInboxRequest)(nil),                   // 2: reliant.v1.ListInboxRequest
-	(*ListInboxResponse)(nil),                  // 3: reliant.v1.ListInboxResponse
-	(*InboxItem)(nil),                          // 4: reliant.v1.InboxItem
-	(*InboxOrgProviderKeyRejected)(nil),        // 5: reliant.v1.InboxOrgProviderKeyRejected
-	(*InboxAutomationNoOrgAccount)(nil),        // 6: reliant.v1.InboxAutomationNoOrgAccount
-	(*InboxAutomationsOnPersonalAccounts)(nil), // 7: reliant.v1.InboxAutomationsOnPersonalAccounts
-	(*InboxAutomationRunPaused)(nil),           // 8: reliant.v1.InboxAutomationRunPaused
-	(*RecoveryInboxItem)(nil),                  // 9: reliant.v1.RecoveryInboxItem
-	(*InboxApproval)(nil),                      // 10: reliant.v1.InboxApproval
-	(*InboxQuestion)(nil),                      // 11: reliant.v1.InboxQuestion
-	(*InboxWaitingForMachine)(nil),             // 12: reliant.v1.InboxWaitingForMachine
-	(*InboxAutomationFailing)(nil),             // 13: reliant.v1.InboxAutomationFailing
-	(*InboxAutomationDefinitionBroken)(nil),    // 14: reliant.v1.InboxAutomationDefinitionBroken
-	(*InboxRefusedAutomation)(nil),             // 15: reliant.v1.InboxRefusedAutomation
-	(*InboxAutomationNeedsSetup)(nil),          // 16: reliant.v1.InboxAutomationNeedsSetup
-	(*InboxAutomationLaunchFailed)(nil),        // 17: reliant.v1.InboxAutomationLaunchFailed
-	(*DismissInboxItemRequest)(nil),            // 18: reliant.v1.DismissInboxItemRequest
-	(*DismissInboxItemResponse)(nil),           // 19: reliant.v1.DismissInboxItemResponse
-	(*RestoreInboxItemRequest)(nil),            // 20: reliant.v1.RestoreInboxItemRequest
-	(*RestoreInboxItemResponse)(nil),           // 21: reliant.v1.RestoreInboxItemResponse
-	(*InboxStorage)(nil),                       // 22: reliant.v1.InboxStorage
-	(*HeldWorktree)(nil),                       // 23: reliant.v1.HeldWorktree
-	(*InboxWorktreeReclaim)(nil),               // 24: reliant.v1.InboxWorktreeReclaim
-	(*InboxWorktreeMarked)(nil),                // 25: reliant.v1.InboxWorktreeMarked
-	(*KeepMarkedWorktreeRequest)(nil),          // 26: reliant.v1.KeepMarkedWorktreeRequest
-	(*KeepMarkedWorktreeResponse)(nil),         // 27: reliant.v1.KeepMarkedWorktreeResponse
-	(*ReclaimMarkedWorktreeNowRequest)(nil),    // 28: reliant.v1.ReclaimMarkedWorktreeNowRequest
-	(*ReclaimMarkedWorktreeNowResponse)(nil),   // 29: reliant.v1.ReclaimMarkedWorktreeNowResponse
-	(*ForgetStorageWorktreeRequest)(nil),       // 30: reliant.v1.ForgetStorageWorktreeRequest
-	(*ForgetStorageWorktreeResponse)(nil),      // 31: reliant.v1.ForgetStorageWorktreeResponse
-	(*CleanupStorageRequest)(nil),              // 32: reliant.v1.CleanupStorageRequest
-	(*CleanupStorageResponse)(nil),             // 33: reliant.v1.CleanupStorageResponse
-	(*CleanupStorageResult)(nil),               // 34: reliant.v1.CleanupStorageResult
-	(ApprovalType)(0),                          // 35: reliant.v1.ApprovalType
-	(*TriggerHealth)(nil),                      // 36: reliant.v1.TriggerHealth
-	(*TriggerEventDefinition)(nil),             // 37: reliant.v1.TriggerEventDefinition
-	(*TriggerSetupIssue)(nil),                  // 38: reliant.v1.TriggerSetupIssue
-	(*DiskVolume)(nil),                         // 39: reliant.v1.DiskVolume
-	(*ProcessReport)(nil),                      // 40: reliant.v1.ProcessReport
-	(*WorktreeReclaimProposal)(nil),            // 41: reliant.v1.WorktreeReclaimProposal
+	(InboxCategory)(0),                         // 1: reliant.v1.InboxCategory
+	(CleanupStorageOutcome)(0),                 // 2: reliant.v1.CleanupStorageOutcome
+	(*ListInboxRequest)(nil),                   // 3: reliant.v1.ListInboxRequest
+	(*ListInboxResponse)(nil),                  // 4: reliant.v1.ListInboxResponse
+	(*InboxItem)(nil),                          // 5: reliant.v1.InboxItem
+	(*InboxOrgProviderKeyRejected)(nil),        // 6: reliant.v1.InboxOrgProviderKeyRejected
+	(*InboxAutomationNoOrgAccount)(nil),        // 7: reliant.v1.InboxAutomationNoOrgAccount
+	(*InboxAutomationsOnPersonalAccounts)(nil), // 8: reliant.v1.InboxAutomationsOnPersonalAccounts
+	(*InboxAutomationRunPaused)(nil),           // 9: reliant.v1.InboxAutomationRunPaused
+	(*RecoveryInboxItem)(nil),                  // 10: reliant.v1.RecoveryInboxItem
+	(*InboxApproval)(nil),                      // 11: reliant.v1.InboxApproval
+	(*InboxQuestion)(nil),                      // 12: reliant.v1.InboxQuestion
+	(*InboxWaitingForMachine)(nil),             // 13: reliant.v1.InboxWaitingForMachine
+	(*InboxAutomationFailing)(nil),             // 14: reliant.v1.InboxAutomationFailing
+	(*InboxAutomationDefinitionBroken)(nil),    // 15: reliant.v1.InboxAutomationDefinitionBroken
+	(*InboxRefusedAutomation)(nil),             // 16: reliant.v1.InboxRefusedAutomation
+	(*InboxAutomationNeedsSetup)(nil),          // 17: reliant.v1.InboxAutomationNeedsSetup
+	(*InboxAutomationLaunchFailed)(nil),        // 18: reliant.v1.InboxAutomationLaunchFailed
+	(*DismissInboxItemRequest)(nil),            // 19: reliant.v1.DismissInboxItemRequest
+	(*DismissInboxItemResponse)(nil),           // 20: reliant.v1.DismissInboxItemResponse
+	(*RestoreInboxItemRequest)(nil),            // 21: reliant.v1.RestoreInboxItemRequest
+	(*RestoreInboxItemResponse)(nil),           // 22: reliant.v1.RestoreInboxItemResponse
+	(*InboxStorage)(nil),                       // 23: reliant.v1.InboxStorage
+	(*HeldWorktree)(nil),                       // 24: reliant.v1.HeldWorktree
+	(*InboxWorktreeReclaim)(nil),               // 25: reliant.v1.InboxWorktreeReclaim
+	(*InboxWorktreeMarked)(nil),                // 26: reliant.v1.InboxWorktreeMarked
+	(*KeepMarkedWorktreeRequest)(nil),          // 27: reliant.v1.KeepMarkedWorktreeRequest
+	(*KeepMarkedWorktreeResponse)(nil),         // 28: reliant.v1.KeepMarkedWorktreeResponse
+	(*ReclaimMarkedWorktreeNowRequest)(nil),    // 29: reliant.v1.ReclaimMarkedWorktreeNowRequest
+	(*ReclaimMarkedWorktreeNowResponse)(nil),   // 30: reliant.v1.ReclaimMarkedWorktreeNowResponse
+	(*ForgetStorageWorktreeRequest)(nil),       // 31: reliant.v1.ForgetStorageWorktreeRequest
+	(*ForgetStorageWorktreeResponse)(nil),      // 32: reliant.v1.ForgetStorageWorktreeResponse
+	(*CleanupStorageRequest)(nil),              // 33: reliant.v1.CleanupStorageRequest
+	(*CleanupStorageResponse)(nil),             // 34: reliant.v1.CleanupStorageResponse
+	(*CleanupStorageResult)(nil),               // 35: reliant.v1.CleanupStorageResult
+	(ApprovalType)(0),                          // 36: reliant.v1.ApprovalType
+	(*TriggerHealth)(nil),                      // 37: reliant.v1.TriggerHealth
+	(*TriggerEventDefinition)(nil),             // 38: reliant.v1.TriggerEventDefinition
+	(*TriggerSetupIssue)(nil),                  // 39: reliant.v1.TriggerSetupIssue
+	(*DiskVolume)(nil),                         // 40: reliant.v1.DiskVolume
+	(*ProcessReport)(nil),                      // 41: reliant.v1.ProcessReport
+	(*WorktreeReclaimProposal)(nil),            // 42: reliant.v1.WorktreeReclaimProposal
 }
 var file_reliant_v1_inbox_proto_depIdxs = []int32{
-	4,  // 0: reliant.v1.ListInboxResponse.items:type_name -> reliant.v1.InboxItem
-	0,  // 1: reliant.v1.InboxItem.kind:type_name -> reliant.v1.InboxItemKind
-	10, // 2: reliant.v1.InboxItem.approval:type_name -> reliant.v1.InboxApproval
-	11, // 3: reliant.v1.InboxItem.question:type_name -> reliant.v1.InboxQuestion
-	12, // 4: reliant.v1.InboxItem.waiting_for_machine:type_name -> reliant.v1.InboxWaitingForMachine
-	13, // 5: reliant.v1.InboxItem.automation_failing:type_name -> reliant.v1.InboxAutomationFailing
-	17, // 6: reliant.v1.InboxItem.automation_launch_failed:type_name -> reliant.v1.InboxAutomationLaunchFailed
-	22, // 7: reliant.v1.InboxItem.storage:type_name -> reliant.v1.InboxStorage
-	16, // 8: reliant.v1.InboxItem.automation_needs_setup:type_name -> reliant.v1.InboxAutomationNeedsSetup
-	9,  // 9: reliant.v1.InboxItem.recovery:type_name -> reliant.v1.RecoveryInboxItem
-	8,  // 10: reliant.v1.InboxItem.automation_run_paused:type_name -> reliant.v1.InboxAutomationRunPaused
-	14, // 11: reliant.v1.InboxItem.automation_definition_broken:type_name -> reliant.v1.InboxAutomationDefinitionBroken
-	24, // 12: reliant.v1.InboxItem.worktree_reclaim:type_name -> reliant.v1.InboxWorktreeReclaim
-	25, // 13: reliant.v1.InboxItem.worktree_marked:type_name -> reliant.v1.InboxWorktreeMarked
-	5,  // 14: reliant.v1.InboxItem.org_provider_key_rejected:type_name -> reliant.v1.InboxOrgProviderKeyRejected
-	6,  // 15: reliant.v1.InboxItem.automation_no_org_account:type_name -> reliant.v1.InboxAutomationNoOrgAccount
-	7,  // 16: reliant.v1.InboxItem.automations_on_personal_accounts:type_name -> reliant.v1.InboxAutomationsOnPersonalAccounts
-	35, // 17: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
-	36, // 18: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
-	37, // 19: reliant.v1.InboxAutomationDefinitionBroken.definition:type_name -> reliant.v1.TriggerEventDefinition
-	15, // 20: reliant.v1.InboxAutomationDefinitionBroken.automations:type_name -> reliant.v1.InboxRefusedAutomation
-	38, // 21: reliant.v1.InboxAutomationNeedsSetup.issues:type_name -> reliant.v1.TriggerSetupIssue
-	23, // 22: reliant.v1.InboxStorage.held:type_name -> reliant.v1.HeldWorktree
-	39, // 23: reliant.v1.InboxStorage.volumes:type_name -> reliant.v1.DiskVolume
-	40, // 24: reliant.v1.InboxStorage.processes:type_name -> reliant.v1.ProcessReport
-	41, // 25: reliant.v1.InboxWorktreeReclaim.proposals:type_name -> reliant.v1.WorktreeReclaimProposal
-	34, // 26: reliant.v1.CleanupStorageResponse.results:type_name -> reliant.v1.CleanupStorageResult
-	1,  // 27: reliant.v1.CleanupStorageResult.outcome:type_name -> reliant.v1.CleanupStorageOutcome
-	2,  // 28: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
-	32, // 29: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
-	30, // 30: reliant.v1.InboxService.ForgetStorageWorktree:input_type -> reliant.v1.ForgetStorageWorktreeRequest
-	26, // 31: reliant.v1.InboxService.KeepMarkedWorktree:input_type -> reliant.v1.KeepMarkedWorktreeRequest
-	28, // 32: reliant.v1.InboxService.ReclaimMarkedWorktreeNow:input_type -> reliant.v1.ReclaimMarkedWorktreeNowRequest
-	18, // 33: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
-	20, // 34: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
-	3,  // 35: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
-	33, // 36: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
-	31, // 37: reliant.v1.InboxService.ForgetStorageWorktree:output_type -> reliant.v1.ForgetStorageWorktreeResponse
-	27, // 38: reliant.v1.InboxService.KeepMarkedWorktree:output_type -> reliant.v1.KeepMarkedWorktreeResponse
-	29, // 39: reliant.v1.InboxService.ReclaimMarkedWorktreeNow:output_type -> reliant.v1.ReclaimMarkedWorktreeNowResponse
-	19, // 40: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
-	21, // 41: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
-	35, // [35:42] is the sub-list for method output_type
-	28, // [28:35] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	1,  // 0: reliant.v1.ListInboxRequest.categories:type_name -> reliant.v1.InboxCategory
+	5,  // 1: reliant.v1.ListInboxResponse.items:type_name -> reliant.v1.InboxItem
+	0,  // 2: reliant.v1.InboxItem.kind:type_name -> reliant.v1.InboxItemKind
+	1,  // 3: reliant.v1.InboxItem.category:type_name -> reliant.v1.InboxCategory
+	11, // 4: reliant.v1.InboxItem.approval:type_name -> reliant.v1.InboxApproval
+	12, // 5: reliant.v1.InboxItem.question:type_name -> reliant.v1.InboxQuestion
+	13, // 6: reliant.v1.InboxItem.waiting_for_machine:type_name -> reliant.v1.InboxWaitingForMachine
+	14, // 7: reliant.v1.InboxItem.automation_failing:type_name -> reliant.v1.InboxAutomationFailing
+	18, // 8: reliant.v1.InboxItem.automation_launch_failed:type_name -> reliant.v1.InboxAutomationLaunchFailed
+	23, // 9: reliant.v1.InboxItem.storage:type_name -> reliant.v1.InboxStorage
+	17, // 10: reliant.v1.InboxItem.automation_needs_setup:type_name -> reliant.v1.InboxAutomationNeedsSetup
+	10, // 11: reliant.v1.InboxItem.recovery:type_name -> reliant.v1.RecoveryInboxItem
+	9,  // 12: reliant.v1.InboxItem.automation_run_paused:type_name -> reliant.v1.InboxAutomationRunPaused
+	15, // 13: reliant.v1.InboxItem.automation_definition_broken:type_name -> reliant.v1.InboxAutomationDefinitionBroken
+	25, // 14: reliant.v1.InboxItem.worktree_reclaim:type_name -> reliant.v1.InboxWorktreeReclaim
+	26, // 15: reliant.v1.InboxItem.worktree_marked:type_name -> reliant.v1.InboxWorktreeMarked
+	6,  // 16: reliant.v1.InboxItem.org_provider_key_rejected:type_name -> reliant.v1.InboxOrgProviderKeyRejected
+	7,  // 17: reliant.v1.InboxItem.automation_no_org_account:type_name -> reliant.v1.InboxAutomationNoOrgAccount
+	8,  // 18: reliant.v1.InboxItem.automations_on_personal_accounts:type_name -> reliant.v1.InboxAutomationsOnPersonalAccounts
+	36, // 19: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
+	37, // 20: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
+	38, // 21: reliant.v1.InboxAutomationDefinitionBroken.definition:type_name -> reliant.v1.TriggerEventDefinition
+	16, // 22: reliant.v1.InboxAutomationDefinitionBroken.automations:type_name -> reliant.v1.InboxRefusedAutomation
+	39, // 23: reliant.v1.InboxAutomationNeedsSetup.issues:type_name -> reliant.v1.TriggerSetupIssue
+	24, // 24: reliant.v1.InboxStorage.held:type_name -> reliant.v1.HeldWorktree
+	40, // 25: reliant.v1.InboxStorage.volumes:type_name -> reliant.v1.DiskVolume
+	41, // 26: reliant.v1.InboxStorage.processes:type_name -> reliant.v1.ProcessReport
+	42, // 27: reliant.v1.InboxWorktreeReclaim.proposals:type_name -> reliant.v1.WorktreeReclaimProposal
+	35, // 28: reliant.v1.CleanupStorageResponse.results:type_name -> reliant.v1.CleanupStorageResult
+	2,  // 29: reliant.v1.CleanupStorageResult.outcome:type_name -> reliant.v1.CleanupStorageOutcome
+	3,  // 30: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
+	33, // 31: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
+	31, // 32: reliant.v1.InboxService.ForgetStorageWorktree:input_type -> reliant.v1.ForgetStorageWorktreeRequest
+	27, // 33: reliant.v1.InboxService.KeepMarkedWorktree:input_type -> reliant.v1.KeepMarkedWorktreeRequest
+	29, // 34: reliant.v1.InboxService.ReclaimMarkedWorktreeNow:input_type -> reliant.v1.ReclaimMarkedWorktreeNowRequest
+	19, // 35: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
+	21, // 36: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
+	4,  // 37: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
+	34, // 38: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
+	32, // 39: reliant.v1.InboxService.ForgetStorageWorktree:output_type -> reliant.v1.ForgetStorageWorktreeResponse
+	28, // 40: reliant.v1.InboxService.KeepMarkedWorktree:output_type -> reliant.v1.KeepMarkedWorktreeResponse
+	30, // 41: reliant.v1.InboxService.ReclaimMarkedWorktreeNow:output_type -> reliant.v1.ReclaimMarkedWorktreeNowResponse
+	20, // 42: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
+	22, // 43: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
+	37, // [37:44] is the sub-list for method output_type
+	30, // [30:37] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_inbox_proto_init() }
@@ -3185,7 +3339,7 @@ func file_reliant_v1_inbox_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_inbox_proto_rawDesc), len(file_reliant_v1_inbox_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      3,
 			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   1,

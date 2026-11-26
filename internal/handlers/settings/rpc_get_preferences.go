@@ -69,6 +69,8 @@ func (s *Service) GetPreferences(ctx context.Context, req *connect.Request[relia
 	branchCopyUncommittedFilesDefault := boolPref("worktree.branch_copy_uncommitted_files_default", false)
 	hideBuiltinWorkflows := boolPref("ui.hide_builtin_workflows", false)
 	hideBuiltinPresets := boolPref("ui.hide_builtin_presets", false)
+	inboxShowHousekeeping := boolPref(inboxShowHousekeepingKey, false)
+	inboxShowEveryAutomationFailure := boolPref(inboxShowEveryAutomationFailureKey, false)
 
 	worktreeArchiveMode := "ask_me"
 	if value, ok := values["worktree.archive_cleanup_mode"]; ok {
@@ -107,6 +109,8 @@ func (s *Service) GetPreferences(ctx context.Context, req *connect.Request[relia
 		HideBuiltinPresets:                hideBuiltinPresets,
 		HiddenWorkflowSlugs:               hiddenWorkflows,
 		HiddenPresetSlugs:                 hiddenPresets,
+		InboxShowHousekeeping:             inboxShowHousekeeping,
+		InboxShowEveryAutomationFailure:   inboxShowEveryAutomationFailure,
 	}), nil
 }
 

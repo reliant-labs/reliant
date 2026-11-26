@@ -38,6 +38,8 @@ function settingsRow(item: SectionItem): NavRow {
     match: (ctx) =>
       isAtOrBelow(ctx.pathname, settingsPath(item.id)) &&
       isSettingsItemCurrent(item, item.id, typeof ctx.search.tab === "string" ? (ctx.search.tab as SettingsTab) : undefined),
+    // Machine housekeeping lives on the sandboxes' pages, not in the Inbox.
+    ...(item.id === "machines" ? { trail: "sandboxes-housekeeping" as const } : {}),
   };
 }
 

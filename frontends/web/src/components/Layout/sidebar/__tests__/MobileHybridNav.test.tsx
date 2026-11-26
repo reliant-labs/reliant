@@ -43,6 +43,7 @@ vi.mock("../../../inbox/InboxNavItem", () => ({
       Inbox
     </a>
   ),
+  SandboxesHousekeepingDot: () => null,
 }));
 
 const { MobileHybridNav, desktopPathOfMobile } = await import("../MobileHybridNav");

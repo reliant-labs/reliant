@@ -275,6 +275,10 @@ func TestListInbox_LaunchFailedDismissalAndNewerFailureReappears(t *testing.T) {
 	// A launch ends the episode; the next failure is a new one and reappears.
 	f.launched(t, "evL3", "chat-l3", "trg-l", base.Add(2*time.Minute), db.Completed())
 	f.firing(t, "evL4", "trg-l", core.TriggerEventFailed, "gone again", base.Add(3*time.Minute))
+	// Minutes after the last failure, the new episode is habitual: it is
+	// listed with every automation failure, not in the default Inbox.
+	assert.EqualValues(t, 1, f.list(t, nil).HabitualCount)
+	f.setFilter(t, showEveryAutomationFailureKey, true)
 	resp = f.list(t, nil)
 	launchFailed := inboxByKind(resp.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED)
 	require.Len(t, launchFailed, 1, "a new episode reappears")

@@ -189,6 +189,51 @@ func TestComputeHealth_AHandledFailureIsAFailureNotARecovery(t *testing.T) {
 	assert.Zero(t, recovered.ConsecutiveFailures)
 }
 
+// A run that completed into a declared outcome: skipped chose not to do its
+// work. It neither ends a failure streak nor extends one, for any kind of
+// trigger, and three in a row read DEGRADED, never FAILING or HEALTHY.
+func TestComputeHealth_ADeclaredSkipIsNeitherASuccessNorAFailure(t *testing.T) {
+	skipped := func(kind core.TriggerEventKind) *core.TriggerEventWithRun {
+		f := launched(core.RunDisplayCompleted)
+		f.Event.Kind = kind
+		f.Event.RunStatus = core.TriggerRunCompleted
+		f.Event.RunOutcome = core.RunOutcomeSkipped
+		return f
+	}
+	failed := func() *core.TriggerEventWithRun {
+		f := launched(core.RunDisplayFailed)
+		f.Event.RunStatus = core.TriggerRunFailed
+		return f
+	}
+
+	for _, kind := range []core.TriggerEventKind{core.TriggerEventKindSchedule, core.TriggerEventKindWebhook} {
+		got, detail := resolveFiring(skipped(kind))
+		assert.Equal(t, resultSkipped, got, kind)
+		assert.Empty(t, detail, kind)
+	}
+
+	// A skip between two failures does not end the streak, and a skip at
+	// its head does not extend it.
+	sched := core.TriggerEventKindSchedule
+	streak := []*core.TriggerEventWithRun{skipped(sched), failed(), skipped(sched), failed()}
+	assert.Equal(t, int32(2), FailureStreak(streak).Count)
+	health := ComputeHealth(streak)
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING, health.Status)
+	assert.Equal(t, int32(2), health.ConsecutiveFailures)
+	assert.Equal(t, int32(1), health.ConsecutiveSkips)
+
+	// Three skips in a row after a success read DEGRADED; two do not.
+	clean := launched(core.RunDisplayCompleted)
+	clean.Event.RunStatus = core.TriggerRunCompleted
+	clean.Event.RunOutcome = core.RunOutcomeSucceeded
+	three := ComputeHealth([]*core.TriggerEventWithRun{skipped(sched), skipped(sched), skipped(sched), clean})
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED, three.Status)
+	assert.Equal(t, int32(3), three.ConsecutiveSkips)
+	assert.Zero(t, three.ConsecutiveFailures)
+	two := ComputeHealth([]*core.TriggerEventWithRun{skipped(sched), skipped(sched), clean})
+	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_HEALTHY, two.Status)
+}
+
 func TestComputeHealth_OnlyReadsTheWindow(t *testing.T) {
 	// A failure just outside the 10-firing window must not count.
 	firings := make([]*core.TriggerEventWithRun, 0, HealthWindow+1)

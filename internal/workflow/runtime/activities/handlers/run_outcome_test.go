@@ -49,6 +49,8 @@ func TestResolveRunOutcome(t *testing.T) {
 	}{
 		{"failed", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "failed"}, core.RunOutcomeFailed},
 		{"declared failure", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "completed", Outcome: model.OutcomeFailure}, core.RunOutcomeFailed},
+		{"declared skip", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "completed", Outcome: model.OutcomeSkipped}, core.RunOutcomeSkipped},
+		{"a declared skip wins over a handled failure", WorkflowStatusInput{WorkflowID: "wf-handled", Status: "completed", Outcome: model.OutcomeSkipped}, core.RunOutcomeSkipped},
 		{"clean completion", WorkflowStatusInput{WorkflowID: "wf-clean", Status: "completed", RunStartedAtMs: started.UnixMilli(), RunID: "run-1"}, core.RunOutcomeSucceeded},
 		{"completed past a failed node", WorkflowStatusInput{WorkflowID: "wf-handled", Status: "completed", RunStartedAtMs: started.UnixMilli()}, core.RunOutcomeFailureHandled},
 		{"unreadable attempts keep the old reading", WorkflowStatusInput{WorkflowID: "wf-unreadable", Status: "completed"}, core.RunOutcomeSucceeded},

@@ -111,6 +111,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 	// The store projects expired leases as action_required and validates current
 	// chat/project ownership. Policy presence alone never suppresses legacy rows.
 	out := attentionInboxItems(userID, incidents, stored, recent)
+	var candidates []habitualCandidate
 	for _, t := range stored {
 		if !t.Enabled {
 			continue
@@ -163,6 +164,21 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 			WaitingSince: streak.First.Event.OccurredAt.UTC().Format(time.RFC3339Nano),
 			Payload:      &reliantv1.InboxItem_AutomationFailing{AutomationFailing: payload},
 		})
+		candidates = append(candidates, habitualCandidate{key: inboxFailingPrefix + streak.First.Event.ID, triggerID: t.ID, start: streak.First.Event.OccurredAt})
+	}
+	// A streak that began within a day of the automation's last failure is
+	// one more of an unhealthy period already reported: habitual.
+	if len(candidates) > 0 {
+		var habitual map[string]bool
+		_ = lim.do(ctx, func() error {
+			habitual = s.readHabitual(ctx, userID, candidates)
+			return nil
+		})
+		for _, it := range out {
+			if streakItem(it) && habitual[it.ItemId] {
+				it.Habitual = true
+			}
+		}
 	}
 	return out, nil
 }

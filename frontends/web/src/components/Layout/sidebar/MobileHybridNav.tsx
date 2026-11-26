@@ -48,7 +48,7 @@ import {
 } from "@/lib/paths";
 import { orgFreePath } from "@/lib/paths/org";
 
-import { InboxNavItem } from "../../inbox/InboxNavItem";
+import { InboxNavItem, SandboxesHousekeepingDot } from "../../inbox/InboxNavItem";
 import { hybridNav } from "./navConfig";
 import { isAtOrBelow } from "./navLocation";
 import type { NavigateOptions, NavSlots } from "./NavRenderer";
@@ -129,6 +129,7 @@ export function MobileHybridNav({
         />
       ),
       inbox: () => <InboxNavItem href={inboxPath()} onOpen={() => onNavigate(inboxPath())} current={isAtOrBelow(pathname, inboxPath())} />,
+      "sandboxes-housekeeping": () => <SandboxesHousekeepingDot />,
     }),
     [onNavigate, pathname],
   );

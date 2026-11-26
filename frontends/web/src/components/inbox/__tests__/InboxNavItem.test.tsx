@@ -13,7 +13,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 
-import { ListInboxResponseSchema } from "@/gen/reliant/v1/inbox_pb";
+import { InboxCategory, ListInboxResponseSchema } from "@/gen/reliant/v1/inbox_pb";
 import { ChatActivity } from "@/gen/reliant/v1/chat_pb";
 
 import { setTransport } from "@/lib/connect";
@@ -22,7 +22,8 @@ import { mockTransport } from "@/lib/test-utils";
 // The counts are InboxService's generated ListInbox: answered at the transport.
 const listInbox = vi.fn();
 
-import { InboxNavItem } from "../InboxNavItem";
+import { InboxNavItem, SandboxesHousekeepingDot } from "../InboxNavItem";
+import { storageItem } from "./inboxTestUtils";
 import { useActivityStore } from "@/store/activityStore";
 
 function renderItem(ui: ReactNode) {
@@ -95,5 +96,41 @@ describe("InboxNavItem", () => {
     renderItem(<InboxNavItem onOpen={vi.fn()} />);
     expect(await screen.findByTestId("inbox-badge-warning")).toBeInTheDocument();
     expect(screen.getByTestId("inbox-badge-count")).toHaveTextContent("2");
+  });
+});
+
+describe("SandboxesHousekeepingDot (the Agent sandboxes nav row)", () => {
+  it("shows a dot while the filters keep housekeeping out of the Inbox, from the badge's own read", async () => {
+    listInbox.mockResolvedValue(create(ListInboxResponseSchema, { blockingCount: 1, housekeepingCount: 2 }));
+    renderItem(
+      <>
+        <InboxNavItem onOpen={vi.fn()} />
+        <SandboxesHousekeepingDot />
+      </>,
+    );
+    expect(await screen.findByTestId("sandboxes-housekeeping-dot")).toHaveAccessibleName("A sandbox has housekeeping waiting");
+    // One read serves the badge and the dot.
+    expect(listInbox).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a dot for listed housekeeping when the person's filter lets it into the Inbox", async () => {
+    listInbox.mockResolvedValue(
+      create(ListInboxResponseSchema, { items: [storageItem({ category: InboxCategory.HOUSEKEEPING })], hasInformational: true }),
+    );
+    renderItem(<SandboxesHousekeepingDot />);
+    expect(await screen.findByTestId("sandboxes-housekeeping-dot")).toBeInTheDocument();
+  });
+
+  it("no housekeeping: no dot", async () => {
+    listInbox.mockResolvedValue(create(ListInboxResponseSchema, { blockingCount: 1 }));
+    renderItem(
+      <>
+        <InboxNavItem onOpen={vi.fn()} />
+        <SandboxesHousekeepingDot />
+      </>,
+    );
+    // The read has landed (the badge shows it), and there is still no dot.
+    expect(await screen.findByTestId("inbox-badge-count")).toHaveTextContent("1");
+    expect(screen.queryByTestId("sandboxes-housekeeping-dot")).toBeNull();
   });
 });

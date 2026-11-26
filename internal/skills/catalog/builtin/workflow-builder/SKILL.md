@@ -391,6 +391,14 @@ what needs a person (a question, an approval, a failed run, a broken automation)
 the automation's failure item. A workflow that must tell a person something after a success does it with an explicit
 step: a Slack, SMS or email message, or an async ask_user question.
 
+**When a run should stand down: `outcome: skipped`.** A run that chose not to do its work this time, for
+a reason that clears on its own (its machine or environment is unhealthy, another run holds the work, a person must
+first fix something it already reported), and will be asked again on its next tick, routes to a node with
+`outcome: skipped`, not `outcome: failure`. It is not a failure anywhere: no `on_failure`, no failure
+notification, no Inbox item, and it neither ends nor extends the automation's failure streak. It archives like a
+success, a run of three or more reads Degraded on the automations page, and a GitHub check concludes `cancelled`.
+Use `outcome: failure` for anything a person must act on.
+
 What `trigger.payload` holds, by source:
 
 | Source | trigger.payload |

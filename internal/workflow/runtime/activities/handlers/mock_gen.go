@@ -4386,7 +4386,7 @@ func (m *MockTriggerPauser) SystemPauseTrigger(ctx context.Context, id string, r
 var _ TriggerPauser = (*MockTriggerPauser)(nil)
 
 // forge:section MockWorkflowStatusStore
-// forge:hash=beabca36626c27083933bbaaf4b96cc201fb59273a2f8c54d616489b939ae35b
+// forge:hash=a10c26cf347d09b0ec54a4d96a775efc38352da04d2b0ea365ef7323aa11c05f
 
 // MockWorkflowStatusStore is a test mock for the WorkflowStatusStore interface.
 //
@@ -4413,6 +4413,7 @@ type MockWorkflowStatusStore struct {
 	CreateChatUpdateFunc                                     func(context.Context, string, reliantv1.ChatUpdateType, string, string) error
 	EmitChatRefetchFunc                                      func(context.Context, string, db.RefetchType) error
 	FiringsSinceLastSuccessFunc                              func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	PriorTriggerFailuresFunc                                 func(context.Context, string, []string, []time.Time, time.Duration) ([]*time.Time, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
@@ -4611,6 +4612,15 @@ func (m *MockWorkflowStatusStore) FiringsSinceLastSuccess(ctx context.Context, u
 		return m.FiringsSinceLastSuccessFunc(ctx, userID, triggerIDs, perTrigger)
 	}
 	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "FiringsSinceLastSuccess")
+}
+
+// PriorTriggerFailures records the call and delegates to PriorTriggerFailuresFunc when set.
+func (m *MockWorkflowStatusStore) PriorTriggerFailures(ctx context.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error) {
+	m.Recorder.Record("PriorTriggerFailures", ctx, userID, triggerIDs, before, window)
+	if m.PriorTriggerFailuresFunc != nil {
+		return m.PriorTriggerFailuresFunc(ctx, userID, triggerIDs, before, window)
+	}
+	return nil, contractkit.MockNotSet("MockWorkflowStatusStore", "PriorTriggerFailures")
 }
 
 // CreateThread records the call and delegates to CreateThreadFunc when set.

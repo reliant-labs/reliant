@@ -2839,6 +2839,13 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
+// PriorTriggerFailures returns, for each triggerIDs[i], when its newest failed
+// firing in [before[i]-window, before[i]) occurred, nil when none
+// (store.PriorTriggerFailures).
+func (r *Repo) PriorTriggerFailures(ctx context.Context, userID string, triggerIDs []string, before []time.Time, window time.Duration) ([]*time.Time, error) {
+	return store.PriorTriggerFailures(ctx, r.ORM(), userID, triggerIDs, before, window)
+}
+
 // ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
 //
 // Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the

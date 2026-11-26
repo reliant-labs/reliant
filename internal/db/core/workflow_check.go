@@ -58,7 +58,8 @@ type WorkflowCheckRun struct {
 	StartedAt *time.Time
 	// EndedStatus is how the run saw its own end (completed, failed,
 	// cancelled), and Verdict the outcome its graph declared ("success",
-	// "failure", or "" when no node declared one). Empty until it ended.
+	// "failure", "skipped", or "" when no node declared one). Empty until it
+	// ended.
 	EndedStatus string
 	Verdict     string
 	// Output is the check's output the run evaluated ({title, summary, text,
@@ -108,7 +109,7 @@ type WorkflowCheckRun struct {
 // output it evaluated.
 type WorkflowCheckEnding struct {
 	Status      string         `json:"status"`            // completed | failed | cancelled
-	Verdict     string         `json:"verdict,omitempty"` // success | failure | ""
+	Verdict     string         `json:"verdict,omitempty"` // success | failure | skipped | ""
 	Output      map[string]any `json:"output,omitempty"`
 	OutputError string         `json:"output_error,omitempty"`
 }
@@ -122,8 +123,11 @@ type WorkflowCheckObservation struct {
 	// ChatID is the chat the firing launched; "" when it launched none.
 	ChatID string
 	// RunStatus is how the trigger's own run ended
-	// (TriggerEvent.RunStatus); "" while it is going.
-	RunStatus string
+	// (TriggerEvent.RunStatus); "" while it is going. RunOutcome is the
+	// outcome recorded beside it (TriggerEvent.RunOutcome, a RunOutcome*
+	// value; "" when none was).
+	RunStatus  string
+	RunOutcome string
 	// Root is the lifecycle of the chat's root workflow row, nil when there
 	// is none (not launched yet, or deleted). RootVerdict and
 	// RootFailureDetail are its declared outcome and failure detail.

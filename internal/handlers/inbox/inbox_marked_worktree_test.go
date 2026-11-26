@@ -71,7 +71,7 @@ func markedFixture(t *testing.T) (*inboxFixture, *unmarkSender, string) {
 // its sweeper, so a test can wait for the settles it starts.
 func markedFixtureSweeper(t *testing.T) (*inboxFixture, *unmarkSender, string, *worktreesweep.Sweeper) {
 	t.Helper()
-	f := newInboxFixture(t)
+	f := newHousekeepingFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID, Hostname: ptr.Of("MacBook")}))
 	require.NoError(t, f.repo.UpsertProjectDaemon(f.ctx, f.project(), daemonID, "/home/u/proj", nil))

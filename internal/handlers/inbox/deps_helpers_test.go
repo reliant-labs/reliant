@@ -31,6 +31,7 @@ func realDeps(repo *db.Repo) Deps {
 		Recoveries:    store.NewWorktreeRecoveryExtStore(repo.ORM()),
 		Marks:         store.NewWorktreeExtStore(repo.ORM()),
 		OrgKeys:       &MockOrgKeys{},
+		Preferences:   store.NewSettingExtStore(repo.ORM()),
 	}
 }
 
@@ -44,7 +45,7 @@ func mockDeps(repo Repository) Deps {
 		return Deps{Repo: r, Chats: &MockChats{}, ProjectRows: &MockProjectReader{}, Machines: &MockDaemonReader{}, Items: &MockItems{}, Firings: &MockFirings{}, Notices: &MockNotices{}, Registrations: &MockRegistrations{}, Storage: &MockStorage{}, Recoveries: noRecoveries(), Marks: &MockMarkDecisionStore{}}
 	}
 	o := repo.(interface{ ORM() *orm.Client }).ORM()
-	return Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(o), ProjectRows: store.NewProjectExtStore(o), Machines: store.NewDaemonExtStore(o), Items: store.NewInboxDismissalExtStore(o), Firings: store.NewTriggerEventExtStore(o), Notices: store.NewTriggerExtStore(o), Registrations: store.NewTriggerRegistrationExtStore(o), Storage: realStorage(repo), Recoveries: store.NewWorktreeRecoveryExtStore(o), Marks: store.NewWorktreeExtStore(o)}
+	return Deps{Repo: repo, Chats: store.NewChatsWithActivityExtStore(o), ProjectRows: store.NewProjectExtStore(o), Machines: store.NewDaemonExtStore(o), Items: store.NewInboxDismissalExtStore(o), Firings: store.NewTriggerEventExtStore(o), Notices: store.NewTriggerExtStore(o), Registrations: store.NewTriggerRegistrationExtStore(o), Storage: realStorage(repo), Recoveries: store.NewWorktreeRecoveryExtStore(o), Marks: store.NewWorktreeExtStore(o), Preferences: store.NewSettingExtStore(o)}
 }
 
 // realStorage is the sweep's store over a real repository, as the composition
@@ -94,6 +95,9 @@ func withDeps(d Deps) TestOption {
 	}
 	if d.Storage == nil {
 		d.Storage = fill.Storage
+	}
+	if d.Preferences == nil {
+		d.Preferences = fill.Preferences
 	}
 	return WithInboxDeps(d)
 }

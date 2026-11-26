@@ -125,6 +125,10 @@ const (
 	// error but the graph declared the run failed: it reached a terminal node
 	// with `outcome: failure` (ExecutionDetails.OutcomeNode names it).
 	OutcomeFailed ExpectedOutcome = "failed"
+	// OutcomeSkipped means the workflow ran its graph to the end without an
+	// error and the graph declared it skipped its work: it reached a node
+	// with `outcome: skipped` (ExecutionDetails.OutcomeNode names it).
+	OutcomeSkipped ExpectedOutcome = "skipped"
 )
 
 // NodeExecutionState represents the execution state of a node.
@@ -168,7 +172,7 @@ const (
 //	      confidence: 0.95
 type Expectation struct {
 	// Outcome specifies whether the workflow should complete or error.
-	// Values: "completed", "error", or "failed"
+	// Values: "completed", "error", "failed", or "skipped"
 	Outcome ExpectedOutcome `json:"outcome,omitempty" yaml:"outcome,omitempty"`
 
 	// Reached lists nodes that must be scheduled during the scenario (completed, skipped, or errored).
@@ -444,8 +448,8 @@ type ExecutionDetails struct {
 	NodesCompleted  []string                          `json:"nodes_completed,omitempty"` // Nodes that executed successfully
 	NodesSkipped    []string                          `json:"nodes_skipped,omitempty"`   // Nodes skipped due to false conditions
 	NodeStates      map[string]NodeExecutionState     `json:"node_states,omitempty"`     // Explicit state for each node
-	Outcome         string                            `json:"outcome"`                   // "completed", "error", or "failed"
-	OutcomeNode     string                            `json:"outcome_node,omitempty"`    // For "failed": the terminal node declaring outcome: failure
+	Outcome         string                            `json:"outcome"`                   // "completed", "error", "failed", or "skipped"
+	OutcomeNode     string                            `json:"outcome_node,omitempty"`    // For "failed"/"skipped": the node declaring outcome: failure/skipped
 	Error           *ErrorDetails                     `json:"error,omitempty"`
 	DurationMs      int64                             `json:"duration_ms"`
 	NodeOutputs     map[string]map[string]interface{} `json:"node_outputs,omitempty"`     // Actual outputs from each node

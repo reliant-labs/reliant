@@ -110,6 +110,12 @@ type inboxReads struct {
 	// and trigger ("trigger:<id>") the items are about, nil for one with no
 	// org yet: what ListInbox's org scope decides an item by (itemOrg).
 	orgs map[string]*string
+	// pendingHabitual is the item id of each habitual launch-failed and
+	// paused-run item of pending (readHabitual); the failing items carry
+	// their own InboxItem.habitual.
+	pendingHabitual map[string]bool
+	// filters are the person's Inbox filters (readFilters).
+	filters inboxFilters
 }
 
 // sharedReadKey is the class of callers whose reads are interchangeable: the
