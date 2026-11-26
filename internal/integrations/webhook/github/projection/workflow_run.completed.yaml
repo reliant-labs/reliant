@@ -12,6 +12,7 @@ attributes:
   - { name: conclusion, description: "The run's conclusion.", example: failure, from: workflow_run.conclusion }
   - { name: branch, description: The branch the run was for., example: main, from: workflow_run.head_branch }
   - { name: workflow, description: "The workflow's name.", example: CI, from: workflow_run.name }
+  - { name: run_event, description: "The event that started the run (push, pull_request, merge_group, schedule, ...).", example: merge_group, from: workflow_run.event }
 data:
   workflow:
     kind: object
