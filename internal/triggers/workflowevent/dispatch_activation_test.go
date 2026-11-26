@@ -114,6 +114,24 @@ func TestDispatch_ActivationMatchesTheDeclarationNotItsProjection(t *testing.T) 
 	assert.Equal(t, 0, f.starter.count())
 }
 
+// A widened declaration must reach Dispatch even before its projection catches up.
+func TestMayReach_StaleActivationProjectionCannotDiscardAMatch(t *testing.T) {
+	for _, projection := range []Source{
+		{Workflows: []string{"old-workflow"}, Outcomes: []string{"failed"}},
+		{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}},
+	} {
+		f := newFixture(t)
+		f.dispatcher.WithWorkflows(triggers.LaunchWorkflows{Repo: f.repo})
+		f.saveDeclaringWorkflow("reactor", reactorYAML)
+		tr := f.addActivation("reactor", "on-review-failure", projection)
+		ev := f.finish(f.humanRun("code-review"), core.RunEventFailed)
+		require.True(t, MayReach([]*core.Trigger{tr}, ev))
+		results, err := f.dispatcher.Dispatch(context.Background(), ev)
+		require.NoError(t, err)
+		assert.NotEmpty(t, launchedChat(t, results, tr.ID))
+	}
+}
+
 // A declaration removed from the workflow: the activation records why on the
 // events it used to match, and launches nothing.
 func TestDispatch_BrokenActivationIsRecordedNotFired(t *testing.T) {
