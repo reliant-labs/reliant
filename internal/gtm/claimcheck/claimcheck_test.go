@@ -87,7 +87,7 @@ func TestExtractContextKeepsDecimalsInsideTheSentence(t *testing.T) {
 func TestNormalize(t *testing.T) {
 	for in, want := range map[string]string{
 		"  Acme Studio is  Apache-2.0. ": "acme studio is apache-2.0",
-		"One FREE Pages site!!":          "one free pages site",
+		"One FREE Docs site!!":           "one free docs site",
 		"a\tb\nc":                        "a b c",
 	} {
 		if got := claimcheck.Normalize(in); got != want {
@@ -106,7 +106,7 @@ func TestCheck(t *testing.T) {
 	registry := []claimcheck.Claim{
 		claim("apache", "Acme Studio is open source under the Apache License 2.0", claimcheck.StatusVerified),
 		claim("trial", "trial deploys last 36h and are deleted 10 days after that", claimcheck.StatusVerified),
-		claim("site", "one free Pages site per workspace", claimcheck.StatusVerified),
+		claim("site", "one free Docs site per workspace", claimcheck.StatusVerified),
 		claim("service", "service $7.25/mo", claimcheck.StatusVerified),
 		claim("bsl", "Acme Cloud is BSL 1.1 source-available, not OSI open source", claimcheck.StatusVerified),
 		claim("merge", "Acme Bot never merges", claimcheck.StatusVerified),
@@ -127,7 +127,7 @@ func TestCheck(t *testing.T) {
 		{"open source studio", "Acme Studio is open source.", claimcheck.MatchedVerified, "apache", ""},
 		{"verified duration spelled differently", "Trial deploys last 36 hours.", claimcheck.MatchedVerified, "trial", ""},
 		{"verified price", "Service is roughly $7.25/mo.", claimcheck.MatchedVerified, "service", ""},
-		{"verified free site", "Your first Pages site is free.", claimcheck.MatchedVerified, "site", ""},
+		{"verified free site", "Your first Docs site is free.", claimcheck.MatchedVerified, "site", ""},
 		{"verified negation", "Acme Cloud is not open source.", claimcheck.MatchedVerified, "bsl", ""},
 		{"verified absolute", "Acme Bot never merges.", claimcheck.MatchedVerified, "merge", ""},
 		{"unverified claim", "Postgres is $15/mo.", claimcheck.MatchedUnverified, "draft", claimcheck.ReasonUnverified},
@@ -198,15 +198,15 @@ func referenceRegistry() []claimcheck.Claim {
 	texts := []string{
 		"Acme Studio is Apache-2.0",
 		"trial deploys stay live for 36 hours, then are suspended and deleted 10 days later unless upgraded",
-		"Pages sites are free, any number of them, in one workspace per person",
+		"Docs sites are free, any number of them, within one team per account",
 		"$4 monthly minimum for hosting in a month with usage; a month with no usage is never billed",
-		"a hosted service of 0.125 vCPU and 512 MiB is about $6.10/mo, estimated at 730 hours a month",
-		"a hosted service of 0.25 vCPU and 1 GiB is about $12.20/mo, estimated at 730 hours a month",
-		"managed Postgres is about $16.40/mo, estimated at 730 hours a month",
+		"a hosted service of 0.5 vCPU and 2 GiB is about $6.10/mo, estimated at 720 hours a month",
+		"a hosted service of 1 vCPU and 4 GiB is about $12.20/mo, estimated at 720 hours a month",
+		"managed Postgres is about $16.40/mo, estimated at 720 hours a month",
 		"cloud machines start from $24.90/mo",
 		"Acme Cloud is BSL 1.1 source-available, not OSI open source",
 		"Acme Bot never merges",
-		"Acme Bot's security review reads code only: it is not a penetration test and never scans or probes hosts",
+		"Acme Bot's security review inspects source only: it is not a stress test and never contacts or pings servers",
 	}
 	out := make([]claimcheck.Claim, len(texts))
 	for i, t := range texts {
@@ -222,11 +222,11 @@ func TestReferenceClaimsDoNotCoverOverreachingSentences(t *testing.T) {
 	for _, text := range []string{
 		"Acme Bot never fails a build.",
 		"Our security review never misses a vulnerability.",
-		"Pages hosting for every app is free.",
+		"Docs hosting for every app is free.",
 		"Hosting costs $4 a month.",
 		"Deleted apps are restored within 10 days.",
 		"Acme Bot always merges.",
-		"Every Pages site is free.",
+		"Every Docs site is free.",
 		"Unlimited hosting from $24.90/mo.",
 	} {
 		fs := claimcheck.Check(claimcheck.Rules{}, text, reg, now)
@@ -248,7 +248,7 @@ func TestQuotingAClaimDoesNotVouchForWhatTheSentenceAddsToIt(t *testing.T) {
 	reg := []claimcheck.Claim{
 		claim("apache", "Acme Studio is Apache-2.0", claimcheck.StatusVerified),
 		claim("merge", "Acme Bot never merges", claimcheck.StatusVerified),
-		claim("site", "One Pages site per workspace is free", claimcheck.StatusVerified),
+		claim("site", "One Docs site per workspace is free", claimcheck.StatusVerified),
 		claim("gpu", "Cloud machines start from $24.90/mo", claimcheck.StatusVerified),
 		claim("bsl", "Acme Cloud is BSL 1.1", claimcheck.StatusVerified),
 	}
@@ -256,7 +256,7 @@ func TestQuotingAClaimDoesNotVouchForWhatTheSentenceAddsToIt(t *testing.T) {
 		"Acme Studio is Apache-2.0 and so is Acme Cloud.",
 		"Acme Studio is Apache-2.0, and Acme Cloud too.",
 		"Acme Bot never merges or touches prod.",
-		"One Pages site per workspace is free and so is Postgres.",
+		"One Docs site per workspace is free and so is Postgres.",
 		"Cloud machines start from $24.90/mo, with GPUs included.",
 	} {
 		fs := claimcheck.Check(claimcheck.Rules{}, text, reg, now)
@@ -272,7 +272,7 @@ func TestQuotingAClaimDoesNotVouchForWhatTheSentenceAddsToIt(t *testing.T) {
 		"Acme Studio is Apache-2.0.",
 		"Acme Studio is Apache-2.0, Acme Cloud is BSL 1.1.",
 		"Acme Bot never merges.",
-		"One Pages site per workspace is free.",
+		"One Docs site per workspace is free.",
 		"Cloud machines start from $24.90/mo.",
 	} {
 		fs := claimcheck.Check(claimcheck.Rules{}, text, reg, now)
@@ -286,7 +286,7 @@ func TestReferenceClaimsStillCoverTheirOwnFacts(t *testing.T) {
 	reg := referenceRegistry()
 	for _, text := range []string{
 		"Acme Bot never merges.",
-		"Pages sites are free, any number of them, in one workspace per person.",
+		"Docs sites are free, any number of them, within one team per account.",
 		"Trial deploys stay live for 36 hours.",
 		"Cloud machines start from $24.90/mo.",
 		"Acme Cloud is BSL 1.1 source-available, not OSI open source.",

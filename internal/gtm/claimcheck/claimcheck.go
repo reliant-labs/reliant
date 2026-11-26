@@ -1,7 +1,6 @@
 // Package claimcheck finds the claims in an asset's text and matches them
-// against a registry of known facts. It is ported from growth's
-// internal/claimcheck and is pure: no I/O, no clock beyond the time the caller
-// passes in.
+// against a registry of known facts. It is pure: no I/O, no clock
+// beyond the time the caller passes in.
 //
 // Extraction is deterministic: regexes for numbers, prices, durations, sizes
 // and percentages, and phrase lists for "free", license names, superlatives,
@@ -39,7 +38,7 @@ const (
 // Mention is one candidate claim in a text.
 type Mention struct {
 	Kind string
-	// Text is the words matched, e.g. "$8.34/mo".
+	// Text is the words matched, e.g. "$7.25/mo".
 	Text string
 	// Context is the text around the mention: its sentence, clipped to a
 	// window so one long unpunctuated paragraph stays cheap to match.
@@ -115,8 +114,8 @@ func (f Finding) Blocking() bool { return f.Kind != MatchedVerified }
 func Blocking(fs []Finding) bool { return slices.ContainsFunc(fs, Finding.Blocking) }
 
 // Normalize is the registry's text key: lower-cased, whitespace collapsed,
-// trailing "." and "!" dropped. It must agree with claims.text_norm, which
-// postgres derives with the same steps.
+// trailing "." and "!" dropped. Callers that store a normalized key
+// must derive it with these same steps so the two agree.
 func Normalize(s string) string {
 	s = strings.Join(strings.Fields(s), " ")
 	s = strings.TrimRight(s, ".!")
@@ -127,14 +126,14 @@ func Normalize(s string) string {
 //
 // A claim covers a mention only when all of these hold:
 //
-//   - it states the same value (same kind and canonical text: "72 hours" and
-//     "72h" agree) with the same polarity (a negation scopes over its own
+//   - it states the same value (same kind and canonical text: "36 hours" and
+//     "36h" agree) with the same polarity (a negation scopes over its own
 //     clause), so "Acme Cloud is open source" is not backed by "Acme Cloud is
 //     source-available, not open source";
 //   - the clause around the mention shares a subject with the claim: at least
 //     one content word in common, and no more than a quarter of the clause's
-//     content words missing from the claim, so "Hosting costs $5 a month" is
-//     not backed by "$5 monthly minimum for hosting";
+//     content words missing from the claim, so "Hosting costs $4 a month" is
+//     not backed by "$4 monthly minimum for hosting";
 //   - for the absolute kinds (never, always, free, unlimited, superlatives,
 //     competitors), also every word the clause says after the mention and every
 //     quantifier in the clause ("every", "all", "any") is in the claim, so
