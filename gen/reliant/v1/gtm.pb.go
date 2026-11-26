@@ -317,6 +317,8 @@ func (GtmItemKind) EnumDescriptor() ([]byte, []int) {
 //   - never touches an item in any other status.
 //
 // A PERSON:
+//   - every change an agent may make (DRAFT <-> REVIEW, content and date
+//     edits on a DRAFT or REVIEW item);
 //   - DRAFT or REVIEW -> APPROVED;
 //   - APPROVED -> SCHEDULED, for an item that is not an EMAIL;
 //   - any status (but SENT) -> PAUSED, and PAUSED -> DRAFT;
@@ -324,7 +326,16 @@ func (GtmItemKind) EnumDescriptor() ([]byte, []int) {
 //     manual "it went out" marker, since publishing happens outside GTM;
 //   - a content edit of an APPROVED or SCHEDULED item returns it to REVIEW.
 //
-// The EMAIL SEND PATH alone writes SENT: from APPROVED, for an EMAIL item.
+// A CONTENT EDIT changes any of title, body_md, kind, channel, email_to or
+// email_subject. scheduled_at is not content: dating an APPROVED item keeps it
+// APPROVED. clear_scheduled_at on a SCHEDULED item is FailedPrecondition, and
+// there is no SCHEDULED -> APPROVED: to take an item off the calendar, pause it
+// (PAUSED -> DRAFT) and approve it again.
+//
+// The EMAIL SEND PATH alone writes SENT: from APPROVED, for an EMAIL item. A
+// send whose outcome is unknown leaves the item HELD (GtmItem.approval_hash)
+// and frozen until a person resolves it with ResolveItemSend, which records
+// SENT (the email went out) or releases the hold (it did not).
 //
 // An EMAIL never uses SCHEDULED or PUBLISHED (the table refuses both): a
 // person may date an APPROVED email (scheduled_at) and it stays APPROVED until
@@ -1056,16 +1067,21 @@ type GtmItem struct {
 	EmailTo      []string `protobuf:"bytes,11,rep,name=email_to,json=emailTo,proto3" json:"email_to,omitempty"`
 	EmailSubject string   `protobuf:"bytes,12,opt,name=email_subject,json=emailSubject,proto3" json:"email_subject,omitempty"`
 	// EMAIL only, once SENT: Gmail's id for the sent message, when and by whom
-	// it was sent, and the hash of the approval card it was sent under.
+	// it was sent.
 	GmailMessageId string                 `protobuf:"bytes,13,opt,name=gmail_message_id,json=gmailMessageId,proto3" json:"gmail_message_id,omitempty"`
 	SentAt         *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=sent_at,json=sentAt,proto3" json:"sent_at,omitempty"`
 	SentBy         string                 `protobuf:"bytes,15,opt,name=sent_by,json=sentBy,proto3" json:"sent_by,omitempty"`
-	ApprovalHash   string                 `protobuf:"bytes,16,opt,name=approval_hash,json=approvalHash,proto3" json:"approval_hash,omitempty"`
-	Revision       int32                  `protobuf:"varint,17,opt,name=revision,proto3" json:"revision,omitempty"`
-	CreatedAt      *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt      *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// EMAIL only: the hash of the approval card the email is sent under. Set
+	// while status is not SENT, the item is HELD: a send started and its
+	// outcome is unknown. A held item is frozen (every UpdateItem is
+	// FailedPrecondition) until a person resolves it with ResolveItemSend; the
+	// web shows that action for it. Once SENT, it is the card it was sent under.
+	ApprovalHash  string                 `protobuf:"bytes,16,opt,name=approval_hash,json=approvalHash,proto3" json:"approval_hash,omitempty"`
+	Revision      int32                  `protobuf:"varint,17,opt,name=revision,proto3" json:"revision,omitempty"`
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,18,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GtmItem) Reset() {
@@ -3569,6 +3585,121 @@ func (x *UpdateItemResponse) GetItem() *GtmItem {
 	return nil
 }
 
+type ResolveItemSendRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Id    string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// The held send's approval hash (GtmItem.approval_hash), as the person saw it.
+	ApprovalHash string `protobuf:"bytes,3,opt,name=approval_hash,json=approvalHash,proto3" json:"approval_hash,omitempty"`
+	// Set: the email went out, with this Gmail message id; the item becomes
+	// SENT. Unset: it did not go out; the hold is released.
+	GmailMessageId *string `protobuf:"bytes,4,opt,name=gmail_message_id,json=gmailMessageId,proto3,oneof" json:"gmail_message_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ResolveItemSendRequest) Reset() {
+	*x = ResolveItemSendRequest{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveItemSendRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveItemSendRequest) ProtoMessage() {}
+
+func (x *ResolveItemSendRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveItemSendRequest.ProtoReflect.Descriptor instead.
+func (*ResolveItemSendRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *ResolveItemSendRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+func (x *ResolveItemSendRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ResolveItemSendRequest) GetApprovalHash() string {
+	if x != nil {
+		return x.ApprovalHash
+	}
+	return ""
+}
+
+func (x *ResolveItemSendRequest) GetGmailMessageId() string {
+	if x != nil && x.GmailMessageId != nil {
+		return *x.GmailMessageId
+	}
+	return ""
+}
+
+type ResolveItemSendResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Item          *GtmItem               `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveItemSendResponse) Reset() {
+	*x = ResolveItemSendResponse{}
+	mi := &file_reliant_v1_gtm_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveItemSendResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveItemSendResponse) ProtoMessage() {}
+
+func (x *ResolveItemSendResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_gtm_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveItemSendResponse.ProtoReflect.Descriptor instead.
+func (*ResolveItemSendResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *ResolveItemSendResponse) GetItem() *GtmItem {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
 type GetPositioningRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -3578,7 +3709,7 @@ type GetPositioningRequest struct {
 
 func (x *GetPositioningRequest) Reset() {
 	*x = GetPositioningRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[38]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3590,7 +3721,7 @@ func (x *GetPositioningRequest) String() string {
 func (*GetPositioningRequest) ProtoMessage() {}
 
 func (x *GetPositioningRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[38]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3603,7 +3734,7 @@ func (x *GetPositioningRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPositioningRequest.ProtoReflect.Descriptor instead.
 func (*GetPositioningRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{38}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *GetPositioningRequest) GetOrgId() string {
@@ -3622,7 +3753,7 @@ type GetPositioningResponse struct {
 
 func (x *GetPositioningResponse) Reset() {
 	*x = GetPositioningResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[39]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3634,7 +3765,7 @@ func (x *GetPositioningResponse) String() string {
 func (*GetPositioningResponse) ProtoMessage() {}
 
 func (x *GetPositioningResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[39]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3647,7 +3778,7 @@ func (x *GetPositioningResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPositioningResponse.ProtoReflect.Descriptor instead.
 func (*GetPositioningResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{39}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *GetPositioningResponse) GetPositioning() *GtmPositioning {
@@ -3670,7 +3801,7 @@ type UpdatePositioningRequest struct {
 
 func (x *UpdatePositioningRequest) Reset() {
 	*x = UpdatePositioningRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[40]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3682,7 +3813,7 @@ func (x *UpdatePositioningRequest) String() string {
 func (*UpdatePositioningRequest) ProtoMessage() {}
 
 func (x *UpdatePositioningRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[40]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3695,7 +3826,7 @@ func (x *UpdatePositioningRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePositioningRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePositioningRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{40}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *UpdatePositioningRequest) GetOrgId() string {
@@ -3735,7 +3866,7 @@ type UpdatePositioningResponse struct {
 
 func (x *UpdatePositioningResponse) Reset() {
 	*x = UpdatePositioningResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[41]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3747,7 +3878,7 @@ func (x *UpdatePositioningResponse) String() string {
 func (*UpdatePositioningResponse) ProtoMessage() {}
 
 func (x *UpdatePositioningResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[41]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3760,7 +3891,7 @@ func (x *UpdatePositioningResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePositioningResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePositioningResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *UpdatePositioningResponse) GetPositioning() *GtmPositioning {
@@ -3786,7 +3917,7 @@ type ListClaimsRequest struct {
 
 func (x *ListClaimsRequest) Reset() {
 	*x = ListClaimsRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[42]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3798,7 +3929,7 @@ func (x *ListClaimsRequest) String() string {
 func (*ListClaimsRequest) ProtoMessage() {}
 
 func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[42]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3811,7 +3942,7 @@ func (x *ListClaimsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListClaimsRequest.ProtoReflect.Descriptor instead.
 func (*ListClaimsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ListClaimsRequest) GetOrgId() string {
@@ -3866,7 +3997,7 @@ type ListClaimsResponse struct {
 
 func (x *ListClaimsResponse) Reset() {
 	*x = ListClaimsResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[43]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3878,7 +4009,7 @@ func (x *ListClaimsResponse) String() string {
 func (*ListClaimsResponse) ProtoMessage() {}
 
 func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[43]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3891,7 +4022,7 @@ func (x *ListClaimsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListClaimsResponse.ProtoReflect.Descriptor instead.
 func (*ListClaimsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ListClaimsResponse) GetClaims() []*GtmClaim {
@@ -3933,7 +4064,7 @@ type UpsertClaimRequest struct {
 
 func (x *UpsertClaimRequest) Reset() {
 	*x = UpsertClaimRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[44]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3945,7 +4076,7 @@ func (x *UpsertClaimRequest) String() string {
 func (*UpsertClaimRequest) ProtoMessage() {}
 
 func (x *UpsertClaimRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[44]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3958,7 +4089,7 @@ func (x *UpsertClaimRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertClaimRequest.ProtoReflect.Descriptor instead.
 func (*UpsertClaimRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *UpsertClaimRequest) GetOrgId() string {
@@ -4049,7 +4180,7 @@ type UpsertClaimResponse struct {
 
 func (x *UpsertClaimResponse) Reset() {
 	*x = UpsertClaimResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[45]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4061,7 +4192,7 @@ func (x *UpsertClaimResponse) String() string {
 func (*UpsertClaimResponse) ProtoMessage() {}
 
 func (x *UpsertClaimResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[45]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4074,7 +4205,7 @@ func (x *UpsertClaimResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpsertClaimResponse.ProtoReflect.Descriptor instead.
 func (*UpsertClaimResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{45}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *UpsertClaimResponse) GetClaim() *GtmClaim {
@@ -4102,7 +4233,7 @@ type CheckClaimsRequest struct {
 
 func (x *CheckClaimsRequest) Reset() {
 	*x = CheckClaimsRequest{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[46]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4114,7 +4245,7 @@ func (x *CheckClaimsRequest) String() string {
 func (*CheckClaimsRequest) ProtoMessage() {}
 
 func (x *CheckClaimsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[46]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4127,7 +4258,7 @@ func (x *CheckClaimsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckClaimsRequest.ProtoReflect.Descriptor instead.
 func (*CheckClaimsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *CheckClaimsRequest) GetOrgId() string {
@@ -4155,7 +4286,7 @@ type CheckClaimsResponse struct {
 
 func (x *CheckClaimsResponse) Reset() {
 	*x = CheckClaimsResponse{}
-	mi := &file_reliant_v1_gtm_proto_msgTypes[47]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4167,7 +4298,7 @@ func (x *CheckClaimsResponse) String() string {
 func (*CheckClaimsResponse) ProtoMessage() {}
 
 func (x *CheckClaimsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_gtm_proto_msgTypes[47]
+	mi := &file_reliant_v1_gtm_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4180,7 +4311,7 @@ func (x *CheckClaimsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckClaimsResponse.ProtoReflect.Descriptor instead.
 func (*CheckClaimsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *CheckClaimsResponse) GetFindings() []*GtmClaimFinding {
@@ -4513,6 +4644,14 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x0e_email_subjectB\t\n" +
 	"\a_status\"=\n" +
 	"\x12UpdateItemResponse\x12'\n" +
+	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"\xc9\x01\n" +
+	"\x16ResolveItemSendRequest\x12\x1d\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\x12+\n" +
+	"\rapproval_hash\x18\x03 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\fapprovalHash\x126\n" +
+	"\x10gmail_message_id\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01H\x00R\x0egmailMessageId\x88\x01\x01B\x13\n" +
+	"\x11_gmail_message_id\"B\n" +
+	"\x17ResolveItemSendResponse\x12'\n" +
 	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"6\n" +
 	"\x15GetPositioningRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\"V\n" +
@@ -4634,7 +4773,7 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\"GTM_CLAIM_FINDING_KIND_UNSPECIFIED\x10\x00\x12+\n" +
 	"'GTM_CLAIM_FINDING_KIND_MATCHED_VERIFIED\x10\x01\x12-\n" +
 	")GTM_CLAIM_FINDING_KIND_MATCHED_UNVERIFIED\x10\x02\x12*\n" +
-	"&GTM_CLAIM_FINDING_KIND_UNMATCHED_RISKY\x10\x032\xce\x13\n" +
+	"&GTM_CLAIM_FINDING_KIND_UNMATCHED_RISKY\x10\x032\x86\x15\n" +
 	"\n" +
 	"GtmService\x12\x8d\x01\n" +
 	"\fGetGtmAccess\x12\x1f.reliant.v1.GetGtmAccessRequest\x1a .reliant.v1.GetGtmAccessResponse\":\xa2\xbb\x183\b\x01:/:-read-only: whether GTM is enabled for the org\x90\x02\x01\x12`\n" +
@@ -4669,7 +4808,10 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\n" +
 	"UpdateItem\x12\x1d.reliant.v1.UpdateItemRequest\x1a\x1e.reliant.v1.UpdateItemResponse\"E\xa2\xbb\x18A\b\x01:=\n" +
 	"\x06update\x12#\n" +
-	"\bgtm_item\x12\x02id\x1a\x13response.item.title\"\x06org_id*\x06status\x12o\n" +
+	"\bgtm_item\x12\x02id\x1a\x13response.item.title\"\x06org_id*\x06status\x12\xb5\x01\n" +
+	"\x0fResolveItemSend\x12\".reliant.v1.ResolveItemSendRequest\x1a#.reliant.v1.ResolveItemSendResponse\"Y\xa2\xbb\x18U\b\x01:Q\n" +
+	"\fresolve_send\x12#\n" +
+	"\bgtm_item\x12\x02id\x1a\x13response.item.title\"\x06org_id*\x14response.item.status\x12o\n" +
 	"\x0eGetPositioning\x12!.reliant.v1.GetPositioningRequest\x1a\".reliant.v1.GetPositioningResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\x95\x01\n" +
 	"\x11UpdatePositioning\x12$.reliant.v1.UpdatePositioningRequest\x1a%.reliant.v1.UpdatePositioningResponse\"3\xa2\xbb\x18/\b\x01:+\n" +
 	"\x06update\x12\x19\n" +
@@ -4694,7 +4836,7 @@ func file_reliant_v1_gtm_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_gtm_proto_enumTypes = make([]protoimpl.EnumInfo, 10)
-var file_reliant_v1_gtm_proto_msgTypes = make([]protoimpl.MessageInfo, 48)
+var file_reliant_v1_gtm_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_reliant_v1_gtm_proto_goTypes = []any{
 	(GtmIdeaKind)(0),                  // 0: reliant.v1.GtmIdeaKind
 	(GtmIdeaStatus)(0),                // 1: reliant.v1.GtmIdeaStatus
@@ -4744,141 +4886,146 @@ var file_reliant_v1_gtm_proto_goTypes = []any{
 	(*GtmEmailRecipients)(nil),        // 45: reliant.v1.GtmEmailRecipients
 	(*UpdateItemRequest)(nil),         // 46: reliant.v1.UpdateItemRequest
 	(*UpdateItemResponse)(nil),        // 47: reliant.v1.UpdateItemResponse
-	(*GetPositioningRequest)(nil),     // 48: reliant.v1.GetPositioningRequest
-	(*GetPositioningResponse)(nil),    // 49: reliant.v1.GetPositioningResponse
-	(*UpdatePositioningRequest)(nil),  // 50: reliant.v1.UpdatePositioningRequest
-	(*UpdatePositioningResponse)(nil), // 51: reliant.v1.UpdatePositioningResponse
-	(*ListClaimsRequest)(nil),         // 52: reliant.v1.ListClaimsRequest
-	(*ListClaimsResponse)(nil),        // 53: reliant.v1.ListClaimsResponse
-	(*UpsertClaimRequest)(nil),        // 54: reliant.v1.UpsertClaimRequest
-	(*UpsertClaimResponse)(nil),       // 55: reliant.v1.UpsertClaimResponse
-	(*CheckClaimsRequest)(nil),        // 56: reliant.v1.CheckClaimsRequest
-	(*CheckClaimsResponse)(nil),       // 57: reliant.v1.CheckClaimsResponse
-	(*timestamppb.Timestamp)(nil),     // 58: google.protobuf.Timestamp
+	(*ResolveItemSendRequest)(nil),    // 48: reliant.v1.ResolveItemSendRequest
+	(*ResolveItemSendResponse)(nil),   // 49: reliant.v1.ResolveItemSendResponse
+	(*GetPositioningRequest)(nil),     // 50: reliant.v1.GetPositioningRequest
+	(*GetPositioningResponse)(nil),    // 51: reliant.v1.GetPositioningResponse
+	(*UpdatePositioningRequest)(nil),  // 52: reliant.v1.UpdatePositioningRequest
+	(*UpdatePositioningResponse)(nil), // 53: reliant.v1.UpdatePositioningResponse
+	(*ListClaimsRequest)(nil),         // 54: reliant.v1.ListClaimsRequest
+	(*ListClaimsResponse)(nil),        // 55: reliant.v1.ListClaimsResponse
+	(*UpsertClaimRequest)(nil),        // 56: reliant.v1.UpsertClaimRequest
+	(*UpsertClaimResponse)(nil),       // 57: reliant.v1.UpsertClaimResponse
+	(*CheckClaimsRequest)(nil),        // 58: reliant.v1.CheckClaimsRequest
+	(*CheckClaimsResponse)(nil),       // 59: reliant.v1.CheckClaimsResponse
+	(*timestamppb.Timestamp)(nil),     // 60: google.protobuf.Timestamp
 }
 var file_reliant_v1_gtm_proto_depIdxs = []int32{
-	58, // 0: reliant.v1.GtmEvidence.observed_at:type_name -> google.protobuf.Timestamp
-	10, // 1: reliant.v1.GtmEvidenceList.evidence:type_name -> reliant.v1.GtmEvidence
-	0,  // 2: reliant.v1.GtmIdea.kind:type_name -> reliant.v1.GtmIdeaKind
-	10, // 3: reliant.v1.GtmIdea.evidence:type_name -> reliant.v1.GtmEvidence
-	1,  // 4: reliant.v1.GtmIdea.status:type_name -> reliant.v1.GtmIdeaStatus
-	2,  // 5: reliant.v1.GtmIdea.source:type_name -> reliant.v1.GtmIdeaSource
-	58, // 6: reliant.v1.GtmIdea.created_at:type_name -> google.protobuf.Timestamp
-	58, // 7: reliant.v1.GtmIdea.updated_at:type_name -> google.protobuf.Timestamp
-	58, // 8: reliant.v1.GtmCampaign.period_start:type_name -> google.protobuf.Timestamp
-	58, // 9: reliant.v1.GtmCampaign.period_end:type_name -> google.protobuf.Timestamp
-	3,  // 10: reliant.v1.GtmCampaign.status:type_name -> reliant.v1.GtmCampaignStatus
-	58, // 11: reliant.v1.GtmCampaign.created_at:type_name -> google.protobuf.Timestamp
-	58, // 12: reliant.v1.GtmCampaign.updated_at:type_name -> google.protobuf.Timestamp
-	4,  // 13: reliant.v1.GtmItem.kind:type_name -> reliant.v1.GtmItemKind
-	5,  // 14: reliant.v1.GtmItem.status:type_name -> reliant.v1.GtmItemStatus
-	58, // 15: reliant.v1.GtmItem.scheduled_at:type_name -> google.protobuf.Timestamp
-	58, // 16: reliant.v1.GtmItem.sent_at:type_name -> google.protobuf.Timestamp
-	58, // 17: reliant.v1.GtmItem.created_at:type_name -> google.protobuf.Timestamp
-	58, // 18: reliant.v1.GtmItem.updated_at:type_name -> google.protobuf.Timestamp
-	58, // 19: reliant.v1.GtmPositioning.updated_at:type_name -> google.protobuf.Timestamp
-	6,  // 20: reliant.v1.GtmClaim.category:type_name -> reliant.v1.GtmClaimCategory
-	7,  // 21: reliant.v1.GtmClaim.status:type_name -> reliant.v1.GtmClaimStatus
-	8,  // 22: reliant.v1.GtmClaim.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
-	58, // 23: reliant.v1.GtmClaim.verified_at:type_name -> google.protobuf.Timestamp
-	58, // 24: reliant.v1.GtmClaim.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
-	58, // 25: reliant.v1.GtmClaim.created_at:type_name -> google.protobuf.Timestamp
-	58, // 26: reliant.v1.GtmClaim.updated_at:type_name -> google.protobuf.Timestamp
-	9,  // 27: reliant.v1.GtmClaimFinding.kind:type_name -> reliant.v1.GtmClaimFindingKind
-	0,  // 28: reliant.v1.ListIdeasRequest.kind:type_name -> reliant.v1.GtmIdeaKind
-	1,  // 29: reliant.v1.ListIdeasRequest.status:type_name -> reliant.v1.GtmIdeaStatus
-	12, // 30: reliant.v1.ListIdeasResponse.ideas:type_name -> reliant.v1.GtmIdea
-	12, // 31: reliant.v1.GetIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
-	0,  // 32: reliant.v1.CreateIdeaRequest.kind:type_name -> reliant.v1.GtmIdeaKind
-	10, // 33: reliant.v1.CreateIdeaRequest.evidence:type_name -> reliant.v1.GtmEvidence
-	12, // 34: reliant.v1.CreateIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
-	0,  // 35: reliant.v1.UpdateIdeaRequest.kind:type_name -> reliant.v1.GtmIdeaKind
-	11, // 36: reliant.v1.UpdateIdeaRequest.evidence:type_name -> reliant.v1.GtmEvidenceList
-	12, // 37: reliant.v1.UpdateIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
-	1,  // 38: reliant.v1.SetIdeaStatusRequest.status:type_name -> reliant.v1.GtmIdeaStatus
-	12, // 39: reliant.v1.SetIdeaStatusResponse.idea:type_name -> reliant.v1.GtmIdea
-	3,  // 40: reliant.v1.ListCampaignsRequest.status:type_name -> reliant.v1.GtmCampaignStatus
-	13, // 41: reliant.v1.ListCampaignsResponse.campaigns:type_name -> reliant.v1.GtmCampaign
-	13, // 42: reliant.v1.GetCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
-	12, // 43: reliant.v1.GetCampaignResponse.ideas:type_name -> reliant.v1.GtmIdea
-	14, // 44: reliant.v1.GetCampaignResponse.items:type_name -> reliant.v1.GtmItem
-	58, // 45: reliant.v1.CreateCampaignRequest.period_start:type_name -> google.protobuf.Timestamp
-	58, // 46: reliant.v1.CreateCampaignRequest.period_end:type_name -> google.protobuf.Timestamp
-	3,  // 47: reliant.v1.CreateCampaignRequest.status:type_name -> reliant.v1.GtmCampaignStatus
-	13, // 48: reliant.v1.CreateCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
-	58, // 49: reliant.v1.UpdateCampaignRequest.period_start:type_name -> google.protobuf.Timestamp
-	58, // 50: reliant.v1.UpdateCampaignRequest.period_end:type_name -> google.protobuf.Timestamp
-	3,  // 51: reliant.v1.UpdateCampaignRequest.status:type_name -> reliant.v1.GtmCampaignStatus
-	13, // 52: reliant.v1.UpdateCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
-	4,  // 53: reliant.v1.ListItemsRequest.kind:type_name -> reliant.v1.GtmItemKind
-	5,  // 54: reliant.v1.ListItemsRequest.status:type_name -> reliant.v1.GtmItemStatus
-	58, // 55: reliant.v1.ListItemsRequest.scheduled_from:type_name -> google.protobuf.Timestamp
-	58, // 56: reliant.v1.ListItemsRequest.scheduled_to:type_name -> google.protobuf.Timestamp
-	14, // 57: reliant.v1.ListItemsResponse.items:type_name -> reliant.v1.GtmItem
-	14, // 58: reliant.v1.GetItemResponse.item:type_name -> reliant.v1.GtmItem
-	4,  // 59: reliant.v1.CreateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
-	58, // 60: reliant.v1.CreateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
-	5,  // 61: reliant.v1.CreateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
-	14, // 62: reliant.v1.CreateItemResponse.item:type_name -> reliant.v1.GtmItem
-	4,  // 63: reliant.v1.UpdateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
-	58, // 64: reliant.v1.UpdateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
-	45, // 65: reliant.v1.UpdateItemRequest.email_to:type_name -> reliant.v1.GtmEmailRecipients
-	5,  // 66: reliant.v1.UpdateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
-	14, // 67: reliant.v1.UpdateItemResponse.item:type_name -> reliant.v1.GtmItem
-	15, // 68: reliant.v1.GetPositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
-	15, // 69: reliant.v1.UpdatePositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
-	7,  // 70: reliant.v1.ListClaimsRequest.status:type_name -> reliant.v1.GtmClaimStatus
-	6,  // 71: reliant.v1.ListClaimsRequest.category:type_name -> reliant.v1.GtmClaimCategory
-	16, // 72: reliant.v1.ListClaimsResponse.claims:type_name -> reliant.v1.GtmClaim
-	6,  // 73: reliant.v1.UpsertClaimRequest.category:type_name -> reliant.v1.GtmClaimCategory
-	7,  // 74: reliant.v1.UpsertClaimRequest.status:type_name -> reliant.v1.GtmClaimStatus
-	8,  // 75: reliant.v1.UpsertClaimRequest.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
-	58, // 76: reliant.v1.UpsertClaimRequest.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
-	16, // 77: reliant.v1.UpsertClaimResponse.claim:type_name -> reliant.v1.GtmClaim
-	17, // 78: reliant.v1.CheckClaimsResponse.findings:type_name -> reliant.v1.GtmClaimFinding
-	19, // 79: reliant.v1.GtmService.GetGtmAccess:input_type -> reliant.v1.GetGtmAccessRequest
-	21, // 80: reliant.v1.GtmService.ListIdeas:input_type -> reliant.v1.ListIdeasRequest
-	23, // 81: reliant.v1.GtmService.GetIdea:input_type -> reliant.v1.GetIdeaRequest
-	25, // 82: reliant.v1.GtmService.CreateIdea:input_type -> reliant.v1.CreateIdeaRequest
-	27, // 83: reliant.v1.GtmService.UpdateIdea:input_type -> reliant.v1.UpdateIdeaRequest
-	29, // 84: reliant.v1.GtmService.SetIdeaStatus:input_type -> reliant.v1.SetIdeaStatusRequest
-	31, // 85: reliant.v1.GtmService.ListCampaigns:input_type -> reliant.v1.ListCampaignsRequest
-	33, // 86: reliant.v1.GtmService.GetCampaign:input_type -> reliant.v1.GetCampaignRequest
-	35, // 87: reliant.v1.GtmService.CreateCampaign:input_type -> reliant.v1.CreateCampaignRequest
-	37, // 88: reliant.v1.GtmService.UpdateCampaign:input_type -> reliant.v1.UpdateCampaignRequest
-	39, // 89: reliant.v1.GtmService.ListItems:input_type -> reliant.v1.ListItemsRequest
-	41, // 90: reliant.v1.GtmService.GetItem:input_type -> reliant.v1.GetItemRequest
-	43, // 91: reliant.v1.GtmService.CreateItem:input_type -> reliant.v1.CreateItemRequest
-	46, // 92: reliant.v1.GtmService.UpdateItem:input_type -> reliant.v1.UpdateItemRequest
-	48, // 93: reliant.v1.GtmService.GetPositioning:input_type -> reliant.v1.GetPositioningRequest
-	50, // 94: reliant.v1.GtmService.UpdatePositioning:input_type -> reliant.v1.UpdatePositioningRequest
-	52, // 95: reliant.v1.GtmService.ListClaims:input_type -> reliant.v1.ListClaimsRequest
-	54, // 96: reliant.v1.GtmService.UpsertClaim:input_type -> reliant.v1.UpsertClaimRequest
-	56, // 97: reliant.v1.GtmService.CheckClaims:input_type -> reliant.v1.CheckClaimsRequest
-	20, // 98: reliant.v1.GtmService.GetGtmAccess:output_type -> reliant.v1.GetGtmAccessResponse
-	22, // 99: reliant.v1.GtmService.ListIdeas:output_type -> reliant.v1.ListIdeasResponse
-	24, // 100: reliant.v1.GtmService.GetIdea:output_type -> reliant.v1.GetIdeaResponse
-	26, // 101: reliant.v1.GtmService.CreateIdea:output_type -> reliant.v1.CreateIdeaResponse
-	28, // 102: reliant.v1.GtmService.UpdateIdea:output_type -> reliant.v1.UpdateIdeaResponse
-	30, // 103: reliant.v1.GtmService.SetIdeaStatus:output_type -> reliant.v1.SetIdeaStatusResponse
-	32, // 104: reliant.v1.GtmService.ListCampaigns:output_type -> reliant.v1.ListCampaignsResponse
-	34, // 105: reliant.v1.GtmService.GetCampaign:output_type -> reliant.v1.GetCampaignResponse
-	36, // 106: reliant.v1.GtmService.CreateCampaign:output_type -> reliant.v1.CreateCampaignResponse
-	38, // 107: reliant.v1.GtmService.UpdateCampaign:output_type -> reliant.v1.UpdateCampaignResponse
-	40, // 108: reliant.v1.GtmService.ListItems:output_type -> reliant.v1.ListItemsResponse
-	42, // 109: reliant.v1.GtmService.GetItem:output_type -> reliant.v1.GetItemResponse
-	44, // 110: reliant.v1.GtmService.CreateItem:output_type -> reliant.v1.CreateItemResponse
-	47, // 111: reliant.v1.GtmService.UpdateItem:output_type -> reliant.v1.UpdateItemResponse
-	49, // 112: reliant.v1.GtmService.GetPositioning:output_type -> reliant.v1.GetPositioningResponse
-	51, // 113: reliant.v1.GtmService.UpdatePositioning:output_type -> reliant.v1.UpdatePositioningResponse
-	53, // 114: reliant.v1.GtmService.ListClaims:output_type -> reliant.v1.ListClaimsResponse
-	55, // 115: reliant.v1.GtmService.UpsertClaim:output_type -> reliant.v1.UpsertClaimResponse
-	57, // 116: reliant.v1.GtmService.CheckClaims:output_type -> reliant.v1.CheckClaimsResponse
-	98, // [98:117] is the sub-list for method output_type
-	79, // [79:98] is the sub-list for method input_type
-	79, // [79:79] is the sub-list for extension type_name
-	79, // [79:79] is the sub-list for extension extendee
-	0,  // [0:79] is the sub-list for field type_name
+	60,  // 0: reliant.v1.GtmEvidence.observed_at:type_name -> google.protobuf.Timestamp
+	10,  // 1: reliant.v1.GtmEvidenceList.evidence:type_name -> reliant.v1.GtmEvidence
+	0,   // 2: reliant.v1.GtmIdea.kind:type_name -> reliant.v1.GtmIdeaKind
+	10,  // 3: reliant.v1.GtmIdea.evidence:type_name -> reliant.v1.GtmEvidence
+	1,   // 4: reliant.v1.GtmIdea.status:type_name -> reliant.v1.GtmIdeaStatus
+	2,   // 5: reliant.v1.GtmIdea.source:type_name -> reliant.v1.GtmIdeaSource
+	60,  // 6: reliant.v1.GtmIdea.created_at:type_name -> google.protobuf.Timestamp
+	60,  // 7: reliant.v1.GtmIdea.updated_at:type_name -> google.protobuf.Timestamp
+	60,  // 8: reliant.v1.GtmCampaign.period_start:type_name -> google.protobuf.Timestamp
+	60,  // 9: reliant.v1.GtmCampaign.period_end:type_name -> google.protobuf.Timestamp
+	3,   // 10: reliant.v1.GtmCampaign.status:type_name -> reliant.v1.GtmCampaignStatus
+	60,  // 11: reliant.v1.GtmCampaign.created_at:type_name -> google.protobuf.Timestamp
+	60,  // 12: reliant.v1.GtmCampaign.updated_at:type_name -> google.protobuf.Timestamp
+	4,   // 13: reliant.v1.GtmItem.kind:type_name -> reliant.v1.GtmItemKind
+	5,   // 14: reliant.v1.GtmItem.status:type_name -> reliant.v1.GtmItemStatus
+	60,  // 15: reliant.v1.GtmItem.scheduled_at:type_name -> google.protobuf.Timestamp
+	60,  // 16: reliant.v1.GtmItem.sent_at:type_name -> google.protobuf.Timestamp
+	60,  // 17: reliant.v1.GtmItem.created_at:type_name -> google.protobuf.Timestamp
+	60,  // 18: reliant.v1.GtmItem.updated_at:type_name -> google.protobuf.Timestamp
+	60,  // 19: reliant.v1.GtmPositioning.updated_at:type_name -> google.protobuf.Timestamp
+	6,   // 20: reliant.v1.GtmClaim.category:type_name -> reliant.v1.GtmClaimCategory
+	7,   // 21: reliant.v1.GtmClaim.status:type_name -> reliant.v1.GtmClaimStatus
+	8,   // 22: reliant.v1.GtmClaim.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
+	60,  // 23: reliant.v1.GtmClaim.verified_at:type_name -> google.protobuf.Timestamp
+	60,  // 24: reliant.v1.GtmClaim.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
+	60,  // 25: reliant.v1.GtmClaim.created_at:type_name -> google.protobuf.Timestamp
+	60,  // 26: reliant.v1.GtmClaim.updated_at:type_name -> google.protobuf.Timestamp
+	9,   // 27: reliant.v1.GtmClaimFinding.kind:type_name -> reliant.v1.GtmClaimFindingKind
+	0,   // 28: reliant.v1.ListIdeasRequest.kind:type_name -> reliant.v1.GtmIdeaKind
+	1,   // 29: reliant.v1.ListIdeasRequest.status:type_name -> reliant.v1.GtmIdeaStatus
+	12,  // 30: reliant.v1.ListIdeasResponse.ideas:type_name -> reliant.v1.GtmIdea
+	12,  // 31: reliant.v1.GetIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
+	0,   // 32: reliant.v1.CreateIdeaRequest.kind:type_name -> reliant.v1.GtmIdeaKind
+	10,  // 33: reliant.v1.CreateIdeaRequest.evidence:type_name -> reliant.v1.GtmEvidence
+	12,  // 34: reliant.v1.CreateIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
+	0,   // 35: reliant.v1.UpdateIdeaRequest.kind:type_name -> reliant.v1.GtmIdeaKind
+	11,  // 36: reliant.v1.UpdateIdeaRequest.evidence:type_name -> reliant.v1.GtmEvidenceList
+	12,  // 37: reliant.v1.UpdateIdeaResponse.idea:type_name -> reliant.v1.GtmIdea
+	1,   // 38: reliant.v1.SetIdeaStatusRequest.status:type_name -> reliant.v1.GtmIdeaStatus
+	12,  // 39: reliant.v1.SetIdeaStatusResponse.idea:type_name -> reliant.v1.GtmIdea
+	3,   // 40: reliant.v1.ListCampaignsRequest.status:type_name -> reliant.v1.GtmCampaignStatus
+	13,  // 41: reliant.v1.ListCampaignsResponse.campaigns:type_name -> reliant.v1.GtmCampaign
+	13,  // 42: reliant.v1.GetCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
+	12,  // 43: reliant.v1.GetCampaignResponse.ideas:type_name -> reliant.v1.GtmIdea
+	14,  // 44: reliant.v1.GetCampaignResponse.items:type_name -> reliant.v1.GtmItem
+	60,  // 45: reliant.v1.CreateCampaignRequest.period_start:type_name -> google.protobuf.Timestamp
+	60,  // 46: reliant.v1.CreateCampaignRequest.period_end:type_name -> google.protobuf.Timestamp
+	3,   // 47: reliant.v1.CreateCampaignRequest.status:type_name -> reliant.v1.GtmCampaignStatus
+	13,  // 48: reliant.v1.CreateCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
+	60,  // 49: reliant.v1.UpdateCampaignRequest.period_start:type_name -> google.protobuf.Timestamp
+	60,  // 50: reliant.v1.UpdateCampaignRequest.period_end:type_name -> google.protobuf.Timestamp
+	3,   // 51: reliant.v1.UpdateCampaignRequest.status:type_name -> reliant.v1.GtmCampaignStatus
+	13,  // 52: reliant.v1.UpdateCampaignResponse.campaign:type_name -> reliant.v1.GtmCampaign
+	4,   // 53: reliant.v1.ListItemsRequest.kind:type_name -> reliant.v1.GtmItemKind
+	5,   // 54: reliant.v1.ListItemsRequest.status:type_name -> reliant.v1.GtmItemStatus
+	60,  // 55: reliant.v1.ListItemsRequest.scheduled_from:type_name -> google.protobuf.Timestamp
+	60,  // 56: reliant.v1.ListItemsRequest.scheduled_to:type_name -> google.protobuf.Timestamp
+	14,  // 57: reliant.v1.ListItemsResponse.items:type_name -> reliant.v1.GtmItem
+	14,  // 58: reliant.v1.GetItemResponse.item:type_name -> reliant.v1.GtmItem
+	4,   // 59: reliant.v1.CreateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
+	60,  // 60: reliant.v1.CreateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
+	5,   // 61: reliant.v1.CreateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
+	14,  // 62: reliant.v1.CreateItemResponse.item:type_name -> reliant.v1.GtmItem
+	4,   // 63: reliant.v1.UpdateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
+	60,  // 64: reliant.v1.UpdateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
+	45,  // 65: reliant.v1.UpdateItemRequest.email_to:type_name -> reliant.v1.GtmEmailRecipients
+	5,   // 66: reliant.v1.UpdateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
+	14,  // 67: reliant.v1.UpdateItemResponse.item:type_name -> reliant.v1.GtmItem
+	14,  // 68: reliant.v1.ResolveItemSendResponse.item:type_name -> reliant.v1.GtmItem
+	15,  // 69: reliant.v1.GetPositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
+	15,  // 70: reliant.v1.UpdatePositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
+	7,   // 71: reliant.v1.ListClaimsRequest.status:type_name -> reliant.v1.GtmClaimStatus
+	6,   // 72: reliant.v1.ListClaimsRequest.category:type_name -> reliant.v1.GtmClaimCategory
+	16,  // 73: reliant.v1.ListClaimsResponse.claims:type_name -> reliant.v1.GtmClaim
+	6,   // 74: reliant.v1.UpsertClaimRequest.category:type_name -> reliant.v1.GtmClaimCategory
+	7,   // 75: reliant.v1.UpsertClaimRequest.status:type_name -> reliant.v1.GtmClaimStatus
+	8,   // 76: reliant.v1.UpsertClaimRequest.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
+	60,  // 77: reliant.v1.UpsertClaimRequest.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
+	16,  // 78: reliant.v1.UpsertClaimResponse.claim:type_name -> reliant.v1.GtmClaim
+	17,  // 79: reliant.v1.CheckClaimsResponse.findings:type_name -> reliant.v1.GtmClaimFinding
+	19,  // 80: reliant.v1.GtmService.GetGtmAccess:input_type -> reliant.v1.GetGtmAccessRequest
+	21,  // 81: reliant.v1.GtmService.ListIdeas:input_type -> reliant.v1.ListIdeasRequest
+	23,  // 82: reliant.v1.GtmService.GetIdea:input_type -> reliant.v1.GetIdeaRequest
+	25,  // 83: reliant.v1.GtmService.CreateIdea:input_type -> reliant.v1.CreateIdeaRequest
+	27,  // 84: reliant.v1.GtmService.UpdateIdea:input_type -> reliant.v1.UpdateIdeaRequest
+	29,  // 85: reliant.v1.GtmService.SetIdeaStatus:input_type -> reliant.v1.SetIdeaStatusRequest
+	31,  // 86: reliant.v1.GtmService.ListCampaigns:input_type -> reliant.v1.ListCampaignsRequest
+	33,  // 87: reliant.v1.GtmService.GetCampaign:input_type -> reliant.v1.GetCampaignRequest
+	35,  // 88: reliant.v1.GtmService.CreateCampaign:input_type -> reliant.v1.CreateCampaignRequest
+	37,  // 89: reliant.v1.GtmService.UpdateCampaign:input_type -> reliant.v1.UpdateCampaignRequest
+	39,  // 90: reliant.v1.GtmService.ListItems:input_type -> reliant.v1.ListItemsRequest
+	41,  // 91: reliant.v1.GtmService.GetItem:input_type -> reliant.v1.GetItemRequest
+	43,  // 92: reliant.v1.GtmService.CreateItem:input_type -> reliant.v1.CreateItemRequest
+	46,  // 93: reliant.v1.GtmService.UpdateItem:input_type -> reliant.v1.UpdateItemRequest
+	48,  // 94: reliant.v1.GtmService.ResolveItemSend:input_type -> reliant.v1.ResolveItemSendRequest
+	50,  // 95: reliant.v1.GtmService.GetPositioning:input_type -> reliant.v1.GetPositioningRequest
+	52,  // 96: reliant.v1.GtmService.UpdatePositioning:input_type -> reliant.v1.UpdatePositioningRequest
+	54,  // 97: reliant.v1.GtmService.ListClaims:input_type -> reliant.v1.ListClaimsRequest
+	56,  // 98: reliant.v1.GtmService.UpsertClaim:input_type -> reliant.v1.UpsertClaimRequest
+	58,  // 99: reliant.v1.GtmService.CheckClaims:input_type -> reliant.v1.CheckClaimsRequest
+	20,  // 100: reliant.v1.GtmService.GetGtmAccess:output_type -> reliant.v1.GetGtmAccessResponse
+	22,  // 101: reliant.v1.GtmService.ListIdeas:output_type -> reliant.v1.ListIdeasResponse
+	24,  // 102: reliant.v1.GtmService.GetIdea:output_type -> reliant.v1.GetIdeaResponse
+	26,  // 103: reliant.v1.GtmService.CreateIdea:output_type -> reliant.v1.CreateIdeaResponse
+	28,  // 104: reliant.v1.GtmService.UpdateIdea:output_type -> reliant.v1.UpdateIdeaResponse
+	30,  // 105: reliant.v1.GtmService.SetIdeaStatus:output_type -> reliant.v1.SetIdeaStatusResponse
+	32,  // 106: reliant.v1.GtmService.ListCampaigns:output_type -> reliant.v1.ListCampaignsResponse
+	34,  // 107: reliant.v1.GtmService.GetCampaign:output_type -> reliant.v1.GetCampaignResponse
+	36,  // 108: reliant.v1.GtmService.CreateCampaign:output_type -> reliant.v1.CreateCampaignResponse
+	38,  // 109: reliant.v1.GtmService.UpdateCampaign:output_type -> reliant.v1.UpdateCampaignResponse
+	40,  // 110: reliant.v1.GtmService.ListItems:output_type -> reliant.v1.ListItemsResponse
+	42,  // 111: reliant.v1.GtmService.GetItem:output_type -> reliant.v1.GetItemResponse
+	44,  // 112: reliant.v1.GtmService.CreateItem:output_type -> reliant.v1.CreateItemResponse
+	47,  // 113: reliant.v1.GtmService.UpdateItem:output_type -> reliant.v1.UpdateItemResponse
+	49,  // 114: reliant.v1.GtmService.ResolveItemSend:output_type -> reliant.v1.ResolveItemSendResponse
+	51,  // 115: reliant.v1.GtmService.GetPositioning:output_type -> reliant.v1.GetPositioningResponse
+	53,  // 116: reliant.v1.GtmService.UpdatePositioning:output_type -> reliant.v1.UpdatePositioningResponse
+	55,  // 117: reliant.v1.GtmService.ListClaims:output_type -> reliant.v1.ListClaimsResponse
+	57,  // 118: reliant.v1.GtmService.UpsertClaim:output_type -> reliant.v1.UpsertClaimResponse
+	59,  // 119: reliant.v1.GtmService.CheckClaims:output_type -> reliant.v1.CheckClaimsResponse
+	100, // [100:120] is the sub-list for method output_type
+	80,  // [80:100] is the sub-list for method input_type
+	80,  // [80:80] is the sub-list for extension type_name
+	80,  // [80:80] is the sub-list for extension extendee
+	0,   // [0:80] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_gtm_proto_init() }
@@ -4894,15 +5041,16 @@ func file_reliant_v1_gtm_proto_init() {
 	file_reliant_v1_gtm_proto_msgTypes[29].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[33].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[36].OneofWrappers = []any{}
-	file_reliant_v1_gtm_proto_msgTypes[42].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[38].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[44].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[46].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_gtm_proto_rawDesc), len(file_reliant_v1_gtm_proto_rawDesc)),
 			NumEnums:      10,
-			NumMessages:   48,
+			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

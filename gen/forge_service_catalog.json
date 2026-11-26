@@ -18392,6 +18392,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.GtmService/ResolveItemSend",
+          "name": "ResolveItemSend",
+          "input": "reliant.v1.ResolveItemSendRequest",
+          "output": "reliant.v1.ResolveItemSendResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.GtmService/SetIdeaStatus",
           "name": "SetIdeaStatus",
           "input": "reliant.v1.SetIdeaStatusRequest",
@@ -18741,6 +18751,27 @@
               "Mutating": true,
               "Declared": true,
               "Verb": "update",
+              "TargetKind": "gtm_item",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ResolveItemSend",
+            "InputType": "ResolveItemSendRequest",
+            "OutputType": "ResolveItemSendResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.ResolveItemSendRequest",
+            "OutputTypeFQ": "reliant.v1.ResolveItemSendResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "resolve_send",
               "TargetKind": "gtm_item",
               "Writer": "INTERCEPTOR"
             }
@@ -19316,6 +19347,36 @@
               "Name": "next_page_token",
               "ProtoType": "string",
               "IsOptional": false
+            }
+          ],
+          "ResolveItemSendRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "approval_hash",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "gmail_message_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "ResolveItemSendResponse": [
+            {
+              "Name": "item",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmItem"
             }
           ],
           "SetIdeaStatusRequest": [
@@ -20513,6 +20574,44 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.ResolveItemSendRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "approval_hash",
+              "kind": "string",
+              "validate": {
+                "required": true
+              }
+            },
+            {
+              "name": "gmail_message_id",
+              "kind": "string",
+              "optional": true,
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.ResolveItemSendResponse": [
+            {
+              "name": "item",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmItem"
+            }
+          ],
           "reliant.v1.SetIdeaStatusRequest": [
             {
               "name": "org_id",
@@ -20912,6 +21011,8 @@
           "reliant.v1.ListIdeasResponse": "reliant/v1/gtm.proto",
           "reliant.v1.ListItemsRequest": "reliant/v1/gtm.proto",
           "reliant.v1.ListItemsResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.ResolveItemSendRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.ResolveItemSendResponse": "reliant/v1/gtm.proto",
           "reliant.v1.SetIdeaStatusRequest": "reliant/v1/gtm.proto",
           "reliant.v1.SetIdeaStatusResponse": "reliant/v1/gtm.proto",
           "reliant.v1.UpdateCampaignRequest": "reliant/v1/gtm.proto",

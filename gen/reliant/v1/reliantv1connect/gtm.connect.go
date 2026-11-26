@@ -67,6 +67,9 @@ const (
 	GtmServiceCreateItemProcedure = "/reliant.v1.GtmService/CreateItem"
 	// GtmServiceUpdateItemProcedure is the fully-qualified name of the GtmService's UpdateItem RPC.
 	GtmServiceUpdateItemProcedure = "/reliant.v1.GtmService/UpdateItem"
+	// GtmServiceResolveItemSendProcedure is the fully-qualified name of the GtmService's
+	// ResolveItemSend RPC.
+	GtmServiceResolveItemSendProcedure = "/reliant.v1.GtmService/ResolveItemSend"
 	// GtmServiceGetPositioningProcedure is the fully-qualified name of the GtmService's GetPositioning
 	// RPC.
 	GtmServiceGetPositioningProcedure = "/reliant.v1.GtmService/GetPositioning"
@@ -132,6 +135,18 @@ type GtmServiceClient interface {
 	//   - SENT is never set here: only the approved email path writes it, and a
 	//     SENT item is not edited.
 	UpdateItem(context.Context, *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error)
+	// ResolveItemSend resolves a HELD email (GtmItem.approval_hash set while it
+	// is not SENT): one whose send started and whose outcome is unknown. A
+	// person's act only; an agent is PermissionDenied. approval_hash must be the
+	// item's own (the send being resolved).
+	//
+	//   - With gmail_message_id: the person found the email in Gmail. The item
+	//     becomes SENT with that id, sent by the caller.
+	//   - Without it: the person checked Gmail and it did not go out. The hold
+	//     is released and the item stays APPROVED, to be sent again.
+	//
+	// An item that is not held is FailedPrecondition.
+	ResolveItemSend(context.Context, *connect.Request[v1.ResolveItemSendRequest]) (*connect.Response[v1.ResolveItemSendResponse], error)
 	// GetPositioning returns the org's positioning. An org that has none yet
 	// gets an empty one at revision 0.
 	GetPositioning(context.Context, *connect.Request[v1.GetPositioningRequest]) (*connect.Response[v1.GetPositioningResponse], error)
@@ -261,6 +276,12 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(gtmServiceMethods.ByName("UpdateItem")),
 			connect.WithClientOptions(opts...),
 		),
+		resolveItemSend: connect.NewClient[v1.ResolveItemSendRequest, v1.ResolveItemSendResponse](
+			httpClient,
+			baseURL+GtmServiceResolveItemSendProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ResolveItemSend")),
+			connect.WithClientOptions(opts...),
+		),
 		getPositioning: connect.NewClient[v1.GetPositioningRequest, v1.GetPositioningResponse](
 			httpClient,
 			baseURL+GtmServiceGetPositioningProcedure,
@@ -313,6 +334,7 @@ type gtmServiceClient struct {
 	getItem           *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
 	createItem        *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
 	updateItem        *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
+	resolveItemSend   *connect.Client[v1.ResolveItemSendRequest, v1.ResolveItemSendResponse]
 	getPositioning    *connect.Client[v1.GetPositioningRequest, v1.GetPositioningResponse]
 	updatePositioning *connect.Client[v1.UpdatePositioningRequest, v1.UpdatePositioningResponse]
 	listClaims        *connect.Client[v1.ListClaimsRequest, v1.ListClaimsResponse]
@@ -388,6 +410,11 @@ func (c *gtmServiceClient) CreateItem(ctx context.Context, req *connect.Request[
 // UpdateItem calls reliant.v1.GtmService.UpdateItem.
 func (c *gtmServiceClient) UpdateItem(ctx context.Context, req *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error) {
 	return c.updateItem.CallUnary(ctx, req)
+}
+
+// ResolveItemSend calls reliant.v1.GtmService.ResolveItemSend.
+func (c *gtmServiceClient) ResolveItemSend(ctx context.Context, req *connect.Request[v1.ResolveItemSendRequest]) (*connect.Response[v1.ResolveItemSendResponse], error) {
+	return c.resolveItemSend.CallUnary(ctx, req)
 }
 
 // GetPositioning calls reliant.v1.GtmService.GetPositioning.
@@ -466,6 +493,18 @@ type GtmServiceHandler interface {
 	//   - SENT is never set here: only the approved email path writes it, and a
 	//     SENT item is not edited.
 	UpdateItem(context.Context, *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error)
+	// ResolveItemSend resolves a HELD email (GtmItem.approval_hash set while it
+	// is not SENT): one whose send started and whose outcome is unknown. A
+	// person's act only; an agent is PermissionDenied. approval_hash must be the
+	// item's own (the send being resolved).
+	//
+	//   - With gmail_message_id: the person found the email in Gmail. The item
+	//     becomes SENT with that id, sent by the caller.
+	//   - Without it: the person checked Gmail and it did not go out. The hold
+	//     is released and the item stays APPROVED, to be sent again.
+	//
+	// An item that is not held is FailedPrecondition.
+	ResolveItemSend(context.Context, *connect.Request[v1.ResolveItemSendRequest]) (*connect.Response[v1.ResolveItemSendResponse], error)
 	// GetPositioning returns the org's positioning. An org that has none yet
 	// gets an empty one at revision 0.
 	GetPositioning(context.Context, *connect.Request[v1.GetPositioningRequest]) (*connect.Response[v1.GetPositioningResponse], error)
@@ -591,6 +630,12 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(gtmServiceMethods.ByName("UpdateItem")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gtmServiceResolveItemSendHandler := connect.NewUnaryHandler(
+		GtmServiceResolveItemSendProcedure,
+		svc.ResolveItemSend,
+		connect.WithSchema(gtmServiceMethods.ByName("ResolveItemSend")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gtmServiceGetPositioningHandler := connect.NewUnaryHandler(
 		GtmServiceGetPositioningProcedure,
 		svc.GetPositioning,
@@ -654,6 +699,8 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 			gtmServiceCreateItemHandler.ServeHTTP(w, r)
 		case GtmServiceUpdateItemProcedure:
 			gtmServiceUpdateItemHandler.ServeHTTP(w, r)
+		case GtmServiceResolveItemSendProcedure:
+			gtmServiceResolveItemSendHandler.ServeHTTP(w, r)
 		case GtmServiceGetPositioningProcedure:
 			gtmServiceGetPositioningHandler.ServeHTTP(w, r)
 		case GtmServiceUpdatePositioningProcedure:
@@ -727,6 +774,10 @@ func (UnimplementedGtmServiceHandler) CreateItem(context.Context, *connect.Reque
 
 func (UnimplementedGtmServiceHandler) UpdateItem(context.Context, *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.UpdateItem is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ResolveItemSend(context.Context, *connect.Request[v1.ResolveItemSendRequest]) (*connect.Response[v1.ResolveItemSendResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ResolveItemSend is not implemented"))
 }
 
 func (UnimplementedGtmServiceHandler) GetPositioning(context.Context, *connect.Request[v1.GetPositioningRequest]) (*connect.Response[v1.GetPositioningResponse], error) {

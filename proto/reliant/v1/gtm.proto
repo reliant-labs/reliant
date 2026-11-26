@@ -231,6 +231,33 @@ service GtmService {
     };
   }
 
+  // ResolveItemSend resolves a HELD email (GtmItem.approval_hash set while it
+  // is not SENT): one whose send started and whose outcome is unknown. A
+  // person's act only; an agent is PermissionDenied. approval_hash must be the
+  // item's own (the send being resolved).
+  //
+  //   - With gmail_message_id: the person found the email in Gmail. The item
+  //     becomes SENT with that id, sent by the caller.
+  //   - Without it: the person checked Gmail and it did not go out. The hold
+  //     is released and the item stays APPROVED, to be sent again.
+  //
+  // An item that is not held is FailedPrecondition.
+  rpc ResolveItemSend(ResolveItemSendRequest) returns (ResolveItemSendResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "resolve_send"
+        target: {
+          kind: "gtm_item"
+          id: "id"
+          label: "response.item.title"
+        }
+        scope: "org_id"
+        detail: ["response.item.status"]
+      }
+    };
+  }
+
   // GetPositioning returns the org's positioning. An org that has none yet
   // gets an empty one at revision 0.
   rpc GetPositioning(GetPositioningRequest) returns (GetPositioningResponse) {
@@ -371,6 +398,8 @@ enum GtmItemKind {
 //   - never touches an item in any other status.
 //
 // A PERSON:
+//   - every change an agent may make (DRAFT <-> REVIEW, content and date
+//     edits on a DRAFT or REVIEW item);
 //   - DRAFT or REVIEW -> APPROVED;
 //   - APPROVED -> SCHEDULED, for an item that is not an EMAIL;
 //   - any status (but SENT) -> PAUSED, and PAUSED -> DRAFT;
@@ -378,7 +407,16 @@ enum GtmItemKind {
 //     manual "it went out" marker, since publishing happens outside GTM;
 //   - a content edit of an APPROVED or SCHEDULED item returns it to REVIEW.
 //
-// The EMAIL SEND PATH alone writes SENT: from APPROVED, for an EMAIL item.
+// A CONTENT EDIT changes any of title, body_md, kind, channel, email_to or
+// email_subject. scheduled_at is not content: dating an APPROVED item keeps it
+// APPROVED. clear_scheduled_at on a SCHEDULED item is FailedPrecondition, and
+// there is no SCHEDULED -> APPROVED: to take an item off the calendar, pause it
+// (PAUSED -> DRAFT) and approve it again.
+//
+// The EMAIL SEND PATH alone writes SENT: from APPROVED, for an EMAIL item. A
+// send whose outcome is unknown leaves the item HELD (GtmItem.approval_hash)
+// and frozen until a person resolves it with ResolveItemSend, which records
+// SENT (the email went out) or releases the hold (it did not).
 //
 // An EMAIL never uses SCHEDULED or PUBLISHED (the table refuses both): a
 // person may date an APPROVED email (scheduled_at) and it stays APPROVED until
@@ -530,10 +568,15 @@ message GtmItem {
   repeated string email_to = 11;
   string email_subject = 12;
   // EMAIL only, once SENT: Gmail's id for the sent message, when and by whom
-  // it was sent, and the hash of the approval card it was sent under.
+  // it was sent.
   string gmail_message_id = 13;
   google.protobuf.Timestamp sent_at = 14;
   string sent_by = 15;
+  // EMAIL only: the hash of the approval card the email is sent under. Set
+  // while status is not SENT, the item is HELD: a send started and its
+  // outcome is unknown. A held item is frozen (every UpdateItem is
+  // FailedPrecondition) until a person resolves it with ResolveItemSend; the
+  // web shows that action for it. Once SENT, it is the card it was sent under.
   string approval_hash = 16;
   int32 revision = 17;
   google.protobuf.Timestamp created_at = 18;
@@ -897,6 +940,20 @@ message UpdateItemRequest {
 }
 
 message UpdateItemResponse {
+  GtmItem item = 1;
+}
+
+message ResolveItemSendRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
+  // The held send's approval hash (GtmItem.approval_hash), as the person saw it.
+  string approval_hash = 3 [(buf.validate.field).required = true];
+  // Set: the email went out, with this Gmail message id; the item becomes
+  // SENT. Unset: it did not go out; the hold is released.
+  optional string gmail_message_id = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+message ResolveItemSendResponse {
   GtmItem item = 1;
 }
 
