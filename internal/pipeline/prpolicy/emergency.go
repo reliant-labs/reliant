@@ -195,7 +195,9 @@ func EvaluateEmergency(in EmergencyInput) EmergencyEligibility {
 	case core.PipelineEmergencyLandOff:
 		return no(EmergencyPolicyOff)
 	case core.PipelineEmergencyLandAutoAllow:
-		if in.AutoApprovedToday >= in.DailyCap {
+		// A cap of 0 or less, or a count that cannot be true (negative), never
+		// authorizes an automatic land: the safe answer is a person.
+		if in.DailyCap <= 0 || in.AutoApprovedToday < 0 || in.AutoApprovedToday >= in.DailyCap {
 			yes.Reason = EmergencyDailyCapReached
 			return yes
 		}

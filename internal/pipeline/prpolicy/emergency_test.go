@@ -51,6 +51,15 @@ func TestEvaluateEmergency(t *testing.T) {
 			EmergencyEligibility{Eligible: true, Head: "h1", Approval: EmergencyApprovalAsk, Reason: EmergencyDailyCapReached}},
 		{"auto_allow with a zero cap asks", in(func(e *EmergencyInput) { e.Policy = core.PipelineEmergencyLandAutoAllow; e.DailyCap = 0 }),
 			EmergencyEligibility{Eligible: true, Head: "h1", Approval: EmergencyApprovalAsk, Reason: EmergencyDailyCapReached}},
+		{"auto_allow with a negative count asks", in(func(e *EmergencyInput) {
+			e.Policy = core.PipelineEmergencyLandAutoAllow
+			e.AutoApprovedToday = -1
+		}), EmergencyEligibility{Eligible: true, Head: "h1", Approval: EmergencyApprovalAsk, Reason: EmergencyDailyCapReached}},
+		{"auto_allow with a negative cap and a lower count asks", in(func(e *EmergencyInput) {
+			e.Policy = core.PipelineEmergencyLandAutoAllow
+			e.DailyCap = -1
+			e.AutoApprovedToday = -5
+		}), EmergencyEligibility{Eligible: true, Head: "h1", Approval: EmergencyApprovalAsk, Reason: EmergencyDailyCapReached}},
 		{"off", in(func(e *EmergencyInput) { e.Policy = core.PipelineEmergencyLandOff }), no(EmergencyPolicyOff)},
 		{"no review pass", in(func(e *EmergencyInput) { e.VerdictPassed = false }), no(EmergencyNotPassed)},
 		{"no head", in(func(e *EmergencyInput) { e.Head = "" }), EmergencyEligibility{Reason: EmergencyNotPassed}},
