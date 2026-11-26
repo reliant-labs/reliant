@@ -281,6 +281,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge fix tests-capture`](#reliant-forge-fix-tests-capture) | Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step |
 | [`reliant forge fix trimpath-default`](#reliant-forge-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`reliant forge fix zod4-forms`](#reliant-forge-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
@@ -310,6 +311,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge lint fix harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`reliant forge lint fix narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge lint fix operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge lint fix tests-capture`](#reliant-forge-lint-fix-tests-capture) | Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step |
 | [`reliant forge lint fix trimpath-default`](#reliant-forge-lint-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`reliant forge lint fix tx-isolation`](#reliant-forge-lint-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`reliant forge lint fix zod4-forms`](#reliant-forge-lint-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
@@ -3913,6 +3915,7 @@ reliant forge cloud token create --env <env> --name <name> --scopes <s1,s2> [fla
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--bind-env` | `string` | - | Confine the token to one environment, by the control plane's environment id; every scope must bind to an environment (e.g. changes:read, obs:read). Needs a control plane whose CreateToken accepts a resource binding (control-plane#3713); an older one rejects the request |
 | `--env` | `string` | - | Env whose declared control plane to use (default, and for an env with no deploy/kcl: Reliant cloud) |
 | `--expires-in` | `duration` | `0s` | Expire after this long (default: never) |
 | `--json` | `bool` | - | Emit machine-readable JSON |
@@ -10743,6 +10746,7 @@ reliant forge fix [flags]
 | [`harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`tests-capture`](#reliant-forge-fix-tests-capture) | Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step |
 | [`trimpath-default`](#reliant-forge-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`zod4-forms`](#reliant-forge-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
@@ -11179,6 +11183,46 @@ reliant forge fix operatorkit [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge fix tests-capture
+
+Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step
+
+Rewrite the test lanes of a Taskfile an older forge scaffolded into the shape
+a new project gets, so every `task test` records its results and coverage
+under .forge/tests/runs/ (gitignored):
+
+  - test, test:integration, test:e2e: the `go test` runs through
+    `forge test capture` (lanes unit, integration, e2e), with -json and,
+    except e2e, a -coverprofile in the run; each task gets its RUN var
+    (`forge test begin`). The command still runs unchanged and the task
+    exits with its status.
+  - test:frontend: each Vitest frontend is recorded as lane frontend-<dir>
+    (coverage when @vitest/coverage-v8 is installed).
+  - test:report: added, to summarise runs and, with -- --upload, send them
+    to the control plane.
+  - .github/workflows/ci.yml: a `Report test results` step after each
+    `task test` / `task test:integration` step. It uploads with the
+    FORGE_CONTROL_PLANE_TOKEN secret and never fails the job.
+
+A lane is rewritten only when it is still exactly what forge scaffolded; one
+you edited is left alone and the run names the edit to make by hand. Nothing
+is written while forge.yaml pins a forge older than v1.12.0, which has no
+`forge test`. Re-running it changes nothing.
+The rest of the story: `forge skill load migrations/v1.12.0/tests-capture`.
+
+```
+reliant forge fix tests-capture [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -12307,6 +12351,7 @@ reliant forge lint fix [flags]
 | [`harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`tests-capture`](#reliant-forge-lint-fix-tests-capture) | Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step |
 | [`trimpath-default`](#reliant-forge-lint-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`tx-isolation`](#reliant-forge-lint-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`zod4-forms`](#reliant-forge-lint-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
@@ -12743,6 +12788,46 @@ reliant forge lint fix operatorkit [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge lint fix tests-capture
+
+Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step
+
+Rewrite the test lanes of a Taskfile an older forge scaffolded into the shape
+a new project gets, so every `task test` records its results and coverage
+under .forge/tests/runs/ (gitignored):
+
+  - test, test:integration, test:e2e: the `go test` runs through
+    `forge test capture` (lanes unit, integration, e2e), with -json and,
+    except e2e, a -coverprofile in the run; each task gets its RUN var
+    (`forge test begin`). The command still runs unchanged and the task
+    exits with its status.
+  - test:frontend: each Vitest frontend is recorded as lane frontend-<dir>
+    (coverage when @vitest/coverage-v8 is installed).
+  - test:report: added, to summarise runs and, with -- --upload, send them
+    to the control plane.
+  - .github/workflows/ci.yml: a `Report test results` step after each
+    `task test` / `task test:integration` step. It uploads with the
+    FORGE_CONTROL_PLANE_TOKEN secret and never fails the job.
+
+A lane is rewritten only when it is still exactly what forge scaffolded; one
+you edited is left alone and the run names the edit to make by hand. Nothing
+is written while forge.yaml pins a forge older than v1.12.0, which has no
+`forge test`. Re-running it changes nothing.
+The rest of the story: `forge skill load migrations/v1.12.0/tests-capture`.
+
+```
+reliant forge lint fix tests-capture [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
