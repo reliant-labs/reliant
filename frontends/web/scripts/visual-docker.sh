@@ -52,7 +52,8 @@ built="$(node -p "require('$WEB/dist/version.json').version" 2>/dev/null || echo
 
 tty=()
 [ -t 1 ] && tty=(-t)
-exec docker run --rm -i "${tty[@]}" --init --ipc=host \
+# ${tty[@]+…}: macOS's bash 3.2 calls an empty array unbound under set -u.
+exec docker run --rm -i ${tty[@]+"${tty[@]}"} --init --ipc=host \
   --user "$(id -u):$(id -g)" \
   -e HOME=/tmp -e NPM_CONFIG_UPDATE_NOTIFIER=false -e CI -e VISUAL_IN_CONTAINER=1 -e VISUAL_FXLOG -e VISUAL_WORKERS -e VISUAL_PORT -e VISUAL_JSON \
   -v "$REPO:$REPO" -w "$WEB" \
