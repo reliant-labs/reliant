@@ -44,6 +44,12 @@ type Deps struct {
 	// TriggerExtStore).
 	Firings        Firings
 	WebhookSecrets WebhookSecrets
+	// Triggers, FiringReads and Registrations read the stored triggers, their
+	// firings and their integration registrations (the generated
+	// TriggerExtStore, TriggerEventExtStore and TriggerRegistrationExtStore).
+	Triggers      Triggers
+	FiringReads   FiringReads
+	Registrations RegistrationReads
 	// TriggerWrites inserts and replaces a trigger's definition (the
 	// generated TriggerWritesExtStore).
 	TriggerWrites TriggerWrites
@@ -217,8 +223,8 @@ func (d Deps) validateDeps() error {
 	if d.ControlPlane != nil && d.AutomationKeys == nil {
 		return fmt.Errorf("trigger: Deps.AutomationKeys is required with Deps.ControlPlane")
 	}
-	if d.Firings == nil || d.WebhookSecrets == nil || d.TriggerWrites == nil {
-		return fmt.Errorf("trigger: Deps.Firings, Deps.WebhookSecrets and Deps.TriggerWrites are required")
+	if d.Firings == nil || d.WebhookSecrets == nil || d.TriggerWrites == nil || d.Triggers == nil || d.FiringReads == nil || d.Registrations == nil {
+		return fmt.Errorf("trigger: Deps.Firings, WebhookSecrets, TriggerWrites, Triggers, FiringReads and Registrations are required")
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("trigger: Deps.Projects is required")
@@ -260,7 +266,7 @@ func New(deps Deps) (*Service, error) {
 		s.publicURL = strings.TrimSpace(deps.Integrations.GetPublicUrl())
 	}
 	if deps.ControlPlane != nil {
-		s.grants = &automationGrants{client: deps.ControlPlane, keys: deps.AutomationKeys, triggers: deps.Repo}
+		s.grants = &automationGrants{client: deps.ControlPlane, keys: deps.AutomationKeys, triggers: deps.Triggers}
 	}
 	return s, nil
 }

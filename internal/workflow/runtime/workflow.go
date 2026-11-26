@@ -510,6 +510,9 @@ type ChildWorkflowTracker struct {
 	// own attempts (run_outcome.go). A continue-as-new successor keeps it
 	// through its execution context's telemetry.
 	runID string
+	// reviewExecutions counts this execution's runs of each review node, by
+	// where it ran (reviewSession): the ordinal in its session's thread id.
+	reviewExecutions map[string]int
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -2510,7 +2513,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				// Derive child context for the inline workflow (before launching so it's available for tracking)
 				var childExecCtx *ExecutionContext
 				inlineExecutor = inlineExecutor.WithInvocationContract(contract)
-				childExecCtx = execCtx.ForChild(step.Node.GetId(), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, true)
+				childExecCtx = workflowNodeContext(ctx, childTracker, execCtx, step.Node, step.Node.GetId(), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, true)
 
 				// Create child thread and optionally save inject message
 				// For non-inherit modes, this creates the thread with proper fork metadata
@@ -4312,6 +4315,9 @@ func runSpawnInlineChild(
 	const maxBackoff = 30 * time.Second
 
 	var execErr error
+	// result is the agent's answer, fetched as soon as its loop exits when the
+	// terminal status is deferred (see subAgentOwesLateMessageTurn).
+	var result *spawnInlineResult
 	for attempt := 0; ; attempt++ {
 		// Create a fresh inline executor for each attempt.
 		// The executor is stateful, so we must re-create it after a transient error.
@@ -4358,6 +4364,23 @@ func runSpawnInlineChild(
 
 		_, execErr = inlineExecutor.Execute()
 		if execErr == nil {
+			if !deferTerminalStatus {
+				break // Success: terminal status first, then the result (below)
+			}
+			// The same activity, in the same place, as before: the loop
+			// exited, and nothing else runs before the result is fetched.
+			result = fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
+			// A message that reached the agent after its loop-exit gate is
+			// owed a turn before the agent completes.
+			if subAgentOwesLateMessageTurn(ctx, childTracker, config.childThread, pauseCtrl) {
+				logger.Info("[SpawnInline] Message reached the sub-agent after its last turn; taking one more turn before completing",
+					"toolCallID", config.toolCallID,
+					"childThread", config.childThread,
+				)
+				result = nil
+				backoff = time.Second
+				continue
+			}
 			break // Success
 		}
 
@@ -4452,11 +4475,9 @@ func runSpawnInlineChild(
 
 	if !deferTerminalStatus {
 		notifySpawnTerminal(ctx, chatID, config, prep, parentWorkflowID, "completed")
-	}
-
-	// Fetch the last message from the child's thread as the spawn result
-	result := fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
-	if deferTerminalStatus {
+		// Fetch the last message from the child's thread as the spawn result
+		result = fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
+	} else {
 		result.terminalStatus = "completed"
 	}
 
@@ -6469,7 +6490,7 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: preflightWaitSlice + preflightSliceMargin,
 		HeartbeatTimeout:    preflightHeartbeatTimeout,
-		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+		RetryPolicy:         preflightRetryPolicy(),
 	})
 	waitStart := workflow.Now(ctx)
 	in := preflightSliceInput(preflightInput, preflightWaitSlice, preflightMachineWaitCap, false)
@@ -6481,6 +6502,27 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 		return nil
 	}
 	return waitForMachine(ctx, actCtx, preflightInput, waitStart, result["failed_since"])
+}
+
+// preflightRetryPolicy is PreflightDaemonCheck's retry ladder: a few quick
+// attempts, so one lost heartbeat (a worker restarting mid-slice) or a
+// database blip does not fail the user's run (obs 5a36f26f). Every failure
+// the check decides itself is non-retryable
+// (handlers.PreflightDaemonCheckFailedErrType), so a missing machine, a
+// refused wake or an exhausted wait still fails at once.
+//
+// No version gate: a retry policy is an attribute of the ScheduleActivityTask
+// command, and replay matches an activity by its id and type, not its
+// options. Every replay fixture that waits for a daemon was recorded with
+// MaximumAttempts 1 and replays through this (TestReplayFixtures). An
+// in-flight run picks the ladder up at its next check.
+func preflightRetryPolicy() *temporal.RetryPolicy {
+	return &temporal.RetryPolicy{
+		InitialInterval:    2 * time.Second,
+		BackoffCoefficient: 2.0,
+		MaximumInterval:    10 * time.Second,
+		MaximumAttempts:    preflightActivityMaxAttempts,
+	}
 }
 
 // waitForMachine is the rest of a run's wait for a machine that is still

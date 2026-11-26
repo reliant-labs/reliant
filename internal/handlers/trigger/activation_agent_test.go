@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -48,7 +49,7 @@ func TestAgentActivationValidationAuditAndMachineBinding(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, other, moved.DaemonID)
 	require.Equal(t, "cicd", moved.DaemonName)
-	changes, err := env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+	changes, err := store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Len(t, changes, 2)
 	require.Equal(t, "caller", changes[0].ChatID)
@@ -61,7 +62,7 @@ func TestAgentActivationValidationAuditAndMachineBinding(t *testing.T) {
 	require.NoError(t, err)
 	_, err = env.svc.ManageActivation(ctx, env.userID, tools.ToolPauseTrigger, p, pause.Hash)
 	require.NoError(t, err)
-	changes, err = env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+	changes, err = store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Len(t, changes, 3)
 	require.Equal(t, "pause", changes[0].Operation)
@@ -70,7 +71,7 @@ func TestAgentActivationValidationAuditAndMachineBinding(t *testing.T) {
 	stored, e := env.repo.GetTrigger(env.ctx, created.ID)
 	require.NoError(t, e)
 	staleCtx := automationpolicy.WithRevision(env.ctx, stored.UpdatedAt.Add(-time.Second))
-	require.ErrorContains(t, env.repo.SetTriggerEnabled(staleCtx, created.ID, true), "changed after approval")
+	require.ErrorContains(t, store.EnableTrigger(staleCtx, env.repo.ORM(), created.ID, true), "changed after approval")
 	// Approval is invalidated if either the saved definition or workflow
 	// changes. Under always, a resume needs a card, so the card's hash binds.
 	env.setApprovalMode(t, nil, automationpolicy.ApprovalAlways)

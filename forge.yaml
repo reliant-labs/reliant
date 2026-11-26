@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v1.10.1-0.20261125040729-73664c6256d3
+forge_version: v1.11.1-0.20261126012849-a60339115d75
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -282,6 +282,65 @@ ci:
                 api/types/versions through forge's KCL renderer; reliant never
                 performs plugin privilege validation.
               expires: "2026-12-31"
+    license:
+        # The gate's license-check row (go-licenses over the IMPORT graph of
+        # ./...). An ALLOWLIST: a license not named here, or one the
+        # classifier cannot name, fails, and passing it takes a reasoned
+        # entry in `exceptions`. The risk is linking: a copyleft
+        # (AGPL/GPL/LGPL) or source-available (SSPL/BSL/Elastic) library in a
+        # proprietary binary reaches its source. Deliberately not allowed:
+        # those, CC-BY-SA, and MPL-2.0 (file-level copyleft: each MPL module is
+        # an exception below, so the decision is recorded per module).
+        # Replaces scripts/check-licenses.sh and .license-allowlist; the npm
+        # half stays in scripts/check-npm-licenses.sh (npm-licenses below).
+        allowed:
+            - MIT
+            - Apache-2.0
+            - BSD-2-Clause
+            - BSD-3-Clause
+            - ISC
+            - 0BSD
+            - Unlicense
+            - Zlib
+            - PostgreSQL
+            - Python-2.0
+            - CC0-1.0
+        # One module each, never a license. Revisit an entry if the module's
+        # role changes (vendored and patched is a different question).
+        exceptions:
+            # MPL-2.0 obliges publishing MPL FILES you modify; it does not reach
+            # the rest of a binary that links them (§1.12/§3.3). Imported
+            # unmodified; if we ever patch one, the patched files must be
+            # published and the entry revisited.
+            - module: github.com/hashicorp/go-version
+              reason: MPL-2.0, imported unmodified (version parsing)
+            - module: github.com/hashicorp/go-cleanhttp
+              reason: MPL-2.0, imported unmodified (stdlib http client presets)
+            - module: github.com/hashicorp/go-getter
+              reason: MPL-2.0, imported unmodified (artifact fetching)
+            - module: github.com/hashicorp/aws-sdk-go-base/v2
+              reason: MPL-2.0, imported unmodified, transitive of go-getter
+            - module: github.com/cyphar/filepath-securejoin
+              reason: >-
+                Dual-licensed per file (`SPDX-License-Identifier: BSD-3-Clause
+                AND MPL-2.0` in COPYING.md): the join code we call is
+                BSD-3-Clause, the MPL-2.0 half is imported unmodified.
+                Transitive via go-git and kcl-lang.io/kpm (forge's CLI).
+            - module: github.com/xi2/xz
+              reason: >-
+                Public domain: a Go port of XZ Embedded whose LICENSE is a
+                hand-written grant, not a standard text, so no classifier
+                names it. Read directly; no obligations.
+            - module: github.com/segmentio/asm
+              reason: >-
+                MIT-0 (MIT No Attribution), more permissive than MIT; the
+                classifier does not name it. Transitive (segmentio/encoding).
+            - module: github.com/nexus-rpc/nexus-proto-annotations
+              reason: >-
+                MIT upstream (commit 835bd8d4), committed after the v0.1.0 tag
+                we resolve to, so the tagged tree carries no license file.
+                Transitive from go.temporal.io/api via nexus-rpc/sdk-go. Delete
+                once upstream tags a release containing 835bd8d4.
     gate:
         # `task ci` = forge's checks + these. Files no Go test reads.
         affected_ignore: ["*.md", "docs/**", "research/**", "dev-docs/**"]
@@ -310,11 +369,12 @@ ci:
               requires: [task, python3]
               heavy: true
               mutates_tree: true
-            # forge's own row for frontends/web has the same name (one
-            # lint-<frontend> per frontend), and an extra check may not
-            # shadow it silently: this takes it over, unchanged.
+            # forge's own lint row for frontends/web, taken over unchanged.
+            # Since forge#2802 a directory several frontends share (desktop,
+            # forge-demo, web) gets one row, named for the first frontend
+            # forge lists: lint-forge-demo.
             - name: lint-web
-              replaces: lint-web
+              replaces: lint-forge-demo
               dir: frontends/web
               command: [npm, run, lint]
               requires: [npm]

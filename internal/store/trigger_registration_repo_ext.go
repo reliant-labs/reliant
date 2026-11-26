@@ -64,6 +64,9 @@ func GetTriggerRegistration(ctx context.Context, db orm.Context, triggerID strin
 // keyed by trigger id, in ONE query, for health. Joined through triggers so
 // only the caller's own appear.
 func ListTriggerRegistrationsForUser(ctx context.Context, db orm.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	out := map[string]*core.TriggerRegistration{}
 	if len(triggerIDs) == 0 {
 		return out, nil

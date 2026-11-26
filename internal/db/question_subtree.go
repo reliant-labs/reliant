@@ -52,7 +52,7 @@ func (r *Repo) WithdrawAsyncQuestion(ctx context.Context, chatID, threadID, ques
 
 	// Best-effort, as for every closed question: the row is what the gates
 	// and the inbox read; the feed is what clients render.
-	if err := r.EmitQuestionUpdate(ctx, closed.ChatID, QuestionUpdate{
+	if err := r.UpdateWriter().EmitQuestionUpdate(ctx, closed.ChatID, QuestionUpdate{
 		QuestionID:      closed.ID,
 		ChatID:          closed.ChatID,
 		WorkflowID:      closed.WorkflowID,

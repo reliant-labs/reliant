@@ -291,7 +291,7 @@ func TestTriggerRegistrationStateInTheStore(t *testing.T) {
 	assert.Equal(t, "lost", active.LastGapDetail)
 
 	save(&core.TriggerRegistration{TriggerID: bobs.ID, Provider: "github", Cursor: "9"})
-	regs, err := e.repo.ListTriggerRegistrations(ctx, "alice", []string{trigger.ID, bobs.ID})
+	regs, err := ormstore.ListTriggerRegistrationsForUser(ctx, e.repo.ORM(), "alice", []string{trigger.ID, bobs.ID})
 	require.NoError(t, err)
 	require.Contains(t, regs, trigger.ID)
 	assert.NotContains(t, regs, bobs.ID, "another user's registration never appears")

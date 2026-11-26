@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (28 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (82 tools)
+- [Other Tools](#other-tools) (86 tools)
 
 ---
 
@@ -2229,10 +2229,14 @@ _Miscellaneous tools and utilities._
 | [`github__repo_list_for_user`](#github__repo_list_for_user) | integration | List the repositories the connected user can access (owned, collaborator, and through organizatio... |
 | [`github__user_get`](#github__user_get) | integration | Return the GitHub user the connection authenticates as: login, id, name and profile URL. |
 | [`github__workflow_dispatch`](#github__workflow_dispatch) | integration | Start a GitHub Actions workflow run on a branch or tag. The workflow file must declare `on: workf... |
+| [`gmail__draft_create`](#gmail__draft_create) | integration | Save an email to the Drafts folder of the connected Google account. It sends nothing: the person ... |
 | [`gmail__label_list`](#gmail__label_list) | integration | List the mailbox's labels: system labels (INBOX, SENT, UNREAD, STARRED, IMPORTANT, CATEGORY_*) an... |
 | [`gmail__message_get`](#gmail__message_get) | integration | Read a message by id. format full (the default) decodes the body into text (and html when the mes... |
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
+| [`growth__agent_run_create`](#growth__agent_run_create) | integration | Create an agent run record in the tenant: the workflow name, a status, why it ran, a link to the ... |
+| [`growth__agent_run_list`](#growth__agent_run_list) | integration | List the agent runs recorded in the tenant, newest first by default. A run holds the workflow nam... |
+| [`growth__inbox_status`](#growth__inbox_status) | integration | Read the approval inbox, redacted: counts of pending, expired, approved and rejected actions and ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
 | [`list_changes`](#list_changes) | readonly | List the Forge Changes of a project: remote config, gradual rollouts and A/B tests, the same list... |
 | [`list_machines`](#list_machines) | readonly | List the user's machines (Settings -> Machines): each one's id, name, type (managed or connected)... |
@@ -2731,6 +2735,14 @@ Start a GitHub Actions workflow run on a branch or tag. The workflow file must d
 
 ---
 
+### gmail__draft_create
+
+**Tags:** `integration`
+
+Save an email to the Drafts folder of the connected Google account. It sends nothing: the person reviews, edits and sends it from Gmail. Takes the same fields as Send email (a subject, a body as plain text, HTML or both, and optionally to, cc and bcc; a draft may have no recipient yet). To draft a reply, pass the original message's thread_id and its Message-ID header as in_reply_to (and references when the thread has several), and keep its subject ("Re: " is added if missing). Returns the draft_id, the message_id and the thread_id. Needs the gmail.compose permission, which connections made before this action existed lack: a permission error means the person must reconnect Gmail and allow every permission it asks for.
+
+---
+
 ### gmail__label_list
 
 **Tags:** `integration`
@@ -2760,6 +2772,30 @@ List message ids in the mailbox, newest first, matching q (Gmail's search box sy
 **Tags:** `integration`
 
 Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, a subject, and a body as plain text, HTML or both. To reply, pass the original message's thread_id and its Message-ID header as in_reply_to (and references when the thread has several), and keep its subject ("Re: " is added if missing): Gmail only threads a reply whose headers and subject match. Returns the sent message's id and thread_id.
+
+---
+
+### growth__agent_run_create
+
+**Tags:** `integration`
+
+Create an agent run record in the tenant: the workflow name, a status, why it ran, a link to the run and a one-line outcome. Growth shows these in its UI; the record is history, it triggers nothing.
+
+---
+
+### growth__agent_run_list
+
+**Tags:** `integration`
+
+List the agent runs recorded in the tenant, newest first by default. A run holds the workflow name, status, reason, output summary and the input it recorded (workflows keep what they already handled there). search matches workflow, reason, status, run_url and output_summary, so filter the result by workflow yourself when you need an exact match.
+
+---
+
+### growth__inbox_status
+
+**Tags:** `integration`
+
+Read the approval inbox, redacted: counts of pending, expired, approved and rejected actions and the oldest-expiring pending items (id, operation, play name, dates; at most 25). It carries no proposer, reason or snapshot, so any tenant key may read it.
 
 ---
 

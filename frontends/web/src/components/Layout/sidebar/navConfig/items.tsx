@@ -7,8 +7,9 @@
  *
  * All projects (several, or every one, in the switcher): Overview is the
  * projects' summary; Observability's views and Dashboards are the org-wide
- * pages (an in-page app filter); every other app page opens the focused
- * project's, with its in-page picker (PAGES); the chat list groups by project.
+ * pages (an in-page app filter); every other app page shows every project
+ * in scope too (Forge/Console/severalProjects.tsx), at the focused project's
+ * URL; the chat list groups by project.
  *
  * Settings' sections are not here but in settings.tsx, which only hybrid.ts
  * imports: they are Settings' own list (Settings/SettingsNavigation), and a

@@ -45,6 +45,7 @@ func sameInstant(a, b time.Time) bool {
 // TestPlanQueries ports plans.sql: every plan read and write through the
 // store, interleaved with the Repository on the same database.
 func TestPlanQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChatThread(t, env, "chat-plans", "thread-plans")
@@ -165,6 +166,7 @@ func TestPlanQueries(t *testing.T) {
 
 // TestTaskQueries ports tasks.sql, interleaved with the Repository.
 func TestTaskQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChatThread(t, env, "chat-tasks", "thread-tasks")
@@ -243,6 +245,7 @@ func TestTaskQueries(t *testing.T) {
 // TestTaskDependencyQueries ports task_dependencies.sql, interleaved with the
 // Repository.
 func TestTaskDependencyQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChatThread(t, env, "chat-deps", "thread-deps")

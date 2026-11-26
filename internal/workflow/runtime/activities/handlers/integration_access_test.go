@@ -101,7 +101,7 @@ func setupIntegrationFixture(t *testing.T, noMachine bool, conns *ownerConnectio
 	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo(), IntegrationCredentials: source})
 	return &integrationFixture{
 		h: h, project: project, chat: chat, driver: driver, conns: conns,
-		callLLM: NewCallLLMActivity(CallLLMDeps{Store: h.Repo(), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: factory, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
+		callLLM: NewCallLLMActivity(CallLLMDeps{Store: tools.WithChats(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: factory, ConfigProvider: &staticConfigProvider{}, DriverResolver: resolver, MCPBinder: nil}),
 	}
 }
 
@@ -141,7 +141,7 @@ func TestUnusableIntegrationsAreWithheldByTheResolver(t *testing.T) {
 			MCPTools: []string{"mcp__srv__probe"}, UsableIntegrations: usable})
 	}
 
-	everything := map[string]bool{"github": true, "slack": true, "gmail": true, "twilio": true, "sentry": true}
+	everything := map[string]bool{"github": true, "slack": true, "gmail": true, "twilio": true, "sentry": true, "growth": true}
 	caps := resolve(tools.ToolAccess{LoadableAll: true, Preloaded: []string{"github__issue_get", tools.ToolFetch}}, everything)
 	assert.True(t, caps.LoadableAll, "nothing withheld: still unrestricted")
 	assert.Empty(t, caps.WithheldIntegrations)

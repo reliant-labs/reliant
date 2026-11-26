@@ -49,8 +49,8 @@ events:
     output:
       message:
         role: assistant
-        text: "I've created a plan for the dark mode feature. Switch to Auto mode to execute."
-      response_text: "I've created a plan for the dark mode feature. Switch to Auto mode to execute."
+        text: "I've created a plan for the dark mode feature. Switch to Default mode to execute."
+      response_text: "I've created a plan for the dark mode feature. Switch to Default mode to execute."
       tool_calls: []
 expect:
   outcome: completed

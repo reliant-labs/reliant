@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -69,7 +70,7 @@ func TestWorktreeOwnerBackfill(t *testing.T) {
 	assert.Nil(t, wt.DaemonID, "one remaining install is not proof of where a workspace lives")
 
 	pin := func(id string) string {
-		c, err := repo.GetChat(ctx, id)
+		c, err := store.GetChat(ctx, repo.ORM(), id)
 		require.NoError(t, err)
 		require.NotNil(t, c.ActiveDaemonID)
 		return *c.ActiveDaemonID

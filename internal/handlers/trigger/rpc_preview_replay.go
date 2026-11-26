@@ -120,7 +120,7 @@ func (s *Service) previewAutomationEvent(ctx context.Context, msg *reliantv1.Pre
 // maps against the workflow's input defaults, and a failure to list is not a
 // reason to refuse the preview.
 func (s *Service) activationOf(ctx context.Context, userID string, msg *reliantv1.PreviewReplayRequest, triggerName string) *core.Trigger {
-	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: optionalString(msg.GetProjectId())})
+	mine, err := s.deps.Triggers.ListTriggersForUser(ctx, core.TriggerFilters{UserID: userID, ProjectID: optionalString(msg.GetProjectId())})
 	if err != nil {
 		return nil
 	}

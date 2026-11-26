@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -32,7 +33,7 @@ func (f *streakFixture) archiveState(chatID, status, outcome string, launchRun b
 	}
 	var out WorkflowStatusOutput
 	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
-	chat, err := f.h.Repo().GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), chatID)
 	require.NoError(f.t, err)
 	return chat.State
 }

@@ -32,11 +32,11 @@ The `mode` parameter controls how tool execution is handled. This is a regular w
 
 | Mode | Behavior | Good for |
 |------|----------|----------|
-| **Auto** | Auto-approves all tool calls. Press Escape to stop. | Large refactors, trusted tasks, autonomous work |
+| **Auto** (shown as **Default** in the chat composer) | Auto-approves all tool calls. Press Escape to stop. | Large refactors, trusted tasks, autonomous work |
 | **Manual** | Requires your approval before each tool execution. | Learning Reliant, sensitive code, understanding what the agent is doing |
 | **Plan** | Starts the agent with reading, search and planning tools plus the shell, under a prompt that tells it to plan rather than change code. Tool calls are auto-approved. This is guidance, not containment: the shell can still write files. | Exploring unfamiliar code, creating a plan before executing it |
 
-You can switch modes mid-conversation. A common pattern: start in plan mode to analyze and create a plan, then switch to auto to execute it.
+You can switch modes mid-conversation. A common pattern: start in plan mode to analyze and create a plan, then switch to Default to execute it.
 
 ## Running Workflows
 

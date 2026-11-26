@@ -23,6 +23,7 @@ import { useConsoleNavExtras } from "./consoleNavExtras";
 import { Header, Page } from "./consolePageFrame";
 import { ObservabilityHost } from "./ObservabilityHost";
 import { OBS_NAV_LABELS } from "./paths";
+import { ToOrgObservability, useSeveralApps } from "./severalProjects";
 
 /** `name` of a lazily loaded module, as a component; a chunk a deploy removed reloads the page (lazyRoute.tsx). */
 function lazyPage<M extends Record<string, unknown>, K extends keyof M & string>(load: () => Promise<M>, name: K) {
@@ -58,7 +59,10 @@ function PageLoading() {
 export function ObservabilityViewPage() {
   const { page } = useForgeConsole();
   const { subtitle, intro, listPage } = useConsoleNavExtras();
+  const several = useSeveralApps();
   if (page.kind !== "obs-view") return null;
+  // Several projects: every view but Dashboards (which lists theirs itself) is the org console's.
+  if (several && page.view !== "dashboards") return <ToOrgObservability view={page.view} />;
   if (page.view === "dashboards") {
     return (
       <Suspense fallback={<PageLoading />}>

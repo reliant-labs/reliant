@@ -17,6 +17,7 @@ import (
 
 // TestApprovalQueries ports approvals.sql, interleaved with the Repository.
 func TestApprovalQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChatThread(t, env, "chat-approvals", "thread-approvals")
@@ -133,6 +134,7 @@ func TestApprovalQueries(t *testing.T) {
 // TestAttachmentQueries ports attachments.sql, interleaved with the
 // Repository.
 func TestAttachmentQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	before := time.Now().UTC().Add(-time.Second)

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -59,7 +60,7 @@ func TestEnableWorkflowSealsADeclaredWebhooksSigningSecret(t *testing.T) {
 	require.True(t, resp.Enabled, "%v", resp.Results)
 	id := resultFor(resp, "signed").Activation.GetId()
 	assert.NotEmpty(t, resultFor(resp, "signed").Webhook.GetToken(), "the token still comes back once: HMAC adds a way in")
-	stored, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	stored, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Equal(t, "sealed:"+env.userID+":"+string(triggers.WebhookSecretAAD(id))+":s3cret", string(stored.SecretSealed))
 	for _, r := range resp.Results {
@@ -77,7 +78,7 @@ func TestEnableWorkflowSealsADeclaredWebhooksSigningSecret(t *testing.T) {
 	}))
 	require.True(t, rotated.Enabled, "%v", rotated.Results)
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED, outcomes(rotated)["signed"])
-	replaced, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	replaced, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Equal(t, "sealed:"+env.userID+":"+string(triggers.WebhookSecretAAD(id))+":n3w", string(replaced.SecretSealed))
 }
@@ -126,7 +127,7 @@ nodes:
 	}))
 	require.True(t, first.Enabled, "%v", first.Results)
 	id := resultFor(first, "signed").Activation.GetId()
-	before, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	before, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 
 	env.backend.syncErr = errors.New("temporal is down")
@@ -137,7 +138,7 @@ nodes:
 	require.NoError(t, err)
 	require.False(t, resp.Msg.Enabled)
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED, outcomes(resp.Msg)["signed"])
-	after, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
+	after, err := store.GetTriggerWebhookCredentials(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Equal(t, before.SecretSealed, after.SecretSealed, "the undone enable keeps the old secret")
 }

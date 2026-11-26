@@ -28,10 +28,14 @@ import (
 // Store is the slice of the repository this service reads; *db.Repo
 // satisfies it.
 type Store interface {
-	// GetChatRow is the chat, or core.ErrChatNotFound.
-	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 	// ListChatLLMCalls is the chat's model calls, oldest first.
 	ListChatLLMCalls(ctx context.Context, q db.ChatLLMCallQuery) ([]*db.ChatLLMCall, error)
+}
+
+// ChatRows reads a chat's own row; the generated chat store satisfies it.
+type ChatRows interface {
+	// GetChatRow is the chat, or core.ErrChatNotFound.
+	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 }
 
 // Spans reads one page of a chat's spans from control-plane's span store;
@@ -47,8 +51,10 @@ type Spans interface {
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	// Store holds the chat and its model calls.
+	// Store holds the chat's model calls.
 	Store Store
+	// Chats reads the chat the trace is of.
+	Chats ChatRows
 	// Spans is nil when this deployment has no control plane to ask (self
 	// hosted, or no internal-service secret): every trace is then PARTIAL,
 	// spans unavailable, with its model calls.
@@ -72,6 +78,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Store == nil {
 		return fmt.Errorf("chat_trace: Deps.Store is required")
+	}
+	if d.Chats == nil {
+		return fmt.Errorf("chat_trace: Deps.Chats is required")
 	}
 	return nil
 }

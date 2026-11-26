@@ -19,6 +19,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/questions"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
@@ -41,7 +42,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -91,10 +91,10 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	doer := slackDoer{target: slack}
-	store := db.TestConnections(t, repo)
-	tokens := connections.NewTokenSource(store, sealer, providers, doer)
-	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
-	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)
+	vault := db.TestConnections(t, repo)
+	tokens := connections.NewTokenSource(vault, sealer, providers, doer)
+	broker := connections.NewBroker(vault, sealer, providers, doer, "https://reliant.example")
+	conns := connections.NewService(vault, sealer, providers, tokens, broker, doer)
 	connectSlack := func(userID, team string) *core.Connection {
 		slack.team = team
 		authURL, err := conns.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "slack", ClientOrigin: "https://reliant.example"})
@@ -118,7 +118,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo), Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake})))
 
 	// --- two users, two workspaces ---------------------------------------
 	type tenant struct {
@@ -202,7 +202,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, "T0ACME", launchedAcme.Payload["account"])
 	data, _ := launchedAcme.Payload["data"].(map[string]any)
 	assert.Equal(t, "<@U0BOT> summarize the thread", data["text"])
-	chat, err := repo.GetChat(ctx, *launchedAcme.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launchedAcme.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, acme.userID, chat.UserID)
 	assertFirings(t, repo, acme.userID, acme.trigger.GetId(), map[core.TriggerEventOutcome]int{

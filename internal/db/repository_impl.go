@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -33,23 +32,6 @@ func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 		return fmt.Errorf("chat cannot be nil")
 	}
 	return store.InsertChat(ctx, r.ORM(), chat)
-}
-
-func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-
-	return store.GetChat(ctx, r.ORM(), id)
-}
-
-// GetChatRow reads a chat's own row from the chats table — no activity view —
-// for a caller that needs none of the activity-derived fields (ChatRow).
-func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetChatRow(ctx, r.ORM(), id)
 }
 
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
@@ -1618,21 +1600,46 @@ func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, 
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
 // store.GetProjectConfigRecord whenever that column is all a caller needs: the
 // full row carries every indexed skill body and can run to tens of MB.
+//
+// A value this Repo read before is served again while the record is
+// unchanged (catalogColumnCache).
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectWorkflowsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.workflows", projectID, store.GetProjectWorkflowsJSONVersioned)
 }
 
 // GetProjectPresetsJSON reads one column of the project config record: the
 // synced .reliant/presets. It returns svcerr.NotFound when the
-// project has no record.
+// project has no record. Cached as GetProjectWorkflowsJSON is.
 func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.presets", projectID, store.GetProjectPresetsJSONVersioned)
+}
+
+// projectConfigColumn reads one JSON column of projectID's config record
+// through the catalog column cache, svcerr.NotFound when there is none.
+func (r *Repo) projectConfigColumn(ctx context.Context, column, projectID string,
+	versioned func(ctx context.Context, db orm.Context, projectID string) (*string, string, bool, error),
+) (*string, error) {
+	value, found, err := r.catalogColumns().read(ctx, catalogColumnKey{column: column, projectID: projectID}, catalogColumnReads{
+		version: func(ctx context.Context) (string, bool, error) {
+			return store.ProjectConfigVersion(ctx, r.ORM(), projectID)
+		},
+		versioned: func(ctx context.Context) (*string, string, bool, error) {
+			return versioned(ctx, r.ORM(), projectID)
+		},
+	}, r.fillsCatalogColumns(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, store.MissingProjectConfig()
+	}
+	return value, nil
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2023,6 +2030,13 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 	}
 
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
+}
+
+// CopyChatPlans gives toThreadID a pending copy of every plan of fromChatID
+// and of their tasks, in one statement (store.CopyChatPlans). A branch
+// starts with its source chat's plans this way.
+func (r *Repo) CopyChatPlans(ctx context.Context, fromChatID, toThreadID string) error {
+	return store.CopyChatPlans(ctx, r.ORM(), fromChatID, toThreadID, int32(PlanStatusPending), int32(TaskStatusPending))
 }
 
 // ==================== Tasks ====================
@@ -2763,9 +2777,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
-	if id == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
 	return store.GetTrigger(ctx, r.ORM(), id)
 }
 
@@ -2774,76 +2785,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
-}
-
-func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.RemoveTrigger(ctx, r.ORM(), id)
-}
-
-func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		// Turning a trigger on locks its project first: refused while the
-		// project is scheduled for deletion (store.LockProjectsForWrite).
-		if enabled {
-			if err := r.lockTriggerProjects(ctx, id, "", true); err != nil {
-				return err
-			}
-		}
-		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
-			return err
-		}
-		before, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
-			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
-		}
-		if err := store.SetTriggerEnabled(ctx, r.ORM(), id, enabled); err != nil {
-			return err
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		op := "pause"
-		if enabled {
-			op = "enable"
-		}
-		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
-	})
-}
-
-// lockTriggerProjects takes the key share a trigger write needs on its
-// projects before the trigger's own row lock (store.LockProjectsForWrite):
-// the project it is in now and, when it moves, toProjectID. Only a write
-// that leaves the trigger on, or moves it, is admitted against a deletion;
-// one that leaves it off, in place, locks nothing. The database's admission
-// re-decides under the same lock in the write itself, so a trigger that moved
-// between this read and its row lock is still refused.
-func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID string, enabled bool) error {
-	current, err := store.TriggerProjectID(ctx, r.ORM(), triggerID)
-	if err != nil {
-		return err
-	}
-	if !enabled && (toProjectID == "" || toProjectID == current) {
-		return nil
-	}
-	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
-}
-
-func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
-	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
-}
-
-func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
-	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
 }
 
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
@@ -2909,18 +2850,6 @@ func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload
 	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
 }
 
-// ListTriggerEvents returns one page of the trigger's firings newest first,
-// each with the run it launched, and whether more follow.
-func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
-	if f.TriggerID == "" {
-		return nil, false, fmt.Errorf("trigger ID cannot be empty")
-	}
-	if f.UserID == "" {
-		return nil, false, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
-}
-
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
 //
 // Deprecated: use store.RunEventExtStore.ClaimRunEvents; the relay reads it
@@ -2942,49 +2871,12 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
-// FiringsSinceLastUnmanagedSuccess returns the legacy inbox failure episode.
-// Attention-managed actors are excluded before the success boundary and cap;
-// callers needing diagnostic health continue to use the unfiltered reads.
-func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
-// GetLatestTriggerEvent returns the trigger's latest firing, optionally
-// filtered by outcome, and (nil, nil) when it has never fired.
-func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
-	if triggerID == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.GetLatestTriggerEvent(ctx, r.ORM(), triggerID, outcome)
-}
-
-func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
-}
-
-func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
-	if id == "" {
-		return nil, core.ErrTriggerNotFound
-	}
-	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
-}
-
 // ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
 //
 // Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
 // ledger through launch.Deps.TriggerEvents.
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
-}
-
-func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
 }
 
 // ==================== Step Executions ====================

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -19,7 +20,7 @@ import (
 // list both derive from.
 func activityOfChat(t *testing.T, f *durableStatusFixture) int {
 	t.Helper()
-	chat, err := f.h.Repo().GetChat(context.Background(), f.chatID)
+	chat, err := store.GetChat(context.Background(), f.h.Repo().ORM(), f.chatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.Activity)
 	return *chat.Activity
@@ -92,7 +93,7 @@ func TestExecuteTools_ReconnectWaitShowsWaitingForDaemon(t *testing.T) {
 	defer f.h.Cleanup()
 	ctx := context.Background()
 	f.h.CreateTestWorkflow(ctx, f.chatID, f.chatID)
-	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: newMockToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: newMockToolExecutor(), Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 	observe := a.daemonWaitObserver(ctx, f.chatID)
 	require.NotNil(t, observe)
 

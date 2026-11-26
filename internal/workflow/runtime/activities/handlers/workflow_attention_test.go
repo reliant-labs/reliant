@@ -131,7 +131,7 @@ func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T)
 	// The runtime turns exhausted terminal persistence into a true Temporal
 	// failure; the existing active-row reconciler then restores failed state.
 	require.NoError(t, f.h.Repo().UpdateWorkflowStatus(ctx, chatID, db.Failed()))
-	firings, err := f.h.Repo().FiringsSinceLastUnmanagedSuccess(ctx, f.userID, []string{f.triggerID}, 20)
+	firings, err := store.FiringsSinceLastUnmanagedSuccess(ctx, f.h.Repo().ORM(), f.userID, []string{f.triggerID}, 20)
 	require.NoError(t, err)
 	require.NotEmpty(t, firings[f.triggerID], "reconciled execution failure remains available to legacy inbox")
 }
@@ -154,7 +154,7 @@ func TestAttentionPreservesFailedOutcomeWhileRepairOwnsIncident(t *testing.T) {
 		Attention: &core.AttentionUpdate{RunID: actorID, StartedAt: at, Key: "repo:one:pr:12", Phase: "finish", State: "action_required", FailureClass: "unsuccessful"}}
 	var out WorkflowStatusOutput
 	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
-	chat, err := f.h.Repo().GetChat(ctx, observer)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), observer)
 	require.NoError(t, err)
 	require.False(t, chat.Unread)
 	var status string
