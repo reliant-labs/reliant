@@ -509,7 +509,7 @@ func (r *racingStore) GetPRPipeline(ctx context.Context, id string) (*core.PRPip
 		r.once.Do(func() {
 			to := *row
 			to.Priority = 60
-			_, err = r.Repo.TransitionPRPipeline(ctx, id, row.Version, to)
+			_, err = r.TransitionPRPipeline(ctx, id, row.Version, to)
 		})
 	}
 	return row, err

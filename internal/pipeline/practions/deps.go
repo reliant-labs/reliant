@@ -108,9 +108,12 @@ type Inbox interface {
 type Deps struct {
 	Store  Store
 	GitHub GitHub
-	Inbox  Inbox
+	// forge:optional-dep
+	Inbox Inbox
 	// Now is the clock; nil is time.Now.
-	Now    func() time.Time
+	// forge:optional-dep
+	Now func() time.Time
+	// forge:optional-dep
 	Logger *slog.Logger
 }
 
