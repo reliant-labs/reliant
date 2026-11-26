@@ -106,13 +106,19 @@ func (g *staticGate) Allowed(ctx context.Context, f Feature, userID, orgID strin
 
 // AllowedForUser asks, one entitled org at a time, the same check Allowed
 // asks (so a credential bound to an unlisted org gets "no"), and stops at the
-// first yes. An outage on one org does not hide a yes from another; with no
+// first yes. The checks run on a fork of the credential binding: a refusal of
+// a listed org the caller never named is not recorded on the caller's ctx,
+// where the edge would report it, naming that org, on a later refusal of the
+// same request. An outage on one org does not hide a yes from another; with no
 // yes, the first outage is returned. Every check together is bounded by
 // allowedForUserTimeout: once it passes, the orgs not yet asked are skipped
 // and the answer is "no". Callers should bound ctx as well.
 func (g *staticGate) AllowedForUser(ctx context.Context, f Feature, userID string) (bool, error) {
 	if userID == "" {
 		return false, nil
+	}
+	if bound, _, _ := authz.CredentialRefusal(ctx); bound != "" {
+		ctx = authz.WithCredentialOrg(ctx, bound)
 	}
 	ctx, cancel := context.WithTimeout(ctx, allowedForUserTimeout)
 	defer cancel()
