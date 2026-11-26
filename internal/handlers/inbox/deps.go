@@ -68,8 +68,11 @@ type Firings interface {
 	// RecentTriggerOutcomes, not RecentTriggerFirings: the Inbox judges
 	// health and never shows an event, so it does not read their bodies.
 	RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+	// InboxEpisodes and InboxEpisodeFailures, not FiringsSinceLastUnmanagedSuccess
+	// and FiringsSinceLastSuccess: the same episodes, without the skipped
+	// firings that cannot change what the Inbox derives from them.
+	InboxEpisodes(ctx context.Context, userID string, triggerIDs []string, perTrigger, window int) (map[string][]*core.TriggerEventWithRun, error)
+	InboxEpisodeFailures(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	// GetLatestTriggerEvent is a trigger's newest event with outcome, nil
 	// when it has none.
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)

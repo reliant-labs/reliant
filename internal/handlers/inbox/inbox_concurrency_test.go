@@ -93,8 +93,10 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		return nil, nil
 	}
 	r.firings.RecentTriggerOutcomesFunc = firings
-	r.firings.FiringsSinceLastSuccessFunc = firings
-	r.firings.FiringsSinceLastUnmanagedSuccessFunc = firings
+	r.firings.InboxEpisodeFailuresFunc = firings
+	r.firings.InboxEpisodesFunc = func(ctx context.Context, userID string, ids []string, per, _ int) (map[string][]*core.TriggerEventWithRun, error) {
+		return firings(ctx, userID, ids, per)
+	}
 	r.regs.ListTriggerRegistrationsForUserFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
 		r.enter(ctx, hold)
 		return nil, nil
@@ -165,7 +167,7 @@ func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
 		return nil, nil
 	}
 	repo.firings.RecentTriggerOutcomesFunc = firing
-	repo.firings.FiringsSinceLastSuccessFunc = firing
+	repo.firings.InboxEpisodeFailuresFunc = firing
 	repo.items.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
 		waitForBoth(ctx)
 		return nil, nil
@@ -240,7 +242,7 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 			r.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) { return nil, errors.New("boom") }
 		}},
 		{"automation health", func(r *inflightRepo) {
-			r.firings.FiringsSinceLastUnmanagedSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
+			r.firings.InboxEpisodesFunc = func(context.Context, string, []string, int, int) (map[string][]*core.TriggerEventWithRun, error) {
 				return nil, errors.New("boom")
 			}
 		}},

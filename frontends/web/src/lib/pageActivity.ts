@@ -230,6 +230,25 @@ export function pageActivity(): PageActivity {
   return _shared;
 }
 
+/**
+ * The page, as the SDK's reconnecting streams see it (their
+ * StreamEnvironment): they report a lost connection here, measure a
+ * connection attempt's wait for its first frame on the active clock (a locked
+ * phone does not count), and replace an attempt still waiting when the page
+ * resumes or another stream's connection fails.
+ */
+export function streamPageEnvironment(): {
+  onConnectionLost: () => void;
+  activeNow: () => number;
+  resumeSignals: (listener: (reason: string) => void) => () => void;
+} {
+  return {
+    onConnectionLost: () => pageActivity().noteConnectionLost(),
+    activeNow: () => pageActivity().activeNow(),
+    resumeSignals: (listener) => pageActivity().onResume(({ reason }) => listener(reason)),
+  };
+}
+
 /** Test seam: drop the shared instance so the next caller starts fresh. */
 export function resetPageActivityForTests(): void {
   _shared?.stop();

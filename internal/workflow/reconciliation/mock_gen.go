@@ -165,6 +165,52 @@ func (m *MockOrphans) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Co
 // Compile-time check.
 var _ Orphans = (*MockOrphans)(nil)
 
+// forge:section MockToolCallLists
+// forge:hash=e55a7a9720ea25666bc936e92861c9c03b1f1744425adc54fce7122feffcceea
+
+// MockToolCallLists is a test mock for the ToolCallLists interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockToolCallLists.<Method>Func not set" error.
+type MockToolCallLists struct {
+	contractkit.Recorder
+	ListStrandedSpawnToolCallsFunc           func(context.Context) ([]*db.ToolCall, error)
+	ListStrandedBackgroundSpawnToolCallsFunc func(context.Context) ([]*db.StrandedBackgroundSpawn, error)
+	ListBackgroundedProcessToolCallsFunc     func(context.Context) ([]*db.BackgroundedProcessCall, error)
+}
+
+// ListStrandedSpawnToolCalls records the call and delegates to ListStrandedSpawnToolCallsFunc when set.
+func (m *MockToolCallLists) ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error) {
+	m.Recorder.Record("ListStrandedSpawnToolCalls", ctx)
+	if m.ListStrandedSpawnToolCallsFunc != nil {
+		return m.ListStrandedSpawnToolCallsFunc(ctx)
+	}
+	return nil, contractkit.MockNotSet("MockToolCallLists", "ListStrandedSpawnToolCalls")
+}
+
+// ListStrandedBackgroundSpawnToolCalls records the call and delegates to ListStrandedBackgroundSpawnToolCallsFunc when set.
+func (m *MockToolCallLists) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*db.StrandedBackgroundSpawn, error) {
+	m.Recorder.Record("ListStrandedBackgroundSpawnToolCalls", ctx)
+	if m.ListStrandedBackgroundSpawnToolCallsFunc != nil {
+		return m.ListStrandedBackgroundSpawnToolCallsFunc(ctx)
+	}
+	return nil, contractkit.MockNotSet("MockToolCallLists", "ListStrandedBackgroundSpawnToolCalls")
+}
+
+// ListBackgroundedProcessToolCalls records the call and delegates to ListBackgroundedProcessToolCallsFunc when set.
+func (m *MockToolCallLists) ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error) {
+	m.Recorder.Record("ListBackgroundedProcessToolCalls", ctx)
+	if m.ListBackgroundedProcessToolCallsFunc != nil {
+		return m.ListBackgroundedProcessToolCallsFunc(ctx)
+	}
+	return nil, contractkit.MockNotSet("MockToolCallLists", "ListBackgroundedProcessToolCalls")
+}
+
+// Compile-time check.
+var _ ToolCallLists = (*MockToolCallLists)(nil)
+
 // forge:section MockChats
 // forge:hash=31c2cd871f3d0a9b0fca72ff139635fd6accae1d2080b86d6656595bde427c7d
 
@@ -244,7 +290,7 @@ func (m *MockDaemonReader) GetDaemon(ctx context.Context, id string) (*db.Daemon
 var _ DaemonReader = (*MockDaemonReader)(nil)
 
 // forge:section MockReconcilerStore
-// forge:hash=bc6f0fdead9d463e2b7fe71d32db0c1a0692551b857b6badbfbe8c8d123c8dd2
+// forge:hash=ddcf108cf09daa2f602229640f68d297f9727ecdf6ec4a9b3f7f7adee9faf609
 
 // MockReconcilerStore is a test mock for the ReconcilerStore interface.
 //
@@ -268,9 +314,6 @@ type MockReconcilerStore struct {
 	ReapOrphanedThreadsFunc                  func(context.Context) ([]db.ReapedThread, error)
 	GetThreadFunc                            func(context.Context, string) (*db.Thread, error)
 	ListPendingApprovalsByChatFunc           func(context.Context, string) ([]*db.Approval, error)
-	ListStrandedSpawnToolCallsFunc           func(context.Context) ([]*db.ToolCall, error)
-	ListStrandedBackgroundSpawnToolCallsFunc func(context.Context) ([]*db.StrandedBackgroundSpawn, error)
-	ListBackgroundedProcessToolCallsFunc     func(context.Context) ([]*db.BackgroundedProcessCall, error)
 	UpsertToolCallResultFunc                 func(context.Context, string, *db.ToolCallResult) error
 	EmitToolCallUpdateFunc                   func(context.Context, string, db.ToolCallUpdate) error
 	UpdateChatFunc                           func(context.Context, *db.Chat) error
@@ -416,33 +459,6 @@ func (m *MockReconcilerStore) ListPendingApprovalsByChat(ctx context.Context, ch
 		return m.ListPendingApprovalsByChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListPendingApprovalsByChat")
-}
-
-// ListStrandedSpawnToolCalls records the call and delegates to ListStrandedSpawnToolCallsFunc when set.
-func (m *MockReconcilerStore) ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error) {
-	m.Recorder.Record("ListStrandedSpawnToolCalls", ctx)
-	if m.ListStrandedSpawnToolCallsFunc != nil {
-		return m.ListStrandedSpawnToolCallsFunc(ctx)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListStrandedSpawnToolCalls")
-}
-
-// ListStrandedBackgroundSpawnToolCalls records the call and delegates to ListStrandedBackgroundSpawnToolCallsFunc when set.
-func (m *MockReconcilerStore) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*db.StrandedBackgroundSpawn, error) {
-	m.Recorder.Record("ListStrandedBackgroundSpawnToolCalls", ctx)
-	if m.ListStrandedBackgroundSpawnToolCallsFunc != nil {
-		return m.ListStrandedBackgroundSpawnToolCallsFunc(ctx)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListStrandedBackgroundSpawnToolCalls")
-}
-
-// ListBackgroundedProcessToolCalls records the call and delegates to ListBackgroundedProcessToolCallsFunc when set.
-func (m *MockReconcilerStore) ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error) {
-	m.Recorder.Record("ListBackgroundedProcessToolCalls", ctx)
-	if m.ListBackgroundedProcessToolCallsFunc != nil {
-		return m.ListBackgroundedProcessToolCallsFunc(ctx)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListBackgroundedProcessToolCalls")
 }
 
 // UpsertToolCallResult records the call and delegates to UpsertToolCallResultFunc when set.

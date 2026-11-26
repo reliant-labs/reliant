@@ -356,7 +356,7 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 	t.Parallel()
 
 	env := setupTriggerTest(t)
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo)})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Triggers: store.NewTriggerExtStore(env.repo.ORM()), FiringReads: store.NewTriggerEventExtStore(env.repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(env.repo.ORM()), Projects: projectaccesstest.For(env.repo)})))
 
 	_, err := svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
@@ -380,8 +380,8 @@ func TestServiceWithoutTemporal(t *testing.T) {
 	require.Nil(t, fires, "TemporalBackend without a client must return a nil interface")
 
 	for name, deps := range map[string]Deps{
-		"nil Syncer and Fires":             realStores(env.repo, Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo)}),
-		"TemporalBackend without a client": realStores(env.repo, Deps{Repo: env.repo, Projects: projectaccesstest.For(env.repo), Syncer: syncer, Fires: fires}),
+		"nil Syncer and Fires":             realStores(env.repo, Deps{Repo: env.repo, Triggers: store.NewTriggerExtStore(env.repo.ORM()), FiringReads: store.NewTriggerEventExtStore(env.repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(env.repo.ORM()), Projects: projectaccesstest.For(env.repo)}),
+		"TemporalBackend without a client": realStores(env.repo, Deps{Repo: env.repo, Triggers: store.NewTriggerExtStore(env.repo.ORM()), FiringReads: store.NewTriggerEventExtStore(env.repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(env.repo.ORM()), Projects: projectaccesstest.For(env.repo), Syncer: syncer, Fires: fires}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			// Stored while Temporal was available; served without it.

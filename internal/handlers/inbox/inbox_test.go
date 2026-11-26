@@ -42,7 +42,7 @@ func newInboxFixture(t *testing.T) *inboxFixture {
 // enabled.
 func (f *inboxFixture) withSweeper(t *testing.T, sweeper Sweeper) {
 	t.Helper()
-	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Sweeper: sweeper}))
+	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Registrations: store.NewTriggerRegistrationExtStore(f.repo.ORM()), Sweeper: sweeper}))
 }
 
 // otherUser returns a context and project for a second, unrelated user in the

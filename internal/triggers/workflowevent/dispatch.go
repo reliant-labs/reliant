@@ -173,7 +173,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 		retryable   []error
 	)
 	for _, trigger := range candidates {
-		if trigger.Kind != runevents.TriggerKind || !trigger.Enabled || trigger.UserID != ev.UserID {
+		if !candidate(trigger, ev) {
 			continue
 		}
 		// A retry of a dispatch that already launched this firing resumes
@@ -239,6 +239,41 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 		results, retryable = appendResult(results, retryable, res, err)
 	}
 	return results, errors.Join(retryable...)
+}
+
+// MayReach reports whether Dispatch could fire, or record anything for, any
+// of candidates on ev, judged from the trigger rows alone. False means its
+// dispatch would match nothing and write nothing, so the relay need not start
+// one.
+//
+// It keeps Dispatch's listing rules and judges ad hoc triggers by their own
+// config. An activation always counts as reaching: its row is only a cached
+// projection, while Dispatch reads its current declaration (or a prior firing's
+// pinned declaration). Rejecting on that projection could permanently discard
+// an event after the declaration widens, before reconciliation catches up.
+//
+// A row that does not parse counts as reaching: Dispatch records a failed
+// event for it on every run event, so the owner sees why it never fires.
+func MayReach(candidates []*core.Trigger, ev *core.RunEvent) bool {
+	for _, trigger := range candidates {
+		if !candidate(trigger, ev) {
+			continue
+		}
+		if trigger.WorkflowTrigger != nil && *trigger.WorkflowTrigger != "" {
+			return true
+		}
+		spec, err := SpecOf(trigger)
+		if err != nil || spec.Source.Matches(ev.WorkflowName, ev.Outcome) {
+			return true
+		}
+	}
+	return false
+}
+
+// candidate reports whether trigger is one Dispatch matches ev against: an
+// enabled workflow_event trigger of ev's own owner.
+func candidate(trigger *core.Trigger, ev *core.RunEvent) bool {
+	return trigger.Kind == runevents.TriggerKind && trigger.Enabled && trigger.UserID == ev.UserID
 }
 
 // traced runs one trigger's firing for ev as a trigger.fire span

@@ -302,9 +302,9 @@ var fixtureTriggerReads func(Repository) TriggerReads
 // triggerReads is Deps.TriggerReads; in this package's tests a fixture that
 // left it unnamed (the harness's mock) reads through its own repository.
 func (s *Service) triggerReads() TriggerReads {
-	switch s.deps.TriggerReads.(type) {
-	case nil, *MockTriggerReads:
-		if fixtureTriggerReads != nil {
+	if fixtureTriggerReads != nil {
+		mock, isMock := s.deps.TriggerReads.(*MockTriggerReads)
+		if s.deps.TriggerReads == nil || (isMock && mock.GetTriggerEventByChatIDFunc == nil) {
 			return fixtureTriggerReads(s.deps.Repo)
 		}
 	}

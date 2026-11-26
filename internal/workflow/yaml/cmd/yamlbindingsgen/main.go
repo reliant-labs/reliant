@@ -71,6 +71,7 @@ func generate() ([]byte, error) {
 	fmt.Fprintf(&buf, "const yamlKeyOutcome = %q\n", nodeFields.ByName("outcome").Name())
 	fmt.Fprintf(&buf, "const yamlKeyTolerateFailure = %q\n", nodeFields.ByName("tolerate_failure").Name())
 	fmt.Fprintf(&buf, "const yamlKeyObserve = %q\n", nodeFields.ByName("observe").Name())
+	fmt.Fprintf(&buf, "const yamlKeyRole = %q\n", nodeFields.ByName("role").Name())
 	fmt.Fprintf(&buf, "const yamlKeyArgs = %q\n", argsOneof.Name())
 	fmt.Fprintf(&buf, "const yamlKeyFrom = %q\n", edgeFields.ByName("from").Name())
 	fmt.Fprintf(&buf, "const yamlKeyCases = %q\n", edgeFields.ByName("cases").Name())
