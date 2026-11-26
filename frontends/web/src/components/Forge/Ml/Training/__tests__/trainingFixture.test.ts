@@ -31,6 +31,7 @@ import { timestampMs } from "@bufbuild/protobuf/wkt";
 
 import { recoveryGapSeconds, trainingAnswers, V3_RECOVERIES, V3_SPECS } from "@/fixtures/shop/model/ml/training";
 import { ALERTS, attemptId, BAD_NODE, checkpointId, EXPERIMENTS, HOT_NODE, RUNS, SPARE_NODE, V3_ATTEMPTS } from "@/fixtures/shop/model/ml/world";
+import { scopedNumbers } from "../trainingModel";
 
 const NOW = Date.UTC(2026, 10, 26, 3, 0);
 const now = () => NOW;
@@ -185,5 +186,25 @@ describe("training fixture: lists, events, alerts", () => {
     expect(org).not.toContain(ALERTS.gpuThermal);
     expect(org).toContain(ALERTS.straggler);
     expect(alerts(MlSubjectKind.RUN, RUNS.v3.id).find((a) => a.id === ALERTS.lossSpike)?.autoActionEnabled).toBe(false);
+  });
+});
+
+describe("the run page's header numbers follow its scope", () => {
+  it("read the whole run, a phase, then an attempt", () => {
+    const run = getRun(RUNS.v3.id).run!;
+    const sft = run.phases.find((p) => p.key === "sft")!;
+    const a2 = sft.attempts.find((a) => a.n === 2)!;
+    const whole = scopedNumbers(run, sft, null, false, NOW);
+    expect(whole.scopeLabel).toBe("whole run");
+    expect(whole.lost.count).toBe(3);
+    const phase = scopedNumbers(run, sft, null, true, NOW);
+    expect(phase.scopeLabel).toBe("sft (3 attempts)");
+    expect(phase.lost.count).toBe(2);
+    const attempt = scopedNumbers(run, sft, a2, true, NOW);
+    expect(attempt.scopeLabel).toBe("sft attempt 2");
+    expect(attempt.step).toBe(32_750);
+    expect(attempt.lost.count).toBe(1);
+    expect(attempt.etaSeconds).toBeNull();
+    expect(attempt.ranSeconds).toBeGreaterThan(0);
   });
 });

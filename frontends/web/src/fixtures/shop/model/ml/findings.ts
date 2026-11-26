@@ -161,7 +161,7 @@ function build(now: () => number): FindingInit[] {
           { cells: ["26h ago", "npd", "GPUXidError=True (XidCriticalError)"], subject: node(BAD_NODE) },
           { cells: ["26h ago", "forge", `alert-xid-fatal: cordoned, swapped in ${SPARE_NODE}`], subject: node(SPARE_NODE) },
           { cells: ["25h ago", "dcgm", "dcgmi diag -r 3: GPU 5 not found; 7 of 8 passed"], subject: node(BAD_NODE) },
-          { cells: ["25.6h ago", "forge", "sft attempt 3 running from checkpoint 32,000"], subject: attempt("sft", 3) },
+          { cells: ["26h ago", "forge", "sft attempt 3 running from checkpoint 32,000"], subject: attempt("sft", 3) },
         ],
       },
       evidenceFacts: [
@@ -635,7 +635,7 @@ function build(now: () => number): FindingInit[] {
       lastSeenAt: at(-MINUTE, now),
       rule: "A rank whose DCGM_FI_DEV_SM_CLOCK is under 0.9× the run's median for 30 min while step time rises (train/step_time)",
       evidenceSeries: [
-        series(now, "train.step_time_ms", "Step time", "ms", 24, 10, (off) => v3StepTimeMs("sft", 32_000 + Math.round((off + 25.6 * HOUR) / HOUR) * 359, off >= STRAGGLER_SINCE), "step time"),
+        series(now, "train.step_time_ms", "Step time", "ms", 24, 10, (off) => v3StepTimeMs("sft", 32_000 + Math.round((off + 25.86 * HOUR) / HOUR) * 359, off >= STRAGGLER_SINCE), "step time"),
         ...withGroup(deviceSeries(gpuUuid(HOT_NODE, HOT_GPU_INDEX), "gpu.sm_clock_mhz", now, 24), `rank ${STRAGGLER_RANK} SM clock`),
       ],
       evidenceTable: {
@@ -1040,7 +1040,7 @@ function build(now: () => number): FindingInit[] {
       subjects: [pool(POOLS.l4), service(SERVICES.prod), pool(POOLS.spare), node(SPARE_NODE)],
       clusterIds: [SERVE, TRAIN],
       state: MlFindingState.OPEN,
-      firstSeenAt: at(-25.6 * HOUR, now),
+      firstSeenAt: at(-26 * HOUR + 515 * 1000, now),
       lastSeenAt: at(-MINUTE, now),
       rule: "A pool serving production, or running a training run on more than 32 GPUs, with no schedulable spare node",
       evidenceSeries: [],

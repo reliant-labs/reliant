@@ -364,7 +364,8 @@ export const V3_ATTEMPTS: readonly AttemptDef[] = [
     phase: "sft",
     n: 3,
     queuedAt: -26 * HOUR,
-    runningAt: -25.6 * HOUR,
+    // The recovery after the Xid: drain 95 s + reschedule 38 s + NCCL init 64 s + checkpoint load 318 s (training.ts).
+    runningAt: -26 * HOUR + 515 * 1000,
     endedAt: null,
     startStep: 32000,
     endStep: 41200,

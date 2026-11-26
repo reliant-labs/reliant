@@ -13,7 +13,6 @@ import { useMemo, useState } from "react";
 import Link from "@/components/forge-ui/link";
 import { FilterBar, FilterChip, FilterMenu, FilterSearch } from "@/components/forge-ui/filter_bar";
 import { MlSubjectKind, type MlExperiment, type MlRun } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
-import { cn } from "@/lib/utils";
 
 import { MlFrame, MlRead } from "../MlParts";
 import {
@@ -34,6 +33,7 @@ import {
   Sparkline,
   SubjectLink,
   tsMs,
+  useCompareTray,
   useMl,
   useMlSearch,
   type MlColumn,
@@ -60,12 +60,16 @@ export function RunsList() {
 function RunsListBody({ runs, experiments }: { runs: readonly MlRun[]; experiments: readonly MlExperiment[] }) {
   const [now] = useState(() => Date.now());
   const [search, setSearch] = useMlSearch();
-  const [picked, setPicked] = useState<string[]>([]);
+  const tray = useCompareTray();
+  const picked = tray.runs.map((r) => r.id);
   const kpis = useMemo(() => listKpis(runs, now), [runs, now]);
   const shown = useMemo(() => filterRuns(runs, search.filter, search.q), [runs, search.filter, search.q]);
   const groups = useMemo(() => groupRuns(shown, experiments, search.group), [shown, experiments, search.group]);
-  const toggle = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
-  const columns = useRunColumns(picked, toggle, now);
+  const toggle = (id: string) => {
+    const run = runs.find((r) => r.id === id);
+    if (run) tray.toggle({ id: run.id, name: run.name });
+  };
+  const columns = useRunColumns(picked, toggle, now, tray.full);
   const board = leaderboard(experiments, runs);
 
   return (
@@ -91,11 +95,6 @@ function RunsListBody({ runs, experiments }: { runs: readonly MlRun[]; experimen
             <FilterChip on={search.group === "experiment"} onClick={() => setSearch({ group: search.group === "experiment" ? undefined : "experiment" })} testId="ml-runs-group">
               Group by experiment
             </FilterChip>
-            {picked.length > 0 && (
-              <MlLink href={mlHref("runs", ["compare"], { compare: picked.join(",") })} testId="ml-runs-compare" className="text-primary-ink">
-                Compare ({picked.length})
-              </MlLink>
-            )}
           </>
         }
       >
@@ -152,14 +151,23 @@ function RunsListBody({ runs, experiments }: { runs: readonly MlRun[]; experimen
   );
 }
 
-function useRunColumns(picked: readonly string[], toggle: (id: string) => void, now: number): MlColumn<MlRun>[] {
+function useRunColumns(picked: readonly string[], toggle: (id: string) => void, now: number, full: boolean): MlColumn<MlRun>[] {
   return [
     {
       key: "pick",
       header: <span className="sr-only">Select to compare</span>,
       width: "32px",
       render: (r) => (
-        <input type="checkbox" aria-label={`Compare ${r.name}`} checked={picked.includes(r.id)} onChange={() => toggle(r.id)} className="h-3.5 w-3.5 accent-primary" data-testid={`ml-runs-pick-${r.name}`} />
+        <input
+          type="checkbox"
+          aria-label={`Compare ${r.name}`}
+          checked={picked.includes(r.id)}
+          disabled={full && !picked.includes(r.id)}
+          title={full && !picked.includes(r.id) ? "The tray holds 4 runs" : "Add to the compare tray"}
+          onChange={() => toggle(r.id)}
+          className="h-3.5 w-3.5 accent-primary"
+          data-testid={`ml-runs-pick-${r.name}`}
+        />
       ),
     },
     {
@@ -179,7 +187,22 @@ function useRunColumns(picked: readonly string[], toggle: (id: string) => void, 
         </div>
       ),
     },
-    { key: "state", header: "State", sort: (r) => r.state, render: (r) => <RunState run={r} compact /> },
+    {
+      key: "state",
+      header: "State",
+      sort: (r) => r.state,
+      render: (r) => (
+        <div className="flex flex-col leading-tight">
+          <RunState run={r} compact />
+          {r.restarts > 0 && (
+            <span className="text-meta text-ink-muted" title={`${r.restarts} restarts, ${r.preemptions} preemptions`}>
+              {r.restarts} restart{r.restarts === 1 ? "" : "s"}
+              {r.preemptions ? ` · ${r.preemptions} preempted` : ""}
+            </span>
+          )}
+        </div>
+      ),
+    },
     { key: "phases", header: "Phases", render: (r) => <MiniGantt run={r} now={now} /> },
     {
       key: "step",
@@ -206,18 +229,20 @@ function useRunColumns(picked: readonly string[], toggle: (id: string) => void, 
     { key: "eta", header: "ETA", numeric: true, sort: (r) => r.etaSeconds ?? Infinity, render: (r) => (r.etaSeconds !== undefined ? fmtDuration(r.etaSeconds) : <span className="text-ink-muted">—</span>) },
     { key: "gpus", header: "GPUs", numeric: true, sort: (r) => r.accelerators, render: (r) => <span title={r.acceleratorProduct}>{r.accelerators}×{shortProduct(r.acceleratorProduct)}</span> },
     { key: "goodput", header: "Goodput", numeric: true, sort: (r) => (has(r.goodput) ? r.goodput : -1), render: (r) => fmtPct(r.goodput) },
-    { key: "cost", header: "GPU-h · $", numeric: true, sort: (r) => r.cost?.usd ?? 0, render: (r) => <CostPair cost={r.cost} /> },
     {
-      key: "restarts",
-      header: "Restarts",
+      key: "cost",
+      header: "Cost",
       numeric: true,
-      sort: (r) => r.restarts,
-      render: (r) => (
-        <span className={cn(r.restarts ? "text-ink" : "text-ink-muted")} title={`${r.restarts} restarts, ${r.preemptions} preemptions`}>
-          {r.restarts}
-          {r.preemptions ? <span className="text-ink-muted"> · {r.preemptions}p</span> : null}
-        </span>
-      ),
+      sort: (r) => r.cost?.usd ?? 0,
+      render: (r) =>
+        r.cost ? (
+          <div className="flex flex-col leading-tight">
+            <span>{r.cost.priced ? fmtUsd(r.cost.usd) : "unpriced"}</span>
+            <span className="text-meta text-ink-muted">{fmtGpuHours(r.cost.gpuHours)}</span>
+          </div>
+        ) : (
+          <span className="text-ink-muted">—</span>
+        ),
     },
     {
       key: "objective",
@@ -228,8 +253,8 @@ function useRunColumns(picked: readonly string[], toggle: (id: string) => void, 
         const v = r.summary[r.objectiveKey];
         return (
           <span className="inline-flex items-center justify-end gap-2">
-            <Sparkline values={r.objective?.y ?? []} width={64} height={18} />
-            <span className="w-12 text-right">{has(v) ? v.toFixed(3) : "—"}</span>
+            <Sparkline values={r.objective?.y ?? []} width={40} height={18} />
+            <span className="w-10 text-right">{has(v) ? v.toFixed(3) : "—"}</span>
           </span>
         );
       },
@@ -244,7 +269,7 @@ function MiniGantt({ run, now }: { run: MlRun; now: number }) {
   const segs = miniGantt(run, now);
   if (!segs.length) return <span className="text-meta text-ink-muted">not started</span>;
   return (
-    <div className="relative h-4 w-48" data-testid={`ml-mini-gantt-${run.name}`}>
+    <div className="relative h-4 w-32" data-testid={`ml-mini-gantt-${run.name}`}>
       <div className="absolute inset-x-0 top-1/2 h-px bg-border-subtle" aria-hidden="true" />
       {segs.map((s) => (
         <Link

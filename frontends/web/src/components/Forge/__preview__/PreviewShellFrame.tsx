@@ -47,7 +47,7 @@ import {
 } from "@/components/Layout/sidebar/navConfig/items";
 import { testsGroup } from "@/components/Layout/sidebar/navConfig/tests";
 import type { NavConfig } from "@/components/Layout/sidebar/navConfig/types";
-import { SidebarOrgLabel, SidebarOrgRow } from "@/components/Layout/sidebar/primitives";
+import { SidebarOrgRow } from "@/components/Layout/sidebar/primitives";
 import { ShellNavColumn } from "@/components/Layout/sidebar/ShellNavColumn";
 import { useShellProject, type ShellProject } from "@/components/Layout/sidebar/shellProject";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -101,8 +101,12 @@ function PreviewNav({ pathname, search, onNavigate }: ShellNavProps) {
           <SidebarOrgRow>
             <ForgeBrand />
           </SidebarOrgRow>
-          <div>
-            <SidebarOrgLabel name={DEMO_PROJECT} />
+          {/* The app, as the live nav's project row shows it: an initial and the name on one line. */}
+          <div className="flex h-9 items-center gap-2 px-4 text-ui font-semibold text-ink" data-testid="preview-project-row">
+            <span className="grid size-5 shrink-0 place-items-center rounded-md bg-ink/10 text-meta" aria-hidden="true">
+              {DEMO_PROJECT.charAt(0).toUpperCase()}
+            </span>
+            <span className="min-w-0 truncate">{DEMO_PROJECT}</span>
           </div>
         </>
       }

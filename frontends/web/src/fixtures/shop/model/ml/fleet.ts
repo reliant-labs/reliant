@@ -691,9 +691,9 @@ function hostAt(n: NodeModel, off: number, now: () => number, r: () => number): 
     psiMem: 0.0005,
     psiIo: ckpt ? 0.09 + 0.02 * z : 0.004 + 0.002 * z,
     disk: 0.41 + (off / (7 * DAY)) * 0.04,
-    netRx: load * (training ? (ckpt ? 18 : 4.2) : 1.4) + 0.2 * z,
-    netTx: load * (training ? (ckpt ? 22 : 3.1) : 1.9) + 0.2 * z,
-    ibX: training ? load * 142 * (1 + 0.06 * z) : NaN,
+    netRx: Math.max(0, load * (training ? (ckpt ? 18 : 4.2) : 1.4) + 0.2 * z),
+    netTx: Math.max(0, load * (training ? (ckpt ? 22 : 3.1) : 1.9) + 0.2 * z),
+    ibX: training ? Math.max(0, load * 142 * (1 + 0.06 * z)) : NaN,
     ibR: training ? load * 139 * (1 + 0.06 * z) : NaN,
   };
 }

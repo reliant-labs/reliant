@@ -1355,8 +1355,8 @@ function podStartTrace(run: TRun, a: TAttempt, now: () => number): BuiltTrace {
   const root = b.add({ name: "attempt.start", start: t0, ms: total, service: "forge", attrs: { "ml.workload": wl, "ml.resumed_from_step": String(a.startStep), "ml.remediation": `cordoned ${BAD_NODE}, swapped in hot spare ${SPARE_NODE}`, "ml.alert": "alert-xid-fatal" } });
   b.add({ name: "detect: dcgm Xid 79 → alert-xid-fatal", parent: root, start: t0, ms: 41 * S, service: "forge", node: BAD_NODE, device: gpuUuid(BAD_NODE, BAD_GPU_INDEX), attrs: { "dcgm.xid": "79", "alert.rule": "alert-xid-fatal", action: "cordon + new attempt" } });
   let c = prevEnd;
-  b.add({ name: "pods.drain (attempt 2)", parent: root, start: c, ms: 1020 * S, service: "kubelet", node: BAD_NODE, pod: `${workloadName(run.name, "sft", 2)}-w-${H100.indexOf(BAD_NODE)}`, attrs: { "node.cordoned": BAD_NODE, reason: "pod stuck Terminating (process in D state after the GPU fell off the bus); force-deleted after the 900 s grace period" } });
-  c += 1020 * S;
+  b.add({ name: "pods.drain (attempt 2)", parent: root, start: c, ms: 95 * S, service: "kubelet", node: BAD_NODE, pod: `${workloadName(run.name, "sft", 2)}-w-${H100.indexOf(BAD_NODE)}`, attrs: { "node.cordoned": BAD_NODE, reason: "healthy pods exit without an emergency checkpoint; r4vb's pod force-deleted at once (the GPU fell off the bus)" } });
+  c += 95 * S;
   const kq = b.add({
     name: "kueue.workload",
     parent: root,

@@ -413,3 +413,75 @@ export function leaderboard(experiments: readonly MlExperiment[], runs: readonly
 export function seriesPhase(detail: GetMlRunResponse, phase: MlPhase | null): MlPhase | null {
   return phase ?? detail.run?.phases.find((p) => p.key === detail.run?.currentPhaseKey) ?? null;
 }
+
+/** What the run page's header numbers are about: the whole run, one phase, or one attempt. */
+export interface ScopedNumbers {
+  /** "whole run", "sft (all attempts)", "sft attempt 3". */
+  scopeLabel: string;
+  step: number;
+  totalSteps: number;
+  /** Seconds the scope ran (an attempt or a finished phase); null for a live run or phase, which has an ETA instead. */
+  ranSeconds: number | null;
+  etaSeconds: number | null;
+  accelerators: number;
+  goodput: number;
+  gpuHours: number;
+  usd: number;
+  lost: { gpuHours: number; usd: number; count: number };
+}
+
+/**
+ * The header's numbers for `scope` (runScope.ts): the run's own totals, a
+ * phase's (its attempts summed, its failures), or an attempt's (its steps, its
+ * world size, its cost, and the failure that ended it).
+ */
+export function scopedNumbers(run: MlRun, phase: MlPhase | null, attempt: MlAttempt | null, phaseScoped: boolean, now: number): ScopedNumbers {
+  const cards = failureCards(run);
+  const sum = (cs: FailureCard[]) => ({ gpuHours: cs.reduce((s, c) => s + c.gpuHoursLost, 0), usd: cs.reduce((s, c) => s + c.usdLost, 0), count: cs.length });
+  if (phase && attempt) {
+    const start = tsMs(attempt.runningAt) ?? tsMs(attempt.queuedAt);
+    const end = tsMs(attempt.endedAt);
+    const productive = attempt.cost?.byCategory.find((c) => c.category === MlCostCategory.PRODUCTIVE)?.gpuHours ?? Number.NaN;
+    const live = end === null;
+    return {
+      scopeLabel: `${phase.key} attempt ${attempt.n}`,
+      step: num(attempt.endStep),
+      totalSteps: num(phase.totalSteps),
+      ranSeconds: start ? ((end ?? now) - start) / 1000 : null,
+      etaSeconds: live && run.currentPhaseKey === phase.key && run.etaSeconds !== undefined ? run.etaSeconds : null,
+      accelerators: attempt.worldSize || phase.accelerators,
+      goodput: attempt.cost && attempt.cost.gpuHours > 0 ? productive / attempt.cost.gpuHours : Number.NaN,
+      gpuHours: attempt.cost?.gpuHours ?? Number.NaN,
+      usd: attempt.cost?.usd ?? Number.NaN,
+      lost: sum(cards.filter((c) => c.phaseKey === phase.key && c.failed.n === attempt.n)),
+    };
+  }
+  if (phase && phaseScoped) {
+    const start = tsMs(phase.startedAt);
+    const end = tsMs(phase.endedAt);
+    return {
+      scopeLabel: `${phase.key} (${phase.attempts.length} attempt${phase.attempts.length === 1 ? "" : "s"})`,
+      step: num(phase.step),
+      totalSteps: num(phase.totalSteps),
+      ranSeconds: start && end ? (end - start) / 1000 : null,
+      etaSeconds: run.currentPhaseKey === phase.key && run.etaSeconds !== undefined ? run.etaSeconds : null,
+      accelerators: phase.accelerators,
+      goodput: phase.goodput,
+      gpuHours: phase.cost?.gpuHours ?? Number.NaN,
+      usd: phase.cost?.usd ?? Number.NaN,
+      lost: sum(cards.filter((c) => c.phaseKey === phase.key)),
+    };
+  }
+  return {
+    scopeLabel: "whole run",
+    step: num(run.step),
+    totalSteps: num(run.totalSteps),
+    ranSeconds: null,
+    etaSeconds: run.etaSeconds ?? null,
+    accelerators: run.accelerators,
+    goodput: run.goodput,
+    gpuHours: run.cost?.gpuHours ?? Number.NaN,
+    usd: run.cost?.usd ?? Number.NaN,
+    lost: sum(cards),
+  };
+}

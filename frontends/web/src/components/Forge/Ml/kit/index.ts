@@ -3,6 +3,7 @@
 /** The ML tab's shared kit: import from "../kit". */
 
 export * from "./charts";
+export * from "./compareTray";
 export * from "./format";
 export * from "./ids";
 export * from "./labels";

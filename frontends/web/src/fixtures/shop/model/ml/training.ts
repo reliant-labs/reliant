@@ -248,7 +248,7 @@ export const V3_RECOVERIES: Record<string, RecoveryDef> = {
   "sft/3": {
     stages: [
       ["detect", 41, "DCGM Xid 79 event → alert-xid-fatal fired"],
-      ["drain", 1020, "Cordon r4vb; its pod stuck Terminating (process in uninterruptible sleep after the GPU fell off the bus), force-deleted after the 900 s grace period"],
+      ["drain", 95, "Cordon r4vb; the 7 healthy pods write no emergency checkpoint (32,000 is 750 steps back) and exit; r4vb's pod is force-deleted at once (the GPU fell off the bus)"],
       ["reschedule", 38, "Kueue requeue + admission; hot spare gke-train-h100-s01 bound in place of r4vb"],
       ["image pull", 0, "Pre-pulled on the hot spare (a cold node pulls 18.4 GB in 212 s)"],
       ["NCCL init", 64, "64 ranks, new ring through s01"],

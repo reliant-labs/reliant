@@ -20,7 +20,8 @@ import { MlAxis, MlCollection, type MlEvent, type MlHistogram, type MlSeries } f
 import { cn } from "@/lib/utils";
 
 import { UPlotChart, type ChartBand, type ChartMarker, type ChartSeries, type ChartTone } from "../../Observability/charts/UPlotChart";
-import { fmtCompact, fmtStep, fmtUnit, num, tsMs } from "./format";
+import { chartToken } from "../../Observability/charts/chartPalette";
+import { fmtCompact, fmtInt, fmtUnit, num, tsMs } from "./format";
 import { eventKindOf, TONE_VAR, type MlTone } from "./labels";
 import { NotCollected } from "./ui";
 
@@ -81,8 +82,14 @@ function seriesLabel(s: MlSeries): string {
 export function MlChart({ series, events, bands, label, height = 160, syncKey, area, bars, compact, legend, unit, what, tones, testId }: MlChartProps) {
   const collected = useMemo(() => series.filter((s) => s.collection !== MlCollection.NOT_COLLECTED && s.collection !== MlCollection.NOT_APPLICABLE && s.x.length > 0), [series]);
   const axis = series[0]?.axis ?? MlAxis.TIME;
-  const u = unit ?? series[0]?.unit ?? "";
-  const { xs, ys } = useMemo(() => alignSeries(collected), [collected]);
+  const rawUnit = unit ?? series[0]?.unit ?? "";
+  // A ratio is drawn in percent: the axis splits read "40%", and an all-zero
+  // series (a cordoned node) spans 0–100%, never 0–10000%.
+  const asPercent = rawUnit === "ratio";
+  const u = asPercent ? "percent" : rawUnit;
+  const aligned = useMemo(() => alignSeries(collected), [collected]);
+  const xs = aligned.xs;
+  const ys = useMemo(() => (asPercent ? aligned.ys.map((row) => row.map((v) => (v === null ? null : v * 100))) : aligned.ys), [aligned, asPercent]);
   const chartSeries = useMemo<ChartSeries[]>(
     () =>
       collected.map((s, i) => {
@@ -111,7 +118,9 @@ export function MlChart({ series, events, bands, label, height = 160, syncKey, a
     const missing = series.find((s) => s.collection === MlCollection.NOT_COLLECTED);
     return <NotCollected what={what ?? label} source={missing?.missingSource} findingId={missing?.fixFindingId} height={compact ? undefined : height} compact={compact} />;
   }
-  const xFormat = axis === MlAxis.STEP ? (x: number) => `step ${fmtStep(x)}` : axis === MlAxis.TOKENS ? (x: number) => `${fmtCompact(x)} tokens` : undefined;
+  const xFormat = axis === MlAxis.STEP ? (x: number) => `step ${fmtInt(x)}` : axis === MlAxis.TOKENS ? (x: number) => `${fmtCompact(x)} tokens` : undefined;
+  const xAxisFormat = axis === MlAxis.STEP || axis === MlAxis.TOKENS ? (x: number) => fmtCompact(x, 1) : undefined;
+  const showLegend = legend ?? (!compact && chartSeries.length > 1 && chartSeries.length <= 8);
   return (
     <div data-testid={testId} className="min-w-0">
       <UPlotChart
@@ -121,16 +130,49 @@ export function MlChart({ series, events, bands, label, height = 160, syncKey, a
         height={height}
         label={label}
         compact={compact}
-        legend={legend ?? (!compact && chartSeries.length > 1 && chartSeries.length <= 8)}
+        legend={false}
         markers={markers}
         bands={chartBands}
         area={area}
         bars={bars}
         syncKey={syncKey}
         xFormat={xFormat}
+        xAxisFormat={xAxisFormat}
         annotationSummary={false}
+        zoom={!compact}
       />
+      {showLegend && <LatestLegend series={chartSeries} unit={u} />}
     </div>
+  );
+}
+
+/**
+ * Each series' colour, name and LATEST value, at rest (uPlot's own legend
+ * shows "—" until the pointer is on the plot; the tooltip reads the sample
+ * under the pointer).
+ */
+function LatestLegend({ series, unit }: { series: readonly ChartSeries[]; unit: string }) {
+  return (
+    <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-meta" data-testid="ml-chart-legend">
+      {series.map((s, i) => {
+        let latest: number | null = null;
+        for (let k = s.values.length - 1; k >= 0; k--) {
+          const v = s.values[k];
+          if (v !== null && Number.isFinite(v)) {
+            latest = v;
+            break;
+          }
+        }
+        const token = s.color ?? (s.tone ? TONE_VAR[s.tone === "destructive" ? "danger" : s.tone === "muted" ? "neutral" : s.tone] : chartToken(i));
+        return (
+          <li key={`${s.label}-${i}`} className="inline-flex items-center gap-1.5 text-ink-muted">
+            <span className={cn("h-0.5 w-3 rounded-full", s.dashed && "border-t border-dashed bg-transparent")} style={s.dashed ? { borderColor: `hsl(var(${token}))` } : { backgroundColor: `hsl(var(${token}))` }} aria-hidden="true" />
+            {s.label}
+            <span className="tabular-nums text-ink">{fmtUnit(latest, unit)}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

@@ -126,6 +126,15 @@ export const fmtStep = (step: number | bigint | undefined | null): string => {
 /** A value in an MlSeries unit ("ratio", "percent", "ms", "bytes", "W", "C", ...). */
 export function fmtUnit(value: number | null | undefined, unit: string): string {
   if (!has(value)) return DASH;
+  return noNegativeZero(fmtUnitRaw(value, unit));
+}
+
+/** "-0.0 GB/s" → "0.0 GB/s": a value that rounds to zero carries no sign. */
+export function noNegativeZero(text: string): string {
+  return /^-0(?:\.0+)?(?![\d.])/.test(text) ? text.slice(1) : text;
+}
+
+function fmtUnitRaw(value: number, unit: string): string {
   switch (unit) {
     case "ratio":
       return fmtPct(value, value < 0.1 ? 1 : 0);

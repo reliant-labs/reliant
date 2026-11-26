@@ -20,7 +20,6 @@ import {
   fmtStep,
   fmtTime,
   fmtUsd,
-  Grid,
   MlChart,
   num,
   Panel,
@@ -64,98 +63,103 @@ export function OverviewTab({ scope }: { scope: RunScope }) {
   const tputSeries = named(tput.data?.kind === "ok" ? tput.data.data.series : []);
   const workloadAttempt = attempt ?? [...(p?.attempts ?? [])].sort((a, b) => b.n - a.n)[0] ?? null;
 
+  // Two columns that stack on their own: a tall Health list never stretches the Loss chart beside it.
   return (
-    <Grid cols={2}>
-      <Panel title="Health" note={`${detail.health.filter((h) => h.status !== "ok").length} need attention`} flush testId="ml-run-health">
-        <HealthList checks={detail.health} />
-      </Panel>
+    <div className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-2">
+      <div className="min-w-0 space-y-4">
+        <Panel title="Health" note={`${detail.health.filter((h) => h.status !== "ok").length} need attention`} flush testId="ml-run-health">
+          <HealthList checks={detail.health} />
+        </Panel>
 
-      <Panel title="Loss" note={`${p?.key ?? ""} · step axis · markers: checkpoints, restarts, spikes`} testId="ml-run-loss">
-        <MlChart series={lossSeries} events={evs} bands={bands} label="Loss" height={200} syncKey={syncKey} what="Loss" testId="ml-run-loss-chart" />
-      </Panel>
-
-      <Panel title="Where the time went" note={scope.attempt ? `attempt ${scope.attempt.n}` : scope.phaseScoped ? `phase ${phase?.key}` : "whole run"} testId="ml-run-goodput">
-        {segs.length ? (
-          <div className="space-y-3">
-            <div className="flex items-baseline gap-2">
-              <span className="text-2xl font-semibold tabular-nums text-ink">{productive ? `${Math.round(productive.share * 100)}%` : "—"}</span>
-              <span className="text-meta text-ink-muted">goodput · {fmtGpuHours(cost?.gpuHours)} · {fmtUsd(cost?.usd)} allocated</span>
+        <Panel title="Where the time went" note={scope.attempt ? `attempt ${scope.attempt.n}` : scope.phaseScoped ? `phase ${phase?.key}` : "whole run"} testId="ml-run-goodput">
+          {segs.length ? (
+            <div className="space-y-3">
+              <div className="flex items-baseline gap-2">
+                <span className="text-2xl font-semibold tabular-nums text-ink">{productive ? `${Math.round(productive.share * 100)}%` : "—"}</span>
+                <span className="text-meta text-ink-muted">goodput · {fmtGpuHours(cost?.gpuHours)} · {fmtUsd(cost?.usd)} allocated</span>
+              </div>
+              <StackedBar segments={segs.map((s) => ({ label: s.label, value: s.gpuHours, color: s.color, title: `${s.label}: ${fmtGpuHours(s.gpuHours)} · ${fmtUsd(s.usd)}` }))} format={fmtGpuHours} height={12} testId="ml-run-goodput-bar" />
+              <ul className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-meta">
+                {segs.map((s) => (
+                  <li key={s.label} className="flex justify-between gap-2 border-b border-border-subtle py-0.5">
+                    <span className="text-ink-muted">{s.label}</span>
+                    <span className="tabular-nums text-ink">{fmtUsd(s.usd)}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
-            <StackedBar segments={segs.map((s) => ({ label: s.label, value: s.gpuHours, color: s.color, title: `${s.label}: ${fmtGpuHours(s.gpuHours)} · ${fmtUsd(s.usd)}` }))} format={fmtGpuHours} height={12} testId="ml-run-goodput-bar" />
-            <ul className="grid grid-cols-2 gap-x-6 gap-y-0.5 text-meta">
-              {segs.map((s) => (
-                <li key={s.label} className="flex justify-between gap-2 border-b border-border-subtle py-0.5">
-                  <span className="text-ink-muted">{s.label}</span>
-                  <span className="tabular-nums text-ink">{fmtUsd(s.usd)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <EmptyNote>Nothing allocated yet.</EmptyNote>
-        )}
-      </Panel>
+          ) : (
+            <EmptyNote>Nothing allocated yet.</EmptyNote>
+          )}
+        </Panel>
 
-      <Panel title="Throughput" note="tokens/s and MFU" testId="ml-run-throughput">
-        <MlChart series={tputSeries.filter((s) => s.key === "throughput/tokens_per_s")} events={evs.filter((e) => e.kind !== MlEventKind.CHECKPOINT)} label="Tokens/s" height={110} syncKey={syncKey} what="Tokens/s" compact={false} />
-        <MlChart series={tputSeries.filter((s) => s.key === "throughput/mfu")} label="MFU" height={90} syncKey={syncKey} what="MFU" />
-      </Panel>
+        <Panel title="Step time breakdown" note={`p50 per step · ${run.currentPhaseKey}`} testId="ml-run-step-breakdown">
+          {detail.stepBreakdown.length ? (
+            <div className="space-y-2">
+              <p className="text-meta text-ink-muted">
+                <span className="text-xl font-semibold tabular-nums text-ink">{fmtMs(detail.stepBreakdown.reduce((s, x) => s + x.msP50, 0))}</span> per step
+              </p>
+              <StackedBar segments={detail.stepBreakdown.map((s, i) => ({ label: s.stage.replace("_", " "), value: s.msP50, color: s.stage === "comm_exposed" ? 3 : i }))} format={fmtMs} height={12} />
+            </div>
+          ) : (
+            <EmptyNote>No step timers: the run does not report them.</EmptyNote>
+          )}
+        </Panel>
 
-      <Panel title="Step time breakdown" note={`p50 per step · ${run.currentPhaseKey}`} testId="ml-run-step-breakdown">
-        {detail.stepBreakdown.length ? (
-          <div className="space-y-2">
-            <p className="text-meta text-ink-muted">
-              <span className="text-xl font-semibold tabular-nums text-ink">{fmtMs(detail.stepBreakdown.reduce((s, x) => s + x.msP50, 0))}</span> per step
-            </p>
-            <StackedBar segments={detail.stepBreakdown.map((s, i) => ({ label: s.stage.replace("_", " "), value: s.msP50, color: s.stage === "comm_exposed" ? 3 : i }))} format={fmtMs} height={12} />
-          </div>
-        ) : (
-          <EmptyNote>No step timers: the run does not report them.</EmptyNote>
-        )}
-      </Panel>
+        <Panel title="Kueue workload" note={workloadAttempt ? `${p?.key} attempt ${workloadAttempt.n}` : undefined} testId="ml-run-workload">
+          {workloadAttempt?.workload ? <WorkloadFacts w={workloadAttempt.workload} /> : <EmptyNote>No workload: the phase has not been queued.</EmptyNote>}
+        </Panel>
 
-      <Panel title="Key numbers" testId="ml-run-key-numbers">
-        {detail.keyNumbers.length ? <FactList facts={detail.keyNumbers.map((f) => ({ label: f.label, value: <span className="tabular-nums">{f.value}</span> }))} columns={1} /> : <EmptyNote>None reported.</EmptyNote>}
-      </Panel>
+      </div>
+      <div className="min-w-0 space-y-4">
+        <Panel title="Loss" note={`${p?.key ?? ""} · step axis · markers: checkpoints, restarts, spikes`} testId="ml-run-loss">
+          <MlChart series={lossSeries} events={evs} bands={bands} label="Loss" height={200} syncKey={syncKey} what="Loss" testId="ml-run-loss-chart" />
+        </Panel>
 
-      <Panel title="Model insights" note="what the vitals say" flush testId="ml-run-insights">
-        {detail.insights.length ? (
-          <ul className="divide-y divide-border-subtle">
-            {detail.insights.map((i) => {
-              const sev = severityOf(i.severity);
-              return (
-                <li key={i.id} className="space-y-0.5 px-4 py-2.5">
-                  <div className="flex flex-wrap items-center gap-x-2">
-                    <StatusDot tone={sev.tone} label={<span className="font-medium text-ink">{i.title}</span>} />
-                    <span className="text-meta tabular-nums text-ink-muted">
-                      {i.phaseKey} {fmtStep(i.fromStep)}–{fmtStep(i.toStep)}
-                    </span>
-                  </div>
-                  <p className="text-meta text-ink-muted">{i.detail}</p>
-                  {i.suggestion && <p className="text-meta text-ink">→ {i.suggestion}</p>}
-                  <p className="text-meta text-ink-muted">
-                    {i.seriesKeys.map((k) => (
-                      <span key={k} className="mr-2 font-mono text-code">
-                        {k}
+        <Panel title="Throughput" note="tokens/s and MFU" testId="ml-run-throughput">
+          <MlChart series={tputSeries.filter((s) => s.key === "throughput/tokens_per_s")} events={evs.filter((e) => e.kind !== MlEventKind.CHECKPOINT)} label="Tokens/s" height={110} syncKey={syncKey} what="Tokens/s" compact={false} />
+          <MlChart series={tputSeries.filter((s) => s.key === "throughput/mfu")} label="MFU" height={90} syncKey={syncKey} what="MFU" />
+        </Panel>
+
+        <Panel title="Key numbers" testId="ml-run-key-numbers">
+          {detail.keyNumbers.length ? <FactList facts={detail.keyNumbers.map((f) => ({ label: f.label, value: <span className="tabular-nums">{f.value}</span> }))} columns={1} /> : <EmptyNote>None reported.</EmptyNote>}
+        </Panel>
+
+        <Panel title="Model insights" note="what the vitals say" flush testId="ml-run-insights">
+          {detail.insights.length ? (
+            <ul className="divide-y divide-border-subtle">
+              {detail.insights.map((i) => {
+                const sev = severityOf(i.severity);
+                return (
+                  <li key={i.id} className="space-y-0.5 px-4 py-2.5">
+                    <div className="flex flex-wrap items-center gap-x-2">
+                      <StatusDot tone={sev.tone} label={<span className="font-medium text-ink">{i.title}</span>} />
+                      <span className="text-meta tabular-nums text-ink-muted">
+                        {i.phaseKey} {fmtStep(i.fromStep)}–{fmtStep(i.toStep)}
                       </span>
-                    ))}
-                    {i.findingId && <FindingLink id={i.findingId}>{i.findingId}</FindingLink>}
-                  </p>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <div className="px-4">
-            <EmptyNote>No insights: the run reports no model vitals.</EmptyNote>
-          </div>
-        )}
-      </Panel>
-
-      <Panel title="Kueue workload" note={workloadAttempt ? `${p?.key} attempt ${workloadAttempt.n}` : undefined} testId="ml-run-workload">
-        {workloadAttempt?.workload ? <WorkloadFacts w={workloadAttempt.workload} /> : <EmptyNote>No workload: the phase has not been queued.</EmptyNote>}
-      </Panel>
-    </Grid>
+                    </div>
+                    <p className="text-meta text-ink-muted">{i.detail}</p>
+                    {i.suggestion && <p className="text-meta text-ink">→ {i.suggestion}</p>}
+                    <p className="text-meta text-ink-muted">
+                      {i.seriesKeys.map((k) => (
+                        <span key={k} className="mr-2 font-mono text-code">
+                          {k}
+                        </span>
+                      ))}
+                      {i.findingId && <FindingLink id={i.findingId}>{i.findingId}</FindingLink>}
+                    </p>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <div className="px-4">
+              <EmptyNote>No insights: the run reports no model vitals.</EmptyNote>
+            </div>
+          )}
+        </Panel>
+      </div>
+    </div>
   );
 }
 

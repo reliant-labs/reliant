@@ -213,7 +213,7 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
           </Panel>
           <MlRead query={host} what="host series">
             {(d) => (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-testid="ml-node-host-charts">
+              <div className="grid grid-cols-1 content-start items-start gap-3 sm:grid-cols-2" data-testid="ml-node-host-charts">
                 {d.series.map((s) => (
                   <ChartTile key={s.key} title={s.label} series={[s]} syncKey={SYNC} events={events} height={90} />
                 ))}

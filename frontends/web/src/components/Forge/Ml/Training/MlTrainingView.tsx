@@ -11,12 +11,22 @@
  */
 
 import { MlFrame, MlRead } from "../MlParts";
-import { MlTraceView, mlHref, useMl, useMlSearch } from "../kit";
+import { CompareTray, MlTraceView, mlHref, useMl, useMlSearch } from "../kit";
 import { RunCompare } from "./compare/RunCompare";
 import { RunDetail } from "./RunDetail";
 import { RunsList } from "./RunsList";
 
 export function MlTrainingView({ sub }: { sub: readonly string[] }) {
+  return (
+    <>
+      <TrainingPage sub={sub} />
+      {/* The tray follows the reader across Training's pages, but not onto the comparison it opens. */}
+      {sub[0] !== "compare" && <CompareTray />}
+    </>
+  );
+}
+
+function TrainingPage({ sub }: { sub: readonly string[] }) {
   const [search] = useMlSearch();
   const [first, second, third] = sub;
   if (!first) return <RunsList />;

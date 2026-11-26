@@ -9,7 +9,8 @@ import { describe, expect, it } from "vitest";
 import { MlSeriesSchema, MlSubjectKind } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { alignSeries, ticks } from "../charts";
-import { fmtBytes, fmtCompact, fmtDuration, fmtGpuHours, fmtMs, fmtPct, fmtStep, fmtUnit, fmtUsd } from "../format";
+import { COMPARE_MAX, toggled } from "../compareTray";
+import { fmtBytes, fmtCompact, fmtDuration, fmtGpuHours, fmtMs, fmtPct, fmtStep, fmtUnit, fmtUsd, noNegativeZero } from "../format";
 import { mlHref, searchString, subjectHref } from "../links";
 
 describe("ML number formats", () => {
@@ -30,6 +31,13 @@ describe("ML number formats", () => {
     expect(fmtBytes(212 * 1024 ** 3)).toBe("212 GiB");
     expect(fmtDuration(22_200)).toBe("6h 10m");
     expect(fmtMs(4100)).toBe("4.1 s");
+  });
+
+  it("never write a sign on a value that rounds to zero", () => {
+    expect(fmtUnit(-0.04, "GB/s")).toBe("0.0 GB/s");
+    expect(noNegativeZero("-0 W")).toBe("0 W");
+    expect(noNegativeZero("-0.5 GB/s")).toBe("-0.5 GB/s");
+    expect(noNegativeZero("-0.05%")).toBe("-0.05%");
   });
 });
 
@@ -63,5 +71,18 @@ describe("ML charts", () => {
 
   it("space ticks evenly", () => {
     expect(ticks(0, 100, 5)).toEqual([0, 25, 50, 75, 100]);
+  });
+});
+
+describe("the compare tray", () => {
+  const run = (n: number) => ({ id: `run_${n}`, name: `r${n}` });
+  it("adds at the end, removes on a second toggle, and holds at most four", () => {
+    let tray = toggled([], run(1));
+    tray = toggled(tray, run(2));
+    expect(tray.map((r) => r.id)).toEqual(["run_1", "run_2"]);
+    expect(toggled(tray, run(1)).map((r) => r.id)).toEqual(["run_2"]);
+    for (let i = 3; i <= 6; i++) tray = toggled(tray, run(i));
+    expect(tray).toHaveLength(COMPARE_MAX);
+    expect(tray.map((r) => r.id)).not.toContain("run_5");
   });
 });

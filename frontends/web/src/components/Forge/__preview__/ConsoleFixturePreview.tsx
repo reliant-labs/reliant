@@ -177,6 +177,16 @@ const SCHEMES = ["professional-blue", "refined-neutral", "modern-teal", "slate",
  * colour scheme and dark mode, each a key of the harness's own URL
  * (`case`, `scheme`, `dark`), so a screenshot of any state is a link.
  */
+/**
+ * Whether the harness's pickers show: in local dev unless `?devtools=0`, and
+ * anywhere else only with `?devtools=1`, so a shared link opens on the page
+ * alone (and a screenshot can drop them).
+ */
+export function previewControlsShown(search: string, dev: boolean): boolean {
+  const flag = new URLSearchParams(search).get("devtools");
+  return flag === null ? dev : flag !== "0";
+}
+
 export function PreviewControls({
   base,
   cases,
@@ -201,6 +211,7 @@ export function PreviewControls({
     document.documentElement.setAttribute("data-color-scheme", scheme);
   }, [dark, scheme]);
   const go = (next: Record<string, unknown>) => void navigate({ to: base, search: (prev: Record<string, unknown>) => ({ ...prev, ...next }), replace: true });
+  if (!previewControlsShown(typeof window === "undefined" ? "" : window.location.search, import.meta.env.DEV)) return null;
   return (
     <div className="fixed bottom-3 right-3 z-50 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border bg-surface/95 px-3 py-2 shadow" data-testid="preview-controls">
       {children}

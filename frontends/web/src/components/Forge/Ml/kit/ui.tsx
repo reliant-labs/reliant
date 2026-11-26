@@ -478,7 +478,7 @@ export function FactList({ facts, columns = 2, testId }: { facts: readonly { lab
 /** A responsive grid of panels. */
 export function Grid({ cols = 2, children, className }: { cols?: 1 | 2 | 3 | 4; children: ReactNode; className?: string }) {
   return (
-    <div className={cn("grid min-w-0 gap-4", cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-1 xl:grid-cols-2" : cols === 3 ? "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-4", className)}>
+    <div className={cn("grid min-w-0 items-start gap-4", cols === 1 ? "grid-cols-1" : cols === 2 ? "grid-cols-1 xl:grid-cols-2" : cols === 3 ? "grid-cols-1 lg:grid-cols-2 xl:grid-cols-3" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-4", className)}>
       {children}
     </div>
   );
