@@ -24,6 +24,7 @@ import (
 //     refused, never read. That guard lives in the store function itself.
 
 func TestEmptyPrimaryKeyGetsAreNotFound(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 
@@ -58,6 +59,7 @@ func TestEmptyPrimaryKeyGetsAreNotFound(t *testing.T) {
 }
 
 func TestListReposByProjectRefusesAnEmptyProject(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	require.NoError(t, store.InsertRepo(ctx, env.ORM, &core.Repo{ID: "r-1", ProjectID: storetest.SeedProjectID, Name: "a", RelativePath: "."}))

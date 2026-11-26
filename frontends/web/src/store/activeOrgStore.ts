@@ -215,7 +215,9 @@ export function forgetChosenOrg(): void {
  */
 export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "observability",
-  "observability-billing",
+  // Every ObservabilityBillingService read on its generated keys: usage,
+  // limits, storage and daily rows (hooks/observability-billing-queries.ts).
+  "observability_billing.v1.ObservabilityBillingService",
   "forge",
   "forgeService",
   // hooks/identity-queries.ts: the caller's org outside the org tree, then

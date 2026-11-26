@@ -12,6 +12,7 @@ import (
 // Exercise the Bun statement, not a rewritten copy: each neighboring scope
 // differs in just one key, so dropping any scope predicate leaks an execution.
 func TestListTriggerCapacityExecutionsScopeIsolation(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()

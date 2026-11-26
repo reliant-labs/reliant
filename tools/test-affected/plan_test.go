@@ -215,6 +215,8 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		{"frontends/web/package.json", []lane{laneWeb, laneWebDemo, laneWebBuild}},
 		{"frontends/web/pnpm-lock.yaml", []lane{laneWeb, laneWebDemo, laneWebBuild}},
 		{"frontends/web/vite.config.ts", []lane{laneWeb, laneWebDemo, laneWebBuild}},
+		// vite.config.ts's test sizing (timeouts) reads it.
+		{"frontends/web/vitest-load.ts", []lane{laneWeb, laneWebDemo, laneWebBuild}},
 		{"frontends/web/src/test/setup.ts", []lane{laneWeb, laneWebDemo, laneWebBuild}},
 		{"package-lock.json", []lane{laneWeb, laneElectron, laneWebDemo, laneWebBuild}},
 		{"proto/buf.yaml", []lane{laneGo, laneWeb, laneForgeGen, laneWebDemo, laneWebBuild}},

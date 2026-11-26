@@ -73,6 +73,7 @@ func gotErrors(updates []core.ChatUpdate) string {
 // the thread's first message at or after beforeSeq), errors only, one per id
 // (its newest attempt inside the range), oldest first.
 func TestErrorUpdatesInRange(t *testing.T) {
+	t.Parallel()
 	f, seq := errorRangeFixture(t)
 	ctx := context.Background()
 	want := func(names ...string) string {
@@ -136,6 +137,7 @@ func TestErrorUpdatesInRange(t *testing.T) {
 // needs it: (chat_id, created_at), only ERROR updates, and valid (a failed
 // CREATE INDEX CONCURRENTLY leaves an invalid one behind).
 func TestErrorUpdatesInRangeIndex(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-error-range-index")
 	var def string
 	var valid bool
