@@ -877,6 +877,20 @@ func RequireOrgAdmin(ctx context.Context, userID, orgID string) error {
 	if !personCredential(ctx) {
 		return ErrPersonRequired
 	}
+	return RequireOrgAdminRole(ctx, userID, orgID)
+}
+
+// RequireOrgAdminRole is RequireOrgAdmin without its person check: nil when
+// userID is an owner or admin of orgID right now, asked fresh, whatever
+// credential the request came with. It is for the few admin actions whose
+// caller decides for itself which credentials may administer (the pipeline's
+// enrolment admits a personal access token, internal/handlers/pipeline);
+// every other admin action is RequireOrgAdmin's. It fails closed as
+// RequireOrgAdmin does.
+func RequireOrgAdminRole(ctx context.Context, userID, orgID string) error {
+	if userID == "" || orgID == "" {
+		return ErrDenied
+	}
 	if bound, ok := boundOrg(ctx); ok && bound != orgID {
 		logging.InfoContext(ctx, "[authz] a credential bound to another org; denying an admin action", "user_id", userID, "credential_org", bound, "org_id", orgID)
 		recordCredentialRefusal(ctx, orgID)
