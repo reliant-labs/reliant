@@ -56,7 +56,7 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces?: string[]; except?
     except: [
       'projects', 'projects-project-page', 'billing', 'usage', 'hosting', 'shell-usage-billing', 'shell-settings (desktop)',
       'shell-inbox (desktop)', 'shell-apps', 'shell-connectors', 'shell-empty-cta', 'shell-daemonless-home (desktop)',
-      'observability-overview', 'settings-appearance',
+      'observability-overview', 'settings-appearance', 'settings-org-github',
     ],
     // The desktop daemonless home sends Alex to Projects; a project selected
     // before that redirect lands is touched, one run in a few.
@@ -636,6 +636,15 @@ const SURFACES: Surface[] = [
     path: '/settings/billing?tab=usage',
     on: ['desktop'],
     ready: (page) => page.getByText('Machine usage and allowance').first(),
+  },
+  {
+    // Settings › Organization GitHub for an admin whose GitHub is connected:
+    // Acme's GitHub organization linked, and Alex's personal installation
+    // offered to link (handlers/github.ts).
+    name: 'settings-org-github',
+    path: '/settings/org-github',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('button', { name: 'Link alex-demo' }),
   },
   // The one shell (U6): the same destinations the shell hosts, named so they can be re-captured
   // as the shell changes. `ready` waits on page content, never on the sidebar.

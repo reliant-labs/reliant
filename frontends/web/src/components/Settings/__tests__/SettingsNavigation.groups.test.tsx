@@ -23,7 +23,7 @@ describe("SettingsNavigation grouping", () => {
 
     expect(labels("Account")).toEqual(["Account", "Billing & usage", "Members", "Policies", "AI usage", "Privacy"]);
     expect(labels("AI")).toEqual(["Personal accounts", "Organization accounts", "Models & tools"]);
-    expect(labels("Connections")).toEqual(["Integrations", "GitHub", "Tools (MCP)"]);
+    expect(labels("Connections")).toEqual(["Integrations", "GitHub", "Organization GitHub", "Tools (MCP)"]);
     expect(labels("Sandboxes & projects")).toEqual(["Agent sandboxes", "Projects"]);
     expect(labels("Preferences")).toEqual(["Appearance", "Chat & editor", "Notifications", "Keyboard shortcuts"]);
   });

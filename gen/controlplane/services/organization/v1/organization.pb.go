@@ -182,7 +182,11 @@ func (x *StartGitHubAppInstallRequest) GetOrgId() string {
 type StartGitHubAppInstallResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// github.com/apps/<slug>/installations/new?state=...
-	InstallUrl    string `protobuf:"bytes,1,opt,name=install_url,json=installUrl,proto3" json:"install_url,omitempty"`
+	InstallUrl string `protobuf:"bytes,1,opt,name=install_url,json=installUrl,proto3" json:"install_url,omitempty"`
+	// The signed state install_url carries, for a client that links an
+	// installation the App already has (ListLinkableGitHubAppInstallations)
+	// without sending anyone to GitHub. It expires 30 minutes after issue.
+	State         string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -220,6 +224,13 @@ func (*StartGitHubAppInstallResponse) Descriptor() ([]byte, []int) {
 func (x *StartGitHubAppInstallResponse) GetInstallUrl() string {
 	if x != nil {
 		return x.InstallUrl
+	}
+	return ""
+}
+
+func (x *StartGitHubAppInstallResponse) GetState() string {
+	if x != nil {
+		return x.State
 	}
 	return ""
 }
@@ -418,6 +429,205 @@ func (x *ListGitHubAppInstallationsResponse) GetInstallations() []*GitHubAppInst
 	return nil
 }
 
+// LinkableGitHubAppInstallation is an installation of the App the caller's
+// GitHub account can reach, and where it is linked.
+type LinkableGitHubAppInstallation struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// GitHub's installation id.
+	InstallationId int64 `protobuf:"varint,1,opt,name=installation_id,json=installationId,proto3" json:"installation_id,omitempty"`
+	// The GitHub account the App is installed on, and its kind
+	// ("Organization" or "User").
+	AccountLogin string `protobuf:"bytes,2,opt,name=account_login,json=accountLogin,proto3" json:"account_login,omitempty"`
+	AccountType  string `protobuf:"bytes,3,opt,name=account_type,json=accountType,proto3" json:"account_type,omitempty"`
+	// The account's avatar; "" when GitHub sent none.
+	AvatarUrl string `protobuf:"bytes,4,opt,name=avatar_url,json=avatarUrl,proto3" json:"avatar_url,omitempty"`
+	// "all" or "selected"; "" when GitHub did not say.
+	RepositorySelection string `protobuf:"bytes,5,opt,name=repository_selection,json=repositorySelection,proto3" json:"repository_selection,omitempty"`
+	// Linked to the org the request named.
+	LinkedHere bool `protobuf:"varint,6,opt,name=linked_here,json=linkedHere,proto3" json:"linked_here,omitempty"`
+	// Linked to some other org (which one is not said): linking it here is
+	// refused until it is unlinked there.
+	LinkedElsewhere bool `protobuf:"varint,7,opt,name=linked_elsewhere,json=linkedElsewhere,proto3" json:"linked_elsewhere,omitempty"`
+	// Set while GitHub reports the installation suspended.
+	SuspendedAt   *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=suspended_at,json=suspendedAt,proto3" json:"suspended_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LinkableGitHubAppInstallation) Reset() {
+	*x = LinkableGitHubAppInstallation{}
+	mi := &file_services_organization_v1_organization_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LinkableGitHubAppInstallation) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LinkableGitHubAppInstallation) ProtoMessage() {}
+
+func (x *LinkableGitHubAppInstallation) ProtoReflect() protoreflect.Message {
+	mi := &file_services_organization_v1_organization_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LinkableGitHubAppInstallation.ProtoReflect.Descriptor instead.
+func (*LinkableGitHubAppInstallation) Descriptor() ([]byte, []int) {
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *LinkableGitHubAppInstallation) GetInstallationId() int64 {
+	if x != nil {
+		return x.InstallationId
+	}
+	return 0
+}
+
+func (x *LinkableGitHubAppInstallation) GetAccountLogin() string {
+	if x != nil {
+		return x.AccountLogin
+	}
+	return ""
+}
+
+func (x *LinkableGitHubAppInstallation) GetAccountType() string {
+	if x != nil {
+		return x.AccountType
+	}
+	return ""
+}
+
+func (x *LinkableGitHubAppInstallation) GetAvatarUrl() string {
+	if x != nil {
+		return x.AvatarUrl
+	}
+	return ""
+}
+
+func (x *LinkableGitHubAppInstallation) GetRepositorySelection() string {
+	if x != nil {
+		return x.RepositorySelection
+	}
+	return ""
+}
+
+func (x *LinkableGitHubAppInstallation) GetLinkedHere() bool {
+	if x != nil {
+		return x.LinkedHere
+	}
+	return false
+}
+
+func (x *LinkableGitHubAppInstallation) GetLinkedElsewhere() bool {
+	if x != nil {
+		return x.LinkedElsewhere
+	}
+	return false
+}
+
+func (x *LinkableGitHubAppInstallation) GetSuspendedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.SuspendedAt
+	}
+	return nil
+}
+
+type ListLinkableGitHubAppInstallationsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLinkableGitHubAppInstallationsRequest) Reset() {
+	*x = ListLinkableGitHubAppInstallationsRequest{}
+	mi := &file_services_organization_v1_organization_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLinkableGitHubAppInstallationsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLinkableGitHubAppInstallationsRequest) ProtoMessage() {}
+
+func (x *ListLinkableGitHubAppInstallationsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_organization_v1_organization_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLinkableGitHubAppInstallationsRequest.ProtoReflect.Descriptor instead.
+func (*ListLinkableGitHubAppInstallationsRequest) Descriptor() ([]byte, []int) {
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ListLinkableGitHubAppInstallationsRequest) GetOrgId() string {
+	if x != nil {
+		return x.OrgId
+	}
+	return ""
+}
+
+type ListLinkableGitHubAppInstallationsResponse struct {
+	state         protoimpl.MessageState           `protogen:"open.v1"`
+	Installations []*LinkableGitHubAppInstallation `protobuf:"bytes,1,rep,name=installations,proto3" json:"installations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLinkableGitHubAppInstallationsResponse) Reset() {
+	*x = ListLinkableGitHubAppInstallationsResponse{}
+	mi := &file_services_organization_v1_organization_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLinkableGitHubAppInstallationsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLinkableGitHubAppInstallationsResponse) ProtoMessage() {}
+
+func (x *ListLinkableGitHubAppInstallationsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_organization_v1_organization_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLinkableGitHubAppInstallationsResponse.ProtoReflect.Descriptor instead.
+func (*ListLinkableGitHubAppInstallationsResponse) Descriptor() ([]byte, []int) {
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ListLinkableGitHubAppInstallationsResponse) GetInstallations() []*LinkableGitHubAppInstallation {
+	if x != nil {
+		return x.Installations
+	}
+	return nil
+}
+
 type UnlinkGitHubAppInstallationRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	OrgId          string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -428,7 +638,7 @@ type UnlinkGitHubAppInstallationRequest struct {
 
 func (x *UnlinkGitHubAppInstallationRequest) Reset() {
 	*x = UnlinkGitHubAppInstallationRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[7]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -440,7 +650,7 @@ func (x *UnlinkGitHubAppInstallationRequest) String() string {
 func (*UnlinkGitHubAppInstallationRequest) ProtoMessage() {}
 
 func (x *UnlinkGitHubAppInstallationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[7]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -453,7 +663,7 @@ func (x *UnlinkGitHubAppInstallationRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use UnlinkGitHubAppInstallationRequest.ProtoReflect.Descriptor instead.
 func (*UnlinkGitHubAppInstallationRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{7}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *UnlinkGitHubAppInstallationRequest) GetOrgId() string {
@@ -478,7 +688,7 @@ type UnlinkGitHubAppInstallationResponse struct {
 
 func (x *UnlinkGitHubAppInstallationResponse) Reset() {
 	*x = UnlinkGitHubAppInstallationResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[8]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -490,7 +700,7 @@ func (x *UnlinkGitHubAppInstallationResponse) String() string {
 func (*UnlinkGitHubAppInstallationResponse) ProtoMessage() {}
 
 func (x *UnlinkGitHubAppInstallationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[8]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -503,7 +713,7 @@ func (x *UnlinkGitHubAppInstallationResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use UnlinkGitHubAppInstallationResponse.ProtoReflect.Descriptor instead.
 func (*UnlinkGitHubAppInstallationResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{8}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{11}
 }
 
 // OrgMember is one member of an org, as its roster shows them.
@@ -530,7 +740,7 @@ type OrgMember struct {
 
 func (x *OrgMember) Reset() {
 	*x = OrgMember{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[9]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -542,7 +752,7 @@ func (x *OrgMember) String() string {
 func (*OrgMember) ProtoMessage() {}
 
 func (x *OrgMember) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[9]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -555,7 +765,7 @@ func (x *OrgMember) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrgMember.ProtoReflect.Descriptor instead.
 func (*OrgMember) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{9}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *OrgMember) GetUserId() string {
@@ -629,7 +839,7 @@ type SeatUsage struct {
 
 func (x *SeatUsage) Reset() {
 	*x = SeatUsage{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[10]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +851,7 @@ func (x *SeatUsage) String() string {
 func (*SeatUsage) ProtoMessage() {}
 
 func (x *SeatUsage) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[10]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +864,7 @@ func (x *SeatUsage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SeatUsage.ProtoReflect.Descriptor instead.
 func (*SeatUsage) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{10}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *SeatUsage) GetMembers() int32 {
@@ -697,7 +907,7 @@ type OrgInvitation struct {
 
 func (x *OrgInvitation) Reset() {
 	*x = OrgInvitation{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[11]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -709,7 +919,7 @@ func (x *OrgInvitation) String() string {
 func (*OrgInvitation) ProtoMessage() {}
 
 func (x *OrgInvitation) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[11]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -722,7 +932,7 @@ func (x *OrgInvitation) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OrgInvitation.ProtoReflect.Descriptor instead.
 func (*OrgInvitation) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{11}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *OrgInvitation) GetId() string {
@@ -801,7 +1011,7 @@ type CreateOrganizationRequest struct {
 
 func (x *CreateOrganizationRequest) Reset() {
 	*x = CreateOrganizationRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[12]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -813,7 +1023,7 @@ func (x *CreateOrganizationRequest) String() string {
 func (*CreateOrganizationRequest) ProtoMessage() {}
 
 func (x *CreateOrganizationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[12]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -826,7 +1036,7 @@ func (x *CreateOrganizationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateOrganizationRequest.ProtoReflect.Descriptor instead.
 func (*CreateOrganizationRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{12}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CreateOrganizationRequest) GetName() string {
@@ -852,7 +1062,7 @@ type CreateOrganizationResponse struct {
 
 func (x *CreateOrganizationResponse) Reset() {
 	*x = CreateOrganizationResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[13]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -864,7 +1074,7 @@ func (x *CreateOrganizationResponse) String() string {
 func (*CreateOrganizationResponse) ProtoMessage() {}
 
 func (x *CreateOrganizationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[13]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -877,7 +1087,7 @@ func (x *CreateOrganizationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateOrganizationResponse.ProtoReflect.Descriptor instead.
 func (*CreateOrganizationResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{13}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CreateOrganizationResponse) GetOrganization() *MyOrganization {
@@ -900,7 +1110,7 @@ type ListMembersRequest struct {
 
 func (x *ListMembersRequest) Reset() {
 	*x = ListMembersRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[14]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -912,7 +1122,7 @@ func (x *ListMembersRequest) String() string {
 func (*ListMembersRequest) ProtoMessage() {}
 
 func (x *ListMembersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[14]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -925,7 +1135,7 @@ func (x *ListMembersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMembersRequest.ProtoReflect.Descriptor instead.
 func (*ListMembersRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{14}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListMembersRequest) GetOrgId() string {
@@ -962,7 +1172,7 @@ type ListMembersResponse struct {
 
 func (x *ListMembersResponse) Reset() {
 	*x = ListMembersResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[15]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -974,7 +1184,7 @@ func (x *ListMembersResponse) String() string {
 func (*ListMembersResponse) ProtoMessage() {}
 
 func (x *ListMembersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[15]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -987,7 +1197,7 @@ func (x *ListMembersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMembersResponse.ProtoReflect.Descriptor instead.
 func (*ListMembersResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{15}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListMembersResponse) GetMembers() []*OrgMember {
@@ -1023,7 +1233,7 @@ type InviteMemberRequest struct {
 
 func (x *InviteMemberRequest) Reset() {
 	*x = InviteMemberRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[16]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1035,7 +1245,7 @@ func (x *InviteMemberRequest) String() string {
 func (*InviteMemberRequest) ProtoMessage() {}
 
 func (x *InviteMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[16]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1048,7 +1258,7 @@ func (x *InviteMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InviteMemberRequest.ProtoReflect.Descriptor instead.
 func (*InviteMemberRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{16}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *InviteMemberRequest) GetOrgId() string {
@@ -1088,7 +1298,7 @@ type InviteMemberResponse struct {
 
 func (x *InviteMemberResponse) Reset() {
 	*x = InviteMemberResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[17]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1100,7 +1310,7 @@ func (x *InviteMemberResponse) String() string {
 func (*InviteMemberResponse) ProtoMessage() {}
 
 func (x *InviteMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[17]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1113,7 +1323,7 @@ func (x *InviteMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InviteMemberResponse.ProtoReflect.Descriptor instead.
 func (*InviteMemberResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{17}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *InviteMemberResponse) GetInvitation() *OrgInvitation {
@@ -1158,7 +1368,7 @@ type ListInvitationsRequest struct {
 
 func (x *ListInvitationsRequest) Reset() {
 	*x = ListInvitationsRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[18]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1170,7 +1380,7 @@ func (x *ListInvitationsRequest) String() string {
 func (*ListInvitationsRequest) ProtoMessage() {}
 
 func (x *ListInvitationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[18]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1183,7 +1393,7 @@ func (x *ListInvitationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInvitationsRequest.ProtoReflect.Descriptor instead.
 func (*ListInvitationsRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{18}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ListInvitationsRequest) GetOrgId() string {
@@ -1225,7 +1435,7 @@ type ListInvitationsResponse struct {
 
 func (x *ListInvitationsResponse) Reset() {
 	*x = ListInvitationsResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[19]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1237,7 +1447,7 @@ func (x *ListInvitationsResponse) String() string {
 func (*ListInvitationsResponse) ProtoMessage() {}
 
 func (x *ListInvitationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[19]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1250,7 +1460,7 @@ func (x *ListInvitationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInvitationsResponse.ProtoReflect.Descriptor instead.
 func (*ListInvitationsResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{19}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ListInvitationsResponse) GetInvitations() []*OrgInvitation {
@@ -1277,7 +1487,7 @@ type RevokeInvitationRequest struct {
 
 func (x *RevokeInvitationRequest) Reset() {
 	*x = RevokeInvitationRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[20]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1289,7 +1499,7 @@ func (x *RevokeInvitationRequest) String() string {
 func (*RevokeInvitationRequest) ProtoMessage() {}
 
 func (x *RevokeInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[20]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1302,7 +1512,7 @@ func (x *RevokeInvitationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeInvitationRequest.ProtoReflect.Descriptor instead.
 func (*RevokeInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{20}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *RevokeInvitationRequest) GetOrgId() string {
@@ -1327,7 +1537,7 @@ type RevokeInvitationResponse struct {
 
 func (x *RevokeInvitationResponse) Reset() {
 	*x = RevokeInvitationResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[21]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1339,7 +1549,7 @@ func (x *RevokeInvitationResponse) String() string {
 func (*RevokeInvitationResponse) ProtoMessage() {}
 
 func (x *RevokeInvitationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[21]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1352,7 +1562,7 @@ func (x *RevokeInvitationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeInvitationResponse.ProtoReflect.Descriptor instead.
 func (*RevokeInvitationResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{21}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{24}
 }
 
 type GetInvitationRequest struct {
@@ -1365,7 +1575,7 @@ type GetInvitationRequest struct {
 
 func (x *GetInvitationRequest) Reset() {
 	*x = GetInvitationRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[22]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1377,7 +1587,7 @@ func (x *GetInvitationRequest) String() string {
 func (*GetInvitationRequest) ProtoMessage() {}
 
 func (x *GetInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[22]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1390,7 +1600,7 @@ func (x *GetInvitationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvitationRequest.ProtoReflect.Descriptor instead.
 func (*GetInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{22}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetInvitationRequest) GetToken() string {
@@ -1421,7 +1631,7 @@ type GetInvitationResponse struct {
 
 func (x *GetInvitationResponse) Reset() {
 	*x = GetInvitationResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[23]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1433,7 +1643,7 @@ func (x *GetInvitationResponse) String() string {
 func (*GetInvitationResponse) ProtoMessage() {}
 
 func (x *GetInvitationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[23]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1446,7 +1656,7 @@ func (x *GetInvitationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetInvitationResponse.ProtoReflect.Descriptor instead.
 func (*GetInvitationResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{23}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *GetInvitationResponse) GetOrgName() string {
@@ -1514,7 +1724,7 @@ type AcceptInvitationRequest struct {
 
 func (x *AcceptInvitationRequest) Reset() {
 	*x = AcceptInvitationRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[24]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1526,7 +1736,7 @@ func (x *AcceptInvitationRequest) String() string {
 func (*AcceptInvitationRequest) ProtoMessage() {}
 
 func (x *AcceptInvitationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[24]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1539,7 +1749,7 @@ func (x *AcceptInvitationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptInvitationRequest.ProtoReflect.Descriptor instead.
 func (*AcceptInvitationRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{24}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *AcceptInvitationRequest) GetToken() string {
@@ -1563,7 +1773,7 @@ type AcceptInvitationResponse struct {
 
 func (x *AcceptInvitationResponse) Reset() {
 	*x = AcceptInvitationResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[25]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1575,7 +1785,7 @@ func (x *AcceptInvitationResponse) String() string {
 func (*AcceptInvitationResponse) ProtoMessage() {}
 
 func (x *AcceptInvitationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[25]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1588,7 +1798,7 @@ func (x *AcceptInvitationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcceptInvitationResponse.ProtoReflect.Descriptor instead.
 func (*AcceptInvitationResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{25}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *AcceptInvitationResponse) GetOrganization() *MyOrganization {
@@ -1622,7 +1832,7 @@ type RemoveMemberRequest struct {
 
 func (x *RemoveMemberRequest) Reset() {
 	*x = RemoveMemberRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[26]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1634,7 +1844,7 @@ func (x *RemoveMemberRequest) String() string {
 func (*RemoveMemberRequest) ProtoMessage() {}
 
 func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[26]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1647,7 +1857,7 @@ func (x *RemoveMemberRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberRequest.ProtoReflect.Descriptor instead.
 func (*RemoveMemberRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{26}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *RemoveMemberRequest) GetOrgId() string {
@@ -1675,7 +1885,7 @@ type RemoveMemberResponse struct {
 
 func (x *RemoveMemberResponse) Reset() {
 	*x = RemoveMemberResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[27]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1687,7 +1897,7 @@ func (x *RemoveMemberResponse) String() string {
 func (*RemoveMemberResponse) ProtoMessage() {}
 
 func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[27]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1700,7 +1910,7 @@ func (x *RemoveMemberResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveMemberResponse.ProtoReflect.Descriptor instead.
 func (*RemoveMemberResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{27}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *RemoveMemberResponse) GetRevokedTokenCount() int32 {
@@ -1719,7 +1929,7 @@ type LeaveOrganizationRequest struct {
 
 func (x *LeaveOrganizationRequest) Reset() {
 	*x = LeaveOrganizationRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[28]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1731,7 +1941,7 @@ func (x *LeaveOrganizationRequest) String() string {
 func (*LeaveOrganizationRequest) ProtoMessage() {}
 
 func (x *LeaveOrganizationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[28]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1744,7 +1954,7 @@ func (x *LeaveOrganizationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveOrganizationRequest.ProtoReflect.Descriptor instead.
 func (*LeaveOrganizationRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{28}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *LeaveOrganizationRequest) GetOrgId() string {
@@ -1768,7 +1978,7 @@ type LeaveOrganizationResponse struct {
 
 func (x *LeaveOrganizationResponse) Reset() {
 	*x = LeaveOrganizationResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[29]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1780,7 +1990,7 @@ func (x *LeaveOrganizationResponse) String() string {
 func (*LeaveOrganizationResponse) ProtoMessage() {}
 
 func (x *LeaveOrganizationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[29]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1793,7 +2003,7 @@ func (x *LeaveOrganizationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeaveOrganizationResponse.ProtoReflect.Descriptor instead.
 func (*LeaveOrganizationResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{29}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *LeaveOrganizationResponse) GetDefaultOrgId() string {
@@ -1829,7 +2039,7 @@ type UpdateMemberRoleRequest struct {
 
 func (x *UpdateMemberRoleRequest) Reset() {
 	*x = UpdateMemberRoleRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[30]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1841,7 +2051,7 @@ func (x *UpdateMemberRoleRequest) String() string {
 func (*UpdateMemberRoleRequest) ProtoMessage() {}
 
 func (x *UpdateMemberRoleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[30]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1854,7 +2064,7 @@ func (x *UpdateMemberRoleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMemberRoleRequest.ProtoReflect.Descriptor instead.
 func (*UpdateMemberRoleRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{30}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *UpdateMemberRoleRequest) GetOrgId() string {
@@ -1889,7 +2099,7 @@ type UpdateMemberRoleResponse struct {
 
 func (x *UpdateMemberRoleResponse) Reset() {
 	*x = UpdateMemberRoleResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[31]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1901,7 +2111,7 @@ func (x *UpdateMemberRoleResponse) String() string {
 func (*UpdateMemberRoleResponse) ProtoMessage() {}
 
 func (x *UpdateMemberRoleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[31]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1914,7 +2124,7 @@ func (x *UpdateMemberRoleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMemberRoleResponse.ProtoReflect.Descriptor instead.
 func (*UpdateMemberRoleResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{31}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *UpdateMemberRoleResponse) GetMember() *OrgMember {
@@ -1961,7 +2171,7 @@ type MyOrganization struct {
 
 func (x *MyOrganization) Reset() {
 	*x = MyOrganization{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[32]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1973,7 +2183,7 @@ func (x *MyOrganization) String() string {
 func (*MyOrganization) ProtoMessage() {}
 
 func (x *MyOrganization) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[32]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1986,7 +2196,7 @@ func (x *MyOrganization) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MyOrganization.ProtoReflect.Descriptor instead.
 func (*MyOrganization) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{32}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *MyOrganization) GetId() string {
@@ -2060,7 +2270,7 @@ type ListMyOrganizationsRequest struct {
 
 func (x *ListMyOrganizationsRequest) Reset() {
 	*x = ListMyOrganizationsRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[33]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2072,7 +2282,7 @@ func (x *ListMyOrganizationsRequest) String() string {
 func (*ListMyOrganizationsRequest) ProtoMessage() {}
 
 func (x *ListMyOrganizationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[33]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2085,7 +2295,7 @@ func (x *ListMyOrganizationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyOrganizationsRequest.ProtoReflect.Descriptor instead.
 func (*ListMyOrganizationsRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{33}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{36}
 }
 
 type ListMyOrganizationsResponse struct {
@@ -2100,7 +2310,7 @@ type ListMyOrganizationsResponse struct {
 
 func (x *ListMyOrganizationsResponse) Reset() {
 	*x = ListMyOrganizationsResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[34]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2112,7 +2322,7 @@ func (x *ListMyOrganizationsResponse) String() string {
 func (*ListMyOrganizationsResponse) ProtoMessage() {}
 
 func (x *ListMyOrganizationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[34]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2125,7 +2335,7 @@ func (x *ListMyOrganizationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMyOrganizationsResponse.ProtoReflect.Descriptor instead.
 func (*ListMyOrganizationsResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{34}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ListMyOrganizationsResponse) GetOrganizations() []*MyOrganization {
@@ -2151,7 +2361,7 @@ type SetDefaultOrganizationRequest struct {
 
 func (x *SetDefaultOrganizationRequest) Reset() {
 	*x = SetDefaultOrganizationRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[35]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2163,7 +2373,7 @@ func (x *SetDefaultOrganizationRequest) String() string {
 func (*SetDefaultOrganizationRequest) ProtoMessage() {}
 
 func (x *SetDefaultOrganizationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[35]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2176,7 +2386,7 @@ func (x *SetDefaultOrganizationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultOrganizationRequest.ProtoReflect.Descriptor instead.
 func (*SetDefaultOrganizationRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{35}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *SetDefaultOrganizationRequest) GetOrgId() string {
@@ -2195,7 +2405,7 @@ type SetDefaultOrganizationResponse struct {
 
 func (x *SetDefaultOrganizationResponse) Reset() {
 	*x = SetDefaultOrganizationResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[36]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2207,7 +2417,7 @@ func (x *SetDefaultOrganizationResponse) String() string {
 func (*SetDefaultOrganizationResponse) ProtoMessage() {}
 
 func (x *SetDefaultOrganizationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[36]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2220,7 +2430,7 @@ func (x *SetDefaultOrganizationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultOrganizationResponse.ProtoReflect.Descriptor instead.
 func (*SetDefaultOrganizationResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{36}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *SetDefaultOrganizationResponse) GetDefaultOrgId() string {
@@ -2243,7 +2453,7 @@ type MoveFreeHostingDesignationRequest struct {
 
 func (x *MoveFreeHostingDesignationRequest) Reset() {
 	*x = MoveFreeHostingDesignationRequest{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[37]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2255,7 +2465,7 @@ func (x *MoveFreeHostingDesignationRequest) String() string {
 func (*MoveFreeHostingDesignationRequest) ProtoMessage() {}
 
 func (x *MoveFreeHostingDesignationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[37]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2268,7 +2478,7 @@ func (x *MoveFreeHostingDesignationRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use MoveFreeHostingDesignationRequest.ProtoReflect.Descriptor instead.
 func (*MoveFreeHostingDesignationRequest) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{37}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *MoveFreeHostingDesignationRequest) GetOrgId() string {
@@ -2313,7 +2523,7 @@ type MoveFreeHostingDesignationResponse struct {
 
 func (x *MoveFreeHostingDesignationResponse) Reset() {
 	*x = MoveFreeHostingDesignationResponse{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[38]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2325,7 +2535,7 @@ func (x *MoveFreeHostingDesignationResponse) String() string {
 func (*MoveFreeHostingDesignationResponse) ProtoMessage() {}
 
 func (x *MoveFreeHostingDesignationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[38]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2338,7 +2548,7 @@ func (x *MoveFreeHostingDesignationResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use MoveFreeHostingDesignationResponse.ProtoReflect.Descriptor instead.
 func (*MoveFreeHostingDesignationResponse) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{38}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *MoveFreeHostingDesignationResponse) GetFromOrgId() string {
@@ -2414,7 +2624,7 @@ type FreeHostingMoveSite struct {
 
 func (x *FreeHostingMoveSite) Reset() {
 	*x = FreeHostingMoveSite{}
-	mi := &file_services_organization_v1_organization_proto_msgTypes[39]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2426,7 +2636,7 @@ func (x *FreeHostingMoveSite) String() string {
 func (*FreeHostingMoveSite) ProtoMessage() {}
 
 func (x *FreeHostingMoveSite) ProtoReflect() protoreflect.Message {
-	mi := &file_services_organization_v1_organization_proto_msgTypes[39]
+	mi := &file_services_organization_v1_organization_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2439,7 +2649,7 @@ func (x *FreeHostingMoveSite) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FreeHostingMoveSite.ProtoReflect.Descriptor instead.
 func (*FreeHostingMoveSite) Descriptor() ([]byte, []int) {
-	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{39}
+	return file_services_organization_v1_organization_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *FreeHostingMoveSite) GetDeploymentId() string {
@@ -2498,10 +2708,11 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\tlinked_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\blinkedAt\x12=\n" +
 	"\fsuspended_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vsuspendedAt\"5\n" +
 	"\x1cStartGitHubAppInstallRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"@\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"[\n" +
 	"\x1dStartGitHubAppInstallResponse\x12\x1f\n" +
 	"\vinstall_url\x18\x01 \x01(\tR\n" +
-	"installUrl\"\x8d\x01\n" +
+	"installUrl\x12\x19\n" +
+	"\x05state\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05state\"\x8d\x01\n" +
 	" LinkGitHubAppInstallationRequest\x12'\n" +
 	"\x0finstallation_id\x18\x01 \x01(\x03R\x0einstallationId\x12\x19\n" +
 	"\x05state\x18\x02 \x01(\tB\x03\x80\x01\x01R\x05state\x12\x1a\n" +
@@ -2512,7 +2723,22 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"!ListGitHubAppInstallationsRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"r\n" +
 	"\"ListGitHubAppInstallationsResponse\x12L\n" +
-	"\rinstallations\x18\x01 \x03(\v2&.controlplane.v1.GitHubAppInstallationR\rinstallations\"d\n" +
+	"\rinstallations\x18\x01 \x03(\v2&.controlplane.v1.GitHubAppInstallationR\rinstallations\"\xed\x02\n" +
+	"\x1dLinkableGitHubAppInstallation\x12'\n" +
+	"\x0finstallation_id\x18\x01 \x01(\x03R\x0einstallationId\x12#\n" +
+	"\raccount_login\x18\x02 \x01(\tR\faccountLogin\x12!\n" +
+	"\faccount_type\x18\x03 \x01(\tR\vaccountType\x12\x1d\n" +
+	"\n" +
+	"avatar_url\x18\x04 \x01(\tR\tavatarUrl\x121\n" +
+	"\x14repository_selection\x18\x05 \x01(\tR\x13repositorySelection\x12\x1f\n" +
+	"\vlinked_here\x18\x06 \x01(\bR\n" +
+	"linkedHere\x12)\n" +
+	"\x10linked_elsewhere\x18\a \x01(\bR\x0flinkedElsewhere\x12=\n" +
+	"\fsuspended_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vsuspendedAt\"B\n" +
+	")ListLinkableGitHubAppInstallationsRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\"\x82\x01\n" +
+	"*ListLinkableGitHubAppInstallationsResponse\x12T\n" +
+	"\rinstallations\x18\x01 \x03(\v2..controlplane.v1.LinkableGitHubAppInstallationR\rinstallations\"d\n" +
 	"\"UnlinkGitHubAppInstallationRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12'\n" +
 	"\x0finstallation_id\x18\x02 \x01(\x03R\x0einstallationId\"%\n" +
@@ -2663,7 +2889,7 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\aproject\x18\x03 \x01(\tR\aproject\x12\x10\n" +
 	"\x03env\x18\x04 \x01(\tR\x03env\x12\x12\n" +
 	"\x04name\x18\x05 \x01(\tR\x04name\x12\x10\n" +
-	"\x03url\x18\x06 \x01(\tR\x03url2\x9e\x0f\n" +
+	"\x03url\x18\x06 \x01(\tR\x03url2\xc3\x10\n" +
 	"\x13OrganizationService\x12u\n" +
 	"\x13ListMyOrganizations\x12+.controlplane.v1.ListMyOrganizationsRequest\x1a,.controlplane.v1.ListMyOrganizationsResponse\"\x03\x90\x02\x01\x12y\n" +
 	"\x16SetDefaultOrganization\x12..controlplane.v1.SetDefaultOrganizationRequest\x1a/.controlplane.v1.SetDefaultOrganizationResponse\x12m\n" +
@@ -2680,7 +2906,8 @@ const file_services_organization_v1_organization_proto_rawDesc = "" +
 	"\x1aMoveFreeHostingDesignation\x122.controlplane.v1.MoveFreeHostingDesignationRequest\x1a3.controlplane.v1.MoveFreeHostingDesignationResponse\x12v\n" +
 	"\x15StartGitHubAppInstall\x12-.controlplane.v1.StartGitHubAppInstallRequest\x1a..controlplane.v1.StartGitHubAppInstallResponse\x12\x82\x01\n" +
 	"\x19LinkGitHubAppInstallation\x121.controlplane.v1.LinkGitHubAppInstallationRequest\x1a2.controlplane.v1.LinkGitHubAppInstallationResponse\x12\x8a\x01\n" +
-	"\x1aListGitHubAppInstallations\x122.controlplane.v1.ListGitHubAppInstallationsRequest\x1a3.controlplane.v1.ListGitHubAppInstallationsResponse\"\x03\x90\x02\x01\x12\x88\x01\n" +
+	"\x1aListGitHubAppInstallations\x122.controlplane.v1.ListGitHubAppInstallationsRequest\x1a3.controlplane.v1.ListGitHubAppInstallationsResponse\"\x03\x90\x02\x01\x12\xa2\x01\n" +
+	"\"ListLinkableGitHubAppInstallations\x12:.controlplane.v1.ListLinkableGitHubAppInstallationsRequest\x1a;.controlplane.v1.ListLinkableGitHubAppInstallationsResponse\"\x03\x90\x02\x01\x12\x88\x01\n" +
 	"\x1bUnlinkGitHubAppInstallation\x123.controlplane.v1.UnlinkGitHubAppInstallationRequest\x1a4.controlplane.v1.UnlinkGitHubAppInstallationResponseB\xdf\x01\n" +
 	"\x13com.controlplane.v1B\x11OrganizationProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/organization/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
 
@@ -2696,113 +2923,120 @@ func file_services_organization_v1_organization_proto_rawDescGZIP() []byte {
 	return file_services_organization_v1_organization_proto_rawDescData
 }
 
-var file_services_organization_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_services_organization_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 43)
 var file_services_organization_v1_organization_proto_goTypes = []any{
-	(*GitHubAppInstallation)(nil),               // 0: controlplane.v1.GitHubAppInstallation
-	(*StartGitHubAppInstallRequest)(nil),        // 1: controlplane.v1.StartGitHubAppInstallRequest
-	(*StartGitHubAppInstallResponse)(nil),       // 2: controlplane.v1.StartGitHubAppInstallResponse
-	(*LinkGitHubAppInstallationRequest)(nil),    // 3: controlplane.v1.LinkGitHubAppInstallationRequest
-	(*LinkGitHubAppInstallationResponse)(nil),   // 4: controlplane.v1.LinkGitHubAppInstallationResponse
-	(*ListGitHubAppInstallationsRequest)(nil),   // 5: controlplane.v1.ListGitHubAppInstallationsRequest
-	(*ListGitHubAppInstallationsResponse)(nil),  // 6: controlplane.v1.ListGitHubAppInstallationsResponse
-	(*UnlinkGitHubAppInstallationRequest)(nil),  // 7: controlplane.v1.UnlinkGitHubAppInstallationRequest
-	(*UnlinkGitHubAppInstallationResponse)(nil), // 8: controlplane.v1.UnlinkGitHubAppInstallationResponse
-	(*OrgMember)(nil),                           // 9: controlplane.v1.OrgMember
-	(*SeatUsage)(nil),                           // 10: controlplane.v1.SeatUsage
-	(*OrgInvitation)(nil),                       // 11: controlplane.v1.OrgInvitation
-	(*CreateOrganizationRequest)(nil),           // 12: controlplane.v1.CreateOrganizationRequest
-	(*CreateOrganizationResponse)(nil),          // 13: controlplane.v1.CreateOrganizationResponse
-	(*ListMembersRequest)(nil),                  // 14: controlplane.v1.ListMembersRequest
-	(*ListMembersResponse)(nil),                 // 15: controlplane.v1.ListMembersResponse
-	(*InviteMemberRequest)(nil),                 // 16: controlplane.v1.InviteMemberRequest
-	(*InviteMemberResponse)(nil),                // 17: controlplane.v1.InviteMemberResponse
-	(*ListInvitationsRequest)(nil),              // 18: controlplane.v1.ListInvitationsRequest
-	(*ListInvitationsResponse)(nil),             // 19: controlplane.v1.ListInvitationsResponse
-	(*RevokeInvitationRequest)(nil),             // 20: controlplane.v1.RevokeInvitationRequest
-	(*RevokeInvitationResponse)(nil),            // 21: controlplane.v1.RevokeInvitationResponse
-	(*GetInvitationRequest)(nil),                // 22: controlplane.v1.GetInvitationRequest
-	(*GetInvitationResponse)(nil),               // 23: controlplane.v1.GetInvitationResponse
-	(*AcceptInvitationRequest)(nil),             // 24: controlplane.v1.AcceptInvitationRequest
-	(*AcceptInvitationResponse)(nil),            // 25: controlplane.v1.AcceptInvitationResponse
-	(*RemoveMemberRequest)(nil),                 // 26: controlplane.v1.RemoveMemberRequest
-	(*RemoveMemberResponse)(nil),                // 27: controlplane.v1.RemoveMemberResponse
-	(*LeaveOrganizationRequest)(nil),            // 28: controlplane.v1.LeaveOrganizationRequest
-	(*LeaveOrganizationResponse)(nil),           // 29: controlplane.v1.LeaveOrganizationResponse
-	(*UpdateMemberRoleRequest)(nil),             // 30: controlplane.v1.UpdateMemberRoleRequest
-	(*UpdateMemberRoleResponse)(nil),            // 31: controlplane.v1.UpdateMemberRoleResponse
-	(*MyOrganization)(nil),                      // 32: controlplane.v1.MyOrganization
-	(*ListMyOrganizationsRequest)(nil),          // 33: controlplane.v1.ListMyOrganizationsRequest
-	(*ListMyOrganizationsResponse)(nil),         // 34: controlplane.v1.ListMyOrganizationsResponse
-	(*SetDefaultOrganizationRequest)(nil),       // 35: controlplane.v1.SetDefaultOrganizationRequest
-	(*SetDefaultOrganizationResponse)(nil),      // 36: controlplane.v1.SetDefaultOrganizationResponse
-	(*MoveFreeHostingDesignationRequest)(nil),   // 37: controlplane.v1.MoveFreeHostingDesignationRequest
-	(*MoveFreeHostingDesignationResponse)(nil),  // 38: controlplane.v1.MoveFreeHostingDesignationResponse
-	(*FreeHostingMoveSite)(nil),                 // 39: controlplane.v1.FreeHostingMoveSite
-	(*timestamppb.Timestamp)(nil),               // 40: google.protobuf.Timestamp
+	(*GitHubAppInstallation)(nil),                      // 0: controlplane.v1.GitHubAppInstallation
+	(*StartGitHubAppInstallRequest)(nil),               // 1: controlplane.v1.StartGitHubAppInstallRequest
+	(*StartGitHubAppInstallResponse)(nil),              // 2: controlplane.v1.StartGitHubAppInstallResponse
+	(*LinkGitHubAppInstallationRequest)(nil),           // 3: controlplane.v1.LinkGitHubAppInstallationRequest
+	(*LinkGitHubAppInstallationResponse)(nil),          // 4: controlplane.v1.LinkGitHubAppInstallationResponse
+	(*ListGitHubAppInstallationsRequest)(nil),          // 5: controlplane.v1.ListGitHubAppInstallationsRequest
+	(*ListGitHubAppInstallationsResponse)(nil),         // 6: controlplane.v1.ListGitHubAppInstallationsResponse
+	(*LinkableGitHubAppInstallation)(nil),              // 7: controlplane.v1.LinkableGitHubAppInstallation
+	(*ListLinkableGitHubAppInstallationsRequest)(nil),  // 8: controlplane.v1.ListLinkableGitHubAppInstallationsRequest
+	(*ListLinkableGitHubAppInstallationsResponse)(nil), // 9: controlplane.v1.ListLinkableGitHubAppInstallationsResponse
+	(*UnlinkGitHubAppInstallationRequest)(nil),         // 10: controlplane.v1.UnlinkGitHubAppInstallationRequest
+	(*UnlinkGitHubAppInstallationResponse)(nil),        // 11: controlplane.v1.UnlinkGitHubAppInstallationResponse
+	(*OrgMember)(nil),                                  // 12: controlplane.v1.OrgMember
+	(*SeatUsage)(nil),                                  // 13: controlplane.v1.SeatUsage
+	(*OrgInvitation)(nil),                              // 14: controlplane.v1.OrgInvitation
+	(*CreateOrganizationRequest)(nil),                  // 15: controlplane.v1.CreateOrganizationRequest
+	(*CreateOrganizationResponse)(nil),                 // 16: controlplane.v1.CreateOrganizationResponse
+	(*ListMembersRequest)(nil),                         // 17: controlplane.v1.ListMembersRequest
+	(*ListMembersResponse)(nil),                        // 18: controlplane.v1.ListMembersResponse
+	(*InviteMemberRequest)(nil),                        // 19: controlplane.v1.InviteMemberRequest
+	(*InviteMemberResponse)(nil),                       // 20: controlplane.v1.InviteMemberResponse
+	(*ListInvitationsRequest)(nil),                     // 21: controlplane.v1.ListInvitationsRequest
+	(*ListInvitationsResponse)(nil),                    // 22: controlplane.v1.ListInvitationsResponse
+	(*RevokeInvitationRequest)(nil),                    // 23: controlplane.v1.RevokeInvitationRequest
+	(*RevokeInvitationResponse)(nil),                   // 24: controlplane.v1.RevokeInvitationResponse
+	(*GetInvitationRequest)(nil),                       // 25: controlplane.v1.GetInvitationRequest
+	(*GetInvitationResponse)(nil),                      // 26: controlplane.v1.GetInvitationResponse
+	(*AcceptInvitationRequest)(nil),                    // 27: controlplane.v1.AcceptInvitationRequest
+	(*AcceptInvitationResponse)(nil),                   // 28: controlplane.v1.AcceptInvitationResponse
+	(*RemoveMemberRequest)(nil),                        // 29: controlplane.v1.RemoveMemberRequest
+	(*RemoveMemberResponse)(nil),                       // 30: controlplane.v1.RemoveMemberResponse
+	(*LeaveOrganizationRequest)(nil),                   // 31: controlplane.v1.LeaveOrganizationRequest
+	(*LeaveOrganizationResponse)(nil),                  // 32: controlplane.v1.LeaveOrganizationResponse
+	(*UpdateMemberRoleRequest)(nil),                    // 33: controlplane.v1.UpdateMemberRoleRequest
+	(*UpdateMemberRoleResponse)(nil),                   // 34: controlplane.v1.UpdateMemberRoleResponse
+	(*MyOrganization)(nil),                             // 35: controlplane.v1.MyOrganization
+	(*ListMyOrganizationsRequest)(nil),                 // 36: controlplane.v1.ListMyOrganizationsRequest
+	(*ListMyOrganizationsResponse)(nil),                // 37: controlplane.v1.ListMyOrganizationsResponse
+	(*SetDefaultOrganizationRequest)(nil),              // 38: controlplane.v1.SetDefaultOrganizationRequest
+	(*SetDefaultOrganizationResponse)(nil),             // 39: controlplane.v1.SetDefaultOrganizationResponse
+	(*MoveFreeHostingDesignationRequest)(nil),          // 40: controlplane.v1.MoveFreeHostingDesignationRequest
+	(*MoveFreeHostingDesignationResponse)(nil),         // 41: controlplane.v1.MoveFreeHostingDesignationResponse
+	(*FreeHostingMoveSite)(nil),                        // 42: controlplane.v1.FreeHostingMoveSite
+	(*timestamppb.Timestamp)(nil),                      // 43: google.protobuf.Timestamp
 }
 var file_services_organization_v1_organization_proto_depIdxs = []int32{
-	40, // 0: controlplane.v1.GitHubAppInstallation.linked_at:type_name -> google.protobuf.Timestamp
-	40, // 1: controlplane.v1.GitHubAppInstallation.suspended_at:type_name -> google.protobuf.Timestamp
+	43, // 0: controlplane.v1.GitHubAppInstallation.linked_at:type_name -> google.protobuf.Timestamp
+	43, // 1: controlplane.v1.GitHubAppInstallation.suspended_at:type_name -> google.protobuf.Timestamp
 	0,  // 2: controlplane.v1.LinkGitHubAppInstallationResponse.installation:type_name -> controlplane.v1.GitHubAppInstallation
 	0,  // 3: controlplane.v1.ListGitHubAppInstallationsResponse.installations:type_name -> controlplane.v1.GitHubAppInstallation
-	40, // 4: controlplane.v1.OrgMember.joined_at:type_name -> google.protobuf.Timestamp
-	40, // 5: controlplane.v1.OrgInvitation.created_at:type_name -> google.protobuf.Timestamp
-	40, // 6: controlplane.v1.OrgInvitation.expires_at:type_name -> google.protobuf.Timestamp
-	40, // 7: controlplane.v1.OrgInvitation.last_sent_at:type_name -> google.protobuf.Timestamp
-	32, // 8: controlplane.v1.CreateOrganizationResponse.organization:type_name -> controlplane.v1.MyOrganization
-	9,  // 9: controlplane.v1.ListMembersResponse.members:type_name -> controlplane.v1.OrgMember
-	10, // 10: controlplane.v1.ListMembersResponse.seats:type_name -> controlplane.v1.SeatUsage
-	11, // 11: controlplane.v1.InviteMemberResponse.invitation:type_name -> controlplane.v1.OrgInvitation
-	11, // 12: controlplane.v1.ListInvitationsResponse.invitations:type_name -> controlplane.v1.OrgInvitation
-	40, // 13: controlplane.v1.GetInvitationResponse.expires_at:type_name -> google.protobuf.Timestamp
-	32, // 14: controlplane.v1.AcceptInvitationResponse.organization:type_name -> controlplane.v1.MyOrganization
-	9,  // 15: controlplane.v1.UpdateMemberRoleResponse.member:type_name -> controlplane.v1.OrgMember
-	40, // 16: controlplane.v1.MyOrganization.created_at:type_name -> google.protobuf.Timestamp
-	40, // 17: controlplane.v1.MyOrganization.joined_at:type_name -> google.protobuf.Timestamp
-	32, // 18: controlplane.v1.ListMyOrganizationsResponse.organizations:type_name -> controlplane.v1.MyOrganization
-	39, // 19: controlplane.v1.MoveFreeHostingDesignationResponse.stopping_sites:type_name -> controlplane.v1.FreeHostingMoveSite
-	39, // 20: controlplane.v1.MoveFreeHostingDesignationResponse.served_sites:type_name -> controlplane.v1.FreeHostingMoveSite
-	39, // 21: controlplane.v1.MoveFreeHostingDesignationResponse.unserved_sites:type_name -> controlplane.v1.FreeHostingMoveSite
-	40, // 22: controlplane.v1.MoveFreeHostingDesignationResponse.next_move_allowed_at:type_name -> google.protobuf.Timestamp
-	33, // 23: controlplane.v1.OrganizationService.ListMyOrganizations:input_type -> controlplane.v1.ListMyOrganizationsRequest
-	35, // 24: controlplane.v1.OrganizationService.SetDefaultOrganization:input_type -> controlplane.v1.SetDefaultOrganizationRequest
-	12, // 25: controlplane.v1.OrganizationService.CreateOrganization:input_type -> controlplane.v1.CreateOrganizationRequest
-	14, // 26: controlplane.v1.OrganizationService.ListMembers:input_type -> controlplane.v1.ListMembersRequest
-	16, // 27: controlplane.v1.OrganizationService.InviteMember:input_type -> controlplane.v1.InviteMemberRequest
-	18, // 28: controlplane.v1.OrganizationService.ListInvitations:input_type -> controlplane.v1.ListInvitationsRequest
-	20, // 29: controlplane.v1.OrganizationService.RevokeInvitation:input_type -> controlplane.v1.RevokeInvitationRequest
-	22, // 30: controlplane.v1.OrganizationService.GetInvitation:input_type -> controlplane.v1.GetInvitationRequest
-	24, // 31: controlplane.v1.OrganizationService.AcceptInvitation:input_type -> controlplane.v1.AcceptInvitationRequest
-	26, // 32: controlplane.v1.OrganizationService.RemoveMember:input_type -> controlplane.v1.RemoveMemberRequest
-	28, // 33: controlplane.v1.OrganizationService.LeaveOrganization:input_type -> controlplane.v1.LeaveOrganizationRequest
-	30, // 34: controlplane.v1.OrganizationService.UpdateMemberRole:input_type -> controlplane.v1.UpdateMemberRoleRequest
-	37, // 35: controlplane.v1.OrganizationService.MoveFreeHostingDesignation:input_type -> controlplane.v1.MoveFreeHostingDesignationRequest
-	1,  // 36: controlplane.v1.OrganizationService.StartGitHubAppInstall:input_type -> controlplane.v1.StartGitHubAppInstallRequest
-	3,  // 37: controlplane.v1.OrganizationService.LinkGitHubAppInstallation:input_type -> controlplane.v1.LinkGitHubAppInstallationRequest
-	5,  // 38: controlplane.v1.OrganizationService.ListGitHubAppInstallations:input_type -> controlplane.v1.ListGitHubAppInstallationsRequest
-	7,  // 39: controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation:input_type -> controlplane.v1.UnlinkGitHubAppInstallationRequest
-	34, // 40: controlplane.v1.OrganizationService.ListMyOrganizations:output_type -> controlplane.v1.ListMyOrganizationsResponse
-	36, // 41: controlplane.v1.OrganizationService.SetDefaultOrganization:output_type -> controlplane.v1.SetDefaultOrganizationResponse
-	13, // 42: controlplane.v1.OrganizationService.CreateOrganization:output_type -> controlplane.v1.CreateOrganizationResponse
-	15, // 43: controlplane.v1.OrganizationService.ListMembers:output_type -> controlplane.v1.ListMembersResponse
-	17, // 44: controlplane.v1.OrganizationService.InviteMember:output_type -> controlplane.v1.InviteMemberResponse
-	19, // 45: controlplane.v1.OrganizationService.ListInvitations:output_type -> controlplane.v1.ListInvitationsResponse
-	21, // 46: controlplane.v1.OrganizationService.RevokeInvitation:output_type -> controlplane.v1.RevokeInvitationResponse
-	23, // 47: controlplane.v1.OrganizationService.GetInvitation:output_type -> controlplane.v1.GetInvitationResponse
-	25, // 48: controlplane.v1.OrganizationService.AcceptInvitation:output_type -> controlplane.v1.AcceptInvitationResponse
-	27, // 49: controlplane.v1.OrganizationService.RemoveMember:output_type -> controlplane.v1.RemoveMemberResponse
-	29, // 50: controlplane.v1.OrganizationService.LeaveOrganization:output_type -> controlplane.v1.LeaveOrganizationResponse
-	31, // 51: controlplane.v1.OrganizationService.UpdateMemberRole:output_type -> controlplane.v1.UpdateMemberRoleResponse
-	38, // 52: controlplane.v1.OrganizationService.MoveFreeHostingDesignation:output_type -> controlplane.v1.MoveFreeHostingDesignationResponse
-	2,  // 53: controlplane.v1.OrganizationService.StartGitHubAppInstall:output_type -> controlplane.v1.StartGitHubAppInstallResponse
-	4,  // 54: controlplane.v1.OrganizationService.LinkGitHubAppInstallation:output_type -> controlplane.v1.LinkGitHubAppInstallationResponse
-	6,  // 55: controlplane.v1.OrganizationService.ListGitHubAppInstallations:output_type -> controlplane.v1.ListGitHubAppInstallationsResponse
-	8,  // 56: controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation:output_type -> controlplane.v1.UnlinkGitHubAppInstallationResponse
-	40, // [40:57] is the sub-list for method output_type
-	23, // [23:40] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	43, // 4: controlplane.v1.LinkableGitHubAppInstallation.suspended_at:type_name -> google.protobuf.Timestamp
+	7,  // 5: controlplane.v1.ListLinkableGitHubAppInstallationsResponse.installations:type_name -> controlplane.v1.LinkableGitHubAppInstallation
+	43, // 6: controlplane.v1.OrgMember.joined_at:type_name -> google.protobuf.Timestamp
+	43, // 7: controlplane.v1.OrgInvitation.created_at:type_name -> google.protobuf.Timestamp
+	43, // 8: controlplane.v1.OrgInvitation.expires_at:type_name -> google.protobuf.Timestamp
+	43, // 9: controlplane.v1.OrgInvitation.last_sent_at:type_name -> google.protobuf.Timestamp
+	35, // 10: controlplane.v1.CreateOrganizationResponse.organization:type_name -> controlplane.v1.MyOrganization
+	12, // 11: controlplane.v1.ListMembersResponse.members:type_name -> controlplane.v1.OrgMember
+	13, // 12: controlplane.v1.ListMembersResponse.seats:type_name -> controlplane.v1.SeatUsage
+	14, // 13: controlplane.v1.InviteMemberResponse.invitation:type_name -> controlplane.v1.OrgInvitation
+	14, // 14: controlplane.v1.ListInvitationsResponse.invitations:type_name -> controlplane.v1.OrgInvitation
+	43, // 15: controlplane.v1.GetInvitationResponse.expires_at:type_name -> google.protobuf.Timestamp
+	35, // 16: controlplane.v1.AcceptInvitationResponse.organization:type_name -> controlplane.v1.MyOrganization
+	12, // 17: controlplane.v1.UpdateMemberRoleResponse.member:type_name -> controlplane.v1.OrgMember
+	43, // 18: controlplane.v1.MyOrganization.created_at:type_name -> google.protobuf.Timestamp
+	43, // 19: controlplane.v1.MyOrganization.joined_at:type_name -> google.protobuf.Timestamp
+	35, // 20: controlplane.v1.ListMyOrganizationsResponse.organizations:type_name -> controlplane.v1.MyOrganization
+	42, // 21: controlplane.v1.MoveFreeHostingDesignationResponse.stopping_sites:type_name -> controlplane.v1.FreeHostingMoveSite
+	42, // 22: controlplane.v1.MoveFreeHostingDesignationResponse.served_sites:type_name -> controlplane.v1.FreeHostingMoveSite
+	42, // 23: controlplane.v1.MoveFreeHostingDesignationResponse.unserved_sites:type_name -> controlplane.v1.FreeHostingMoveSite
+	43, // 24: controlplane.v1.MoveFreeHostingDesignationResponse.next_move_allowed_at:type_name -> google.protobuf.Timestamp
+	36, // 25: controlplane.v1.OrganizationService.ListMyOrganizations:input_type -> controlplane.v1.ListMyOrganizationsRequest
+	38, // 26: controlplane.v1.OrganizationService.SetDefaultOrganization:input_type -> controlplane.v1.SetDefaultOrganizationRequest
+	15, // 27: controlplane.v1.OrganizationService.CreateOrganization:input_type -> controlplane.v1.CreateOrganizationRequest
+	17, // 28: controlplane.v1.OrganizationService.ListMembers:input_type -> controlplane.v1.ListMembersRequest
+	19, // 29: controlplane.v1.OrganizationService.InviteMember:input_type -> controlplane.v1.InviteMemberRequest
+	21, // 30: controlplane.v1.OrganizationService.ListInvitations:input_type -> controlplane.v1.ListInvitationsRequest
+	23, // 31: controlplane.v1.OrganizationService.RevokeInvitation:input_type -> controlplane.v1.RevokeInvitationRequest
+	25, // 32: controlplane.v1.OrganizationService.GetInvitation:input_type -> controlplane.v1.GetInvitationRequest
+	27, // 33: controlplane.v1.OrganizationService.AcceptInvitation:input_type -> controlplane.v1.AcceptInvitationRequest
+	29, // 34: controlplane.v1.OrganizationService.RemoveMember:input_type -> controlplane.v1.RemoveMemberRequest
+	31, // 35: controlplane.v1.OrganizationService.LeaveOrganization:input_type -> controlplane.v1.LeaveOrganizationRequest
+	33, // 36: controlplane.v1.OrganizationService.UpdateMemberRole:input_type -> controlplane.v1.UpdateMemberRoleRequest
+	40, // 37: controlplane.v1.OrganizationService.MoveFreeHostingDesignation:input_type -> controlplane.v1.MoveFreeHostingDesignationRequest
+	1,  // 38: controlplane.v1.OrganizationService.StartGitHubAppInstall:input_type -> controlplane.v1.StartGitHubAppInstallRequest
+	3,  // 39: controlplane.v1.OrganizationService.LinkGitHubAppInstallation:input_type -> controlplane.v1.LinkGitHubAppInstallationRequest
+	5,  // 40: controlplane.v1.OrganizationService.ListGitHubAppInstallations:input_type -> controlplane.v1.ListGitHubAppInstallationsRequest
+	8,  // 41: controlplane.v1.OrganizationService.ListLinkableGitHubAppInstallations:input_type -> controlplane.v1.ListLinkableGitHubAppInstallationsRequest
+	10, // 42: controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation:input_type -> controlplane.v1.UnlinkGitHubAppInstallationRequest
+	37, // 43: controlplane.v1.OrganizationService.ListMyOrganizations:output_type -> controlplane.v1.ListMyOrganizationsResponse
+	39, // 44: controlplane.v1.OrganizationService.SetDefaultOrganization:output_type -> controlplane.v1.SetDefaultOrganizationResponse
+	16, // 45: controlplane.v1.OrganizationService.CreateOrganization:output_type -> controlplane.v1.CreateOrganizationResponse
+	18, // 46: controlplane.v1.OrganizationService.ListMembers:output_type -> controlplane.v1.ListMembersResponse
+	20, // 47: controlplane.v1.OrganizationService.InviteMember:output_type -> controlplane.v1.InviteMemberResponse
+	22, // 48: controlplane.v1.OrganizationService.ListInvitations:output_type -> controlplane.v1.ListInvitationsResponse
+	24, // 49: controlplane.v1.OrganizationService.RevokeInvitation:output_type -> controlplane.v1.RevokeInvitationResponse
+	26, // 50: controlplane.v1.OrganizationService.GetInvitation:output_type -> controlplane.v1.GetInvitationResponse
+	28, // 51: controlplane.v1.OrganizationService.AcceptInvitation:output_type -> controlplane.v1.AcceptInvitationResponse
+	30, // 52: controlplane.v1.OrganizationService.RemoveMember:output_type -> controlplane.v1.RemoveMemberResponse
+	32, // 53: controlplane.v1.OrganizationService.LeaveOrganization:output_type -> controlplane.v1.LeaveOrganizationResponse
+	34, // 54: controlplane.v1.OrganizationService.UpdateMemberRole:output_type -> controlplane.v1.UpdateMemberRoleResponse
+	41, // 55: controlplane.v1.OrganizationService.MoveFreeHostingDesignation:output_type -> controlplane.v1.MoveFreeHostingDesignationResponse
+	2,  // 56: controlplane.v1.OrganizationService.StartGitHubAppInstall:output_type -> controlplane.v1.StartGitHubAppInstallResponse
+	4,  // 57: controlplane.v1.OrganizationService.LinkGitHubAppInstallation:output_type -> controlplane.v1.LinkGitHubAppInstallationResponse
+	6,  // 58: controlplane.v1.OrganizationService.ListGitHubAppInstallations:output_type -> controlplane.v1.ListGitHubAppInstallationsResponse
+	9,  // 59: controlplane.v1.OrganizationService.ListLinkableGitHubAppInstallations:output_type -> controlplane.v1.ListLinkableGitHubAppInstallationsResponse
+	11, // 60: controlplane.v1.OrganizationService.UnlinkGitHubAppInstallation:output_type -> controlplane.v1.UnlinkGitHubAppInstallationResponse
+	43, // [43:61] is the sub-list for method output_type
+	25, // [25:43] is the sub-list for method input_type
+	25, // [25:25] is the sub-list for extension type_name
+	25, // [25:25] is the sub-list for extension extendee
+	0,  // [0:25] is the sub-list for field type_name
 }
 
 func init() { file_services_organization_v1_organization_proto_init() }
@@ -2811,16 +3045,16 @@ func file_services_organization_v1_organization_proto_init() {
 		return
 	}
 	file_services_organization_v1_organization_proto_msgTypes[3].OneofWrappers = []any{}
-	file_services_organization_v1_organization_proto_msgTypes[12].OneofWrappers = []any{}
-	file_services_organization_v1_organization_proto_msgTypes[18].OneofWrappers = []any{}
-	file_services_organization_v1_organization_proto_msgTypes[32].OneofWrappers = []any{}
+	file_services_organization_v1_organization_proto_msgTypes[15].OneofWrappers = []any{}
+	file_services_organization_v1_organization_proto_msgTypes[21].OneofWrappers = []any{}
+	file_services_organization_v1_organization_proto_msgTypes[35].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_organization_v1_organization_proto_rawDesc), len(file_services_organization_v1_organization_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   40,
+			NumMessages:   43,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

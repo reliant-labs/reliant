@@ -114,6 +114,7 @@ const FORKS_POOL_FILES = [
   "src/components/Chat/__tests__/draftSurvivesForcedReload.test.tsx",
   "src/components/Settings/__tests__/ConnectorConsent.defaults.test.tsx",
   "src/components/Settings/__tests__/IntegrationsSettings.test.tsx",
+  "src/components/Settings/cloud/github/__tests__/OrgGitHubPage.test.tsx",
   "src/components/__tests__/AppOutOfDateModal.test.tsx",
   "src/components/__tests__/ConnectionOAuthCallback.test.tsx",
   "src/components/__tests__/GitHubOAuthCallback.desktopAndInstall.test.tsx",
