@@ -103,6 +103,15 @@ func (s *service) markSent(ctx context.Context, actor Actor, row *store.GtmItem,
 // holdMayBeInFlight reports whether row's hold is young enough that the send
 // which took it may still be running: under twice the send timeout. A held
 // item is frozen, so its updated_at is the hold's time.
+//
+// The rule rests on two assumptions. Email.Send returns by its context's
+// deadline (the Email contract requires it), so no send runs past
+// EmailSendTimeout. And updated_at was stamped by the clock of the replica
+// that took the hold while the age is read off this replica's clock, so
+// the replicas' clocks agree to well within EmailSendTimeout: the second
+// EmailSendTimeout of the window is the margin for that skew (and for a
+// send's last response in flight). A clock more than EmailSendTimeout fast
+// could release a hold whose send is still running.
 func (s *service) holdMayBeInFlight(row *store.GtmItem) bool {
 	return s.now().Sub(row.UpdatedAt) < 2*s.sendTimeout
 }
@@ -114,19 +123,35 @@ func (s *service) inDoubt(row *store.GtmItem) error {
 }
 
 // checkSendChannel is the send path's channel rule: an email-type item's
-// channel, when it has one, is ACTIVE, INTEGRATED and gmail.
-func (s *service) checkSendChannel(ctx context.Context, orgID string, row *store.GtmItem) error {
+// channel, when it has one, is ACTIVE, INTEGRATED and gmail. It returns the
+// channel (nil for none).
+func (s *service) checkSendChannel(ctx context.Context, orgID string, row *store.GtmItem) (*store.GtmChannel, error) {
 	if row.ChannelID == nil {
-		return nil
+		return nil, nil
 	}
 	ch, err := s.store.GetChannel(ctx, orgID, *row.ChannelID)
 	if err != nil {
-		return s.notFound(ctx, err, "channel", *row.ChannelID)
+		return nil, s.notFound(ctx, err, "channel", *row.ChannelID)
 	}
 	if ChannelStatus(ch.Status) != ChannelActive || ChannelMode(ch.Mode) != ChannelIntegrated || deref(ch.IntegrationKind) != GmailIntegration {
-		return ErrChannelNotSendable
+		return nil, ErrChannelNotSendable
 	}
-	return nil
+	return ch, nil
+}
+
+// sendRun is the run a send goes through: in's, on the channel's Gmail
+// connection when the channel names one. A run that names another is
+// ErrChannelNotSendable: the channel decides which mailbox it sends from.
+func sendRun(in EmailRun, ch *store.GtmChannel) (EmailRun, error) {
+	if ch == nil || deref(ch.ConnectionID) == "" {
+		return in, nil
+	}
+	conn := *ch.ConnectionID
+	if in.ConnectionID != "" && in.ConnectionID != conn {
+		return EmailRun{}, ErrChannelNotSendable
+	}
+	in.ConnectionID = conn
+	return in, nil
 }
 
 // SendItemEmail sends an APPROVED email item through Email and records it,
@@ -181,6 +206,7 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 
 	// 1. Hold.
 	var msg EmailMessage
+	var run EmailRun
 	err := s.store.InTx(ctx, func(ctx context.Context) error {
 		row, err := s.store.GetItem(ctx, org, id)
 		if err != nil {
@@ -192,7 +218,11 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 		if err := sendable(row, rev); err != nil {
 			return err
 		}
-		if err := s.checkSendChannel(ctx, org, row); err != nil {
+		ch, err := s.checkSendChannel(ctx, org, row)
+		if err != nil {
+			return err
+		}
+		if run, err = sendRun(in.Run, ch); err != nil {
 			return err
 		}
 		want := ApprovalHash(itemFromRow(row))
@@ -220,7 +250,7 @@ func (s *service) SendItemEmail(ctx context.Context, actor Actor, in SendItemEma
 
 	// 2. Send.
 	sendCtx, cancel := context.WithTimeout(ctx, s.sendTimeout)
-	sentID, err := s.email.Send(sendCtx, actor, in.Run, msg)
+	sentID, err := s.email.Send(sendCtx, actor, run, msg)
 	cancel()
 	detached := context.WithoutCancel(ctx)
 	if err != nil {

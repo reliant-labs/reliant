@@ -186,6 +186,14 @@ type AnalyticsResult struct {
 	HiddenGroups int
 }
 
+// passesThrough reports whether an Analytics error reaches the caller as it
+// is: one that wraps a *ValidationError, ErrAnalyticsUnavailable or
+// ErrAnalyticsFailed, whose text the Analytics contract holds fixed.
+func passesThrough(err error) bool {
+	var ve *ValidationError
+	return errors.As(err, &ve) || errors.Is(err, ErrAnalyticsUnavailable) || errors.Is(err, ErrAnalyticsFailed)
+}
+
 // ReadProductAnalytics gates, resolves and validates q, then hands it to
 // Analytics with the actor's org.
 func (s *service) ReadProductAnalytics(ctx context.Context, actor Actor, q AnalyticsQuery) (AnalyticsResult, error) {
@@ -203,9 +211,10 @@ func (s *service) ReadProductAnalytics(ctx context.Context, actor Actor, q Analy
 	if err != nil {
 		// The domain's own errors carry fixed, actionable messages (a refused
 		// window, name or property is the caller's to fix, not to retry):
-		// they pass through. Anything else can name hosts and queries: log
-		// it, say less.
-		if errors.Is(err, ErrInvalidArgument) || errors.Is(err, ErrAnalyticsUnavailable) || errors.Is(err, ErrAnalyticsFailed) {
+		// they pass through, and the Analytics contract holds their text
+		// fixed. Anything else, a bare InvalidArgument included, can name
+		// hosts and queries: log it, say less.
+		if passesThrough(err) {
 			return AnalyticsResult{}, err
 		}
 		s.log.WarnContext(ctx, "gtm: product analytics query failed", "template", string(q.Template), "error", err)

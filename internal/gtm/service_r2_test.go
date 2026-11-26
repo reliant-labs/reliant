@@ -27,19 +27,35 @@ import (
 type fakeBlobs struct {
 	objects map[string][]byte
 	puts    []string
-	deletes []string
-	gets    []GetOptions
-	failPut error
+	putOpts []PutOptions
+	// writes are the keys Put wrote.
+	writes     []string
+	deletes    []string
+	gets       []GetOptions
+	failPut    error
+	failDelete error
+	// now is the store's clock (t0 when nil); expiresIn, when set, is the
+	// presigned PUT's lifetime in place of opts.TTL.
+	now       func() time.Time
+	expiresIn time.Duration
 }
 
 func newFakeBlobs() *fakeBlobs { return &fakeBlobs{objects: map[string][]byte{}} }
 
 func (b *fakeBlobs) PresignPut(_ context.Context, key string, opts PutOptions) (PresignedRequest, error) {
 	b.puts = append(b.puts, key)
+	b.putOpts = append(b.putOpts, opts)
+	now, ttl := t0, opts.TTL
+	if b.now != nil {
+		now = b.now()
+	}
+	if b.expiresIn != 0 {
+		ttl = b.expiresIn
+	}
 	return PresignedRequest{
 		URL:       "https://bucket.example/" + key,
 		Headers:   map[string]string{"Content-Type": opts.ContentType, "Content-Length": fmt.Sprint(opts.Size)},
-		ExpiresAt: t0.Add(15 * time.Minute),
+		ExpiresAt: now.Add(ttl),
 	}, nil
 }
 
@@ -62,11 +78,15 @@ func (b *fakeBlobs) Put(_ context.Context, key string, r io.Reader, opts PutOpti
 	if int64(len(data)) != opts.Size {
 		return fmt.Errorf("size %d, not %d", len(data), opts.Size)
 	}
+	b.writes = append(b.writes, key)
 	b.objects[key] = data
 	return nil
 }
 
 func (b *fakeBlobs) Delete(_ context.Context, key string) error {
+	if b.failDelete != nil {
+		return b.failDelete
+	}
 	b.deletes = append(b.deletes, key)
 	delete(b.objects, key)
 	return nil
@@ -144,6 +164,7 @@ func TestR2MethodsAreNotFoundWhenTheGateRefuses(t *testing.T) {
 			_, err := s.GetAssetDownload(ctx(), a, GetAssetDownloadInput{AssetID: "x"})
 			return err
 		},
+		"DeleteAsset": func(s Service, a Actor) error { return s.DeleteAsset(ctx(), a, DeleteAssetInput{AssetID: "x"}) },
 		"AttachFromAttachment": func(s Service, a Actor) error {
 			_, err := s.AttachFromAttachment(ctx(), a, AttachFromAttachmentInput{AttachmentID: "x", ItemID: "y"})
 			return err
@@ -181,6 +202,7 @@ func TestR2MethodsAreNotFoundWhenTheGateRefuses(t *testing.T) {
 					assert.Zero(t, st.CallCount(m), m)
 				}
 				assert.Empty(t, blobs.puts)
+				assert.Empty(t, blobs.deletes)
 				assert.Zero(t, conns.CallCount("State"))
 			})
 		}
@@ -510,6 +532,75 @@ func TestItemsOnChannels(t *testing.T) {
 	})
 }
 
+func TestSendUsesTheChannelsConnection(t *testing.T) {
+	f := newFixture(t)
+	var runs []EmailRun
+	f.email.SendFunc = func(_ context.Context, _ Actor, run EmailRun, _ EmailMessage) (string, error) {
+		runs = append(runs, run)
+		return "gmail-1", nil
+	}
+	email := f.channel(t, "email")
+	_, err := f.svc.UpdateChannel(ctx(), person, UpdateChannelInput{ID: email.ID, ExpectedRevision: email.Revision, ConnectionID: ptr("conn-7")})
+	require.NoError(t, err)
+	mk := func() Item {
+		it, err := f.svc.CreateItem(ctx(), person, CreateItemInput{Format: FormatEmail, Title: "m", BodyMD: "b", EmailTo: []string{"a@example.com"}, EmailSubject: "s", ChannelID: email.ID})
+		require.NoError(t, err)
+		it, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemApproved)})
+		require.NoError(t, err)
+		return it
+	}
+
+	it := mk()
+	in := f.send(it)
+	in.Run.ConnectionID = "conn-9"
+	_, err = f.svc.SendItemEmail(ctx(), agent, in)
+	require.ErrorIs(t, err, ErrChannelNotSendable, "a run naming another connection")
+	assert.Empty(t, runs, "nothing is sent")
+	got, err := f.svc.GetItem(ctx(), person, GetItemInput{ID: it.ID})
+	require.NoError(t, err)
+	assert.Equal(t, ItemApproved, got.Status, "and nothing is held")
+	_, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: got.Revision, Title: ptr("still editable")})
+	require.NoError(t, err)
+
+	_, err = f.svc.SendItemEmail(ctx(), agent, f.send(mk()))
+	require.NoError(t, err)
+	in = f.send(mk())
+	in.Run.ConnectionID = "conn-7"
+	_, err = f.svc.SendItemEmail(ctx(), agent, in)
+	require.NoError(t, err)
+	require.Len(t, runs, 2)
+	assert.Equal(t, "conn-7", runs[0].ConnectionID, "the channel's connection, for a run that names none")
+	assert.Equal(t, EmailRun{RunID: "run-1", ConnectionID: "conn-7"}, runs[1])
+
+	plain, err := f.svc.CreateItem(ctx(), person, CreateItemInput{Format: FormatEmail, Title: "m", BodyMD: "b", EmailTo: []string{"a@example.com"}, EmailSubject: "s"})
+	require.NoError(t, err)
+	plain, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: plain.ID, ExpectedRevision: plain.Revision, Status: ptr(ItemApproved)})
+	require.NoError(t, err)
+	in = f.send(plain)
+	in.Run.ConnectionID = "conn-9"
+	_, err = f.svc.SendItemEmail(ctx(), agent, in)
+	require.NoError(t, err)
+	assert.Equal(t, "conn-9", runs[2].ConnectionID, "with no channel the run's connection stands")
+}
+
+func TestChannelLimit(t *testing.T) {
+	f := newFixture(t)
+	seeded, err := f.svc.ListChannels(ctx(), person, ListChannelsInput{})
+	require.NoError(t, err)
+	for i := len(seeded.Channels); i < MaxChannels; i++ {
+		_, err := f.svc.CreateChannel(ctx(), agent, CreateChannelInput{Key: fmt.Sprintf("extra-%d", i), Name: "Extra", Mode: ChannelManual})
+		require.NoError(t, err, i)
+	}
+	_, err = f.svc.CreateChannel(ctx(), person, CreateChannelInput{Key: "one-too-many", Name: "Extra", Mode: ChannelManual})
+	require.ErrorIs(t, err, ErrTooManyChannels)
+	assert.Equal(t, connect.CodeResourceExhausted, svcerr.Code(err))
+	n, err := f.store.CountChannels(ctx(), orgA)
+	require.NoError(t, err)
+	assert.Equal(t, int64(MaxChannels), n)
+	_, err = f.svc.CreateChannel(ctx(), Actor{UserID: "u-b", OrgID: orgB, Kind: ActorPerson}, CreateChannelInput{Key: "one-too-many", Name: "Extra", Mode: ChannelManual})
+	require.NoError(t, err, "another org's count is its own")
+}
+
 func TestCampaignPlanAndCoverage(t *testing.T) {
 	f := newFixture(t)
 	reddit, x := f.channel(t, "reddit"), f.channel(t, "x")
@@ -742,7 +833,7 @@ func TestAssets(t *testing.T) {
 		t.Helper()
 		up, err := f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: itemID, Filename: "shot.png", ContentType: ct, SizeBytes: int64(len(data))})
 		require.NoError(t, err)
-		f.blobs.objects[up.Asset.ObjectKey] = data
+		f.blobs.objects[stagingKey(up.Asset.ObjectKey)] = data
 		return up
 	}
 	t.Run("upload, confirm, download", func(t *testing.T) {
@@ -755,19 +846,25 @@ func TestAssets(t *testing.T) {
 		assert.Equal(t, "shot.png", up.Asset.Filename)
 		assert.Equal(t, AssetSourcePerson, up.Asset.Source)
 		assert.Equal(t, "image/png", up.RequiredHeaders["Content-Type"])
-		assert.Equal(t, []string{up.Asset.ObjectKey}, f.blobs.puts)
+		assert.Equal(t, []string{up.Asset.ObjectKey + ".upload"}, f.blobs.puts, "the client uploads to the staging object only")
+		assert.Equal(t, AssetUploadTTL, f.blobs.putOpts[0].TTL)
+		assert.Equal(t, t0.Add(AssetUploadTTL), up.ExpiresAt)
 
 		_, err = f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
 		require.ErrorIs(t, err, ErrAssetNotUploaded, "not PUT yet: it stays PENDING")
 		_, err = f.svc.GetAssetDownload(ctx(), person, GetAssetDownloadInput{AssetID: up.Asset.ID})
 		require.ErrorIs(t, err, ErrAssetNotReady)
 
-		f.blobs.objects[up.Asset.ObjectKey] = pngBytes
+		f.blobs.objects[stagingKey(up.Asset.ObjectKey)] = pngBytes
 		a, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
 		require.NoError(t, err)
 		assert.Equal(t, AssetReady, a.Status)
 		assert.Equal(t, sum(pngBytes), a.SHA256)
 		assert.Equal(t, "image/png", a.ContentType)
+		assert.Equal(t, pngBytes, f.blobs.objects[a.ObjectKey], "the checked bytes, at the asset's own key")
+		assert.Equal(t, []string{a.ObjectKey}, f.blobs.writes)
+		_, staged := f.blobs.objects[stagingKey(a.ObjectKey)]
+		assert.False(t, staged, "the staging object is deleted")
 		_, err = f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
 		require.ErrorIs(t, err, ErrAssetNotPending)
 
@@ -802,6 +899,13 @@ func TestAssets(t *testing.T) {
 			"xml":  {"text/plain", []byte(`<?xml version="1.0"?><svg/>`), 0},
 			"html": {"text/plain", []byte(`<!DOCTYPE html><html><script>x</script></html>`), 0},
 			"zip":  {"application/pdf", []byte("PK\x03\x04 not a pdf at all"), 0},
+			// DetectContentType reads 512 bytes; the text check reads them all.
+			"late svg":    {"text/plain", []byte(strings.Repeat("plain words ", 100) + `<svg onload="alert(1)">`), 0},
+			"late script": {"text/plain", []byte(strings.Repeat("plain words ", 100) + "<ScRiPt>alert(1)</script>"), 0},
+			"late html":   {"text/plain", []byte(strings.Repeat("plain words ", 100) + "<HTML><body>"), 0},
+			"utf-16le":    {"text/plain", []byte("\xff\xfe<\x00s\x00v\x00g\x00>\x00"), 0},
+			"utf-16be":    {"text/plain", []byte("\xfe\xff\x00h\x00i"), 0},
+			"not utf-8":   {"text/plain", []byte(strings.Repeat("plain words ", 100) + "\xc3\x28 broken"), 0},
 		} {
 			t.Run(name, func(t *testing.T) {
 				f := newFixture(t)
@@ -812,14 +916,14 @@ func TestAssets(t *testing.T) {
 				}
 				up, err := f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: it.ID, Filename: "f", ContentType: tc.declared, SizeBytes: int64(size)})
 				require.NoError(t, err)
-				f.blobs.objects[up.Asset.ObjectKey] = tc.data
+				f.blobs.objects[stagingKey(up.Asset.ObjectKey)] = tc.data
 				_, err = f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
 				var rej *AssetRejectedError
 				require.ErrorAs(t, err, &rej)
 				assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-				assert.Contains(t, f.blobs.deletes, up.Asset.ObjectKey)
-				_, gone := f.blobs.objects[up.Asset.ObjectKey]
-				assert.False(t, gone)
+				assert.ElementsMatch(t, []string{stagingKey(up.Asset.ObjectKey), up.Asset.ObjectKey}, f.blobs.deletes)
+				assert.Empty(t, f.blobs.objects, "neither object is left")
+				assert.Empty(t, f.blobs.writes, "nothing refused reaches the asset's own key")
 				_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: up.Asset.ID})
 				require.ErrorIs(t, err, ErrNotFound, "the row is gone")
 			})
@@ -848,9 +952,9 @@ func TestAssets(t *testing.T) {
 		_, err = f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: "nope", Filename: "f", ContentType: "image/png", SizeBytes: 10})
 		require.ErrorIs(t, err, ErrLinkNotFound)
 
-		// The quota counts READY and PENDING bytes together.
+		// The quota counts READY and live PENDING bytes together.
 		used := MaxOrgAssetBytes - 10
-		f.store.r2().assets["big"] = &store.GtmAsset{ID: "big", OrgID: orgA, SizeBytes: &used, Status: string(AssetPending)}
+		f.store.r2().assets["big"] = &store.GtmAsset{ID: "big", OrgID: orgA, ObjectKey: assetKey(orgA, "big"), SizeBytes: &used, Status: string(AssetPending), CreatedAt: f.now}
 		_, err = f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: it.ID, Filename: "f", ContentType: "image/png", SizeBytes: 11})
 		require.ErrorIs(t, err, ErrAssetQuota)
 		_, err = f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: it.ID, Filename: "f", ContentType: "image/png", SizeBytes: 10})
@@ -868,10 +972,137 @@ func TestAssets(t *testing.T) {
 		require.ErrorIs(t, err, ErrAssetsUnavailable)
 		_, err = svc.GetAssetDownload(ctx(), person, GetAssetDownloadInput{AssetID: "x"})
 		require.ErrorIs(t, err, ErrAssetsUnavailable)
+		require.ErrorIs(t, svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: "x"}), ErrAssetsUnavailable)
 		_, err = svc.AttachFromAttachment(ctx(), person, AttachFromAttachmentInput{AttachmentID: "a", ItemID: "x"})
 		require.ErrorIs(t, err, ErrAssetsUnavailable)
 		_, err = New(Deps{Store: f.store, Gate: allowGate(orgA), Assets: f.blobs}).AttachFromAttachment(ctx(), person, AttachFromAttachmentInput{AttachmentID: "a", ItemID: "x"})
 		require.ErrorIs(t, err, ErrAttachmentsUnavailable)
+	})
+	t.Run("what is served is what was checked: a re-upload after confirm changes nothing", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		up := upload(t, f, it.ID, pngBytes, "image/png")
+		a, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
+		require.NoError(t, err)
+		// The presigned PUT is still valid: the client writes the staging
+		// object again, with a same-sized SVG.
+		evil := []byte(`<svg onload="alert(1)">` + strings.Repeat(" ", len(pngBytes)-23))
+		require.Len(t, evil, len(pngBytes))
+		f.blobs.objects[stagingKey(a.ObjectKey)] = evil
+		_, err = f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: a.ID})
+		require.ErrorIs(t, err, ErrAssetNotPending)
+		assert.Equal(t, pngBytes, f.blobs.objects[a.ObjectKey], "the served object is the checked one")
+		got, err := f.svc.GetAsset(ctx(), person, GetAssetInput{ID: a.ID})
+		require.NoError(t, err)
+		assert.Equal(t, sum(pngBytes), got.SHA256)
+		for _, k := range f.blobs.puts {
+			assert.True(t, strings.HasSuffix(k, ".upload"), "no URL to write %s", k)
+		}
+	})
+	t.Run("a write of the checked bytes that fails removes the asset", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		up := upload(t, f, it.ID, pngBytes, "image/png")
+		f.blobs.failPut = errors.New("bucket 10.0.0.1 down")
+		_, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
+		require.ErrorIs(t, err, ErrAssetStorageFailed)
+		assert.NotContains(t, err.Error(), "10.0.0.1")
+		assert.Empty(t, f.blobs.objects)
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: up.Asset.ID})
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+	t.Run("a presigned upload that outlives AssetUploadTTL is refused", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		f.blobs.expiresIn = time.Hour
+		_, err := f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: it.ID, Filename: "f", ContentType: "image/png", SizeBytes: 10})
+		require.ErrorIs(t, err, ErrAssetStorageFailed)
+		assert.Empty(t, f.store.r2().assets, "no row is left")
+	})
+	t.Run("an expired PENDING asset stops counting and is reaped on the next upload", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		used := MaxOrgAssetBytes - 10
+		f.store.r2().assets["big"] = &store.GtmAsset{ID: "big", OrgID: orgA, ObjectKey: assetKey(orgA, "big"), SizeBytes: &used, Status: string(AssetPending), CreatedAt: f.now}
+		f.blobs.objects[stagingKey(assetKey(orgA, "big"))] = []byte("half an upload")
+		in := CreateAssetUploadInput{ItemID: it.ID, Filename: "f", ContentType: "image/png", SizeBytes: 11}
+		f.advance(AssetUploadTTL + assetPendingGrace - time.Second)
+		_, err := f.svc.CreateAssetUpload(ctx(), person, in)
+		require.ErrorIs(t, err, ErrAssetQuota, "still live")
+		f.advance(time.Second)
+		_, err = f.svc.CreateAssetUpload(ctx(), person, in)
+		require.NoError(t, err, "expired: it no longer counts")
+		_, ok := f.store.r2().assets["big"]
+		assert.False(t, ok, "and it is reaped")
+		assert.Subset(t, f.blobs.deletes, []string{stagingKey(assetKey(orgA, "big")), assetKey(orgA, "big")})
+		_, ok = f.blobs.objects[stagingKey(assetKey(orgA, "big"))]
+		assert.False(t, ok)
+
+		other := MaxOrgAssetBytes
+		f.store.r2().assets["b-big"] = &store.GtmAsset{ID: "b-big", OrgID: orgB, ObjectKey: assetKey(orgB, "b-big"), SizeBytes: &other, Status: string(AssetPending), CreatedAt: t0}
+		_, err = f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: it.ID, Filename: "f", ContentType: "image/png", SizeBytes: 1})
+		require.NoError(t, err)
+		_, ok = f.store.r2().assets["b-big"]
+		assert.True(t, ok, "an org reaps only its own")
+	})
+	t.Run("a confirm after expiry is refused and deletes the asset; it reaps the org's others", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		old := upload(t, f, it.ID, pngBytes, "image/png")
+		f.advance(10 * time.Minute)
+		young := upload(t, f, it.ID, pngBytes, "image/png")
+		f.advance(AssetUploadTTL + assetPendingGrace - 10*time.Minute)
+		_, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: old.Asset.ID})
+		require.ErrorIs(t, err, ErrAssetUploadExpired)
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: old.Asset.ID})
+		require.ErrorIs(t, err, ErrNotFound)
+		_, ok := f.blobs.objects[stagingKey(old.Asset.ObjectKey)]
+		assert.False(t, ok)
+		a, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: young.Asset.ID})
+		require.NoError(t, err, "the younger upload is live")
+		assert.Equal(t, AssetReady, a.Status)
+
+		stale := upload(t, f, it.ID, pngBytes, "image/png")
+		f.advance(AssetUploadTTL + assetPendingGrace)
+		fresh := upload(t, f, it.ID, pdfBytes, "application/pdf")
+		_, err = f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: fresh.Asset.ID})
+		require.NoError(t, err)
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: stale.Asset.ID})
+		require.ErrorIs(t, err, ErrNotFound, "the stale upload was reaped")
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: a.ID})
+		require.NoError(t, err, "a READY asset never expires")
+	})
+	t.Run("delete is a person's, and removes the objects then the row", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		up := upload(t, f, it.ID, pngBytes, "image/png")
+		a, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
+		require.NoError(t, err)
+		require.ErrorIs(t, f.svc.DeleteAsset(ctx(), agent, DeleteAssetInput{AssetID: a.ID}), ErrPersonOnly)
+		require.ErrorIs(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{}), ErrInvalidArgument)
+		require.ErrorIs(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: "nope"}), ErrNotFound)
+		require.ErrorIs(t, f.svc.DeleteAsset(ctx(), Actor{UserID: "u-b", OrgID: orgB, Kind: ActorPerson}, DeleteAssetInput{AssetID: a.ID}), ErrNotFound, "another org's")
+
+		f.blobs.failDelete = errors.New("bucket 10.0.0.1 down")
+		err = f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: a.ID})
+		require.ErrorIs(t, err, ErrAssetStorageFailed)
+		assert.NotContains(t, err.Error(), "10.0.0.1")
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: a.ID})
+		require.NoError(t, err, "a storage failure keeps the row, to retry")
+
+		f.blobs.failDelete = nil
+		require.NoError(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: a.ID}))
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: a.ID})
+		require.ErrorIs(t, err, ErrNotFound)
+		assert.Subset(t, f.blobs.deletes, []string{stagingKey(a.ObjectKey), a.ObjectKey})
+		assert.Empty(t, f.blobs.objects)
+
+		pending, err := f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: it.ID, Filename: "f", ContentType: "image/png", SizeBytes: 10})
+		require.NoError(t, err)
+		require.NoError(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: pending.Asset.ID}), "a PENDING one too")
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: pending.Asset.ID})
+		require.ErrorIs(t, err, ErrNotFound)
 	})
 	t.Run("attach a chat attachment of the actor's own", func(t *testing.T) {
 		f := newFixture(t)
@@ -908,14 +1139,25 @@ func TestAssets(t *testing.T) {
 
 func TestAnalyticsErrorsAndHiddenGroups(t *testing.T) {
 	t.Run("the domain's fixed-message errors pass through; others are hidden", func(t *testing.T) {
+		// A fixed-text variant, as PR-8's client builds them: it wraps the
+		// sentinel, and its message is shown whole.
+		refused := fmt.Errorf("analytics: an identifier property is refused: %w", ErrAnalyticsFailed)
 		for name, tc := range map[string]struct {
 			err  error
 			want error
+			// shown is the message the caller sees; "" is the sentinel's.
+			shown string
 		}{
-			"invalid":     {&ValidationError{Field: "property", Reason: "an identifier property is not allowed"}, ErrInvalidArgument},
-			"unavailable": {ErrAnalyticsUnavailable, ErrAnalyticsUnavailable},
-			"failed":      {ErrAnalyticsFailed, ErrAnalyticsFailed},
-			"other":       {errors.New("cp 10.0.0.9: boom"), ErrAnalyticsFailed},
+			"invalid":         {&ValidationError{Field: "property", Reason: "an identifier property is not allowed"}, ErrInvalidArgument, "property: an identifier property is not allowed"},
+			"wrapped invalid": {fmt.Errorf("analytics: %w", &ValidationError{Field: "events", Reason: "unknown event"}), ErrInvalidArgument, "analytics: events: unknown event"},
+			"unavailable":     {ErrAnalyticsUnavailable, ErrAnalyticsUnavailable, ErrAnalyticsUnavailable.Error()},
+			"failed":          {ErrAnalyticsFailed, ErrAnalyticsFailed, ErrAnalyticsFailed.Error()},
+			"fixed variant":   {refused, ErrAnalyticsFailed, refused.Error()},
+			"other":           {errors.New("cp 10.0.0.9: boom"), ErrAnalyticsFailed, ErrAnalyticsFailed.Error()},
+			// Only a *ValidationError carries InvalidArgument through: any
+			// other InvalidArgument may hold a cause's text.
+			"bare invalid": {svcerr.InvalidArgument("x at 10.0.0.9"), ErrAnalyticsFailed, ErrAnalyticsFailed.Error()},
+			"wrapped bare": {fmt.Errorf("pq 10.0.0.9: %w", ErrInvalidArgument), ErrAnalyticsFailed, ErrAnalyticsFailed.Error()},
 		} {
 			f := newFixture(t)
 			f.analytics.QueryFunc = func(context.Context, string, AnalyticsQuery) (AnalyticsResult, error) {
@@ -923,10 +1165,8 @@ func TestAnalyticsErrorsAndHiddenGroups(t *testing.T) {
 			}
 			_, err := f.svc.ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventCounts})
 			require.ErrorIs(t, err, tc.want, name)
+			assert.Equal(t, tc.shown, err.Error(), name)
 			assert.NotContains(t, err.Error(), "10.0.0.9", name)
-			if name == "invalid" {
-				assert.Contains(t, err.Error(), "identifier property", "the caller learns what to fix")
-			}
 		}
 	})
 	t.Run("a funnel names each step once", func(t *testing.T) {

@@ -5,6 +5,7 @@ package gtm
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
@@ -158,23 +159,37 @@ func (p pgStore) GetAsset(ctx context.Context, orgID, id string) (*store.GtmAsse
 	return one(rows, err, "gtm asset")
 }
 
-func (p pgStore) SumAssetBytes(ctx context.Context, orgID string) (int64, error) {
+func (p pgStore) SumAssetBytes(ctx context.Context, orgID string, pendingAfter time.Time) (int64, error) {
 	var n int64
-	err := p.db.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes), 0) FROM gtm_assets WHERE org_id = $1`, orgID).Scan(&n)
+	err := p.db.QueryRow(ctx, `SELECT COALESCE(SUM(size_bytes), 0) FROM gtm_assets
+		WHERE org_id = $1 AND (status <> $2 OR created_at > $3)`, orgID, string(AssetPending), pendingAfter).Scan(&n)
 	if err != nil {
 		return 0, fmt.Errorf("sum gtm asset bytes: %w", err)
 	}
 	return n, nil
 }
 
+func (p pgStore) ListExpiredAssets(ctx context.Context, orgID string, createdBefore time.Time, limit int) ([]*store.GtmAsset, error) {
+	rows, err := store.ListGtmAsset(ctx, p.db,
+		orm.WhereEq(store.GtmAssetFieldOrgID, orgID),
+		orm.WhereEq(store.GtmAssetFieldStatus, string(AssetPending)),
+		func(q *bun.SelectQuery) { q.Where("? <= ?", bun.Ident(store.GtmAssetFieldCreatedAt), createdBefore) },
+		orm.WithOrderBy("created_at ASC, id ASC", orm.Asc),
+		pageOpts(limit, 0))
+	if err != nil {
+		return nil, fmt.Errorf("list expired gtm assets: %w", err)
+	}
+	return rows, nil
+}
+
 func (p pgStore) CreateAsset(ctx context.Context, row *store.GtmAsset) error {
 	return classify(store.CreateGtmAsset(ctx, p.db, row), "create gtm asset")
 }
 
-func (p pgStore) MarkAssetReady(ctx context.Context, orgID, id, contentType string, size int64, sha256 string) error {
+func (p pgStore) MarkAssetReady(ctx context.Context, orgID, id, contentType string, size int64, sha256 string, createdAfter time.Time) error {
 	res, err := p.db.Exec(ctx, `UPDATE gtm_assets SET status = $1, content_type = $2, size_bytes = $3, sha256 = $4
-		WHERE org_id = $5 AND id = $6 AND status = $7`,
-		string(AssetReady), contentType, size, sha256, orgID, id, string(AssetPending))
+		WHERE org_id = $5 AND id = $6 AND status = $7 AND created_at > $8`,
+		string(AssetReady), contentType, size, sha256, orgID, id, string(AssetPending), createdAfter)
 	if err := execUpdated(res, err, "mark gtm asset ready"); err != nil {
 		if err == ErrRevisionConflict {
 			return ErrAssetNotPending
@@ -182,6 +197,25 @@ func (p pgStore) MarkAssetReady(ctx context.Context, orgID, id, contentType stri
 		return err
 	}
 	return nil
+}
+
+func (p pgStore) DeletePendingAsset(ctx context.Context, orgID, id string, createdBefore time.Time) (bool, error) {
+	q := p.db.Bun().NewDelete().Model((*store.GtmAsset)(nil)).
+		Where("? = ?", bun.Ident(store.GtmAssetFieldOrgID), orgID).
+		Where("? = ?", bun.Ident(store.GtmAssetFieldID), id).
+		Where("? = ?", bun.Ident(store.GtmAssetFieldStatus), string(AssetPending))
+	if !createdBefore.IsZero() {
+		q = q.Where("? <= ?", bun.Ident(store.GtmAssetFieldCreatedAt), createdBefore)
+	}
+	res, err := q.Exec(ctx)
+	if err != nil {
+		return false, classify(err, "delete pending gtm asset")
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("delete pending gtm asset: %w", err)
+	}
+	return n > 0, nil
 }
 
 func (p pgStore) DeleteAsset(ctx context.Context, orgID, id string) error {

@@ -95,7 +95,9 @@ type Service interface {
 	// named, through Email as the actor with the run's credential, then
 	// records it SENT. The approval hash must be ApprovalHash of the item as
 	// stored now, so the person approved exactly what is sent. The message is
-	// built from the stored item, never from the caller. A send that may
+	// built from the stored item, never from the caller. When the item's
+	// channel names a Gmail connection, the send goes through that one: a
+	// run naming another is ErrChannelNotSendable. A send that may
 	// have left without its record landing holds the item
 	// (*SendInDoubtError, *SentUnrecordedError) rather than risk a second
 	// email; see the implementation for the steps.
@@ -146,7 +148,8 @@ type Service interface {
 	// GetChannel returns one channel, seeding as ListChannels does.
 	GetChannel(ctx context.Context, actor Actor, in GetChannelInput) (Channel, error)
 	// CreateChannel creates a channel. An agent creates MANUAL channels
-	// only; a key the org holds is ErrChannelExists.
+	// only; a key the org holds is ErrChannelExists, and a channel past
+	// MaxChannels is ErrTooManyChannels.
 	CreateChannel(ctx context.Context, actor Actor, in CreateChannelInput) (Channel, error)
 	// UpdateChannel edits a channel. An agent changes name,
 	// manual_instructions_md and status only, and never an integration.
@@ -157,14 +160,21 @@ type Service interface {
 	// GetAsset returns one asset's metadata.
 	GetAsset(ctx context.Context, actor Actor, in GetAssetInput) (Asset, error)
 	// CreateAssetUpload records a PENDING asset and returns a presigned PUT
-	// for its bytes (MaxAssetBytes; MaxOrgAssetBytes per org).
+	// of its bytes to a staging object, valid for at most AssetUploadTTL
+	// (MaxAssetBytes; MaxOrgAssetBytes per org, counting READY assets and
+	// PENDING ones that have not expired).
 	CreateAssetUpload(ctx context.Context, actor Actor, in CreateAssetUploadInput) (AssetUpload, error)
-	// ConfirmAssetUpload checks an uploaded object (size, sniffed type,
-	// sha256) and marks the asset READY, or deletes the object and the row.
+	// ConfirmAssetUpload reads the staging object once, checks those bytes
+	// (size, sniffed type, sha256), marks the asset READY and writes exactly
+	// them to the asset's own key; a refusal deletes both objects and the
+	// row. An expired PENDING asset is ErrAssetUploadExpired, and deleted.
 	ConfirmAssetUpload(ctx context.Context, actor Actor, in ConfirmAssetUploadInput) (Asset, error)
 	// GetAssetDownload returns a short-lived URL for a READY asset: inline
 	// for raster images and mp4/webm, an attachment otherwise.
 	GetAssetDownload(ctx context.Context, actor Actor, in GetAssetDownloadInput) (AssetDownload, error)
+	// DeleteAsset deletes an asset, in any status: its objects, then its
+	// row. A person's call.
+	DeleteAsset(ctx context.Context, actor Actor, in DeleteAssetInput) error
 	// AttachFromAttachment copies one of the actor's chat attachments into
 	// a READY asset of an item or a campaign (MaxCopiedAssetBytes), with the
 	// same checks as ConfirmAssetUpload. PR-7's attach_gtm_asset calls it.
@@ -194,11 +204,17 @@ type Connections interface {
 }
 
 // AssetStore holds asset bytes in the org's bucket (PR-13, over
-// pkg/blobstore). Keys are gtm/<org_id>/<asset_id>; the Service builds
-// them, and an implementation never takes a key from a client.
+// pkg/blobstore). The Service builds every key, and an implementation never
+// takes a key from a client. An asset has two:
+//
+//   - gtm/<org_id>/<asset_id>.upload, the staging object: the only key a
+//     client ever writes, through PresignPut.
+//   - gtm/<org_id>/<asset_id>, the asset's own key: written only
+//     server-side, by Put, with bytes the Service read and checked. It is
+//     never presigned for a PUT, so what is served is what was checked.
 type AssetStore interface {
 	// PresignPut returns a presigned PUT of exactly opts.Size bytes of
-	// opts.ContentType to key.
+	// opts.ContentType to key, expiring no later than now + opts.TTL.
 	PresignPut(ctx context.Context, key string, opts PutOptions) (PresignedRequest, error)
 	// Open reads key; a missing object is ErrObjectNotFound.
 	Open(ctx context.Context, key string) (io.ReadCloser, error)
@@ -206,7 +222,12 @@ type AssetStore interface {
 	Put(ctx context.Context, key string, r io.Reader, opts PutOptions) error
 	// Delete removes key; a missing object is not an error.
 	Delete(ctx context.Context, key string) error
-	// PresignGet returns a presigned GET of key, shaped by opts.
+	// PresignGet returns a presigned GET of key, shaped by opts. Every
+	// response it signs MUST carry X-Content-Type-Options: nosniff,
+	// Content-Type opts.ContentType, and a Content-Disposition (inline or
+	// attachment, per opts.Inline) whose filename is opts.Filename encoded
+	// per RFC 6266 (an ASCII filename= fallback and filename*=UTF-8''
+	// percent-encoded), so no stored name can break out of the header.
 	PresignGet(ctx context.Context, key string, opts GetOptions) (PresignedRequest, error)
 }
 
@@ -241,6 +262,15 @@ type Clock interface {
 // It builds every query itself from the template: a query never carries SQL,
 // and names (events, the property) are emitted as escaped literals. Results
 // are aggregates only, never a user id or any other identifier.
+//
+// ReadProductAnalytics passes three kinds of error through to the caller,
+// message and all: one that wraps ErrAnalyticsFailed, one that wraps
+// ErrAnalyticsUnavailable, and one that wraps a *ValidationError (the only
+// ErrInvalidArgument that passes). An implementation MUST put only fixed
+// text in those, its own wrappers and a ValidationError's Field and Reason
+// included: never a cause's text, a host, a query or a value it read.
+// Anything else, a bare svcerr.InvalidArgument included, is logged and
+// becomes ErrAnalyticsFailed.
 type Analytics interface {
 	// Query runs q over orgID's product events.
 	Query(ctx context.Context, orgID string, q AnalyticsQuery) (AnalyticsResult, error)
@@ -262,6 +292,16 @@ type Email interface {
 	// run or connection, no connection, a request Gmail rejected); any
 	// other error leaves the send in doubt, and the item is held until a
 	// person resolves it. The error's text is logged, never shown.
+	//
+	// Send MUST return by ctx's deadline (EmailSendTimeout), abandoning any
+	// request still running. ResolveInDoubtSend lets a person release a
+	// hold once it is twice EmailSendTimeout old, on the premise that no
+	// Send of it can still be running by then; a Send that outlives its
+	// deadline could deliver after that release, and a new approval would
+	// then send a second email. The hold's age is the Service clock's now
+	// less the hold's updated_at, which the Service stamps from that same
+	// clock, so every replica's clock must be within a small fraction of
+	// EmailSendTimeout of true time (NTP-synced hosts are).
 	Send(ctx context.Context, actor Actor, run EmailRun, msg EmailMessage) (gmailMessageID string, err error)
 }
 
@@ -367,13 +407,22 @@ type Store interface {
 	ListAssets(ctx context.Context, f AssetFilter) ([]*store.GtmAsset, error)
 	// GetAsset returns orgID's asset id.
 	GetAsset(ctx context.Context, orgID, id string) (*store.GtmAsset, error)
-	// SumAssetBytes is the size of orgID's assets, READY and PENDING.
-	SumAssetBytes(ctx context.Context, orgID string) (int64, error)
+	// SumAssetBytes is the size of orgID's READY assets and of its PENDING
+	// ones created after pendingAfter (those not yet expired).
+	SumAssetBytes(ctx context.Context, orgID string, pendingAfter time.Time) (int64, error)
+	// ListExpiredAssets returns up to limit of orgID's PENDING assets
+	// created at or before createdBefore, oldest first.
+	ListExpiredAssets(ctx context.Context, orgID string, createdBefore time.Time, limit int) ([]*store.GtmAsset, error)
 	// CreateAsset inserts row (its ID and object key set by the caller).
 	CreateAsset(ctx context.Context, row *store.GtmAsset) error
-	// MarkAssetReady makes a PENDING asset READY with its checked type,
-	// size and sha256; an asset that is not PENDING is ErrAssetNotPending.
-	MarkAssetReady(ctx context.Context, orgID, id, contentType string, size int64, sha256 string) error
+	// MarkAssetReady makes a PENDING asset created after createdAfter READY
+	// with its checked type, size and sha256; any other (not PENDING, or
+	// expired) is ErrAssetNotPending.
+	MarkAssetReady(ctx context.Context, orgID, id, contentType string, size int64, sha256 string, createdAfter time.Time) error
+	// DeletePendingAsset removes orgID's asset id only while it is PENDING
+	// and, when createdBefore is not zero, created at or before it; it
+	// reports whether it did.
+	DeletePendingAsset(ctx context.Context, orgID, id string, createdBefore time.Time) (bool, error)
 	// DeleteAsset removes orgID's asset id; a missing one is not an error.
 	DeleteAsset(ctx context.Context, orgID, id string) error
 

@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=6279f74b6b130146d5b4a1fd202c9b607674b1f35db527d0719b82c805481cda
+// forge:hash=61f416459991f967a07f93d3c7b54435cd20cc4b25e8ad6320a1e8d9c9486ef3
 
 // MockService is a test mock for the Service interface.
 //
@@ -64,6 +64,7 @@ type MockService struct {
 	CreateAssetUploadFunc       func(context.Context, Actor, CreateAssetUploadInput) (AssetUpload, error)
 	ConfirmAssetUploadFunc      func(context.Context, Actor, ConfirmAssetUploadInput) (Asset, error)
 	GetAssetDownloadFunc        func(context.Context, Actor, GetAssetDownloadInput) (AssetDownload, error)
+	DeleteAssetFunc             func(context.Context, Actor, DeleteAssetInput) error
 	AttachFromAttachmentFunc    func(context.Context, Actor, AttachFromAttachmentInput) (Asset, error)
 	ListStrategyLibraryFunc     func(context.Context, Actor, ListStrategyLibraryInput) (ListStrategyLibraryResult, error)
 	GetStrategyLibraryEntryFunc func(context.Context, Actor, GetStrategyLibraryEntryInput) (LibraryEntry, error)
@@ -386,6 +387,15 @@ func (m *MockService) GetAssetDownload(ctx context.Context, actor Actor, in GetA
 	return AssetDownload{}, contractkit.MockNotSet("MockService", "GetAssetDownload")
 }
 
+// DeleteAsset records the call and delegates to DeleteAssetFunc when set.
+func (m *MockService) DeleteAsset(ctx context.Context, actor Actor, in DeleteAssetInput) error {
+	m.Recorder.Record("DeleteAsset", ctx, actor, in)
+	if m.DeleteAssetFunc != nil {
+		return m.DeleteAssetFunc(ctx, actor, in)
+	}
+	return contractkit.MockNotSet("MockService", "DeleteAsset")
+}
+
 // AttachFromAttachment records the call and delegates to AttachFromAttachmentFunc when set.
 func (m *MockService) AttachFromAttachment(ctx context.Context, actor Actor, in AttachFromAttachmentInput) (Asset, error) {
 	m.Recorder.Record("AttachFromAttachment", ctx, actor, in)
@@ -657,7 +667,7 @@ func (m *MockEmail) Send(ctx context.Context, actor Actor, run EmailRun, msg Ema
 var _ Email = (*MockEmail)(nil)
 
 // forge:section MockStore
-// forge:hash=d490c233dfcaab619bd8b6a9fe21f50af32aa71f1905ceaeeebce84bc2ee3a5c
+// forge:hash=245c2e03c3dfcdb6584c60efdd75a0ab335fc577a7fdba896f1053a0f795f409
 
 // MockStore is a test mock for the Store interface.
 //
@@ -702,9 +712,11 @@ type MockStore struct {
 	CampaignItemCountsFunc func(context.Context, string, string) ([]ItemCount, error)
 	ListAssetsFunc         func(context.Context, AssetFilter) ([]*store.GtmAsset, error)
 	GetAssetFunc           func(context.Context, string, string) (*store.GtmAsset, error)
-	SumAssetBytesFunc      func(context.Context, string) (int64, error)
+	SumAssetBytesFunc      func(context.Context, string, time.Time) (int64, error)
+	ListExpiredAssetsFunc  func(context.Context, string, time.Time, int) ([]*store.GtmAsset, error)
 	CreateAssetFunc        func(context.Context, *store.GtmAsset) error
-	MarkAssetReadyFunc     func(context.Context, string, string, string, int64, string) error
+	MarkAssetReadyFunc     func(context.Context, string, string, string, int64, string, time.Time) error
+	DeletePendingAssetFunc func(context.Context, string, string, time.Time) (bool, error)
 	DeleteAssetFunc        func(context.Context, string, string) error
 	ListLibraryFunc        func(context.Context, LibraryFilter) ([]*store.GtmStrategyLibrary, error)
 	GetLibraryEntryFunc    func(context.Context, string, string) (*store.GtmStrategyLibrary, error)
@@ -1029,12 +1041,21 @@ func (m *MockStore) GetAsset(ctx context.Context, orgID string, id string) (*sto
 }
 
 // SumAssetBytes records the call and delegates to SumAssetBytesFunc when set.
-func (m *MockStore) SumAssetBytes(ctx context.Context, orgID string) (int64, error) {
-	m.Recorder.Record("SumAssetBytes", ctx, orgID)
+func (m *MockStore) SumAssetBytes(ctx context.Context, orgID string, pendingAfter time.Time) (int64, error) {
+	m.Recorder.Record("SumAssetBytes", ctx, orgID, pendingAfter)
 	if m.SumAssetBytesFunc != nil {
-		return m.SumAssetBytesFunc(ctx, orgID)
+		return m.SumAssetBytesFunc(ctx, orgID, pendingAfter)
 	}
 	return 0, contractkit.MockNotSet("MockStore", "SumAssetBytes")
+}
+
+// ListExpiredAssets records the call and delegates to ListExpiredAssetsFunc when set.
+func (m *MockStore) ListExpiredAssets(ctx context.Context, orgID string, createdBefore time.Time, limit int) ([]*store.GtmAsset, error) {
+	m.Recorder.Record("ListExpiredAssets", ctx, orgID, createdBefore, limit)
+	if m.ListExpiredAssetsFunc != nil {
+		return m.ListExpiredAssetsFunc(ctx, orgID, createdBefore, limit)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "ListExpiredAssets")
 }
 
 // CreateAsset records the call and delegates to CreateAssetFunc when set.
@@ -1047,12 +1068,21 @@ func (m *MockStore) CreateAsset(ctx context.Context, row *store.GtmAsset) error 
 }
 
 // MarkAssetReady records the call and delegates to MarkAssetReadyFunc when set.
-func (m *MockStore) MarkAssetReady(ctx context.Context, orgID string, id string, contentType string, size int64, sha256 string) error {
-	m.Recorder.Record("MarkAssetReady", ctx, orgID, id, contentType, size, sha256)
+func (m *MockStore) MarkAssetReady(ctx context.Context, orgID string, id string, contentType string, size int64, sha256 string, createdAfter time.Time) error {
+	m.Recorder.Record("MarkAssetReady", ctx, orgID, id, contentType, size, sha256, createdAfter)
 	if m.MarkAssetReadyFunc != nil {
-		return m.MarkAssetReadyFunc(ctx, orgID, id, contentType, size, sha256)
+		return m.MarkAssetReadyFunc(ctx, orgID, id, contentType, size, sha256, createdAfter)
 	}
 	return contractkit.MockNotSet("MockStore", "MarkAssetReady")
+}
+
+// DeletePendingAsset records the call and delegates to DeletePendingAssetFunc when set.
+func (m *MockStore) DeletePendingAsset(ctx context.Context, orgID string, id string, createdBefore time.Time) (bool, error) {
+	m.Recorder.Record("DeletePendingAsset", ctx, orgID, id, createdBefore)
+	if m.DeletePendingAssetFunc != nil {
+		return m.DeletePendingAssetFunc(ctx, orgID, id, createdBefore)
+	}
+	return false, contractkit.MockNotSet("MockStore", "DeletePendingAsset")
 }
 
 // DeleteAsset records the call and delegates to DeleteAssetFunc when set.
