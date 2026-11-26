@@ -307,6 +307,7 @@ type (
 	QueuedAgentMessage                       = sdk.QueuedAgentMessage
 	ReclaimMarkedWorktreeNowRequest          = sdk.ReclaimMarkedWorktreeNowRequest
 	ReclaimMarkedWorktreeNowResponse         = sdk.ReclaimMarkedWorktreeNowResponse
+	RecordDueSource                          = sdk.RecordDueSource
 	RecoveryInboxItem                        = sdk.RecoveryInboxItem
 	RecoveryType                             = sdk.RecoveryType
 	RecreateWorktreeRequest                  = sdk.RecreateWorktreeRequest
@@ -431,6 +432,7 @@ type (
 	TriggerSender                            = sdk.TriggerSender
 	TriggerSetupIssue                        = sdk.TriggerSetupIssue
 	Trigger_Integration                      = sdk.Trigger_Integration
+	Trigger_RecordDue                        = sdk.Trigger_RecordDue
 	Trigger_Schedule                         = sdk.Trigger_Schedule
 	Trigger_Webhook                          = sdk.Trigger_Webhook
 	Trigger_WorkflowEvent                    = sdk.Trigger_WorkflowEvent
@@ -472,6 +474,7 @@ type (
 	WorkflowTriggerOverride                  = sdk.WorkflowTriggerOverride
 	WorkflowTriggerResult                    = sdk.WorkflowTriggerResult
 	WorkflowTrigger_Integration              = sdk.WorkflowTrigger_Integration
+	WorkflowTrigger_RecordDue                = sdk.WorkflowTrigger_RecordDue
 	WorkflowTrigger_Schedule                 = sdk.WorkflowTrigger_Schedule
 	WorkflowTrigger_Webhook                  = sdk.WorkflowTrigger_Webhook
 	WorkflowTrigger_WorkflowEvent            = sdk.WorkflowTrigger_WorkflowEvent
@@ -673,6 +676,7 @@ const (
 	TriggerEventKind_TRIGGER_EVENT_KIND_CLI_RUN                                = sdk.TriggerEventKind_TRIGGER_EVENT_KIND_CLI_RUN
 	TriggerEventKind_TRIGGER_EVENT_KIND_INTEGRATION                            = sdk.TriggerEventKind_TRIGGER_EVENT_KIND_INTEGRATION
 	TriggerEventKind_TRIGGER_EVENT_KIND_MANUAL_RUN                             = sdk.TriggerEventKind_TRIGGER_EVENT_KIND_MANUAL_RUN
+	TriggerEventKind_TRIGGER_EVENT_KIND_RECORD_DUE                             = sdk.TriggerEventKind_TRIGGER_EVENT_KIND_RECORD_DUE
 	TriggerEventKind_TRIGGER_EVENT_KIND_SCHEDULE                               = sdk.TriggerEventKind_TRIGGER_EVENT_KIND_SCHEDULE
 	TriggerEventKind_TRIGGER_EVENT_KIND_UNSPECIFIED                            = sdk.TriggerEventKind_TRIGGER_EVENT_KIND_UNSPECIFIED
 	TriggerEventKind_TRIGGER_EVENT_KIND_WEBHOOK                                = sdk.TriggerEventKind_TRIGGER_EVENT_KIND_WEBHOOK
