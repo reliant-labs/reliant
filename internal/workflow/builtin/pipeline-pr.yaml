@@ -61,24 +61,34 @@ triggers:
       integration: github
       events: [pull_request.opened, pull_request.reopened, pull_request.ready_for_review, pull_request.synchronize, pull_request.closed]
       match: {repository: {input: repos}}
-    inputs:
-      repository: "{{ trigger.record.repository }}"
-      number: "{{ trigger.record.number }}"
+    inputs: &pr_of_event
+      repository: "{{ trigger.payload.attributes.repository }}"
+      number: "{{ trigger.payload.data.pull_request.number }}"
   - name: pr-comment
-    description: You, or someone you trust, comments on a PR or one of its lines
+    description: You, or someone you trust, comments on a PR's conversation
     integration:
       integration: github
-      events: [issue_comment.created, pull_request_review_comment.created]
-      match: {repository: {input: repos}}
-    filter: >-
-      trigger.record.number > 0 && trigger.sender.verified && trigger.sender.id != ''
+      events: [issue_comment.created]
+      match: {is_pull_request: "true", repository: {input: repos}}
+    filter: &trusted >-
+      trigger.sender.verified && trigger.sender.id != ''
       && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)
     inputs:
-      repository: "{{ trigger.record.repository }}"
-      number: "{{ trigger.record.number }}"
-      comment: >-
-        {{ {'id': string(trigger.payload.data.comment.id), 'body': trigger.payload.data.comment.body,
-            'author': string(trigger.payload.data.comment.?user.orValue('')), 'path': trigger.payload.data.comment.?path.orValue('')} }}
+      repository: "{{ trigger.payload.attributes.repository }}"
+      number: "{{ trigger.payload.data.issue.number }}"
+      comment: &comment >-
+        {{ {'id': string(trigger.payload.data.comment.id), 'body': trigger.payload.data.comment.body, 'author': trigger.payload.attributes.sender} }}
+  - name: pr-line-comment
+    description: You, or someone you trust, comments on a line of a PR's diff
+    integration:
+      integration: github
+      events: [pull_request_review_comment.created]
+      match: {repository: {input: repos}}
+    filter: *trusted
+    inputs:
+      repository: "{{ trigger.payload.attributes.repository }}"
+      number: "{{ trigger.payload.data.pull_request.number }}"
+      comment: *comment
 
 entry: [decide]
 
@@ -127,53 +137,21 @@ nodes:
 
   # fix (edits only) -> check (deterministic, no credentials) -> checked, until the check passes or
   # pr.checked says escalate (fix.check_rounds, default 3).
-  - id: fixing
-    type: loop
-    while: "outputs.next == 'fix' && iter.iteration < 8"
-    inline:
-      entry: [fix]
-      outputs:
-        next: "{{ nodes.fix.?response.outcome.orValue('') != 'changed' ? 'escalate' : nodes.checked.data.?next.orValue('escalate') }}"
-        reason: >-
-          {{ nodes.fix.?response.outcome.orValue('') != 'changed' ? 'the fixer could not fix it: ' + nodes.fix.?response.summary.orValue('it ended without a result')
-             : nodes.checked.data.?reason.orValue(nodes.checked.?content.orValue('the check could not be recorded')) }}
-        failures: "{{ nodes.?checked.data.failures.orValue([]) }}"
-        message: "{{ nodes.fix.?response.commit_message.orValue('fix: address review findings') }}"
-      nodes:
-        - id: fix
-          type: workflow
-          ref: builtin://pipeline-fixer
-          preflight: true
-          project:
-            path: "{{ nodes.wt.path }}{{ nodes.decide.data.repo_subdir != '' ? '/' + nodes.decide.data.repo_subdir : '' }}"
-          args:
-            model: "{{ inputs.fix_model }}"
-            with:
-              repository: "{{ nodes.decide.data.repository }}"
-              number: "{{ nodes.decide.data.number }}"
-              head: "{{ nodes.decide.data.head }}"
-              base_ref: "{{ nodes.decide.data.base_ref }}"
-              round: "{{ iter.iteration + 1 }}"
-              blockers: "{{ has(nodes.verdict) ? nodes.verdict.data.blockers : nodes.decide.data.blockers }}"
-              check_failures: "{{ iter.iteration > 0 ? outputs.failures : [] }}"
-        - id: check
-          type: run
-          preflight: true
-          timeout: 30m
-          args:
-            command: "{{ nodes.decide.data.check_script }}"
-            work_dir: "{{ nodes.wt.path }}{{ nodes.decide.data.repo_subdir != '' ? '/' + nodes.decide.data.repo_subdir : '' }}"
-            credentials: none
-        - id: checked
-          type: action
-          uses: reliant/pr.checked@1
-          with: {record_id: "{{ nodes.decide.data.record_id }}", from: check}
-      edges:
-        - from: fix
-          cases:
-            - {to: [check], condition: "nodes.fix.?response.outcome.orValue('') == 'changed'", label: changed}
-        - from: check
-          default: checked
+  # The loop body is its own file because an inline body sees only its own nodes.
+  - id: fix
+    type: workflow
+    ref: builtin://pipeline-pr-fix
+    args:
+      record_id: "{{ nodes.decide.data.record_id }}"
+      worktree: "{{ nodes.wt.path }}{{ nodes.decide.data.repo_subdir != '' ? '/' + nodes.decide.data.repo_subdir : '' }}"
+      check_script: "{{ nodes.decide.data.check_script }}"
+      model: "{{ inputs.fix_model }}"
+      with:
+        repository: "{{ nodes.decide.data.repository }}"
+        number: "{{ nodes.decide.data.number }}"
+        head: "{{ nodes.decide.data.head }}"
+        base_ref: "{{ nodes.decide.data.base_ref }}"
+        blockers: "{{ has(nodes.verdict) ? nodes.verdict.data.blockers : nodes.decide.data.blockers }}"
 
   # Shadow mode writes nothing to GitHub: the fix was checked, and is not pushed.
   - id: push
@@ -184,7 +162,7 @@ nodes:
       worktree: "{{ nodes.wt.path }}{{ nodes.decide.data.repo_subdir != '' ? '/' + nodes.decide.data.repo_subdir : '' }}"
       repo: "{{ nodes.decide.data.repository }}"
       pr_head_of: "{{ nodes.decide.data.number }}"
-      message: "{{ nodes.fixing.message }}"
+      message: "{{ nodes.fix.message }}"
 
   # Records the attempt; the push's synchronize event wakes the next run, which re-reviews the new head.
   - id: pushed
@@ -208,7 +186,7 @@ nodes:
     with:
       record_id: "{{ nodes.decide.data.record_id }}"
       reason: >-
-        {{ has(nodes.fixing) ? nodes.fixing.reason
+        {{ has(nodes.fix) ? nodes.fix.reason
            : (has(nodes.verdict) ? nodes.verdict.data.?reason.orValue(nodes.verdict.content) : nodes.decide.data.reason) }}
 
 edges:
@@ -227,10 +205,10 @@ edges:
       - {to: [enqueue], condition: "!nodes.verdict.is_error && nodes.verdict.data.next == 'enqueue'", label: enqueue}
       - {to: [escalate], condition: "!nodes.verdict.is_error && nodes.verdict.data.next == 'escalate'", label: escalate}
   - from: wt
-    default: fixing
-  - from: fixing
+    default: fix
+  - from: fix
     cases:
-      - {to: [push], condition: "nodes.fixing.next == 'push'", label: push}
+      - {to: [push], condition: "nodes.fix.next == 'push'", label: push}
       - {to: [escalate], condition: "true", label: escalate}
   - from: push
     default: pushed
