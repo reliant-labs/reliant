@@ -129,6 +129,10 @@ type Repository interface {
 	// one thread as pending, in one statement (a branch inherits its source
 	// chat's plans).
 	CopyChatPlansToThread(ctx context.Context, sourceChatID, targetThreadID string) (plans, tasks int, err error)
+	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
+	// CopyChatPlans gives toThreadID a pending copy of every plan of
+	// fromChatID, with their tasks, in one statement (BranchChat).
+	CopyChatPlans(ctx context.Context, fromChatID, toThreadID string) error
 
 	// Step executions the workflow view renders.
 	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error)
