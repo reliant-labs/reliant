@@ -93,7 +93,7 @@ func (s *Service) EnableWorkflow(
 		return nil, err
 	}
 
-	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: &msg.ProjectId})
+	mine, err := s.deps.Triggers.ListTriggersForUser(ctx, core.TriggerFilters{UserID: userID, ProjectID: &msg.ProjectId})
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
@@ -349,7 +349,7 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 			if _, revertErr := s.SetTriggerEnabled(undoCtx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: false})); revertErr != nil {
 				// SetTriggerEnabled writes the row before it converges, so its
 				// error alone does not say whether the trigger is still on.
-				if cur, getErr := s.deps.Repo.GetTrigger(undoCtx, step.existing.ID); getErr != nil || cur.Enabled {
+				if cur, getErr := s.deps.Triggers.GetTrigger(undoCtx, step.existing.ID); getErr != nil || cur.Enabled {
 					logging.ErrorContext(ctx, "could not switch off a trigger whose enable failed; it is still running",
 						"trigger_id", step.existing.ID, "error", err, "revert_error", revertErr)
 					return &leftEnabledError{cause: err, revert: revertErr}
@@ -396,7 +396,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 	// brings back: keep it so the undo can.
 	restore := func(ctx context.Context) error { return s.restoreActivation(ctx, &prev) }
 	if def.WebhookHmacSecret != nil {
-		creds, err := s.deps.Repo.GetTriggerWebhookCredentials(ctx, prev.ID)
+		creds, err := s.deps.Triggers.GetTriggerWebhookCredentials(ctx, prev.ID)
 		if err != nil {
 			return triggerDBError("get webhook credentials", err)
 		}
@@ -417,7 +417,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 		if revertErr := restore(undoCtx); revertErr != nil {
 			// The restore can fail after it wrote, or before: the row may hold
 			// either settings, and is running if it is on.
-			if cur, getErr := s.deps.Repo.GetTrigger(undoCtx, prev.ID); getErr != nil || cur.Enabled {
+			if cur, getErr := s.deps.Triggers.GetTrigger(undoCtx, prev.ID); getErr != nil || cur.Enabled {
 				logging.ErrorContext(ctx, "could not restore a trigger whose update failed; it is still running",
 					"trigger_id", prev.ID, "error", err, "revert_error", revertErr)
 				return &leftEnabledError{cause: err, revert: revertErr, settings: true}
@@ -440,7 +440,7 @@ func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, r
 // restoreActivation writes a row back as it was before an update, reconverges
 // its schedule, and moves the machine grant back with it.
 func (s *Service) restoreActivation(ctx context.Context, prev *core.Trigger) error {
-	current, err := s.deps.Repo.GetTrigger(ctx, prev.ID)
+	current, err := s.deps.Triggers.GetTrigger(ctx, prev.ID)
 	if err != nil {
 		return err
 	}

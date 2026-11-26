@@ -33,7 +33,7 @@ func TestGetLatestNonMessageUpdatesPerEntity_CollapsesQuestionToLatestStatus(t *
 
 	questionID := "question-regression-id"
 
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, QuestionUpdate{
 		QuestionID: questionID,
 		ChatID:     chatID,
 		Status:     "pending",
@@ -43,7 +43,7 @@ func TestGetLatestNonMessageUpdatesPerEntity_CollapsesQuestionToLatestStatus(t *
 	// two ids are unambiguously distinct even on a coarse clock. Distinct ids
 	// are the precondition this test is about.
 	time.Sleep(time.Millisecond)
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, QuestionUpdate{
 		QuestionID: questionID,
 		ChatID:     chatID,
 		Status:     "resolved",
@@ -71,11 +71,11 @@ func TestGetLatestNonMessageUpdatesPerEntity_KeepsDistinctQuestionsSeparate(t *t
 	ctx := context.Background()
 	chatID := seedChatForUpdates(t, repo, ctx)
 
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, QuestionUpdate{
 		QuestionID: "question-answered", ChatID: chatID, Status: "resolved",
 	}))
 	time.Sleep(time.Millisecond)
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, QuestionUpdate{
 		QuestionID: "question-open", ChatID: chatID, Status: "pending",
 	}))
 

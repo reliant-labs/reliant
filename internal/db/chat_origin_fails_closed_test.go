@@ -12,6 +12,7 @@ import (
 
 	forgedb "github.com/reliant-labs/reliant/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // allLaunchKinds is every TriggerEventKind a chat can be launched by.
@@ -127,7 +128,7 @@ func TestUnrecordedOriginFailsClosed(t *testing.T) {
 
 	for _, kind := range allLaunchKinds {
 		id := "old-" + string(kind)
-		chat, err := repo.GetChat(ctx, id)
+		chat, err := store.GetChat(ctx, repo.ORM(), id)
 		require.NoError(t, err)
 		person := kind == core.TriggerEventKindChatStart
 		assert.Equal(t, core.ChatOriginOf(kind), chat.Origin, "%s: the view derives the launcher's origin", id)
@@ -135,7 +136,7 @@ func TestUnrecordedOriginFailsClosed(t *testing.T) {
 		assert.Equal(t, person, listed[id], "%s: ListChats", id)
 		assert.Equal(t, person, found[id], "%s: SearchChats", id)
 	}
-	noEvent, err := repo.GetChat(ctx, "old-no-event")
+	noEvent, err := store.GetChat(ctx, repo.ORM(), "old-no-event")
 	require.NoError(t, err)
 	assert.Equal(t, core.ChatOriginUser, noEvent.Origin)
 	assert.True(t, listed["old-no-event"], "a chat with no launch event is a conversation")
@@ -157,7 +158,7 @@ func TestUnrecordedOriginFailsClosed(t *testing.T) {
 	createActivityTestChat(t, repo, "new-user")
 	setTestChatOrigin(t, repo, "new-user", core.ChatOriginUser)
 	attachLaunchEvent(t, repo, "new-user", core.TriggerEventKindChatStart, now)
-	recorded, err := repo.GetChat(ctx, "new-user")
+	recorded, err := store.GetChat(ctx, repo.ORM(), "new-user")
 	require.NoError(t, err)
 	assert.Equal(t, core.ChatOriginUser, recorded.Origin)
 }

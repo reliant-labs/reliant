@@ -41,7 +41,6 @@ type fakeRepo struct {
 	questionErr         error
 	resolvedQuestionIDs []string
 	resolvedResponse    *string
-	emittedQuestions    []db.QuestionUpdate
 }
 
 type workflowCASCall struct {
@@ -124,11 +123,6 @@ func (f *fakeRepo) ResolveQuestion(_ context.Context, id string, responseData *s
 			q.ResponseData = responseData
 		}
 	}
-	return nil
-}
-
-func (f *fakeRepo) EmitQuestionUpdate(_ context.Context, _ string, update db.QuestionUpdate) error {
-	f.emittedQuestions = append(f.emittedQuestions, update)
 	return nil
 }
 
@@ -267,11 +261,6 @@ func TestTerminate_LiveRunHardTerminatesAndDrainsSubtree(t *testing.T) {
 	assert.Equal(t, []string{"q-1", "q-2"}, repo.resolvedQuestionIDs)
 	require.NotNil(t, repo.resolvedResponse)
 	assert.Contains(t, *repo.resolvedResponse, "terminated by operator")
-	require.Len(t, repo.emittedQuestions, 2)
-	for _, update := range repo.emittedQuestions {
-		assert.Equal(t, "resolved", update.Status)
-	}
-	assert.Equal(t, "thread-spawn", repo.emittedQuestions[1].ThreadID)
 }
 
 // A terminated run executes no workflow code, so it cannot release its own

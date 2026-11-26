@@ -55,16 +55,6 @@ func (r *Repo) EmitToolCallCancelledUpdate(ctx context.Context, chatID string, u
 	return r.CreateChatUpdate(ctx, chatID, UpdateTypeToolCall, EntityIDForToolCancelled(update.ToolCallID), data)
 }
 
-// EmitQuestionUpdate emits a question status update to chat_updates
-func (r *Repo) EmitQuestionUpdate(ctx context.Context, chatID string, update QuestionUpdate) error {
-	update.UpdateType = UpdateTypeQuestion
-	data, err := MarshalUpdate(update)
-	if err != nil {
-		return fmt.Errorf("failed to marshal question update: %w", err)
-	}
-	return r.CreateChatUpdate(ctx, chatID, UpdateTypeQuestion, EntityIDForQuestion(update.QuestionID), data)
-}
-
 // EmitStreamFinalizedUpdate emits a stream_finalized marker for a
 // pre-allocated assistant message id (delta identity protocol). entity_id is
 // the message id itself so snapshot dedup keeps exactly one marker per message.

@@ -6,6 +6,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/stretchr/testify/require"
 )
@@ -294,7 +295,7 @@ edges:
 	require.NotContains(t, preview.Title, "personal")
 	created, err := e.svc.ManageActivation(e.ctx, e.userID, tools.ToolCreateTriggerActivation, p, preview.Hash)
 	require.NoError(t, err)
-	history, err := e.repo.ListTriggerChanges(e.ctx, e.userID, created.ID)
+	history, err := store.TriggerChanges(e.ctx, e.repo.ORM(), e.userID, created.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, history)
 	require.Contains(t, history[0].CapabilitiesAdded, "connection:"+dynamicCapability)

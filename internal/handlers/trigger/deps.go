@@ -65,28 +65,12 @@ type Repository interface {
 	// their default org (the lazy backfill, orgs.ListScope).
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	RunTx(context.Context, orm.TxPolicy, func(context.Context) error) error
-	LockActivationDependencies(context.Context, string, string) error
 	ListSettingsByKey(context.Context, string, string) ([]*db.Setting, error)
 	ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*db.StepExecution, error)
-	// Trigger rows and their webhook credentials.
-	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
-	ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error)
-	DeleteTrigger(ctx context.Context, id string) error
-	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
-	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
-	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
-
-	// Firings, the feed and the integration registrations a trigger holds.
-	ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
-	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
-	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
-
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 
-	// ListTriggers is called directly too; TriggerLister declares it.
 	launch.WorkflowResolver
 	daemonchoice.Reader
-	TriggerLister
 }
 
 // Pools reads the machine pool a pool-bound trigger names, and its members
@@ -104,6 +88,29 @@ type WebhookSecrets interface {
 	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
 }
 
+// Triggers reads and removes stored triggers and their webhook credentials.
+// store.TriggerExtStore satisfies it.
+type Triggers interface {
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	ListTriggersForUser(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+	RemoveTrigger(ctx context.Context, id string) error
+	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
+	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
+}
+
+// FiringReads reads the firings and the feed of a trigger.
+// store.TriggerEventExtStore satisfies it.
+type FiringReads interface {
+	ListTriggerEventsPage(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
+	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+}
+
+// RegistrationReads reads the integration registrations a trigger holds.
+// store.TriggerRegistrationExtStore satisfies it.
+type RegistrationReads interface {
+	ListTriggerRegistrationsForUser(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
+}
+
 // TriggerWrites writes a trigger's definition under the owner's org lock, only
 // while every org the handler's decision read still holds. Called with the ctx
 // of the transaction the handler opens (Deps.Repo.RunTx), each joins it.
@@ -111,6 +118,14 @@ type WebhookSecrets interface {
 type TriggerWrites interface {
 	CreateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
 	UpdateTriggerInOrg(ctx context.Context, t *core.Trigger, reads ...db.OrgRead) error
+	// EnableTrigger turns a trigger on or off in one transaction and records
+	// the change.
+	EnableTrigger(ctx context.Context, id string, enabled bool) error
+	// TriggerChanges reads a trigger's change history, owner scoped.
+	TriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error)
+	// LockActivationDependencies serializes an activation with edits of what
+	// it depends on.
+	LockActivationDependencies(ctx context.Context, user, project string) error
 }
 
 type Pools interface {
@@ -132,7 +147,7 @@ type AutomationKeyStore interface {
 // automationGrants' check that no enabled trigger still names a daemon
 // before it revokes that daemon's token.
 type TriggerLister interface {
-	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+	ListTriggersForUser(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 }
 
 // AutomationDrafter writes an automation draft from a description

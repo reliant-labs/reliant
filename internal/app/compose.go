@@ -1258,7 +1258,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()), Triggers: store.NewTriggerExtStore(g.Database().ORM()), FiringReads: store.NewTriggerEventExtStore(g.Database().ORM()), Registrations: store.NewTriggerRegistrationExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
@@ -2070,6 +2070,7 @@ func (g *Graph) newChatTrace() (*chat_trace.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Store:  g.Database(),
+		Chats:  store.NewChatExtStore(g.Database().ORM()),
 		Spans:  ChatTraceSpans(g.ServerProcessConfig.GetControlPlane()),
 		Now:    nil, // optional — no provider
 	})

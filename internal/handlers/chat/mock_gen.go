@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=ffd7eee17f9d3373aa28a9ceb53853f6f1bc346d5dbda8f66137907f4cab9412
+// forge:hash=45f7282e968b50ee8cc0b2f9ffb77a5d0e656e46a25bc49adceafa1e3940ba57
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -333,7 +333,6 @@ type MockRepository struct {
 	DeleteWorkflowCheckpointFunc                             func(context.Context, string) error
 	CascadeTerminalStatusToDescendantsFunc                   func(context.Context, string, db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtreeFunc                 func(context.Context, string, db.WorkflowStopReason) error
-	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
 	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
 	ClaimWorkflowStartFunc                                   func(context.Context, string) (bool, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
@@ -1236,15 +1235,6 @@ func (m *MockRepository) CascadeTerminalStatusToThreadSubtree(ctx context.Contex
 		return m.CascadeTerminalStatusToThreadSubtreeFunc(ctx, workflowID, reason)
 	}
 	return contractkit.MockNotSet("MockRepository", "CascadeTerminalStatusToThreadSubtree")
-}
-
-// EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
-func (m *MockRepository) EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error {
-	m.Recorder.Record("EmitQuestionUpdate", ctx, chatID, update)
-	if m.EmitQuestionUpdateFunc != nil {
-		return m.EmitQuestionUpdateFunc(ctx, chatID, update)
-	}
-	return contractkit.MockNotSet("MockRepository", "EmitQuestionUpdate")
 }
 
 // LockChatRunControl records the call and delegates to LockChatRunControlFunc when set.

@@ -150,7 +150,7 @@ func TestMoveProjectOrgClearsAssignmentsAnotherOrgFunds(t *testing.T) {
 	assert.Empty(t, f.assigned("c-move-sub"), "every thread of every moved chat is cleared")
 	assert.Equal(t, map[string]string{"anthropic": "k-src"}, f.assigned("c-stay"), "a chat that did not move keeps its account")
 
-	chat, err := f.env.Repo.GetChat(ctx, "c-move")
+	chat, err := store.GetChat(ctx, f.env.Repo.ORM(), "c-move")
 	require.NoError(t, err)
 	require.NotNil(t, chat.OrgID)
 	assert.Equal(t, mvDst, *chat.OrgID, "the next call is scoped to the target org (chatScope reads the row)")
