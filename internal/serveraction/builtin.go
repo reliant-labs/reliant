@@ -24,6 +24,17 @@ const (
 	PRNeedsPerson = "reliant/pr.needs_person@1"
 )
 
+// withLocator makes an object schema name its PR either way: record_id, or
+// repository and number.
+func withLocator(schema map[string]any) map[string]any {
+	delete(schema, "required")
+	schema["anyOf"] = []any{
+		map[string]any{"required": []any{"record_id"}},
+		map[string]any{"required": []any{"repository", "number"}},
+	}
+	return schema
+}
+
 func prSpecs() []Spec {
 	recordID := map[string]any{"type": "string", "minLength": 1,
 		"description": "The PR's record id (pr_records.id): trigger.record.id."}
@@ -38,8 +49,11 @@ func prSpecs() []Spec {
 			Name: PRNext,
 			Description: "Decide what a pull request needs next (review, fix, enqueue, close, escalate or none) " +
 				"from its pipeline state and its head on GitHub; a low-risk head passes here with no model.",
-			Params: object([]string{"record_id"}, map[string]any{
+			Params: withLocator(object(nil, map[string]any{
 				"record_id": recordID,
+				"repository": map[string]any{"type": "string", "minLength": 1,
+					"description": "The PR's repository as owner/name, with number, when the record id is not known (a GitHub firing): trigger.record.repository."},
+				"number": map[string]any{"type": "integer", "minimum": 1, "description": "The PR's number, with repository: trigger.record.number."},
 				"comment": map[string]any{
 					"type": "object", "description": "The review or issue comment that woke the run, if one did: it becomes a blocker for the fixer.",
 					"properties": map[string]any{
@@ -50,7 +64,7 @@ func prSpecs() []Spec {
 						"line":   map[string]any{"type": []any{"integer", "null"}},
 					},
 				},
-			}),
+			})),
 			Mutates: true,
 		},
 		{
