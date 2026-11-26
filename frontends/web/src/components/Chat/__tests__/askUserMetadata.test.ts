@@ -1,6 +1,16 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { askUserQuestionItemsFromInput, isAsyncAskUserInput, parseAskUserMetadata } from "../askUserUtils";
+import {
+  askUserAnswerLines,
+  askUserQuestionItemsFromInput,
+  isAsyncAskUserInput,
+  isTaskAskUserInput,
+  isTaskAskUserMetadata,
+  parseAskUserMetadata,
+  taskAnswers,
+  taskOutcomeLines,
+  taskOutcomeText,
+} from "../askUserUtils";
 
 describe("parseAskUserMetadata", () => {
   it("returns null for null/undefined/empty metadata", () => {
@@ -302,5 +312,67 @@ describe("askUserQuestionItemsFromInput", () => {
     expect(askUserQuestionItemsFromInput("not json")).toBeNull();
     expect(askUserQuestionItemsFromInput({ questions: 42 })).toBeNull();
     expect(askUserQuestionItemsFromInput({ questions: "  " })).toBeNull();
+  });
+});
+
+describe("to-dos (ask_user task: true)", () => {
+  const metadata = (extra: Record<string, unknown>) =>
+    JSON.stringify({ type: "ask_user", questions: [{ question: "Run gcloud auth login" }], ...extra });
+
+  it("reads the task flag from a question row's metadata", () => {
+    expect(isTaskAskUserMetadata(metadata({ task: true }))).toBe(true);
+    expect(isTaskAskUserMetadata(metadata({ task: true, async: true }))).toBe(true);
+    expect(isTaskAskUserMetadata(metadata({}))).toBe(false);
+    expect(isTaskAskUserMetadata(metadata({ task: false }))).toBe(false);
+    expect(isTaskAskUserMetadata(null)).toBe(false);
+    // A to-do's items carry no options; they parse as items with none.
+    expect(parseAskUserMetadata(metadata({ task: true }))!.questions[0].options).toEqual([]);
+  });
+
+  it("reads the task flag from the tool input, as the server does", () => {
+    expect(isTaskAskUserInput({ task: true, questions: [] })).toBe(true);
+    expect(isTaskAskUserInput({ task: " true ", questions: [] })).toBe(true);
+    expect(isTaskAskUserInput('{"task":true,"questions":[]}')).toBe(true);
+    expect(isTaskAskUserInput({ __reliant_tool_meta__: {}, input: JSON.stringify({ task: true }) })).toBe(true);
+    expect(isTaskAskUserInput({ questions: [] })).toBe(false);
+    expect(isTaskAskUserInput({ task: false })).toBe(false);
+    expect(isTaskAskUserInput(undefined)).toBe(false);
+  });
+
+  it("builds the answers shape: one answer per item, Done or Not done, the note as freetext", () => {
+    expect(
+      taskAnswers(["Sign in", "Approve the PR"], [{ done: true }, { done: false, note: "  no access  " }]),
+    ).toEqual({
+      answers: [
+        { question: "Sign in", selected: ["Done"] },
+        { question: "Approve the PR", selected: ["Not done"], freetext: "no access" },
+      ],
+    });
+    expect(taskAnswers(["Sign in"], [{ done: false, note: " " }])).toEqual({
+      answers: [{ question: "Sign in", selected: ["Not done"] }],
+    });
+  });
+
+  it("reads each item's outcome back from the response", () => {
+    const response = JSON.stringify(
+      taskAnswers(["Sign in", "Approve the PR"], [{ done: true }, { done: false, note: "no access" }]),
+    );
+    const lines = taskOutcomeLines(response);
+    expect(lines).toEqual([
+      { task: "Sign in", done: true, note: "" },
+      { task: "Approve the PR", done: false, note: "no access" },
+    ]);
+    expect(lines.map(taskOutcomeText)).toEqual(["Done", "Not done — no access"]);
+    // A question's answer lines keep "Done": only a bare "Continue" is no answer.
+    expect(askUserAnswerLines(response).map((l) => l.answer)).toEqual(["Done", "Not done — no access"]);
+  });
+
+  it("reads an older client's free-text answer to a to-do as unmarked, with the text as its note", () => {
+    const response = JSON.stringify({ answers: [{ question: "Sign in", selected: [], freetext: "did it" }] });
+    const lines = taskOutcomeLines(response);
+    expect(lines).toEqual([{ task: "Sign in", done: null, note: "did it" }]);
+    expect(lines.map(taskOutcomeText)).toEqual(["did it"]);
+    expect(taskOutcomeLines("not json")).toEqual([]);
+    expect(taskOutcomeLines(undefined)).toEqual([]);
   });
 });

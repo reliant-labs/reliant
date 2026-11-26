@@ -74,3 +74,29 @@ func TestAskUserTool_SchemaProperties(t *testing.T) {
 	assert.Contains(t, tool.Description(), "blocking: true")
 	assert.Contains(t, tool.Description(), "withdraw_question")
 }
+
+// task: true makes each entry a to-do for the user (research/ASYNC_ASK_USER.md,
+// "Tasks"): an optional boolean, default false, and a task item has no
+// options, so options is not required of an item.
+func TestAskUserTool_TaskOption(t *testing.T) {
+	t.Parallel()
+
+	factory := &tools.ToolsFactory{}
+	tool := factory.AskUser()
+	schemaOnly, ok := tool.(*tools.SchemaOnlyTool)
+	require.True(t, ok)
+	schemaMap := schemaOnly.ParamSchemaMap()
+	props := schemaMap["properties"].(map[string]interface{})
+
+	taskMap, ok := props["task"].(map[string]interface{})
+	require.True(t, ok, "Schema should have the 'task' option")
+	assert.Equal(t, "boolean", taskMap["type"])
+	assert.Equal(t, false, taskMap["default"])
+	assert.NotContains(t, schemaMap["required"], "task")
+
+	items := props["questions"].(map[string]interface{})["items"].(map[string]interface{})
+	assert.Equal(t, []string{"question"}, items["required"], "a task item carries no options")
+	options := items["properties"].(map[string]interface{})["options"].(map[string]interface{})
+	assert.Equal(t, 2, options["minItems"], "a question still offers at least two options")
+	assert.Contains(t, tool.Description(), "task: true")
+}

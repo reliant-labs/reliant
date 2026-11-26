@@ -145,7 +145,12 @@ export async function resolveQuestion(
   void queryClient.invalidateQueries({ queryKey: questionKeys.all });
 }
 
-/** What a person's answer to an ask_user form looks like on the wire. */
+/**
+ * What a person's answer to an ask_user form looks like on the wire. A to-do
+ * (ask_user task: true, `"task": true` in the question's metadata) is answered
+ * the same way: one answer per item, `selected` either ["Done"] or
+ * ["Not done"], and `freetext` the optional note on why not.
+ */
 export interface QuestionAnswers {
   answers: Array<{ question: string; selected: string[]; freetext?: string }>;
 }

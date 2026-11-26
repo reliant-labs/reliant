@@ -87,8 +87,9 @@ import {
   unsyncedParams,
   withThinkingLevel,
 } from "../../lib/paramUtils";
-import { askUserQuestionItems } from "./askUserUtils";
+import { askUserQuestionItems, isTaskAskUserMetadata } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
+import { TaskPrompt } from "./TaskPrompt";
 import { COMPOSER_CONTROL, COMPOSER_ROUND_BUTTON } from "./composerControl";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { fetchThreadWorkflowInputs } from "../../hooks/chat-pull-queries";
@@ -364,6 +365,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const hasPendingQuestion = !!pendingQuestion;
     const askUserQuestion = useMemo(
       () => askUserQuestionItems(pendingQuestion?.metadata),
+      [pendingQuestion?.metadata]
+    );
+    // A blocking to-do (ask_user task: true): marked done or not, not answered.
+    const pendingIsTask = useMemo(
+      () => isTaskAskUserMetadata(pendingQuestion?.metadata),
       [pendingQuestion?.metadata]
     );
     // A blocking question takes the composer's place, but never locks the
@@ -1964,10 +1970,17 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   {/* Question prompt - replaces normal input when ask_user question is pending */}
                   {showAskOnly && askUserQuestion && (
                     <>
-                      <QuestionPrompt
-                        questions={askUserQuestion}
-                        onSubmit={handleQuestionSubmit}
-                      />
+                      {pendingIsTask ? (
+                        <TaskPrompt
+                          tasks={askUserQuestion.map((item) => item.question)}
+                          onSubmit={handleQuestionSubmit}
+                        />
+                      ) : (
+                        <QuestionPrompt
+                          questions={askUserQuestion}
+                          onSubmit={handleQuestionSubmit}
+                        />
+                      )}
                       <div className="flex justify-end px-2 pb-1">
                         <button
                           type="button"
@@ -1989,7 +2002,11 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                       offer the way back to the answer form. */}
                   {composingDespiteQuestion && askUserQuestion && (
                     <div className="flex items-center justify-between gap-2 px-2 pt-2 text-xs text-warning-ink">
-                      <span>The agent is waiting on your answer to a question.</span>
+                      <span>
+                        {pendingIsTask
+                          ? "The agent is waiting for you to mark a to-do done."
+                          : "The agent is waiting on your answer to a question."}
+                      </span>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -1998,7 +2015,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         }}
                         className="inline-flex min-h-8 shrink-0 items-center rounded-md px-2 font-medium hover:bg-warning/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        Answer it
+                        {pendingIsTask ? "Mark it" : "Answer it"}
                       </button>
                     </div>
                   )}

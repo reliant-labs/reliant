@@ -900,7 +900,8 @@ func (f *ToolsFactory) ListAvailableTools() []string {
 // by the workflow runtime's splitProtoToolCalls → executeAskUserInline, not by
 // the normal tool execution path. By default the question is posted without
 // waiting and the answer arrives later as a user message; blocking: true stops
-// and waits for it (research/ASYNC_ASK_USER.md).
+// and waits for it. task: true makes each entry a to-do the user marks done or
+// not done instead of a question (research/ASYNC_ASK_USER.md).
 func (f *ToolsFactory) AskUser() Tool {
 	return NewSchemaOnlyTool(
 		ToolAskUser,
@@ -913,6 +914,8 @@ func (f *ToolsFactory) AskUser() Tool {
 Default (async) — the norm: proceed on a sensible default, usually the option you recommend, and say in the question which one you are going with. If the user answers, the answer arrives later as a message from the user; adjust your work then if it changes anything. Do not wait for it and do not ask the same question again. If your work makes a question moot before it is answered, withdraw it (withdraw_question) so it leaves the user's inbox.
 
 blocking: true — the exception: stop and wait for the answer. Use it only when you truly cannot make progress without it — every reasonable default would be wrong or wasted work, or the next action is significant or hard to undo and needs the user's go-ahead first.
+
+task: true — a to-do for the user instead of a question. Use it for something only the user can do: sign in or run a command on their machine, approve or change something in an external system, provide a secret or a file, a physical action. Each entry of questions is then one task: write its question as an instruction to the user (what to do, and why), say what you do meanwhile and what happens once it is done, and give no options. The user marks each task done or not done, optionally with a note or the reason they did not do it. It combines with blocking: by default you keep working and get a message when the user marks it; with blocking: true you wait until they do (e.g. "Run gcloud auth login, then mark this done").
 
 Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw questions your default made moot.
 
@@ -953,7 +956,7 @@ Usage notes:
 							},
 							"options": map[string]interface{}{
 								"type":        "array",
-								"description": "Available choices. The user can always provide freetext instead.",
+								"description": "Available choices. Required for a question; omit it for a task (task: true), which the user marks done or not done. The user can always provide freetext instead.",
 								"minItems":    2,
 								"maxItems":    6,
 								"items": map[string]interface{}{
@@ -982,13 +985,18 @@ Usage notes:
 								"default":     false,
 							},
 						},
-						"required":             []string{"question", "options"},
+						"required":             []string{"question"},
 						"additionalProperties": false,
 					},
 				},
 				"blocking": map[string]interface{}{
 					"type":        "boolean",
 					"description": "If true, stop and wait for the user's answer before continuing. Only when you cannot make progress without it. Default is false: the questions are posted, the tool returns at once, you keep working on your best default, and the user's answer, if any, arrives later as a message.",
+					"default":     false,
+				},
+				"task": map[string]interface{}{
+					"type":        "boolean",
+					"description": "If true, each entry of questions is a to-do for the user rather than a question: something only they can do, written as an instruction to them, with no options. The user marks each one done or not done, optionally saying why. Independent of blocking. Default is false.",
 					"default":     false,
 				},
 			},

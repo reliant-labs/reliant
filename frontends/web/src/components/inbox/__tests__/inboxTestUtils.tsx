@@ -96,6 +96,31 @@ export function questionItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   });
 }
 
+/** A to-do an agent gave the user: a question item whose ask_user metadata has task: true. */
+export function taskItem(overrides: Overrides<InboxItem> = {}): InboxItem {
+  return create(InboxItemSchema, {
+    ...base,
+    kind: InboxItemKind.QUESTION,
+    itemId: "question:t-1",
+    payload: {
+      case: "question",
+      value: {
+        questionId: "t-1",
+        threadId: "t-1",
+        prompt: "Run gcloud auth login",
+        async: true,
+        metadata: JSON.stringify({
+          type: "ask_user",
+          async: true,
+          task: true,
+          questions: [{ question: "Run gcloud auth login" }],
+        }),
+      },
+    },
+    ...overrides,
+  });
+}
+
 export function waitingItem(overrides: Overrides<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,

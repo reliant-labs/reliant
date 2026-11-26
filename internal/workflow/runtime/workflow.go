@@ -5269,6 +5269,13 @@ func executeAskUserInline(
 			}
 		}
 	}
+	// A task is a to-do for the user, not a question (ask_user_task.go). It
+	// is orthogonal to blocking: only the wording the model and the user see
+	// changes, never the path.
+	task := askUserInputFlag(toolInput, "task")
+	if task {
+		metaObj["task"] = true
+	}
 	metaBytes, _ := json.Marshal(metaObj)
 	metadata := string(metaBytes)
 
@@ -5316,6 +5323,7 @@ func executeAskUserInline(
 		return askUserAsync(ctx, toolCallID, askUserQuestionInput{
 			chatID: chatID, workflowID: workflowID, temporalWorkflowID: temporalWorkflowID, threadID: threadID,
 			stepID: stepID, loopNodeID: loopNodeID, loopIteration: loopIteration, metadata: string(asyncMeta),
+			task: task,
 		}, logger)
 	}
 
@@ -5356,7 +5364,7 @@ func executeAskUserInline(
 		logger.Debug("[AskUser] Already resolved (replay)", "questionID", createOutput.QuestionID)
 		return map[string]interface{}{
 			"tool_call_id": toolCallID,
-			"content":      formatAskUserResponse("reply", createOutput.ResponseData),
+			"content":      formatAskUserResult("reply", createOutput.ResponseData, task),
 		}
 	}
 
@@ -5421,7 +5429,7 @@ func executeAskUserInline(
 	// question, so it stops reading as pending, and hand the model a result
 	// that says what happened; its next call_llm reads the input.
 	if yield != askUserYieldNone {
-		return resolveYieldedAskUser(ctx, toolCallID, createOutput.QuestionID, yield, logger)
+		return resolveYieldedAskUser(ctx, toolCallID, createOutput.QuestionID, yield, task, logger)
 	}
 
 	// STEP 4: On timeout, resolve in DB
@@ -5438,9 +5446,13 @@ func executeAskUserInline(
 			logger.Warn("[AskUser] Failed to resolve question as timeout",
 				"questionID", createOutput.QuestionID, "error", err)
 		}
+		content := "The user did not respond in time."
+		if task {
+			content = askUserTaskTimedOut
+		}
 		return map[string]interface{}{
 			"tool_call_id": toolCallID,
-			"content":      "The user did not respond in time.",
+			"content":      content,
 		}
 	}
 
@@ -5450,7 +5462,7 @@ func executeAskUserInline(
 	}
 	return map[string]interface{}{
 		"tool_call_id": toolCallID,
-		"content":      formatAskUserResponse(action, responseData),
+		"content":      formatAskUserResult(action, responseData, task),
 	}
 }
 

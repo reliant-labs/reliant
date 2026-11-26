@@ -24,7 +24,7 @@ const (
 
 	listPendingQuestionsDescription = `List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered.
 
-Shows your own thread's questions and those of every sub-agent below you, recursively — never a sibling's. For each: question_id, who asked (you, or the sub-agent's agent_id and title), whether it is async (asked without waiting — nobody is blocked on it) or blocking (that agent is parked until the user answers), the question and its options, and how long it has been waiting.
+Shows your own thread's questions and those of every sub-agent below you, recursively — never a sibling's. For each: question_id, who asked (you, or the sub-agent's agent_id and title), whether it is async (asked without waiting — nobody is blocked on it) or blocking (that agent is parked until the user answers), the question and its options, and how long it has been waiting. Tasks (ask_user with task: true: to-dos the user has not marked done or not done yet) are listed too, labelled as tasks.
 
 When to call it:
 - Before you finish a task: check for async questions still unanswered. If you went ahead on a default and the answer no longer matters, withdraw it with withdraw_question so it leaves the user's inbox. If it still matters, say so in your final answer.
@@ -33,6 +33,8 @@ When to call it:
 Answers to async questions arrive as messages from the user that name the question_id, so you can match an answer to the question it came from.`
 
 	withdrawQuestionDescription = `Withdraw an async question (an ask_user call without blocking: true) that you or one of your sub-agents asked and that no longer needs an answer — typically because you proceeded on a default and the outcome is settled.
+
+Tasks (ask_user with task: true) are withdrawn the same way, when the to-do is no longer needed.
 
 Withdrawing closes the question: it leaves the user's inbox and its card in the chat shows "Withdrawn: <reason>". The reason is shown to the user, so make it a short, plain sentence (e.g. "Went with Postgres; the schema is already migrated").
 
@@ -49,9 +51,12 @@ type PendingQuestionEntry struct {
 	// AgentID is the thread that asked: the caller's own, or a sub-agent's.
 	AgentID string `json:"agent_id"`
 	// Title is the asking sub-agent's title, when it has one.
-	Title     string                 `json:"title,omitempty"`
-	AskedBy   string                 `json:"asked_by"` // "you" or "sub-agent"
-	Async     bool                   `json:"async"`
+	Title   string `json:"title,omitempty"`
+	AskedBy string `json:"asked_by"` // "you" or "sub-agent"
+	Async   bool   `json:"async"`
+	// Task marks a to-do for the user (ask_user task: true): each of
+	// Questions is one item, which the user marks done or not done.
+	Task      bool                   `json:"task,omitempty"`
 	Questions []PendingQuestionAsked `json:"questions"`
 	CreatedAt string                 `json:"created_at"`
 	WaitingMs int64                  `json:"waiting_ms"`
@@ -126,6 +131,7 @@ func pendingQuestionEntry(row db.SubtreeQuestion, caller string, now time.Time) 
 	}
 	if row.Metadata != nil {
 		if md, ok := askuser.ParseMetadata(*row.Metadata); ok {
+			e.Task = md.Task
 			for _, q := range md.Questions {
 				e.Questions = append(e.Questions, PendingQuestionAsked{Question: q.Question, Options: q.OptionLabels()})
 			}
@@ -134,13 +140,31 @@ func pendingQuestionEntry(row db.SubtreeQuestion, caller string, now time.Time) 
 	return e
 }
 
+// pendingNoun names what is listed: questions, tasks, or both.
+func pendingNoun(entries []PendingQuestionEntry) string {
+	tasks := 0
+	for _, e := range entries {
+		if e.Task {
+			tasks++
+		}
+	}
+	switch {
+	case tasks == 0 && len(entries) == 1:
+		return "question"
+	case tasks == 0:
+		return "questions"
+	case tasks == len(entries) && tasks == 1:
+		return "task"
+	case tasks == len(entries):
+		return "tasks"
+	default:
+		return "questions and tasks"
+	}
+}
+
 func formatPendingQuestions(entries []PendingQuestionEntry) string {
 	var b strings.Builder
-	noun := "questions"
-	if len(entries) == 1 {
-		noun = "question"
-	}
-	fmt.Fprintf(&b, "%d unanswered %s from you and your sub-agents:\n", len(entries), noun)
+	fmt.Fprintf(&b, "%d unanswered %s from you and your sub-agents:\n", len(entries), pendingNoun(entries))
 	for i, e := range entries {
 		who := "asked by you"
 		if e.AskedBy != "you" {
@@ -153,10 +177,18 @@ func formatPendingQuestions(entries []PendingQuestionEntry) string {
 		if !e.Async {
 			kind = "BLOCKING — that agent is waiting on the user's answer"
 		}
+		label := "Q"
+		if e.Task {
+			kind = "task · " + kind
+			if !e.Async {
+				kind = "task · BLOCKING — that agent is waiting for the user to mark it"
+			}
+			label = "Task"
+		}
 		fmt.Fprintf(&b, "\n%d. question_id: %s · %s · %s · waiting %s\n", i+1, e.QuestionID, kind, who,
 			formatDuration(time.Duration(e.WaitingMs)*time.Millisecond))
 		for _, q := range e.Questions {
-			fmt.Fprintf(&b, "   Q: %s\n", q.Question)
+			fmt.Fprintf(&b, "   %s: %s\n", label, q.Question)
 			if len(q.Options) > 0 {
 				fmt.Fprintf(&b, "      options: %s\n", strings.Join(q.Options, " | "))
 			}

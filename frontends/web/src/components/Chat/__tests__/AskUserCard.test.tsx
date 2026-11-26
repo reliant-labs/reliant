@@ -341,6 +341,91 @@ describe("AskUserCard once settled", () => {
   });
 });
 
+describe("AskUserCard, a to-do (task: true)", () => {
+  const taskInput = { task: true, questions: [{ question: "Run gcloud auth login" }] };
+  const taskMetadata = JSON.stringify({ type: "ask_user", async: true, task: true, questions: taskInput.questions });
+  const taskRow = (overrides: Partial<QuestionInfo> = {}) => asyncQuestion({ metadata: taskMetadata, ...overrides });
+  const response = (selected: string, freetext?: string) =>
+    JSON.stringify({ answers: [{ question: "Run gcloud auth login", selected: [selected], ...(freetext ? { freetext } : {}) }] });
+
+  it("is marked done in one click, through ResolveQuestion, and then shows Done", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([taskRow()]);
+    const user = userEvent.setup();
+    renderCard(false, taskInput);
+
+    expect(await screen.findByText("To do for you · not blocking")).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Mark done" }));
+
+    await waitFor(() => expect(resolveQuestionMock).toHaveBeenCalledTimes(1));
+    const [questionId, action, responseData] = resolveQuestionMock.mock.calls[0];
+    expect(questionId).toBe("q-1");
+    expect(action).toBe("reply");
+    expect(JSON.parse(responseData)).toEqual({ answers: [{ question: "Run gcloud auth login", selected: ["Done"] }] });
+
+    const summary = await screen.findByTestId("ask-user-summary");
+    expect(summary).toHaveAccessibleName(/^To-do done: Run gcloud auth login.*Done$/);
+  });
+
+  it("is marked not done with a reason, and shows it", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([taskRow()]);
+    const user = userEvent.setup();
+    renderCard(false, taskInput);
+
+    await user.click(await screen.findByRole("button", { name: "Not done" }));
+    await user.type(screen.getByLabelText("Why not? (optional)"), "No access to the project");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    await waitFor(() => expect(resolveQuestionMock).toHaveBeenCalledTimes(1));
+    expect(JSON.parse(resolveQuestionMock.mock.calls[0][2])).toEqual({
+      answers: [{ question: "Run gcloud auth login", selected: ["Not done"], freetext: "No access to the project" }],
+    });
+    const summary = await screen.findByTestId("ask-user-summary");
+    expect(summary).toHaveAccessibleName(/^To-do not done: .*Not done — No access to the project$/);
+    await user.click(summary);
+    expect(screen.getByText("To-do not done")).toBeInTheDocument();
+    expect(screen.getByTestId("ask-user-answers")).toHaveTextContent("Not done — No access to the project");
+  });
+
+  it("reads as a to-do from the row's metadata alone", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([taskRow({ status: "resolved", responseData: response("Done") })]);
+    const user = userEvent.setup();
+    renderCard(true, { questions: taskInput.questions });
+
+    await user.click(await screen.findByTestId("ask-user-summary"));
+    expect(screen.getByText("To-do done")).toBeInTheDocument();
+    expect(screen.getByTestId("ask-user-status")).toHaveTextContent("Your update was sent to the agent as a message.");
+    expect(screen.getByTestId("ask-user-answers")).toHaveTextContent("Done");
+  });
+
+  it("shows a to-do its agent withdrew", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([taskRow({ status: "resolved", withdrawnReason: "Found a token" })]);
+    renderCard(false, taskInput);
+
+    expect(await screen.findByTestId("ask-user-summary")).toHaveAccessibleName(
+      /^To-do withdrawn: Run gcloud auth login.*Withdrawn: Found a token$/,
+    );
+  });
+
+  it("shows a to-do before its row arrives, with no form", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([]);
+    renderCard(false, taskInput);
+
+    expect(await screen.findByText("To do for you · not blocking")).toBeInTheDocument();
+    expect(screen.getByTestId("ask-user-questions")).toHaveTextContent("Run gcloud auth login");
+    expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
+  });
+
+  it("leaves a blocking to-do's form to the composer", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([]);
+    renderCard(false, { ...taskInput, blocking: true });
+
+    expect(await screen.findByText("To do for you")).toBeInTheDocument();
+    expect(screen.getByTestId("ask-user-card")).toHaveAttribute("data-mode", "waiting");
+    expect(screen.getByTestId("ask-user-status")).toHaveTextContent("Mark it below.");
+    expect(screen.queryByRole("button", { name: "Mark done" })).toBeNull();
+  });
+});
+
 describe("askUserCardMode", () => {
   const row = asyncQuestion();
   const cases: Array<[string, Parameters<typeof askUserCardMode>[0], ReturnType<typeof askUserCardMode>]> = [

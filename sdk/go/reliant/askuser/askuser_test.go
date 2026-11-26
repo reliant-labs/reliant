@@ -203,3 +203,56 @@ func mustJSON(t *testing.T, v any) string {
 	}
 	return string(b)
 }
+
+func TestParseMetadataTask(t *testing.T) {
+	for metadata, want := range map[string]bool{
+		`{"type":"ask_user","task":true,"questions":[{"question":"Run gcloud auth login"}]}`:   true,
+		`{"type":"ask_user","task":"true","questions":[{"question":"Run gcloud auth login"}]}`: true,
+		`{"type":"ask_user","task":false,"questions":[{"question":"Which?"}]}`:                 false,
+		`{"type":"ask_user","questions":[{"question":"Which?","options":[{"label":"A"}]}]}`:    false,
+	} {
+		md, ok := ParseMetadata(metadata)
+		if !ok {
+			t.Fatalf("ParseMetadata(%s) not ok", metadata)
+		}
+		if md.Task != want {
+			t.Errorf("ParseMetadata(%s).Task = %v, want %v", metadata, md.Task, want)
+		}
+		if len(md.Questions[0].Options) != 0 && want {
+			t.Errorf("a task item carries no options")
+		}
+	}
+}
+
+func TestTaskAnswerRoundTripsThroughResponseData(t *testing.T) {
+	data, err := BuildResponseData([]Answer{
+		TaskAnswer("Sign in", true, ""),
+		TaskAnswer("Approve the PR", false, "no access"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"answers":[{"question":"Sign in","selected":["Done"]},{"question":"Approve the PR","selected":["Not done"],"freetext":"no access"}]}`
+	if data != want {
+		t.Errorf("response data = %s, want %s", data, want)
+	}
+}
+
+func TestTaskOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		answer Answer
+		want   string
+	}{
+		{TaskAnswer("x", true, ""), "The user marked it done."},
+		{TaskAnswer("x", true, "took a while"), "The user marked it done (note: took a while)."},
+		{TaskAnswer("x", false, "no access"), "The user marked it not done: no access"},
+		{TaskAnswer("x", false, " "), "The user marked it not done (no reason given)."},
+		{Answer{Question: "x", Freetext: "will do tomorrow"}, "The user replied: will do tomorrow"},
+		{Answer{Question: "x", Selected: []string{"Continue"}}, ""},
+		{Answer{Question: "x"}, ""},
+	} {
+		if got := tc.answer.TaskOutcome(); got != tc.want {
+			t.Errorf("TaskOutcome(%+v) = %q, want %q", tc.answer, got, tc.want)
+		}
+	}
+}

@@ -18,8 +18,14 @@ type (
 	Answer   = sdk.Answer
 )
 
+const (
+	TaskDone    = sdk.TaskDone
+	TaskNotDone = sdk.TaskNotDone
+)
+
 var (
 	ParseMetadata     = sdk.ParseMetadata
+	TaskAnswer        = sdk.TaskAnswer
 	IsAskUser         = sdk.IsAskUser
 	BuildResponseData = sdk.BuildResponseData
 )

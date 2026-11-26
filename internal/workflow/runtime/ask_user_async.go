@@ -89,6 +89,7 @@ type askUserQuestionInput struct {
 	stepID, loopNodeID                               string
 	loopIteration                                    int
 	metadata                                         string
+	task                                             bool // a to-do for the user (ask_user task: true)
 }
 
 // askUserAsync records an async question and returns the tool result that
@@ -122,9 +123,13 @@ func askUserAsync(ctx workflow.Context, toolCallID string, in askUserQuestionInp
 		}
 	}
 	logger.Info("[AskUser] Posted an async question; continuing", "questionID", created.QuestionID, "toolCallID", toolCallID)
+	content := asyncAskUserResponse(created.QuestionID)
+	if in.task {
+		content = asyncAskUserTaskResponse(created.QuestionID)
+	}
 	return map[string]interface{}{
 		"tool_call_id": toolCallID,
-		"content":      asyncAskUserResponse(created.QuestionID),
+		"content":      content,
 	}
 }
 

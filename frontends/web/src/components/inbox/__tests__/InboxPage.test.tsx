@@ -42,6 +42,7 @@ import {
   renderInboxAt,
   runPausedItem,
   storageItem,
+  taskItem,
   waitingItem,
 } from "./inboxTestUtils";
 
@@ -195,6 +196,42 @@ describe("InboxPage item kinds", () => {
         "q-1",
         "reply",
         JSON.stringify({ answers: [{ question: "Which branch?", selected: ["main"] }] }),
+      ),
+    );
+  });
+
+  it("a to-do says so, and is marked done from its form", async () => {
+    respond([taskItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-question:t-1");
+    expect(within(row).getByLabelText("To-do")).toBeInTheDocument();
+    expect(row).toHaveTextContent("To do, not blocking · Run gcloud auth login");
+
+    await userEvent.click(within(row).getByRole("button", { name: /Update/ }));
+    await userEvent.click(within(row).getByRole("button", { name: "Mark done" }));
+    await waitFor(() =>
+      expect(mocks.resolveQuestion).toHaveBeenCalledWith(
+        "t-1",
+        "reply",
+        JSON.stringify({ answers: [{ question: "Run gcloud auth login", selected: ["Done"] }] }),
+      ),
+    );
+  });
+
+  it("a to-do is marked not done with a reason", async () => {
+    respond([taskItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-question:t-1");
+
+    await userEvent.click(within(row).getByRole("button", { name: /Update/ }));
+    await userEvent.click(within(row).getByRole("button", { name: "Not done" }));
+    await userEvent.type(within(row).getByLabelText("Why not? (optional)"), "No access");
+    await userEvent.click(within(row).getByRole("button", { name: "Send" }));
+    await waitFor(() =>
+      expect(mocks.resolveQuestion).toHaveBeenCalledWith(
+        "t-1",
+        "reply",
+        JSON.stringify({ answers: [{ question: "Run gcloud auth login", selected: ["Not done"], freetext: "No access" }] }),
       ),
     );
   });
@@ -459,6 +496,20 @@ describe("InboxPage layout", () => {
 
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual(["Approvals1", "Questions2", "Automations that could not start1"]);
+  });
+
+  it("heads the Questions section as to-dos when it holds them", async () => {
+    respond([taskItem()]);
+    renderInboxAt(<InboxPage />);
+    const section = await screen.findByTestId(`inbox-section-${InboxItemKind.QUESTION}`);
+    expect(within(section).getByRole("heading", { name: /^To-dos\s*1$/ })).toBeInTheDocument();
+  });
+
+  it("heads a section of questions and to-dos as both", async () => {
+    respond([questionItem(), taskItem()]);
+    renderInboxAt(<InboxPage />);
+    const section = await screen.findByTestId(`inbox-section-${InboxItemKind.QUESTION}`);
+    expect(within(section).getByRole("heading", { name: /^Questions and to-dos\s*2$/ })).toBeInTheDocument();
   });
 
   it("a row's name opens the run by its chat id", async () => {

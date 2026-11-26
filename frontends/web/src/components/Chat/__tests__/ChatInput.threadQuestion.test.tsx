@@ -190,3 +190,24 @@ describe("the composer answers the question of the thread in view", () => {
     expect(screen.getByText("Spawn A: which schema?")).toBeInTheDocument();
   });
 });
+
+// A blocking to-do (ask_user task: true + blocking: true) takes the composer's
+// place like a blocking question, as the to-do form: marked, not answered.
+describe("a blocking to-do in the composer", () => {
+  it("shows the to-do form, and Mark done sends Done for the question in view", async () => {
+    const task = askUser("qTask", CHAT_ID, "Run gcloud auth login");
+    task.metadata = JSON.stringify({ type: "ask_user", task: true, questions: [{ question: "Run gcloud auth login" }] });
+    pending.questions = [task];
+
+    renderWithQuery(<ChatInput onSend={vi.fn()} chatId={CHAT_ID} />);
+    expect(screen.getByTestId("task-prompt")).toHaveTextContent("Run gcloud auth login");
+    expect(screen.queryByPlaceholderText("Or type your own answer...")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Mark done" }));
+    await waitFor(() => expect(answerQuestionMock).toHaveBeenCalledTimes(1));
+    expect(answerQuestionMock).toHaveBeenCalledWith(CHAT_ID, "qTask", {
+      answers: [{ question: "Run gcloud auth login", selected: ["Done"] }],
+    });
+    expect(sendAgentMessageMock).not.toHaveBeenCalled();
+  });
+});
