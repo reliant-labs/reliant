@@ -427,3 +427,19 @@ func TestTriggerFiringQueries(t *testing.T) {
 		t.Fatalf("RecentTriggerFirings(no ids) = %v, %v", empty, err)
 	}
 }
+
+// The store functions own the empty-ID guards the repository facade's
+// forwards used to carry: a blank ID is refused before any query runs.
+func TestTriggerEventWritesRefuseABlankID(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	const want = "trigger event ID cannot be empty"
+	for name, err := range map[string]error{
+		"UpdateTriggerEventOutcome": store.UpdateTriggerEventOutcome(ctx, env.ORM, "", core.TriggerEventSkipped, "", nil),
+		"UpdateTriggerEventPayload": store.UpdateTriggerEventPayload(ctx, env.ORM, "", map[string]any{"k": "v"}),
+	} {
+		if err == nil || err.Error() != want {
+			t.Errorf("%s with a blank ID: err = %v, want %q", name, err, want)
+		}
+	}
+}
