@@ -307,7 +307,28 @@ func (GtmItemKind) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{4}
 }
 
-// GtmItemStatus is an item's lifecycle.
+// GtmItemStatus is an item's lifecycle. These transitions are the only ones;
+// the service refuses every other.
+//
+// An AGENT:
+//   - creates an item as DRAFT or REVIEW, and moves it only DRAFT <-> REVIEW;
+//   - edits its content and sets or clears scheduled_at only while it is
+//     DRAFT or REVIEW;
+//   - never touches an item in any other status.
+//
+// A PERSON:
+//   - DRAFT or REVIEW -> APPROVED;
+//   - APPROVED -> SCHEDULED, for an item that is not an EMAIL;
+//   - any status (but SENT) -> PAUSED, and PAUSED -> DRAFT;
+//   - APPROVED or SCHEDULED -> PUBLISHED, for an item that is not an EMAIL: a
+//     manual "it went out" marker, since publishing happens outside GTM;
+//   - a content edit of an APPROVED or SCHEDULED item returns it to REVIEW.
+//
+// The EMAIL SEND PATH alone writes SENT: from APPROVED, for an EMAIL item.
+//
+// An EMAIL never uses SCHEDULED or PUBLISHED (the table refuses both): a
+// person may date an APPROVED email (scheduled_at) and it stays APPROVED until
+// the send path sends it.
 type GtmItemStatus int32
 
 const (
@@ -317,13 +338,16 @@ const (
 	GtmItemStatus_GTM_ITEM_STATUS_REVIEW GtmItemStatus = 2
 	// A person approved it.
 	GtmItemStatus_GTM_ITEM_STATUS_APPROVED GtmItemStatus = 3
-	// It has a date (scheduled_at). Scheduling publishes nothing.
+	// A person put an approved non-email item on the calendar (scheduled_at is
+	// set). Scheduling publishes nothing.
 	GtmItemStatus_GTM_ITEM_STATUS_SCHEDULED GtmItemStatus = 4
-	// The approved email was sent (written only by the email path).
+	// The approved email was sent (written only by the email send path).
 	GtmItemStatus_GTM_ITEM_STATUS_SENT GtmItemStatus = 5
-	// Published outside GTM (by the owner's own workflow or by hand).
+	// A person marked a non-email item as gone out; publishing itself happens
+	// outside GTM (the owner's own workflow, or by hand).
 	GtmItemStatus_GTM_ITEM_STATUS_PUBLISHED GtmItemStatus = 6
-	GtmItemStatus_GTM_ITEM_STATUS_PAUSED    GtmItemStatus = 7
+	// A person paused it; it goes back to DRAFT to resume.
+	GtmItemStatus_GTM_ITEM_STATUS_PAUSED GtmItemStatus = 7
 )
 
 // Enum value maps for GtmItemStatus.
@@ -1463,7 +1487,7 @@ type GtmClaimFinding struct {
 	// Which rule found it: number, price, duration, percent, size, multiplier,
 	// free, no_account, license, superlative, competitor, absolute.
 	MentionKind string `protobuf:"bytes,2,opt,name=mention_kind,json=mentionKind,proto3" json:"mention_kind,omitempty"`
-	// The words in the text, e.g. "$8.34/mo".
+	// The words in the text, e.g. "$5/mo".
 	Mention string `protobuf:"bytes,3,opt,name=mention,proto3" json:"mention,omitempty"`
 	// The sentence it appears in.
 	Context string `protobuf:"bytes,4,opt,name=context,proto3" json:"context,omitempty"`
@@ -2526,7 +2550,9 @@ type GetCampaignResponse struct {
 	Ideas []*GtmIdea `protobuf:"bytes,2,rep,name=ideas,proto3" json:"ideas,omitempty"`
 	// The items linked to it: scheduled ones soonest first, then the rest
 	// newest first.
-	Items         []*GtmItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	Items []*GtmItem `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
+	// ideas and items each hold at most 200 rows; true when either was cut.
+	Truncated     bool `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2580,6 +2606,13 @@ func (x *GetCampaignResponse) GetItems() []*GtmItem {
 		return x.Items
 	}
 	return nil
+}
+
+func (x *GetCampaignResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
 }
 
 type CreateCampaignRequest struct {
@@ -3135,8 +3168,10 @@ type CreateItemRequest struct {
 	IdeaId      string                 `protobuf:"bytes,7,opt,name=idea_id,json=ideaId,proto3" json:"idea_id,omitempty"`
 	ScheduledAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=scheduled_at,json=scheduledAt,proto3" json:"scheduled_at,omitempty"`
 	// EMAIL only.
-	EmailTo       []string `protobuf:"bytes,9,rep,name=email_to,json=emailTo,proto3" json:"email_to,omitempty"`
-	EmailSubject  string   `protobuf:"bytes,10,opt,name=email_subject,json=emailSubject,proto3" json:"email_subject,omitempty"`
+	EmailTo      []string `protobuf:"bytes,9,rep,name=email_to,json=emailTo,proto3" json:"email_to,omitempty"`
+	EmailSubject string   `protobuf:"bytes,10,opt,name=email_subject,json=emailSubject,proto3" json:"email_subject,omitempty"`
+	// DRAFT or REVIEW; unset: DRAFT.
+	Status        *GtmItemStatus `protobuf:"varint,11,opt,name=status,proto3,enum=reliant.v1.GtmItemStatus,oneof" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3239,6 +3274,13 @@ func (x *CreateItemRequest) GetEmailSubject() string {
 		return x.EmailSubject
 	}
 	return ""
+}
+
+func (x *CreateItemRequest) GetStatus() GtmItemStatus {
+	if x != nil && x.Status != nil {
+		return *x.Status
+	}
+	return GtmItemStatus_GTM_ITEM_STATUS_UNSPECIFIED
 }
 
 type CreateItemResponse struct {
@@ -3349,8 +3391,7 @@ type UpdateItemRequest struct {
 	// Set: replaces the recipients.
 	EmailTo      *GtmEmailRecipients `protobuf:"bytes,12,opt,name=email_to,json=emailTo,proto3" json:"email_to,omitempty"`
 	EmailSubject *string             `protobuf:"bytes,13,opt,name=email_subject,json=emailSubject,proto3,oneof" json:"email_subject,omitempty"`
-	// DRAFT, REVIEW, APPROVED (a person only), SCHEDULED, PUBLISHED or PAUSED;
-	// never SENT.
+	// The status to move to, along the lifecycle on GtmItemStatus. Never SENT.
 	Status        *GtmItemStatus `protobuf:"varint,14,opt,name=status,proto3,enum=reliant.v1.GtmItemStatus,oneof" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3871,7 +3912,7 @@ type UpsertClaimRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	// Empty: create a claim (text and category required). Set: change that
-	// claim (expected_revision required; text and category must be unset or
+	// claim (expected_revision > 0 required; text and category must be unset or
 	// equal to the stored ones).
 	Id               string            `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
 	ExpectedRevision int32             `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
@@ -4355,11 +4396,12 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"K\n" +
 	"\x12GetCampaignRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
-	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\"\xa0\x01\n" +
+	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\"\xbe\x01\n" +
 	"\x13GetCampaignResponse\x123\n" +
 	"\bcampaign\x18\x01 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\x12)\n" +
 	"\x05ideas\x18\x02 \x03(\v2\x13.reliant.v1.GtmIdeaR\x05ideas\x12)\n" +
-	"\x05items\x18\x03 \x03(\v2\x13.reliant.v1.GtmItemR\x05items\"\xb7\x02\n" +
+	"\x05items\x18\x03 \x03(\v2\x13.reliant.v1.GtmItemR\x05items\x12\x1c\n" +
+	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xb7\x02\n" +
 	"\x15CreateCampaignRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x1e\n" +
 	"\x04name\x18\x02 \x01(\tB\n" +
@@ -4392,7 +4434,7 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x05_goalB\t\n" +
 	"\a_status\"M\n" +
 	"\x16UpdateCampaignResponse\x123\n" +
-	"\bcampaign\x18\x01 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\"\xaf\x03\n" +
+	"\bcampaign\x18\x01 \x01(\v2\x17.reliant.v1.GtmCampaignR\bcampaign\"\xdc\x04\n" +
 	"\x10ListItemsRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12$\n" +
 	"\vcampaign_id\x18\x02 \x01(\tH\x00R\n" +
@@ -4404,7 +4446,8 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\tpage_size\x18\a \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xf4\x03(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
-	"page_token\x18\b \x01(\tR\tpageTokenB\x0e\n" +
+	"page_token\x18\b \x01(\tR\tpageToken:\xaa\x01\xbaH\xa6\x01\x1a\xa3\x01\n" +
+	"\x15scheduled_range_order\x12)scheduled_to must be after scheduled_from\x1a_!has(this.scheduled_from) || !has(this.scheduled_to) || this.scheduled_to > this.scheduled_fromB\x0e\n" +
 	"\f_campaign_idB\a\n" +
 	"\x05_kindB\t\n" +
 	"\a_status\"f\n" +
@@ -4415,7 +4458,7 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x16\n" +
 	"\x02id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x02id\":\n" +
 	"\x0fGetItemResponse\x12'\n" +
-	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"\xf9\x02\n" +
+	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"\xc8\x03\n" +
 	"\x11CreateItemRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x127\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x17.reliant.v1.GtmItemKindB\n" +
@@ -4430,7 +4473,10 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\fscheduled_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vscheduledAt\x12\x19\n" +
 	"\bemail_to\x18\t \x03(\tR\aemailTo\x12#\n" +
 	"\remail_subject\x18\n" +
-	" \x01(\tR\femailSubject\"=\n" +
+	" \x01(\tR\femailSubject\x12B\n" +
+	"\x06status\x18\v \x01(\x0e2\x19.reliant.v1.GtmItemStatusB\n" +
+	"\xbaH\a\x82\x01\x04\x18\x01\x18\x02H\x00R\x06status\x88\x01\x01B\t\n" +
+	"\a_status\"=\n" +
 	"\x12CreateItemResponse\x12'\n" +
 	"\x04item\x18\x01 \x01(\v2\x13.reliant.v1.GtmItemR\x04item\"2\n" +
 	"\x12GtmEmailRecipients\x12\x1c\n" +
@@ -4493,7 +4539,7 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\a_search\"j\n" +
 	"\x12ListClaimsResponse\x12,\n" +
 	"\x06claims\x18\x01 \x03(\v2\x14.reliant.v1.GtmClaimR\x06claims\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\x94\x05\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xe3\x06\n" +
 	"\x12UpsertClaimRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x124\n" +
@@ -4511,7 +4557,8 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x15expires_or_recheck_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x12expiresOrRecheckAt\x12<\n" +
 	"\x1bclear_expires_or_recheck_at\x18\n" +
 	" \x01(\bR\x17clearExpiresOrRecheckAt\x12\x19\n" +
-	"\x05notes\x18\v \x01(\tH\x05R\x05notes\x88\x01\x01B\a\n" +
+	"\x05notes\x18\v \x01(\tH\x05R\x05notes\x88\x01\x01:\xcc\x01\xbaH\xc8\x01\x1a\xc5\x01\n" +
+	"\x12upsert_claim_shape\x12Za create (id empty) needs text and category; a change (id set) needs expected_revision > 0\x1aSthis.id == '' ? (has(this.text) && has(this.category)) : this.expected_revision > 0B\a\n" +
 	"\x05_textB\v\n" +
 	"\t_categoryB\t\n" +
 	"\a_statusB\r\n" +
@@ -4771,66 +4818,67 @@ var file_reliant_v1_gtm_proto_depIdxs = []int32{
 	14, // 58: reliant.v1.GetItemResponse.item:type_name -> reliant.v1.GtmItem
 	4,  // 59: reliant.v1.CreateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
 	58, // 60: reliant.v1.CreateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
-	14, // 61: reliant.v1.CreateItemResponse.item:type_name -> reliant.v1.GtmItem
-	4,  // 62: reliant.v1.UpdateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
-	58, // 63: reliant.v1.UpdateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
-	45, // 64: reliant.v1.UpdateItemRequest.email_to:type_name -> reliant.v1.GtmEmailRecipients
-	5,  // 65: reliant.v1.UpdateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
-	14, // 66: reliant.v1.UpdateItemResponse.item:type_name -> reliant.v1.GtmItem
-	15, // 67: reliant.v1.GetPositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
-	15, // 68: reliant.v1.UpdatePositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
-	7,  // 69: reliant.v1.ListClaimsRequest.status:type_name -> reliant.v1.GtmClaimStatus
-	6,  // 70: reliant.v1.ListClaimsRequest.category:type_name -> reliant.v1.GtmClaimCategory
-	16, // 71: reliant.v1.ListClaimsResponse.claims:type_name -> reliant.v1.GtmClaim
-	6,  // 72: reliant.v1.UpsertClaimRequest.category:type_name -> reliant.v1.GtmClaimCategory
-	7,  // 73: reliant.v1.UpsertClaimRequest.status:type_name -> reliant.v1.GtmClaimStatus
-	8,  // 74: reliant.v1.UpsertClaimRequest.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
-	58, // 75: reliant.v1.UpsertClaimRequest.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
-	16, // 76: reliant.v1.UpsertClaimResponse.claim:type_name -> reliant.v1.GtmClaim
-	17, // 77: reliant.v1.CheckClaimsResponse.findings:type_name -> reliant.v1.GtmClaimFinding
-	19, // 78: reliant.v1.GtmService.GetGtmAccess:input_type -> reliant.v1.GetGtmAccessRequest
-	21, // 79: reliant.v1.GtmService.ListIdeas:input_type -> reliant.v1.ListIdeasRequest
-	23, // 80: reliant.v1.GtmService.GetIdea:input_type -> reliant.v1.GetIdeaRequest
-	25, // 81: reliant.v1.GtmService.CreateIdea:input_type -> reliant.v1.CreateIdeaRequest
-	27, // 82: reliant.v1.GtmService.UpdateIdea:input_type -> reliant.v1.UpdateIdeaRequest
-	29, // 83: reliant.v1.GtmService.SetIdeaStatus:input_type -> reliant.v1.SetIdeaStatusRequest
-	31, // 84: reliant.v1.GtmService.ListCampaigns:input_type -> reliant.v1.ListCampaignsRequest
-	33, // 85: reliant.v1.GtmService.GetCampaign:input_type -> reliant.v1.GetCampaignRequest
-	35, // 86: reliant.v1.GtmService.CreateCampaign:input_type -> reliant.v1.CreateCampaignRequest
-	37, // 87: reliant.v1.GtmService.UpdateCampaign:input_type -> reliant.v1.UpdateCampaignRequest
-	39, // 88: reliant.v1.GtmService.ListItems:input_type -> reliant.v1.ListItemsRequest
-	41, // 89: reliant.v1.GtmService.GetItem:input_type -> reliant.v1.GetItemRequest
-	43, // 90: reliant.v1.GtmService.CreateItem:input_type -> reliant.v1.CreateItemRequest
-	46, // 91: reliant.v1.GtmService.UpdateItem:input_type -> reliant.v1.UpdateItemRequest
-	48, // 92: reliant.v1.GtmService.GetPositioning:input_type -> reliant.v1.GetPositioningRequest
-	50, // 93: reliant.v1.GtmService.UpdatePositioning:input_type -> reliant.v1.UpdatePositioningRequest
-	52, // 94: reliant.v1.GtmService.ListClaims:input_type -> reliant.v1.ListClaimsRequest
-	54, // 95: reliant.v1.GtmService.UpsertClaim:input_type -> reliant.v1.UpsertClaimRequest
-	56, // 96: reliant.v1.GtmService.CheckClaims:input_type -> reliant.v1.CheckClaimsRequest
-	20, // 97: reliant.v1.GtmService.GetGtmAccess:output_type -> reliant.v1.GetGtmAccessResponse
-	22, // 98: reliant.v1.GtmService.ListIdeas:output_type -> reliant.v1.ListIdeasResponse
-	24, // 99: reliant.v1.GtmService.GetIdea:output_type -> reliant.v1.GetIdeaResponse
-	26, // 100: reliant.v1.GtmService.CreateIdea:output_type -> reliant.v1.CreateIdeaResponse
-	28, // 101: reliant.v1.GtmService.UpdateIdea:output_type -> reliant.v1.UpdateIdeaResponse
-	30, // 102: reliant.v1.GtmService.SetIdeaStatus:output_type -> reliant.v1.SetIdeaStatusResponse
-	32, // 103: reliant.v1.GtmService.ListCampaigns:output_type -> reliant.v1.ListCampaignsResponse
-	34, // 104: reliant.v1.GtmService.GetCampaign:output_type -> reliant.v1.GetCampaignResponse
-	36, // 105: reliant.v1.GtmService.CreateCampaign:output_type -> reliant.v1.CreateCampaignResponse
-	38, // 106: reliant.v1.GtmService.UpdateCampaign:output_type -> reliant.v1.UpdateCampaignResponse
-	40, // 107: reliant.v1.GtmService.ListItems:output_type -> reliant.v1.ListItemsResponse
-	42, // 108: reliant.v1.GtmService.GetItem:output_type -> reliant.v1.GetItemResponse
-	44, // 109: reliant.v1.GtmService.CreateItem:output_type -> reliant.v1.CreateItemResponse
-	47, // 110: reliant.v1.GtmService.UpdateItem:output_type -> reliant.v1.UpdateItemResponse
-	49, // 111: reliant.v1.GtmService.GetPositioning:output_type -> reliant.v1.GetPositioningResponse
-	51, // 112: reliant.v1.GtmService.UpdatePositioning:output_type -> reliant.v1.UpdatePositioningResponse
-	53, // 113: reliant.v1.GtmService.ListClaims:output_type -> reliant.v1.ListClaimsResponse
-	55, // 114: reliant.v1.GtmService.UpsertClaim:output_type -> reliant.v1.UpsertClaimResponse
-	57, // 115: reliant.v1.GtmService.CheckClaims:output_type -> reliant.v1.CheckClaimsResponse
-	97, // [97:116] is the sub-list for method output_type
-	78, // [78:97] is the sub-list for method input_type
-	78, // [78:78] is the sub-list for extension type_name
-	78, // [78:78] is the sub-list for extension extendee
-	0,  // [0:78] is the sub-list for field type_name
+	5,  // 61: reliant.v1.CreateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
+	14, // 62: reliant.v1.CreateItemResponse.item:type_name -> reliant.v1.GtmItem
+	4,  // 63: reliant.v1.UpdateItemRequest.kind:type_name -> reliant.v1.GtmItemKind
+	58, // 64: reliant.v1.UpdateItemRequest.scheduled_at:type_name -> google.protobuf.Timestamp
+	45, // 65: reliant.v1.UpdateItemRequest.email_to:type_name -> reliant.v1.GtmEmailRecipients
+	5,  // 66: reliant.v1.UpdateItemRequest.status:type_name -> reliant.v1.GtmItemStatus
+	14, // 67: reliant.v1.UpdateItemResponse.item:type_name -> reliant.v1.GtmItem
+	15, // 68: reliant.v1.GetPositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
+	15, // 69: reliant.v1.UpdatePositioningResponse.positioning:type_name -> reliant.v1.GtmPositioning
+	7,  // 70: reliant.v1.ListClaimsRequest.status:type_name -> reliant.v1.GtmClaimStatus
+	6,  // 71: reliant.v1.ListClaimsRequest.category:type_name -> reliant.v1.GtmClaimCategory
+	16, // 72: reliant.v1.ListClaimsResponse.claims:type_name -> reliant.v1.GtmClaim
+	6,  // 73: reliant.v1.UpsertClaimRequest.category:type_name -> reliant.v1.GtmClaimCategory
+	7,  // 74: reliant.v1.UpsertClaimRequest.status:type_name -> reliant.v1.GtmClaimStatus
+	8,  // 75: reliant.v1.UpsertClaimRequest.source_kind:type_name -> reliant.v1.GtmClaimSourceKind
+	58, // 76: reliant.v1.UpsertClaimRequest.expires_or_recheck_at:type_name -> google.protobuf.Timestamp
+	16, // 77: reliant.v1.UpsertClaimResponse.claim:type_name -> reliant.v1.GtmClaim
+	17, // 78: reliant.v1.CheckClaimsResponse.findings:type_name -> reliant.v1.GtmClaimFinding
+	19, // 79: reliant.v1.GtmService.GetGtmAccess:input_type -> reliant.v1.GetGtmAccessRequest
+	21, // 80: reliant.v1.GtmService.ListIdeas:input_type -> reliant.v1.ListIdeasRequest
+	23, // 81: reliant.v1.GtmService.GetIdea:input_type -> reliant.v1.GetIdeaRequest
+	25, // 82: reliant.v1.GtmService.CreateIdea:input_type -> reliant.v1.CreateIdeaRequest
+	27, // 83: reliant.v1.GtmService.UpdateIdea:input_type -> reliant.v1.UpdateIdeaRequest
+	29, // 84: reliant.v1.GtmService.SetIdeaStatus:input_type -> reliant.v1.SetIdeaStatusRequest
+	31, // 85: reliant.v1.GtmService.ListCampaigns:input_type -> reliant.v1.ListCampaignsRequest
+	33, // 86: reliant.v1.GtmService.GetCampaign:input_type -> reliant.v1.GetCampaignRequest
+	35, // 87: reliant.v1.GtmService.CreateCampaign:input_type -> reliant.v1.CreateCampaignRequest
+	37, // 88: reliant.v1.GtmService.UpdateCampaign:input_type -> reliant.v1.UpdateCampaignRequest
+	39, // 89: reliant.v1.GtmService.ListItems:input_type -> reliant.v1.ListItemsRequest
+	41, // 90: reliant.v1.GtmService.GetItem:input_type -> reliant.v1.GetItemRequest
+	43, // 91: reliant.v1.GtmService.CreateItem:input_type -> reliant.v1.CreateItemRequest
+	46, // 92: reliant.v1.GtmService.UpdateItem:input_type -> reliant.v1.UpdateItemRequest
+	48, // 93: reliant.v1.GtmService.GetPositioning:input_type -> reliant.v1.GetPositioningRequest
+	50, // 94: reliant.v1.GtmService.UpdatePositioning:input_type -> reliant.v1.UpdatePositioningRequest
+	52, // 95: reliant.v1.GtmService.ListClaims:input_type -> reliant.v1.ListClaimsRequest
+	54, // 96: reliant.v1.GtmService.UpsertClaim:input_type -> reliant.v1.UpsertClaimRequest
+	56, // 97: reliant.v1.GtmService.CheckClaims:input_type -> reliant.v1.CheckClaimsRequest
+	20, // 98: reliant.v1.GtmService.GetGtmAccess:output_type -> reliant.v1.GetGtmAccessResponse
+	22, // 99: reliant.v1.GtmService.ListIdeas:output_type -> reliant.v1.ListIdeasResponse
+	24, // 100: reliant.v1.GtmService.GetIdea:output_type -> reliant.v1.GetIdeaResponse
+	26, // 101: reliant.v1.GtmService.CreateIdea:output_type -> reliant.v1.CreateIdeaResponse
+	28, // 102: reliant.v1.GtmService.UpdateIdea:output_type -> reliant.v1.UpdateIdeaResponse
+	30, // 103: reliant.v1.GtmService.SetIdeaStatus:output_type -> reliant.v1.SetIdeaStatusResponse
+	32, // 104: reliant.v1.GtmService.ListCampaigns:output_type -> reliant.v1.ListCampaignsResponse
+	34, // 105: reliant.v1.GtmService.GetCampaign:output_type -> reliant.v1.GetCampaignResponse
+	36, // 106: reliant.v1.GtmService.CreateCampaign:output_type -> reliant.v1.CreateCampaignResponse
+	38, // 107: reliant.v1.GtmService.UpdateCampaign:output_type -> reliant.v1.UpdateCampaignResponse
+	40, // 108: reliant.v1.GtmService.ListItems:output_type -> reliant.v1.ListItemsResponse
+	42, // 109: reliant.v1.GtmService.GetItem:output_type -> reliant.v1.GetItemResponse
+	44, // 110: reliant.v1.GtmService.CreateItem:output_type -> reliant.v1.CreateItemResponse
+	47, // 111: reliant.v1.GtmService.UpdateItem:output_type -> reliant.v1.UpdateItemResponse
+	49, // 112: reliant.v1.GtmService.GetPositioning:output_type -> reliant.v1.GetPositioningResponse
+	51, // 113: reliant.v1.GtmService.UpdatePositioning:output_type -> reliant.v1.UpdatePositioningResponse
+	53, // 114: reliant.v1.GtmService.ListClaims:output_type -> reliant.v1.ListClaimsResponse
+	55, // 115: reliant.v1.GtmService.UpsertClaim:output_type -> reliant.v1.UpsertClaimResponse
+	57, // 116: reliant.v1.GtmService.CheckClaims:output_type -> reliant.v1.CheckClaimsResponse
+	98, // [98:117] is the sub-list for method output_type
+	79, // [79:98] is the sub-list for method input_type
+	79, // [79:79] is the sub-list for extension type_name
+	79, // [79:79] is the sub-list for extension extendee
+	0,  // [0:79] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_gtm_proto_init() }
@@ -4844,6 +4892,7 @@ func file_reliant_v1_gtm_proto_init() {
 	file_reliant_v1_gtm_proto_msgTypes[25].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[27].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[29].OneofWrappers = []any{}
+	file_reliant_v1_gtm_proto_msgTypes[33].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[36].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[42].OneofWrappers = []any{}
 	file_reliant_v1_gtm_proto_msgTypes[44].OneofWrappers = []any{}

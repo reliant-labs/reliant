@@ -19015,6 +19015,11 @@
               "Name": "email_subject",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
             }
           ],
           "CreateItemResponse": [
@@ -19055,6 +19060,11 @@
               "ProtoType": "[]message",
               "IsOptional": false,
               "MessageType": "reliant.v1.GtmItem"
+            },
+            {
+              "Name": "truncated",
+              "ProtoType": "bool",
+              "IsOptional": false
             }
           ],
           "GetGtmAccessRequest": [
@@ -19806,6 +19816,12 @@
             {
               "name": "email_subject",
               "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmItemStatus",
+              "optional": true
             }
           ],
           "reliant.v1.CreateItemResponse": [
@@ -19848,6 +19864,10 @@
               "kind": "message",
               "type_name": "reliant.v1.GtmItem",
               "repeated": true
+            },
+            {
+              "name": "truncated",
+              "kind": "bool"
             }
           ],
           "reliant.v1.GetGtmAccessRequest": [

@@ -6,7 +6,14 @@
  * or an agent, changed the record since the page read it, the server answers
  * Aborted with a GtmRevisionConflict detail. The page then says so, drops
  * what it had and reads the record again, and the person makes their change
- * on the current version. Any other failure is the app's usual error toast.
+ * on the current version.
+ *
+ * Two refusals say why in words a person can act on, the server's own
+ * message after them: PermissionDenied (a change only an agent's limits
+ * forbid, or one this caller may not make) and FailedPrecondition (a
+ * transition the item's lifecycle does not allow, or an email held while a
+ * send is in doubt: it refuses edits until a person resolves it). Any other
+ * failure is the app's usual error toast.
  *
  * A successful write needs nothing here: the generated hooks invalidate every
  * GtmService read on success (gtmServiceKeys.all).
@@ -38,10 +45,27 @@ export function revisionConflictOf(error: unknown) {
   return (error as ConnectError).findDetails(GtmRevisionConflictSchema)[0] ?? null;
 }
 
-/** Report a failed GTM write: a conflict refreshes what is on screen; anything else is an error toast. */
+/** The words for a refusal a person can act on, or null for any other failure. */
+export function refusalMessage(error: unknown): string | null {
+  if (!(error instanceof ConnectError)) return null;
+  const why = error.rawMessage.trim();
+  const detail = why ? ` ${why.charAt(0).toUpperCase()}${why.slice(1)}${/[.!?]$/.test(why) ? "" : "."}` : "";
+  if (error.code === Code.FailedPrecondition) return `This change isn't possible right now.${detail}`;
+  if (error.code === Code.PermissionDenied) return `You can't make this change.${detail}`;
+  return null;
+}
+
+/** Report a failed GTM write: a conflict refreshes what is on screen; a refusal says why; anything else is an error toast. */
 export function reportGtmWriteError(client: QueryClient, error: unknown): void {
   if (isRevisionConflict(error)) {
     toast.warning(REVISION_CONFLICT_MESSAGE);
+    void client.invalidateQueries({ queryKey: gtmServiceKeys.all });
+    return;
+  }
+  const refusal = refusalMessage(error);
+  if (refusal) {
+    toast.warning(refusal);
+    // What refused it (a status moved, a hold) may have changed under the page.
     void client.invalidateQueries({ queryKey: gtmServiceKeys.all });
     return;
   }
