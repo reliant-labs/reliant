@@ -54,7 +54,7 @@ func (s *Service) ListArchivedChats(
 	if err != nil {
 		return nil, err
 	}
-	archivedChats, more, err := s.deps.Repo.ListArchivedChats(ctx, userID, scope, page)
+	archivedChats, more, err := s.chatLists().ListArchivedChats(ctx, userID, scope, page)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}

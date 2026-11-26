@@ -123,9 +123,8 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 
 		t.Run("ListChats: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newChatService(t, &chat.MockRepository{
-				ListChatsFunc: func(context.Context, db.ChatFilters) ([]*db.Chat, error) { return nil, tc.err },
-			})
+			lists := &chat.MockChatLists{ListChatsFunc: func(context.Context, db.ChatFilters) ([]*db.Chat, error) { return nil, tc.err }}
+			svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: &chat.MockRepository{}, ChatLists: lists, Chats: &chataccess.MockService{}, Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 			_, err := svc.ListChats(ctx, connect.NewRequest(&pb.ListChatsRequest{ProjectId: "project-1"}))
 			requireClientReads(t, err, tc.want)
 		})

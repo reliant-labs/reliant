@@ -58528,6 +58528,19 @@
     },
     {
       "consumer": "Chat",
+      "field": "ChatLists",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ChatLists",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "ChatRows",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ChatRows",
       "methods": [],
@@ -58708,6 +58721,19 @@
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.Spawns",
       "methods": [],
       "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
+      "field": "StepExecutions",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.StepExecutions",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],

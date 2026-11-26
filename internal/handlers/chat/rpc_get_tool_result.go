@@ -102,7 +102,7 @@ func (s *Service) blockMessages(ctx context.Context, blocks []*db.MessageContent
 	if len(ids) == 0 {
 		return map[string]*db.Message{}, nil
 	}
-	rows, err := s.deps.Repo.ListMessagesByIDs(ctx, ids)
+	rows, err := s.deps.Messages.ListMessagesByIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}

@@ -47,6 +47,7 @@ type Questions interface {
 type Messages interface {
 	FindMessage(ctx context.Context, id string) (*core.Message, error)
 	LatestTurnInThread(ctx context.Context, threadID string) (*core.Message, error)
+	ListMessagesByIDs(ctx context.Context, ids []string) ([]*core.Message, error)
 }
 
 // ToolBlocks reads tool-call and tool-result content blocks by tool call id.
@@ -54,6 +55,7 @@ type Messages interface {
 type ToolBlocks interface {
 	FindToolBlock(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
 	ListToolBlocks(ctx context.Context, toolCallID string, blockType reliantv1.ContentBlockType) ([]*core.MessageContentBlock, error)
+	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*core.MessageContentBlock, error)
 }
 
 // Spawns reads the spawn tree a branch inherits and a resumed run is rebuilt
@@ -82,9 +84,6 @@ type Repository interface {
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 	// Chat rows: listing and search, delete, and the state, unread,
 	// adoption and machine flags the handlers flip.
-	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
-	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error)
 	DeleteChat(ctx context.Context, id string) error
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
@@ -120,8 +119,6 @@ type Repository interface {
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*db.MessageContentBlock, error)
 	GetToolCall(ctx context.Context, id string) (*db.ToolCall, error)
-	ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error)
-	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 
 	// Plans and their tasks.
 	CreatePlan(ctx context.Context, plan *db.Plan) error
@@ -132,7 +129,6 @@ type Repository interface {
 	// Step executions the workflow view renders.
 	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error)
 	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error)
-	ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*db.StepExecution, error)
 
 	// The chat and user update logs.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
@@ -223,4 +219,18 @@ type ChatViews interface {
 // *questions.Service satisfies it.
 type QuestionResolver interface {
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
+}
+
+// ChatLists lists, searches and pages chats with their computed state.
+// store.ChatsWithActivityExtStore satisfies it.
+type ChatLists interface {
+	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
+	SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error)
+	ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error)
+}
+
+// StepExecutions reads the step execution records a workflow node ran.
+// store.StepExecutionExtStore satisfies it.
+type StepExecutions interface {
+	ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*db.StepExecution, error)
 }

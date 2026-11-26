@@ -44,6 +44,15 @@ func TestValidateDepsRequiresChats(t *testing.T) {
 // that programs them). A test that needs another answer names the role itself,
 // which always wins.
 func init() {
+	fixtureStores = func(repo Repository) (ChatLists, StepExecutions) {
+		if client := ormOf(repo); client != nil {
+			return store.NewChatsWithActivityExtStore(client), store.NewStepExecutionExtStore(client)
+		}
+		return &MockChatLists{}, &MockStepExecutions{}
+	}
+}
+
+func init() {
 	fixtureChatReads = func(repo Repository) (ChatRows, ChatViews) {
 		if client := ormOf(repo); client != nil {
 			return store.NewChatExtStore(client), store.NewChatsWithActivityExtStore(client)
