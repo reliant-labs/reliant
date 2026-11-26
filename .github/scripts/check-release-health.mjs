@@ -61,8 +61,9 @@ export const VERDICT_CONCLUSIONS = new Set(["success", "failure", "timed_out", "
 const TAG_SHAPE = /^v\d+\.\d+\.\d+/;
 
 /**
- * release.yml's "Detect release type" regex, verbatim: a tag that matches
- * publishes to the alpha channel. check-release-health.test.mjs pins it.
+ * release.yml's "Detect release type" regex, verbatim. release.yml now refuses
+ * a tag that matches (the alpha channel is retired); older ones, such as
+ * v1.6.4-rc1, published to alpha. check-release-health.test.mjs pins it.
  */
 export const PRERELEASE_TAG = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/;
 

@@ -215,7 +215,8 @@ test("the prerelease regex is release.yml's, verbatim", () => {
 });
 
 test("the feeds read are the manifests release.yml's Finalize purges", () => {
-  for (const channel of ["latest", "alpha"]) {
+  // Finalize publishes and purges `latest` alone: the alpha channel is retired.
+  for (const channel of ["latest"]) {
     for (const file of feedFiles(channel)) {
       assert.ok(
         RELEASE_YML.includes(`"\${BASE_URL}/${file}"`),
