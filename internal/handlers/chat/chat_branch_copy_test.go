@@ -84,7 +84,13 @@ SELECT $1 || '-task-' || p || '-' || i, $1 || '-plan-' || p,
 }
 
 func branchCopyThreads(repo *db.Repo) *threads.Service {
-	return threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})
+	return threads.New(threads.Deps{
+		Repo: repo, Chats: chataccesstest.For(repo),
+		Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+		// Branching must not signal workflows or cancel running tools. These
+		// strict mocks fail on any unexpected call to either collaborator.
+		Signaler: &threads.MockTemporalSignaler{}, ToolCanceler: &threads.MockToolCanceler{},
+	})
 }
 
 // branchCopyService is the chat service over probe's pool, so the probe sees
