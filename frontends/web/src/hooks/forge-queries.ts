@@ -74,17 +74,18 @@ import {
   useGetDeployStatus,
   useStartDeploy,
 } from "./forge-service-hooks_gen";
+import { deployServiceKeys, deployServiceQueries } from "./controlplane/deploy-service-hooks_gen";
 import { invalidateReleaseReadsInOrg } from "./release-queries";
 import {
   cloudAvailabilityFromError,
   cloudErrorDetail,
   deleteEnvironment,
-  getEnvironmentStatus,
   hasCloudControlPlane,
   listEnvironmentPromotions,
   listProjectEnvironments,
   setEnvironmentRunState,
   setWorkloadRunState,
+  toCloudEnvStatus,
   type RunStateRequest,
   type CloudAvailability,
   type CloudEnv,
@@ -92,12 +93,12 @@ import {
   type CloudPromotion,
 } from "../services/forge/cloudEnvs";
 import {
-  getEnvironmentShape,
   getLiveView,
   hasLiveControlPlane,
   listEnvironmentConvergences,
   liveAvailabilityFromError,
   liveErrorDetail,
+  toLiveShape,
   type LiveAvailability,
   type LiveConvergence,
   type LiveEnv,
@@ -184,10 +185,6 @@ export const forgeCloudKeys = {
   // every environment's whole Live answer, because GetLiveView returns them
   // together (see services/forge/live.ts on why it is one round trip).
   liveView: orgCloudKey<[forgeProject: string]>("live-view"),
-  // One environment's declared shape (GetEnvironmentShape): the document the
-  // Live roster deliberately does not carry.
-  environmentShape: orgCloudKey<[environmentId: string]>("environment-shape"),
-  cloudStatus: orgCloudKey<[environmentId: string]>("cloud-status"),
   cloudPromotions: orgCloudKey<[environmentId: string]>("cloud-promotions"),
   convergences: orgCloudKey<[environmentId: string]>("convergences"),
   // Databases kept by a keep-data environment delete: one org-wide list
@@ -206,7 +203,7 @@ export const forgeCloudKeys = {
  * generated mutation's to refetch.
  */
 function invalidateCloudAfterWrite(queryClient: QueryClient) {
-  void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudStatus.all });
+  void queryClient.invalidateQueries({ queryKey: deployServiceKeys.getStatus.all });
   void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudPromotions.all });
 }
 
@@ -471,7 +468,7 @@ export function useInvalidateLiveView() {
   return useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
     // A registration or deploy records a new declaration as well.
-    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.environmentShape.all });
+    void queryClient.invalidateQueries({ queryKey: deployServiceKeys.getEnvironmentShape.all });
   }, [queryClient]);
 }
 
@@ -486,23 +483,26 @@ export function useInvalidateLiveView() {
  * the workloads page share one request; no poll, since a declaration moves
  * only when somebody builds or deploys, and those paths invalidate it.
  */
-function environmentShapeQuery(transport: Transport, environmentId: string, org: OrgScope) {
+function environmentShapeQuery(environmentId: string, org: OrgScope) {
   return withOrgFailure(
-    {
-      queryKey: forgeCloudKeys.environmentShape(org.orgId, environmentId),
-      queryFn: () => getEnvironmentShape(transport, environmentId, org.orgId),
+    deployServiceQueries.getEnvironmentShape(orgRequest({ environmentId }, org.orgId), {
       enabled: environmentId !== "" && hasLiveControlPlane() && orgQueryEnabled(org),
       staleTime: 60_000,
       retry: forgeRetry,
-    },
+      select: selectEnvironmentShape,
+    }),
     org,
   );
 }
 
+/** Module-level, so React Query re-parses a shape only when the cached response changes. */
+function selectEnvironmentShape(res: { declaredShape?: Parameters<typeof toLiveShape>[0] }): LiveShape | null {
+  return toLiveShape(res.declaredShape);
+}
+
 export function useEnvironmentShape(environmentId: string | null | undefined) {
   const org = useOrgScope();
-  const transport = useTransport(appTransport);
-  return useQuery<LiveShape | null>(environmentShapeQuery(transport, environmentId ?? "", org));
+  return useQuery(environmentShapeQuery(environmentId ?? "", org));
 }
 
 /**
@@ -526,7 +526,6 @@ export interface EnvironmentShapeEntry {
  */
 export function useEnvironmentShapes(environmentIds: readonly string[]): Map<string, EnvironmentShapeEntry> {
   const org = useOrgScope();
-  const transport = useTransport(appTransport);
   const key = environmentIds.join("\n");
   const combine = useCallback(
     (results: { data?: LiveShape | null; isLoading: boolean; error: unknown }[]) => {
@@ -540,7 +539,7 @@ export function useEnvironmentShapes(environmentIds: readonly string[]): Map<str
     },
     [key]
   );
-  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(transport, id, org)), combine });
+  return useQueries({ queries: environmentIds.map((id) => environmentShapeQuery(id, org)), combine });
 }
 
 /**
@@ -554,24 +553,22 @@ export function useEnvironmentShapes(environmentIds: readonly string[]): Map<str
  */
 const CLOUD_STATUS_POLL_MS = 30_000;
 
-function cloudStatusQuery(transport: Transport, environmentId: string, org: OrgScope) {
+function cloudStatusQuery(environmentId: string, org: OrgScope) {
   return withOrgFailure(
-    {
-      queryKey: forgeCloudKeys.cloudStatus(org.orgId, environmentId),
-      queryFn: () => getEnvironmentStatus(transport, environmentId, org.orgId),
+    deployServiceQueries.getStatus(orgRequest({ environmentId }, org.orgId), {
       enabled: environmentId !== "" && orgQueryEnabled(org),
       staleTime: 10_000,
       refetchInterval: CLOUD_STATUS_POLL_MS,
       retry: forgeRetry,
-    },
+      select: toCloudEnvStatus,
+    }),
     org,
   );
 }
 
 export function useCloudEnvStatus(environmentId: string | null | undefined) {
   const org = useOrgScope();
-  const transport = useTransport(appTransport);
-  return useQuery<CloudEnvStatus>(cloudStatusQuery(transport, environmentId ?? "", org));
+  return useQuery(cloudStatusQuery(environmentId ?? "", org));
 }
 
 /** The same query per environment, for the overview's rows. One cache entry per env, shared with the env page. */
@@ -583,8 +580,7 @@ export interface CloudStatusEntry {
 
 export function useCloudEnvStatuses(environmentIds: string[]): Map<string, CloudStatusEntry> {
   const org = useOrgScope();
-  const transport = useTransport(appTransport);
-  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(transport, id, org)) });
+  const results = useQueries({ queries: environmentIds.map((id) => cloudStatusQuery(id, org)) });
   // Rebuilt per render on purpose: a handful of entries, and memoising on a
   // freshly-allocated results array would never hit.
   const byId = new Map<string, CloudStatusEntry>();
@@ -839,7 +835,7 @@ export function useInvalidateCloudEnvironments() {
   return useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudEnvs.all });
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.orgEnvs.all });
-    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudStatus.all });
+    void queryClient.invalidateQueries({ queryKey: deployServiceKeys.getStatus.all });
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudPromotions.all });
   }, [queryClient]);
 }
@@ -1515,7 +1511,7 @@ export function useDestroyManagedSecret(
 function useInvalidateAfterRunStateWrite() {
   const queryClient = useQueryClient();
   return useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.cloudStatus.all });
+    void queryClient.invalidateQueries({ queryKey: deployServiceKeys.getStatus.all });
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.liveView.all });
   }, [queryClient]);
 }
@@ -1566,8 +1562,14 @@ export function useInvalidateAfterEnvironmentDelete(environmentId: string | null
     void queryClient.invalidateQueries({ queryKey: forgeCloudKeys.retainedDatabases.all });
     // In every org's entry: an environment id names one environment anywhere.
     void queryClient.removeQueries({
-      queryKey: forgeCloudKeys.cloudStatus.all,
-      predicate: (query) => query.queryKey[query.queryKey.length - 1] === (environmentId ?? ""),
+      queryKey: deployServiceKeys.getStatus.all,
+      predicate: (query) => requestEnvironmentOf(query.queryKey) === (environmentId ?? ""),
     });
   }, [queryClient, environmentId]);
+}
+
+/** The environment id a generated DeployService key's request names ("" for none). */
+function requestEnvironmentOf(queryKey: readonly unknown[]): string {
+  const request = queryKey.find((part): part is { environmentId?: unknown } => typeof part === "object" && part !== null);
+  return typeof request?.environmentId === "string" ? request.environmentId : "";
 }

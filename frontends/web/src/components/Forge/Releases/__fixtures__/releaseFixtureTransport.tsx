@@ -18,6 +18,7 @@
 import { useContext, useState, type ReactNode } from "react";
 import { QueryClientContext, type QueryClient } from "@tanstack/react-query";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+import type { Transport } from "@connectrpc/connect";
 
 import {
   DeployAttemptState,
@@ -38,6 +39,7 @@ import {
   type ListDeployPromotionsRequest,
   type ListDeployReleasesRequest,
 } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { transport as appTransport } from "@/lib/connect";
 import { mockTransport, type MockHandlers } from "@/lib/test-utils";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import type { DeployRun, DeployRunState } from "@/services/forge/deployAttempts";
@@ -277,14 +279,26 @@ export function releasesFixtureHandlers(api: ReleasesFixtureApi): MockHandlers {
 }
 
 /**
- * A TransportScope on `client` (default: the QueryClient above it) whose
- * DeployService reads answer from `api`; any other rpc is Unimplemented.
+ * The fixture ledger's rpcs answered from `api`; every other rpc goes to the
+ * app's transport (lib/connect.ts), so a test's own `setTransport` still
+ * answers the reads this ledger does not hold.
  */
+function ledgerTransport(api: ReleasesFixtureApi): Transport {
+  const handlers = releasesFixtureHandlers(api);
+  const ledger = mockTransport(handlers);
+  const owns = (method: { parent: { typeName: string }; name: string }) => `${method.parent.typeName}/${method.name}` in handlers;
+  return {
+    unary: (method, ...rest) => (owns(method) ? ledger : appTransport).unary(method, ...rest),
+    stream: (method, ...rest) => (owns(method) ? ledger : appTransport).stream(method, ...rest),
+  };
+}
+
+/** A TransportScope on `client` (default: the QueryClient above it) whose Releases reads answer from `api`. */
 export function ReleasesFixtureScope({ api, client, children }: { api: ReleasesFixtureApi; client?: QueryClient; children: ReactNode }) {
   const outer = useContext(QueryClientContext);
   // Once per mount: a QueryClient belongs to one transport.
   const [scope] = useState(() =>
-    createTransportScope({ id: "releases-fixture", transport: mockTransport(releasesFixtureHandlers(api)), queryClient: client ?? outer ?? undefined }),
+    createTransportScope({ id: "releases-fixture", transport: ledgerTransport(api), queryClient: client ?? outer ?? undefined }),
   );
   return <TransportScopeProvider scope={scope}>{children}</TransportScopeProvider>;
 }
