@@ -623,6 +623,7 @@ func describeIncumbentDaemon(dataDir string) string {
 }
 
 func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards Guards, mcpOpts ...mcp.ManagerOption) (*daemonClient, error) {
+	configureGates(host)
 	// Resolve CWD: the platform's working directory (DAEMON_WORKING_DIR, used
 	// in Docker and on pods), else os.Getwd().
 	cwd := strings.TrimSpace(host.WorkingDir)

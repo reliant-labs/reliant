@@ -8,13 +8,26 @@
  * membersApi.ts) decodes it as it decodes control-plane's answers.
  *
  * Triage (status, comments, assignment, chat links) is refused by the
- * transport's read-only guard before it reaches a handler.
+ * transport's read-only guard before it reaches a handler. The handlers below
+ * still decode each write into the model and ask `fixtures`, so a test's fake
+ * answers the generated writes the console sends (test/observabilityFixtures.tsx).
+ *
+ * A relative window resolves against `clock` (the pack's by default), and
+ * ListIssues echoes the range it read as effective_time_range, as the server
+ * does, so the console pages "the last hour" on one range.
  */
 
 import { mockService, type MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 import { IssuePlatform as WirePlatform, IssueStatus as WireStatus } from "@/gen/controlplane/controlplane/v1/issues_pb";
-import { IssueActor_Kind as WireActorKind, IssueSort as WireSort, IssuesService } from "@/gen/controlplane/services/issues/v1/issues_pb";
+import {
+  IssueActor_Kind as WireActorKind,
+  IssueResolveKind as WireResolveKind,
+  IssueSort as WireSort,
+  IssueStatusChange as WireStatusChange,
+  IssuesService,
+  type UpdateIssueStatusRequest as WireStatusUpdate,
+} from "@/gen/controlplane/services/issues/v1/issues_pb";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type {
   Issue,
@@ -24,13 +37,15 @@ import type {
   IssuePlatform,
   IssueSort,
   IssueStatus,
+  IssueStatusChange,
   IssueTimelineEntry,
   IssueUser,
 } from "@/services/controlPlane/observability/issuesTypes";
 
 import { createShopApi } from "../model/shopApi";
+import { demoNow } from "../shopStory";
 import { completed } from "./defaults";
-import { int64, ts, tsOpt, windowOf } from "./wire";
+import { int64, msOf, ts, tsOpt, windowOf, type PackClock } from "./wire";
 
 const WIRE_STATUS: Record<IssueStatus, WireStatus> = {
   new: WireStatus.NEW,
@@ -107,16 +122,32 @@ function wireTimelineEntry(e: IssueTimelineEntry) {
   return { id: e.id, time: ts(e.timeMs), issueId: e.issueId, actor: e.actor ? { kind: WIRE_ACTOR[e.actor.kind], id: e.actor.id, name: e.actor.name } : undefined, entry };
 }
 
-export function issuesHandlers(fixtures: ObservabilityApi = createShopApi()): MockHandlers {
+/** A triage on the wire (issuesApi.ts wireStatusUpdate, run backwards). */
+function statusChangeOf(req: WireStatusUpdate): IssueStatusChange {
+  switch (req.status) {
+    case WireStatusChange.RESOLVED: {
+      const r = req.resolveIn;
+      const resolveIn = r?.kind === WireResolveKind.VERSION ? { kind: "version" as const, version: r.version } : { kind: r?.kind === WireResolveKind.NEXT_RELEASE ? ("next_release" as const) : ("now" as const) };
+      return { status: "resolved", resolveIn };
+    }
+    case WireStatusChange.IGNORED:
+      return { status: "ignored", untilMs: req.ignoredUntil ? msOf(req.ignoredUntil) : undefined };
+    default:
+      return { status: "unresolved" };
+  }
+}
+
+export function issuesHandlers(fixtures: ObservabilityApi = createShopApi(), { clock = demoNow }: { clock?: PackClock } = {}): MockHandlers {
   return completed(IssuesService, mockService(IssuesService, {
     listIssues: async (req) => {
       const scope = req.scope;
+      const window = windowOf(scope?.timeRange, clock) ?? { startMs: 0, endMs: 0 };
       const res = await fixtures.listIssues({
         orgId: scope?.orgId ?? "",
         projectId: scope?.projectId,
         envIds: [...(scope?.envIds ?? [])],
         services: [...(scope?.services ?? [])],
-        window: windowOf(scope?.timeRange) ?? { startMs: 0, endMs: 0 },
+        window,
         statuses: req.statuses.flatMap((s) => STATUS_OF[s] ?? []),
         platform: req.platform === undefined ? undefined : PLATFORM_OF[req.platform],
         text: req.text,
@@ -129,10 +160,10 @@ export function issuesHandlers(fixtures: ObservabilityApi = createShopApi()): Mo
         pageSize: req.pageSize,
         pageToken: req.pageToken,
       });
-      return { issues: res.issues.map(wireIssue), nextPageToken: res.nextPageToken };
+      return { issues: res.issues.map(wireIssue), nextPageToken: res.nextPageToken, effectiveTimeRange: { start: ts(window.startMs), end: ts(window.endMs) } };
     },
     getIssue: async (req) => {
-      const d = await fixtures.getIssue({ issueId: req.issueId, window: windowOf(req.timeRange) });
+      const d = await fixtures.getIssue({ issueId: req.issueId, window: windowOf(req.timeRange, clock) });
       return {
         issue: wireIssue(d.issue),
         latestEvent: d.latestEvent ? wireIssueEvent(d.latestEvent) : undefined,
@@ -155,6 +186,20 @@ export function issuesHandlers(fixtures: ObservabilityApi = createShopApi()): Mo
       // The story's roster is one page: the cast.
       const { users } = await fixtures.listOrgMembers(req.orgId);
       return { users: users.map((u) => ({ id: u.id, name: u.name })), nextPageToken: "" };
+    },
+    updateIssueStatus: async (req) => ({
+      issue: wireIssue(await fixtures.updateIssueStatus({ issueId: req.issueId, envId: req.envId, change: statusChangeOf(req), expectedVersion: req.expectedVersion })),
+    }),
+    addIssueComment: async (req) => ({ comment: wireComment(await fixtures.addIssueComment({ issueId: req.issueId, body: req.body })) }),
+    updateIssueComment: async (req) => ({ comment: wireComment(await fixtures.updateIssueComment({ issueId: req.issueId, commentId: req.commentId, body: req.body })) }),
+    deleteIssueComment: async (req) => {
+      await fixtures.deleteIssueComment({ issueId: req.issueId, commentId: req.commentId });
+      return {};
+    },
+    assignIssue: async (req) => ({ issue: wireIssue(await fixtures.assignIssue({ issueId: req.issueId, assigneeUserId: req.assigneeUserId, expectedVersion: req.expectedVersion })) }),
+    linkIssueChat: async (req) => {
+      const { link, created } = await fixtures.linkIssueChat({ issueId: req.issueId, chatId: req.chatId, chatTitle: req.chatTitle || undefined });
+      return { link: wireChatLink(link), created };
     },
   }));
 }

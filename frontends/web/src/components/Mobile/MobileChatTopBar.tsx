@@ -123,13 +123,13 @@ export function MobileChatTopBar({
         aria-haspopup="dialog"
       >
         <span className="flex min-w-0 items-center gap-1">
-          {/* text-base is the spec's 15px at the default Appearance step,
-              and still follows the font-size preference. */}
-          <span className="truncate text-base font-semibold leading-5 text-foreground">{title}</span>
+          {/* The section role: a step above the rows' text-ui, and still
+              follows the font-size preference. */}
+          <span className="truncate text-section font-semibold leading-5 text-foreground">{title}</span>
           <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
         </span>
         {status && (
-          <span className="flex min-w-0 items-center gap-1 text-xs leading-4 text-muted-foreground" data-testid="mobile-chat-status">
+          <span className="flex min-w-0 items-center gap-1 text-meta leading-4 text-muted-foreground" data-testid="mobile-chat-status">
             {runningWorkflow && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-primary-ink" aria-hidden />}
             <span className="truncate">{status}</span>
           </span>
