@@ -281,7 +281,7 @@ var rules = []rule{
 		id: "web-config",
 		patterns: []string{
 			"frontends/web/package.json", "frontends/web/pnpm-lock.yaml", "frontends/web/pnpm-workspace.yaml", "frontends/web/.nvmrc",
-			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
+			"frontends/web/vite.config.ts", "frontends/web/vitest-load.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
 			"frontends/web/src/test/setup.ts",
 			// pnpm-workspace.yaml's patchedDependencies: a patch rewrites an
 			// installed dependency that any vitest file may load.
@@ -439,7 +439,7 @@ var rules = []rule{
 		id: "inert",
 		patterns: []string{
 			"docs/**", "**/*.md", "**/*.mdx", "research/**", "dev-docs/**", "contributing/**",
-			"LICENSE", "LICENSES.txt", ".license-allowlist", ".license-allowlist-npm",
+			"LICENSE", "LICENSES.txt", ".license-allowlist-npm",
 			".githooks/**", ".github/**", ".reliant/**", ".golangci.yml", ".goreleaser.yml",
 			".gitignore", ".dockerignore", ".air*.toml", "Dockerfile*", "docker-compose*.yml",
 			"tools/protoc-gen-es/**", "tmp/**",

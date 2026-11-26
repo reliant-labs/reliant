@@ -306,7 +306,25 @@ func (s *Service) BranchChat(
 	// (no Temporal/network calls), so it can all join one transaction: any
 	// failure leaves no orphan chat, no thread-less chat, no half-copied
 	// plan, and no announcement for a chat that doesn't exist.
-	if err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	//
+	// READ COMMITTED, because nothing here is a read-check-write that
+	// SERIALIZABLE's proof protects. The chat, workflow, thread, plan and
+	// note rows are new ids nobody else can write. What is read is history
+	// before the fork point (the forked messages, the inherited sub-agents)
+	// and the source chat's selection, projects and plans, each copied by one
+	// statement. The note's context window is the new thread's own. The
+	// shared writes are counter upserts on one row each (the message
+	// ordinals, the chat's and the user's update streams) and the workflow
+	// admission's chat and worktree row locks, which a lock keeps correct, not
+	// a snapshot (CreateWorkflowWithThread, store.AllocateMessageOrder and
+	// CreateUserUpdate document each).
+	// SERIALIZABLE turned any concurrent write to the user's update stream (a
+	// running chat writes it all the time) into 40001 "could not serialize
+	// access due to concurrent update" on the user counter, and the whole
+	// branch was retried: prod trace 82a3f948 ran six attempts in 10.75s, and
+	// the client gave up at 10s (obs issue 4bd143b9).
+	branchTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	if err := s.deps.Repo.RunTx(ctx, branchTx, func(txCtx context.Context) error {
 		if err := s.deps.Repo.CreateChat(txCtx, branchChat); err != nil {
 			return fmt.Errorf("failed to create branch: %w", err)
 		}
@@ -334,8 +352,9 @@ func (s *Service) BranchChat(
 			}
 		}
 
-		// Copy plan and tasks from source chat to branched thread
-		if err := s.copyPlanAndTasks(txCtx, sourceChatID, branchWorkflowID); err != nil {
+		// Copy plans and tasks from source chat to branched thread, reset
+		// to pending, in one statement.
+		if err := s.deps.Repo.CopyChatPlans(txCtx, sourceChatID, branchWorkflowID); err != nil {
 			return fmt.Errorf("failed to copy plan to branched chat: %w", err)
 		}
 
@@ -459,92 +478,6 @@ func workspaceBranchNote(targetWorktree *db.Worktree, workspaceContext *reliantv
 		}
 	}
 	return messageContent
-}
-
-// copyPlanAndTasks copies the plan and tasks from a source chat to a target thread.
-// This preserves the task hierarchy by mapping old task IDs to new ones.
-// Task statuses are reset to "pending" in the new thread.
-func (s *Service) copyPlanAndTasks(ctx context.Context, sourceChatID, targetThreadID string) error {
-	// Get plans from the source chat
-	plans, err := s.deps.Repo.ListPlansByChatID(ctx, sourceChatID)
-	if err != nil {
-		return fmt.Errorf("failed to list plans: %w", err)
-	}
-
-	if len(plans) == 0 {
-		// No plan to copy
-		return nil
-	}
-
-	// Copy each plan (typically there's just one)
-	for _, sourcePlan := range plans {
-		newPlanID := uuid.New().String()
-
-		// Create the new plan with reset status
-		newPlan := &db.Plan{
-			ID:          newPlanID,
-			ThreadID:    targetThreadID,
-			Title:       sourcePlan.Title,
-			Description: sourcePlan.Description,
-			Status:      int32(db.PlanStatusPending), // Reset to pending
-			Complexity:  sourcePlan.Complexity,
-		}
-
-		if err := s.deps.Repo.CreatePlan(ctx, newPlan); err != nil {
-			return fmt.Errorf("failed to create plan: %w", err)
-		}
-
-		// Get all tasks for this plan
-		tasks, err := s.deps.Repo.ListTasksByPlan(ctx, sourcePlan.ID)
-		if err != nil {
-			return fmt.Errorf("failed to list tasks: %w", err)
-		}
-
-		// Map old task IDs to new task IDs for parent reference resolution
-		taskIDMap := make(map[string]string)
-
-		// First pass: create all tasks with new IDs (without parent references)
-		for _, sourceTask := range tasks {
-			newTaskID := uuid.New().String()
-			taskIDMap[sourceTask.ID] = newTaskID
-		}
-
-		// Second pass: create tasks with proper parent references
-		for _, sourceTask := range tasks {
-			newTaskID := taskIDMap[sourceTask.ID]
-
-			// Map parent task ID if present
-			var newParentTaskID *string
-			if sourceTask.ParentTaskID != nil {
-				if mappedID, ok := taskIDMap[*sourceTask.ParentTaskID]; ok {
-					newParentTaskID = &mappedID
-				}
-			}
-
-			newTask := &db.Task{
-				ID:           newTaskID,
-				PlanID:       newPlanID,
-				ParentTaskID: newParentTaskID,
-				Title:        sourceTask.Title,
-				Description:  sourceTask.Description,
-				Status:       int32(db.TaskStatusPending), // Reset to pending
-				Position:     sourceTask.Position,
-			}
-
-			if err := s.deps.Repo.CreateTask(ctx, newTask); err != nil {
-				return fmt.Errorf("failed to create task: %w", err)
-			}
-		}
-
-		logging.DebugContext(ctx, "Copied plan and tasks to branched chat",
-			"sourcePlanID", sourcePlan.ID,
-			"newPlanID", newPlanID,
-			"taskCount", len(tasks),
-			"targetThreadID", targetThreadID,
-		)
-	}
-
-	return nil
 }
 
 // orphanedToolCallInfo holds information about an orphaned tool call for branch repair

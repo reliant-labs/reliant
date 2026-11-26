@@ -13,6 +13,7 @@ import {
   FilePlus,
   FolderPlus,
   Trash2,
+  Download,
 } from "lucide-react";
 import { FileIcon } from "./FileIcon";
 import ContextMenu from "../forge-ui/context_menu";
@@ -35,6 +36,7 @@ import { cachedUserPreferences } from "../../hooks/settings-queries";
 import { toast } from "../../lib/toast-manager";
 import { buildFullPath, getRelativePath } from "../../lib/fileUtils";
 import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
+import { downloadWorkspaceFile } from "./downloadWorkspaceFile";
 
 export type FileOperationType = "copy" | "delete";
 
@@ -350,11 +352,18 @@ export const FileTreeItem = memo(function FileTreeItem({
         },
       });
     } else {
-      items.push({
-        label: "Open",
-        icon: <FileText className="w-4 h-4" />,
-        onClick: () => onSelect(node),
-      });
+      items.push(
+        {
+          label: "Open",
+          icon: <FileText className="w-4 h-4" />,
+          onClick: () => onSelect(node),
+        },
+        {
+          label: "Download",
+          icon: <Download className="w-4 h-4" />,
+          onClick: () => void downloadWorkspaceFile(node.path, node.name, worktreeId),
+        },
+      );
     }
 
     // Add file operations

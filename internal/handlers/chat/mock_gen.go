@@ -246,7 +246,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=4f8bdc5688f9d5820484db3a5c67a8cc8f0496899c9c423623b42c14fb9eafdd
+// forge:hash=5309433ea0e39863d953f84c9c7ef3f5ac83d004c80db02ebeb51f6d7a59c9d5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -286,6 +286,7 @@ type MockRepository struct {
 	CreateTaskFunc                                           func(context.Context, *db.Task) error
 	ListPlansByChatIDFunc                                    func(context.Context, string) ([]*db.Plan, error)
 	ListTasksByPlanFunc                                      func(context.Context, string) ([]*db.Task, error)
+	CopyChatPlansFunc                                        func(context.Context, string, string) error
 	GetStepExecutionsForChatFunc                             func(context.Context, string) ([]*db.ChatStepExecution, error)
 	GetBasicStepExecutionsForChatFunc                        func(context.Context, string) ([]*db.ChatStepExecution, error)
 	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
@@ -645,6 +646,15 @@ func (m *MockRepository) ListTasksByPlan(ctx context.Context, planID string) ([]
 		return m.ListTasksByPlanFunc(ctx, planID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListTasksByPlan")
+}
+
+// CopyChatPlans records the call and delegates to CopyChatPlansFunc when set.
+func (m *MockRepository) CopyChatPlans(ctx context.Context, fromChatID string, toThreadID string) error {
+	m.Recorder.Record("CopyChatPlans", ctx, fromChatID, toThreadID)
+	if m.CopyChatPlansFunc != nil {
+		return m.CopyChatPlansFunc(ctx, fromChatID, toThreadID)
+	}
+	return contractkit.MockNotSet("MockRepository", "CopyChatPlans")
 }
 
 // GetStepExecutionsForChat records the call and delegates to GetStepExecutionsForChatFunc when set.

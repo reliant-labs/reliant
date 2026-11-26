@@ -134,7 +134,7 @@ func TestReconciler_UnreportedEndIsLevelledByHowTheRunEnded(t *testing.T) {
 				expectedBefore := anomalyCount(anomalySilentTerminalDriftExpected)
 				faultsBefore := anomalyCount(anomalySilentTerminalDrift)
 
-				_, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
+				_, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
 				require.Empty(t, errs)
 
 				lines := logsWithMessage(logs(), run.message)
@@ -194,7 +194,7 @@ func TestReconciler_DescendantReapAfterTerminateIsInfo(t *testing.T) {
 	expectedBefore := anomalyCount(anomalyOrphanDescendantReapedAfterTerminate)
 	faultsBefore := anomalyCount(anomalyOrphanDescendantReaped)
 
-	reconciled, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: nil, Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
+	reconciled, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: nil, Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 	assert.Equal(t, 1, reconciled, "the repair still counts")
 
@@ -227,7 +227,7 @@ func TestReconciler_DescendantReapAfterTheRunsOwnEndIsAnError(t *testing.T) {
 			repo := descendantReapRepo()
 			faultsBefore := anomalyCount(anomalyOrphanDescendantReaped)
 
-			_, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: tc.describe}, Config: nil, Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
+			_, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: tc.describe}, Config: nil, Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
 			require.Empty(t, errs)
 
 			reaps := logsWithMessage(logs(), reapedDescendantsAfterTerminateMessage, reapedOrphanedDescendantsMessage)
