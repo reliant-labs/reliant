@@ -13,6 +13,16 @@ type fsStat struct {
 	Ffree  uint64
 }
 
+// StatUsage reads the filesystem holding path (its nearest existing
+// ancestor, when path does not exist yet), as the watcher reads a volume.
+func StatUsage(path string) (Usage, error) {
+	st, _, err := statFS(path)
+	if err != nil {
+		return Usage{}, err
+	}
+	return st.usage(), nil
+}
+
 func (s fsStat) usage() Usage {
 	used := uint64(0)
 	if s.Blocks > s.Bfree {

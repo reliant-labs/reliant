@@ -50990,6 +50990,11 @@
               "kind": "string"
             },
             {
+              "name": "preflight",
+              "kind": "message",
+              "type_name": "reliant.v1.NodePreflight"
+            },
+            {
               "name": "secret_refs",
               "kind": "message",
               "type_name": "reliant.v1.NodeSecretRef",
@@ -51116,6 +51121,29 @@
               "kind": "message",
               "type_name": "reliant.v1.ObserveMetric",
               "repeated": true
+            }
+          ],
+          "reliant.v1.NodePreflight": [
+            {
+              "name": "tools",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "min_free_disk",
+              "kind": "string"
+            },
+            {
+              "name": "max_load",
+              "kind": "double"
+            },
+            {
+              "name": "allow_root",
+              "kind": "bool"
+            },
+            {
+              "name": "max_machines",
+              "kind": "int32"
             }
           ],
           "reliant.v1.NodeRouterCandidate": [
@@ -52702,6 +52730,7 @@
           "reliant.v1.ModelSelector": "reliant/v1/workflow_v2.proto",
           "reliant.v1.Node": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeObserve": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.NodePreflight": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeRouterCandidate": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NodeSecretRef": "reliant/v1/workflow_v2.proto",
           "reliant.v1.NumberInputConfig": "reliant/v1/workflow_v2.proto",
