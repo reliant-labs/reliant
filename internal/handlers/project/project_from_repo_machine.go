@@ -3,7 +3,9 @@ package project
 import (
 	"context"
 	"strings"
+	"time"
 
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -41,12 +43,12 @@ func isRootRepo(r *core.Repo) bool {
 // defaultClonePath is where a clone that names no path lands on machine.
 //
 // A managed machine (and one this server knows nothing of) keeps its
-// projects in /home/workspace/projects. Any other machine reports the
-// directory its daemon runs in (daemons.working_dir), which is where its
-// owner keeps projects: the clone goes beside them, not into a
-// /home/workspace that a laptop or a build host does not have. A working
-// directory that is itself a checkout on the machine (the daemon was started
-// inside a project) is not a projects directory: its parent is.
+// projects in /home/workspace/projects. On any other machine the clone goes
+// beside the projects already checked out there: into the directory holding
+// the most of its live checkouts (installed, of a project not deleted). One
+// with none yet clones into the directory its daemon runs in
+// (daemons.working_dir), not into a /home/workspace that a laptop or a build
+// host does not have.
 func (s *Service) defaultClonePath(ctx context.Context, machine *db.Daemon, name string) string {
 	if dir := s.machineProjectsDir(ctx, machine); dir != "" {
 		return ospath.Join(dir, name)
@@ -72,17 +74,86 @@ func (s *Service) machineProjectsDir(ctx context.Context, machine *db.Daemon) st
 		logging.WarnContext(ctx, "CreateProjectFromRepo: could not read the machine's checkouts", "error", err, "daemon_id", machine.ID)
 		return dir
 	}
-	for _, row := range rows {
-		checkout := ospath.Clean(row.Path)
-		if checkout != "" && pathWithin(dir, checkout) {
-			parent := parentDir(checkout)
-			if parent == "" || isFilesystemRoot(parent) {
-				return ""
-			}
-			return parent
-		}
+	// Where the machine's live checkouts sit is where its owner keeps
+	// projects. A directory chosen here always holds a live checkout
+	// directly, so even when it is above the working directory (the daemon
+	// was started inside a checkout) the clone lands beside a real project,
+	// never in a directory nothing on the machine was ever cloned into.
+	if parent := mostCommonParent(s.liveCheckouts(ctx, rows)); parent != "" {
+		return parent
 	}
 	return dir
+}
+
+// liveCheckouts is the machine's rows that are evidence of where its projects
+// are: installed checkouts of projects the caller can still see, decided as
+// ListProjectDaemonsForDaemon decides it. A failed or still-installing clone
+// is not on disk, and a deleted project's row is stale: a project once kept
+// at the machine's working directory itself would otherwise send every clone
+// to that directory's parent (/home/reliant, which the daemon cannot create).
+func (s *Service) liveCheckouts(ctx context.Context, rows []*core.ProjectDaemon) []*core.ProjectDaemon {
+	userID, _ := auth.GetUserIDFromContext(ctx)
+	if userID == "" {
+		return nil
+	}
+	var live []*core.ProjectDaemon
+	for _, row := range rows {
+		if row == nil || row.InstallState != core.ProjectInstallInstalled {
+			continue
+		}
+		if _, err := s.deps.Projects.GetProjectWithUserCheck(ctx, row.ProjectID, userID); err != nil {
+			continue
+		}
+		live = append(live, row)
+	}
+	return live
+}
+
+// mostCommonParent is the directory holding the most of the checkouts; a tie
+// goes to the directory with the most recent clone, then the lexically first.
+// "" when none has a parent other than the filesystem root.
+func mostCommonParent(checkouts []*core.ProjectDaemon) string {
+	type tally struct {
+		count  int
+		latest time.Time
+	}
+	tallies := map[string]*tally{}
+	for _, row := range checkouts {
+		parent := parentDir(ospath.Clean(row.Path))
+		if parent == "" || isFilesystemRoot(parent) || !ospath.IsAbs(parent) {
+			continue
+		}
+		t := tallies[parent]
+		if t == nil {
+			t = &tally{}
+			tallies[parent] = t
+		}
+		t.count++
+		if row.ClonedAt.After(t.latest) {
+			t.latest = row.ClonedAt
+		}
+	}
+	best := ""
+	for parent, t := range tallies {
+		if best == "" {
+			best = parent
+			continue
+		}
+		b := tallies[best]
+		switch {
+		case t.count != b.count:
+			if t.count > b.count {
+				best = parent
+			}
+		case !t.latest.Equal(b.latest):
+			if t.latest.After(b.latest) {
+				best = parent
+			}
+		case parent < best:
+			best = parent
+		}
+	}
+	return best
 }
 
 // isOtherPlatformsCheckout reports whether path is where this project is

@@ -10,7 +10,7 @@ schema ConfigSecretRef:
     key: str
 
 # forge:section schema ApiServerConfigOrgs
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ApiServerConfigOrgs is the orgs block (OrgsConfig) — author its values in config.k as `orgs.<field> = ...`.
 schema ApiServerConfigOrgs:
     # Let org owners and admins create org-owned integration connections
@@ -25,14 +25,14 @@ schema ApiServerConfigOrgs:
     provider_workspace_seats_enabled: bool = False
 
 # forge:section schema ApiServerConfigChatCollaboration
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ApiServerConfigChatCollaboration is the chat_collaboration block (ChatCollaborationConfig) — author its values in config.k as `chat_collaboration.<field> = ...`.
 schema ApiServerConfigChatCollaboration:
     # Let chat owners and managers grant people view, reply or manage on a chat
     enabled: bool = False
 
 # forge:section schema ApiServerConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -165,7 +165,7 @@ schema ApiServerConfig:
         readiness_paths != "", "readiness_paths = \"\" cannot reach the process: an empty READINESS_PATHS counts as unset, so it would load the default \"/ready,/readyz\" — set a value, or change its default in the proto"
 
 # forge:section env-map apiServerConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR ApiServerConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -300,13 +300,13 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
 }
 
 # forge:section schema AuthConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema AuthConfig:
     # Daemon type the platform declares: managed (an operator-created workspace pod) or self_hosted
     daemon_type: str = ""
 
 # forge:section env-map authConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR AuthConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -359,7 +359,7 @@ authConfigEnvMap = lambda c: AuthConfig, config_secrets: [str] -> {str: str | fo
 }
 
 # forge:section schema CLIConfigConnection
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # CLIConfigConnection is the connection block (CLIConnectionConfig) — author its values in config.k as `connection.<field> = ...`.
 schema CLIConfigConnection:
     # Reliant API server URL
@@ -376,7 +376,7 @@ schema CLIConfigConnection:
         gateway_url != "", "gateway_url = \"\" cannot reach the process: an empty RELIANT_GATEWAY_URL counts as unset, so it would load the default \"https://gateway.reliantapi.com\" — set a value, or pass --gateway= in the workload's args to make it empty"
 
 # forge:section schema CLIConfigWeb
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # CLIConfigWeb is the web block (CLIWebConfig) — author its values in config.k as `web.<field> = ...`.
 schema CLIConfigWeb:
     # Comma-separated web origins the localhost OAuth helper accepts
@@ -385,7 +385,7 @@ schema CLIConfigWeb:
     frontend_port: str = ""
 
 # forge:section schema CLIConfigMachine
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # CLIConfigMachine is the machine block (CLIMachineConfig) — author its values in config.k as `machine.<field> = ...`.
 schema CLIConfigMachine:
     # Pinned machine instance id (default: the one persisted in ~/.reliant)
@@ -396,7 +396,7 @@ schema CLIConfigMachine:
     app_data_dir: str = ""
 
 # forge:section schema CLIConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema CLIConfig:
     # connection config block (CLIConnectionConfig). Set its fields as `connection.<field> = ...`.
     connection: CLIConfigConnection = CLIConfigConnection {}
@@ -406,7 +406,7 @@ schema CLIConfig:
     machine: CLIConfigMachine = CLIConfigMachine {}
 
 # forge:section env-map cLIConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR CLIConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -484,7 +484,7 @@ cLIConfigEnvMap = lambda c: CLIConfig, config_secrets: [str] -> {str: str | forg
 }
 
 # forge:section schema ReliantConfigLog
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ReliantConfigLog is the log block (LogConfig) — author its values in config.k as `log.<field> = ...`.
 schema ReliantConfigLog:
     # Log level: debug, info, warn or error (default info)
@@ -493,14 +493,14 @@ schema ReliantConfigLog:
     format: str = ""
 
 # forge:section schema ReliantConfigRuntime
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ReliantConfigRuntime is the runtime block (RuntimeConfig) — author its values in config.k as `runtime.<field> = ...`.
 schema ReliantConfigRuntime:
     # Environment tier: dev, test or prod (unset or unrecognised is prod)
     environment: str = ""
 
 # forge:section schema ReliantConfigStorageReaper
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ReliantConfigStorageReaper is the storage_reaper block (StorageReaperConfig) — author its values in config.k as `storage_reaper.<field> = ...`.
 schema ReliantConfigStorageReaper:
     # Run forge's storage reaper on a schedule: auto (managed daemons only), on, or off
@@ -521,7 +521,7 @@ schema ReliantConfigStorageReaper:
         gocache_interval != "", "gocache_interval = \"\" cannot reach the process: an empty RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL counts as unset, so it would load the default \"10m\" — set a value, or change its default in the proto"
 
 # forge:section schema ReliantConfigTranscript
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ReliantConfigTranscript is the transcript block (TranscriptConfig) — author its values in config.k as `transcript.<field> = ...`.
 schema ReliantConfigTranscript:
     # Transcript reads may leave finished tool calls' bodies out when a client asks (on) or always send them whole (off)
@@ -531,7 +531,7 @@ schema ReliantConfigTranscript:
         tool_body_stubs != "", "tool_body_stubs = \"\" cannot reach the process: an empty RELIANT_TRANSCRIPT_TOOL_BODY_STUBS counts as unset, so it would load the default \"on\" — set a value, or change its default in the proto"
 
 # forge:section schema ReliantConfigWorktreeReclaim
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ReliantConfigWorktreeReclaim is the worktree_reclaim block (WorktreeReclaimConfig) — author its values in config.k as `worktree_reclaim.<field> = ...`.
 schema ReliantConfigWorktreeReclaim:
     # Machine-wide worktree reclaim: off, dry-run (report only) or on (capture, then reclaim)
@@ -549,7 +549,7 @@ schema ReliantConfigWorktreeReclaim:
         approval_idle != "", "approval_idle = \"\" cannot reach the process: an empty RELIANT_WORKTREE_RECLAIM_APPROVAL_IDLE counts as unset, so it would load the default \"120h\" — set a value, or change its default in the proto"
 
 # forge:section schema ReliantConfigMachineOrg
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ReliantConfigMachineOrg is the machine_org block (MachineOrgConfig) — author its values in config.k as `machine_org.<field> = ...`.
 schema ReliantConfigMachineOrg:
     # The connect reconcile detaches other orgs' checkout records from a machine of a known org (on), or leaves them (off)
@@ -559,7 +559,7 @@ schema ReliantConfigMachineOrg:
         cross_org_cleanup != "", "cross_org_cleanup = \"\" cannot reach the process: an empty RELIANT_MACHINE_ORG_CLEANUP counts as unset, so it would load the default \"on\" — set a value, or change its default in the proto"
 
 # forge:section schema ReliantConfigIdleReclaim
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ReliantConfigIdleReclaim is the idle_reclaim block (IdleReclaimConfig) — author its values in config.k as `idle_reclaim.<field> = ...`.
 schema ReliantConfigIdleReclaim:
     # Idle reclaim of scratch directories and idle worktrees' node_modules: auto (where the storage reaper runs), on, dry-run or off
@@ -578,7 +578,7 @@ schema ReliantConfigIdleReclaim:
         worktree_node_modules_idle != "", "worktree_node_modules_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE counts as unset, so it would load the default \"72h\" — set a value, or change its default in the proto"
 
 # forge:section schema ReliantConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema ReliantConfig:
     # log config block (LogConfig). Set its fields as `log.<field> = ...`.
     log: ReliantConfigLog = ReliantConfigLog {}
@@ -596,7 +596,7 @@ schema ReliantConfig:
     idle_reclaim: ReliantConfigIdleReclaim = ReliantConfigIdleReclaim {}
 
 # forge:section env-map reliantConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR ReliantConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -684,7 +684,7 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
 }
 
 # forge:section schema DaemonConfigInstance
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # DaemonConfigInstance is the instance block (DaemonInstanceConfig) — author its values in config.k as `instance.<field> = ...`.
 schema DaemonConfigInstance:
     # Data directory (default: this instance's directory under ~/.reliant/instances)
@@ -695,7 +695,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -768,7 +768,7 @@ schema DaemonConfig:
         background_idle_reap != "", "background_idle_reap = \"\" cannot reach the process: an empty RELIANT_BACKGROUND_IDLE_REAP counts as unset, so it would load the default \"4h\" — set a value"
 
 # forge:section env-map daemonConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR DaemonConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -857,7 +857,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section schema DaemonStatusConfigInstance
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # DaemonStatusConfigInstance is the instance block (DaemonInstanceConfig) — author its values in config.k as `instance.<field> = ...`.
 schema DaemonStatusConfigInstance:
     # Data directory (default: this instance's directory under ~/.reliant/instances)
@@ -868,13 +868,13 @@ schema DaemonStatusConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonStatusConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema DaemonStatusConfig:
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonStatusConfigInstance = DaemonStatusConfigInstance {}
 
 # forge:section env-map daemonStatusConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR DaemonStatusConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -929,7 +929,7 @@ daemonStatusConfigEnvMap = lambda c: DaemonStatusConfig, config_secrets: [str] -
 }
 
 # forge:section schema DaemonStopConfigInstance
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # DaemonStopConfigInstance is the instance block (DaemonInstanceConfig) — author its values in config.k as `instance.<field> = ...`.
 schema DaemonStopConfigInstance:
     # Data directory (default: this instance's directory under ~/.reliant/instances)
@@ -940,13 +940,13 @@ schema DaemonStopConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonStopConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema DaemonStopConfig:
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonStopConfigInstance = DaemonStopConfigInstance {}
 
 # forge:section env-map daemonStopConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR DaemonStopConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -1001,7 +1001,7 @@ daemonStopConfigEnvMap = lambda c: DaemonStopConfig, config_secrets: [str] -> {s
 }
 
 # forge:section schema DaemonLogsConfigInstance
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # DaemonLogsConfigInstance is the instance block (DaemonInstanceConfig) — author its values in config.k as `instance.<field> = ...`.
 schema DaemonLogsConfigInstance:
     # Data directory (default: this instance's directory under ~/.reliant/instances)
@@ -1012,13 +1012,13 @@ schema DaemonLogsConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonLogsConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema DaemonLogsConfig:
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonLogsConfigInstance = DaemonLogsConfigInstance {}
 
 # forge:section env-map daemonLogsConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR DaemonLogsConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -1073,13 +1073,13 @@ daemonLogsConfigEnvMap = lambda c: DaemonLogsConfig, config_secrets: [str] -> {s
 }
 
 # forge:section schema DaemonRegisterConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema DaemonRegisterConfig:
     # Account (user id) to register; separate accounts on one server keep separate credentials
     account: str = ""
 
 # forge:section env-map daemonRegisterConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR DaemonRegisterConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -1132,7 +1132,7 @@ daemonRegisterConfigEnvMap = lambda c: DaemonRegisterConfig, config_secrets: [st
 }
 
 # forge:section schema DatabaseConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema DatabaseConfig:
     # Postgres connection URL
     database_url: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "database_url" }
@@ -1153,7 +1153,7 @@ schema DatabaseConfig:
         database_driver != "", "database_driver = \"\" cannot reach the process: an empty DATABASE_DRIVER counts as unset, so it would load the default \"postgres\" — set a value, or pass --db-driver= in the workload's args to make it empty"
 
 # forge:section env-map databaseConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR DatabaseConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -1224,7 +1224,7 @@ databaseConfigEnvMap = lambda c: DatabaseConfig, config_secrets: [str] -> {str: 
 }
 
 # forge:section schema GatewayConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema GatewayConfig:
     # Daemon bidi-streaming gRPC listen port
     daemon_port: int = 9190
@@ -1256,7 +1256,7 @@ schema GatewayConfig:
         machine_stats_label != "", "machine_stats_label = \"\" cannot reach the process: an empty MACHINE_STATS_LABEL counts as unset, so it would load the default \"monitor=platform\" — set a value, or change its default in the proto"
 
 # forge:section env-map gatewayConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR GatewayConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -1318,13 +1318,13 @@ gatewayConfigEnvMap = lambda c: GatewayConfig, config_secrets: [str] -> {str: st
 }
 
 # forge:section schema PreviewURLConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema PreviewURLConfig:
     # Preview URL template with a {port} placeholder (set on workspace pods)
     url_template: str = ""
 
 # forge:section env-map previewURLConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR PreviewURLConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -1377,7 +1377,7 @@ previewURLConfigEnvMap = lambda c: PreviewURLConfig, config_secrets: [str] -> {s
 }
 
 # forge:section schema ServerProcessConfigControlPlane
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigControlPlane is the control_plane block (ControlPlaneConfig) — author its values in config.k as `control_plane.<field> = ...`.
 schema ServerProcessConfigControlPlane:
     # Control-plane base URL; unset means self-hosted
@@ -1388,7 +1388,7 @@ schema ServerProcessConfigControlPlane:
     managed_keys_per_org: bool = False
 
 # forge:section schema ServerProcessConfigNats
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigNats is the nats block (NatsConfig) — author its values in config.k as `nats.<field> = ...`.
 schema ServerProcessConfigNats:
     # NATS server URL
@@ -1399,7 +1399,7 @@ schema ServerProcessConfigNats:
     password: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "nats_password" }
 
 # forge:section schema ServerProcessConfigTemporal
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigTemporal is the temporal block (TemporalConfig) — author its values in config.k as `temporal.<field> = ...`.
 schema ServerProcessConfigTemporal:
     # Temporal server host
@@ -1414,7 +1414,7 @@ schema ServerProcessConfigTemporal:
         namespace != "", "namespace = \"\" cannot reach the process: an empty TEMPORAL_NAMESPACE counts as unset, so it would load the default \"reliant\" — set a value, or pass --temporal-namespace= in the workload's args to make it empty"
 
 # forge:section schema ServerProcessConfigTLS
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigTLS is the tls block (ServerTLSConfig) — author its values in config.k as `tls.<field> = ...`.
 schema ServerProcessConfigTLS:
     # TLS certificate file path
@@ -1425,7 +1425,7 @@ schema ServerProcessConfigTLS:
     disable: bool = False
 
 # forge:section schema ServerProcessConfigIntegrations
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigIntegrations is the integrations block (IntegrationsConfig) — author its values in config.k as `integrations.<field> = ...`.
 schema ServerProcessConfigIntegrations:
     # Externally reachable base URL of this deployment
@@ -1459,7 +1459,7 @@ schema ServerProcessConfigIntegrations:
         all _k in oauth_client_secrets { regex.match(_k, r"^[A-Za-z0-9_]+$") }, "oauth_client_secrets: ${[_k for _k in oauth_client_secrets if not regex.match(_k, r'^[A-Za-z0-9_]+$')]} cannot be a KEY of RELIANT_OAUTH_<KEY>_CLIENT_SECRET — a KEY is letters, digits and underscores"
 
 # forge:section schema ServerProcessConfigObservability
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigObservability is the observability block (ObservabilityConfig) — author its values in config.k as `observability.<field> = ...`.
 schema ServerProcessConfigObservability:
     # OTLP collector base URL (export is on whenever it is set)
@@ -1472,14 +1472,14 @@ schema ServerProcessConfigObservability:
     environment: str = ""
 
 # forge:section schema ServerProcessConfigAnalytics
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigAnalytics is the analytics block (AnalyticsConfig) — author its values in config.k as `analytics.<field> = ...`.
 schema ServerProcessConfigAnalytics:
     # Record no product analytics events
     disabled: bool = False
 
 # forge:section schema ServerProcessConfigLLM
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigLLM is the llm block (LLMConfig) — author its values in config.k as `llm.<field> = ...`.
 schema ServerProcessConfigLLM:
     # Reliant LLM gateway base URL
@@ -1508,7 +1508,7 @@ schema ServerProcessConfigLLM:
         stream_progress_timeout != "", "stream_progress_timeout = \"\" cannot reach the process: an empty RELIANT_LLM_STREAM_PROGRESS_TIMEOUT counts as unset, so it would load the default \"10m\" — set a value"
 
 # forge:section schema ServerProcessConfigPreview
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigPreview is the preview block (PreviewConfig) — author its values in config.k as `preview.<field> = ...`.
 schema ServerProcessConfigPreview:
     # Workspace proxy host for path-based preview URLs
@@ -1524,14 +1524,14 @@ schema ServerProcessConfigPreview:
         workspace_url_scheme != "", "workspace_url_scheme = \"\" cannot reach the process: an empty WORKSPACE_URL_SCHEME counts as unset, so it would load the default \"https\" — set a value, or change its default in the proto"
 
 # forge:section schema ServerProcessConfigNetwork
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigNetwork is the network block (NetworkConfig) — author its values in config.k as `network.<field> = ...`.
 schema ServerProcessConfigNetwork:
     # Let user-steered server-side requests (fetch, websearch, model endpoints) reach private, loopback and link-local addresses; self-hosted deployments only
     allow_private_egress: bool = False
 
 # forge:section schema ServerProcessConfigOrgPolicyEnforcement
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigOrgPolicyEnforcement is the org_policy_enforcement block (OrgPolicyEnforcementConfig) — author its values in config.k as `org_policy_enforcement.<field> = ...`.
 schema ServerProcessConfigOrgPolicyEnforcement:
     # How the org integrations policy applies: off, audit (count, never refuse) or enforce
@@ -1553,7 +1553,7 @@ schema ServerProcessConfigOrgPolicyEnforcement:
         providers != "", "providers = \"\" cannot reach the process: an empty RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS counts as unset, so it would load the default \"audit\" — set a value, or change its default in the proto"
 
 # forge:section schema ServerProcessConfigClientVersions
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigClientVersions is the client_versions block (ClientVersionPolicy) — author its values in config.k as `client_versions.<field> = ...`.
 schema ServerProcessConfigClientVersions:
     # Oldest web app version served, semver without a leading v (empty: no floor)
@@ -1602,14 +1602,14 @@ schema ServerProcessConfigClientVersions:
     refuse_unidentified: bool = False
 
 # forge:section schema ServerProcessConfigPipeline
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigPipeline is the pipeline block (PipelineConfig) — author its values in config.k as `pipeline.<field> = ...`.
 schema ServerProcessConfigPipeline:
     # Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them
     enabled: bool = False
 
 # forge:section schema ServerProcessConfigReconciler
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # ServerProcessConfigReconciler is the reconciler block (ReconcilerConfig) — author its values in config.k as `reconciler.<field> = ...`.
 schema ServerProcessConfigReconciler:
     # Workflow reconciler stall watchdog: off (no work), report (log, count and record stalled runs) or enforce (also stop them)
@@ -1619,7 +1619,7 @@ schema ServerProcessConfigReconciler:
         stall_watchdog != "", "stall_watchdog = \"\" cannot reach the process: an empty RELIANT_RECONCILER_STALL_WATCHDOG counts as unset, so it would load the default \"off\" — set a value, or change its default in the proto"
 
 # forge:section schema ServerProcessConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema ServerProcessConfig:
     # Data directory for logs and certs
     data_dir: str = "./data"
@@ -1659,7 +1659,7 @@ schema ServerProcessConfig:
         streaming_driver != "", "streaming_driver = \"\" cannot reach the process: an empty STREAMING_DRIVER counts as unset, so it would load the default \"nats\" — set a value, or pass --streaming-driver= in the workload's args to make it empty"
 
 # forge:section env-map serverProcessConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR ServerProcessConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -1875,13 +1875,13 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
 }
 
 # forge:section schema VaultMaintenanceConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema VaultMaintenanceConfig:
     # Credential vault keyring (id:<base64>[,id:<base64>...], first entry primary)
     vault_key: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "reliant_vault_key" }
 
 # forge:section env-map vaultMaintenanceConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR VaultMaintenanceConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -1935,7 +1935,7 @@ vaultMaintenanceConfigEnvMap = lambda c: VaultMaintenanceConfig, config_secrets:
 }
 
 # forge:section schema WorkerConfig
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 schema WorkerConfig:
     # Private HTTPS workspace-controller endpoint for fixed hosted actions
     hosted_actions_url: str = ""
@@ -1989,7 +1989,7 @@ schema WorkerConfig:
         node_observation_retention != "", "node_observation_retention = \"\" cannot reach the process: an empty RELIANT_WORKER_NODE_OBSERVATION_RETENTION counts as unset, so it would load the default \"0s\" — set a value"
 
 # forge:section env-map workerConfigEnvMap
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # Every ENV_VAR WorkerConfig declares `sensitive: true` for. Used by forge's
 # host-mode config probe, which resolves the whole config for `forge env up`
 # and the parity report. A WORKLOAD must not use it: naming every
@@ -2063,7 +2063,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=429f26b6c820aaf410f35e81bf36c40aa4601067d7cb06fc7df9b6b3b01a508f
+# forge:hash=7980a58ae79177cb965ffdbd76bffce665e21d5ee9a1464298f72e10cae81ce7
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -2073,7 +2073,7 @@ schema ReliantProcess:
     reliant_config?: ReliantConfig
     # Every process at or below `reliant auth`, `reliant update`.
     auth_config?: AuthConfig
-    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
+    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant pipeline`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
     cli_config?: CLIConfig
     # Every process at or below `reliant server`, `reliant db migrate`, `reliant db vault`.
     database_config?: DatabaseConfig
@@ -2127,7 +2127,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
     _root_sensitive: [str] = RELIANT_CONFIG_SENSITIVE_ENV
     _in_auth_config = any _p in [["auth"], ["update"]] { _path[:len(_p)] == _p }
-    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
+    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["pipeline"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
     _in_database_config = any _p in [["server"], ["db", "migrate"], ["db", "vault"]] { _path[:len(_p)] == _p }
     _in_server_process_config = any _p in [["server"]] { _path[:len(_p)] == _p }
     _in_vault_maintenance_config = any _p in [["db", "vault"]] { _path[:len(_p)] == _p }
@@ -2384,6 +2384,10 @@ ROOTS: {str: Root} = {
             "RELIANT_CLIENT_VERSION_ENFORCE",
             "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED",
             "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED",
+
+            # forge:section root api env pipeline
+            # forge:hash=5ccf1452265460a2885a7d70faa9ebc1e38cf154ccb9f23435105d8f8952bc7b
+            "RELIANT_PIPELINE_ENABLED",
 
             # forge:section root api env reconciler
             # forge:hash=5ccf1452265460a2885a7d70faa9ebc1e38cf154ccb9f23435105d8f8952bc7b
