@@ -15,6 +15,12 @@ func (r *Repo) GetPRRecordByID(ctx context.Context, id string) (*core.PRRecord, 
 	return store.GetPRRecordByID(ctx, r.ORM(), id)
 }
 
+// GetPRRecord returns the record of the repository's PR number among the
+// given repository identities, or nil.
+func (r *Repo) GetPRRecord(ctx context.Context, provider, repository string, number int, repositoryIDs []string) (*core.PRRecord, error) {
+	return store.GetPRRecord(ctx, r.ORM(), provider, repository, number, repositoryIDs)
+}
+
 // ListPRRecordsAtHead lists the repository's other records at head.
 func (r *Repo) ListPRRecordsAtHead(ctx context.Context, provider, repositoryID, head, except string) ([]*core.PRRecord, error) {
 	return store.ListPRRecordsAtHead(ctx, r.ORM(), provider, repositoryID, head, except)
