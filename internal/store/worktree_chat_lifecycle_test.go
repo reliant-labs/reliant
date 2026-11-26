@@ -152,7 +152,7 @@ func TestChatWorktreeTransitionFailureRollsBack(t *testing.T) {
 CREATE TRIGGER reject_worktree_update BEFORE UPDATE ON worktrees FOR EACH ROW EXECUTE FUNCTION reject_worktree_update()`)
 			require.NoError(t, err)
 			require.Error(t, env.Repo.UpdateChatState(ctx, c.ID, after, "test"))
-			got, err := env.Repo.GetChat(ctx, c.ID)
+			got, err := store.GetChat(ctx, env.Repo.ORM(), c.ID)
 			require.NoError(t, err)
 			require.Equal(t, before, got.State)
 			wt, err := env.Repo.GetWorktree(ctx, *c.WorktreeID)

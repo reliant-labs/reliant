@@ -337,7 +337,7 @@ func (s *Service) owningWorkflow(ctx context.Context, thread *db.Thread) *db.Wor
 	if thread.WorkflowID != nil && *thread.WorkflowID != "" {
 		workflowID = *thread.WorkflowID
 	}
-	wf, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.deps.Workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || wf == nil {
 		logging.WarnContext(ctx, "Could not read owning workflow for agent-message liveness check; allowing the queue",
 			"error", err, "chatID", thread.ChatID, "threadID", thread.ID, "workflowID", workflowID)

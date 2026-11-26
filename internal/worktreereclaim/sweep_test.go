@@ -501,6 +501,128 @@ func TestSweepRecoversACheckoutParkedBeforeItsLock(t *testing.T) {
 	}
 }
 
+// parkMidDeletion leaves orig the way reclaimEntry does when its deletion
+// stops part-way: captured, parked with its markers, locked as being
+// reclaimed, with .disposing written, and a.txt already unlinked. It returns
+// the parking spot and the capture.
+func parkMidDeletion(t *testing.T, s *sweepFixture, orig string) (string, Capture) {
+	t.Helper()
+	ctx := context.Background()
+	key := CaptureKey(orig)
+	capt, err := captureCheckout(ctx, orig, key, CaptureMeta{Path: orig, Class: string(ClassAutoSafe)}, CaptureLimits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := sweepQuarantinePath(orig, key)
+	if err := os.MkdirAll(filepath.Dir(q), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	marker, _ := json.Marshal(reclaimMarker{Key: key, Ref: capt.Ref, CommonDir: capt.CommonDir, Orig: orig})
+	const fence = "1795322329693601130"
+	for suffix, data := range map[string]string{".origin": orig, ".prelock": "", ".capture": string(marker), ".disposing": fence} {
+		write(t, q+suffix, data)
+	}
+	run(t, s.project, "worktree", "move", orig, q)
+	run(t, s.project, "worktree", "lock", "--reason", reclaimingLock(key, fence), q)
+	if err := os.Remove(filepath.Join(q, "a.txt")); err != nil {
+		t.Fatal(err)
+	}
+	return q, capt
+}
+
+// A deletion that stopped part-way is finished by a later pass in mode on,
+// once what remains is proven to be part of its capture: the remains, their
+// registration and the markers go, the capture stays and restores the whole
+// checkout. A dry-run pass only reports it.
+func TestSweepFinishesAnInterruptedDeletion(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~50 git processes")
+	s := newSweepFixture(t)
+	ctx := context.Background()
+	orig := s.plain(filepath.Join(s.tmp, "half"), "agent/half")
+	write(t, filepath.Join(orig, "notes.txt"), "untracked, captured\n")
+	q, capt := parkMidDeletion(t, s, orig)
+	opts := s.opts(SweepDryRun)
+	opts.Anchors = []string{s.project}
+
+	rep := s.r.SweepMachine(ctx, opts)
+	if e := entryFor(t, rep, orig); e.Reason != ReasonQuarantined || !exists(filepath.Join(q, "notes.txt")) {
+		t.Fatalf("dry-run: %+v, want held with the remains kept", e)
+	}
+
+	opts.Mode = SweepOn
+	rep = s.r.SweepMachine(ctx, opts)
+	e := entryFor(t, rep, orig)
+	if e.Outcome != OutcomeReclaimed || e.CaptureRef != capt.Ref || e.FreedBytes <= 0 {
+		t.Fatalf("got %+v, want the interrupted deletion finished", e)
+	}
+	if rep.Totals.Reclaimed != 1 || rep.Totals.Held != 0 {
+		t.Fatalf("totals %+v", rep.Totals)
+	}
+	for _, p := range []string{q, q + ".origin", q + ".capture", q + ".disposing", filepath.Join(s.tmp, reclaimQuarantineDir)} {
+		if exists(p) {
+			t.Fatalf("%s is still there", p)
+		}
+	}
+	if out := run(t, s.project, "worktree", "list", "--porcelain"); strings.Contains(out, q) {
+		t.Fatalf("registration kept:\n%s", out)
+	}
+	if _, err := RestoreCapture(ctx, RestoreOptions{Repo: s.project, Ref: capt.Ref}); err != nil {
+		t.Fatal(err)
+	}
+	for file, want := range map[string]string{"a.txt": "one\n", "notes.txt": "untracked, captured\n"} {
+		if got := readFile(t, filepath.Join(orig, file)); got != want {
+			t.Fatalf("restored %s = %q, want %q", file, got, want)
+		}
+	}
+}
+
+// What remains of an interrupted deletion is kept, parked and locked, when
+// anything about it is not in its capture: a file changed or added after the
+// deletion began, a capture ref that is gone, or an original path taken again.
+func TestSweepKeepsInterruptedDeletionsItCannotProve(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~120 git processes")
+	for name, tc := range map[string]struct {
+		change func(t *testing.T, s *sweepFixture, orig, q string, c Capture)
+		reason HeldReason
+	}{
+		"changed file": {func(t *testing.T, _ *sweepFixture, _, q string, _ Capture) {
+			write(t, filepath.Join(q, "notes.txt"), "edited after the deletion began\n")
+		}, ReasonDirty},
+		"new file": {func(t *testing.T, _ *sweepFixture, _, q string, _ Capture) {
+			write(t, filepath.Join(q, "late.txt"), "written after the deletion began\n")
+		}, ReasonDirty},
+		"capture gone": {func(t *testing.T, s *sweepFixture, _, _ string, c Capture) {
+			run(t, s.project, "update-ref", "-d", c.Ref)
+		}, ReasonCaptureMissing},
+		"original path taken": {func(t *testing.T, _ *sweepFixture, orig, _ string, _ Capture) {
+			write(t, filepath.Join(orig, "new.txt"), "a new checkout here\n")
+		}, ReasonInUse},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			s := newSweepFixture(t)
+			ctx := context.Background()
+			orig := s.plain(filepath.Join(s.tmp, "half"), "agent/half")
+			write(t, filepath.Join(orig, "notes.txt"), "untracked, captured\n")
+			q, capt := parkMidDeletion(t, s, orig)
+			tc.change(t, s, orig, q, capt)
+			opts := s.opts(SweepOn)
+			opts.Anchors = []string{s.project}
+			rep := s.r.SweepMachine(ctx, opts)
+			e := entryFor(t, rep, orig)
+			if e.Outcome == OutcomeReclaimed || e.Reason != tc.reason || !strings.Contains(e.Detail, "kept") {
+				t.Fatalf("got %+v, want held (%s) with the remains kept", e, tc.reason)
+			}
+			info, err := inspectLock(ctx, q)
+			if err != nil || !info.Registered || !isReclaimingLock(info.Reason) || !exists(filepath.Join(q, "notes.txt")) || !exists(q+".disposing") {
+				t.Fatalf("the remains were touched: %+v, %v", info, err)
+			}
+		})
+	}
+}
+
 // Recovery never touches a reclaim that is live: while another process
 // holds the key's lock (as reclaimEntry does from its first check to its
 // last step), a pass that finds the parked checkout holds it, moves

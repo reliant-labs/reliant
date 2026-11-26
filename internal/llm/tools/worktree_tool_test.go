@@ -121,7 +121,7 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 	repo, cleanup := setupTestDB(t)
 	t.Cleanup(cleanup)
 	chatID := newCaller(t, repo)
-	chat, err := repo.GetChat(context.Background(), chatID)
+	chat, err := store.GetChat(context.Background(), repo.ORM(), chatID)
 	require.NoError(t, err)
 	project, err := repo.GetProject(context.Background(), chat.ProjectID)
 	require.NoError(t, err)
@@ -751,7 +751,7 @@ func TestWorktreeTool_Get_ShowsBoundChats(t *testing.T) {
 	wt := f.register(t, "branchy", 1)
 	idle := f.register(t, "idle", 1)
 	ctx := context.Background()
-	chat, err := f.repo.GetChat(ctx, f.chatID)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	chat.WorktreeID = &wt.ID
 	require.NoError(t, f.repo.UpdateChat(ctx, chat))

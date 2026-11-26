@@ -82,7 +82,7 @@ func TestThreadResetUsesThreadBaselineNotRootPreset(t *testing.T) {
 
 func TestModeResetUsesPresetAndFreshSendRemovesStoredOverride(t *testing.T) {
 	ctx, fx, repo, temporal, service := selectionFixture(t, db.Completed())
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	_, err = repo.CreatePreset(ctx, &db.Preset{ID: uuid.NewString(), UserID: "test-user", ProjectID: &chat.ProjectID, Name: "Plan default", Slug: "plan-default", Tag: "agent", Params: map[string]interface{}{"mode": "plan"}})
 	require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestModeResetStoresDeletionAndSignalsOnlyConcreteMode(t *testing.T) {
 			} else {
 				assert.Empty(t, temporal.signals)
 			}
-			chat, err := repo.GetChat(ctx, fx.chatID)
+			chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 			require.NoError(t, err)
 			next, err := service.launcher().BuildChatWorkflowInputs(ctx, "test-user", chat, "builtin://agent", chat.SelectedPresets, nil)
 			require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestModeResetStoresDeletionAndSignalsOnlyConcreteMode(t *testing.T) {
 
 func TestGroupResetFillsOnlyTouchedGroupAndPreservesItsModel(t *testing.T) {
 	ctx, fx, repo, _, service := selectionFixture(t, db.Active())
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	update, err := service.launcher().BuildStateUpdateForActiveWorkflow(ctx, "test-user", chat, "builtin://parallel-compete", nil, paramsOf(t, map[string]any{"implementer": map[string]any{"model": map[string]any{"id": sonnetOnClaude}}}))
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestGroupResetFillsOnlyTouchedGroupAndPreservesItsModel(t *testing.T) {
 func TestResumeModeReconciliationPreservesExecutionOwnedInputs(t *testing.T) {
 	ctx, fx, repo, _, service := selectionFixture(t, db.Paused())
 	setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": nil})
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	update := map[string]interface{}{"mode": "plan", "model": "runtime-model", "tools": []string{"runtime-tool"}, "internal": "kept"}
 	require.NoError(t, service.reconcileResumeMode(ctx, "test-user", chat, "builtin://agent", update, nil))
@@ -186,7 +186,7 @@ func TestResumeAfterModeDeletionSignalsDefaultBeforeWake(t *testing.T) {
 
 func TestThreadConcreteGroupRemainsCompatibleWithOldWorker(t *testing.T) {
 	ctx, fx, repo, _, service := selectionFixture(t, db.Active())
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	params := paramsOf(t, map[string]any{"implementer": map[string]any{"model": map[string]any{"id": sonnetOnClaude}}})
 	resolved, err := service.resolveThreadResetParams(ctx, "test-user", chat, "builtin://parallel-compete", fx.rootThreadID, fx.rootThreadID, params)

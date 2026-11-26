@@ -88,15 +88,6 @@ func (s *Service) resumeFailedQuestionWorkflow(
 	if err := s.questionResolver().ResolveQuestion(ctx, question.ID, &responseData); err != nil {
 		logging.WarnContext(ctx, "Failed to resolve question during resume", "error", err, "questionID", question.ID)
 	}
-	if err := s.deps.Repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
-		QuestionID: question.ID,
-		ChatID:     question.ChatID,
-		WorkflowID: question.WorkflowID,
-		StepID:     question.StepID,
-		Status:     "resolved",
-	}); err != nil {
-		logging.WarnContext(ctx, "Failed to emit question update during resume", "error", err, "questionID", question.ID)
-	}
 
 	// Persist to the QUESTION's thread — the thread the parked ask_question (and
 	// the resumed run's next LLM call within it) reads — so the marker reaches

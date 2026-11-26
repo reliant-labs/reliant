@@ -83,7 +83,7 @@ func TestChatReadsCarryRootWorkflowStatus(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run("GetChat/"+tc.name, func(t *testing.T) {
-			chat, err := repo.GetChat(ctx, tc.chatID)
+			chat, err := store.GetChat(ctx, repo.ORM(), tc.chatID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, chat.RootStatus)
 		})
@@ -96,7 +96,7 @@ func TestChatReadsCarryRootWorkflowStatus(t *testing.T) {
 	}
 
 	t.Run("GetChat/no root workflow", func(t *testing.T) {
-		chat, err := repo.GetChat(ctx, noRootID)
+		chat, err := store.GetChat(ctx, repo.ORM(), noRootID)
 		require.NoError(t, err)
 		assert.Equal(t, WorkflowStatus{}, chat.RootStatus,
 			"a chat with no root workflow row maps to WORKFLOW_STATE_UNSPECIFIED")
@@ -166,7 +166,7 @@ func TestChatRootStatusIgnoresNonRootWorkflows(t *testing.T) {
 	// A spawn under the same chat, still running. It is NOT the root row.
 	insertTestWorkflow(t, repo, "wf-spawn-vs-root", chatID, "spawn-workflow", Active())
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, Completed(), chat.RootStatus,
 		"root status comes from workflows.id = chats.workflow_id, not from any workflow in the chat")

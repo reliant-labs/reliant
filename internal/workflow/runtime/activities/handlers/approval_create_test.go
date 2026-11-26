@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestApprovalCreateActivity_Basic creates an approval and verifies the output
@@ -85,7 +86,7 @@ func TestApprovalCreateActivity_MarksChatUnread(t *testing.T) {
 	assert.NotEmpty(t, output.ApprovalID)
 
 	// Verify chat was marked as unread
-	chat, err := h.Repo().GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.True(t, chat.Unread,
 		"Chat should be marked as unread after approval creation")

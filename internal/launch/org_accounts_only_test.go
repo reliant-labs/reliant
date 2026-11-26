@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // scopedSources stands in for the scoped loader: the org has no source of
@@ -67,7 +68,7 @@ func TestLaunch_OrgAccountsOnlyRefusesAModelNoOrgSourceServes(t *testing.T) {
 	assert.Equal(t, drivers.Scope{UserID: launchTestUserID, OrgID: "acme"}, scope)
 	assert.True(t, scope.OrgFundedOnly())
 
-	_, err = repo.GetChat(ctx, spec.NewChatID)
+	_, err = store.GetChat(ctx, repo.ORM(), spec.NewChatID)
 	require.ErrorIs(t, err, core.ErrChatNotFound, "nothing is written")
 	_, err = repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
 	require.ErrorIs(t, err, core.ErrTriggerEventNotFound)
@@ -167,7 +168,7 @@ func TestLaunch_OrgAccountsOnlyRefusesAnyNamedModelInput(t *testing.T) {
 	assert.Equal(t, "mock", refused.Model)
 	require.Len(t, sources.scopes, 1)
 
-	_, err = repo.GetChat(ctx, spec.NewChatID)
+	_, err = store.GetChat(ctx, repo.ORM(), spec.NewChatID)
 	require.ErrorIs(t, err, core.ErrChatNotFound, "nothing is written")
 	assert.Empty(t, starter.startedIDs(), "no run starts")
 }

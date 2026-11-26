@@ -84,7 +84,7 @@ export function hostedRateLine(rate: HostedRateLike): string | null {
     unit = "GiB-month";
   }
   const price = formatRateDollars(cents);
-  if (unit === "site-month") return `${rate.displayName}: ${price}/month each (your first site is free)`;
+  if (unit === "site-month") return `${rate.displayName}: ${price}/month each (free in your free hosting organization)`;
   const unitText = UNIT_TEXT[unit] ?? unit;
   const included = parseRational(rate.includedMonthly);
   const free = included && included.numerator > 0n ? ` after ${formatRational(included, 0)} ${unitText} free each month` : "";

@@ -20,7 +20,7 @@ import (
 // startRunCall issues start_run from callerID with the given tool call id.
 func startRunCall(t *testing.T, repo *db.Repo, starter RunStarter, callerID, toolCallID string, params StartRunParams) ToolResponse {
 	t.Helper()
-	return callRunTool(t, NewStartRunTool(repo, store.NewTriggerEventExtStore(repo.ORM()), starter), callerRC(callerID, toolCallID), StartRunToolName, params)
+	return callRunTool(t, NewStartRunTool(WithChats(repo), store.NewTriggerEventExtStore(repo.ORM()), starter), callerRC(callerID, toolCallID), StartRunToolName, params)
 }
 
 func startedChatID(t *testing.T, resp ToolResponse) string {
@@ -80,7 +80,7 @@ func TestStartRun_InheritsTheCallersDaemon(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	callerID := newCaller(t, repo)
-	chat, err := repo.GetChat(context.Background(), callerID)
+	chat, err := store.GetChat(context.Background(), repo.ORM(), callerID)
 	require.NoError(t, err)
 	daemon := "daemon-42"
 	chat.ActiveDaemonID = &daemon
