@@ -117,7 +117,7 @@ func handleFSListMachineDir(ctx context.Context, payload []byte) ([]byte, error)
 		return nil, fmt.Errorf("%w: %s", errNotADirectory, path)
 	}
 
-	entries, truncated, err := readMachineDir(dir, path)
+	entries, truncated, err := readMachineDir(dir, path, req.ViewerRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,7 @@ func machinePath(p, home string) (string, error) {
 // machineDirEntryCap entries. An entry that vanishes or cannot be stat'ed
 // mid-listing is still listed, by name; only a failure to read the directory
 // itself fails the listing (an unreadable directory: permission denied).
-func readMachineDir(dir *os.File, path string) ([]fsMachineDirEntry, bool, error) {
+func readMachineDir(dir *os.File, path, viewerRoot string) ([]fsMachineDirEntry, bool, error) {
 	des, err := dir.ReadDir(-1)
 	if err != nil && len(des) == 0 && !errors.Is(err, io.EOF) {
 		return nil, false, fmt.Errorf("read dir %s: %w", path, err)
@@ -170,9 +170,12 @@ func readMachineDir(dir *os.File, path string) ([]fsMachineDirEntry, bool, error
 		var fi fs.FileInfo
 		if de.Type()&fs.ModeSymlink != 0 {
 			e.IsSymlink = true
-			// The target decides what the entry is: a link to a directory
-			// expands, a dangling link is a file that will not open.
-			fi, _ = os.Stat(full)
+			// Only expose target metadata when the viewer may inspect it.
+			// Refused and dangling links remain name-only entries, so a
+			// listing of an allowed parent discloses no protected metadata.
+			if denyViewerRead(full, viewerRoot) == nil {
+				fi, _ = os.Stat(full)
+			}
 		} else {
 			fi, _ = de.Info()
 		}

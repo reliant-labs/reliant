@@ -126,6 +126,35 @@ func TestFSListMachineDir_RefusesCredentialStores(t *testing.T) {
 	}
 }
 
+func TestFSListMachineDir_ProtectsSymlinkTargetMetadata(t *testing.T) {
+	home, project := machineFixture(t)
+	for name, target := range map[string]string{
+		"keys":  filepath.Join(home, ".ssh"),
+		"notes": filepath.Join(home, ".ssh", "id_rsa"),
+	} {
+		if err := os.Symlink(target, filepath.Join(home, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := listMachineDir(t, home, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, e := range got.Entries {
+		if e.Name != "keys" && e.Name != "notes" {
+			continue
+		}
+		found++
+		if !e.IsSymlink || e.IsDir || e.Size != 0 || e.Modified != "" {
+			t.Errorf("protected link exposes target metadata: %+v", e)
+		}
+	}
+	if found != 2 {
+		t.Fatalf("listed %d protected links, want 2 name-only entries", found)
+	}
+}
+
 // A symlink is listed as what it points at (a link to a directory expands),
 // marked as a link; a dangling one is still listed, as a file with no mtime.
 func TestFSListMachineDir_Symlinks(t *testing.T) {
@@ -219,7 +248,7 @@ func TestReadMachineDirCapsEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = f.Close() }()
-	entries, truncated, err := readMachineDir(f, dir)
+	entries, truncated, err := readMachineDir(f, dir, dir)
 	if err != nil {
 		t.Fatal(err)
 	}
