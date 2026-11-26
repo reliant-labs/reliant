@@ -52,12 +52,12 @@ func TestCapacityRealTemporalHumanReplySupersedesAdmittedChain(t *testing.T) {
 	boundary := &capacityBoundary{event: &core.TriggerEvent{ID: "waiting", Outcome: core.TriggerEventPending}}
 	adapter := &realCapacityRepository{capacityBoundary: boundary, id: id, first: original.GetRunID()}
 	spec := launch.Spec{}
-	require.NoError(t, prepareCapacity(ctx, adapter, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+	require.NoError(t, prepareCapacity(ctx, adapter, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, store.TriggerCapacityLimits{MaxRunning: 1}, capacityCancel{}, &spec))
 	require.False(t, boundary.released)
 	reply, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: id, TaskQueue: queue, WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING}, capacityChainWorkflow, true)
 	require.NoError(t, err)
 	require.NotEqual(t, original.GetRunID(), reply.GetRunID())
-	require.NoError(t, prepareCapacity(ctx, adapter, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+	require.NoError(t, prepareCapacity(ctx, adapter, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, store.TriggerCapacityLimits{MaxRunning: 1}, capacityCancel{}, &spec))
 	require.True(t, boundary.released, "a human replacement chain cannot keep the closed automation slot")
 	require.NoError(t, c.SignalWorkflow(ctx, id, "", "finish", true))
 	require.NoError(t, reply.Get(ctx, nil))
@@ -89,10 +89,10 @@ func TestCapacityRealTemporalContinuedChainRetainsSlot(t *testing.T) {
 	// Use the actual server, substituting only the database boundary in this test.
 	spec := launch.Spec{}
 	adapter := &realCapacityRepository{capacityBoundary: boundary, id: id, first: initial}
-	require.NoError(t, prepareCapacity(ctx, adapter, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+	require.NoError(t, prepareCapacity(ctx, adapter, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, store.TriggerCapacityLimits{MaxRunning: 1}, capacityCancel{}, &spec))
 	require.False(t, boundary.released, "live CAN successor retains the original slot")
 	require.NoError(t, c.SignalWorkflow(ctx, id, "", "finish", true))
 	require.NoError(t, run.Get(ctx, nil))
-	require.NoError(t, prepareCapacity(ctx, adapter, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+	require.NoError(t, prepareCapacity(ctx, adapter, adapter, c, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "ref"}, boundary.event, store.TriggerCapacityLimits{MaxRunning: 1}, capacityCancel{}, &spec))
 	require.True(t, boundary.released, "terminal matching CAN chain releases capacity")
 }

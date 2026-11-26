@@ -790,11 +790,14 @@ type TemporalWorkerDeps struct {
 	Router           *WorkerDaemonRouter
 	ConfigProvider   *reliantconfig.StoredConfigProvider
 	Launcher         *launch.Launcher
-	Credentials      *WorkerIntegrationCredentials
-	WriteLedger      writeledger.Service
-	Pollers          *webhook.Registry
-	ControlPlane     *configv1.ControlPlaneConfig
-	Network          *configv1.NetworkConfig
+	// Runs stops the run a trigger firing supersedes under
+	// concurrency.cancel_running, the way a user's stop does.
+	Runs         *runs.Service
+	Credentials  *WorkerIntegrationCredentials
+	WriteLedger  writeledger.Service
+	Pollers      *webhook.Registry
+	ControlPlane *configv1.ControlPlaneConfig
+	Network      *configv1.NetworkConfig
 	// Pipeline is ServerProcessConfig.pipeline: its enabled switch turns the
 	// Reliant server actions (uses: reliant/...) on for this worker.
 	Pipeline *configv1.PipelineConfig
@@ -1002,6 +1005,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		MCPBinder:              toolexec.NewDaemonMCPContextBinder(d.Router),
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
+		TriggerRunCanceller:    triggerRunCanceller(d.Runs),
 		Membership:             d.Membership,
 		Policies:               d.Policies,
 		IntegrationCredentials: creds,
@@ -1020,6 +1024,15 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		return nil, fmt.Errorf("failed to create worker: %w", err)
 	}
 	return worker, nil
+}
+
+// triggerRunCanceller is the run service as the trigger firers' canceller,
+// or nil (no canceller, rather than a nil *runs.Service inside an interface).
+func triggerRunCanceller(r *runs.Service) triggers.RunCanceller {
+	if r == nil {
+		return nil
+	}
+	return r
 }
 
 // WorkflowEventRelayDeps is the outbox and the workflows it dispatches to.

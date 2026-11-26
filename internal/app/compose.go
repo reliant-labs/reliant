@@ -672,6 +672,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Router:           g.WorkerDaemonRouter(),
 		ConfigProvider:   g.StoredConfigProvider(),
 		Launcher:         g.RunLauncher(),
+		Runs:             g.RunLifecycle(),
 		Credentials:      g.WorkerIntegrationCredentials(),
 		WriteLedger:      g.IntegrationsWriteledger(),
 		Pollers:          g.TriggerPollers(),

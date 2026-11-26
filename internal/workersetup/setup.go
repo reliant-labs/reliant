@@ -103,6 +103,11 @@ type Config struct {
 	// being silently dropped.
 	TriggerLauncher triggers.Launcher
 
+	// TriggerRunCanceller stops the run a firing supersedes under a workflow's
+	// concurrency.cancel_running, normally *runs.Service (the cancel a user's
+	// stop takes). nil: such a firing waits for the run to finish.
+	TriggerRunCanceller triggers.RunCanceller
+
 	// Membership is on every activity's context (authz.WithMembership,
 	// through worker.Options.BackgroundActivityContext), so a tool, a launch
 	// or a trigger fire decides org resources against live membership as an
@@ -422,11 +427,11 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		}
 		pause := triggerAutoPause(cfg)
 		w.RegisterActivityWithOptions(
-			triggers.NewFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).Fire,
+			triggers.NewFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithRunCanceller(cfg.TriggerRunCanceller).Fire,
 			activity.RegisterOptions{Name: triggers.FireActivityName},
 		)
 		w.RegisterActivityWithOptions(
-			triggers.NewEventFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).Fire,
+			triggers.NewEventFirer(triggers.NewStores(cfg.Database), cfg.TriggerLauncher).WithWorkflows(declarations).WithCapacityDescriptions(cfg.TemporalClient).WithCapacityWake(cfg.TemporalClient, cfg.taskQueueName()).WithPlacer(pools).WithAutoPause(pause).WithChecks(checks).WithRunCanceller(cfg.TriggerRunCanceller).Fire,
 			activity.RegisterOptions{Name: triggers.EventFireActivityName},
 		)
 	} else {
