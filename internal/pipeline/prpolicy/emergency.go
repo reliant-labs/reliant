@@ -1,5 +1,3 @@
-//forge:exclude-contract: pure pipeline policy over caller-supplied facts; no I/O, state or time
-
 package prpolicy
 
 import (
