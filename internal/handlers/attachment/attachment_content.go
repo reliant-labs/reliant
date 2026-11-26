@@ -52,7 +52,7 @@ func AttachmentContentHandler(repo ContentReader, authenticate func(*http.Reques
 		// The bytes are sniffed, and only a type that cannot run script is
 		// rendered inline, under the type the bytes are.
 		contentType, disposition := "application/octet-stream", "attachment"
-		if sniffed := http.DetectContentType(att.Content); inlineSafeTypes[sniffed] {
+		if sniffed := sniffContentType(att.Content); inlineSafeTypes[sniffed] {
 			contentType, disposition = sniffed, "inline"
 		}
 		w.Header().Set("Content-Type", contentType)
@@ -81,9 +81,36 @@ var inlineSafeTypes = map[string]bool{
 	"application/pdf": true,
 }
 
+// sniffContentType is http.DetectContentType, plus every ISO base media file
+// as video/mp4. Go's sniffer reports video/mp4 only when an "mp4" brand is
+// listed, so a QuickTime clip (brand "qt  ", which generate_video can store)
+// or a fragmented mp4 (iso5, iso6, dash) comes back application/octet-stream.
+// One label covers them all, because a <video> element reads the container
+// from the bytes, not from Content-Type. The HEIF and AVIF image brands share
+// the box and are not video, so they stay downloads.
+func sniffContentType(data []byte) string {
+	sniffed := http.DetectContentType(data)
+	if sniffed != "application/octet-stream" || len(data) < 12 || string(data[4:8]) != "ftyp" {
+		return sniffed
+	}
+	if isoImageBrands[string(data[8:12])] {
+		return sniffed
+	}
+	return "video/mp4"
+}
+
+// isoImageBrands are the major brands of ISO base media files that are still
+// images (HEIF, AVIF), not video.
+var isoImageBrands = map[string]bool{
+	"avif": true, "avis": true, "heic": true, "heix": true, "heim": true, "heis": true,
+	"hevc": true, "hevx": true, "hevm": true, "hevs": true, "mif1": true, "msf1": true,
+}
+
 // contentDisposition is the Content-Disposition header for disposition and
-// the attachment's filename, RFC 2231-encoded when it is not plain ASCII. A
-// name that cannot be encoded is dropped rather than sent raw.
+// the attachment's filename. A name that is not plain ASCII is sent twice:
+// RFC 2231-encoded (filename*), and as an ASCII stand-in (filename) for a
+// client that reads only that. A name that cannot be encoded is dropped
+// rather than sent raw.
 func contentDisposition(disposition, filename string) string {
 	name := strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f || r == '/' || r == '\\' {
@@ -94,10 +121,20 @@ func contentDisposition(disposition, filename string) string {
 	if name == "" {
 		return disposition
 	}
-	if v := mime.FormatMediaType(disposition, map[string]string{"filename": name}); v != "" {
-		return v
+	v := mime.FormatMediaType(disposition, map[string]string{"filename": name})
+	if v == "" {
+		return disposition
 	}
-	return disposition
+	if rest, encoded := strings.CutPrefix(v, disposition+"; filename*="); encoded {
+		fallback := strings.Map(func(r rune) rune {
+			if r > 0x7e || r == '"' {
+				return '_'
+			}
+			return r
+		}, name)
+		return disposition + `; filename="` + fallback + `"; filename*=` + rest
+	}
+	return v
 }
 
 // parseAttachmentContentPath extracts {id} from /api/attachments/{id}/content.

@@ -106,7 +106,13 @@ var contentFixtures = map[string]*core.Attachment{
 	// Claimed image/png and named .png; the bytes are HTML.
 	"fake-png-1": {ID: "fake-png-1", UserID: "owner", Filename: "cat.png", MimeType: "image/png", Content: []byte(htmlPayload)},
 	// Claimed text/plain; the bytes are a PDF.
-	"pdf-1":  {ID: "pdf-1", UserID: "owner", Filename: "résumé.pdf", MimeType: "text/plain", Content: []byte("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n")},
+	"pdf-1": {ID: "pdf-1", UserID: "owner", Filename: "résumé.pdf", MimeType: "text/plain", Content: []byte("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n")},
+	// QuickTime (major brand "qt  ") and fragmented mp4 (iso5, dash): Go's
+	// sniffer lists no "mp4" brand in either, so it reports octet-stream.
+	"mov-1":  {ID: "mov-1", UserID: "owner", Filename: "generated-2.mov", MimeType: "video/quicktime", Content: []byte("\x00\x00\x00\x14ftypqt  \x00\x00\x02\x00qt  \x00\x00\x00\x08wide")},
+	"fmp4-1": {ID: "fmp4-1", UserID: "owner", Filename: "clip.mp4", MimeType: "video/mp4", Content: []byte("\x00\x00\x00\x18ftypiso5\x00\x00\x02\x00iso5dash\x00\x00\x00\x08free")},
+	// AVIF shares the ISO box but is an image: not served as video.
+	"avif-1": {ID: "avif-1", UserID: "owner", Filename: "pic.avif", MimeType: "image/avif", Content: []byte("\x00\x00\x00\x1cftypavif\x00\x00\x00\x00avifmif1miaf\x00\x00\x00\x08free")},
 	"crlf-1": {ID: "crlf-1", UserID: "owner", Filename: "a\r\nX-Injected: 1/../b.html", MimeType: "text/html", Content: []byte(htmlPayload)},
 }
 
@@ -169,7 +175,8 @@ func TestAttachmentContent_TypeComesFromTheBytes(t *testing.T) {
 	h, _ := newContentHandler(t, "owner")
 	rec := getContent(t, h, "pdf-1")
 	assert.Equal(t, "application/pdf", rec.Header().Get("Content-Type"), "stored as text/plain, served as what it is")
-	assert.Equal(t, `inline; filename*=utf-8''r%C3%A9sum%C3%A9.pdf`, rec.Header().Get("Content-Disposition"))
+	assert.Equal(t, `inline; filename="r_sum_.pdf"; filename*=utf-8''r%C3%A9sum%C3%A9.pdf`, rec.Header().Get("Content-Disposition"),
+		"an ASCII stand-in beside the RFC 2231 name")
 	assertLockedDown(t, rec)
 
 	// HEAD answers the same headers as GET.
@@ -189,4 +196,37 @@ func TestAttachmentContent_FilenameCannotInjectHeaders(t *testing.T) {
 	assert.NotContains(t, cd, "\n")
 	assert.NotContains(t, cd, "/")
 	assert.Empty(t, rec.Header().Get("X-Injected"))
+}
+
+func TestAttachmentContent_ISOBaseMediaIsVideo(t *testing.T) {
+	h, _ := newContentHandler(t, "owner")
+	for _, id := range []string{"mov-1", "fmp4-1"} {
+		rec := getContent(t, h, id)
+		assert.Equal(t, "video/mp4", rec.Header().Get("Content-Type"), id)
+		assert.True(t, strings.HasPrefix(rec.Header().Get("Content-Disposition"), "inline"), id)
+		assertLockedDown(t, rec)
+	}
+
+	rec := getContent(t, h, "avif-1")
+	assert.Equal(t, "application/octet-stream", rec.Header().Get("Content-Type"))
+	assert.Equal(t, `attachment; filename=pic.avif`, rec.Header().Get("Content-Disposition"))
+	assertLockedDown(t, rec)
+}
+
+func TestAttachmentContent_RangeKeepsTheHeaders(t *testing.T) {
+	h, _ := newContentHandler(t, "owner")
+	for _, tc := range []struct{ id, contentType, disposition string }{
+		{"vid-1", "video/mp4", `inline; filename=generated-1.mp4`},
+		{"html-1", "application/octet-stream", `attachment; filename=page.html`},
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/api/attachments/"+tc.id+"/content", nil)
+		req.Header.Set("Range", "bytes=0-9")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusPartialContent, rec.Code, tc.id)
+		assert.Equal(t, tc.contentType, rec.Header().Get("Content-Type"), tc.id)
+		assert.Equal(t, tc.disposition, rec.Header().Get("Content-Disposition"), tc.id)
+		assertLockedDown(t, rec)
+		assert.Len(t, rec.Body.Bytes(), 10, tc.id)
+	}
 }
