@@ -307,7 +307,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
-	if err := repo.SetTriggerEnabled(ctx, trigger.ID, false); err != nil {
+	if err := store.EnableTrigger(ctx, repo.ORM(), trigger.ID, false); err != nil {
 		t.Fatalf("SetTriggerEnabled(false): %v", err)
 	}
 	got, err := repo.GetTrigger(ctx, trigger.ID)
@@ -318,7 +318,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 		t.Error("after SetTriggerEnabled(false): got enabled=true")
 	}
 
-	if err := repo.SetTriggerEnabled(ctx, trigger.ID, true); err != nil {
+	if err := store.EnableTrigger(ctx, repo.ORM(), trigger.ID, true); err != nil {
 		t.Fatalf("SetTriggerEnabled(true): %v", err)
 	}
 	got, err = repo.GetTrigger(ctx, trigger.ID)
@@ -329,7 +329,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 		t.Error("after SetTriggerEnabled(true): got enabled=false")
 	}
 
-	if err := repo.SetTriggerEnabled(ctx, "trg-nope", true); !errors.Is(err, core.ErrTriggerNotFound) {
+	if err := store.EnableTrigger(ctx, repo.ORM(), "trg-nope", true); !errors.Is(err, core.ErrTriggerNotFound) {
 		t.Errorf("SetTriggerEnabled on missing row: got %v, want ErrTriggerNotFound", err)
 	}
 }
@@ -522,7 +522,7 @@ func TestListTriggerEventsOrderAndLimit(t *testing.T) {
 		t.Fatalf("CreateTriggerEvent(foreign): %v", err)
 	}
 
-	all, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 10})
+	all, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListTriggerEvents: %v", err)
 	}
@@ -531,7 +531,7 @@ func TestListTriggerEventsOrderAndLimit(t *testing.T) {
 		t.Errorf("ListTriggerEvents order: got %v, want %v (newest first)", got, wantOrder)
 	}
 
-	limited, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 2})
+	limited, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 2})
 	if err != nil {
 		t.Fatalf("ListTriggerEvents(limit=2): %v", err)
 	}

@@ -20,7 +20,7 @@ import (
 func TestInlineEventPreviewIsOwnedReadOnlyAndWorksWhilePaused(t *testing.T) {
 	ctx := AuthedContext(t)
 	mine := auth.MustGetUserID(ctx)
-	repo := &MockRepository{GetTriggerFunc: func(_ context.Context, id string) (*core.Trigger, error) {
+	rows := &MockTriggers{GetTriggerFunc: func(_ context.Context, id string) (*core.Trigger, error) {
 		owner := mine
 		if id == "foreign" {
 			owner = "other-user"
@@ -29,7 +29,7 @@ func TestInlineEventPreviewIsOwnedReadOnlyAndWorksWhilePaused(t *testing.T) {
 	}}
 	// Unconfigured repository writes, intake or launcher would panic: only the
 	// owned read is installed, proving a preview never starts or enables a run.
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo)}), WithPlaceholderDeps())
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: &MockRepository{}, Triggers: rows, Projects: projectaccesstest.For(&MockRepository{})}), WithPlaceholderDeps())
 	payload, err := structpb.NewStruct(map[string]any{"body": map[string]any{"ref": "release", "user_id": "attacker"}})
 	require.NoError(t, err)
 	id := "mine"

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -214,6 +216,28 @@ func (e *ChangeAPIError) Error() string {
 		return e.Code + ": " + e.Reason
 	}
 	return e.Code
+}
+
+// ErrorClass implements svcerr.Classed, so the log and span layers grade a
+// ChangesService refusal by who must act on it, as the control plane did:
+// without it every refusal (a change id that does not exist, an approval the
+// environment requires) was an unrecognised error, a server fault at ERROR.
+// permission_denied, unauthenticated and invalid_argument are user errors only
+// with a reason; without one they refuse our request or our bearer, which is
+// ours to fix. Any other code has no opinion, which svcerr reads as a server
+// fault.
+func (e *ChangeAPIError) ErrorClass() svcerr.Class {
+	switch e.Code {
+	case "canceled":
+		return svcerr.ClassCanceled
+	case "failed_precondition", "not_found", "already_exists", "out_of_range", "resource_exhausted":
+		return svcerr.ClassUser
+	case "permission_denied", "unauthenticated", "invalid_argument":
+		if e.Reason != "" {
+			return svcerr.ClassUser
+		}
+	}
+	return svcerr.ClassNone
 }
 
 // ChangeController reads and acts on Forge Changes as the user. internal/app

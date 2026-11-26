@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -33,23 +32,6 @@ func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 		return fmt.Errorf("chat cannot be nil")
 	}
 	return store.InsertChat(ctx, r.ORM(), chat)
-}
-
-func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-
-	return store.GetChat(ctx, r.ORM(), id)
-}
-
-// GetChatRow reads a chat's own row from the chats table — no activity view —
-// for a caller that needs none of the activity-derived fields (ChatRow).
-func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetChatRow(ctx, r.ORM(), id)
 }
 
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
@@ -2757,69 +2739,6 @@ func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
 	return store.RemoveTrigger(ctx, r.ORM(), id)
 }
 
-func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		// Turning a trigger on locks its project first: refused while the
-		// project is scheduled for deletion (store.LockProjectsForWrite).
-		if enabled {
-			if err := r.lockTriggerProjects(ctx, id, "", true); err != nil {
-				return err
-			}
-		}
-		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
-			return err
-		}
-		before, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
-			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
-		}
-		if err := store.SetTriggerEnabled(ctx, r.ORM(), id, enabled); err != nil {
-			return err
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		op := "pause"
-		if enabled {
-			op = "enable"
-		}
-		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
-	})
-}
-
-// lockTriggerProjects takes the key share a trigger write needs on its
-// projects before the trigger's own row lock (store.LockProjectsForWrite):
-// the project it is in now and, when it moves, toProjectID. Only a write
-// that leaves the trigger on, or moves it, is admitted against a deletion;
-// one that leaves it off, in place, locks nothing. The database's admission
-// re-decides under the same lock in the write itself, so a trigger that moved
-// between this read and its row lock is still refused.
-func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID string, enabled bool) error {
-	current, err := store.TriggerProjectID(ctx, r.ORM(), triggerID)
-	if err != nil {
-		return err
-	}
-	if !enabled && (toProjectID == "" || toProjectID == current) {
-		return nil
-	}
-	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
-}
-
-func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
-	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
-}
-
-func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
-	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
-}
-
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
 // (kind, dedupe_key) DO NOTHING, so created=false means a firing for that
 // key already existed and nothing was written. That constraint is what
@@ -2861,18 +2780,6 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
-// ListTriggerEvents returns one page of the trigger's firings newest first,
-// each with the run it launched, and whether more follow.
-func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
-	if f.TriggerID == "" {
-		return nil, false, fmt.Errorf("trigger ID cannot be empty")
-	}
-	if f.UserID == "" {
-		return nil, false, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
-}
-
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
 //
 // Deprecated: use store.RunEventExtStore.ClaimRunEvents; the relay reads it
@@ -2892,13 +2799,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
-// FiringsSinceLastUnmanagedSuccess returns the legacy inbox failure episode.
-// Attention-managed actors are excluded before the success boundary and cap;
-// callers needing diagnostic health continue to use the unfiltered reads.
-func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 // GetLatestTriggerEvent returns the trigger's latest firing, optionally

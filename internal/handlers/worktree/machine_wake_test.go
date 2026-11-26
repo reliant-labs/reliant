@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	typedconfig "github.com/reliant-labs/reliant/pkg/config"
@@ -190,7 +191,7 @@ func newAsleepFixture(t *testing.T, asleep ...string) *asleepFixture {
 	return &asleepFixture{
 		placementFixture: pf,
 		router:           router,
-		fs:               newFileSystemService(t, router, pf.repo),
+		fs:               newFileSystemService(t, router, tools.WithChats(pf.repo)),
 		wt:               newWorktreeService(t, pf.repo, router),
 	}
 }
@@ -531,7 +532,7 @@ func TestFileSystemProxy_GetFilePreview_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newAsleepFixture(t)
 			router := &previewRouter{asleepRouter: newAsleepRouter(), info: tc.info}
-			fs := newFileSystemService(t, router, f.repo)
+			fs := newFileSystemService(t, router, tools.WithChats(f.repo))
 			chatID := f.chat(t, f.userID, asleepMachineB, "")
 
 			_, err := fs.GetFilePreview(f.ctx, connect.NewRequest(&reliantv1.GetFilePreviewRequest{

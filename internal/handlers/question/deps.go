@@ -38,7 +38,6 @@ type ChatViews interface {
 // Repository is the slice of *db.Repo the question handlers use.
 type Repository interface {
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
-	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error)
 }
 

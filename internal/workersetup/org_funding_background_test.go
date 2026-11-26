@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -44,7 +45,7 @@ func backgroundActivityEnv() *testsuite.TestActivityEnvironment {
 // title runs the chat's GenerateTitle activity once.
 func (w *orgFundingWorld) title(first string) (string, error) {
 	w.t.Helper()
-	activity := handlers.NewGenerateTitleActivity(w.repo, nil).WithAccountRouting(w.backgroundRouting())
+	activity := handlers.NewGenerateTitleActivity(tools.WithChats(w.repo), nil).WithAccountRouting(w.backgroundRouting())
 	env := backgroundActivityEnv()
 	env.RegisterActivity(activity.Execute)
 	val, err := env.ExecuteActivity(activity.Execute, handlers.GenerateTitleInput{ChatID: w.chatID, FirstMessage: first})
@@ -59,7 +60,7 @@ func (w *orgFundingWorld) title(first string) (string, error) {
 // compact runs a forced compaction of the chat's root thread once.
 func (w *orgFundingWorld) compact() (*handlers.CompactOutput, error) {
 	w.t.Helper()
-	activity := handlers.NewCompactActivity(handlers.CompactDeps{ToolResults: handlers.NewToolCalls(w.repo.ORM()), Store: w.repo, Threads: threads.New(threads.Deps{Repo: w.repo, Messages: store.NewMessageExtStore(w.repo.ORM()), Senders: store.NewThreadExtStore(w.repo.ORM())})}).WithAccountRouting(w.backgroundRouting())
+	activity := handlers.NewCompactActivity(handlers.CompactDeps{ToolResults: handlers.NewToolCalls(w.repo.ORM()), Store: tools.WithChats(w.repo), Threads: threads.New(threads.Deps{Repo: w.repo, Messages: store.NewMessageExtStore(w.repo.ORM()), Senders: store.NewThreadExtStore(w.repo.ORM())})}).WithAccountRouting(w.backgroundRouting())
 	env := backgroundActivityEnv()
 	env.RegisterActivity(activity.Execute)
 	input := types.ActivityInput{
@@ -96,7 +97,7 @@ func TestOrgFunding_TitleOnALimitedOrgKeyNeverCallsThePersonsAccount(t *testing.
 	assert.NotContains(t, w.builtFor, mine.ID)
 	assert.NotContains(t, w.builtFor, myOpenAI.ID)
 	assert.Empty(t, w.builtFor, "no provider call at all")
-	chat, err := w.repo.GetChat(w.ctx, w.chatID)
+	chat, err := store.GetChat(w.ctx, w.repo.ORM(), w.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, title, chat.Title)
 	after := w.question()

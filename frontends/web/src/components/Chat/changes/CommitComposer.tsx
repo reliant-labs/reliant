@@ -138,24 +138,17 @@ export function CommitComposer({
           </Button>
         </Tooltip>
         <Tooltip content={`Commit and push (${MOD}${SHIFT}Enter)`} delay={300} triggerClassName="flex">
-          <button
-            type="button"
+          {/* The same Button as Commit, so the two halves share one fill, height and disabled state. */}
+          <Button
+            variant="primary"
+            size="md"
             aria-label="Commit and push"
+            icon={<ArrowUpFromLine />}
             onClick={() => onCommit({ push: true })}
             disabled={!canCommit}
-            className={cn(
-              "inline-flex h-8 w-8 items-center justify-center rounded-r-md border border-l-0 border-primary/20 bg-primary text-primary-foreground",
-              "shadow-sm transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              "disabled:cursor-not-allowed disabled:opacity-50",
-              "relative before:absolute before:inset-y-1.5 before:left-0 before:w-px before:bg-primary-foreground/25",
-            )}
-          >
-            {op === "commit-push" ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <ArrowUpFromLine className="h-4 w-4" />
-            )}
-          </button>
+            loading={op === "commit-push"}
+            className="rounded-l-none before:absolute before:inset-y-1.5 before:left-0 before:w-px before:bg-current before:opacity-25"
+          />
         </Tooltip>
       </div>
 
@@ -165,11 +158,11 @@ export function CommitComposer({
             <Tooltip content={`Push ${pluralize(ahead, "commit")} to the remote`} delay={300} triggerClassName="flex min-w-0 flex-1">
               <Button
                 variant="outline"
-                size="sm"
+                size="md"
                 onClick={onPush}
                 disabled={busy}
                 loading={op === "push"}
-                leftIcon={<ArrowUp className="h-3.5 w-3.5" />}
+                leftIcon={<ArrowUp />}
                 className="w-full"
               >
                 Push {ahead}
@@ -180,11 +173,11 @@ export function CommitComposer({
             <Tooltip content={`Pull ${pluralize(behind, "commit")} from the remote`} delay={300} triggerClassName="flex min-w-0 flex-1">
               <Button
                 variant="outline"
-                size="sm"
+                size="md"
                 onClick={onPull}
                 disabled={busy}
                 loading={op === "pull"}
-                leftIcon={<ArrowDown className="h-3.5 w-3.5" />}
+                leftIcon={<ArrowDown />}
                 className="w-full"
               >
                 Pull {behind}
@@ -203,7 +196,7 @@ export function PullRequestAction({
 }: PullRequestLookup & { onCreate: () => void; disabled: boolean }) {
   const ghCliMissing = !!error && /GitHub CLI \(gh\) is (not installed|missing)/i.test(error);
   const retryAction = error && (
-    <Button variant="outline" size="sm" onClick={retry} disabled={disabled || refreshing}
+    <Button variant="outline" size="md" onClick={retry} disabled={disabled || refreshing}
       title={ghCliMissing ? "Install the GitHub CLI (gh) from cli.github.com, then retry" : error}>
       {refreshing ? "Checking PR…" : "Retry PR lookup"}
     </Button>
@@ -218,11 +211,11 @@ export function PullRequestAction({
           target="_blank"
           rel="noopener noreferrer"
           className={cn(
-            "inline-flex h-7 w-full min-w-0 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium text-foreground",
+            "inline-flex h-8 w-full min-w-0 items-center justify-center gap-1.5 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground",
             "transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           )}
         >
-          <GitPullRequest className="h-3.5 w-3.5 shrink-0 text-primary-ink" />
+          <GitPullRequest className="h-4 w-4 shrink-0 text-primary-ink" />
           <span className="truncate">PR #{existing.number}</span>
           {state && state !== "open" && <span className="text-muted-foreground">{state}</span>}
           <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" />
@@ -245,10 +238,10 @@ export function PullRequestAction({
     >
       <Button
         variant="outline"
-        size="sm"
+        size="md"
         onClick={onCreate}
         disabled={disabled || ghCliMissing}
-        leftIcon={<GitPullRequest className="h-3.5 w-3.5" />}
+        leftIcon={<GitPullRequest />}
         className="w-full"
       >
         Create PR

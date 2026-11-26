@@ -591,6 +591,9 @@ func TestProve_RunsTheCommandInTheWorktreeThatHoldsTheFiles(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []string{workspace, workspace}, ran)
 		assert.Equal(t, workspace, report.RunDir)
+		// Run above the repository, a command written for its root fails
+		// alike in both runs (obs 77bbc716): the report says where it ran.
+		assert.Contains(t, strings.Join(report.Warnings, "\n"), "above the repository that holds the files")
 	})
 }
 

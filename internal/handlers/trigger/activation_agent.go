@@ -478,7 +478,7 @@ func (s *Service) ManageActivation(ctx context.Context, user, operation string, 
 				project = existing.ProjectID
 			}
 		}
-		if err := s.deps.Repo.LockActivationDependencies(txCtx, user, project); err != nil {
+		if err := s.deps.TriggerWrites.LockActivationDependencies(txCtx, user, project); err != nil {
 			return svcerr.Wrap(err)
 		}
 		effects = &activationEffects{}

@@ -34,7 +34,7 @@ func TestTriggerEvent_BuilderTestKindIsAccepted(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, created)
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builder.test", chat.LaunchKind)
 }
@@ -58,7 +58,7 @@ func TestBuilderTestRunIsNotListedInSidebar(t *testing.T) {
 	recordLaunchEvent(t, repo, "interactive", core.TriggerEventKindChatStart, nil, now)
 
 	for _, id := range []string{"bt-run", "bt-run-awaiting"} {
-		chat, err := repo.GetChat(ctx, id)
+		chat, err := store.GetChat(ctx, repo.ORM(), id)
 		require.NoError(t, err)
 		assert.False(t, chat.ListInSidebar, id)
 	}
