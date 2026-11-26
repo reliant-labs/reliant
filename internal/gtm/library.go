@@ -15,6 +15,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/oklog/ulid/v2"
+
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -93,15 +95,22 @@ func (s *service) GetStrategyLibraryEntry(ctx context.Context, actor Actor, in G
 	return libraryFromRow(row)
 }
 
-// ImportStrategyLibrary upserts a batch of entries by key: a person's act.
+// ImportStrategyLibrary upserts a batch of entries by key: a person's act,
+// and the one a person may make through an access token (Actor.ViaToken).
 // An entry equal to the stored one (every field but the import's own
-// stamps) is left alone. With Prune, the org's entries whose key is not in
-// AllKeys go; strategies made from them keep their library_key.
+// stamps) is left alone, but its stamps move: imported_at says when an
+// import last named the key, which a staged prune checks. With Prune, the
+// org's entries whose key is not in AllKeys go, at once for a person-class
+// credential; a token's prune removes nothing and stages a prune request
+// instead (none when there is nothing to remove). Strategies made from a
+// removed entry keep their library_key. Every call writes one audit row,
+// in the same transaction.
 func (s *service) ImportStrategyLibrary(ctx context.Context, actor Actor, in ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error) {
 	if err := s.admit(ctx, actor); err != nil {
 		return ImportStrategyLibraryResult{}, err
 	}
-	if !actor.Person() {
+	// The one person-only rule a token passes: Kind, not Person().
+	if actor.Kind != ActorPerson {
 		return ImportStrategyLibraryResult{}, personOnly("import the strategy library")
 	}
 	if err := checkImport(in); err != nil {
@@ -123,6 +132,7 @@ func (s *service) ImportStrategyLibrary(ctx context.Context, actor Actor, in Imp
 			byKey[r.Key] = r
 		}
 		now := s.now()
+		var touched []string
 		for _, e := range in.Entries {
 			row, err := libraryRow(actor.OrgID, e)
 			if err != nil {
@@ -142,6 +152,7 @@ func (s *service) ImportStrategyLibrary(ctx context.Context, actor Actor, in Imp
 				return err
 			}
 			if same {
+				touched = append(touched, e.Key)
 				out.Unchanged++
 				continue
 			}
@@ -151,14 +162,51 @@ func (s *service) ImportStrategyLibrary(ctx context.Context, actor Actor, in Imp
 			}
 			out.Updated++
 		}
-		if in.Prune {
+		if len(touched) > 0 {
+			if err := s.store.TouchLibraryEntries(ctx, actor.OrgID, touched, in.SourceRevision, actor.UserID, now); err != nil {
+				return err
+			}
+		}
+		audit := &store.GtmLibraryImport{
+			ID:             ulid.Make().String(),
+			OrgID:          actor.OrgID,
+			ActorUserID:    actor.UserID,
+			CredentialKind: string(actor.credentialKind()),
+			SourceRevision: in.SourceRevision,
+			CreatedAt:      now,
+		}
+		switch {
+		case in.Prune && actor.ViaToken:
+			remove, err := s.store.LibraryKeysNotIn(ctx, actor.OrgID, in.AllKeys)
+			if err != nil {
+				return err
+			}
+			if len(remove) > 0 {
+				req := &store.GtmLibraryPruneRequest{
+					ID:             ulid.Make().String(),
+					OrgID:          actor.OrgID,
+					RequestedBy:    actor.UserID,
+					CredentialKind: string(CredentialToken),
+					SourceRevision: in.SourceRevision,
+					RemoveKeys:     remove,
+					Status:         string(PruneRequestPending),
+					CreatedAt:      now,
+				}
+				if err := s.store.CreatePruneRequest(ctx, req); err != nil {
+					return err
+				}
+				out.PruneRequestID, out.WouldRemove = req.ID, remove
+				audit.PruneRequestID = &req.ID
+			}
+		case in.Prune:
 			n, err := s.store.PruneLibrary(ctx, actor.OrgID, in.AllKeys)
 			if err != nil {
 				return err
 			}
 			out.Pruned = int(n)
 		}
-		return nil
+		audit.Created, audit.Updated, audit.Unchanged, audit.Pruned = int32(out.Created), int32(out.Updated), int32(out.Unchanged), int32(out.Pruned)
+		return s.store.CreateLibraryImport(ctx, audit)
 	})
 	return out, err
 }

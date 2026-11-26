@@ -331,15 +331,20 @@ func (s *service) discard(ctx context.Context, row *store.GtmAsset, before time.
 	}
 }
 
-// remove deletes an asset whatever its status: its objects, then its row,
-// so a storage failure leaves the row (and the delete can be retried)
-// rather than bytes with no row.
+// remove deletes an asset whatever its status: its row first, then its
+// objects. Row first, so a confirm racing the delete sees the row gone once
+// its own write lands and deletes what it wrote (ConfirmAssetUpload step
+// 5); bytes are never left behind by the race. A storage failure after the
+// row is gone orphans the objects: it is logged with their keys, and the
+// asset is gone all the same.
 func (s *service) remove(ctx context.Context, row *store.GtmAsset) error {
-	if err := s.deleteObjects(ctx, row); err != nil {
-		s.log.ErrorContext(ctx, "gtm: deleting an asset's objects failed", "asset_id", row.ID, "error", err)
-		return ErrAssetStorageFailed
+	if err := s.store.InTx(ctx, func(ctx context.Context) error { return s.store.DeleteAsset(ctx, row.OrgID, row.ID) }); err != nil {
+		return err
 	}
-	return s.store.InTx(ctx, func(ctx context.Context) error { return s.store.DeleteAsset(ctx, row.OrgID, row.ID) })
+	if err := s.deleteObjects(context.WithoutCancel(ctx), row); err != nil {
+		s.log.ErrorContext(ctx, "gtm: deleting a deleted asset's objects failed; they are orphaned", "asset_id", row.ID, "object_key", row.ObjectKey, "error", err)
+	}
+	return nil
 }
 
 // reap deletes up to maxAssetReap of orgID's expired PENDING assets, best
@@ -417,11 +422,15 @@ func (s *service) CreateAssetUpload(ctx context.Context, actor Actor, in CreateA
 //  4. Exactly the bytes checked are written to the asset's own key, which
 //     no client can write, so a re-upload to the staging object after the
 //     check changes nothing served. The staging object is deleted.
+//  5. The row is read again. A DeleteAsset that ran meanwhile deleted it
+//     first and the objects after, perhaps before this write landed: with
+//     the row gone, this call deletes the objects itself (ErrNotFound).
 //
 // A refusal or a failure deletes both objects and the row, except a
 // staging object not uploaded yet (ErrAssetNotUploaded), which leaves the
 // asset PENDING. A crash between 3 and 4 leaves a READY row with no bytes,
-// which DeleteAsset removes.
+// which GetAssetDownload refuses (ErrAssetNotReady) and DeleteAsset
+// removes.
 func (s *service) ConfirmAssetUpload(ctx context.Context, actor Actor, in ConfirmAssetUploadInput) (Asset, error) {
 	if err := s.admit(ctx, actor); err != nil {
 		return Asset{}, err
@@ -476,15 +485,22 @@ func (s *service) ConfirmAssetUpload(ctx context.Context, actor Actor, in Confir
 		return Asset{}, &AssetRejectedError{Reason: got.reason}
 	}
 
+	// The cutoff again, now: the read may have outlasted the asset's window,
+	// and an expired asset no longer counts toward the quota.
 	if err := s.store.InTx(ctx, func(ctx context.Context) error {
+		cutoff = s.pendingCutoff()
 		return s.store.MarkAssetReady(ctx, actor.OrgID, row.ID, got.contentType, got.size, got.sha256, cutoff)
 	}); err != nil {
-		// ErrAssetNotPending: another confirm won, or the asset was
-		// deleted. Either way it is not this call's to touch; any other
-		// failure discards it (only while it is still PENDING).
-		if !errors.Is(err, ErrAssetNotPending) {
-			s.discard(ctx, row, time.Time{})
+		if errors.Is(err, ErrAssetNotPending) {
+			if !row.CreatedAt.After(cutoff) {
+				s.discard(ctx, row, cutoff)
+				return Asset{}, ErrAssetUploadExpired
+			}
+			// Another confirm won, or the asset was deleted: not this
+			// call's to touch.
+			return Asset{}, err
 		}
+		s.discard(ctx, row, time.Time{})
 		return Asset{}, err
 	}
 	detached := context.WithoutCancel(ctx)
@@ -498,7 +514,13 @@ func (s *service) ConfirmAssetUpload(ctx context.Context, actor Actor, in Confir
 	if err := s.assets.Delete(detached, staging); err != nil {
 		s.log.WarnContext(ctx, "gtm: deleting a confirmed asset's staging object failed", "asset_id", row.ID, "object_key", staging, "error", err)
 	}
-	stored, err := s.store.GetAsset(ctx, actor.OrgID, row.ID)
+	stored, err := s.store.GetAsset(detached, actor.OrgID, row.ID)
+	if errors.Is(err, ErrNotFound) {
+		// Deleted while this call wrote: its bytes go too.
+		if err := s.deleteObjects(detached, row); err != nil {
+			s.log.ErrorContext(ctx, "gtm: deleting a deleted asset's objects failed; they are orphaned", "asset_id", row.ID, "object_key", row.ObjectKey, "error", err)
+		}
+	}
 	if err != nil {
 		return Asset{}, s.notFound(ctx, err, "asset", row.ID)
 	}
@@ -524,6 +546,16 @@ func (s *service) GetAssetDownload(ctx context.Context, actor Actor, in GetAsset
 	if AssetStatus(row.Status) != AssetReady {
 		return AssetDownload{}, ErrAssetNotReady
 	}
+	// A READY row whose bytes are gone (a crash between confirm's mark and
+	// its write, a bucket-side delete) is not served: a HEAD, not a read.
+	if _, err := s.assets.Stat(ctx, row.ObjectKey); err != nil {
+		if errors.Is(err, ErrObjectNotFound) {
+			s.log.WarnContext(ctx, "gtm: a READY asset's object is missing", "asset_id", row.ID, "object_key", row.ObjectKey)
+			return AssetDownload{}, ErrAssetNotReady
+		}
+		s.log.ErrorContext(ctx, "gtm: checking an asset's object failed", "asset_id", row.ID, "error", err)
+		return AssetDownload{}, ErrAssetStorageFailed
+	}
 	ct := mediaType(row.ContentType)
 	req, err := s.assets.PresignGet(ctx, row.ObjectKey, GetOptions{Inline: inlineAssetTypes[ct], ContentType: ct, Filename: row.Filename})
 	if err != nil {
@@ -533,8 +565,8 @@ func (s *service) GetAssetDownload(ctx context.Context, actor Actor, in GetAsset
 	return AssetDownload{URL: req.URL, ExpiresAt: req.ExpiresAt}, nil
 }
 
-// DeleteAsset deletes an asset in any status, a person's call: its objects,
-// then its row.
+// DeleteAsset deletes an asset in any status, a person's call: its row,
+// then its objects (see remove).
 func (s *service) DeleteAsset(ctx context.Context, actor Actor, in DeleteAssetInput) error {
 	if err := s.admit(ctx, actor); err != nil {
 		return err

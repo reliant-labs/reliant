@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=61f416459991f967a07f93d3c7b54435cd20cc4b25e8ad6320a1e8d9c9486ef3
+// forge:hash=2edacae03f9e54379334b2f54799477e11685ef6e4704d00a141749f78d4f71c
 
 // MockService is a test mock for the Service interface.
 //
@@ -29,47 +29,51 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	GetAccessFunc               func(context.Context, Actor) (Access, error)
-	ListIdeasFunc               func(context.Context, Actor, ListIdeasInput) (ListIdeasResult, error)
-	GetIdeaFunc                 func(context.Context, Actor, GetIdeaInput) (Idea, error)
-	CreateIdeaFunc              func(context.Context, Actor, CreateIdeaInput) (Idea, error)
-	UpdateIdeaFunc              func(context.Context, Actor, UpdateIdeaInput) (Idea, error)
-	SetIdeaStatusFunc           func(context.Context, Actor, SetIdeaStatusInput) (Idea, error)
-	ListCampaignsFunc           func(context.Context, Actor, ListCampaignsInput) (ListCampaignsResult, error)
-	GetCampaignFunc             func(context.Context, Actor, GetCampaignInput) (CampaignDetail, error)
-	CreateCampaignFunc          func(context.Context, Actor, CreateCampaignInput) (Campaign, error)
-	UpdateCampaignFunc          func(context.Context, Actor, UpdateCampaignInput) (Campaign, error)
-	ListItemsFunc               func(context.Context, Actor, ListItemsInput) (ListItemsResult, error)
-	GetItemFunc                 func(context.Context, Actor, GetItemInput) (Item, error)
-	CreateItemFunc              func(context.Context, Actor, CreateItemInput) (Item, error)
-	UpdateItemFunc              func(context.Context, Actor, UpdateItemInput) (Item, error)
-	SendItemEmailFunc           func(context.Context, Actor, SendItemEmailInput) (Item, error)
-	ResolveInDoubtSendFunc      func(context.Context, Actor, ResolveInDoubtSendInput) (Item, error)
-	GetPositioningFunc          func(context.Context, Actor) (Positioning, error)
-	UpdatePositioningFunc       func(context.Context, Actor, UpdatePositioningInput) (Positioning, error)
-	ListClaimsFunc              func(context.Context, Actor, ListClaimsInput) (ListClaimsResult, error)
-	UpsertClaimFunc             func(context.Context, Actor, UpsertClaimInput) (UpsertClaimResult, error)
-	CheckClaimsFunc             func(context.Context, Actor, CheckClaimsInput) (CheckClaimsResult, error)
-	ReadProductAnalyticsFunc    func(context.Context, Actor, AnalyticsQuery) (AnalyticsResult, error)
-	ListStrategiesFunc          func(context.Context, Actor, ListStrategiesInput) (ListStrategiesResult, error)
-	GetStrategyFunc             func(context.Context, Actor, GetStrategyInput) (StrategyDetail, error)
-	CreateStrategyFunc          func(context.Context, Actor, CreateStrategyInput) (Strategy, error)
-	UpdateStrategyFunc          func(context.Context, Actor, UpdateStrategyInput) (Strategy, error)
-	ListChannelsFunc            func(context.Context, Actor, ListChannelsInput) (ListChannelsResult, error)
-	GetChannelFunc              func(context.Context, Actor, GetChannelInput) (Channel, error)
-	CreateChannelFunc           func(context.Context, Actor, CreateChannelInput) (Channel, error)
-	UpdateChannelFunc           func(context.Context, Actor, UpdateChannelInput) (Channel, error)
-	ListAssetsFunc              func(context.Context, Actor, ListAssetsInput) (ListAssetsResult, error)
-	GetAssetFunc                func(context.Context, Actor, GetAssetInput) (Asset, error)
-	CreateAssetUploadFunc       func(context.Context, Actor, CreateAssetUploadInput) (AssetUpload, error)
-	ConfirmAssetUploadFunc      func(context.Context, Actor, ConfirmAssetUploadInput) (Asset, error)
-	GetAssetDownloadFunc        func(context.Context, Actor, GetAssetDownloadInput) (AssetDownload, error)
-	DeleteAssetFunc             func(context.Context, Actor, DeleteAssetInput) error
-	AttachFromAttachmentFunc    func(context.Context, Actor, AttachFromAttachmentInput) (Asset, error)
-	ListStrategyLibraryFunc     func(context.Context, Actor, ListStrategyLibraryInput) (ListStrategyLibraryResult, error)
-	GetStrategyLibraryEntryFunc func(context.Context, Actor, GetStrategyLibraryEntryInput) (LibraryEntry, error)
-	ImportStrategyLibraryFunc   func(context.Context, Actor, ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error)
-	UseLibraryStrategyFunc      func(context.Context, Actor, UseLibraryStrategyInput) (UseLibraryStrategyResult, error)
+	GetAccessFunc                func(context.Context, Actor) (Access, error)
+	ListIdeasFunc                func(context.Context, Actor, ListIdeasInput) (ListIdeasResult, error)
+	GetIdeaFunc                  func(context.Context, Actor, GetIdeaInput) (Idea, error)
+	CreateIdeaFunc               func(context.Context, Actor, CreateIdeaInput) (Idea, error)
+	UpdateIdeaFunc               func(context.Context, Actor, UpdateIdeaInput) (Idea, error)
+	SetIdeaStatusFunc            func(context.Context, Actor, SetIdeaStatusInput) (Idea, error)
+	ListCampaignsFunc            func(context.Context, Actor, ListCampaignsInput) (ListCampaignsResult, error)
+	GetCampaignFunc              func(context.Context, Actor, GetCampaignInput) (CampaignDetail, error)
+	CreateCampaignFunc           func(context.Context, Actor, CreateCampaignInput) (Campaign, error)
+	UpdateCampaignFunc           func(context.Context, Actor, UpdateCampaignInput) (Campaign, error)
+	ListItemsFunc                func(context.Context, Actor, ListItemsInput) (ListItemsResult, error)
+	GetItemFunc                  func(context.Context, Actor, GetItemInput) (Item, error)
+	CreateItemFunc               func(context.Context, Actor, CreateItemInput) (Item, error)
+	UpdateItemFunc               func(context.Context, Actor, UpdateItemInput) (Item, error)
+	SendItemEmailFunc            func(context.Context, Actor, SendItemEmailInput) (Item, error)
+	ResolveInDoubtSendFunc       func(context.Context, Actor, ResolveInDoubtSendInput) (Item, error)
+	GetPositioningFunc           func(context.Context, Actor) (Positioning, error)
+	UpdatePositioningFunc        func(context.Context, Actor, UpdatePositioningInput) (Positioning, error)
+	ListClaimsFunc               func(context.Context, Actor, ListClaimsInput) (ListClaimsResult, error)
+	UpsertClaimFunc              func(context.Context, Actor, UpsertClaimInput) (UpsertClaimResult, error)
+	CheckClaimsFunc              func(context.Context, Actor, CheckClaimsInput) (CheckClaimsResult, error)
+	ReadProductAnalyticsFunc     func(context.Context, Actor, AnalyticsQuery) (AnalyticsResult, error)
+	ListStrategiesFunc           func(context.Context, Actor, ListStrategiesInput) (ListStrategiesResult, error)
+	GetStrategyFunc              func(context.Context, Actor, GetStrategyInput) (StrategyDetail, error)
+	CreateStrategyFunc           func(context.Context, Actor, CreateStrategyInput) (Strategy, error)
+	UpdateStrategyFunc           func(context.Context, Actor, UpdateStrategyInput) (Strategy, error)
+	ListChannelsFunc             func(context.Context, Actor, ListChannelsInput) (ListChannelsResult, error)
+	GetChannelFunc               func(context.Context, Actor, GetChannelInput) (Channel, error)
+	CreateChannelFunc            func(context.Context, Actor, CreateChannelInput) (Channel, error)
+	UpdateChannelFunc            func(context.Context, Actor, UpdateChannelInput) (Channel, error)
+	ListAssetsFunc               func(context.Context, Actor, ListAssetsInput) (ListAssetsResult, error)
+	GetAssetFunc                 func(context.Context, Actor, GetAssetInput) (Asset, error)
+	CreateAssetUploadFunc        func(context.Context, Actor, CreateAssetUploadInput) (AssetUpload, error)
+	ConfirmAssetUploadFunc       func(context.Context, Actor, ConfirmAssetUploadInput) (Asset, error)
+	GetAssetDownloadFunc         func(context.Context, Actor, GetAssetDownloadInput) (AssetDownload, error)
+	DeleteAssetFunc              func(context.Context, Actor, DeleteAssetInput) error
+	AttachFromAttachmentFunc     func(context.Context, Actor, AttachFromAttachmentInput) (Asset, error)
+	ListStrategyLibraryFunc      func(context.Context, Actor, ListStrategyLibraryInput) (ListStrategyLibraryResult, error)
+	GetStrategyLibraryEntryFunc  func(context.Context, Actor, GetStrategyLibraryEntryInput) (LibraryEntry, error)
+	ImportStrategyLibraryFunc    func(context.Context, Actor, ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error)
+	ListLibraryImportsFunc       func(context.Context, Actor, ListLibraryImportsInput) (ListLibraryImportsResult, error)
+	ListLibraryPruneRequestsFunc func(context.Context, Actor, ListLibraryPruneRequestsInput) (ListLibraryPruneRequestsResult, error)
+	ConfirmLibraryPruneFunc      func(context.Context, Actor, ConfirmLibraryPruneInput) (ConfirmLibraryPruneResult, error)
+	CancelLibraryPruneFunc       func(context.Context, Actor, CancelLibraryPruneInput) (LibraryPruneRequest, error)
+	UseLibraryStrategyFunc       func(context.Context, Actor, UseLibraryStrategyInput) (UseLibraryStrategyResult, error)
 }
 
 // GetAccess records the call and delegates to GetAccessFunc when set.
@@ -432,6 +436,42 @@ func (m *MockService) ImportStrategyLibrary(ctx context.Context, actor Actor, in
 	return ImportStrategyLibraryResult{}, contractkit.MockNotSet("MockService", "ImportStrategyLibrary")
 }
 
+// ListLibraryImports records the call and delegates to ListLibraryImportsFunc when set.
+func (m *MockService) ListLibraryImports(ctx context.Context, actor Actor, in ListLibraryImportsInput) (ListLibraryImportsResult, error) {
+	m.Recorder.Record("ListLibraryImports", ctx, actor, in)
+	if m.ListLibraryImportsFunc != nil {
+		return m.ListLibraryImportsFunc(ctx, actor, in)
+	}
+	return ListLibraryImportsResult{}, contractkit.MockNotSet("MockService", "ListLibraryImports")
+}
+
+// ListLibraryPruneRequests records the call and delegates to ListLibraryPruneRequestsFunc when set.
+func (m *MockService) ListLibraryPruneRequests(ctx context.Context, actor Actor, in ListLibraryPruneRequestsInput) (ListLibraryPruneRequestsResult, error) {
+	m.Recorder.Record("ListLibraryPruneRequests", ctx, actor, in)
+	if m.ListLibraryPruneRequestsFunc != nil {
+		return m.ListLibraryPruneRequestsFunc(ctx, actor, in)
+	}
+	return ListLibraryPruneRequestsResult{}, contractkit.MockNotSet("MockService", "ListLibraryPruneRequests")
+}
+
+// ConfirmLibraryPrune records the call and delegates to ConfirmLibraryPruneFunc when set.
+func (m *MockService) ConfirmLibraryPrune(ctx context.Context, actor Actor, in ConfirmLibraryPruneInput) (ConfirmLibraryPruneResult, error) {
+	m.Recorder.Record("ConfirmLibraryPrune", ctx, actor, in)
+	if m.ConfirmLibraryPruneFunc != nil {
+		return m.ConfirmLibraryPruneFunc(ctx, actor, in)
+	}
+	return ConfirmLibraryPruneResult{}, contractkit.MockNotSet("MockService", "ConfirmLibraryPrune")
+}
+
+// CancelLibraryPrune records the call and delegates to CancelLibraryPruneFunc when set.
+func (m *MockService) CancelLibraryPrune(ctx context.Context, actor Actor, in CancelLibraryPruneInput) (LibraryPruneRequest, error) {
+	m.Recorder.Record("CancelLibraryPrune", ctx, actor, in)
+	if m.CancelLibraryPruneFunc != nil {
+		return m.CancelLibraryPruneFunc(ctx, actor, in)
+	}
+	return LibraryPruneRequest{}, contractkit.MockNotSet("MockService", "CancelLibraryPrune")
+}
+
 // UseLibraryStrategy records the call and delegates to UseLibraryStrategyFunc when set.
 func (m *MockService) UseLibraryStrategy(ctx context.Context, actor Actor, in UseLibraryStrategyInput) (UseLibraryStrategyResult, error) {
 	m.Recorder.Record("UseLibraryStrategy", ctx, actor, in)
@@ -471,7 +511,7 @@ func (m *MockConnections) State(ctx context.Context, actor Actor, integrationKin
 var _ Connections = (*MockConnections)(nil)
 
 // forge:section MockAssetStore
-// forge:hash=36599031f9538dbd59d09ccf3c08842ce3bc234f3d2411d3ce65a80242a9ba06
+// forge:hash=6997739bbbc1c4091d62fa02bf1ede1aeab1dff6b07c9e79c3932be4e98037b9
 
 // MockAssetStore is a test mock for the AssetStore interface.
 //
@@ -485,6 +525,7 @@ type MockAssetStore struct {
 	OpenFunc       func(context.Context, string) (io.ReadCloser, error)
 	PutFunc        func(context.Context, string, io.Reader, PutOptions) error
 	DeleteFunc     func(context.Context, string) error
+	StatFunc       func(context.Context, string) (int64, error)
 	PresignGetFunc func(context.Context, string, GetOptions) (PresignedRequest, error)
 }
 
@@ -522,6 +563,15 @@ func (m *MockAssetStore) Delete(ctx context.Context, key string) error {
 		return m.DeleteFunc(ctx, key)
 	}
 	return contractkit.MockNotSet("MockAssetStore", "Delete")
+}
+
+// Stat records the call and delegates to StatFunc when set.
+func (m *MockAssetStore) Stat(ctx context.Context, key string) (int64, error) {
+	m.Recorder.Record("Stat", ctx, key)
+	if m.StatFunc != nil {
+		return m.StatFunc(ctx, key)
+	}
+	return 0, contractkit.MockNotSet("MockAssetStore", "Stat")
 }
 
 // PresignGet records the call and delegates to PresignGetFunc when set.
@@ -667,7 +717,7 @@ func (m *MockEmail) Send(ctx context.Context, actor Actor, run EmailRun, msg Ema
 var _ Email = (*MockEmail)(nil)
 
 // forge:section MockStore
-// forge:hash=245c2e03c3dfcdb6584c60efdd75a0ab335fc577a7fdba896f1053a0f795f409
+// forge:hash=193e90c28fd1d1ecc06ac00ad53333ccdb8bb2de21d8bf7c0768891b0deed495
 
 // MockStore is a test mock for the Store interface.
 //
@@ -677,52 +727,61 @@ var _ Email = (*MockEmail)(nil)
 // "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
-	InTxFunc               func(context.Context, func(ctx context.Context) error) error
-	ListIdeasFunc          func(context.Context, IdeaFilter) ([]*store.GtmIdea, error)
-	GetIdeaFunc            func(context.Context, string, string) (*store.GtmIdea, error)
-	CreateIdeaFunc         func(context.Context, *store.GtmIdea) error
-	UpdateIdeaFunc         func(context.Context, *store.GtmIdea, int32) error
-	ListCampaignsFunc      func(context.Context, CampaignFilter) ([]*store.GtmCampaign, error)
-	GetCampaignFunc        func(context.Context, string, string) (*store.GtmCampaign, error)
-	CreateCampaignFunc     func(context.Context, *store.GtmCampaign) error
-	UpdateCampaignFunc     func(context.Context, *store.GtmCampaign, int32) error
-	ListItemsFunc          func(context.Context, ItemFilter) ([]*store.GtmItem, error)
-	GetItemFunc            func(context.Context, string, string) (*store.GtmItem, error)
-	HoldItemSendFunc       func(context.Context, string, string, int32, string, time.Time) error
-	ReleaseItemSendFunc    func(context.Context, string, string, int32, string, time.Time, bool) error
-	CreateItemFunc         func(context.Context, *store.GtmItem) error
-	UpdateItemFunc         func(context.Context, *store.GtmItem, int32) error
-	GetPositioningFunc     func(context.Context, string) (*store.GtmPositioning, error)
-	CreatePositioningFunc  func(context.Context, *store.GtmPositioning) error
-	UpdatePositioningFunc  func(context.Context, *store.GtmPositioning, int32) error
-	ListClaimsFunc         func(context.Context, ClaimFilter) ([]*store.GtmClaim, error)
-	GetClaimFunc           func(context.Context, string, string) (*store.GtmClaim, error)
-	CreateClaimFunc        func(context.Context, *store.GtmClaim) error
-	UpdateClaimFunc        func(context.Context, *store.GtmClaim, int32) error
-	ListStrategiesFunc     func(context.Context, StrategyFilter) ([]*store.GtmStrategy, error)
-	GetStrategyFunc        func(context.Context, string, string) (*store.GtmStrategy, error)
-	CreateStrategyFunc     func(context.Context, *store.GtmStrategy) error
-	UpdateStrategyFunc     func(context.Context, *store.GtmStrategy, int32) error
-	ListChannelsFunc       func(context.Context, ChannelFilter) ([]*store.GtmChannel, error)
-	CountChannelsFunc      func(context.Context, string) (int64, error)
-	GetChannelFunc         func(context.Context, string, string) (*store.GtmChannel, error)
-	SeedChannelsFunc       func(context.Context, []*store.GtmChannel) error
-	CreateChannelFunc      func(context.Context, *store.GtmChannel) error
-	UpdateChannelFunc      func(context.Context, *store.GtmChannel, int32) error
-	CampaignItemCountsFunc func(context.Context, string, string) ([]ItemCount, error)
-	ListAssetsFunc         func(context.Context, AssetFilter) ([]*store.GtmAsset, error)
-	GetAssetFunc           func(context.Context, string, string) (*store.GtmAsset, error)
-	SumAssetBytesFunc      func(context.Context, string, time.Time) (int64, error)
-	ListExpiredAssetsFunc  func(context.Context, string, time.Time, int) ([]*store.GtmAsset, error)
-	CreateAssetFunc        func(context.Context, *store.GtmAsset) error
-	MarkAssetReadyFunc     func(context.Context, string, string, string, int64, string, time.Time) error
-	DeletePendingAssetFunc func(context.Context, string, string, time.Time) (bool, error)
-	DeleteAssetFunc        func(context.Context, string, string) error
-	ListLibraryFunc        func(context.Context, LibraryFilter) ([]*store.GtmStrategyLibrary, error)
-	GetLibraryEntryFunc    func(context.Context, string, string) (*store.GtmStrategyLibrary, error)
-	CreateLibraryEntryFunc func(context.Context, *store.GtmStrategyLibrary) error
-	UpdateLibraryEntryFunc func(context.Context, *store.GtmStrategyLibrary) error
-	PruneLibraryFunc       func(context.Context, string, []string) (int64, error)
+	InTxFunc                func(context.Context, func(ctx context.Context) error) error
+	ListIdeasFunc           func(context.Context, IdeaFilter) ([]*store.GtmIdea, error)
+	GetIdeaFunc             func(context.Context, string, string) (*store.GtmIdea, error)
+	CreateIdeaFunc          func(context.Context, *store.GtmIdea) error
+	UpdateIdeaFunc          func(context.Context, *store.GtmIdea, int32) error
+	ListCampaignsFunc       func(context.Context, CampaignFilter) ([]*store.GtmCampaign, error)
+	GetCampaignFunc         func(context.Context, string, string) (*store.GtmCampaign, error)
+	CreateCampaignFunc      func(context.Context, *store.GtmCampaign) error
+	UpdateCampaignFunc      func(context.Context, *store.GtmCampaign, int32) error
+	ListItemsFunc           func(context.Context, ItemFilter) ([]*store.GtmItem, error)
+	GetItemFunc             func(context.Context, string, string) (*store.GtmItem, error)
+	HoldItemSendFunc        func(context.Context, string, string, int32, string, time.Time) error
+	ReleaseItemSendFunc     func(context.Context, string, string, int32, string, time.Time, bool) error
+	CreateItemFunc          func(context.Context, *store.GtmItem) error
+	UpdateItemFunc          func(context.Context, *store.GtmItem, int32) error
+	GetPositioningFunc      func(context.Context, string) (*store.GtmPositioning, error)
+	CreatePositioningFunc   func(context.Context, *store.GtmPositioning) error
+	UpdatePositioningFunc   func(context.Context, *store.GtmPositioning, int32) error
+	ListClaimsFunc          func(context.Context, ClaimFilter) ([]*store.GtmClaim, error)
+	GetClaimFunc            func(context.Context, string, string) (*store.GtmClaim, error)
+	CreateClaimFunc         func(context.Context, *store.GtmClaim) error
+	UpdateClaimFunc         func(context.Context, *store.GtmClaim, int32) error
+	ListStrategiesFunc      func(context.Context, StrategyFilter) ([]*store.GtmStrategy, error)
+	GetStrategyFunc         func(context.Context, string, string) (*store.GtmStrategy, error)
+	CreateStrategyFunc      func(context.Context, *store.GtmStrategy) error
+	UpdateStrategyFunc      func(context.Context, *store.GtmStrategy, int32) error
+	ListChannelsFunc        func(context.Context, ChannelFilter) ([]*store.GtmChannel, error)
+	CountChannelsFunc       func(context.Context, string) (int64, error)
+	GetChannelFunc          func(context.Context, string, string) (*store.GtmChannel, error)
+	SeedChannelsFunc        func(context.Context, []*store.GtmChannel) error
+	CreateChannelFunc       func(context.Context, *store.GtmChannel) error
+	UpdateChannelFunc       func(context.Context, *store.GtmChannel, int32) error
+	CampaignItemCountsFunc  func(context.Context, string, string) ([]ItemCount, error)
+	ListAssetsFunc          func(context.Context, AssetFilter) ([]*store.GtmAsset, error)
+	GetAssetFunc            func(context.Context, string, string) (*store.GtmAsset, error)
+	SumAssetBytesFunc       func(context.Context, string, time.Time) (int64, error)
+	ListExpiredAssetsFunc   func(context.Context, string, time.Time, int) ([]*store.GtmAsset, error)
+	CreateAssetFunc         func(context.Context, *store.GtmAsset) error
+	MarkAssetReadyFunc      func(context.Context, string, string, string, int64, string, time.Time) error
+	DeletePendingAssetFunc  func(context.Context, string, string, time.Time) (bool, error)
+	DeleteAssetFunc         func(context.Context, string, string) error
+	ListLibraryFunc         func(context.Context, LibraryFilter) ([]*store.GtmStrategyLibrary, error)
+	GetLibraryEntryFunc     func(context.Context, string, string) (*store.GtmStrategyLibrary, error)
+	CreateLibraryEntryFunc  func(context.Context, *store.GtmStrategyLibrary) error
+	UpdateLibraryEntryFunc  func(context.Context, *store.GtmStrategyLibrary) error
+	PruneLibraryFunc        func(context.Context, string, []string) (int64, error)
+	TouchLibraryEntriesFunc func(context.Context, string, []string, string, string, time.Time) error
+	LibraryKeysNotInFunc    func(context.Context, string, []string) ([]string, error)
+	PruneLibraryKeysFunc    func(context.Context, string, []string, time.Time) (int64, error)
+	CreateLibraryImportFunc func(context.Context, *store.GtmLibraryImport) error
+	ListLibraryImportsFunc  func(context.Context, LibraryImportFilter) ([]*store.GtmLibraryImport, error)
+	CreatePruneRequestFunc  func(context.Context, *store.GtmLibraryPruneRequest) error
+	GetPruneRequestFunc     func(context.Context, string, string) (*store.GtmLibraryPruneRequest, error)
+	ListPruneRequestsFunc   func(context.Context, PruneRequestFilter) ([]*store.GtmLibraryPruneRequest, error)
+	DecidePruneRequestFunc  func(context.Context, string, string, PruneRequestStatus, string, time.Time) error
 }
 
 // InTx records the call and delegates to InTxFunc when set.
@@ -1137,6 +1196,87 @@ func (m *MockStore) PruneLibrary(ctx context.Context, orgID string, keep []strin
 		return m.PruneLibraryFunc(ctx, orgID, keep)
 	}
 	return 0, contractkit.MockNotSet("MockStore", "PruneLibrary")
+}
+
+// TouchLibraryEntries records the call and delegates to TouchLibraryEntriesFunc when set.
+func (m *MockStore) TouchLibraryEntries(ctx context.Context, orgID string, keys []string, sourceRevision string, importedBy string, at time.Time) error {
+	m.Recorder.Record("TouchLibraryEntries", ctx, orgID, keys, sourceRevision, importedBy, at)
+	if m.TouchLibraryEntriesFunc != nil {
+		return m.TouchLibraryEntriesFunc(ctx, orgID, keys, sourceRevision, importedBy, at)
+	}
+	return contractkit.MockNotSet("MockStore", "TouchLibraryEntries")
+}
+
+// LibraryKeysNotIn records the call and delegates to LibraryKeysNotInFunc when set.
+func (m *MockStore) LibraryKeysNotIn(ctx context.Context, orgID string, keep []string) ([]string, error) {
+	m.Recorder.Record("LibraryKeysNotIn", ctx, orgID, keep)
+	if m.LibraryKeysNotInFunc != nil {
+		return m.LibraryKeysNotInFunc(ctx, orgID, keep)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "LibraryKeysNotIn")
+}
+
+// PruneLibraryKeys records the call and delegates to PruneLibraryKeysFunc when set.
+func (m *MockStore) PruneLibraryKeys(ctx context.Context, orgID string, keys []string, importedAtOrBefore time.Time) (int64, error) {
+	m.Recorder.Record("PruneLibraryKeys", ctx, orgID, keys, importedAtOrBefore)
+	if m.PruneLibraryKeysFunc != nil {
+		return m.PruneLibraryKeysFunc(ctx, orgID, keys, importedAtOrBefore)
+	}
+	return 0, contractkit.MockNotSet("MockStore", "PruneLibraryKeys")
+}
+
+// CreateLibraryImport records the call and delegates to CreateLibraryImportFunc when set.
+func (m *MockStore) CreateLibraryImport(ctx context.Context, row *store.GtmLibraryImport) error {
+	m.Recorder.Record("CreateLibraryImport", ctx, row)
+	if m.CreateLibraryImportFunc != nil {
+		return m.CreateLibraryImportFunc(ctx, row)
+	}
+	return contractkit.MockNotSet("MockStore", "CreateLibraryImport")
+}
+
+// ListLibraryImports records the call and delegates to ListLibraryImportsFunc when set.
+func (m *MockStore) ListLibraryImports(ctx context.Context, f LibraryImportFilter) ([]*store.GtmLibraryImport, error) {
+	m.Recorder.Record("ListLibraryImports", ctx, f)
+	if m.ListLibraryImportsFunc != nil {
+		return m.ListLibraryImportsFunc(ctx, f)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "ListLibraryImports")
+}
+
+// CreatePruneRequest records the call and delegates to CreatePruneRequestFunc when set.
+func (m *MockStore) CreatePruneRequest(ctx context.Context, row *store.GtmLibraryPruneRequest) error {
+	m.Recorder.Record("CreatePruneRequest", ctx, row)
+	if m.CreatePruneRequestFunc != nil {
+		return m.CreatePruneRequestFunc(ctx, row)
+	}
+	return contractkit.MockNotSet("MockStore", "CreatePruneRequest")
+}
+
+// GetPruneRequest records the call and delegates to GetPruneRequestFunc when set.
+func (m *MockStore) GetPruneRequest(ctx context.Context, orgID string, id string) (*store.GtmLibraryPruneRequest, error) {
+	m.Recorder.Record("GetPruneRequest", ctx, orgID, id)
+	if m.GetPruneRequestFunc != nil {
+		return m.GetPruneRequestFunc(ctx, orgID, id)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "GetPruneRequest")
+}
+
+// ListPruneRequests records the call and delegates to ListPruneRequestsFunc when set.
+func (m *MockStore) ListPruneRequests(ctx context.Context, f PruneRequestFilter) ([]*store.GtmLibraryPruneRequest, error) {
+	m.Recorder.Record("ListPruneRequests", ctx, f)
+	if m.ListPruneRequestsFunc != nil {
+		return m.ListPruneRequestsFunc(ctx, f)
+	}
+	return nil, contractkit.MockNotSet("MockStore", "ListPruneRequests")
+}
+
+// DecidePruneRequest records the call and delegates to DecidePruneRequestFunc when set.
+func (m *MockStore) DecidePruneRequest(ctx context.Context, orgID string, id string, status PruneRequestStatus, decidedBy string, at time.Time) error {
+	m.Recorder.Record("DecidePruneRequest", ctx, orgID, id, status, decidedBy, at)
+	if m.DecidePruneRequestFunc != nil {
+		return m.DecidePruneRequestFunc(ctx, orgID, id, status, decidedBy, at)
+	}
+	return contractkit.MockNotSet("MockStore", "DecidePruneRequest")
 }
 
 // Compile-time check.
