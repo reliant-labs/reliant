@@ -2,8 +2,9 @@
 
 /**
  * Site insights' frame: the view its path names, the tabs (which keep the
- * site), the SEO view (R4), and Accessibility's "coming soon" until its flag
- * flips. The views' own data is their models' and the shop fixture's tests'.
+ * site), the SEO (R4) and Accessibility (R5) views now that their flags are
+ * set, and the "coming soon" an audit view says before. The views' own data
+ * is their models' and the shop fixture's tests'.
  */
 
 import type React from "react";
@@ -18,21 +19,22 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 }));
 vi.mock("../SpeedInsightsPage", () => ({ SpeedInsightsView: () => <div data-testid="speed-view" /> }));
 vi.mock("../SeoInsightsView", () => ({ SeoInsightsView: () => <div data-testid="seo-view" /> }));
+vi.mock("../AccessibilityInsightsView", () => ({ AccessibilityInsightsView: () => <div data-testid="a11y-view" /> }));
 
-const { SiteInsightsPage, SITE_AUDIT_VIEWS_READY, siteInsightsViewOf } = await import("../SiteInsightsPage");
+const { SiteAuditComingSoon, SiteInsightsPage, SITE_AUDIT_VIEWS_READY, siteInsightsViewOf } = await import("../SiteInsightsPage");
 const { ForgeConsoleContext } = await import("@/components/Forge/Console/consoleContextValue");
 const { consolePath, withSearch } = await import("@/components/Forge/Console/paths");
 type ForgeConsole = NonNullable<React.ContextType<typeof ForgeConsoleContext>>;
 type Page = ForgeConsole["page"];
 
-function renderAt(page: Page, site?: string) {
+function renderWithQueryless(ui: React.ReactElement, site?: string, page: Page = { kind: "site-insights" }) {
   search.site = site;
   const value = { forgeProject: "shop", page, href: (target: Page, extra?: Record<string, unknown>) => withSearch(consolePath("shop", target), { env: "prod", ...extra }) } as unknown as ForgeConsole;
-  return render(
-    <ForgeConsoleContext.Provider value={value}>
-      <SiteInsightsPage />
-    </ForgeConsoleContext.Provider>,
-  );
+  return render(<ForgeConsoleContext.Provider value={value}>{ui}</ForgeConsoleContext.Provider>);
+}
+
+function renderAt(page: Page, site?: string) {
+  return renderWithQueryless(<SiteInsightsPage />, site, page);
 }
 
 describe("SiteInsightsPage", () => {
@@ -44,17 +46,19 @@ describe("SiteInsightsPage", () => {
     expect(screen.getByTestId("speed-view")).toBeInTheDocument();
   });
 
-  it("shows the SEO view now that its flag is set", () => {
-    expect(SITE_AUDIT_VIEWS_READY).toEqual({ seo: true, accessibility: false });
+  it("shows the SEO and Accessibility views now that their flags are set, under tabs that keep the site", () => {
+    expect(SITE_AUDIT_VIEWS_READY).toEqual({ seo: true, accessibility: true });
     renderAt({ kind: "site-insights", view: "seo" }, "shop-web");
     expect(screen.getByTestId("seo-view")).toBeInTheDocument();
     expect(screen.queryByTestId("site-insights-seo-coming-soon")).toBeNull();
+    renderAt({ kind: "site-insights", view: "accessibility" }, "shop-web");
+    expect(screen.getByTestId("a11y-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("speed-view")).toBeNull();
   });
 
-  it("says what Accessibility will show until its flag flips, under tabs that keep the site", () => {
-    renderAt({ kind: "site-insights", view: "accessibility" }, "shop-web");
+  it("says what an audit view will show before its page ships", () => {
+    renderWithQueryless(<SiteAuditComingSoon view="accessibility" />, "shop-web");
     expect(screen.getByTestId("site-insights-accessibility-coming-soon")).toBeInTheDocument();
-    expect(screen.queryByTestId("speed-view")).toBeNull();
     expect(screen.getByRole("heading", { name: "Site insights" })).toBeInTheDocument();
     expect(screen.getByTestId("site-insights-tab-accessibility")).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("site-insights-tab-speed")).not.toHaveAttribute("aria-current");
