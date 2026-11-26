@@ -76,7 +76,7 @@ func (s *service) UpsertClaim(ctx context.Context, actor Actor, in UpsertClaimIn
 	err := s.store.InTx(ctx, func(ctx context.Context) error {
 		row, err := s.store.GetClaim(ctx, actor.OrgID, in.ID)
 		if err != nil {
-			return readErr(err, "claim")
+			return s.notFound(ctx, err, "claim", in.ID)
 		}
 		if row.Revision != in.ExpectedRevision {
 			return conflict(in.ID, in.ExpectedRevision, row.Revision)
@@ -115,7 +115,7 @@ func (s *service) UpsertClaim(ctx context.Context, actor Actor, in UpsertClaimIn
 		}
 		stored, err := s.store.GetClaim(ctx, actor.OrgID, in.ID)
 		if err != nil {
-			return readErr(err, "claim")
+			return s.notFound(ctx, err, "claim", in.ID)
 		}
 		out = claimFromRow(stored)
 		return nil
@@ -160,7 +160,7 @@ func (s *service) createClaim(ctx context.Context, actor Actor, in UpsertClaimIn
 		}
 		stored, err := s.store.GetClaim(ctx, actor.OrgID, r.ID)
 		if err != nil {
-			return readErr(err, "claim")
+			return s.notFound(ctx, err, "claim", r.ID)
 		}
 		out = claimFromRow(stored)
 		return nil

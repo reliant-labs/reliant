@@ -4,7 +4,9 @@ package gtm
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
@@ -33,12 +35,25 @@ var (
 	campaignUpdateCols = []string{
 		store.GtmCampaignFieldName, store.GtmCampaignFieldGoal, store.GtmCampaignFieldPeriodStart,
 		store.GtmCampaignFieldPeriodEnd, store.GtmCampaignFieldStatus, store.GtmCampaignFieldRevision,
+		store.GtmCampaignFieldStrategyID, store.GtmCampaignFieldPlannedChannelIds, store.GtmCampaignFieldPlannedFormats,
 	}
 	itemUpdateCols = []string{
-		store.GtmItemFieldCampaignID, store.GtmItemFieldIdeaID, store.GtmItemFieldKind, store.GtmItemFieldChannel,
+		store.GtmItemFieldCampaignID, store.GtmItemFieldIdeaID, store.GtmItemFieldFormat, store.GtmItemFieldChannelID,
 		store.GtmItemFieldTitle, store.GtmItemFieldBodyMd, store.GtmItemFieldStatus, store.GtmItemFieldScheduledAt,
 		store.GtmItemFieldEmailTo, store.GtmItemFieldEmailSubject, store.GtmItemFieldGmailMessageID,
 		store.GtmItemFieldSentAt, store.GtmItemFieldSentBy, store.GtmItemFieldApprovalHash, store.GtmItemFieldRevision,
+		store.GtmItemFieldPublishedURL,
+	}
+	strategyUpdateCols = []string{
+		store.GtmStrategyFieldName, store.GtmStrategyFieldGoalMd, store.GtmStrategyFieldTargetMetric,
+		store.GtmStrategyFieldPeriodStart, store.GtmStrategyFieldPeriodEnd, store.GtmStrategyFieldStatus,
+		store.GtmStrategyFieldCategory, store.GtmStrategyFieldUpdatedBy, store.GtmStrategyFieldRevision,
+	}
+	channelUpdateCols = []string{
+		store.GtmChannelFieldKey, store.GtmChannelFieldName, store.GtmChannelFieldMode, store.GtmChannelFieldIntegrationKind,
+		store.GtmChannelFieldConnectionID, store.GtmChannelFieldManualInstructionsMd, store.GtmChannelFieldStatus,
+		store.GtmChannelFieldChannelTypes,
+		store.GtmChannelFieldRevision,
 	}
 	positioningUpdateCols = []string{
 		store.GtmPositioningFieldPositioningMd, store.GtmPositioningFieldAudiences,
@@ -97,6 +112,9 @@ func (p pgStore) ListCampaigns(ctx context.Context, f CampaignFilter) ([]*store.
 	if f.Status != "" {
 		opts = append(opts, orm.WhereEq(store.GtmCampaignFieldStatus, string(f.Status)))
 	}
+	if f.StrategyID != "" {
+		opts = append(opts, orm.WhereEq(store.GtmCampaignFieldStrategyID, f.StrategyID))
+	}
 	opts = append(opts, newestFirst, pageOpts(f.Limit, f.Offset))
 	rows, err := store.ListGtmCampaign(ctx, p.db, opts...)
 	if err != nil {
@@ -126,9 +144,10 @@ func (p pgStore) UpdateCampaign(ctx context.Context, row *store.GtmCampaign, exp
 func (p pgStore) ListItems(ctx context.Context, f ItemFilter) ([]*store.GtmItem, error) {
 	opts := []orm.QueryOption{orm.WhereEq(store.GtmItemFieldOrgID, f.OrgID)}
 	opts = append(opts, linkFilter(store.GtmItemFieldCampaignID, f.CampaignID)...)
-	if f.Kind != "" {
-		opts = append(opts, orm.WhereEq(store.GtmItemFieldKind, string(f.Kind)))
+	if f.Format != "" {
+		opts = append(opts, orm.WhereEq(store.GtmItemFieldFormat, string(f.Format)))
 	}
+	opts = append(opts, linkFilter(store.GtmItemFieldChannelID, f.ChannelID)...)
 	if f.Status != "" {
 		opts = append(opts, orm.WhereEq(store.GtmItemFieldStatus, string(f.Status)))
 	}
@@ -151,13 +170,37 @@ func (p pgStore) GetItem(ctx context.Context, orgID, id string) (*store.GtmItem,
 	return one(rows, err, "gtm item")
 }
 
-func (p pgStore) SetItemSendAttempt(ctx context.Context, orgID, id string, revision int32, from, to string) error {
-	n, err := store.UpdateGtmItemWhere(ctx, p.db, &store.GtmItem{ApprovalHash: to},
-		[]string{store.GtmItemFieldApprovalHash},
-		append(atRevision(orgID, id, revision),
-			orm.WhereEq(store.GtmItemFieldStatus, string(ItemApproved)),
-			orm.WhereEq(store.GtmItemFieldApprovalHash, from))...)
-	return updated(n, err, "set gtm item send attempt")
+// The hold writes are raw statements: they set updated_at to the hold's own
+// time (the generated UpdateWhere stamps the wall clock over it) and, for an
+// invalidating release, advance the revision in the same statement.
+
+func (p pgStore) HoldItemSend(ctx context.Context, orgID, id string, revision int32, hash string, at time.Time) error {
+	res, err := p.db.Exec(ctx, `UPDATE gtm_items SET approval_hash = $1, updated_at = $2
+		WHERE org_id = $3 AND id = $4 AND revision = $5 AND status = $6 AND approval_hash = ''`,
+		hash, at, orgID, id, revision, string(ItemApproved))
+	return execUpdated(res, err, "hold gtm item send")
+}
+
+func (p pgStore) ReleaseItemSend(ctx context.Context, orgID, id string, revision int32, hash string, at time.Time, invalidate bool) error {
+	bump := 0
+	if invalidate {
+		bump = 1
+	}
+	res, err := p.db.Exec(ctx, `UPDATE gtm_items SET approval_hash = '', revision = revision + $1, updated_at = $2
+		WHERE org_id = $3 AND id = $4 AND revision = $5 AND status = $6 AND approval_hash = $7`,
+		bump, at, orgID, id, revision, string(ItemApproved), hash)
+	return execUpdated(res, err, "release gtm item send")
+}
+
+func execUpdated(res sql.Result, err error, op string) error {
+	if err != nil {
+		return classify(err, op)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return updated(n, nil, op)
 }
 
 func (p pgStore) CreateItem(ctx context.Context, row *store.GtmItem) error {
@@ -303,10 +346,18 @@ func classify(err error, op string) error {
 		return nil
 	}
 	switch name := orm.ConstraintName(err); name {
-	case store.GtmIdeaConstraintCampaignSameOrgFkey, store.GtmItemConstraintCampaignSameOrgFkey:
+	case store.GtmIdeaConstraintCampaignSameOrgFkey, store.GtmItemConstraintCampaignSameOrgFkey, store.GtmAssetConstraintCampaignSameOrgFkey:
 		return &LinkError{Field: "campaign_id"}
 	case store.GtmItemConstraintIdeaSameOrgFkey:
 		return &LinkError{Field: "idea_id"}
+	case store.GtmItemConstraintChannelSameOrgFkey:
+		return &LinkError{Field: "channel_id"}
+	case store.GtmCampaignConstraintStrategySameOrgFkey:
+		return &LinkError{Field: "strategy_id"}
+	case store.GtmAssetConstraintItemSameOrgFkey:
+		return &LinkError{Field: "item_id"}
+	case store.GtmChannelConstraintOrgIDKeyKey:
+		return ErrChannelExists
 	case store.GtmClaimConstraintOrgIDTextNormKey:
 		return ErrClaimExists
 	default:

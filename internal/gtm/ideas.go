@@ -7,8 +7,6 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/reliant-labs/forge/pkg/svcerr"
-
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -57,7 +55,7 @@ func (s *service) GetIdea(ctx context.Context, actor Actor, in GetIdeaInput) (Id
 	}
 	row, err := s.store.GetIdea(ctx, actor.OrgID, in.ID)
 	if err != nil {
-		return Idea{}, readErr(err, "idea")
+		return Idea{}, s.notFound(ctx, err, "idea", in.ID)
 	}
 	return ideaFromRow(row)
 }
@@ -147,7 +145,7 @@ func (s *service) UpdateIdea(ctx context.Context, actor Actor, in UpdateIdeaInpu
 	err := s.store.InTx(ctx, func(ctx context.Context) error {
 		row, err := s.store.GetIdea(ctx, actor.OrgID, in.ID)
 		if err != nil {
-			return readErr(err, "idea")
+			return s.notFound(ctx, err, "idea", in.ID)
 		}
 		if row.Revision != in.ExpectedRevision {
 			return conflict(in.ID, in.ExpectedRevision, row.Revision)
@@ -199,7 +197,7 @@ func (s *service) SetIdeaStatus(ctx context.Context, actor Actor, in SetIdeaStat
 	err := s.store.InTx(ctx, func(ctx context.Context) error {
 		row, err := s.store.GetIdea(ctx, actor.OrgID, in.ID)
 		if err != nil {
-			return readErr(err, "idea")
+			return s.notFound(ctx, err, "idea", in.ID)
 		}
 		if row.Revision != in.ExpectedRevision {
 			return conflict(in.ID, in.ExpectedRevision, row.Revision)
@@ -234,7 +232,7 @@ func (s *service) writeIdea(ctx context.Context, orgID string, row *store.GtmIde
 	}
 	stored, err := s.store.GetIdea(ctx, orgID, row.ID)
 	if err != nil {
-		return Idea{}, readErr(err, "idea")
+		return Idea{}, s.notFound(ctx, err, "idea", row.ID)
 	}
 	return ideaFromRow(stored)
 }
@@ -267,14 +265,6 @@ func (s *service) checkIdeaLink(ctx context.Context, orgID, id string) error {
 	return nil
 }
 
-// readErr names the entity of a missing row.
-func readErr(err error, entity string) error {
-	if errors.Is(err, ErrNotFound) {
-		return svcerr.NotFound(entity)
-	}
-	return err
-}
-
 // writeErr turns a store's bare ErrRevisionConflict (the row moved between
 // the read and the write) into a *RevisionConflictError with the revision
 // it is at now.
@@ -285,7 +275,8 @@ func (s *service) writeErr(err error, id string, expected int32, current func() 
 	}
 	rev, curErr := current()
 	if curErr != nil {
-		return svcerr.WithCause(conflict(id, expected, 0), curErr)
+		s.log.Warn("gtm: reading the revision of a conflicted row failed", "id", id, "error", curErr)
+		return conflict(id, expected, 0)
 	}
 	return conflict(id, expected, rev)
 }

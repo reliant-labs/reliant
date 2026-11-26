@@ -40,6 +40,25 @@ export async function listThings(orgId: string | null) { return client().listThi
 export async function listAnyThings() { return client().listThings({}); }
 `,
 );
+// An api module whose import name shadows a browser global (history).
+write(
+  "historyApi.ts",
+  `import { FakeService } from "@/gen/fake_pb";
+export function getItem(req: object) { return connectClient(FakeService).getItem(req); }
+`,
+);
+write(
+  "historyReads.ts",
+  `import * as history from "./historyApi";
+export function useHistoryNamespace() { return useQuery({ queryKey: ["h"], queryFn: () => history.getItem({}) }); }
+`,
+);
+write(
+  "historyPackageReads.ts",
+  `import { history } from "some-router";
+export function useHistoryPackage() { return useQuery({ queryKey: ["h"], queryFn: () => history.getItem({}) }); }
+`,
+);
 write(
   "reads.ts",
   `import { useGetThing, useListThings, fakeServiceQueries } from "./hooks/fake-service-hooks_gen";
@@ -53,6 +72,9 @@ export function keyOf(orgId: string) { return fakeServiceQueries.listThings(orgR
 export function useHandUnscoped() { return useQuery({ queryKey: ["things"], queryFn: () => listAnyThings() }); }
 export function useHandScoped(orgId: string | null) { return useQuery({ queryKey: ["things", orgId], queryFn: () => listThings(orgId), enabled: !!orgId }); }
 export function useHandFetchesElsewhere(orgId: string | null) { return useQuery({ queryKey: ["things", orgId], queryFn: () => listAnyThings(), enabled: !!orgId }); }
+export function useStorageOnly() { return useQuery({ queryKey: ["s"], queryFn: () => window.sessionStorage.getItem("k") ?? localStorage.getItem("k") }); }
+export function useStorageAlias() { const s = window.localStorage; return useQuery({ queryKey: ["s"], queryFn: () => s.getItem("k") }); }
+export function useWrapped(api: { getItem(r: object): unknown }) { return useQuery({ queryKey: ["i"], queryFn: () => api.getItem({}) }); }
 export async function fetchThings() { const { orgId } = await whenOrgScopeReady(); return queryClient.fetchQuery(fakeServiceQueries.listThings(orgRequest({}, orgId))); }
 `,
 );
@@ -63,6 +85,8 @@ const fakeService = {
   methods: [
     { localName: "listThings", methodKind: "unary", input: { fields: [{ name: "org_id" }] } },
     { localName: "getThing", methodKind: "unary", input: { fields: [{ name: "id" }] } },
+    // Named like a DOM method (Storage.getItem).
+    { localName: "getItem", methodKind: "unary", input: { fields: [{ name: "org_id" }] } },
   ],
 };
 
@@ -72,7 +96,7 @@ const site = (kind: Site["kind"], fn: string) => sites.find((s) => s.kind === ki
 
 describe("OrgScopeAnalysis", () => {
   it("knows an rpc is org-scoped by its request's org_id", () => {
-    expect([...analysis.orgScoped]).toEqual(["fake.v1.FakeService.listThings"]);
+    expect([...analysis.orgScoped]).toEqual(["fake.v1.FakeService.listThings", "fake.v1.FakeService.getItem"]);
   });
 
   it("flags a generated read whose request names no org, and one that does not wait", () => {
@@ -95,6 +119,16 @@ describe("OrgScopeAnalysis", () => {
     expect(site("handwritten", "useHandUnscoped")).toMatchObject({ rpcs: ["fake.v1.FakeService.listThings"], namesOrg: false });
     expect(site("handwritten", "useHandScoped")).toMatchObject({ namesOrg: true, fetchNamesOrg: true, gated: true });
     expect(site("handwritten", "useHandFetchesElsewhere")).toMatchObject({ namesOrg: true, fetchNamesOrg: false });
+  });
+
+  it("never takes a browser global's method for an rpc of the same name", () => {
+    expect(site("handwritten", "useStorageOnly")?.rpcs ?? []).toEqual([]);
+    expect(site("handwritten", "useStorageAlias")?.rpcs ?? []).toEqual([]);
+    // An api object that wraps the client method by method still counts.
+    expect(site("handwritten", "useWrapped")?.rpcs).toEqual(["fake.v1.FakeService.getItem"]);
+    // So does one imported under a browser global's name.
+    expect(site("handwritten", "useHistoryNamespace")?.rpcs).toEqual(["fake.v1.FakeService.getItem"]);
+    expect(site("handwritten", "useHistoryPackage")?.rpcs).toEqual(["fake.v1.FakeService.getItem"]);
   });
 
   it("records a direct client call and whether its request names the org", () => {

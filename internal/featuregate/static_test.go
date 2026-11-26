@@ -5,7 +5,9 @@ package featuregate_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -13,7 +15,9 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/featuregate"
+	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -25,23 +29,37 @@ const (
 	outsider   = "user-outsider"
 )
 
+// *orgs.Resolver is the membership internal/app hands NewStatic.
+var _ featuregate.Membership = (*orgs.Resolver)(nil)
+
 // fakeMembership answers from a set of "user/org" pairs; err, when set, is
-// the outage every call returns, and errOrgs fails just those orgs.
+// the outage every call returns, and errOrgs fails just those orgs. noOrgs
+// answers "no answer" (ok=false); memberNotOK answers member=true with
+// ok=false, which is still no answer; block waits for the context to end.
 type fakeMembership struct {
-	members map[string]bool
-	noOrgs  bool
-	err     error
-	errOrgs map[string]bool
-	calls   int
+	members     map[string]bool
+	noOrgs      bool
+	memberNotOK bool
+	block       bool
+	err         error
+	errOrgs     map[string]bool
+	calls       int
 }
 
-func (f *fakeMembership) IsMember(_ context.Context, userID, orgID string) (bool, bool, error) {
+func (f *fakeMembership) IsMember(ctx context.Context, userID, orgID string) (bool, bool, error) {
 	f.calls++
+	if f.block {
+		<-ctx.Done()
+		return false, false, ctx.Err()
+	}
 	if f.err != nil || f.errOrgs[orgID] {
 		return false, false, errors.New("control plane unreachable")
 	}
 	if f.noOrgs {
 		return false, false, nil
+	}
+	if f.memberNotOK {
+		return true, false, nil
 	}
 	return f.members[userID+"/"+orgID], true, nil
 }
@@ -78,6 +96,7 @@ func TestStaticGateAllowed(t *testing.T) {
 		{name: "nil membership", cfg: gtmConfig(tenantZero), membership: nil, feature: featuregate.GTM, user: member, org: tenantZero},
 		{name: "membership outage", cfg: gtmConfig(tenantZero), membership: &fakeMembership{err: errors.New("down")}, feature: featuregate.GTM, user: member, org: tenantZero, wantErr: true},
 		{name: "deployment without orgs", cfg: gtmConfig(tenantZero), membership: &fakeMembership{noOrgs: true}, feature: featuregate.GTM, user: member, org: tenantZero},
+		{name: "member but no answer (ok=false)", cfg: gtmConfig(tenantZero), membership: &fakeMembership{memberNotOK: true}, feature: featuregate.GTM, user: member, org: tenantZero},
 		{name: "unknown feature", cfg: gtmConfig(tenantZero), membership: membersOf(), feature: "other", user: member, org: tenantZero},
 		{name: "untrimmed allowlist entry", cfg: gtmConfig(" " + tenantZero + " "), membership: membersOf(), feature: featuregate.GTM, user: member, org: tenantZero, want: true},
 	}
@@ -95,15 +114,41 @@ func TestStaticGateAllowed(t *testing.T) {
 	}
 }
 
-// A non-listed org is refused before membership is asked, so a refusal costs
-// no control-plane call.
-func TestStaticGateAllowedChecksTheListFirst(t *testing.T) {
-	m := &fakeMembership{members: map[string]bool{member + "/" + otherOrg: true}}
-	gate := featuregate.NewStatic(gtmConfig(tenantZero), m)
-	got, err := gate.Allowed(context.Background(), featuregate.GTM, member, otherOrg)
-	require.NoError(t, err)
-	assert.False(t, got)
-	assert.Zero(t, m.calls)
+// Membership is checked before the allowlist, so a refusal looks the same for
+// a listed and an unlisted org: nothing about it reveals which orgs have the
+// feature. A credential bound to another org is refused, and recorded as
+// refused, for both alike.
+func TestStaticGateAllowedRefusalIsUniform(t *testing.T) {
+	members := map[string]bool{member + "/" + tenantZero: true, member + "/" + otherOrg: true}
+
+	t.Run("membership is asked for an unlisted org too", func(t *testing.T) {
+		m := &fakeMembership{members: members}
+		got, err := featuregate.NewStatic(gtmConfig(tenantZero), m).Allowed(context.Background(), featuregate.GTM, member, otherOrg)
+		require.NoError(t, err)
+		assert.False(t, got)
+		assert.Equal(t, 1, m.calls)
+	})
+
+	for _, org := range []string{tenantZero, otherOrg} {
+		t.Run("credential bound to another org, asking "+org, func(t *testing.T) {
+			ctx := authz.WithCredentialOrg(context.Background(), secondOrg)
+			gate := featuregate.NewStatic(gtmConfig(tenantZero), &fakeMembership{members: members})
+			got, err := gate.Allowed(ctx, featuregate.GTM, member, org)
+			require.NoError(t, err)
+			assert.False(t, got)
+			bound, refused, ok := authz.CredentialRefusal(ctx)
+			assert.True(t, ok, "the refusal is recorded the same way for a listed and an unlisted org")
+			assert.Equal(t, secondOrg, bound)
+			assert.Equal(t, org, refused)
+		})
+	}
+
+	t.Run("credential bound to the org itself", func(t *testing.T) {
+		ctx := authz.WithCredentialOrg(context.Background(), tenantZero)
+		got, err := featuregate.NewStatic(gtmConfig(tenantZero), &fakeMembership{members: members}).Allowed(ctx, featuregate.GTM, member, tenantZero)
+		require.NoError(t, err)
+		assert.True(t, got)
+	})
 }
 
 func TestStaticGateAllowedForUser(t *testing.T) {
@@ -124,6 +169,8 @@ func TestStaticGateAllowedForUser(t *testing.T) {
 		{name: "outage", cfg: gtmConfig(tenantZero), membership: &fakeMembership{err: errors.New("down")}, user: member, wantErr: true},
 		{name: "outage on one org, member of another", cfg: gtmConfig(tenantZero, secondOrg), membership: &fakeMembership{errOrgs: map[string]bool{tenantZero: true}, members: map[string]bool{member + "/" + secondOrg: true}}, user: member, want: true},
 		{name: "outage on one org, member of none", cfg: gtmConfig(tenantZero, secondOrg), membership: &fakeMembership{errOrgs: map[string]bool{tenantZero: true}}, user: member, wantErr: true},
+		{name: "deployment without orgs", cfg: gtmConfig(tenantZero), membership: &fakeMembership{noOrgs: true}, user: member},
+		{name: "member but no answer (ok=false)", cfg: gtmConfig(tenantZero, secondOrg), membership: &fakeMembership{memberNotOK: true}, user: member},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -137,6 +184,56 @@ func TestStaticGateAllowedForUser(t *testing.T) {
 			assert.Equal(t, tc.want, got)
 		})
 	}
+}
+
+// AllowedForUser asks the same check as Allowed, so a credential bound to an
+// unlisted org is entitled to nothing, while one bound to a listed org the
+// user belongs to is.
+func TestStaticGateAllowedForUserRespectsTheCredentialsOrg(t *testing.T) {
+	m := &fakeMembership{members: map[string]bool{member + "/" + tenantZero: true, member + "/" + otherOrg: true}}
+	gate := featuregate.NewStatic(gtmConfig(tenantZero), m)
+
+	ctx := authz.WithCredentialOrg(context.Background(), otherOrg)
+	got, err := gate.AllowedForUser(ctx, featuregate.GTM, member)
+	require.NoError(t, err)
+	assert.False(t, got, "a token bound to an unlisted org")
+	// The refusal of the listed org is not recorded on the caller's ctx: the
+	// edge would report it, naming an allowlisted org the caller never asked
+	// about, on any later refusal of the same request.
+	bound, refused, ok := authz.CredentialRefusal(ctx)
+	assert.False(t, ok, "refused %q", refused)
+	assert.Equal(t, otherOrg, bound)
+
+	got, err = gate.AllowedForUser(authz.WithCredentialOrg(context.Background(), tenantZero), featuregate.GTM, member)
+	require.NoError(t, err)
+	assert.True(t, got, "a token bound to the listed org")
+}
+
+// A membership check that does not answer in time is "no", with the outage
+// as the error (the fake blocks until its context ends, so returning at all
+// proves the bound), and AllowedForUser stops asking once its overall
+// deadline passes rather than waiting on every listed org in turn.
+func TestStaticGateTimeouts(t *testing.T) {
+	featuregate.SetTimeoutsForTest(t, 20*time.Millisecond, 50*time.Millisecond)
+
+	t.Run("Allowed", func(t *testing.T) {
+		m := &fakeMembership{block: true}
+		got, err := featuregate.NewStatic(gtmConfig(tenantZero), m).Allowed(context.Background(), featuregate.GTM, member, tenantZero)
+		assert.False(t, got)
+		require.ErrorIs(t, err, authz.ErrMembershipUnavailable)
+	})
+
+	t.Run("AllowedForUser", func(t *testing.T) {
+		orgs := make([]string, 10)
+		for i := range orgs {
+			orgs[i] = fmt.Sprintf("org-%d", i)
+		}
+		m := &fakeMembership{block: true}
+		got, err := featuregate.NewStatic(gtmConfig(orgs...), m).AllowedForUser(context.Background(), featuregate.GTM, member)
+		assert.False(t, got)
+		require.Error(t, err)
+		assert.Less(t, m.calls, len(orgs), "the orgs left once the deadline passed are skipped")
+	})
 }
 
 func TestDenyAll(t *testing.T) {

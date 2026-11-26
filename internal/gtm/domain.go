@@ -50,19 +50,7 @@ const (
 	CampaignArchived CampaignStatus = "GTM_CAMPAIGN_STATUS_ARCHIVED"
 )
 
-// ItemKind is what an item is.
-type ItemKind string
-
-// ItemKind values.
-const (
-	ItemBlogPost   ItemKind = "GTM_ITEM_KIND_BLOG_POST"
-	ItemSocialPost ItemKind = "GTM_ITEM_KIND_SOCIAL_POST"
-	ItemEmail      ItemKind = "GTM_ITEM_KIND_EMAIL"
-	ItemLaunch     ItemKind = "GTM_ITEM_KIND_LAUNCH"
-	ItemOther      ItemKind = "GTM_ITEM_KIND_OTHER"
-)
-
-// ItemStatus is where an item is. SENT is written only by MarkItemSent.
+// ItemStatus is where an item is. SENT is written only by the email path.
 type ItemStatus string
 
 // ItemStatus values.
@@ -164,9 +152,14 @@ type Campaign struct {
 	PeriodStart *time.Time
 	PeriodEnd   *time.Time
 	Status      CampaignStatus
-	Revision    int32
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	// StrategyID is the strategy it belongs to (every campaign has one).
+	StrategyID string
+	// PlannedChannelIDs and PlannedFormats are what it plans to use.
+	PlannedChannelIDs []string
+	PlannedFormats    []ItemFormat
+	Revision          int32
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 // CampaignDetail is a campaign with the ideas and items linked to it, each
@@ -177,22 +170,31 @@ type CampaignDetail struct {
 	Ideas []Idea
 	// Items are scheduled ones soonest first, then the rest newest first.
 	Items []Item
+	// Truncated is true when either list held more than its cap; ListIdeas
+	// and ListItems with the campaign page through all of them.
+	Truncated bool
+	// Coverage is planned against actual over ALL its items: the planned
+	// pairs first (PlannedChannelIDs order, then PlannedFormats order), then
+	// the unplanned pairs its items use.
+	Coverage []CoverageRow
 }
 
-// Item is a post, an email, a launch: with ScheduledAt it is on the calendar.
+// Item is a post, an email, a video, a pitch: with ScheduledAt it is on the
+// calendar.
 type Item struct {
 	ID    string
 	OrgID string
 	// CampaignID and IdeaID are "" for none.
-	CampaignID  string
-	IdeaID      string
-	Kind        ItemKind
-	Channel     string
+	CampaignID string
+	IdeaID     string
+	Format     ItemFormat
+	// ChannelID is the channel it goes out on; "" for none yet.
+	ChannelID   string
 	Title       string
 	BodyMD      string
 	Status      ItemStatus
 	ScheduledAt *time.Time
-	// EmailTo and EmailSubject are an EMAIL item's.
+	// EmailTo and EmailSubject are an email-type item's.
 	EmailTo      []string
 	EmailSubject string
 	// The send record, set with SENT.
@@ -200,9 +202,11 @@ type Item struct {
 	SentAt         *time.Time
 	SentBy         string
 	ApprovalHash   string
-	Revision       int32
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// PublishedURL is where it went out, recorded by a person; "" for none.
+	PublishedURL string
+	Revision     int32
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // Positioning is the org's positioning and audiences. Revision 0 is "none yet".
@@ -343,9 +347,11 @@ type SetIdeaStatusInput struct {
 
 // ListCampaignsInput is the input to Service.ListCampaigns.
 type ListCampaignsInput struct {
-	Status    CampaignStatus
-	PageSize  int
-	PageToken string
+	Status CampaignStatus
+	// StrategyID filters when non-nil (it may not point at "").
+	StrategyID *string
+	PageSize   int
+	PageToken  string
 }
 
 // ListCampaignsResult is the result of Service.ListCampaigns.
@@ -367,6 +373,11 @@ type CreateCampaignInput struct {
 	PeriodEnd   *time.Time
 	// Status "" is DRAFT.
 	Status CampaignStatus
+	// StrategyID is required: a strategy of the org.
+	StrategyID string
+	// PlannedChannelIDs are channels of the org; PlannedFormats formats.
+	PlannedChannelIDs []string
+	PlannedFormats    []ItemFormat
 }
 
 // UpdateCampaignInput is the input to Service.UpdateCampaign. A nil field is
@@ -381,14 +392,23 @@ type UpdateCampaignInput struct {
 	ClearPeriodStart bool
 	ClearPeriodEnd   bool
 	Status           *CampaignStatus
+	// StrategyID, when set, moves it to that strategy of the org.
+	StrategyID *string
+	// PlannedChannelIDs and PlannedFormats, when non-nil, replace the lists
+	// (empty clears them).
+	PlannedChannelIDs *[]string
+	PlannedFormats    *[]ItemFormat
 }
 
 // ListItemsInput is the input to Service.ListItems.
 type ListItemsInput struct {
 	// CampaignID filters when non-nil; a pointer to "" lists unlinked items.
 	CampaignID *string
-	Kind       ItemKind
-	Status     ItemStatus
+	Format     ItemFormat
+	// ChannelID filters when non-nil; a pointer to "" lists items with no
+	// channel.
+	ChannelID *string
+	Status    ItemStatus
 	// The scheduled range, half-open: ScheduledFrom <= scheduled_at <
 	// ScheduledTo. Either bound set lists only scheduled items.
 	ScheduledFrom *time.Time
@@ -408,17 +428,20 @@ type GetItemInput struct {
 	ID string
 }
 
-// CreateItemInput is the input to Service.CreateItem. The item starts DRAFT.
+// CreateItemInput is the input to Service.CreateItem.
 type CreateItemInput struct {
-	Kind    ItemKind
-	Title   string
-	BodyMD  string
-	Channel string
+	// Status is DRAFT or REVIEW; "" is DRAFT.
+	Status ItemStatus
+	Format ItemFormat
+	Title  string
+	BodyMD string
+	// ChannelID is a channel of the org; "" for none yet.
+	ChannelID string
 	// CampaignID and IdeaID link rows of the org; "" for none.
 	CampaignID  string
 	IdeaID      string
 	ScheduledAt *time.Time
-	// EmailTo and EmailSubject are for an EMAIL item only.
+	// EmailTo and EmailSubject are for an email-type item only.
 	EmailTo      []string
 	EmailSubject string
 }
@@ -428,10 +451,11 @@ type CreateItemInput struct {
 type UpdateItemInput struct {
 	ID               string
 	ExpectedRevision int32
-	Kind             *ItemKind
+	Format           *ItemFormat
 	Title            *string
 	BodyMD           *string
-	Channel          *string
+	// ChannelID, when non-nil, moves it to that channel; "" takes it off.
+	ChannelID *string
 	// CampaignID and IdeaID, when non-nil, link that row; "" unlinks.
 	CampaignID       *string
 	IdeaID           *string
@@ -443,16 +467,22 @@ type UpdateItemInput struct {
 	// Status is DRAFT, REVIEW, APPROVED (a person only), SCHEDULED,
 	// PUBLISHED or PAUSED; never SENT.
 	Status *ItemStatus
+	// PublishedURL, when non-nil, records where it went out (http or
+	// https; "" clears it). A person's act; not a content edit.
+	PublishedURL *string
 }
 
-// MarkItemSentInput is the input to Service.MarkItemSent.
-type MarkItemSentInput struct {
+// ResolveInDoubtSendInput is the input to Service.ResolveInDoubtSend.
+type ResolveInDoubtSendInput struct {
 	ItemID string
-	// ExpectedRevision is the revision whose content was approved and sent.
-	ExpectedRevision int32
-	GmailMessageID   string
-	// ApprovalHash is the hash of the approval card the email was sent under.
+	// ApprovalHash is the hold's: the card the in-doubt send ran under.
 	ApprovalHash string
+	// GmailMessageID, when set, is the message the person found in the sent
+	// mail, and the item is recorded SENT with it. It is the person's manual
+	// marker, stored as given: nothing checks it against Gmail. nil releases
+	// the hold ("it did not go out"), refused while the send may still be
+	// running, and voids every earlier approval card.
+	GmailMessageID *string
 }
 
 // SendItemEmailInput is the input to Service.SendItemEmail.
@@ -460,7 +490,8 @@ type SendItemEmailInput struct {
 	ItemID string
 	// ExpectedRevision is the revision the person approved.
 	ExpectedRevision int32
-	// ApprovalHash is the hash of the approval card, recorded with the send.
+	// ApprovalHash is the approval card's hash, which must be ApprovalHash
+	// of the item as stored; it is recorded with the send.
 	ApprovalHash string
 	// Run is the credential context the email is sent with.
 	Run EmailRun
@@ -561,17 +592,19 @@ type IdeaFilter struct {
 
 // CampaignFilter selects campaigns for Store.ListCampaigns.
 type CampaignFilter struct {
-	OrgID  string
-	Status CampaignStatus
-	Limit  int
-	Offset int
+	OrgID      string
+	Status     CampaignStatus
+	StrategyID string
+	Limit      int
+	Offset     int
 }
 
 // ItemFilter selects items for Store.ListItems.
 type ItemFilter struct {
 	OrgID         string
 	CampaignID    *string
-	Kind          ItemKind
+	Format        ItemFormat
+	ChannelID     *string
 	Status        ItemStatus
 	ScheduledFrom *time.Time
 	ScheduledTo   *time.Time

@@ -23,13 +23,15 @@ func TestPGStore(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	cb := &store.GtmCampaign{OrgID: orgB, Name: "B", Status: string(CampaignDraft), Revision: 1, CreatedAt: now, UpdatedAt: now}
+	sb := &store.GtmStrategy{OrgID: orgB, Name: "B", Status: string(StrategyDraft), Revision: 1, CreatedBy: "u", UpdatedBy: "u", CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, st.CreateStrategy(ctx, sb))
+	cb := &store.GtmCampaign{OrgID: orgB, Name: "B", Status: string(CampaignDraft), StrategyID: sb.ID, Revision: 1, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, st.CreateCampaign(ctx, cb))
 	require.NotEmpty(t, cb.ID)
 
 	t.Run("a link to another org's campaign is a LinkError", func(t *testing.T) {
 		err := st.CreateItem(ctx, &store.GtmItem{
-			OrgID: orgA, CampaignID: &cb.ID, Kind: string(ItemBlogPost), Title: "x",
+			OrgID: orgA, CampaignID: &cb.ID, Format: string(FormatLongPost), Title: "x",
 			Status: string(ItemDraft), Revision: 1, CreatedAt: now, UpdatedAt: now,
 		})
 		var link *LinkError
@@ -41,7 +43,7 @@ func TestPGStore(t *testing.T) {
 
 	t.Run("a CHECK violation is a ValidationError naming it", func(t *testing.T) {
 		err := st.CreateItem(ctx, &store.GtmItem{
-			OrgID: orgA, Kind: string(ItemEmail), Title: "x",
+			OrgID: orgA, Format: string(FormatEmail), Title: "x",
 			Status: string(ItemSent), Revision: 1, CreatedAt: now, UpdatedAt: now,
 		})
 		var ve *ValidationError
@@ -84,10 +86,64 @@ func TestPGStore(t *testing.T) {
 		require.ErrorIs(t, st.UpdateIdea(ctx, &other, 2), ErrRevisionConflict, "another org's write matches no row")
 	})
 
+	t.Run("a send hold is taken only when empty and released only by its hash, on an approved row, at its revision", func(t *testing.T) {
+		row := &store.GtmItem{
+			OrgID: orgA, Format: string(FormatEmail), Title: "Mail", Status: string(ItemApproved),
+			EmailTo: []string{"a@example.com"}, EmailSubject: "S", Revision: 1, CreatedAt: now, UpdatedAt: now,
+		}
+		require.NoError(t, st.CreateItem(ctx, row))
+		got, err := st.GetItem(ctx, orgA, row.ID)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"a@example.com"}, got.EmailTo, "the app role reads the forge:secret email_to")
+
+		heldAt := now.Add(-time.Hour)
+		require.ErrorIs(t, st.HoldItemSend(ctx, orgA, row.ID, 2, "h1", heldAt), ErrRevisionConflict, "revision must match")
+		require.ErrorIs(t, st.HoldItemSend(ctx, orgB, row.ID, 1, "h1", heldAt), ErrRevisionConflict, "org must match")
+		require.NoError(t, st.HoldItemSend(ctx, orgA, row.ID, 1, "h1", heldAt))
+		require.ErrorIs(t, st.HoldItemSend(ctx, orgA, row.ID, 1, "h2", heldAt), ErrRevisionConflict, "a second hold loses: approval_hash must be empty")
+		got, err = st.GetItem(ctx, orgA, row.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "h1", got.ApprovalHash)
+		assert.Equal(t, int32(1), got.Revision, "a hold never moves the revision")
+		assert.True(t, got.UpdatedAt.Equal(heldAt), "the hold is stamped with its own time: %s", got.UpdatedAt)
+
+		require.ErrorIs(t, st.ReleaseItemSend(ctx, orgA, row.ID, 1, "h2", now, true), ErrRevisionConflict, "approval_hash = the hold's hash")
+		require.ErrorIs(t, st.ReleaseItemSend(ctx, orgA, row.ID, 2, "h1", now, true), ErrRevisionConflict, "revision must match")
+		require.NoError(t, st.ReleaseItemSend(ctx, orgA, row.ID, 1, "h1", now, true))
+		got, err = st.GetItem(ctx, orgA, row.ID)
+		require.NoError(t, err)
+		assert.Empty(t, got.ApprovalHash)
+		assert.Equal(t, int32(2), got.Revision, "an invalidating release moves the revision")
+
+		require.NoError(t, st.HoldItemSend(ctx, orgA, row.ID, 2, "h3", now))
+		require.NoError(t, st.ReleaseItemSend(ctx, orgA, row.ID, 2, "h3", now, false))
+		got, err = st.GetItem(ctx, orgA, row.ID)
+		require.NoError(t, err)
+		assert.Equal(t, int32(2), got.Revision, "a plain release does not")
+
+		draft := &store.GtmItem{OrgID: orgA, Format: string(FormatEmail), Title: "D", Status: string(ItemDraft), Revision: 1, CreatedAt: now, UpdatedAt: now}
+		require.NoError(t, st.CreateItem(ctx, draft))
+		require.ErrorIs(t, st.HoldItemSend(ctx, orgA, draft.ID, 1, "h", now), ErrRevisionConflict, "only an approved row is held")
+	})
+
+	t.Run("an email is never scheduled or published, at the table too", func(t *testing.T) {
+		for _, st2 := range []ItemStatus{ItemScheduled, ItemPublished} {
+			err := st.CreateItem(ctx, &store.GtmItem{
+				OrgID: orgA, Format: string(FormatEmail), Title: "x", Status: string(st2), ScheduledAt: &now,
+				Revision: 1, CreatedAt: now, UpdatedAt: now,
+			})
+			var ve *ValidationError
+			require.ErrorAs(t, err, &ve, st2)
+		}
+	})
+
 	t.Run("the service end to end", func(t *testing.T) {
-		em := &MockEmail{SendFunc: func(context.Context, EmailRun, EmailMessage) (string, error) { return "gmail-pg", nil }}
+		em := &MockEmail{SendFunc: sendsAs("gmail-pg")}
 		svc := New(Deps{Store: st, Gate: allowGate(orgA), Email: em})
-		c, err := svc.CreateCampaign(ctx, person, CreateCampaignInput{Name: "Launch"})
+		strat, err := svc.CreateStrategy(ctx, person, CreateStrategyInput{Name: "Grow", PeriodStart: "2026-12-01", PeriodEnd: "2027-01-31"})
+		require.NoError(t, err)
+		assert.Equal(t, "2027-01-31", strat.PeriodEnd, "a DATE round-trips")
+		c, err := svc.CreateCampaign(ctx, person, CreateCampaignInput{Name: "Launch", StrategyID: strat.ID})
 		require.NoError(t, err)
 		idea, err := svc.CreateIdea(ctx, agent, CreateIdeaInput{
 			Kind: IdeaKindContent, Title: "Post", CampaignID: c.ID,
@@ -98,12 +154,12 @@ func TestPGStore(t *testing.T) {
 		assert.True(t, idea.Evidence[0].ObservedAt.Equal(now))
 
 		when := now.Add(48 * time.Hour)
-		_, err = svc.CreateItem(ctx, agent, CreateItemInput{Kind: ItemBlogPost, Title: "later", CampaignID: c.ID})
+		_, err = svc.CreateItem(ctx, agent, CreateItemInput{Format: FormatLongPost, Title: "later", CampaignID: c.ID})
 		require.NoError(t, err)
-		_, err = svc.CreateItem(ctx, agent, CreateItemInput{Kind: ItemBlogPost, Title: "dated", CampaignID: c.ID, ScheduledAt: &when})
+		_, err = svc.CreateItem(ctx, agent, CreateItemInput{Format: FormatLongPost, Title: "dated", CampaignID: c.ID, ScheduledAt: &when})
 		require.NoError(t, err)
 		mail, err := svc.CreateItem(ctx, agent, CreateItemInput{
-			Kind: ItemEmail, Title: "Mail", BodyMD: "Hi", IdeaID: idea.ID,
+			Format: FormatEmail, Title: "Mail", BodyMD: "Hi", IdeaID: idea.ID,
 			EmailTo: []string{"a@example.com"}, EmailSubject: "News",
 		})
 		require.NoError(t, err)
@@ -116,12 +172,12 @@ func TestPGStore(t *testing.T) {
 
 		mail, err = svc.UpdateItem(ctx, person, UpdateItemInput{ID: mail.ID, ExpectedRevision: mail.Revision, Status: ptr(ItemApproved)})
 		require.NoError(t, err)
-		sent, err := svc.SendItemEmail(ctx, agent, SendItemEmailInput{ItemID: mail.ID, ExpectedRevision: mail.Revision, ApprovalHash: "card", Run: EmailRun{RunID: "run"}})
+		sent, err := svc.SendItemEmail(ctx, agent, SendItemEmailInput{ItemID: mail.ID, ExpectedRevision: mail.Revision, ApprovalHash: ApprovalHash(mail), Run: EmailRun{RunID: "run"}})
 		require.NoError(t, err)
 		assert.Equal(t, ItemSent, sent.Status)
 		assert.Equal(t, "gmail-pg", sent.GmailMessageID)
 		assert.Equal(t, mail.Revision+1, sent.Revision, "the hold kept the revision; the record advanced it")
-		_, err = svc.SendItemEmail(ctx, agent, SendItemEmailInput{ItemID: mail.ID, ExpectedRevision: mail.Revision, ApprovalHash: "card", Run: EmailRun{RunID: "run"}})
+		_, err = svc.SendItemEmail(ctx, agent, SendItemEmailInput{ItemID: mail.ID, ExpectedRevision: mail.Revision, ApprovalHash: ApprovalHash(mail), Run: EmailRun{RunID: "run"}})
 		require.ErrorIs(t, err, ErrAlreadySent)
 		assert.Equal(t, 1, em.CallCount("Send"))
 

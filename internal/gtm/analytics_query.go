@@ -4,6 +4,7 @@ package gtm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"time"
@@ -33,8 +34,13 @@ const (
 const (
 	// DefaultAnalyticsWindow is the window a query with no From covers.
 	DefaultAnalyticsWindow = 7 * 24 * time.Hour
-	// MaxAnalyticsWindow is the longest window any template reads.
+	// MaxAnalyticsWindow is the longest window a funnel reads (control
+	// plane's QueryPanel funnel cap).
 	MaxAnalyticsWindow = 90 * 24 * time.Hour
+	// MaxSQLAnalyticsWindow is the longest window the sql templates
+	// (event_counts, event_trend, property_breakdown) read: control plane's
+	// QueryPanel caps sql panels at 30 days.
+	MaxSQLAnalyticsWindow = 30 * 24 * time.Hour
 	// DefaultAnalyticsRows and MaxAnalyticsRows bound a result's rows.
 	DefaultAnalyticsRows = 50
 	MaxAnalyticsRows     = 200
@@ -64,7 +70,8 @@ type AnalyticsQuery struct {
 	Property string
 	// The window, half-open: From <= event time < To. A zero To is now, a
 	// zero From is To minus DefaultAnalyticsWindow; at most
-	// MaxAnalyticsWindow long.
+	// MaxSQLAnalyticsWindow long for the sql templates and
+	// MaxAnalyticsWindow for a funnel.
 	From time.Time
 	To   time.Time
 	// Limit caps the rows; 0 is DefaultAnalyticsRows, at most
@@ -111,6 +118,13 @@ func (q AnalyticsQuery) Validate() error {
 		if n < MinFunnelSteps || n > MaxFunnelSteps {
 			return invalid("events", fmt.Sprintf("a funnel has %d to %d steps", MinFunnelSteps, MaxFunnelSteps))
 		}
+		seen := make(map[string]bool, n)
+		for _, e := range q.Events {
+			if seen[e] {
+				return invalid("events", fmt.Sprintf("a funnel names each step once; %q is twice", e))
+			}
+			seen[e] = true
+		}
 	default:
 		return invalid("template", fmt.Sprintf("unknown template %q", q.Template))
 	}
@@ -125,8 +139,12 @@ func (q AnalyticsQuery) Validate() error {
 	if !q.From.Before(q.To) {
 		return invalid("window", "from must be before to")
 	}
-	if q.To.Sub(q.From) > MaxAnalyticsWindow {
-		return invalid("window", "at most 90 days")
+	maxWindow, maxWord := MaxSQLAnalyticsWindow, "30 days"
+	if q.Template == AnalyticsFunnel {
+		maxWindow, maxWord = MaxAnalyticsWindow, "90 days"
+	}
+	if q.To.Sub(q.From) > maxWindow {
+		return invalid("window", "at most "+maxWord+" for "+string(q.Template))
 	}
 	if q.Limit < 1 || q.Limit > MaxAnalyticsRows {
 		return invalid("limit", fmt.Sprintf("1 to %d", MaxAnalyticsRows))
@@ -162,6 +180,18 @@ type AnalyticsResult struct {
 	Rows []AnalyticsRow
 	// Truncated is true when rows beyond the limit were dropped.
 	Truncated bool
+	// HiddenGroups is how many groups were dropped because fewer than 3
+	// people were in them (k-anonymity, k=3). Analytics fills it in; the
+	// Service's re-cap of Rows keeps it as is.
+	HiddenGroups int
+}
+
+// passesThrough reports whether an Analytics error reaches the caller as it
+// is: one that wraps a *ValidationError, ErrAnalyticsUnavailable or
+// ErrAnalyticsFailed, whose text the Analytics contract holds fixed.
+func passesThrough(err error) bool {
+	var ve *ValidationError
+	return errors.As(err, &ve) || errors.Is(err, ErrAnalyticsUnavailable) || errors.Is(err, ErrAnalyticsFailed)
 }
 
 // ReadProductAnalytics gates, resolves and validates q, then hands it to
@@ -179,7 +209,22 @@ func (s *service) ReadProductAnalytics(ctx context.Context, actor Actor, q Analy
 	}
 	res, err := s.analytics.Query(ctx, actor.OrgID, q)
 	if err != nil {
-		return AnalyticsResult{}, fmt.Errorf("product analytics: %w", err)
+		// The domain's own errors carry fixed, actionable messages (a refused
+		// window, name or property is the caller's to fix, not to retry):
+		// they pass through, and the Analytics contract holds their text
+		// fixed. Anything else, a bare InvalidArgument included, can name
+		// hosts and queries: log it, say less.
+		if passesThrough(err) {
+			return AnalyticsResult{}, err
+		}
+		s.log.WarnContext(ctx, "gtm: product analytics query failed", "template", string(q.Template), "error", err)
+		return AnalyticsResult{}, ErrAnalyticsFailed
+	}
+	// The domain holds the caps, whatever the client returned.
+	res.Template, res.From, res.To = q.Template, q.From, q.To
+	if len(res.Rows) > q.Limit {
+		res.Rows = res.Rows[:q.Limit]
+		res.Truncated = true
 	}
 	return res, nil
 }

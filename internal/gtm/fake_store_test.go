@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -21,6 +22,8 @@ type fakeStore struct {
 	positioning map[string]*store.GtmPositioning
 	claims      map[string]*store.GtmClaim
 	seq         int
+	// r2s holds the r2/r3 tables (fake_store_r2_test.go).
+	r2s *fakeR2
 	// failUpdateItem, when set, is returned by the next UpdateItem.
 	failUpdateItem error
 }
@@ -42,7 +45,11 @@ func (f *fakeStore) nextID() string {
 	return fmt.Sprintf("id-%03d", f.seq)
 }
 
+// InTx refuses a done ctx, as a real transaction cannot begin on one.
 func (f *fakeStore) InTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return fn(ctx)
 }
 
@@ -113,7 +120,8 @@ func (f *fakeStore) UpdateIdea(_ context.Context, row *store.GtmIdea, expected i
 
 func (f *fakeStore) ListCampaigns(_ context.Context, flt CampaignFilter) ([]*store.GtmCampaign, error) {
 	return sortedPage(f.campaigns, func(r *store.GtmCampaign) bool {
-		return r.OrgID == flt.OrgID && (flt.Status == "" || r.Status == string(flt.Status))
+		return r.OrgID == flt.OrgID && (flt.Status == "" || r.Status == string(flt.Status)) &&
+			(flt.StrategyID == "" || r.StrategyID == flt.StrategyID)
 	}, func(r *store.GtmCampaign) string { return r.ID }, flt.Limit, flt.Offset), nil
 }
 
@@ -151,7 +159,10 @@ func (f *fakeStore) ListItems(_ context.Context, flt ItemFilter) ([]*store.GtmIt
 		if r.OrgID != flt.OrgID || !linkMatches(flt.CampaignID, r.CampaignID) {
 			return false
 		}
-		if (flt.Kind != "" && r.Kind != string(flt.Kind)) || (flt.Status != "" && r.Status != string(flt.Status)) {
+		if !linkMatches(flt.ChannelID, r.ChannelID) {
+			return false
+		}
+		if (flt.Format != "" && r.Format != string(flt.Format)) || (flt.Status != "" && r.Status != string(flt.Status)) {
 			return false
 		}
 		if flt.ScheduledFrom != nil && (r.ScheduledAt == nil || r.ScheduledAt.Before(*flt.ScheduledFrom)) {
@@ -174,12 +185,24 @@ func (f *fakeStore) GetItem(_ context.Context, orgID, id string) (*store.GtmItem
 	return &c, nil
 }
 
-func (f *fakeStore) SetItemSendAttempt(_ context.Context, orgID, id string, revision int32, from, to string) error {
+func (f *fakeStore) HoldItemSend(_ context.Context, orgID, id string, revision int32, hash string, at time.Time) error {
 	r, ok := f.items[id]
-	if !ok || r.OrgID != orgID || r.Revision != revision || r.Status != string(ItemApproved) || r.ApprovalHash != from {
+	if !ok || r.OrgID != orgID || r.Revision != revision || r.Status != string(ItemApproved) || r.ApprovalHash != "" {
 		return ErrRevisionConflict
 	}
-	r.ApprovalHash = to
+	r.ApprovalHash, r.UpdatedAt = hash, at
+	return nil
+}
+
+func (f *fakeStore) ReleaseItemSend(_ context.Context, orgID, id string, revision int32, hash string, at time.Time, invalidate bool) error {
+	r, ok := f.items[id]
+	if !ok || r.OrgID != orgID || r.Revision != revision || r.Status != string(ItemApproved) || r.ApprovalHash != hash {
+		return ErrRevisionConflict
+	}
+	r.ApprovalHash, r.UpdatedAt = "", at
+	if invalidate {
+		r.Revision++
+	}
 	return nil
 }
 
