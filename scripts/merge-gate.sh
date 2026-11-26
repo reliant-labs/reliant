@@ -181,7 +181,20 @@ slot_wait=$(( t0 - ${MG_SLOT_T0:-$t0} ))
 # all its lanes uncapped, on a host where every other job takes all 32), and
 # each concurrent phase a part of that: the test phase (the longest) half for
 # Go and half for vitest, the others a quarter. MG_CPUS=<n> overrides it.
+#
+# Inside a CPU quota — a container's, or the reliant daemon's heavy-command
+# cgroup when an agent's command line wraps the gate (cpu.max at the slot's
+# share, internal/heavyjob) — the machine is that quota, not nproc: sized to
+# nproc, a gate under a 4-CPU cap ran half=24 Go processes on 4 CPUs.
 cpus=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
+cg=$(sed -n 's/^0:://p' /proc/self/cgroup 2>/dev/null)
+while [ -n "$cg" ]; do
+  # cpu.max is "<quota> <period>", or "max <period>" for none.
+  read -r q p 2>/dev/null <"/sys/fs/cgroup$cg/cpu.max" || q=max
+  case "$q" in ''|max|*[!0-9]*) ;; *) [ "${p:-0}" -gt 0 ] && [ $(( q / p )) -lt "$cpus" ] && cpus=$(( q / p > 0 ? q / p : 1 )) ;; esac
+  [ "$cg" = / ] && break
+  cg=$(dirname "$cg")
+done
 load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null | cut -d. -f1); load=${load:-0}
 share=$(( cpus / 2 )); [ "$share" -ge 4 ] || share=4
 free=$(( cpus - load ))
