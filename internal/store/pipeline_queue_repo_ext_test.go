@@ -315,6 +315,13 @@ func TestQueueBatchLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, e := range entries[:2] {
+		if i == 1 {
+			// Review B1 on #3805: one entry still batched, so the batch
+			// cannot land yet.
+			if _, err := store.MarkQueueBatchLanded(ctx, env.ORM, half.ID, "main-a"); !errors.Is(err, core.ErrPipelineVersionConflict) {
+				t.Fatalf("a batch with an entry not landed must not land, got %v", err)
+			}
+		}
 		landed, err := store.MarkQueueEntryLanded(ctx, env.ORM, e.ID, "main-"+string(rune('a'+i)))
 		if err != nil || landed.State != core.QueueEntryLanded || landed.LandedAt == nil {
 			t.Fatalf("entry landed: %+v %v", landed, err)
