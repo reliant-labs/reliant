@@ -246,6 +246,17 @@ export interface UPlotChartProps {
    * crosshair, no tooltip, and not a stop for the keyboard.
    */
   hover?: boolean;
+  /**
+   * Charts sharing a key share one cursor (uPlot's cursor sync, matched on
+   * the x value): hovering one moves the crosshair on all of them.
+   */
+  syncKey?: string;
+  /**
+   * The x values are not instants (training steps, tokens): the axis, the
+   * tooltip and the caption read them through this, and the x scale is
+   * linear, not time.
+   */
+  xFormat?: (x: number) => string;
 }
 
 const NO_BANDS: readonly ChartBand[] = [];
@@ -272,6 +283,8 @@ export function UPlotChart({
   window: requested,
   calendar: calendarProp,
   hover: hoverable = true,
+  syncKey,
+  xFormat,
 }: UPlotChartProps) {
   // Callers build these arrays afresh on every render, and the chart below is
   // rebuilt whenever one changes identity: a page re-render (a tour step, a
@@ -287,6 +300,9 @@ export function UPlotChart({
   const layoutKey = useRef("");
   const placedCallback = useRef(onExemplarsPlaced);
   placedCallback.current = onExemplarsPlaced;
+  const xFormatRef = useRef(xFormat);
+  xFormatRef.current = xFormat;
+  const linearX = xFormat !== undefined;
   const cursorCallback = useRef(onCursor);
   cursorCallback.current = onCursor;
   // Read through a ref: callers pass a fresh arrow each render, and the chart is not rebuilt for it.
@@ -424,6 +440,7 @@ export function UPlotChart({
       cursor: {
         show: hoverable,
         drag: { x: false, y: false },
+        ...(syncKey ? { sync: { key: syncKey, scales: ["x", null] as [string, null] } } : {}),
         // A sparkline is a vertical rule only; a full chart keeps its horizontal guide.
         y: !compact,
         // The crosshair sits on the sample it reads, not between two.
@@ -440,7 +457,7 @@ export function UPlotChart({
       // bucket starts 20 minutes ago.
       scales: {
         x: {
-          time: true,
+          time: !xFormatRef.current,
           // uPlot 1.6.32 expands a singleton by 1000 days BEFORE this
           // callback. Never trust its min/max; use the actual observations.
           range: () => extent,
@@ -483,7 +500,13 @@ export function UPlotChart({
         : [
             // Time runs along the bottom with no vertical rules: only the
             // value axis draws its few horizontal guides, and no tick marks.
-            { stroke: palette.axis, font: palette.axisFont, grid: { show: false }, ticks: { show: false } },
+            {
+              stroke: palette.axis,
+              font: palette.axisFont,
+              grid: { show: false },
+              ticks: { show: false },
+              ...(xFormatRef.current ? { values: (_u: uPlot, splits: number[]) => splits.map((x) => xFormatRef.current!(x)) } : {}),
+            },
             {
               stroke: palette.axis,
               font: palette.axisFont,
@@ -556,7 +579,7 @@ export function UPlotChart({
       chart?.destroy();
       if (chartRef.current === chart) chartRef.current = null;
     };
-  }, [data, series, timestamps.length, height, unit, valueText, hoverable, compact, themeVersion, markers, shown, legend, area, stacked, barred, exemplars, extent, calendar]);
+  }, [data, series, timestamps.length, height, unit, valueText, hoverable, compact, themeVersion, markers, shown, legend, area, stacked, barred, exemplars, extent, calendar, syncKey, linearX]);
 
   // Highlight without a rebuild: uPlot dims every other series in place.
   // Re-applied after a rebuild too (a new chart starts unfocused).
@@ -575,7 +598,7 @@ export function UPlotChart({
   const calendarNote = calendar ? `${bucket ? `${bucket} buckets` : "Buckets"}: ${calendar.timezone} calendar dates` : "";
   const caption = [describeSeries(series, unit, valueText), describeMarkers(markers), describeBands(shown), calendarNote && `${calendarNote}.`].filter(Boolean).join(" ");
   const sampleSec = hover ? timestamps[hover.index] : undefined;
-  const sampleTime = sampleSec === undefined ? "" : formatSampleTime(sampleSec, calendar);
+  const sampleTime = sampleSec === undefined ? "" : xFormat ? xFormat(sampleSec) : formatSampleTime(sampleSec, calendar);
   const rows = useMemo(
     () => (hover ? sampleRows(series, hover.index, unit, (i) => tokenColor(series[i]!.color ?? (series[i]!.tone ? TONE_VAR[series[i]!.tone!] : chartToken(i))), valueText) : []),
     [hover, series, unit, valueText]

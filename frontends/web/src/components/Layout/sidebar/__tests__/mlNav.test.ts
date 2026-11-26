@@ -2,7 +2,7 @@
 
 /**
  * ML › (navConfig/items.tsx mlArea): placed right after Observability, shown
- * to every signed-in org with or without an app, its six rows in order, each
+ * to every signed-in org with or without an app, its rows in order, each
  * lit on its page, and Runs, Models and Inference labelled "Early access".
  * Where the rest of the nav sits is navConfig.test.tsx's.
  */
@@ -47,41 +47,34 @@ describe("the ML nav area", () => {
     }
   });
 
-  it("is Machines, Stack, Recommendations, Runs, Models, Inference, each an org page", () => {
+  it("is Overview, Training, Evals, Models, Inference, Fleet, Queues, Recommendations, Setup, each an org page", () => {
     const ctx = ctxAt(inboxPath());
-    expect(rows(ctx).map((row) => row.id)).toEqual(["ml-machines", "ml-stack", "ml-recommendations", "ml-runs", "ml-models", "ml-inference"]);
-    expect(rows(ctx).map((row) => hrefOf(row, ctx))).toEqual([
-      "/forge/ml/machines",
-      "/forge/ml/stack",
-      "/forge/ml/recommendations",
-      "/forge/ml/runs",
-      "/forge/ml/models",
-      "/forge/ml/inference",
-    ]);
-    expect(hrefOf(mlArea, ctx)).toBe("/forge/ml/machines");
+    const views = ["overview", "runs", "evals", "models", "inference", "fleet", "queues", "recommendations", "setup"];
+    expect(rows(ctx).map((row) => row.id)).toEqual(views.map((v) => `ml-${v}`));
+    expect(rows(ctx).map((row) => (row.kind === "row" ? row.label : ""))).toEqual(["Overview", "Training", "Evals", "Models", "Inference", "Fleet", "Queues", "Recommendations", "Setup"]);
+    expect(rows(ctx).map((row) => hrefOf(row, ctx))).toEqual(views.map((v) => `/forge/ml/${v}`));
+    expect(hrefOf(mlArea, ctx)).toBe("/forge/ml/overview");
   });
 
-  it("labels only Runs, Models and Inference Early access", () => {
+  it("labels only Training, Evals, Models and Inference Early access", () => {
     const ctx = ctxAt(inboxPath());
     const badges = Object.fromEntries(rows(ctx).map((row) => [row.id, row.kind === "row" ? row.badge?.(ctx) : undefined]));
-    expect(badges["ml-runs"]).toEqual({ type: "label", text: "Early access" });
-    expect(badges["ml-models"]).toEqual({ type: "label", text: "Early access" });
-    expect(badges["ml-inference"]).toEqual({ type: "label", text: "Early access" });
-    expect(badges["ml-machines"]).toBeUndefined();
-    expect(badges["ml-stack"]).toBeUndefined();
-    expect(badges["ml-recommendations"]).toBeUndefined();
+    for (const id of ["ml-runs", "ml-evals", "ml-models", "ml-inference"]) expect(badges[id]).toEqual({ type: "label", text: "Early access" });
+    for (const id of ["ml-overview", "ml-fleet", "ml-queues", "ml-recommendations", "ml-setup"]) expect(badges[id]).toBeUndefined();
   });
 
-  it("claims all six pages and lights each one's row", () => {
-    for (const view of ["machines", "stack", "recommendations", "runs", "models", "inference"] as const) {
-      const ctx = ctxAt(orgPath({ kind: "ml", view }));
-      expect(activeArea(hybridNav, ctx)?.id).toBe("ml");
-      expect(rows(ctx).filter((row) => isCurrent(row, ctx)).map((row) => row.id)).toEqual([`ml-${view}`]);
+  it("claims every page and its drill-downs, and lights the page's row", () => {
+    for (const view of ["overview", "runs", "evals", "models", "inference", "fleet", "queues", "recommendations", "setup"] as const) {
+      for (const sub of [undefined, ["some-id", "deeper"]]) {
+        const ctx = ctxAt(orgPath({ kind: "ml", view, sub }));
+        expect(activeArea(hybridNav, ctx)?.id).toBe("ml");
+        expect(rows(ctx).filter((row) => isCurrent(row, ctx)).map((row) => row.id)).toEqual([`ml-${view}`]);
+      }
     }
   });
 
   it("claims the org form of its pages too", () => {
-    const ctx = ctxAt("/o/acme/ml/stack");
+    const ctx = ctxAt("/o/acme/ml/setup");
     expect(activeArea(hybridNav, ctx)?.id).toBe("ml");
   });
 

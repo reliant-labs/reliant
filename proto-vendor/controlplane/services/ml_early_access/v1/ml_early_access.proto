@@ -11,16 +11,38 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/ml_early
 // === MlEarlyAccessService ===
 //
 // EARLY ACCESS, BY REQUEST. The read side of the console's ML tab (forge
-// docs/proposals/ml-workloads.md §8): machines, the ML stack found in a
-// connected cluster, recommendations, training runs, model versions and
-// inference services.
+// docs/proposals/ml-workloads.md §8): the fleet and its health, the ML stack
+// found in each connected cluster, queues, recommendations, training runs,
+// evals, models and inference services.
+//
+// THE OBJECT MODEL. Work is project → experiment → run → phase → attempt →
+// pod/rank → step. A run is one logical attempt to produce a model: a DAG of
+// phases (pretrain, SFT, RL, eval, ...) with one config lineage. An attempt
+// is one continuous lifetime of a phase's job; a preemption, a device error,
+// a hang or a rewind ends it and the next attempt resumes from a checkpoint.
+// Steps are continuous across attempts. Checkpoints link phases and are
+// promoted to model versions (OCI digests), which inference services serve
+// through revisions (releases). The fleet is cluster → pool → node → device.
+// Every chart is a series keyed by a subject (MlSubject) and an axis.
+//
+// SUBJECT IDS. Each entity has one stable string id, and an MlSubject names
+// any of them by kind and id. Composite ids join their parts with "/":
+//   phase      "<run_id>/<phase_key>"
+//   attempt    "<run_id>/<phase_key>/<n>"
+//   rank       "<run_id>/<phase_key>/<n>/<rank>"
+//   checkpoint "<run_id>/<phase_key>/<step>"
+//   node       "<cluster_id>/<node_name>"
+//   pool       "<cluster_id>/<pool_name>"
+//   device     the GPU UUID (it follows the board across nodes)
+//   revision   "<service_id>/<release>"
+//   replica    "<service_id>/<pod>"
 //
 // This service exists so the console's ML pages, and the demo shell's
 // fixtures, are typed against one contract before the data behind it exists.
 // It is deliberately NOT the proposal's MlService: when the real service
-// ships (rollout slices 1-5), it replaces this one, which is then deprecated
-// and kept answering as it does now. Fields here may be added; none will be
-// repurposed.
+// ships, it replaces this one, which is then deprecated and kept answering as
+// it does now. It is unreleased: its shape may still change before the first
+// release that carries it.
 //
 // ACCESS. Every rpc is gated per org on the "ml" entitlement
 // (OrganizationService.GetMyOrgEntitlements; Reliant grants it). In order:
@@ -36,14 +58,17 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/ml_early
 service MlEarlyAccessService {
   option (forge.v1.service) = {
     name: "MlEarlyAccessService"
-    version: "0.1.0"
-    description: "Early access: the console ML tab's reads (machines, stack, recommendations, runs, models, inference)"
+    version: "0.2.0"
+    description: "Early access: the console ML tab's reads (fleet, stack, queues, recommendations, runs, evals, models, inference)"
   };
 
-  // GetMlMachines reports the accelerator nodes of the org's connected
-  // clusters, by pool: allocation against utilisation, and health flags with
-  // their evidence.
-  rpc GetMlMachines(GetMlMachinesRequest) returns (GetMlMachinesResponse) {
+  // --- Fleet ---------------------------------------------------------------
+
+  // GetMlFleet summarises the accelerators of the org's connected clusters:
+  // allocation against use, health, idle-allocated devices and cost, by pool.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlFleet(GetMlFleetRequest) returns (GetMlFleetResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
@@ -51,8 +76,49 @@ service MlEarlyAccessService {
     };
   }
 
-  // GetMlStack reports the ML components discovered in each connected
-  // cluster: adopted (found, theirs), installed by forge, or missing.
+  // GetMlPool reports one node pool: its nodes with their devices, version
+  // skew, throttle reasons and allocation by namespace.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlPool(GetMlPoolRequest) returns (GetMlPoolResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlNode reports one node: its devices with every collected device
+  // field, conditions (kubelet and node-problem-detector), the workloads it
+  // ran, its interconnect, host resources and diagnostics.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlNode(GetMlNodeRequest) returns (GetMlNodeResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlDevice reports one accelerator by UUID: identity, every collected
+  // field, its health score with the inputs, the workloads that held it and
+  // the nodes it has been in.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlDevice(GetMlDeviceRequest) returns (GetMlDeviceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlStack reports, per connected cluster, the telemetry and ML
+  // components coverage checklist: adopted (found, theirs), installed by
+  // forge, or missing, with the inventory discovery found.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
   rpc GetMlStack(GetMlStackRequest) returns (GetMlStackResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
@@ -61,8 +127,22 @@ service MlEarlyAccessService {
     };
   }
 
-  // ListMlFindings lists the recommendations engine's open findings, worst
-  // first, each with its evidence and the adopt-first fix.
+  // GetMlQueues reports scheduling: queues with quota and usage, pending
+  // workloads with the classified reason they wait, preemptions, and the
+  // pod-start stage breakdown of accelerator pods.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlQueues(GetMlQueuesRequest) returns (GetMlQueuesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlFindings lists the recommendations engine's findings, one per rule
+  // per scope with its subjects inside, each with its impact, evidence and
+  // the adopt-first fix.
   //
   // forge:custom — an early-access read with no table behind it yet.
   rpc ListMlFindings(ListMlFindingsRequest) returns (ListMlFindingsResponse) {
@@ -73,7 +153,22 @@ service MlEarlyAccessService {
     };
   }
 
-  // ListMlRuns lists training runs, newest first.
+  // --- Runs ----------------------------------------------------------------
+
+  // ListMlExperiments lists experiments: named lines of work whose runs are
+  // compared with each other.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlExperiments(ListMlExperimentsRequest) returns (ListMlExperimentsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlRuns lists training runs, newest first, each with its phases and
+  // attempts (no ranks) for a list's mini-timeline.
   //
   // forge:custom — an early-access read with no table behind it yet.
   rpc ListMlRuns(ListMlRunsRequest) returns (ListMlRunsResponse) {
@@ -84,7 +179,209 @@ service MlEarlyAccessService {
     };
   }
 
-  // ListMlModels lists models and their versions, by OCI digest.
+  // GetMlRun reports one run in full: phases, attempts with their ranks,
+  // checkpoints, health checks, step-time breakdown, config with provenance,
+  // and cost by phase, attempt and category.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlRun(GetMlRunRequest) returns (GetMlRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // --- Telemetry by subject --------------------------------------------------
+
+  // QueryMlSeries reads time series of one subject (a run, phase, attempt,
+  // node, device, pool, service, queue, ...) by metric key, on a time or a
+  // step axis. A key the subject does not report comes back marked not
+  // collected, naming the missing source; never as zeros.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc QueryMlSeries(QueryMlSeriesRequest) returns (QueryMlSeriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlEvents lists the events of a subject and everything under it
+  // (Kueue, scheduler, pods, nodes, devices, the orchestrator, training,
+  // releases, people), newest first: the overlays every chart draws.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlEvents(ListMlEventsRequest) returns (ListMlEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlLogs lists the merged log lines of a subject's pods, tagged with
+  // rank, pod and node, with the lines worth reading (NCCL timeouts, Xids,
+  // OOMs, tracebacks) highlighted.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlLogs(ListMlLogsRequest) returns (ListMlLogsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlTraces lists sampled traces of a subject: training steps,
+  // checkpoint saves, data pipelines, inference requests; slowest first.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlTraces(ListMlTracesRequest) returns (ListMlTracesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlTrace reads one trace's spans.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlTrace(GetMlTraceRequest) returns (GetMlTraceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlProfiles lists a subject's profiler captures (PyTorch profiler,
+  // Nsight, memory snapshots, NCCL flight-recorder dumps, continuous CPU).
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlProfiles(ListMlProfilesRequest) returns (ListMlProfilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlProfile reads one capture with its summary and, where it has one,
+  // its flamegraph.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlProfile(GetMlProfileRequest) returns (GetMlProfileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlLineage reads the lineage graph around a subject: datasets →
+  // phases → checkpoints → model versions → releases → inference services.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlLineage(GetMlLineageRequest) returns (GetMlLineageResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // QueryMlHistograms reads distributions of a subject: step time, latency
+  // (TTFT, ITL, e2e, queue), admission wait, checkpoint save time.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc QueryMlHistograms(QueryMlHistogramsRequest) returns (QueryMlHistogramsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlAlerts lists the alert rules that watch a subject (the defaults
+  // forge declares, and the org's own), their state, and the remediation each
+  // may take on its own (rewind to the last good checkpoint, cordon a bad node
+  // and start a new attempt). Releases are never rolled back automatically.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlAlerts(ListMlAlertsRequest) returns (ListMlAlertsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // --- Evals ---------------------------------------------------------------
+
+  // ListMlEvalSuites lists the eval suites with their tasks and gates.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlEvalSuites(ListMlEvalSuitesRequest) returns (ListMlEvalSuitesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlEvalMatrix reads one suite's subjects × tasks matrix against a
+  // baseline: scores, deltas, confidence and gate results.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlEvalMatrix(GetMlEvalMatrixRequest) returns (GetMlEvalMatrixResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlEvalRuns lists eval runs, newest first.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlEvalRuns(ListMlEvalRunsRequest) returns (ListMlEvalRunsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlEvalRun reads one eval run: its config and per-task, per-slice
+  // results.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlEvalRun(GetMlEvalRunRequest) returns (GetMlEvalRunResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMlEvalSamples lists one task's per-example records of an eval run,
+  // paired with a baseline eval run's, with the paired win/loss statistics.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc ListMlEvalSamples(ListMlEvalSamplesRequest) returns (ListMlEvalSamplesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // --- Models --------------------------------------------------------------
+
+  // ListMlModels lists models with their aliases and serving summary.
   //
   // forge:custom — an early-access read with no table behind it yet.
   rpc ListMlModels(ListMlModelsRequest) returns (ListMlModelsResponse) {
@@ -95,8 +392,34 @@ service MlEarlyAccessService {
     };
   }
 
-  // ListMlInferenceServices lists inference services with their serving SLIs
-  // and the release health verdict of their latest promotion.
+  // GetMlModel reads one model: its versions, aliases and their history,
+  // and the promotion gates per environment.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlModel(GetMlModelRequest) returns (GetMlModelResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetMlModelVersion reads one version: its card, files, gate, where it
+  // serves, serving performance per hardware and pull performance.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlModelVersion(GetMlModelVersionRequest) returns (GetMlModelVersionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // --- Inference -----------------------------------------------------------
+
+  // ListMlInferenceServices lists inference services with their serving
+  // SLIs, cost per token and the verdict of their current revision.
   //
   // forge:custom — an early-access read with no table behind it yet.
   rpc ListMlInferenceServices(ListMlInferenceServicesRequest) returns (ListMlInferenceServicesResponse) {
@@ -106,102 +429,639 @@ service MlEarlyAccessService {
       idempotent: true
     };
   }
+
+  // GetMlInferenceService reads one service: revisions with verdicts and SLI
+  // deltas, replicas, cold start, traffic mix, cost, a running Changes
+  // comparison and online evals.
+  //
+  // forge:custom — an early-access read with no table behind it yet.
+  rpc GetMlInferenceService(GetMlInferenceServiceRequest) returns (GetMlInferenceServiceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
 }
 
-// --- Machines ---------------------------------------------------------------
+// ============================================================================
+// Common
+// ============================================================================
 
-message GetMlMachinesRequest {
+enum MlSubjectKind {
+  ML_SUBJECT_KIND_UNSPECIFIED = 0;
+  // The whole org: org-wide events and series.
+  ML_SUBJECT_KIND_ORG = 1;
+  ML_SUBJECT_KIND_CLUSTER = 2;
+  ML_SUBJECT_KIND_POOL = 3;
+  ML_SUBJECT_KIND_NODE = 4;
+  ML_SUBJECT_KIND_DEVICE = 5;
+  ML_SUBJECT_KIND_EXPERIMENT = 6;
+  ML_SUBJECT_KIND_RUN = 7;
+  ML_SUBJECT_KIND_PHASE = 8;
+  ML_SUBJECT_KIND_ATTEMPT = 9;
+  ML_SUBJECT_KIND_RANK = 10;
+  ML_SUBJECT_KIND_CHECKPOINT = 11;
+  ML_SUBJECT_KIND_DATASET = 12;
+  ML_SUBJECT_KIND_MODEL = 13;
+  ML_SUBJECT_KIND_MODEL_VERSION = 14;
+  ML_SUBJECT_KIND_EVAL_RUN = 15;
+  ML_SUBJECT_KIND_INFERENCE_SERVICE = 16;
+  ML_SUBJECT_KIND_REVISION = 17;
+  ML_SUBJECT_KIND_REPLICA = 18;
+  ML_SUBJECT_KIND_QUEUE = 19;
+  // A Kueue Workload (one phase attempt's, or an inference job's).
+  ML_SUBJECT_KIND_WORKLOAD = 20;
+  // A pod that is none of the above (a notebook, a batch job).
+  ML_SUBJECT_KIND_POD = 21;
+  ML_SUBJECT_KIND_RELEASE = 22;
+  ML_SUBJECT_KIND_FINDING = 23;
+}
+
+// MlSubject names any entity: its kind and its stable id (the service
+// comment's SUBJECT IDS), with a label for display.
+message MlSubject {
+  MlSubjectKind kind = 1;
+  string id = 2;
+  // How a person reads it: "llama-8b-support-v3", "sft attempt 3", "GPU 5".
+  string label = 3;
+}
+
+enum MlSeverity {
+  ML_SEVERITY_UNSPECIFIED = 0;
+  ML_SEVERITY_CRITICAL = 1;
+  ML_SEVERITY_WARNING = 2;
+  ML_SEVERITY_INFO = 3;
+}
+
+enum MlHealth {
+  ML_HEALTH_UNSPECIFIED = 0;
+  ML_HEALTH_HEALTHY = 1;
+  ML_HEALTH_DEGRADED = 2;
+  ML_HEALTH_FAULTY = 3;
+  // Telemetry lost for more than two scrape intervals.
+  ML_HEALTH_UNKNOWN = 4;
+}
+
+// A label and a value: a fact shown as written.
+message MlFact {
+  string label = 1;
+  string value = 2;
+}
+
+enum MlCostCategory {
+  ML_COST_CATEGORY_UNSPECIFIED = 0;
+  ML_COST_CATEGORY_PRODUCTIVE = 1;
+  ML_COST_CATEGORY_IDLE_ALLOCATED = 2;
+  ML_COST_CATEGORY_QUEUED_HOLDING = 3;
+  ML_COST_CATEGORY_STARTUP = 4;
+  ML_COST_CATEGORY_RESTART_LOST = 5;
+  ML_COST_CATEGORY_CHECKPOINT = 6;
+  ML_COST_CATEGORY_STALLED = 7;
+  ML_COST_CATEGORY_UNALLOCATED = 8;
+}
+
+// MlCost is accelerator time and, when the org declared a price sheet,
+// money.
+message MlCost {
+  double gpu_hours = 1;
+  double usd = 2;
+  // Whether a price sheet covers it; false means usd is unknown, not zero.
+  bool priced = 3;
+  repeated MlCostSlice by_category = 4;
+}
+
+message MlCostSlice {
+  MlCostCategory category = 1;
+  double gpu_hours = 2;
+  double usd = 3;
+}
+
+enum MlAxis {
+  ML_AXIS_UNSPECIFIED = 0;
+  // x is epoch seconds.
+  ML_AXIS_TIME = 1;
+  // x is the optimizer step (continuous across attempts).
+  ML_AXIS_STEP = 2;
+  // x is tokens seen.
+  ML_AXIS_TOKENS = 3;
+}
+
+enum MlCollection {
+  ML_COLLECTION_UNSPECIFIED = 0;
+  ML_COLLECTION_COLLECTED = 1;
+  // The subject has this metric, and nothing reports it: missing_source
+  // says what would, fix_finding_id the finding that fixes it.
+  ML_COLLECTION_NOT_COLLECTED = 2;
+  // The metric has no meaning for this subject (MIG, a time-sliced device).
+  ML_COLLECTION_NOT_APPLICABLE = 3;
+}
+
+// MlSeries is one line: parallel x and y arrays. A NaN y is a gap.
+message MlSeries {
+  // The neutral metric key: "train/loss", "gpu.sm_active", "serve.ttft_p95".
+  string key = 1;
+  string label = 2;
+  // "ratio" (0-1), "percent", "ms", "s", "bytes", "W", "C", "MHz",
+  // "tokens/s", "count", "usd", or "" for a plain number.
+  string unit = 3;
+  MlAxis axis = 4;
+  repeated double x = 5;
+  repeated double y = 6;
+  // One series of several for the same key: "rank 37", "attempt 2",
+  // "GPU 3", "h100-train", "p95". Empty for the only one.
+  string group = 7;
+  // The attempt a step-axis series belongs to; 0 when not per attempt.
+  int32 attempt = 8;
+  // Seconds (time axis) or steps (step axis) per point.
+  double resolution = 9;
+  MlCollection collection = 10;
+  string missing_source = 11;
+  string fix_finding_id = 12;
+  // A statistic across a group, for percentile bands: "p5", "p50", "p95",
+  // "min", "max"; empty for a plain series.
+  string stat = 13;
+  // The subject the series belongs to: every training series names its run
+  // (and phase, attempt or rank).
+  MlSubject subject = 14;
+}
+
+enum MlEventKind {
+  ML_EVENT_KIND_UNSPECIFIED = 0;
+  ML_EVENT_KIND_LAUNCH = 1;
+  ML_EVENT_KIND_QUEUE_ADMITTED = 2;
+  ML_EVENT_KIND_QUEUE_EVICTED = 3;
+  ML_EVENT_KIND_PREEMPTION = 4;
+  ML_EVENT_KIND_SCHEDULING_FAILED = 5;
+  ML_EVENT_KIND_IMAGE_PULL = 6;
+  ML_EVENT_KIND_POD_STARTED = 7;
+  ML_EVENT_KIND_RESTART = 8;
+  ML_EVENT_KIND_CHECKPOINT = 9;
+  ML_EVENT_KIND_XID = 10;
+  ML_EVENT_KIND_ECC = 11;
+  ML_EVENT_KIND_ROW_REMAP = 12;
+  ML_EVENT_KIND_THROTTLE = 13;
+  ML_EVENT_KIND_NPD_CONDITION = 14;
+  ML_EVENT_KIND_NODE_NOT_READY = 15;
+  ML_EVENT_KIND_NCCL_TIMEOUT = 16;
+  ML_EVENT_KIND_HANG = 17;
+  ML_EVENT_KIND_OOM = 18;
+  ML_EVENT_KIND_LOSS_SPIKE = 19;
+  ML_EVENT_KIND_NAN = 20;
+  ML_EVENT_KIND_EVAL = 21;
+  ML_EVENT_KIND_RELEASE = 22;
+  ML_EVENT_KIND_ALIAS_MOVE = 23;
+  ML_EVENT_KIND_CHANGES_RAMP = 24;
+  ML_EVENT_KIND_FINDING_OPENED = 25;
+  ML_EVENT_KIND_REWIND = 26;
+  ML_EVENT_KIND_PROFILE_CAPTURE = 27;
+  ML_EVENT_KIND_LINK_FLAP = 28;
+  ML_EVENT_KIND_DCGM_DIAG = 29;
+  ML_EVENT_KIND_SCALE = 30;
+  ML_EVENT_KIND_CANCEL = 31;
+  ML_EVENT_KIND_COMPLETED = 32;
+  ML_EVENT_KIND_STRAGGLER = 33;
+}
+
+// MlEvent is one moment (or stretch, with end_at) worth drawing on a chart.
+message MlEvent {
+  string id = 1;
+  google.protobuf.Timestamp at = 2;
+  // Set for a stretch (a throttle episode, a queue wait); unset for a moment.
+  google.protobuf.Timestamp end_at = 3;
+  MlEventKind kind = 4;
+  MlSeverity severity = 5;
+  string title = 6;
+  string detail = 7;
+  // What it happened to.
+  MlSubject subject = 8;
+  // Everything else it touches: the run an Xid hit, the finding it opened.
+  repeated MlSubject related = 9;
+  // The training step it happened at, when it happened in a run; 0 if none.
+  int64 step = 10;
+  // "kueue", "scheduler", "kubelet", "npd", "dcgm", "trainer", "forge",
+  // "person".
+  string source = 11;
+  map<string, string> attributes = 12;
+  // The hook event type it emitted (MlHook.event_type); empty for none.
+  string hook_event_type = 13;
+}
+
+// MlTimeSpan is a stretch of time in one state, for timelines and Gantts.
+message MlTimeSpan {
+  // "queued", "starting", "running", "checkpointing", "stalled",
+  // "restarting", or a workload kind on a node's timeline.
+  string state = 1;
+  google.protobuf.Timestamp start = 2;
+  // Unset while it lasts.
+  google.protobuf.Timestamp end = 3;
+  string label = 4;
+}
+
+// MlPodStart is the stage breakdown from a pod's creation to ready.
+message MlPodStart {
+  string workload = 1;
+  int32 sample_count = 2;
+  repeated MlPodStartStage stages = 3;
+}
+
+message MlPodStartStage {
+  // "queued", "scheduling", "node provisioning", "sandbox/init",
+  // "image pull", "model load", "ready".
+  string stage = 1;
+  double p50_seconds = 2;
+  double p95_seconds = 3;
+  // Of the total p50, 0-1.
+  double share = 4;
+  string top_cause = 5;
+  string finding_id = 6;
+}
+
+// MlPodStartWaterfall is one pod's stages, as offsets from its creation.
+message MlPodStartWaterfall {
+  string pod = 1;
+  MlSubject workload = 2;
+  google.protobuf.Timestamp created_at = 3;
+  repeated MlWaterfallStage stages = 4;
+}
+
+message MlWaterfallStage {
+  string stage = 1;
+  double start_seconds = 2;
+  double seconds = 3;
+  string detail = 4;
+}
+
+// ============================================================================
+// Fleet
+// ============================================================================
+
+message GetMlFleetRequest {
   string org_id = 1 [(buf.validate.field).required = true];
   // One connected cluster; unset for every cluster of the org.
   optional string cluster_id = 2;
 }
 
-message GetMlMachinesResponse {
-  repeated MlCluster clusters = 1;
-  repeated MlNodePool pools = 2;
-  // When the inventory these come from was observed.
-  google.protobuf.Timestamp observed_at = 3;
+message GetMlFleetResponse {
+  MlFleetSummary summary = 1;
+  repeated MlCluster clusters = 2;
+  repeated MlPool pools = 3;
+  // Allocated devices doing nothing, worst first.
+  repeated MlIdleAllocation top_idle = 4;
+  // Devices and nodes with open health problems, worst score first.
+  repeated MlHealthItem unhealthy = 5;
+  google.protobuf.Timestamp observed_at = 6;
 }
 
-// MlCluster is a connected cluster that reports ML inventory.
+message MlFleetSummary {
+  int32 gpus_total = 1;
+  int32 gpus_allocated = 2;
+  // Mean busy share of allocated devices, 0-1.
+  double busy_ratio = 3;
+  int32 gpus_idle_allocated = 4;
+  int32 gpus_unallocated = 5;
+  int32 gpus_faulty = 6;
+  int32 gpus_throttled = 7;
+  double usd_per_day = 8;
+  double idle_usd_per_day = 9;
+  // Last 24h.
+  MlCost cost_24h = 10;
+  // Productive share of training accelerator time over the last 24h, 0-1.
+  double training_goodput = 11;
+}
+
 message MlCluster {
-  string cluster_id = 1;
+  string id = 1;
   string name = 2;
-  // "gke", "eks", "aks" or "other".
+  // "gke", "eks", "aks", "other".
   string provider = 3;
-  // The region or zone, as the cluster reports it.
   string location = 4;
-  google.protobuf.Timestamp last_seen_at = 5;
+  string kubernetes_version = 5;
+  google.protobuf.Timestamp last_seen_at = 6;
+  int32 node_count = 7;
+  int32 gpu_count = 8;
+  MlHealth health = 9;
 }
 
-// MlNodePool is the accelerator nodes of one pool of one cluster.
-message MlNodePool {
-  string cluster_id = 1;
-  string name = 2;
-  // "nvidia", "amd", "google" or "aws".
-  string accelerator_vendor = 3;
-  // The product, e.g. "NVIDIA H100 80GB HBM3".
-  string accelerator_product = 4;
-  int32 accelerators_total = 5;
-  int32 accelerators_allocated = 6;
-  // Allocated, but under 5% utilisation for at least an hour.
-  int32 accelerators_idle = 7;
-  repeated MlNode nodes = 8;
-  // Pool-wide utilisation against allocation over the last 24h, oldest first.
-  repeated MlUtilizationPoint utilization = 9;
+enum MlCapacityType {
+  ML_CAPACITY_TYPE_UNSPECIFIED = 0;
+  ML_CAPACITY_TYPE_ON_DEMAND = 1;
+  ML_CAPACITY_TYPE_SPOT = 2;
+  ML_CAPACITY_TYPE_RESERVED = 3;
 }
 
-// MlNodeHealth summarizes a node's health flags.
-enum MlNodeHealth {
-  ML_NODE_HEALTH_UNSPECIFIED = 0;
-  ML_NODE_HEALTH_HEALTHY = 1;
-  // Something to watch (a correctable error rate, a driver skew), not a fault.
-  ML_NODE_HEALTH_DEGRADED = 2;
-  // A device is faulty (a fatal Xid, an uncorrectable ECC error,
-  // allocatable below capacity): the node should not get new work.
-  ML_NODE_HEALTH_BAD = 3;
+message MlPool {
+  string id = 1;
+  string cluster_id = 2;
+  string name = 3;
+  // "nvidia", "amd", "google", "aws".
+  string vendor = 4;
+  string product = 5;
+  double memory_gb = 6;
+  MlCapacityType capacity_type = 7;
+  int32 node_count = 8;
+  int32 gpus_total = 9;
+  int32 gpus_allocated = 10;
+  int32 gpus_idle_allocated = 11;
+  int32 gpus_faulty = 12;
+  // Median SM-active of allocated devices, 0-1; NaN when not collected.
+  double sm_active_p50 = 13;
+  double busy_ratio = 14;
+  int32 nodes_unhealthy = 15;
+  double usd_per_gpu_hour = 16;
+  double usd_per_day = 17;
+  // What runs here: "training", "serving", "dev".
+  string purpose = 18;
+}
+
+message MlIdleAllocation {
+  string namespace = 1;
+  MlSubject workload = 2;
+  string owner = 3;
+  int32 gpus = 4;
+  double idle_hours = 5;
+  double usd = 6;
+  string node_id = 7;
+  google.protobuf.Timestamp last_active_at = 8;
+}
+
+message MlHealthItem {
+  MlSubject subject = 1;
+  // 0-100, higher is worse.
+  double score = 2;
+  MlHealth health = 3;
+  string reason = 4;
+  int32 events_24h = 5;
+  // The node it is in (for a device).
+  string node_id = 6;
+  string finding_id = 7;
+}
+
+message GetMlPoolRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string pool_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlPoolResponse {
+  MlPool pool = 1;
+  repeated MlNode nodes = 2;
+  repeated MlVersionSkew skew = 3;
+  // Share of device time with each clock-event (throttle) reason, 0-1.
+  repeated MlShare throttle_reasons = 4;
+  // Allocated devices by namespace, now.
+  repeated MlShare allocation_by_namespace = 5;
+}
+
+message MlVersionSkew {
+  string driver = 1;
+  string cuda = 2;
+  string os_image = 3;
+  int32 nodes = 4;
+}
+
+// MlShare is a named part of a whole.
+message MlShare {
+  string name = 1;
+  double value = 2;
+  // value / total, 0-1.
+  double share = 3;
 }
 
 message MlNode {
-  string name = 1;
-  int32 accelerator_count = 2;
-  int32 accelerators_allocatable = 3;
-  int32 accelerators_allocated = 4;
-  // Mean accelerator utilisation over the last 5 minutes, 0-100.
-  double utilization_percent = 5;
-  // Mean accelerator memory in use over the last 5 minutes, 0-100.
-  double memory_used_percent = 6;
-  string driver_version = 7;
-  // "none", "mig" or "time-slicing".
-  string sharing = 8;
-  MlNodeHealth health = 9;
-  repeated MlHealthFlag flags = 10;
-  bool cordoned = 11;
+  // "<cluster_id>/<node_name>".
+  string id = 1;
+  string name = 2;
+  string cluster_id = 3;
+  string pool_id = 4;
+  string provider_id = 5;
+  string instance_type = 6;
+  string zone = 7;
+  // A re-imaged node is a new incarnation; history is kept.
+  int32 incarnation = 8;
+  MlHealth health = 9;
+  // 0-100, higher is worse.
+  double health_score = 10;
+  string health_reason = 11;
+  bool cordoned = 12;
+  int32 gpus = 13;
+  int32 gpus_allocatable = 14;
+  int32 gpus_allocated = 15;
+  double busy_ratio = 16;
+  string driver_version = 17;
+  string cuda_version = 18;
+  string kernel_version = 19;
+  string os_image = 20;
+  google.protobuf.Timestamp booted_at = 21;
+  // Summaries: no fields here, only in GetMlNode / GetMlDevice.
+  repeated MlDevice devices = 22;
+  repeated MlNodeCondition conditions = 23;
+  // "none", "mig", "time-slicing", "mps".
+  string sharing = 24;
+  string nvlink_domain = 25;
 }
 
-// MlHealthFlag is one piece of health evidence on a node.
-message MlHealthFlag {
-  // "xid", "ecc_dbe", "row_remap_failure", "condition" or
-  // "allocatable_below_capacity".
-  string kind = 1;
-  // The code, e.g. "79" for an Xid.
-  string code = 2;
-  // The device it concerns, e.g. "GPU-3"; empty for the node as a whole.
-  string device = 3;
-  string message = 4;
-  google.protobuf.Timestamp first_seen_at = 5;
-  google.protobuf.Timestamp last_seen_at = 6;
+message MlNodeCondition {
+  // "Ready", "MemoryPressure", "KernelDeadlock", "ReadonlyFilesystem",
+  // "GPUXidError", ...
+  string type = 1;
+  // "True", "False", "Unknown".
+  string status = 2;
+  // Whether this status is the bad one for its type.
+  bool bad = 3;
+  string reason = 4;
+  string message = 5;
+  google.protobuf.Timestamp since = 6;
+  // "kubelet", "npd".
+  string source = 7;
 }
 
-message MlUtilizationPoint {
-  google.protobuf.Timestamp time = 1;
-  // Mean utilisation of the pool's accelerators, 0-100.
-  double utilization_percent = 2;
-  // Share of the pool's accelerators allocated to pods, 0-100.
-  double allocated_percent = 3;
+enum MlFieldGroup {
+  ML_FIELD_GROUP_UNSPECIFIED = 0;
+  ML_FIELD_GROUP_UTILIZATION = 1;
+  ML_FIELD_GROUP_PROFILING = 2;
+  ML_FIELD_GROUP_MEMORY = 3;
+  ML_FIELD_GROUP_POWER = 4;
+  ML_FIELD_GROUP_THERMAL = 5;
+  ML_FIELD_GROUP_CLOCKS = 6;
+  ML_FIELD_GROUP_ECC = 7;
+  ML_FIELD_GROUP_ROW_REMAP = 8;
+  ML_FIELD_GROUP_PCIE = 9;
+  ML_FIELD_GROUP_NVLINK = 10;
+  ML_FIELD_GROUP_XID = 11;
+  ML_FIELD_GROUP_IDENTITY = 12;
+  // node-exporter and kubelet fields of the host.
+  ML_FIELD_GROUP_HOST_CPU = 13;
+  ML_FIELD_GROUP_HOST_MEMORY = 14;
+  ML_FIELD_GROUP_HOST_DISK = 15;
+  ML_FIELD_GROUP_HOST_NETWORK = 16;
+  ML_FIELD_GROUP_INFINIBAND = 17;
+  ML_FIELD_GROUP_KUBELET = 18;
 }
 
-// --- Stack ------------------------------------------------------------------
+// MlFieldValue is one device field's latest value under its neutral key,
+// with the vendor field it came from.
+message MlFieldValue {
+  // "gpu.sm_active", "gpu.ecc.dbe_volatile", "gpu.row_remap.pending".
+  string key = 1;
+  string label = 2;
+  MlFieldGroup group = 3;
+  double value = 4;
+  // Set instead of value for a field read as text (clock-event reasons).
+  string text = 5;
+  string unit = 6;
+  // "DCGM_FI_PROF_SM_ACTIVE".
+  string source_field = 7;
+  MlCollection collection = 8;
+  string missing_source = 9;
+  string fix_finding_id = 10;
+  // Whether the value is outside its healthy range.
+  bool alarm = 11;
+}
+
+message MlDevice {
+  // The GPU UUID.
+  string uuid = 1;
+  string node_id = 2;
+  int32 index = 3;
+  string product = 4;
+  string serial = 5;
+  string pci_bus_id = 6;
+  string vbios = 7;
+  string mig_mode = 8;
+  MlHealth health = 9;
+  double health_score = 10;
+  string health_reason = 11;
+  // Latest headline values; NaN when not collected.
+  double busy_ratio = 12;
+  double sm_active = 13;
+  double memory_used_gb = 14;
+  double memory_total_gb = 15;
+  double power_w = 16;
+  double power_limit_w = 17;
+  double temperature_c = 18;
+  double memory_temperature_c = 19;
+  // Decoded active clock-event reasons: "HW slowdown", "SW power cap".
+  repeated string clock_event_reasons = 20;
+  int32 xid_last = 21;
+  int32 xids_24h = 22;
+  // What holds it now; unset when unallocated.
+  MlSubject allocated_to = 23;
+  // Every collected field (GetMlNode, GetMlDevice only).
+  repeated MlFieldValue fields = 24;
+  repeated MlHealthScoreInput score_inputs = 25;
+}
+
+message MlHealthScoreInput {
+  string input = 1;
+  string value = 2;
+  // Points this input adds to the score.
+  double points = 3;
+}
+
+message GetMlNodeRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string node_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlNodeResponse {
+  MlNode node = 1;
+  // Workloads that held its devices over the window, as spans.
+  repeated MlNodeWorkload workloads = 2;
+  repeated MlNvlinkPair nvlink = 3;
+  repeated MlIbPort ib_ports = 4;
+  MlHostResources host = 5;
+  repeated MlDiagResult diagnostics = 6;
+  repeated MlIncarnation incarnations = 7;
+}
+
+message MlNodeWorkload {
+  MlSubject subject = 1;
+  string pod = 2;
+  // "training", "inference", "eval", "notebook", "other".
+  string kind = 3;
+  repeated int32 device_indexes = 4;
+  google.protobuf.Timestamp start = 5;
+  google.protobuf.Timestamp end = 6;
+}
+
+// MlNvlinkPair is the NVLink connection between two devices of one node.
+message MlNvlinkPair {
+  int32 from_index = 1;
+  int32 to_index = 2;
+  int32 links = 3;
+  // "up", "degraded", "down".
+  string state = 4;
+  double bandwidth_gbps = 5;
+  int64 crc_errors = 6;
+  int64 replay_errors = 7;
+}
+
+message MlIbPort {
+  string hca = 1;
+  int32 port = 2;
+  string state = 3;
+  double rate_gbps = 4;
+  double xmit_gbps = 5;
+  double rcv_gbps = 6;
+  int64 symbol_errors = 7;
+  int64 link_downed = 8;
+}
+
+message MlHostResources {
+  double cpu_ratio = 1;
+  double memory_ratio = 2;
+  double psi_cpu = 3;
+  double psi_memory = 4;
+  double psi_io = 5;
+  double disk_ratio = 6;
+  double image_fs_ratio = 7;
+  double shm_used_gb = 8;
+  double shm_total_gb = 9;
+  int32 kubelet_restarts_24h = 10;
+  int32 containerd_restarts_24h = 11;
+  // Every collected node-exporter and kubelet field.
+  repeated MlFieldValue fields = 12;
+  // node-problem-detector's monitors on this node: "kernel-monitor",
+  // "gpu-xid-monitor", "docker-monitor", "custom-plugin-monitor".
+  repeated string npd_monitors = 13;
+}
+
+message MlDiagResult {
+  google.protobuf.Timestamp at = 1;
+  // DCGM diag level 1-4.
+  int32 level = 2;
+  // "pass", "fail", "warn".
+  string result = 3;
+  string detail = 4;
+}
+
+message MlIncarnation {
+  int32 incarnation = 1;
+  google.protobuf.Timestamp from = 2;
+  google.protobuf.Timestamp to = 3;
+  string note = 4;
+}
+
+message GetMlDeviceRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string uuid = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlDeviceResponse {
+  MlDevice device = 1;
+  repeated MlNodeWorkload workloads = 2;
+  // The nodes it has been in, newest first (an RMA'd board moves).
+  repeated MlDevicePlacement placements = 3;
+}
+
+message MlDevicePlacement {
+  string node_id = 1;
+  int32 index = 2;
+  google.protobuf.Timestamp from = 3;
+  google.protobuf.Timestamp to = 4;
+}
+
+// --- Setup ---------------------------------------------------------------
 
 message GetMlStackRequest {
   string org_id = 1 [(buf.validate.field).required = true];
@@ -209,161 +1069,1314 @@ message GetMlStackRequest {
 }
 
 message GetMlStackResponse {
-  repeated MlStackComponent components = 1;
+  repeated MlClusterSetup clusters = 1;
 }
 
-// MlComponentState is how forge relates to a component in a cluster.
 enum MlComponentState {
   ML_COMPONENT_STATE_UNSPECIFIED = 0;
-  // Found in the cluster and theirs: forge reads it and never touches it.
+  // Found in the cluster and theirs.
   ML_COMPONENT_STATE_ADOPTED = 1;
-  // Not found, so forge installed it from a pinned upstream chart.
+  // Installed by forge, declared in KCL.
   ML_COMPONENT_STATE_INSTALLED = 2;
-  // Not found and not installed.
   ML_COMPONENT_STATE_MISSING = 3;
+  ML_COMPONENT_STATE_PARTIAL = 4;
+  ML_COMPONENT_STATE_NOT_APPLICABLE = 5;
 }
 
-message MlStackComponent {
-  string cluster_id = 1;
-  // e.g. "dcgm-exporter", "kueue", "node-problem-detector".
-  string name = 2;
-  // "telemetry", "health", "scheduling", "training", "serving" or "drivers".
-  string category = 3;
-  MlComponentState state = 4;
+message MlClusterSetup {
+  MlCluster cluster = 1;
+  repeated MlCoverageItem coverage = 2;
+  MlInventory inventory = 3;
+  google.protobuf.Timestamp discovered_at = 4;
+  string discover_command = 5;
+  // Covered items over applicable items, 0-1.
+  double coverage_ratio = 6;
+}
+
+message MlCoverageItem {
+  // "accelerator-metrics", "profiling-counters", "pod-attribution",
+  // "node-health", "events", "queueing", "serving-metrics",
+  // "training-instrumentation", "tracing", "profiling", "kubelet-metrics".
+  string key = 1;
+  string title = 2;
+  MlComponentState state = 3;
+  // The component that covers it: "DCGM exporter", "Kueue".
+  string component = 4;
   string version = 5;
-  // How it got there, e.g. "GPU Operator v24.9.0".
-  string via = 6;
-  string namespace = 7;
-  // The KCL that declares it (Adopt or Install), as forge ml discover
-  // proposes it.
-  string declaration = 8;
-  string note = 9;
+  string namespace = 6;
+  string detail = 7;
+  // The KCL that declares (installs or adopts) it.
+  string kcl = 8;
+  string finding_id = 9;
 }
 
-// --- Recommendations ----------------------------------------------------------
+message MlInventory {
+  int32 node_count = 1;
+  repeated MlShare products = 2;
+  repeated string driver_versions = 3;
+  repeated MlCrd crds = 4;
+}
 
-message ListMlFindingsRequest {
+message MlCrd {
+  string name = 1;
+  string version = 2;
+  string owner = 3;
+}
+
+// --- Queues --------------------------------------------------------------
+
+message GetMlQueuesRequest {
   string org_id = 1 [(buf.validate.field).required = true];
   optional string cluster_id = 2;
 }
 
-message ListMlFindingsResponse {
-  // Worst first, then most recently seen.
-  repeated MlFinding findings = 1;
+message GetMlQueuesResponse {
+  MlQueuesSummary summary = 1;
+  repeated MlClusterQueue queues = 2;
+  repeated MlPendingWorkload pending = 3;
+  repeated MlPreemption preemptions = 4;
+  MlPodStart pod_start = 5;
+  repeated MlPodStartWaterfall pod_start_examples = 6;
 }
 
-enum MlFindingSeverity {
-  ML_FINDING_SEVERITY_UNSPECIFIED = 0;
-  ML_FINDING_SEVERITY_CRITICAL = 1;
-  ML_FINDING_SEVERITY_WARNING = 2;
-  ML_FINDING_SEVERITY_INFO = 3;
+message MlQueuesSummary {
+  int32 pending = 1;
+  int32 gpus_demanded = 2;
+  int32 gpus_free = 3;
+  double wait_p50_seconds = 4;
+  double wait_p95_seconds = 5;
+  int32 preemptions_24h = 6;
+  double gpu_hours_lost_24h = 7;
+}
+
+message MlClusterQueue {
+  string id = 1;
+  string name = 2;
+  string cluster_id = 3;
+  string cohort = 4;
+  repeated MlFlavorQuota flavors = 5;
+  int32 pending = 6;
+  int32 admitted = 7;
+  double wait_p50_seconds = 8;
+  double wait_p95_seconds = 9;
+  double fair_share = 10;
+  repeated string local_queues = 11;
+  // "BestEffortFIFO", "StrictFIFO".
+  string queueing_strategy = 12;
+  // "Never", "LowerPriority", "Any".
+  string preemption_policy = 13;
+}
+
+message MlFlavorQuota {
+  string flavor = 1;
+  string resource = 2;
+  double nominal = 3;
+  double used = 4;
+  double borrowed = 5;
+  double lendable = 6;
+  double borrowing_limit = 7;
+}
+
+enum MlPendingReason {
+  ML_PENDING_REASON_UNSPECIFIED = 0;
+  ML_PENDING_REASON_INSUFFICIENT_QUOTA = 1;
+  ML_PENDING_REASON_NO_CAPACITY = 2;
+  ML_PENDING_REASON_WAITING_FOR_PREEMPTION = 3;
+  ML_PENDING_REASON_ADMISSION_CHECK = 4;
+  ML_PENDING_REASON_UNTOLERATED_TAINT = 5;
+  ML_PENDING_REASON_NODE_PROVISIONING = 6;
+  ML_PENDING_REASON_TOPOLOGY = 7;
+  ML_PENDING_REASON_INACTIVE_QUEUE = 8;
+}
+
+message MlPendingWorkload {
+  string name = 1;
+  string queue_id = 2;
+  string local_queue = 3;
+  int32 priority = 4;
+  string priority_class = 5;
+  int32 gpus = 6;
+  string flavor = 7;
+  google.protobuf.Timestamp created_at = 8;
+  double waiting_seconds = 9;
+  MlPendingReason reason = 10;
+  string reason_message = 11;
+  int32 position = 12;
+  // The run phase attempt (or other workload) it admits.
+  MlSubject subject = 13;
+  string owner = 14;
+}
+
+message MlPreemption {
+  google.protobuf.Timestamp at = 1;
+  MlSubject preemptor = 2;
+  MlSubject preempted = 3;
+  string reason = 4;
+  double gpu_hours_lost = 5;
+  string queue_id = 6;
+}
+
+// --- Findings ------------------------------------------------------------
+
+message ListMlFindingsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional string cluster_id = 2;
+  // Also return fixed and dismissed findings.
+  optional bool include_closed = 3;
+}
+
+message ListMlFindingsResponse {
+  repeated MlFinding findings = 1;
+  // Telemetry coverage across clusters, 0-1 (the Coverage category rolled up).
+  double coverage_ratio = 2;
+}
+
+enum MlFindingCategory {
+  ML_FINDING_CATEGORY_UNSPECIFIED = 0;
+  ML_FINDING_CATEGORY_HEALTH = 1;
+  ML_FINDING_CATEGORY_WASTE = 2;
+  ML_FINDING_CATEGORY_SCHEDULING = 3;
+  ML_FINDING_CATEGORY_STARTUP = 4;
+  ML_FINDING_CATEGORY_TRAINING_EFFICIENCY = 5;
+  ML_FINDING_CATEGORY_INFERENCE = 6;
+  // Telemetry the org does not collect.
+  ML_FINDING_CATEGORY_COVERAGE = 7;
+  ML_FINDING_CATEGORY_RELIABILITY = 8;
+}
+
+enum MlImpactUnit {
+  ML_IMPACT_UNIT_UNSPECIFIED = 0;
+  ML_IMPACT_UNIT_USD_PER_DAY = 1;
+  ML_IMPACT_UNIT_GPU_HOURS_PER_DAY = 2;
+  ML_IMPACT_UNIT_RUN_HOURS_AT_RISK = 3;
+  ML_IMPACT_UNIT_LATENCY_MS = 4;
+  // Something the org cannot see: no number.
+  ML_IMPACT_UNIT_BLIND_SPOT = 5;
+}
+
+message MlImpact {
+  // The unit the finding is sorted by.
+  MlImpactUnit unit = 1;
+  double value = 2;
+  // Comparable across findings where known, so the inbox sorts by money.
+  double usd_per_day = 3;
+  double gpu_hours_per_day = 4;
+  // How a person reads it: "$1.9k/day · 178 GPU-h/day".
+  string text = 5;
+}
+
+enum MlFixKind {
+  ML_FIX_KIND_UNSPECIFIED = 0;
+  // A change to the org's KCL, opened as a PR.
+  ML_FIX_KIND_KCL_PR = 1;
+  // A command for something outside the declarations.
+  ML_FIX_KIND_COMMAND = 2;
+  // An explanation; the agent drafts the rest.
+  ML_FIX_KIND_EXPLAIN = 3;
+}
+
+message MlFix {
+  MlFixKind kind = 1;
+  string summary = 2;
+  // A unified diff against kcl_path.
+  string kcl_diff = 3;
+  string kcl_path = 4;
+  string command = 5;
+  string docs_url = 6;
+  // "adopt" when the fix uses what the cluster already runs.
+  string approach = 7;
+}
+
+enum MlFindingState {
+  ML_FINDING_STATE_UNSPECIFIED = 0;
+  ML_FINDING_STATE_OPEN = 1;
+  ML_FINDING_STATE_ASSIGNED = 2;
+  ML_FINDING_STATE_FIX_PROPOSED = 3;
+  // The rule cleared after the fix.
+  ML_FINDING_STATE_FIXED = 4;
+  ML_FINDING_STATE_DISMISSED = 5;
+  ML_FINDING_STATE_SNOOZED = 6;
+}
+
+// MlEvidenceTable is a finding's evidence as rows, each opening its subject.
+message MlEvidenceTable {
+  repeated string columns = 1;
+  repeated MlEvidenceRow rows = 2;
+}
+
+message MlEvidenceRow {
+  repeated string cells = 1;
+  MlSubject subject = 2;
 }
 
 message MlFinding {
-  // This finding's id.
   string id = 1;
-  // The rule, e.g. "bad-accelerator" (forge docs/proposals/ml-workloads.md
-  // §5): what a RecommendationDecision names.
   string rule_id = 2;
-  MlFindingSeverity severity = 3;
-  string title = 4;
-  string summary = 5;
-  string cluster_id = 6;
-  // What it is about: a node, a pool or a workload.
-  string subject = 7;
-  repeated MlEvidence evidence = 8;
-  // The fix, adopt first: a KCL diff, or the exact command for a setting
-  // outside forge's declarations. Either may be empty.
-  string fix_kcl = 9;
-  string fix_command = 10;
-  google.protobuf.Timestamp first_seen_at = 11;
-  google.protobuf.Timestamp last_seen_at = 12;
-  // Set on startup findings: where a pod's start time goes.
-  MlPodStartBreakdown pod_start = 13;
+  MlFindingCategory category = 3;
+  MlSeverity severity = 4;
+  string title = 5;
+  string summary = 6;
+  // Why it matters, in a sentence with its numbers.
+  string why = 7;
+  MlImpact impact = 8;
+  repeated MlSubject subjects = 9;
+  repeated string cluster_ids = 10;
+  MlFindingState state = 11;
+  string assignee = 12;
+  string pr_url = 13;
+  google.protobuf.Timestamp first_seen_at = 14;
+  google.protobuf.Timestamp last_seen_at = 15;
+  // The rule as a person reads it, with the metric it reads.
+  string rule = 16;
+  repeated MlSeries evidence_series = 17;
+  MlEvidenceTable evidence_table = 18;
+  repeated MlFact evidence_facts = 19;
+  repeated MlEvent evidence_events = 20;
+  MlFix fix = 21;
+  // How the fix is verified: "the rule clears for 24h".
+  string verify = 22;
+  string dismiss_reason = 23;
+  google.protobuf.Timestamp snoozed_until = 24;
+  MlPodStart pod_start = 25;
 }
 
-message MlEvidence {
-  string label = 1;
-  string value = 2;
-}
+// ============================================================================
+// Runs
+// ============================================================================
 
-// MlPodStartBreakdown is where the time from a pod's creation to Ready goes,
-// stage by stage, over recent starts of one workload.
-message MlPodStartBreakdown {
-  string workload = 1;
-  int32 sample_count = 2;
-  // In order: e.g. "scheduling", "image pull", "container start",
-  // "model load", "ready".
-  repeated MlStartStage stages = 3;
-}
-
-message MlStartStage {
-  string name = 1;
-  double p50_seconds = 2;
-  double p95_seconds = 3;
-}
-
-// --- Runs ---------------------------------------------------------------------
-
-message ListMlRunsRequest {
+message ListMlExperimentsRequest {
   string org_id = 1 [(buf.validate.field).required = true];
-  // One project (app); unset for every project of the org.
   optional string project = 2;
 }
 
+message ListMlExperimentsResponse {
+  repeated MlExperiment experiments = 1;
+}
+
+message MlExperiment {
+  string id = 1;
+  string name = 2;
+  string project = 3;
+  string owner = 4;
+  string description = 5;
+  int32 run_count = 6;
+  int32 active_runs = 7;
+  // The key runs are ranked by: "val/loss" (lower is better) or an eval.
+  string objective_key = 8;
+  bool objective_lower_is_better = 9;
+  string best_run_id = 10;
+  double best_objective = 11;
+  google.protobuf.Timestamp last_activity_at = 12;
+  MlCost cost = 13;
+}
+
+message ListMlRunsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional string project = 2;
+  optional string experiment_id = 3;
+}
+
 message ListMlRunsResponse {
-  // Newest first.
   repeated MlRun runs = 1;
 }
 
 enum MlRunState {
   ML_RUN_STATE_UNSPECIFIED = 0;
-  // Waiting for admission (Kueue) or capacity.
   ML_RUN_STATE_QUEUED = 1;
   ML_RUN_STATE_RUNNING = 2;
-  ML_RUN_STATE_SUCCEEDED = 3;
-  ML_RUN_STATE_FAILED = 4;
-  ML_RUN_STATE_CANCELLED = 5;
+  // Running, with an active problem (MlRun.badges says which).
+  ML_RUN_STATE_DEGRADED = 3;
+  ML_RUN_STATE_PAUSED = 4;
+  ML_RUN_STATE_SUCCEEDED = 5;
+  ML_RUN_STATE_FAILED = 6;
+  ML_RUN_STATE_CANCELLED = 7;
+  ML_RUN_STATE_UNKNOWN = 8;
+}
+
+enum MlRunBadge {
+  ML_RUN_BADGE_UNSPECIFIED = 0;
+  ML_RUN_BADGE_STRAGGLER = 1;
+  ML_RUN_BADGE_STALLED = 2;
+  ML_RUN_BADGE_LOSS_SPIKE = 3;
+  ML_RUN_BADGE_NAN = 4;
+  ML_RUN_BADGE_RESTART_STORM = 5;
+  ML_RUN_BADGE_BAD_DEVICE = 6;
+  // Observed from the cluster, no tracking: no step or metrics.
+  ML_RUN_BADGE_UNTRACKED = 7;
 }
 
 message MlRun {
   string id = 1;
   string name = 2;
-  string project = 3;
-  // The declared training template it was launched from.
-  string template = 4;
-  // The orchestrator's kind, e.g. "TrainJob" or "JobSet".
-  string orchestrator = 5;
+  string experiment_id = 3;
+  string project = 4;
+  string owner = 5;
+  string sweep_id = 6;
+  int32 trial = 7;
+  repeated string tags = 8;
+  MlRunState state = 9;
+  repeated MlRunBadge badges = 10;
+  // The training template and the release that carried it.
+  string template = 11;
+  string template_release = 12;
+  string commit = 13;
+  google.protobuf.Timestamp created_at = 14;
+  google.protobuf.Timestamp started_at = 15;
+  google.protobuf.Timestamp ended_at = 16;
+  string current_phase_key = 17;
+  // Of the current phase.
+  int64 step = 18;
+  int64 total_steps = 19;
+  int64 tokens_seen = 20;
+  int64 tokens_planned = 21;
+  // Unset when not running or not estimable.
+  optional double eta_seconds = 22;
+  int32 accelerators = 23;
+  string accelerator_product = 24;
+  // Productive share of allocated accelerator time, 0-1.
+  double goodput = 25;
+  MlCost cost = 26;
+  int32 restarts = 27;
+  int32 preemptions = 28;
+  // Headline scalars: "val/loss", "train/loss", "eval/mmlu_pro", "mfu".
+  map<string, double> summary = 29;
+  map<string, string> params = 30;
+  string objective_key = 31;
+  // The objective's recent values, for a sparkline.
+  MlSeries objective = 32;
+  repeated MlPhase phases = 33;
+  repeated string cluster_ids = 34;
+  // How it was launched: "forge ml run", "observed", "mlflow import".
+  string launched_via = 35;
+}
+
+enum MlPhaseKind {
+  ML_PHASE_KIND_UNSPECIFIED = 0;
+  ML_PHASE_KIND_PRETRAIN = 1;
+  ML_PHASE_KIND_MIDTRAIN = 2;
+  ML_PHASE_KIND_SFT = 3;
+  ML_PHASE_KIND_DPO = 4;
+  ML_PHASE_KIND_RL = 5;
+  ML_PHASE_KIND_DISTILL = 6;
+  ML_PHASE_KIND_QUANTIZE = 7;
+  ML_PHASE_KIND_EVAL = 8;
+  ML_PHASE_KIND_CUSTOM = 9;
+}
+
+enum MlPhaseState {
+  ML_PHASE_STATE_UNSPECIFIED = 0;
+  // Waiting on an upstream phase or checkpoint.
+  ML_PHASE_STATE_PENDING = 1;
+  ML_PHASE_STATE_QUEUED = 2;
+  ML_PHASE_STATE_ADMITTED = 3;
+  ML_PHASE_STATE_STARTING = 4;
+  ML_PHASE_STATE_RUNNING = 5;
+  ML_PHASE_STATE_RESTARTING = 6;
+  ML_PHASE_STATE_SUCCEEDED = 7;
+  ML_PHASE_STATE_FAILED = 8;
+  ML_PHASE_STATE_CANCELLED = 9;
+  ML_PHASE_STATE_SKIPPED = 10;
+}
+
+message MlPhase {
+  // Unique in its run: "pretrain", "sft", "rl", "eval-periodic".
+  string key = 1;
+  MlPhaseKind kind = 2;
+  string label = 3;
+  MlPhaseState state = 4;
+  repeated string depends_on = 5;
   string cluster_id = 6;
-  MlRunState state = 7;
-  map<string, string> params = 8;
-  // Who launched it: a person's email, or a token's name.
-  string launched_by = 9;
+  string queue_id = 7;
+  // "JobSet", "TrainJob", "PyTorchJob", "RayJob", "Job".
+  string orchestrator = 8;
+  // The algorithm, where the kind has several: "GRPO", "DPO", "FSDP2".
+  string method = 9;
   google.protobuf.Timestamp started_at = 10;
-  google.protobuf.Timestamp finished_at = 11;
-  int32 accelerator_count = 12;
-  string accelerator_product = 13;
-  int32 restarts = 14;
-  int32 preemptions = 15;
-  repeated MlMetricSeries metrics = 16;
-  // The model version it produced, by OCI digest; empty when none.
-  string output_model_digest = 17;
+  google.protobuf.Timestamp ended_at = 11;
+  int64 from_step = 12;
+  int64 step = 13;
+  int64 total_steps = 14;
+  // The checkpoint (or model version) it was initialised from.
+  MlSubject input = 15;
+  repeated MlAttempt attempts = 16;
+  repeated MlSegment segments = 17;
+  int32 accelerators = 18;
+  int32 world_size = 19;
+  double goodput = 20;
+  MlCost cost = 21;
+  // For an eval phase: the checkpoint steps it evaluated.
+  repeated int64 evaluated_steps = 22;
+  map<string, double> summary = 23;
 }
 
-message MlMetricSeries {
-  // e.g. "loss", "eval/accuracy", "accelerator_utilization".
+// MlSegment is a named step range of a phase (a data mixture change, an LR
+// cooldown), drawn as a band on its charts.
+message MlSegment {
   string name = 1;
-  string unit = 2;
-  repeated MlMetricPoint points = 3;
+  int64 from_step = 2;
+  int64 to_step = 3;
+  string note = 4;
 }
 
-message MlMetricPoint {
-  int64 step = 1;
-  google.protobuf.Timestamp time = 2;
+enum MlAttemptEndReason {
+  ML_ATTEMPT_END_REASON_UNSPECIFIED = 0;
+  ML_ATTEMPT_END_REASON_COMPLETED = 1;
+  ML_ATTEMPT_END_REASON_PREEMPTED_BY_QUEUE = 2;
+  ML_ATTEMPT_END_REASON_PREEMPTED_BY_SCHEDULER = 3;
+  ML_ATTEMPT_END_REASON_SPOT_RECLAIMED = 4;
+  ML_ATTEMPT_END_REASON_NODE_FAILURE = 5;
+  ML_ATTEMPT_END_REASON_GPU_ERROR = 6;
+  ML_ATTEMPT_END_REASON_NCCL_TIMEOUT = 7;
+  ML_ATTEMPT_END_REASON_HANG = 8;
+  ML_ATTEMPT_END_REASON_OOM_GPU = 9;
+  ML_ATTEMPT_END_REASON_OOM_HOST = 10;
+  ML_ATTEMPT_END_REASON_USER_CODE_ERROR = 11;
+  ML_ATTEMPT_END_REASON_PODS_READY_TIMEOUT = 12;
+  ML_ATTEMPT_END_REASON_REWIND = 13;
+  ML_ATTEMPT_END_REASON_ELASTIC_RESIZE = 14;
+  ML_ATTEMPT_END_REASON_CANCELLED = 15;
+  ML_ATTEMPT_END_REASON_UNKNOWN = 16;
+}
+
+message MlAttempt {
+  int32 n = 1;
+  MlPhaseState state = 2;
+  // Unset (UNSPECIFIED) while it runs.
+  MlAttemptEndReason end_reason = 3;
+  // "Xid 79 on gke-h100-r4vb GPU 5", "NCCL watchdog: allreduce seq 88213".
+  string end_detail = 4;
+  google.protobuf.Timestamp queued_at = 5;
+  google.protobuf.Timestamp admitted_at = 6;
+  google.protobuf.Timestamp running_at = 7;
+  google.protobuf.Timestamp ended_at = 8;
+  int64 start_step = 9;
+  int64 end_step = 10;
+  // Steps between the last durable checkpoint and the end: work redone.
+  int64 steps_lost = 11;
+  string resumed_from_checkpoint_id = 12;
+  int32 world_size = 13;
+  repeated string node_ids = 14;
+  repeated string device_uuids = 15;
+  string image_digest = 16;
+  // The stretches it spent queued, starting, running, checkpointing,
+  // stalled.
+  repeated MlTimeSpan spans = 17;
+  MlPodStart pod_start = 18;
+  MlCost cost = 19;
+  int64 rewound_to_step = 20;
+  // The ranks (GetMlRun only).
+  repeated MlRank ranks = 21;
+  // The event that ended it.
+  string end_event_id = 22;
+  // The Kueue Workload that admitted it.
+  MlKueueWorkload workload = 23;
+  // How it came back from the previous attempt's end: unset for attempt 1.
+  MlRecovery recovery = 24;
+}
+
+// MlRecovery is the time from a failure to the next attempt's first step,
+// stage by stage, and what the platform did about it.
+message MlRecovery {
+  // In order: "detect", "drain", "reschedule", "image pull", "NCCL init",
+  // "checkpoint load", "first step".
+  repeated MlRecoveryStage stages = 1;
+  double total_seconds = 2;
+  // What was done, as a person reads it: "cordoned gke-h100-r4vb, swapped in
+  // hot spare gke-h100-s01, resumed from step 32,000".
+  string remediation = 3;
+  // Whether the platform took it on its own (an opt-in alert action).
+  bool automatic = 4;
+  repeated string cordoned_node_ids = 5;
+  // The hot spare node swapped in; empty when none was.
+  string hot_spare_node_id = 6;
+  string resumed_from_checkpoint_id = 7;
+  int64 resumed_step = 8;
+  // Accelerator time the failure cost: the recovery itself plus the steps
+  // redone since the last durable checkpoint.
+  double gpu_hours_lost = 9;
+  double usd_lost = 10;
+  // The alert rule whose action ran, when automatic.
+  string alert_id = 11;
+}
+
+message MlRecoveryStage {
+  string stage = 1;
+  double seconds = 2;
+  string detail = 3;
+}
+
+// MlKueueWorkload is the Kueue Workload of one phase attempt (or job).
+message MlKueueWorkload {
+  string name = 1;
+  string uid = 2;
+  string local_queue = 3;
+  string cluster_queue = 4;
+  string cohort = 5;
+  int32 priority = 6;
+  string priority_class = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp quota_reserved_at = 9;
+  google.protobuf.Timestamp admitted_at = 10;
+  google.protobuf.Timestamp evicted_at = 11;
+  // "Preempted", "PodsReadyTimeout", "InactiveWorkload"; empty when not evicted.
+  string eviction_reason = 12;
+  string flavor = 13;
+  int32 gpus = 14;
+  // GPUs admitted against another queue's quota in the cohort.
+  int32 borrowed_gpus = 15;
+  int32 preemptions = 16;
+  int32 requeues = 17;
+  // "ProvisioningRequest: Provisioned".
+  repeated string admission_checks = 18;
+  // A topology request (TAS): "rack", "block"; empty when none.
+  string topology = 19;
+}
+
+message MlRank {
+  int32 rank = 1;
+  int32 local_rank = 2;
+  string pod = 3;
+  string node_id = 4;
+  string device_uuid = 5;
+  int32 device_index = 6;
+  double step_time_ms_p50 = 7;
+  double compute_ms_p50 = 8;
+  double comm_exposed_ms_p50 = 9;
+  double data_wait_ms_p50 = 10;
+  double sm_active = 11;
+  bool straggler = 12;
+  string straggler_reason = 13;
+  // This rank's coordinates in the device mesh (MlParallelism sizes).
+  int32 dp = 14;
+  int32 tp = 15;
+  int32 pp = 16;
+  int32 cp = 17;
+  int32 ep = 18;
+  double tflops = 19;
+  double memory_allocated_gb = 20;
+  double memory_reserved_gb = 21;
+  double memory_peak_gb = 22;
+  int32 world_size = 23;
+}
+
+enum MlCheckpointStatus {
+  ML_CHECKPOINT_STATUS_UNSPECIFIED = 0;
+  ML_CHECKPOINT_STATUS_DURABLE = 1;
+  ML_CHECKPOINT_STATUS_UPLOADING = 2;
+  ML_CHECKPOINT_STATUS_PARTIAL = 3;
+  ML_CHECKPOINT_STATUS_DELETED = 4;
+}
+
+message MlCheckpoint {
+  // "<run_id>/<phase_key>/<step>".
+  string id = 1;
+  string run_id = 2;
+  string phase_key = 3;
+  int32 attempt = 4;
+  int64 step = 5;
+  // "full", "weights-only", "sharded-dcp", "adapter".
+  string kind = 6;
+  int64 size_bytes = 7;
+  double save_seconds = 8;
+  double upload_seconds = 9;
+  bool async = 10;
+  // Seconds the training loop blocked for it.
+  double blocking_seconds = 11;
+  map<string, double> metrics = 12;
+  // Task key → score, from evals of this checkpoint.
+  map<string, double> eval_scores = 13;
+  MlCheckpointStatus status = 14;
+  string uri = 15;
+  string digest = 16;
+  google.protobuf.Timestamp saved_at = 17;
+  string model_version_id = 18;
+  repeated string eval_run_ids = 19;
+}
+
+message MlHealthCheck {
+  string key = 1;
+  // "ok", "warn", "fail", "not-collected".
+  string status = 2;
+  string title = 3;
+  string detail = 4;
+  string finding_id = 5;
+  MlSubject subject = 6;
+}
+
+message MlStepStage {
+  // "data_wait", "forward", "backward", "optimizer", "comm_exposed",
+  // "checkpoint", "rollout" (RL).
+  string stage = 1;
+  double ms_p50 = 2;
+  double share = 3;
+}
+
+enum MlParamSource {
+  ML_PARAM_SOURCE_UNSPECIFIED = 0;
+  ML_PARAM_SOURCE_TEMPLATE = 1;
+  ML_PARAM_SOURCE_LAUNCH = 2;
+  ML_PARAM_SOURCE_PHASE = 3;
+}
+
+message MlParam {
+  string key = 1;
+  string value = 2;
+  MlParamSource source = 3;
+  // For a per-phase override.
+  string phase_key = 4;
+}
+
+message MlParallelism {
+  int32 data = 1;
+  int32 tensor = 2;
+  int32 pipeline = 3;
+  int32 context = 4;
+  int32 expert = 5;
+  int32 zero_stage = 6;
+  int32 micro_batch = 7;
+  int32 global_batch = 8;
+  int32 grad_accumulation = 9;
+  string framework = 10;
+  // The device mesh's dimension order, outermost first: "pp,dp,cp,ep,tp".
+  string mesh_order = 11;
+  int32 world_size = 12;
+  int32 gpus_per_node = 13;
+}
+
+message MlDatasetRef {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string digest = 4;
+  int64 tokens = 5;
+  double mixture_weight = 6;
+  string uri = 7;
+}
+
+message MlCodeRef {
+  string repository = 1;
+  string commit = 2;
+  string commit_message = 3;
+  string release = 4;
+  string image_digest = 5;
+  // What changed since the previous run's commit, as a person reads it.
+  string diff_summary = 6;
+  string previous_commit = 7;
+}
+
+message MlRunConfig {
+  repeated MlParam params = 1;
+  MlParallelism parallelism = 2;
+  // "CUDA 12.4", "NCCL 2.21.5", "PyTorch 2.5.1", NCCL_* env.
+  repeated MlFact environment = 3;
+  repeated MlFact hardware = 4;
+  repeated MlDatasetRef datasets = 5;
+  MlCodeRef code = 6;
+}
+
+message MlCostCell {
+  string phase_key = 1;
+  int32 attempt = 2;
+  MlCostCategory category = 3;
+  double gpu_hours = 4;
+  double usd = 5;
+}
+
+message MlRunCost {
+  repeated MlCostCell cells = 1;
+  double usd_per_billion_tokens = 2;
+  double projected_usd_to_finish = 3;
+  double experiment_median_usd = 4;
+}
+
+message GetMlRunRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // The run's id or its name.
+  string run = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlRunResponse {
+  MlRun run = 1;
+  repeated MlCheckpoint checkpoints = 2;
+  repeated MlHealthCheck health = 3;
+  // Of the current (or selected default) phase.
+  repeated MlStepStage step_breakdown = 4;
+  MlRunConfig config = 5;
+  MlRunCost cost = 6;
+  // Headline numbers: "best val loss 1.88 @38k", "MFU 41%".
+  repeated MlFact key_numbers = 7;
+  MlExperiment experiment = 8;
+  // Open findings about this run.
+  repeated string finding_ids = 9;
+  // The model versions it produced.
+  repeated string model_version_ids = 10;
+  // Model insights: what the vitals say over the run (a loss spike traced to
+  // a data shard, attention logit growth, a dead expert).
+  repeated MlInsight insights = 11;
+  // Per-layer statistics at the latest logged step: model vitals.
+  repeated MlLayerStat layer_stats = 12;
+  // Token accounting of the current phase.
+  MlTokenStats tokens = 13;
+  // The events this run emits that workflows and webhooks can subscribe to.
+  repeated MlHook hooks = 14;
+  // Hot spare capacity the run's phases may swap in.
+  repeated MlFact spares = 15;
+}
+
+// MlHook is one event type a subject emits, and what is subscribed to it.
+message MlHook {
+  // "ml.attempt.failed", "ml.checkpoint.saved", "ml.loss.spike",
+  // "ml.phase.succeeded", "ml.eval.regressed", "ml.straggler.detected".
+  string event_type = 1;
+  string description = 2;
+  int32 emitted_7d = 3;
+  google.protobuf.Timestamp last_emitted_at = 4;
+  repeated MlHookTarget targets = 5;
+  // An example payload, as JSON.
+  string example_payload = 6;
+}
+
+message MlHookTarget {
+  // "workflow", "webhook", "slack".
+  string kind = 1;
+  string name = 2;
+  // "succeeded", "failed", "" when it never ran.
+  string last_result = 3;
+  google.protobuf.Timestamp last_run_at = 4;
+  // Where it is declared: ".reliant/workflows/rewind-on-spike.yaml".
+  string declared_in = 5;
+}
+
+message MlInsight {
+  string id = 1;
+  MlSeverity severity = 2;
+  string title = 3;
+  string detail = 4;
+  string phase_key = 5;
+  int64 from_step = 6;
+  int64 to_step = 7;
+  // The series that show it.
+  repeated string series_keys = 8;
+  // What to do: "rewind to step 39,000 and skip shard 1184".
+  string suggestion = 9;
+  string finding_id = 10;
+}
+
+message MlLayerStat {
+  // "layers.17.attn", "embed", "lm_head", "layers.4.mlp.experts.12".
+  string layer = 1;
+  double grad_norm = 2;
+  double weight_norm = 3;
+  double activation_rms = 4;
+  // Update size over weight size, per step.
+  double update_ratio = 5;
+  double max_attention_logit = 6;
+  // "ok", "warn", "fail".
+  string status = 7;
+  string note = 8;
+}
+
+message MlTokenStats {
+  int64 tokens_seen = 1;
+  int64 tokens_planned = 2;
+  double tokens_per_second = 3;
+  double tokens_per_second_per_gpu = 4;
+  // Share of padding in packed batches, 0-1.
+  double padding_ratio = 5;
+  int32 sequence_length = 6;
+  // Tokens per data source.
+  repeated MlShare by_source = 7;
+}
+
+// --- Telemetry by subject ----------------------------------------------------
+
+message QueryMlSeriesRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  MlSubject subject = 2 [(buf.validate.field).required = true];
+  // Metric keys; a key ending in "/*" reads every key under that prefix.
+  repeated string keys = 3;
+  MlAxis axis = 4;
+  // The window, for the time axis; unset for the subject's lifetime.
+  optional google.protobuf.Timestamp from = 5;
+  optional google.protobuf.Timestamp to = 6;
+  // One series per member: "rank", "device", "attempt", "node", "pool",
+  // "replica", "revision"; empty for one series per key.
+  optional string group_by = 7;
+  // The most points per series the caller wants.
+  optional int32 max_points = 8;
+}
+
+message QueryMlSeriesResponse {
+  repeated MlSeries series = 1;
+}
+
+message ListMlEventsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  MlSubject subject = 2 [(buf.validate.field).required = true];
+  optional google.protobuf.Timestamp from = 3;
+  optional google.protobuf.Timestamp to = 4;
+  repeated MlEventKind kinds = 5;
+  optional int32 limit = 6;
+}
+
+message ListMlEventsResponse {
+  repeated MlEvent events = 1;
+}
+
+message ListMlLogsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  MlSubject subject = 2 [(buf.validate.field).required = true];
+  optional google.protobuf.Timestamp from = 3;
+  optional google.protobuf.Timestamp to = 4;
+  optional int32 rank = 5;
+  // "error", "warn", "info", "debug".
+  optional string min_level = 6;
+  optional string query = 7;
+  optional bool highlights_only = 8;
+  optional int32 limit = 9;
+}
+
+message ListMlLogsResponse {
+  repeated MlLogLine lines = 1;
+  bool truncated = 2;
+}
+
+message MlLogLine {
+  google.protobuf.Timestamp time = 1;
+  // -1 when the line is not from a rank (an init container, the launcher).
+  int32 rank = 2;
+  string pod = 3;
+  string node_id = 4;
+  string container = 5;
+  string level = 6;
+  string message = 7;
+  // "nccl", "xid", "oom", "traceback", "shm", "nan", "watchdog"; empty for
+  // an ordinary line.
+  string highlight = 8;
+  string event_id = 9;
+  int32 attempt = 10;
+  string run_id = 11;
+  string phase_key = 12;
+  string trace_id = 13;
+}
+
+enum MlTraceKind {
+  ML_TRACE_KIND_UNSPECIFIED = 0;
+  ML_TRACE_KIND_TRAIN_STEP = 1;
+  ML_TRACE_KIND_CHECKPOINT = 2;
+  ML_TRACE_KIND_DATA_PIPELINE = 3;
+  ML_TRACE_KIND_INFERENCE_REQUEST = 4;
+  ML_TRACE_KIND_EVAL = 5;
+  ML_TRACE_KIND_POD_START = 6;
+}
+
+message ListMlTracesRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  MlSubject subject = 2 [(buf.validate.field).required = true];
+  optional MlTraceKind kind = 3;
+  optional int32 limit = 4;
+}
+
+message ListMlTracesResponse {
+  repeated MlTraceSummary traces = 1;
+  // Why there are none, when there are none: "training-uninstrumented".
+  string missing_finding_id = 2;
+}
+
+message MlTraceSummary {
+  string trace_id = 1;
+  MlTraceKind kind = 2;
+  string title = 3;
+  google.protobuf.Timestamp start = 4;
+  double duration_ms = 5;
+  // Against the median of its kind, e.g. 1.8.
+  double vs_median = 6;
+  // The span that took most of it.
+  string dominant_span = 7;
+  MlSubject subject = 8;
+  int64 step = 9;
+  int32 rank = 10;
+  bool error = 11;
+  map<string, string> attributes = 12;
+}
+
+message GetMlTraceRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string trace_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlTraceResponse {
+  MlTraceSummary summary = 1;
+  repeated MlSpan spans = 2;
+  bool truncated = 3;
+}
+
+enum MlSpanStatus {
+  ML_SPAN_STATUS_UNSPECIFIED = 0;
+  ML_SPAN_STATUS_OK = 1;
+  ML_SPAN_STATUS_ERROR = 2;
+}
+
+message MlSpan {
+  string span_id = 1;
+  string parent_span_id = 2;
+  string name = 3;
+  string service = 4;
+  // "server", "client", "internal", "producer", "consumer".
+  string kind = 5;
+  google.protobuf.Timestamp start = 6;
+  double duration_ms = 7;
+  MlSpanStatus status = 8;
+  string status_message = 9;
+  map<string, string> attributes = 10;
+  repeated MlSpanEvent events = 11;
+  // The join keys every ML span carries, so one trace joins the device,
+  // kubelet, scheduler and Kueue telemetry of the same moment. Empty when
+  // the span is not in a run (an inference request carries replica, node
+  // and device only).
+  string run_id = 12;
+  string phase_key = 13;
+  int32 attempt = 14;
+  int32 rank = 15;
+  string node_id = 16;
+  string device_uuid = 17;
+  string pod = 18;
+}
+
+message MlSpanEvent {
+  google.protobuf.Timestamp time = 1;
+  string name = 2;
+  map<string, string> attributes = 3;
+}
+
+enum MlProfileKind {
+  ML_PROFILE_KIND_UNSPECIFIED = 0;
+  ML_PROFILE_KIND_PYTORCH_PROFILER = 1;
+  ML_PROFILE_KIND_NSIGHT_SYSTEMS = 2;
+  ML_PROFILE_KIND_NSIGHT_COMPUTE = 3;
+  ML_PROFILE_KIND_MEMORY_SNAPSHOT = 4;
+  ML_PROFILE_KIND_FLIGHT_RECORDER = 5;
+  ML_PROFILE_KIND_PY_SPY = 6;
+  ML_PROFILE_KIND_CPU_CONTINUOUS = 7;
+  // Always-on, low-rate GPU kernel sampling (CUPTI range profiling).
+  ML_PROFILE_KIND_GPU_CONTINUOUS = 8;
+}
+
+message ListMlProfilesRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  MlSubject subject = 2 [(buf.validate.field).required = true];
+}
+
+message ListMlProfilesResponse {
+  repeated MlProfile profiles = 1;
+}
+
+message MlProfile {
+  string id = 1;
+  MlProfileKind kind = 2;
+  // "declared window", "auto on regression", "manual", "watchdog".
+  string trigger = 3;
+  MlSubject subject = 4;
+  int64 from_step = 5;
+  int64 to_step = 6;
+  repeated int32 ranks = 7;
+  int64 size_bytes = 8;
+  google.protobuf.Timestamp captured_at = 9;
+  // Where to open it: Perfetto for a trace, a download for Nsight.
+  string open_url = 10;
+  string open_label = 11;
+  MlProfileSummary summary = 12;
+  // A speedscope JSON flamegraph (GetMlProfile only).
+  string flamegraph_json = 13;
+  // Per-rank last collective, for a flight-recorder dump.
+  repeated MlCollectiveState collectives = 14;
+  string captured_by = 15;
+}
+
+// MlProfileSummary is what we compute from a capture (Holistic Trace
+// Analysis): where the time went, the top kernels, overlap and gaps.
+message MlProfileSummary {
+  double compute_share = 1;
+  double comm_share = 2;
+  double memcpy_share = 3;
+  double idle_share = 4;
+  // Communication hidden behind compute, 0-1.
+  double comm_overlap = 5;
+  bool launch_bound = 6;
+  repeated MlKernel top_kernels = 7;
+  double peak_memory_gb = 8;
+  repeated MlFact notes = 9;
+}
+
+message MlKernel {
+  string name = 1;
+  double share = 2;
+  int64 calls = 3;
+  double mean_us = 4;
+  // "gemm", "attention", "nccl", "elementwise", "memcpy".
+  string category = 5;
+}
+
+message MlCollectiveState {
+  int32 rank = 1;
+  int64 last_seq = 2;
+  string op = 3;
+  int64 size_bytes = 4;
+  // "completed", "started", "scheduled", "not-started".
+  string state = 5;
+  bool mismatched = 6;
+  string pod = 7;
+}
+
+message GetMlProfileRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string profile_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlProfileResponse {
+  MlProfile profile = 1;
+}
+
+// --- Lineage ---------------------------------------------------------------
+
+enum MlLineageEdgeKind {
+  ML_LINEAGE_EDGE_KIND_UNSPECIFIED = 0;
+  ML_LINEAGE_EDGE_KIND_TRAINED_ON = 1;
+  ML_LINEAGE_EDGE_KIND_INITIALIZED_FROM = 2;
+  ML_LINEAGE_EDGE_KIND_RESUMED_FROM = 3;
+  ML_LINEAGE_EDGE_KIND_PRODUCED = 4;
+  ML_LINEAGE_EDGE_KIND_EVALUATED = 5;
+  ML_LINEAGE_EDGE_KIND_PROMOTED_TO = 6;
+  ML_LINEAGE_EDGE_KIND_SHIPPED_IN = 7;
+  ML_LINEAGE_EDGE_KIND_SERVES = 8;
+  ML_LINEAGE_EDGE_KIND_DISTILLED_FROM = 9;
+  ML_LINEAGE_EDGE_KIND_BUILT_FROM = 10;
+}
+
+message MlLineageNode {
+  MlSubject subject = 1;
+  string title = 2;
+  string subtitle = 3;
+  // "ok", "running", "failed", "serving", "" for none.
+  string status = 4;
+  // Left-to-right column: dataset 0, phases 1, checkpoints 2, versions 3,
+  // releases 4, services 5.
+  int32 column = 5;
+}
+
+message MlLineageEdge {
+  // Subject ids.
+  string from = 1;
+  string to = 2;
+  MlLineageEdgeKind kind = 3;
+  string label = 4;
+}
+
+message GetMlLineageRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  MlSubject subject = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlLineageResponse {
+  repeated MlLineageNode nodes = 1;
+  repeated MlLineageEdge edges = 2;
+}
+
+// ============================================================================
+// Evals
+// ============================================================================
+
+message ListMlEvalSuitesRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional string project = 2;
+}
+
+message ListMlEvalSuitesResponse {
+  repeated MlEvalSuite suites = 1;
+}
+
+message MlEvalSuite {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string project = 4;
+  repeated MlEvalTask tasks = 5;
+  repeated MlEvalGate gates = 6;
+  string description = 7;
+}
+
+message MlEvalTask {
+  // "mmlu_pro", "gsm8k", "ifeval", "support_tickets_v3", "safety_refusals".
+  string key = 1;
+  string name = 2;
+  // "knowledge", "reasoning", "math", "code", "long-context", "safety",
+  // "instruction-following", "agentic", "internal".
+  string category = 3;
+  string metric = 4;
+  bool higher_is_better = 5;
+  int32 samples = 6;
+  string dataset_digest = 7;
+  // "5-shot", "0-shot CoT".
+  string setting = 8;
+  // Scores as fractions (0-1) shown as percent, or raw.
+  string unit = 9;
+}
+
+message MlEvalGate {
+  string id = 1;
+  string description = 2;
+  // As declared: "regression(mmlu_pro) <= 1pt @95%", "safety_refusals >= 0.98".
+  string expression = 3;
+  string task_key = 4;
+}
+
+message GetMlEvalMatrixRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string suite_id = 2 [(buf.validate.field).required = true];
+  optional string model_id = 3;
+  // A row's subject id; unset for the suite's default (production).
+  optional string baseline = 4;
+}
+
+message GetMlEvalMatrixResponse {
+  MlEvalSuite suite = 1;
+  string baseline_row_id = 2;
+  repeated MlEvalRow rows = 3;
+  repeated MlEvalCell cells = 4;
+}
+
+message MlEvalRow {
+  // The subject id (a model version, checkpoint, revision or external model).
+  string id = 1;
+  MlSubject subject = 2;
+  string label = 3;
+  // "production", "staging", "candidate", "".
+  string alias = 4;
+  string eval_run_id = 5;
+  double usd = 6;
+  // "pass", "fail", "" when no gate applies.
+  string gate_status = 7;
+  repeated string gate_failures = 8;
+  google.protobuf.Timestamp evaluated_at = 9;
+  // A judge's pairwise win rate against the baseline, 0-1; NaN when none.
+  double judge_win_rate = 10;
+}
+
+message MlEvalCell {
+  string row_id = 1;
+  string task_key = 2;
   double value = 3;
+  double stderr = 4;
+  double delta = 5;
+  // Significant at 95% (paired bootstrap / McNemar).
+  bool significant = 6;
+  int32 n = 7;
+  bool gate_fail = 8;
+  // Whether the delta is worse.
+  bool regression = 9;
 }
 
-// --- Models -------------------------------------------------------------------
+message ListMlEvalRunsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional string suite_id = 2;
+  optional string subject_id = 3;
+}
+
+message ListMlEvalRunsResponse {
+  repeated MlEvalRun eval_runs = 1;
+}
+
+message MlEvalRun {
+  string id = 1;
+  string suite_id = 2;
+  string suite_version = 3;
+  MlSubject subject = 4;
+  // "lm-eval-harness", "inspect", "lighteval", "custom".
+  string harness = 5;
+  string harness_version = 6;
+  int64 seed = 7;
+  int32 sample_limit = 8;
+  string judge_model = 9;
+  string judge_rubric_version = 10;
+  google.protobuf.Timestamp started_at = 11;
+  google.protobuf.Timestamp ended_at = 12;
+  int64 tokens = 13;
+  MlCost cost = 14;
+  string ran_by = 15;
+  // The run phase it belongs to, when it ran inside a run.
+  MlSubject phase = 16;
+  // "succeeded", "running", "failed".
+  string state = 17;
+  repeated MlEvalResult results = 18;
+  double latency_p50_ms = 19;
+  double latency_p95_ms = 20;
+  repeated MlFact config = 21;
+}
+
+message MlEvalResult {
+  string task_key = 1;
+  string metric = 2;
+  double value = 3;
+  double stderr = 4;
+  int32 n = 5;
+  repeated MlEvalSliceResult slices = 6;
+}
+
+message MlEvalSliceResult {
+  string slice = 1;
+  double value = 2;
+  int32 n = 3;
+}
+
+message GetMlEvalRunRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string eval_run_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlEvalRunResponse {
+  MlEvalRun eval_run = 1;
+}
+
+message ListMlEvalSamplesRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string eval_run_id = 2 [(buf.validate.field).required = true];
+  string task_key = 3 [(buf.validate.field).required = true];
+  optional string baseline_eval_run_id = 4;
+  // "regressed", "improved", "same", "all".
+  optional string filter = 5;
+  optional string slice = 6;
+  optional int32 limit = 7;
+}
+
+message ListMlEvalSamplesResponse {
+  repeated MlEvalSample samples = 1;
+  int32 wins = 2;
+  int32 losses = 3;
+  int32 ties = 4;
+  double p_value = 5;
+  int32 total = 6;
+}
+
+message MlEvalSample {
+  string id = 1;
+  string task_key = 2;
+  string input = 3;
+  string reference = 4;
+  string output = 5;
+  string baseline_output = 6;
+  double score = 7;
+  double baseline_score = 8;
+  string judge_rationale = 9;
+  int32 tokens = 10;
+  double latency_ms = 11;
+  string slice = 12;
+  // "regressed", "improved", "same".
+  string flip = 13;
+}
+
+// ============================================================================
+// Models
+// ============================================================================
 
 message ListMlModelsRequest {
   string org_id = 1 [(buf.validate.field).required = true];
@@ -375,29 +2388,172 @@ message ListMlModelsResponse {
 }
 
 message MlModel {
+  string id = 1;
+  string name = 2;
+  string project = 3;
+  // The OCI repository.
+  string repository = 4;
+  string description = 5;
+  string latest_version_id = 6;
+  int32 version_count = 7;
+  repeated MlAlias aliases = 8;
+  int32 serving_services = 9;
+  double serving_rps = 10;
+  // The latest gate result: "pass", "fail", "".
+  string last_gate_status = 11;
+  string last_gate_version_id = 12;
+  google.protobuf.Timestamp updated_at = 13;
+}
+
+message MlAlias {
+  // "production", "staging", "candidate".
   string name = 1;
-  string project = 2;
-  // The OCI repository, without tag or digest.
-  string repository = 3;
-  // Newest first.
-  repeated MlModelVersion versions = 4;
+  string version_id = 2;
+  // The env whose release it is, when it is one.
+  string env = 3;
+  google.protobuf.Timestamp moved_at = 4;
+  string moved_by = 5;
+}
+
+message MlAliasMove {
+  string alias = 1;
+  string from_version_id = 2;
+  string to_version_id = 3;
+  google.protobuf.Timestamp at = 4;
+  string by = 5;
+  string reason = 6;
+  string release = 7;
+}
+
+message GetMlModelRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string model_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlModelResponse {
+  MlModel model = 1;
+  repeated MlModelVersion versions = 2;
+  repeated MlAliasMove alias_history = 3;
+  repeated MlPromotionGate promotion = 4;
+}
+
+enum MlVersionSource {
+  ML_VERSION_SOURCE_UNSPECIFIED = 0;
+  ML_VERSION_SOURCE_TRAINED = 1;
+  ML_VERSION_SOURCE_PUSHED = 2;
+  ML_VERSION_SOURCE_IMPORTED = 3;
 }
 
 message MlModelVersion {
-  // "sha256:<hex>": the version's identity.
-  string digest = 1;
-  // A tag pointing at it, if any.
-  string tag = 2;
-  google.protobuf.Timestamp created_at = 3;
-  // The run that produced it; empty when pushed by hand.
-  string run_id = 4;
-  int64 size_bytes = 5;
-  map<string, double> eval_metrics = 6;
-  // The inference services serving it now, as "<project>/<env>/<service>".
-  repeated string serving_in = 7;
+  // "<model_id>/<version>".
+  string id = 1;
+  string model_id = 2;
+  // "v3".
+  string version = 3;
+  string digest = 4;
+  google.protobuf.Timestamp created_at = 5;
+  MlVersionSource source = 6;
+  string run_id = 7;
+  string phase_key = 8;
+  int32 attempt = 9;
+  string checkpoint_id = 10;
+  string base_model = 11;
+  MlModelCard card = 12;
+  // "pass", "fail", "pending", "".
+  string gate_status = 13;
+  int32 gate_passed = 14;
+  int32 gate_total = 15;
+  repeated string aliases = 16;
+  repeated MlServingPlacement serving = 17;
+  string created_by = 18;
 }
 
-// --- Inference ----------------------------------------------------------------
+message MlModelCard {
+  string architecture = 1;
+  int64 params_total = 2;
+  int64 params_active = 3;
+  int32 context_length = 4;
+  string dtype = 5;
+  string quantization = 6;
+  string tokenizer = 7;
+  string license = 8;
+  int32 layers = 9;
+  int32 shards = 10;
+  int64 size_bytes = 11;
+  repeated string adapters = 12;
+  string training_data = 13;
+  string intended_use = 14;
+  // ModelPack media type of the manifest.
+  string media_type = 15;
+}
+
+message MlServingPlacement {
+  string service_id = 1;
+  string env = 2;
+  string revision_id = 3;
+  double traffic_share = 4;
+}
+
+message MlGateCheck {
+  string name = 1;
+  // "pass", "fail", "pending", "skipped".
+  string status = 2;
+  string detail = 3;
+  // What it reads: an eval run, a release check.
+  MlSubject evidence = 4;
+}
+
+message MlPromotionGate {
+  string env = 1;
+  string version_id = 2;
+  repeated MlGateCheck checks = 3;
+  bool can_promote = 4;
+  // What Promote does: "opens a release PR promoting v3 to prod".
+  string action = 5;
+}
+
+message GetMlModelVersionRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string version_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlModelVersionResponse {
+  MlModelVersion version = 1;
+  repeated MlModelFile files = 2;
+  repeated MlGateCheck gate = 3;
+  repeated MlServingPerf perf = 4;
+  repeated MlPullPerf pulls = 5;
+  repeated MlAliasMove alias_history = 6;
+}
+
+message MlModelFile {
+  string path = 1;
+  int64 size_bytes = 2;
+  string media_type = 3;
+  string digest = 4;
+}
+
+message MlServingPerf {
+  string hardware = 1;
+  string runtime = 2;
+  double ttft_p95_ms = 3;
+  double itl_p95_ms = 4;
+  double tokens_per_second_per_gpu = 5;
+  double usd_per_million_tokens = 6;
+  string service_id = 7;
+}
+
+message MlPullPerf {
+  string cluster_id = 1;
+  int64 size_bytes = 2;
+  double pull_seconds = 3;
+  // "registry", "cache", "peer".
+  string source = 4;
+}
+
+// ============================================================================
+// Inference
+// ============================================================================
 
 message ListMlInferenceServicesRequest {
   string org_id = 1 [(buf.validate.field).required = true];
@@ -411,32 +2567,246 @@ message ListMlInferenceServicesResponse {
 enum MlReleaseVerdict {
   ML_RELEASE_VERDICT_UNSPECIFIED = 0;
   ML_RELEASE_VERDICT_PASS = 1;
-  ML_RELEASE_VERDICT_FAIL = 2;
-  // The check could not prove the release good (too little traffic).
-  ML_RELEASE_VERDICT_INCONCLUSIVE = 3;
+  ML_RELEASE_VERDICT_REGRESSED = 2;
+  ML_RELEASE_VERDICT_NOT_PROVEN = 3;
+  ML_RELEASE_VERDICT_PENDING = 4;
 }
 
 message MlInferenceService {
-  string name = 1;
-  string project = 2;
-  string environment = 3;
-  string cluster_id = 4;
-  // The serving runtime and version, e.g. "vLLM 0.6.3".
-  string runtime = 5;
-  // The forge release it runs.
-  string release = 6;
-  // The model version it serves, by OCI digest.
-  string model_digest = 7;
-  int32 replicas = 8;
-  double ttft_p95_ms = 9;
-  double queue_wait_p95_ms = 10;
-  double tokens_per_second = 11;
-  double accelerator_utilization_percent = 12;
-  double kv_cache_usage_percent = 13;
-  // Where a new replica's start time goes.
-  MlPodStartBreakdown cold_start = 14;
-  MlReleaseVerdict release_verdict = 15;
-  // What the verdict says, e.g. "TTFT p95 within 5% of baseline".
-  string release_verdict_summary = 16;
-  google.protobuf.Timestamp release_checked_at = 17;
+  string id = 1;
+  string name = 2;
+  string project = 3;
+  string env = 4;
+  string cluster_id = 5;
+  string pool_id = 6;
+  string model_id = 7;
+  string model_version_id = 8;
+  // The revision taking most traffic.
+  string revision_id = 9;
+  string release = 10;
+  // "vLLM 0.8.5", "SGLang 0.4", "TGI 3.0", "Triton".
+  string runtime = 11;
+  int32 accelerators = 12;
+  string accelerator_product = 13;
+  int32 replicas = 14;
+  int32 replicas_desired = 15;
+  double rps = 16;
+  double ttft_p95_ms = 17;
+  double itl_p95_ms = 18;
+  double e2e_p95_ms = 19;
+  double queue_p95_ms = 20;
+  double error_ratio = 21;
+  double slo_attainment = 22;
+  double slo_target = 23;
+  double kv_cache_ratio = 24;
+  double busy_ratio = 25;
+  double tokens_per_second = 26;
+  double usd_per_million_tokens = 27;
+  // Last 24h.
+  MlCost cost = 28;
+  MlReleaseVerdict verdict = 29;
+  // Requests per second over the last 24h, for a sparkline.
+  MlSeries rps_series = 30;
+  // A Changes comparison is running on it.
+  bool comparing = 31;
+}
+
+message GetMlInferenceServiceRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string service_id = 2 [(buf.validate.field).required = true];
+}
+
+message GetMlInferenceServiceResponse {
+  MlInferenceService service = 1;
+  repeated MlRevision revisions = 2;
+  repeated MlReplica replicas = 3;
+  MlPodStart cold_start = 4;
+  repeated MlPodStartWaterfall cold_start_replicas = 5;
+  repeated MlShare finish_reasons = 6;
+  repeated MlShare adapters = 7;
+  MlServingCost serving_cost = 8;
+  // A running (or the last) Changes comparison of two revisions.
+  MlChangesComparison comparison = 9;
+  repeated MlOnlineEval online_evals = 10;
+  // The engine's serving config of the current revision.
+  repeated MlFact config = 11;
+  repeated string finding_ids = 12;
+}
+
+message MlSliDelta {
+  string key = 1;
+  string label = 2;
+  string unit = 3;
+  double before = 4;
+  double after = 5;
+  bool significant = 6;
+  bool regression = 7;
+}
+
+message MlRevision {
+  // "<service_id>/<release>".
+  string id = 1;
+  string release = 2;
+  string model_version_id = 3;
+  string runtime = 4;
+  repeated MlFact config = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp ended_at = 7;
+  double traffic_share = 8;
+  MlReleaseVerdict verdict = 9;
+  string verdict_detail = 10;
+  repeated MlSliDelta deltas = 11;
+  string commit = 12;
+}
+
+message MlReplica {
+  // "<service_id>/<pod>".
+  string id = 1;
+  string pod = 2;
+  string node_id = 3;
+  repeated string device_uuids = 4;
+  string revision_id = 5;
+  // "ready", "starting", "terminating", "crashloop".
+  string state = 6;
+  double busy_ratio = 7;
+  double kv_cache_ratio = 8;
+  int32 running = 9;
+  int32 waiting = 10;
+  double ttft_p95_ms = 11;
+  int32 restarts = 12;
+  google.protobuf.Timestamp started_at = 13;
+  double rps = 14;
+}
+
+message MlServingCost {
+  double gpu_hours_24h = 1;
+  double usd_per_hour = 2;
+  double usd_per_million_input_tokens = 3;
+  double usd_per_million_output_tokens = 4;
+  int32 idle_replicas = 5;
+  double idle_usd_per_day = 6;
+}
+
+message MlChangesComparison {
+  string id = 1;
+  string name = 2;
+  // "running", "decided", "stopped".
+  string status = 3;
+  google.protobuf.Timestamp started_at = 4;
+  repeated MlChangesArm arms = 5;
+  string decision = 6;
+  // Which arm is the control.
+  string control_arm = 7;
+}
+
+message MlChangesArm {
+  string arm = 1;
+  string revision_id = 2;
+  string model_version_id = 3;
+  double traffic_share = 4;
+  int64 requests = 5;
+  repeated MlArmMetric metrics = 6;
+}
+
+message MlArmMetric {
+  string key = 1;
+  string label = 2;
+  string unit = 3;
+  double value = 4;
+  double ci_low = 5;
+  double ci_high = 6;
+  // Relative to the control arm; 0 for the control.
+  double delta_ratio = 7;
+  bool significant = 8;
+  // Whether the delta is the good direction.
+  bool better = 9;
+}
+
+message MlOnlineEval {
+  string revision_id = 1;
+  string arm = 2;
+  double feedback_positive_ratio = 3;
+  double task_success_ratio = 4;
+  double guardrail_ratio = 5;
+  double judge_score = 6;
+  int64 samples = 7;
+}
+
+// ============================================================================
+// Histograms and alerts
+// ============================================================================
+
+message QueryMlHistogramsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  MlSubject subject = 2 [(buf.validate.field).required = true];
+  // "train.step_time", "serve.ttft", "serve.itl", "serve.e2e",
+  // "queue.admission_wait", "ckpt.save_time".
+  repeated string keys = 3;
+  optional google.protobuf.Timestamp from = 4;
+  optional google.protobuf.Timestamp to = 5;
+}
+
+message QueryMlHistogramsResponse {
+  repeated MlHistogram histograms = 1;
+}
+
+message MlHistogram {
+  string key = 1;
+  string label = 2;
+  string unit = 3;
+  repeated MlHistogramBucket buckets = 4;
+  double p50 = 5;
+  double p95 = 6;
+  double p99 = 7;
+  int64 count = 8;
+  // A comparison distribution (the previous revision, attempt 1), if any.
+  string compare_label = 9;
+  repeated MlHistogramBucket compare_buckets = 10;
+  MlCollection collection = 11;
+  string missing_source = 12;
+}
+
+message MlHistogramBucket {
+  double lower = 1;
+  double upper = 2;
+  int64 count = 3;
+}
+
+message ListMlAlertsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  MlSubject subject = 2 [(buf.validate.field).required = true];
+}
+
+message ListMlAlertsResponse {
+  repeated MlAlertRule alerts = 1;
+}
+
+enum MlAlertState {
+  ML_ALERT_STATE_UNSPECIFIED = 0;
+  ML_ALERT_STATE_OK = 1;
+  ML_ALERT_STATE_PENDING = 2;
+  ML_ALERT_STATE_FIRING = 3;
+  ML_ALERT_STATE_SILENCED = 4;
+}
+
+message MlAlertRule {
+  string id = 1;
+  string name = 2;
+  // As declared: "train/loss z-score > 6 for 3 steps".
+  string expression = 3;
+  MlSeverity severity = 4;
+  MlAlertState state = 5;
+  MlSubject subject = 6;
+  // "forge default" or the KCL path that declares it.
+  string declared_in = 7;
+  google.protobuf.Timestamp last_fired_at = 8;
+  int32 fired_7d = 9;
+  // What it may do on its own: "rewind to the last good checkpoint",
+  // "cordon the node and start a new attempt"; empty to notify only.
+  string auto_action = 10;
+  // Whether the auto action is on (opt-in).
+  bool auto_action_enabled = 11;
+  // "Slack #ml-oncall", "Inbox".
+  string routed_to = 12;
+  string last_action = 13;
 }

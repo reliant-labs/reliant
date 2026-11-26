@@ -1,10 +1,11 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * What the six ML pages share: the page frame (title, the "Early access"
- * label on Runs, Models and Inference), the states every read can land in
- * (loading, no data yet, a failure, not entitled), a code block for KCL and
- * commands, and a pod-start breakdown.
+ * What the ML pages share: the page frame (breadcrumbs, title, the "Early
+ * access" label on Training, Evals, Models and Inference), the states every
+ * read can land in (loading, no data yet, a failure, not entitled), and a
+ * code block for KCL and commands. The chart, table and timeline kit is
+ * ./kit.
  *
  * NOT ENTITLED IS NOT AN ERROR. A read answering FEATURE_NOT_ENTITLED (the
  * entitlement was revoked since the gate read it) reports it to the gate
@@ -12,7 +13,7 @@
  */
 
 import { createContext, useContext, useEffect, type ReactNode } from "react";
-import { Cpu, RefreshCw } from "lucide-react";
+import { ChevronRight, Cpu, RefreshCw } from "lucide-react";
 import type { UseQueryResult } from "@tanstack/react-query";
 
 import Button from "@/components/forge-ui/button";
@@ -20,13 +21,12 @@ import Card from "@/components/forge-ui/card";
 import { FilterBar, FilterMenu } from "@/components/forge-ui/filter_bar";
 import Tag from "@/components/forge-ui/tag";
 import { mlErrorKind } from "@/services/controlPlane/ml/errors";
-import type { MlOutcome, MlPodStartBreakdown } from "@/services/controlPlane/ml/types";
+import Link from "@/components/forge-ui/link";
+import type { MlOutcome } from "@/services/controlPlane/ml/types";
 import { obsErrorMessage } from "@/services/controlPlane/observability/errors";
 
-import { ML_EARLY_ACCESS_VIEWS, ML_VIEW_LABELS, type MlView } from "../Console/paths";
-import { Header } from "../Console/consolePageFrame";
+import { ML_EARLY_ACCESS_VIEWS, ML_VIEW_LABELS, orgPath, type MlView } from "../Console/paths";
 import { ObsLoadingRows, StateFrame } from "../Observability/ObsStates";
-import { seconds } from "./mlModel";
 
 /** What the gate hands its pages: the org they read, and how to say the org is not entitled after all. */
 export interface MlGate {
@@ -43,24 +43,80 @@ export function useMlGate(): MlGate {
 }
 
 const SUBTITLES: Record<MlView, string> = {
-  machines: "Accelerator nodes in your connected clusters, by pool: allocation against use, and health with its evidence.",
-  stack: "The ML components found in each cluster: adopted where they exist, installed only where they are missing.",
-  recommendations: "What to fix first, worst first, with the evidence and the change that fixes it.",
-  runs: "Training runs, newest first.",
-  models: "Model versions by digest: the run that produced each, its evals, and where it serves.",
-  inference: "Inference services: serving latency, throughput, cold starts and each release's verdict.",
+  overview: "What is running, what is wasting money, and what is broken, across your clusters.",
+  runs: "Experiments, runs and their phases: progress, goodput, cost and what went wrong.",
+  evals: "Every candidate against production on the release-gate suite: deltas, significance and gates.",
+  models: "Model versions by digest: where each came from, how it evaluates, and where it serves.",
+  inference: "Serving SLOs, latency by stage, engine saturation, cost per token and each revision's verdict.",
+  fleet: "Accelerators by pool and node: allocation against use, health from DCGM and node-problem-detector, and idle cost.",
+  queues: "Kueue quotas and usage, what waits and why, preemptions, and where pod start time goes.",
+  recommendations: "What to fix first, by money and GPU-hours at stake, with the evidence and the change that fixes it.",
+  setup: "Per cluster: which telemetry and ML components are in place, adopted where they exist, installed only where missing.",
 };
 
-/** One ML page: its header (with the early-access label where it applies), then the body. */
-export function MlFrame({ view, controls, children }: { view: MlView; controls?: ReactNode; children: ReactNode }) {
+export interface MlCrumb {
+  label: string;
+  href?: string;
+}
+
+/**
+ * One ML page: breadcrumbs (`ML › Training › llama-8b-support-v3 › sft`),
+ * its header (the early-access label where it applies), then the body. A
+ * drill-down passes its own `title`, `meta` and `crumbs`; a view's list page
+ * passes none and gets its label and subtitle.
+ */
+export function MlFrame({
+  view,
+  title,
+  subtitle,
+  meta,
+  crumbs,
+  actions,
+  controls,
+  children,
+  testId,
+}: {
+  view: MlView;
+  title?: string;
+  subtitle?: ReactNode;
+  meta?: ReactNode;
+  crumbs?: readonly MlCrumb[];
+  actions?: ReactNode;
+  controls?: ReactNode;
+  children: ReactNode;
+  testId?: string;
+}) {
   const early = ML_EARLY_ACCESS_VIEWS.includes(view);
+  const trail: MlCrumb[] = [{ label: "ML", href: orgPath({ kind: "ml", view: "overview" }) }, { label: ML_VIEW_LABELS[view], href: orgPath({ kind: "ml", view }) }, ...(crumbs ?? [])];
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[var(--page-max)] space-y-4" data-testid={`ml-page-${view}`}>
-      <Header
-        title={ML_VIEW_LABELS[view]}
-        subtitle={SUBTITLES[view]}
-        meta={early ? <Tag title="Early access: what this page shows may change">Early access</Tag> : undefined}
-      />
+    <div className="mx-auto w-full min-w-0 max-w-screen-2xl space-y-4" data-testid={testId ?? `ml-page-${view}`}>
+      <div className="space-y-1">
+        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1 text-meta text-ink-muted" data-testid="ml-crumbs">
+          {trail.map((crumb, i) => (
+            <span key={`${i}-${crumb.label}`} className="flex items-center gap-1">
+              {i > 0 && <ChevronRight className="h-3 w-3" aria-hidden="true" />}
+              {crumb.href && i < trail.length - 1 ? (
+                <Link href={crumb.href} className="hover:text-ink hover:underline">
+                  {crumb.label}
+                </Link>
+              ) : (
+                <span className={i === trail.length - 1 ? "text-ink" : undefined}>{crumb.label}</span>
+              )}
+            </span>
+          ))}
+        </nav>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 space-y-0.5">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-title text-ink">{title ?? ML_VIEW_LABELS[view]}</h1>
+              {early && <Tag title="Early access: what this page shows may change">Early access</Tag>}
+              {meta}
+            </div>
+            {(subtitle ?? (title ? undefined : SUBTITLES[view])) && <p className="text-ui text-ink-muted">{subtitle ?? SUBTITLES[view]}</p>}
+          </div>
+          {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+        </div>
+      </div>
       {controls}
       {children}
     </div>
@@ -167,64 +223,5 @@ export function CodeBlock({ code, label, testId }: { code: string; label: string
       <figcaption className="text-meta font-medium text-ink-muted">{label}</figcaption>
       <pre className="max-h-80 overflow-auto whitespace-pre rounded-md border border-border/60 bg-surface-sunken px-3 py-2 font-mono text-code text-ink">{code}</pre>
     </figure>
-  );
-}
-
-/**
- * Where a pod's start time goes: one bar split by each stage's p50 share, and
- * the stages' p50 and p95 in a table under it. The bar is one hue at stepped
- * opacity: the stages are one series' parts, not separate series.
- */
-export function StageBreakdown({ breakdown, title = "Pod start", testId }: { breakdown: MlPodStartBreakdown; title?: string; testId?: string }) {
-  const total = breakdown.stages.reduce((sum, stage) => sum + stage.p50Seconds, 0);
-  // A data colour (web-styling: inline style is how data colours are painted).
-  const alphas = [1, 0.8, 0.6, 0.45, 0.3, 0.2];
-  const fill = (index: number) => ({ backgroundColor: `hsl(var(--chart-1) / ${alphas[index % alphas.length]})` });
-  return (
-    <div className="space-y-2" data-testid={testId}>
-      <p className="text-meta text-ink-muted">
-        {title}
-        {breakdown.workload && (
-          <>
-            {" "}
-            of <span className="font-mono text-ink">{breakdown.workload}</span>
-          </>
-        )}{" "}
-        · {breakdown.sampleCount} {breakdown.sampleCount === 1 ? "start" : "starts"} · p50 {seconds(total)} in total
-      </p>
-      {total > 0 && (
-        <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-surface-sunken" role="img" aria-label={`${title}: ${breakdown.stages.map((s) => `${s.name} ${seconds(s.p50Seconds)}`).join(", ")}`}>
-          {breakdown.stages.map((stage, index) => (
-            <span
-              key={stage.name}
-              className={index > 0 ? "h-full border-l border-surface" : "h-full"}
-              style={{ ...fill(index), width: `${(stage.p50Seconds / total) * 100}%` }}
-              title={`${stage.name}: p50 ${seconds(stage.p50Seconds)}`}
-            />
-          ))}
-        </div>
-      )}
-      <table className="w-full text-ui">
-        <thead>
-          <tr className="text-left text-meta text-ink-muted">
-            <th className="py-1 font-medium">Stage</th>
-            <th className="py-1 text-right font-medium">p50</th>
-            <th className="py-1 text-right font-medium">p95</th>
-          </tr>
-        </thead>
-        <tbody>
-          {breakdown.stages.map((stage, index) => (
-            <tr key={stage.name} className="border-t border-border-subtle">
-              <td className="py-1 text-ink">
-                <span className="mr-2 inline-block h-2 w-2 rounded-full" style={fill(index)} aria-hidden="true" />
-                {stage.name}
-              </td>
-              <td className="py-1 text-right tabular-nums text-ink">{seconds(stage.p50Seconds)}</td>
-              <td className="py-1 text-right tabular-nums text-ink-muted">{seconds(stage.p95Seconds)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
   );
 }

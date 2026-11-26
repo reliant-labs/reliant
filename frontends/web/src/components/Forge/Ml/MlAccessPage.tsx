@@ -36,7 +36,7 @@ export function mlSupportMailto(orgId: string): string {
 }
 
 /** Where the demo's ML tab opens. */
-export const ML_DEMO_URL = `${demoAppOrigin()}/forge/ml/machines`;
+export const ML_DEMO_URL = `${demoAppOrigin()}/forge/ml/overview`;
 
 const WHAT: { icon: typeof Cpu; title: string; body: string }[] = [
   { icon: Server, title: "Machines", body: "Every accelerator node in your clusters, by pool: what is allocated, what is busy, and which devices are failing." },

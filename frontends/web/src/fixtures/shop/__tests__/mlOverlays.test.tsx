@@ -45,7 +45,7 @@ function renderGate(...overlays: string[]) {
   scope.queryClient.setDefaultOptions({ queries: { retry: false } });
   render(
     <TransportScopeProvider scope={scope}>
-      <MlGatedView view="machines" app="" onApp={() => {}} />
+      <MlGatedView view="fleet" />
     </TransportScopeProvider>,
   );
 }
@@ -65,7 +65,7 @@ describe("the ML access overlays", () => {
     expect(features[0].requestedAt).toBeUndefined();
     expect(features[0].grantedAt).toBeUndefined();
     const ml = createClient(MlEarlyAccessService, transport);
-    for (const read of [() => ml.getMlMachines({ orgId: DEMO_ORG }), () => ml.listMlRuns({ orgId: DEMO_ORG }), () => ml.listMlInferenceServices({ orgId: DEMO_ORG })]) {
+    for (const read of [() => ml.getMlFleet({ orgId: DEMO_ORG }), () => ml.listMlRuns({ orgId: DEMO_ORG }), () => ml.listMlInferenceServices({ orgId: DEMO_ORG })]) {
       const error = await read().then(
         () => null,
         (e: unknown) => e,
@@ -81,7 +81,7 @@ describe("the ML access overlays", () => {
     const page = await screen.findByTestId("ml-access-page");
     expect(page).toHaveTextContent("Reach out to Reliant for access");
     expect(page).toHaveAttribute("data-requested", "false");
-    expect(screen.queryByTestId("ml-page-machines")).toBeNull();
+    expect(screen.queryByTestId("ml-page-fleet")).toBeNull();
   });
 
   it("ml-requested: asked for 3 days ago, and the access page says so", async () => {
@@ -95,7 +95,7 @@ describe("the ML access overlays", () => {
 
   it("without an overlay, the org has ML and the pages show", async () => {
     renderGate();
-    expect(await screen.findByTestId("ml-page-machines")).toBeInTheDocument();
+    expect(await screen.findByTestId("ml-page-fleet")).toBeInTheDocument();
     expect(screen.queryByTestId("ml-access-page")).toBeNull();
   });
 });

@@ -54,6 +54,8 @@ import {
   KeyRound,
   LayoutDashboard,
   LayoutGrid,
+  ListChecks,
+  ListOrdered,
   Layers,
   Rocket,
   Receipt,
@@ -399,12 +401,15 @@ export const observabilityArea: NavArea = {
 
 /** The flat nav's icon for each ML page (NavRow `flatIcon`). */
 const ML_VIEW_ICONS: Record<MlView, typeof Activity> = {
-  machines: Server,
-  stack: Layers,
-  recommendations: Lightbulb,
+  overview: LayoutDashboard,
   runs: Rocket,
+  evals: ListChecks,
   models: Boxes,
   inference: Sparkles,
+  fleet: Server,
+  queues: ListOrdered,
+  recommendations: Lightbulb,
+  setup: Layers,
 };
 
 function mlRow(view: MlView): NavRow {
@@ -422,7 +427,7 @@ function mlRow(view: MlView): NavRow {
 
 export const mlRows: readonly NavRow[] = ML_VIEWS.map(mlRow);
 
-/** The ML tab's pages: all six are org pages (Forge/Ml). */
+/** The ML tab's pages: all are org pages (Forge/Ml). */
 export const isMlRoute = (ctx: NavCtx): boolean => ctx.orgPage?.kind === "ml";
 
 /**

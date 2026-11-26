@@ -1074,6 +1074,24 @@ export const forgeOrgObsSearchSchema = z.object({
  */
 export const forgeOrgMlSearchSchema = z.object({
   app: z.string().optional().catch(undefined),
+  /** The open tab of a detail page (a run's "metrics", a node's "devices"). */
+  tab: z.string().optional().catch(undefined),
+  /** Scopes a run's tabs to one attempt of the phase in the path. */
+  attempt: z.coerce.number().int().positive().optional().catch(undefined),
+  rank: z.coerce.number().int().nonnegative().optional().catch(undefined),
+  /** Comma-separated ids to compare (runs, revisions, eval rows). */
+  compare: z.string().optional().catch(undefined),
+  /** The selected row whose side panel is open (a finding, a trace, a profile, a sample). */
+  sel: z.string().optional().catch(undefined),
+  /** A training chart's x axis: step, tokens or time. */
+  axis: z.enum(['step', 'tokens', 'time']).optional().catch(undefined),
+  suite: z.string().optional().catch(undefined),
+  baseline: z.string().optional().catch(undefined),
+  task: z.string().optional().catch(undefined),
+  /** List grouping and filters: "category", "experiment", a state, a search. */
+  group: z.string().optional().catch(undefined),
+  filter: z.string().optional().catch(undefined),
+  q: z.string().optional().catch(undefined),
 });
 
 /**

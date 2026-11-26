@@ -213,12 +213,18 @@ const ORG_PAGES: OrgPage[] = [
   { kind: "obs-view", view: "errors" },
   { kind: "obs-view", view: "dashboards" },
   { kind: "obs-view", view: "alerts" },
-  { kind: "ml", view: "machines" },
-  { kind: "ml", view: "stack" },
+  { kind: "ml", view: "overview" },
+  { kind: "ml", view: "fleet" },
+  { kind: "ml", view: "setup" },
+  { kind: "ml", view: "queues" },
   { kind: "ml", view: "recommendations" },
   { kind: "ml", view: "runs" },
+  { kind: "ml", view: "evals" },
   { kind: "ml", view: "models" },
   { kind: "ml", view: "inference" },
+  { kind: "ml", view: "runs", sub: ["llama-8b-support-v3", "phases", "sft"] },
+  { kind: "ml", view: "fleet", sub: ["gke-us-central1-train", "gke-train-h100-r4vb"] },
+  { kind: "ml", view: "models", sub: ["support-assistant", "v2"] },
 ];
 
 describe("org paths", () => {
@@ -233,7 +239,7 @@ describe("org paths", () => {
 
   it("tolerate a trailing slash", () => {
     expect(orgPageOf("/forge/observability/")).toEqual({ kind: "observability" });
-    expect(orgPageOf("/forge/ml/stack/")).toEqual({ kind: "ml", view: "stack" });
+    expect(orgPageOf("/forge/ml/setup/")).toEqual({ kind: "ml", view: "setup" });
   });
 
   it("put the ML tab at /forge/ml/<view>, in both forms", () => {
@@ -242,7 +248,7 @@ describe("org paths", () => {
     // The bare segment redirects to Machines (forgeConsoleRoutes.tsx); an unknown view is no page.
     expect(orgPageOf("/forge/ml")).toBeNull();
     expect(orgPageOf("/forge/ml/gpus")).toBeNull();
-    expect(orgPageOf("/forge/ml/runs/extra")).toBeNull();
+    expect(orgPageOf("/forge/ml/runs/extra")).toEqual({ kind: "ml", view: "runs", sub: ["extra"] });
   });
 
   it("are null outside the org pages", () => {

@@ -64,7 +64,7 @@ import { usagePath } from './lib/paths'
 import { inOrgOfPath } from './lib/paths/org'
 import { memberOnly } from './lib/routeOrg'
 
-import { isAnalyticsTab, isAuthTab, isMlView, isObsNavView, ML_VIEWS, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
+import { isAnalyticsTab, isAuthTab, isMlView, isObsNavView, ML_VIEWS, mlViewOf, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
   forgeConsoleAnalyticsSearchSchema,
@@ -172,7 +172,7 @@ export interface ForgeConsoleComponents {
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
   orgObservability: RouteComponent
-  /** /forge/ml/$view: the ML tab (machines · stack · recommendations · runs · models · inference), early access by request. */
+  /** /forge/ml/$view[/$]: the ML tab (overview · training · evals · models · inference · fleet · queues · recommendations · setup) and its drill-downs, early access by request. */
   orgMl: RouteComponent
   /** /forge: to the Apps list, or the entry that resolves a project and redirects (ForgeEntryRoutes.tsx). */
   landing: RouteComponent
@@ -230,9 +230,17 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     component: components.orgObservability,
   })
 
-  // The ML tab (components/Forge/Ml): one route for its six pages, each gated
-  // on the org's "ml" entitlement by the page itself. The bare segment, and a
-  // view that is not one (a hand-edited URL), land on its first page.
+  // The ML tab (components/Forge/Ml): one route for its pages and one for
+  // their drill-downs (`/forge/ml/runs/<run>/phases/<phase>`), each gated on
+  // the org's "ml" entitlement by the page itself. The bare segment, and a
+  // view that is not one (a hand-edited URL), land on its first page; a
+  // retired view segment (`machines`, `stack`) lands on the view it became.
+  const mlViewRedirect = (pathname: string, searchStr: string, view: string | undefined, depth: number) => {
+    const target = mlViewOf(view) ?? ML_VIEWS[0]
+    const parts = pathname.replace(/\/$/, '').split('/')
+    parts.splice(parts.length - depth, 1, target)
+    return redirect({ href: `${parts.join('/')}${searchStr}`, replace: true })
+  }
   const orgMlIndexRoute = createRoute({
     getParentRoute: () => orgLayoutRoute,
     path: (inOrg ? '/ml' : '/forge/ml') as '/forge/ml',
@@ -246,7 +254,18 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     validateSearch: forgeOrgMlSearchSchema,
     beforeLoad: memberOnly(({ params, location }) => {
       if (isMlView(params.view)) return
-      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, `/${ML_VIEWS[0]}`)}${location.searchStr}`, replace: true })
+      throw mlViewRedirect(location.pathname, location.searchStr, params.view, 1)
+    }),
+    component: components.orgMl,
+  })
+  const orgMlDrillRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    path: (inOrg ? '/ml/$view/$' : '/forge/ml/$view/$') as '/forge/ml/$view/$',
+    validateSearch: forgeOrgMlSearchSchema,
+    beforeLoad: memberOnly(({ params, location }) => {
+      if (isMlView(params.view)) return
+      const depth = 1 + (params._splat ?? '').split('/').filter(Boolean).length
+      throw mlViewRedirect(location.pathname, location.searchStr, params.view, depth)
     }),
     component: components.orgMl,
   })
@@ -581,7 +600,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
 
   return layoutRoute.addChildren([
     landingRoute,
-    orgLayoutRoute.addChildren([orgObservabilityRoute, orgObservabilityViewRoute, orgMlIndexRoute, orgMlRoute]),
+    orgLayoutRoute.addChildren([orgObservabilityRoute, orgObservabilityViewRoute, orgMlIndexRoute, orgMlRoute, orgMlDrillRoute]),
     legacyEnvRoute,
     legacyDomainsRoute,
     legacyCommandRoute('/forge/topology'),

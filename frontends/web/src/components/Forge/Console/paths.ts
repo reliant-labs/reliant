@@ -138,37 +138,54 @@ export function isObsNavView(value: string | undefined): value is ObsNavView {
 }
 
 /**
- * The ML tab's pages (Forge/Ml; forge docs/proposals/ml-workloads.md §8), in
- * nav order. All six are org pages: clusters belong to the org, and Runs,
- * Models and Inference narrow to one app with their own `?app=` filter. The
- * first is where ML opens (`/forge/ml` lands there).
+ * The ML tab's pages (Forge/Ml; ml-spec 02-views §1), in nav order. All are
+ * org pages: clusters belong to the org, and Training, Models and Inference
+ * narrow to one app with their own `?app=` filter. The first is where ML
+ * opens (`/forge/ml` lands there). "runs" keeps its path segment and reads
+ * "Training": the console's own "Runs" are workflow runs.
  */
-export const ML_VIEWS = ["machines", "stack", "recommendations", "runs", "models", "inference"] as const;
+export const ML_VIEWS = ["overview", "runs", "evals", "models", "inference", "fleet", "queues", "recommendations", "setup"] as const;
 export type MlView = (typeof ML_VIEWS)[number];
 
 export const ML_VIEW_LABELS: Record<MlView, string> = {
-  machines: "Machines",
-  stack: "Stack",
-  recommendations: "Recommendations",
-  runs: "Runs",
+  overview: "Overview",
+  runs: "Training",
+  evals: "Evals",
   models: "Models",
   inference: "Inference",
+  fleet: "Fleet",
+  queues: "Queues",
+  recommendations: "Recommendations",
+  setup: "Setup",
 };
 
 /** The ML pages labelled "Early access" in the nav and their header (owner, slice 0). */
-export const ML_EARLY_ACCESS_VIEWS: readonly MlView[] = ["runs", "models", "inference"];
+export const ML_EARLY_ACCESS_VIEWS: readonly MlView[] = ["runs", "evals", "models", "inference"];
+
+/** Retired view segments (slice 0's demo) and the view each now is. */
+const ML_VIEW_ALIASES: Readonly<Record<string, MlView>> = { machines: "fleet", stack: "setup", training: "runs" };
 
 export function isMlView(value: string | undefined): value is MlView {
   return (ML_VIEWS as readonly string[]).includes(value ?? "");
 }
 
+/** The view a path segment names, a retired one included; null for none. */
+export function mlViewOf(value: string | undefined): MlView | null {
+  if (isMlView(value)) return value;
+  return ML_VIEW_ALIASES[value ?? ""] ?? null;
+}
+
 /** The pages of the org console (not inside one app): org-wide Observability, and the ML tab. */
-export type OrgPage = { kind: "observability" } | { kind: "obs-view"; view: ObsNavView } | { kind: "ml"; view: MlView };
+export type OrgPage =
+  | { kind: "observability" }
+  | { kind: "obs-view"; view: ObsNavView }
+  /** `sub` is the drill-down under the view: `["llama-8b-support-v3", "phases", "sft"]`. */
+  | { kind: "ml"; view: MlView; sub?: readonly string[] };
 
 /**
  * The path of an org page. Its org form (flag `web.org_routes` on) is
- * `/o/<org>/observability[/<view>]` and `/o/<org>/ml/<view>` (design §3.1):
- * withOrg rewrites it (lib/paths/org.ts, orgFormOf).
+ * `/o/<org>/observability[/<view>]` and `/o/<org>/ml/<view>[/<sub>…]` (design
+ * §3.1): withOrg rewrites it (lib/paths/org.ts, orgFormOf).
  */
 export function orgPath(page: OrgPage, ctx?: PathContext): string {
   switch (page.kind) {
@@ -176,8 +193,10 @@ export function orgPath(page: OrgPage, ctx?: PathContext): string {
       return withOrg(`${FORGE_ROOT}/observability`, ctx);
     case "obs-view":
       return withOrg(`${FORGE_ROOT}/observability/${page.view}`, ctx);
-    case "ml":
-      return withOrg(`${FORGE_ROOT}/ml/${page.view}`, ctx);
+    case "ml": {
+      const sub = (page.sub ?? []).filter(Boolean).map((s) => `/${encodeURIComponent(s)}`).join("");
+      return withOrg(`${FORGE_ROOT}/ml/${page.view}${sub}`, ctx);
+    }
   }
 }
 
@@ -185,7 +204,11 @@ export function orgPath(page: OrgPage, ctx?: PathContext): string {
 export function orgPageOf(pathname: string): OrgPage | null {
   const parts = orgFreePath(pathname).split("/").filter(Boolean);
   if (parts[0] !== "forge") return null;
-  if (parts[1] === "ml") return parts.length === 3 && isMlView(parts[2]) ? { kind: "ml", view: parts[2] } : null;
+  if (parts[1] === "ml") {
+    if (parts.length < 3 || !isMlView(parts[2])) return null;
+    const sub = parts.slice(3).map(safeDecode);
+    return sub.length ? { kind: "ml", view: parts[2], sub } : { kind: "ml", view: parts[2] };
+  }
   if (parts[1] !== "observability") return null;
   if (parts.length === 2) return { kind: "observability" };
   return parts.length === 3 && isObsNavView(parts[2]) ? { kind: "obs-view", view: parts[2] } : null;
