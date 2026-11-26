@@ -14,6 +14,7 @@ import {
   MlEventKind,
   MlFieldGroup,
   MlSubjectKind,
+  type MlCluster,
   type MlEvent,
   type MlFieldValue,
   type MlNodeWorkload,
@@ -215,6 +216,30 @@ const GANTT_KIND: Record<string, string> = { training: "training", inference: "i
 /** Allocated share, and the money idle allocation costs a day. */
 export function allocShare(allocated: number, total: number): number {
   return total > 0 ? allocated / total : 0;
+}
+
+/** "1 cluster", "2 pools". */
+export const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+/** A cluster whose newest inventory row is older than this is stale (the B1 contract: 10 min). */
+export const STALE_AFTER_MS = 10 * 60_000;
+
+/** Whether a cluster stopped reporting: last seen more than STALE_AFTER_MS before `nowMs` (never seen counts). */
+export function isStale(cluster: Pick<MlCluster, "lastSeenAt">, nowMs: number): boolean {
+  const seen = tsMs(cluster.lastSeenAt);
+  return seen === null || nowMs - seen > STALE_AFTER_MS;
+}
+
+/** Whether a group's fields exist and none was collected: the whole group is "not collected". */
+export function groupUncollected(fields: readonly MlFieldValue[], group: MlFieldGroup): boolean {
+  const fs = fields.filter((f) => f.group === group);
+  return fs.length > 0 && fs.every((f) => f.collection === MlCollection.NOT_COLLECTED);
+}
+
+/** Whether every field of `group` is not applicable to this device (an L4 has no NVLink). */
+export function groupNotApplicable(fields: readonly MlFieldValue[], group: MlFieldGroup): boolean {
+  const fs = fields.filter((f) => f.group === group);
+  return fs.length > 0 && fs.every((f) => f.collection === MlCollection.NOT_APPLICABLE);
 }
 
 /** Device tile tone in a pool grid: the device's health dot, or none. */

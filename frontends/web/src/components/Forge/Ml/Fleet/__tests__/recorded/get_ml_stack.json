@@ -1,0 +1,74 @@
+{
+  "clusters": [
+    {
+      "cluster": {
+        "id": "ml-fleet-e2e",
+        "name": "ml-fleet-e2e",
+        "kubernetesVersion": "v1.31.5+k3s1",
+        "lastSeenAt": "2026-11-26T12:00:00Z",
+        "nodeCount": 4,
+        "gpuCount": 32,
+        "health": "ML_HEALTH_DEGRADED"
+      },
+      "coverage": [
+        {
+          "key": "inventory",
+          "title": "Node and accelerator inventory",
+          "state": "ML_COMPONENT_STATE_INSTALLED",
+          "component": "forge ML cluster collector",
+          "detail": "nodes every 60s, daemonsets and deployments every 300s; 4 GPU nodes reporting",
+          "namespace": "forge-observability"
+        },
+        {
+          "key": "accelerator-metrics",
+          "title": "Accelerator metrics",
+          "state": "ML_COMPONENT_STATE_PARTIAL",
+          "component": "DCGM exporter (fake-gpu-operator)",
+          "detail": "utilisation and framebuffer memory collected; power, temperature, clocks, Xid and ECC not collected",
+          "namespace": "gpu-operator"
+        },
+        {
+          "key": "profiling-counters",
+          "title": "Profiling counters",
+          "state": "ML_COMPONENT_STATE_MISSING",
+          "detail": "DCGM_FI_PROF_* (SM, tensor, DRAM active) not collected"
+        },
+        {
+          "key": "pod-attribution",
+          "title": "Pod attribution",
+          "state": "ML_COMPONENT_STATE_ADOPTED",
+          "component": "DCGM exporter (fake-gpu-operator)",
+          "detail": "pod, namespace and container labels on DCGM series",
+          "namespace": "gpu-operator"
+        },
+        {
+          "key": "node-health",
+          "title": "Node health",
+          "state": "ML_COMPONENT_STATE_PARTIAL",
+          "detail": "kubelet conditions collected; node-problem-detector not found"
+        },
+        {
+          "key": "events",
+          "title": "Kubernetes events",
+          "state": "ML_COMPONENT_STATE_INSTALLED",
+          "component": "forge ML cluster collector",
+          "detail": "events.k8s.io watch",
+          "namespace": "forge-observability"
+        }
+      ],
+      "inventory": {
+        "nodeCount": 4,
+        "products": [
+          {
+            "name": "NVIDIA-A100-SXM4-80GB",
+            "value": 32,
+            "share": 1
+          }
+        ]
+      },
+      "discoveredAt": "2026-11-26T12:00:00Z",
+      "discoverCommand": "reliant forge ml discover --cluster ml-fleet-e2e",
+      "coverageRatio": 0.58
+    }
+  ]
+}

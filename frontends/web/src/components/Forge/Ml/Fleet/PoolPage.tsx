@@ -14,9 +14,9 @@ import Link from "@/components/forge-ui/link";
 import { cn } from "@/lib/utils";
 
 import { MlFrame, MlRead } from "../MlParts";
-import { ChartTile, EmptyNote, fmtInt, fmtPct, fmtUnit, fmtUsd, lastValue, Grid, healthOf, KpiStrip, MlChart, mlHref, MlTable, Panel, StackedBar, StatusDot, useMl } from "../kit";
+import { ChartTile, EmptyNote, fmtInt, fmtPct, fmtUnit, fmtUsd, lastValue, Grid, has, healthOf, KpiStrip, MlChart, mlHref, MlTable, Panel, StackedBar, StatusDot, useMl } from "../kit";
 import { allocShare, utilFill } from "./fleetModel";
-import { dataOf } from "./parts";
+import { dataOf, NO_PRICE_SHEET, Uncollected } from "./parts";
 
 const SYNC = "ml-pool";
 const BANDS: { key: string; title: string }[] = [
@@ -53,10 +53,12 @@ function PoolBody({ data }: { data: GetMlPoolResponse }) {
         items={[
           { label: "GPUs", value: fmtInt(p.gpusTotal), sub: `${p.nodeCount} nodes · ${p.product.replace("NVIDIA ", "")}`, hero: true },
           { label: "Allocated", value: fmtPct(allocShare(p.gpusAllocated, p.gpusTotal)), sub: `${p.gpusAllocated} of ${p.gpusTotal}` },
-          { label: "Busy", value: fmtPct(p.busyRatio), sub: Number.isFinite(p.smActiveP50) ? `SM active p50 ${fmtPct(p.smActiveP50)}` : "SM active not collected" },
+          { label: "Busy", value: has(p.busyRatio) ? fmtPct(p.busyRatio) : <Uncollected label={p.gpusAllocated ? "not collected" : "none allocated"} />, sub: Number.isFinite(p.smActiveP50) ? `SM active p50 ${fmtPct(p.smActiveP50)}` : "SM active not collected" },
           { label: "Idle allocated", value: fmtInt(p.gpusIdleAllocated), tone: p.gpusIdleAllocated ? "warning" : undefined },
           { label: "Unhealthy nodes", value: fmtInt(p.nodesUnhealthy), tone: p.gpusFaulty ? "danger" : p.nodesUnhealthy ? "warning" : undefined, sub: `${p.gpusFaulty} faulty GPU${p.gpusFaulty === 1 ? "" : "s"}` },
-          { label: "Cost", value: `${fmtUsd(p.usdPerDay)}/day`, sub: `$${p.usdPerGpuHour.toFixed(2)}/GPU-h · ${p.capacityType === 3 ? "reserved" : p.capacityType === 2 ? "spot" : "on-demand"}` },
+          has(p.usdPerDay) && has(p.usdPerGpuHour)
+            ? { label: "Cost", value: `${fmtUsd(p.usdPerDay)}/day`, sub: `$${p.usdPerGpuHour.toFixed(2)}/GPU-h · ${p.capacityType === 3 ? "reserved" : p.capacityType === 2 ? "spot" : "on-demand"}` }
+            : { label: "Cost", value: <Uncollected label="unknown" why={NO_PRICE_SHEET} />, sub: "no price sheet covers this pool" },
         ]}
       />
       <Panel title="Nodes" note="one tile per node · one cell per GPU, shaded by utilisation · hatched: no telemetry" testId="ml-pool-grid">

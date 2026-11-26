@@ -23,6 +23,17 @@ export function dataOf<T>(query: { data?: MlOutcome<T> }): T | undefined {
   return query.data?.kind === "ok" ? query.data.data : undefined;
 }
 
+/** A value nothing reports, in a cell or a KPI: says so, and why on hover. Never 0, NaN or "$0". */
+export function Uncollected({ why, label = "not collected" }: { why?: string; label?: string }) {
+  return (
+    <span className="text-meta text-ink-muted" title={why}>
+      {label}
+    </span>
+  );
+}
+
+export const NO_PRICE_SHEET = "No price sheet covers these GPUs, so their cost is unknown (not zero)";
+
 /** Write actions the demo refuses: shown, disabled, saying why. */
 export function DemoActions({ actions }: { actions: readonly { label: string; icon?: ReactNode }[] }) {
   return (
@@ -86,6 +97,6 @@ export function FieldTable({ fields, testId }: { fields: readonly MlFieldValue[]
 export function WorkloadGantt({ workloads, nowMs, days = 7, testId }: { workloads: readonly MlNodeWorkload[]; nowMs: number; days?: number; testId?: string }) {
   const from = nowMs - days * 86_400_000;
   const rows = workloadRows(workloads, from);
-  if (!rows.length) return <p className="py-3 text-meta text-ink-muted">Nothing held these GPUs in the last {days} days.</p>;
+  if (!rows.length) return <p className="py-3 text-meta text-ink-muted">No workload history reported for these GPUs in the last {days} days.</p>;
   return <Gantt rows={rows} from={from} to={nowMs} now={nowMs} formatTick={(v) => fmtTime(v)} labelWidth={240} testId={testId} />;
 }

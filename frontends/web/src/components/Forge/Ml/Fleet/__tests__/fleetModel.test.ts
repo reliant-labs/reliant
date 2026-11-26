@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { MlCollection, MlEventKind, MlEventSchema, MlFieldGroup, MlFieldValueSchema, MlNvlinkPairSchema } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 
-import { eventCountSeries, fmtField, groupFields, nvlinkMatrix, parseFleetRoute } from "../fleetModel";
+import { eventCountSeries, fmtField, groupFields, groupNotApplicable, groupUncollected, isStale, nvlinkMatrix, parseFleetRoute, plural, STALE_AFTER_MS } from "../fleetModel";
 
 describe("fleetModel", () => {
   it("parses the fleet routes", () => {
@@ -42,5 +42,21 @@ describe("fleetModel", () => {
     const s = eventCountSeries([e(MlEventKind.XID, 1), e(MlEventKind.THROTTLE, 2), e(MlEventKind.THROTTLE, 2.5), e(MlEventKind.XID, 100)], now, 48, 3);
     expect(s.find((x) => x.label === "Xid")!.y.reduce((a, b) => a + b, 0)).toBe(1);
     expect(s.find((x) => x.label === "Throttle")!.y.at(-1)).toBe(2);
+  });
+
+  it("reads real-data edge cases: stale clusters, whole groups not collected, plurals", () => {
+    const at = Date.UTC(2026, 10, 26, 12);
+    expect(isStale({ lastSeenAt: timestampFromMs(at - STALE_AFTER_MS + 1) }, at)).toBe(false);
+    expect(isStale({ lastSeenAt: timestampFromMs(at - STALE_AFTER_MS - 1) }, at)).toBe(true);
+    expect(isStale({ lastSeenAt: undefined }, at)).toBe(true);
+    const nc = (key: string, group: MlFieldGroup) => create(MlFieldValueSchema, { key, group, value: NaN, collection: MlCollection.NOT_COLLECTED });
+    const fields = [create(MlFieldValueSchema, { key: "gpu.util", group: MlFieldGroup.UTILIZATION, value: 0.7, collection: MlCollection.COLLECTED }), nc("gpu.temp", MlFieldGroup.THERMAL), nc("gpu.xid.last", MlFieldGroup.XID)];
+    expect(groupUncollected(fields, MlFieldGroup.XID)).toBe(true);
+    expect(groupUncollected(fields, MlFieldGroup.UTILIZATION)).toBe(false);
+    // A group nothing sent says nothing: neither collected nor "not collected".
+    expect(groupUncollected(fields, MlFieldGroup.NVLINK)).toBe(false);
+    expect(groupNotApplicable(fields, MlFieldGroup.NVLINK)).toBe(false);
+    expect(plural(1, "cluster")).toBe("1 cluster");
+    expect(plural(0, "pool")).toBe("0 pools");
   });
 });

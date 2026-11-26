@@ -8,14 +8,16 @@
  * the workloads that held it and the nodes it has been in.
  */
 
-import { MlCollection, MlSubjectKind, type GetMlDeviceResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlCollection, MlFieldGroup, MlSubjectKind, type GetMlDeviceResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { MlFrame, MlRead } from "../MlParts";
 import {
   ChartTile,
+  EmptyNote,
   FactList,
   fmtPct,
   fmtTime,
+  has,
   healthOf,
   KpiStrip,
   mlHref,
@@ -27,7 +29,7 @@ import {
   tsMs,
   useMl,
 } from "../kit";
-import { fieldOf, fmtField, groupFields } from "./fleetModel";
+import { fieldOf, fmtField, groupFields, groupUncollected } from "./fleetModel";
 import { dataOf, FieldTable, WorkloadGantt } from "./parts";
 
 const SYNC = "ml-gpu";
@@ -65,7 +67,7 @@ function DeviceBody({ data }: { data: GetMlDeviceResponse }) {
   const nowMs = Date.now();
   const value = (key: string) => {
     const f = fieldOf(d.fields, key);
-    return f ? (fmtField(f) ?? "not collected") : "—";
+    return f ? (fmtField(f) ?? "not collected") : "not reported";
   };
   const groups = groupFields(d.fields);
   const total = d.scoreInputs.reduce((a, i) => a + i.points, 0);
@@ -90,8 +92,12 @@ function DeviceBody({ data }: { data: GetMlDeviceResponse }) {
             { label: "Utilisation", value: value("gpu.util"), sub: `SM active ${value("gpu.sm_active")}` },
             { label: "Power / limit", value: `${value("gpu.power")}`, sub: `limit ${value("gpu.power_limit")}` },
             { label: "Temperature", value: value("gpu.temp"), sub: `HBM ${value("gpu.memory_temp")}`, tone: fieldOf(d.fields, "gpu.temp")?.alarm ? "warning" : undefined },
-            { label: "Clock events", value: d.clockEventReasons.filter((r) => r !== "GPU idle").join(", ") || "none", tone: d.clockEventReasons.some((r) => r.startsWith("HW")) ? "danger" : undefined },
-            { label: "Last Xid", value: d.xidLast || "—", tone: d.xidLast === 79 ? "danger" : undefined, sub: `${d.xids24h} in 24h` },
+            {
+              label: "Clock events",
+              value: d.clockEventReasons.filter((r) => r !== "GPU idle").join(", ") || (groupUncollected(d.fields, MlFieldGroup.CLOCKS) ? "not collected" : "none"), tone: d.clockEventReasons.some((r) => r.startsWith("HW")) ? "danger" : undefined },
+            groupUncollected(d.fields, MlFieldGroup.XID)
+              ? { label: "Last Xid", value: "not collected", sub: "DCGM_FI_DEV_XID_ERRORS not reported" }
+              : { label: "Last Xid", value: d.xidLast || "none", tone: d.xidLast === 79 ? "danger" : undefined, sub: `${d.xids24h} in 24h` },
           ]}
         />
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -114,6 +120,7 @@ function DeviceBody({ data }: { data: GetMlDeviceResponse }) {
           <Panel title="Health score" note="0–100, higher is worse · drain at 60, RMA candidate at 85" flush testId="ml-gpu-score">
             <MlTable
               rows={d.scoreInputs}
+              empty={<EmptyNote>No score inputs reported for this GPU.</EmptyNote>}
               rowKey={(i) => i.input}
               columns={[
                 { key: "i", header: "Input", render: (i) => i.input },
@@ -129,6 +136,7 @@ function DeviceBody({ data }: { data: GetMlDeviceResponse }) {
           <Panel title="Placements" note="the nodes this board has been in" flush testId="ml-gpu-placements">
             <MlTable
               rows={data.placements}
+              empty={<EmptyNote>No placement history reported.</EmptyNote>}
               rowKey={(p) => `${p.nodeId}#${tsMs(p.from)}`}
               columns={[
                 { key: "n", header: "Node", render: (p) => <SubjectLink subject={{ kind: MlSubjectKind.NODE, id: p.nodeId }}>{tail(p.nodeId)}</SubjectLink> },
@@ -160,7 +168,7 @@ function DeviceBody({ data }: { data: GetMlDeviceResponse }) {
             </Panel>
           ))}
         </div>
-        <Panel title="Workloads" note={`what held this GPU over 7 days · busy now ${fmtPct(d.busyRatio)}`} testId="ml-gpu-workloads">
+        <Panel title="Workloads" note={`what held this GPU over 7 days · busy now ${has(d.busyRatio) ? fmtPct(d.busyRatio) : "not collected"}`} testId="ml-gpu-workloads">
           <WorkloadGantt workloads={data.workloads} nowMs={nowMs} />
         </Panel>
       </div>

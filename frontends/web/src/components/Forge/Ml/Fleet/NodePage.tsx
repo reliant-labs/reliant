@@ -37,11 +37,13 @@ import {
   fmtPct,
   fmtTime,
   Grid,
+  has,
   healthOf,
   KpiStrip,
   MlLink,
   mlHref,
   MlTable,
+  NotCollected,
   Panel,
   Sparkline,
   StatusDot,
@@ -50,8 +52,8 @@ import {
   useMl,
   type MlColumn,
 } from "../kit";
-import { byGroup, fieldOf, fmtField, groupFields, nvlinkMatrix, nvlinkTone } from "./fleetModel";
-import { dataOf, DemoActions, FieldTable, WorkloadGantt } from "./parts";
+import { byGroup, fieldOf, fmtField, groupFields, groupNotApplicable, groupUncollected, nvlinkMatrix, nvlinkTone } from "./fleetModel";
+import { dataOf, DemoActions, FieldTable, Uncollected, WorkloadGantt } from "./parts";
 
 const SYNC = "ml-node";
 
@@ -77,8 +79,22 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
   const events = dataOf(useMl("listMlEvents", { subject, kinds: [] }))?.events ?? [];
   const nowMs = Date.now();
   const product = n.devices[0]?.product.replace("NVIDIA ", "") ?? "";
-  const power = n.devices.reduce((a, d) => a + (Number.isFinite(d.powerW) ? d.powerW : 0), 0);
+  // Headline numbers from what was collected; a field nothing reports reads "not collected", never 0.
+  const powered = n.devices.filter((d) => has(d.powerW));
+  const power = powered.reduce((a, d) => a + d.powerW, 0);
+  const deviceFields = n.devices.flatMap((d) => d.fields);
+  const xidUncollected = groupUncollected(deviceFields, MlFieldGroup.XID);
   const xids = n.devices.filter((d) => d.xidLast > 0).length;
+  const facts = [
+    n.driverVersion && `driver ${n.driverVersion}`,
+    n.cudaVersion && `CUDA ${n.cudaVersion}`,
+    n.kernelVersion && `kernel ${n.kernelVersion}`,
+    n.osImage,
+    n.instanceType,
+    n.zone,
+    tsMs(n.bootedAt) !== null && `up ${fmtDuration((nowMs - (tsMs(n.bootedAt) ?? nowMs)) / 1000)}`,
+    n.incarnation > 0 && `incarnation ${n.incarnation}`,
+  ].filter(Boolean);
   const bad = n.conditions.filter((c) => c.bad);
   return (
     <MlFrame
@@ -99,7 +115,7 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
       subtitle={
         <span>
           {n.healthReason && <span className="text-ink">{n.healthReason} · </span>}
-          {n.gpus}× {product} · driver {n.driverVersion} · CUDA {n.cudaVersion} · kernel {n.kernelVersion} · {n.instanceType} · {n.zone} · up {fmtDuration((nowMs - (tsMs(n.bootedAt) ?? nowMs)) / 1000)} · incarnation {n.incarnation}
+          {[`${n.gpus}× ${product}`, ...facts].join(" · ")}
         </span>
       }
       actions={
@@ -118,17 +134,25 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
           testId="ml-node-kpis"
           items={[
             { label: "Allocated", value: `${n.gpusAllocated} / ${n.gpus}`, sub: `${n.gpusAllocatable} allocatable`, tone: n.gpusAllocatable < n.gpus ? "danger" : undefined, hero: true },
-            { label: "Busy", value: fmtPct(n.busyRatio), sub: "mean of allocated GPUs" },
+            { label: "Busy", value: has(n.busyRatio) ? fmtPct(n.busyRatio) : <Uncollected label={n.gpusAllocated ? "not collected" : "none allocated"} />, sub: "mean of allocated GPUs" },
             { label: "Health score", value: Math.round(n.healthScore), tone: h.tone === "success" ? undefined : h.tone, sub: "0–100, higher is worse" },
-            { label: "Power", value: `${fmtInt(power)} W`, sub: `${n.devices.length} GPUs` },
-            { label: "GPUs with an Xid", value: xids, tone: xids ? "danger" : undefined, sub: "last Xid set" },
+            {
+              label: "Power",
+              value: powered.length ? `${fmtInt(power)} W` : <Uncollected why="no GPU on this node reports DCGM_FI_DEV_POWER_USAGE" />,
+              sub: powered.length && powered.length < n.devices.length ? `${powered.length} of ${n.devices.length} GPUs report it` : `${n.devices.length} GPUs`,
+            },
+            {
+              label: "GPUs with an Xid",
+              value: xidUncollected ? <Uncollected why="no GPU on this node reports DCGM_FI_DEV_XID_ERRORS" /> : xids,
+              tone: xids ? "danger" : undefined,
+              sub: xidUncollected ? "Xid errors" : "last Xid set",
+            },
             { label: "Bad conditions", value: bad.length, tone: bad.length ? "warning" : undefined, sub: bad.map((c) => c.type).join(", ") || "none" },
           ]}
         />
         <Panel title="Devices" note="latest values · sparkline: GPU utilisation, 24h" flush testId="ml-node-devices">
-          <MlRead query={series} what="device series">
-            {(d) => <DevicesTable devices={n.devices} util={byGroup(d.series, "gpu.util")} findings={findings} />}
-          </MlRead>
+          {/* The table is the node's own answer; the sparklines join when series answer (none yet is no sparkline). */}
+          <DevicesTable devices={n.devices} util={byGroup(dataOf(series)?.series ?? [], "gpu.util")} findings={findings} />
         </Panel>
         <MlRead query={series} what="device series">
           {(d) => (
@@ -156,13 +180,19 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
         </Panel>
         <Grid cols={2}>
           <Panel title="NVLink" note={data.nvlink.length ? `GPU × GPU · ${data.nvlink[0].links} links each through NVSwitch` : undefined} testId="ml-node-nvlink">
-            {data.nvlink.length ? <NvlinkMatrix data={data} /> : <EmptyNote>No NVLink on this node: GPUs talk over PCIe.</EmptyNote>}
+            {data.nvlink.length ? (
+              <NvlinkMatrix data={data} />
+            ) : groupNotApplicable(deviceFields, MlFieldGroup.NVLINK) ? (
+              <EmptyNote>No NVLink on this node: GPUs talk over PCIe.</EmptyNote>
+            ) : (
+              <NotCollected what="NVLink topology" source="DCGM NVLink fields (DCGM_FI_DEV_NVLINK_*)" compact />
+            )}
           </Panel>
           <Panel title="InfiniBand" note={data.ibPorts.length ? "ConnectX-7 · node_infiniband_*" : undefined} flush testId="ml-node-ib">
             <MlTable
               rows={data.ibPorts}
               rowKey={(p) => `${p.hca}/${p.port}`}
-              empty={<EmptyNote>No InfiniBand HCAs on this node.</EmptyNote>}
+              empty={data.host ? <EmptyNote>No InfiniBand HCAs on this node.</EmptyNote> : <div className="px-4 py-3"><NotCollected what="InfiniBand" source="node-exporter's infiniband collector" compact /></div>}
               columns={[
                 { key: "hca", header: "HCA", render: (p) => <span className="font-mono text-code">{`${p.hca}/${p.port}`}</span> },
                 { key: "state", header: "State", render: (p) => <StatusDot tone={p.state === "ACTIVE" ? "success" : "danger"} label={p.state} /> },
@@ -200,16 +230,20 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
                     </li>
                   ))}
               </ul>
-              <p className="text-meta text-ink-muted">
-                kubelet restarts 24h: <span className="tabular-nums text-ink">{data.host?.kubeletRestarts24h ?? 0}</span> · containerd restarts 24h:{" "}
-                <span className="tabular-nums text-ink">{data.host?.containerdRestarts24h ?? 0}</span>
-              </p>
+              {data.host ? (
+                <p className="text-meta text-ink-muted">
+                  kubelet restarts 24h: <span className="tabular-nums text-ink">{data.host.kubeletRestarts24h}</span> · containerd restarts 24h:{" "}
+                  <span className="tabular-nums text-ink">{data.host.containerdRestarts24h}</span>
+                </p>
+              ) : (
+                <p className="text-meta text-ink-muted">node-problem-detector and host restarts: not collected</p>
+              )}
             </div>
           </Panel>
         </Grid>
         <Grid cols={2}>
           <Panel title="Host" note="node-exporter and kubelet" flush testId="ml-node-host">
-            <HostFields fields={data.host?.fields ?? []} />
+            {data.host?.fields.length ? <HostFields fields={data.host.fields} /> : <div className="px-4 py-3"><NotCollected what="Host fields" source="node-exporter and kubelet metrics" compact /></div>}
           </Panel>
           <MlRead query={host} what="host series">
             {(d) => (
@@ -225,6 +259,7 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
           <Panel title="Incarnations" note="a re-imaged node is a new incarnation; history is kept" flush testId="ml-node-incarnations">
             <MlTable
               rows={data.incarnations}
+              empty={<EmptyNote>No incarnation history reported.</EmptyNote>}
               rowKey={(i) => String(i.incarnation)}
               columns={[
                 { key: "n", header: "#", numeric: true, render: (i) => i.incarnation, width: "40px" },
@@ -237,6 +272,7 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
           <Panel title="DCGM diagnostics" flush testId="ml-node-diag">
             <MlTable
               rows={data.diagnostics}
+              empty={<EmptyNote>No DCGM diagnostics reported for this node.</EmptyNote>}
               rowKey={(d) => `${tsMs(d.at)}`}
               columns={[
                 { key: "at", header: "When", render: (d) => fmtAgo(tsMs(d.at), nowMs) },
@@ -253,7 +289,7 @@ function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
 }
 
 function cell(f: MlFieldValue | undefined, finding?: string) {
-  if (!f) return <span className="text-ink-muted">—</span>;
+  if (!f) return <Uncollected label="not reported" why="this device reports no such field" />;
   const v = fmtField(f);
   if (v === null)
     return (
@@ -302,12 +338,20 @@ function DevicesTable({ devices, util, findings }: { devices: readonly MlDevice[
       header: "Clock events",
       render: (d) => {
         const r = d.clockEventReasons.filter((x) => x !== "GPU idle");
-        return r.length ? <StatusDot tone={r.some((x) => x.startsWith("HW")) ? "danger" : "warning"} label={r.join(", ")} /> : <span className="text-ink-muted">{d.clockEventReasons.length ? "idle" : "none"}</span>;
+        if (r.length) return <StatusDot tone={r.some((x) => x.startsWith("HW")) ? "danger" : "warning"} label={r.join(", ")} />;
+        if (!d.clockEventReasons.length && groupUncollected(d.fields, MlFieldGroup.CLOCKS)) return <Uncollected why="DCGM_FI_DEV_CLOCKS_EVENT_REASONS is not reported" />;
+        return <span className="text-ink-muted">{d.clockEventReasons.length ? "idle" : "none"}</span>;
       },
     },
     { key: "ecc", header: "SBE", numeric: true, render: (d) => cell(F(d, "gpu.ecc.sbe_volatile")) },
     { key: "remap", header: "Remap pend.", numeric: true, render: (d) => cell(F(d, "gpu.row_remap.pending")) },
-    { key: "xid", header: "Xid", numeric: true, render: (d) => (d.xidLast ? <span className={cn(d.xidLast === 79 ? "font-medium text-danger-ink" : "text-ink")}>{d.xidLast}</span> : <span className="text-ink-muted">—</span>) },
+    {
+      key: "xid",
+      header: "Xid",
+      numeric: true,
+      render: (d) =>
+        d.xidLast ? <span className={cn(d.xidLast === 79 ? "font-medium text-danger-ink" : "text-ink")}>{d.xidLast}</span> : groupUncollected(d.fields, MlFieldGroup.XID) ? cell(F(d, "gpu.xid.last")) : <span className="text-ink-muted" title="no Xid reported">none</span>,
+    },
     {
       key: "health",
       header: "Health",

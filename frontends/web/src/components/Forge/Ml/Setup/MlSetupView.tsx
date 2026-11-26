@@ -14,8 +14,8 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 
 import type { GetMlStackResponse, MlClusterSetup, MlCoverageItem } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
-import { CodeBlock, MlFrame, MlRead } from "../MlParts";
-import { componentStateOf, FactList, FindingLink, fmtAgo, fmtPct, Grid, KpiStrip, MlTable, Panel, StackedBar, StatusDot, tsMs, useMl, useMlSearch, type MlColumn } from "../kit";
+import { CodeBlock, MlFrame, MlNoCluster, MlRead } from "../MlParts";
+import { componentStateOf, EmptyNote, FactList, FindingLink, fmtAgo, fmtPct, Grid, KpiStrip, MlTable, Panel, StackedBar, StatusDot, tsMs, useMl, useMlSearch, type MlColumn } from "../kit";
 import { CopyCommand } from "../Recommendations/CopyCommand";
 import { isGap, kclSel, orderCoverage, setupKpis } from "./setupModel";
 
@@ -24,7 +24,7 @@ export function MlSetupView({ sub: _sub }: { sub: readonly string[] }) {
   return (
     <MlFrame view="setup">
       <MlRead query={q} what="setup">
-        {(data) => <SetupBody data={data} />}
+        {(data) => (data.clusters.length ? <SetupBody data={data} /> : <MlNoCluster />)}
       </MlRead>
     </MlFrame>
   );
@@ -38,7 +38,7 @@ function SetupBody({ data }: { data: GetMlStackResponse }) {
       <KpiStrip
         testId="ml-setup-kpis"
         items={[
-          { label: "Clusters", value: k.clusters, sub: data.clusters.map((c) => c.cluster?.provider.toUpperCase()).join(" · ") },
+          { label: "Clusters", value: k.clusters, sub: data.clusters.map((c) => c.cluster?.provider.toUpperCase()).filter(Boolean).join(" · ") || undefined },
           { label: "Telemetry coverage", value: fmtPct(k.coverage), sub: "covered of applicable, partial counts half", hero: true },
           { label: "Missing", value: k.missing, tone: k.missing ? "danger" : undefined, sub: "each with the finding that fixes it" },
           { label: "Partial", value: k.partial, tone: k.partial ? "warning" : undefined },
@@ -95,7 +95,9 @@ function ClusterSetup({ setup, nowMs }: { setup: MlClusterSetup; nowMs: number }
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h2 className="text-section text-ink">{c.name}</h2>
         <span className="text-meta text-ink-muted">
-          {c.provider.toUpperCase()} · {c.location} · Kubernetes {c.kubernetesVersion} · {c.nodeCount} GPU nodes · {c.gpuCount} GPUs
+          {[c.provider.toUpperCase(), c.location, c.kubernetesVersion && `Kubernetes ${c.kubernetesVersion}`, `${c.nodeCount} GPU node${c.nodeCount === 1 ? "" : "s"}`, c.gpuCount ? `${c.gpuCount} GPUs` : "no GPUs found"]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
         <span className="text-meta text-ink">{fmtPct(setup.coverageRatio)} covered</span>
       </div>
@@ -115,7 +117,7 @@ function ClusterSetup({ setup, nowMs }: { setup: MlClusterSetup; nowMs: number }
               columns={1}
               facts={[
                 { label: "GPU nodes", value: setup.inventory?.nodeCount ?? 0 },
-                { label: "Drivers", value: setup.inventory?.driverVersions.join(", ") || "—" },
+                { label: "Drivers", value: setup.inventory?.driverVersions.join(", ") || "not reported" },
               ]}
             />
           </div>
@@ -123,6 +125,7 @@ function ClusterSetup({ setup, nowMs }: { setup: MlClusterSetup; nowMs: number }
         <Panel title="Custom resources" note="CRDs found, with who owns them" flush>
           <MlTable
             rows={setup.inventory?.crds ?? []}
+            empty={<EmptyNote>No custom resources reported: discovery has not listed this cluster&apos;s CRDs yet.</EmptyNote>}
             rowKey={(r) => r.name}
             columns={[
               { key: "n", header: "CRD", render: (r) => <span className="font-mono text-code">{r.name}</span> },

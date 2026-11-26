@@ -1,0 +1,1077 @@
+{
+  "node": {
+    "id": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+    "name": "k3d-ml-fleet-e2e-agent-0",
+    "clusterId": "ml-fleet-e2e",
+    "poolId": "ml-fleet-e2e/a100",
+    "health": "ML_HEALTH_FAULTY",
+    "healthScore": 40,
+    "gpus": 8,
+    "gpusAllocatable": 8,
+    "busyRatio": "NaN",
+    "kernelVersion": "6.8.0-1015-gcp",
+    "osImage": "K3s v1.31.5+k3s1",
+    "sharing": "none",
+    "conditions": [
+      {
+        "type": "Ready",
+        "status": "True",
+        "reason": "KubeletReady",
+        "since": "2026-11-26T11:00:00Z",
+        "source": "kubelet"
+      },
+      {
+        "type": "GpuXidError",
+        "status": "True",
+        "bad": true,
+        "reason": "GpuXidError",
+        "message": "GPU Xid error reported",
+        "since": "2026-11-26T11:52:00Z",
+        "source": "npd"
+      }
+    ],
+    "healthReason": "GpuXidError: GPU Xid error reported",
+    "devices": [
+      {
+        "uuid": "GPU-5f1c0000-8a2e-4b7d-9c31-0e6f2a7d0000",
+        "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+        "index": 0,
+        "product": "NVIDIA-A100-SXM4-80GB",
+        "health": "ML_HEALTH_HEALTHY",
+        "smActive": "NaN",
+        "memoryTotalGb": 80,
+        "powerW": "NaN",
+        "powerLimitW": "NaN",
+        "temperatureC": "NaN",
+        "memoryTemperatureC": "NaN",
+        "fields": [
+          {
+            "key": "gpu.util",
+            "label": "GPU utilization",
+            "group": "ML_FIELD_GROUP_UTILIZATION",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.sm_active",
+            "label": "SM active",
+            "group": "ML_FIELD_GROUP_PROFILING",
+            "value": "NaN",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.fb_used",
+            "label": "Framebuffer used",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_USED",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.fb_free",
+            "label": "Framebuffer free",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "value": 80,
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_FREE",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.power",
+            "label": "Power usage",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.power_limit",
+            "label": "Power limit (enforced)",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.temp",
+            "label": "GPU temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.memory_temp",
+            "label": "Memory (HBM) temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.sm_clock",
+            "label": "SM clock",
+            "group": "ML_FIELD_GROUP_CLOCKS",
+            "value": "NaN",
+            "unit": "MHz",
+            "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.sbe_volatile",
+            "label": "SBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.dbe_volatile",
+            "label": "DBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.xid.last",
+            "label": "Last Xid",
+            "group": "ML_FIELD_GROUP_XID",
+            "value": "NaN",
+            "unit": "",
+            "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          }
+        ]
+      },
+      {
+        "uuid": "GPU-5f1c0001-8a2e-4b7d-9c31-0e6f2a7d0001",
+        "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+        "index": 1,
+        "product": "NVIDIA-A100-SXM4-80GB",
+        "health": "ML_HEALTH_HEALTHY",
+        "smActive": "NaN",
+        "memoryTotalGb": 80,
+        "powerW": "NaN",
+        "powerLimitW": "NaN",
+        "temperatureC": "NaN",
+        "memoryTemperatureC": "NaN",
+        "fields": [
+          {
+            "key": "gpu.util",
+            "label": "GPU utilization",
+            "group": "ML_FIELD_GROUP_UTILIZATION",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.sm_active",
+            "label": "SM active",
+            "group": "ML_FIELD_GROUP_PROFILING",
+            "value": "NaN",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.fb_used",
+            "label": "Framebuffer used",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_USED",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.fb_free",
+            "label": "Framebuffer free",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "value": 80,
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_FREE",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.power",
+            "label": "Power usage",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.power_limit",
+            "label": "Power limit (enforced)",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.temp",
+            "label": "GPU temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.memory_temp",
+            "label": "Memory (HBM) temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.sm_clock",
+            "label": "SM clock",
+            "group": "ML_FIELD_GROUP_CLOCKS",
+            "value": "NaN",
+            "unit": "MHz",
+            "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.sbe_volatile",
+            "label": "SBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.dbe_volatile",
+            "label": "DBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.xid.last",
+            "label": "Last Xid",
+            "group": "ML_FIELD_GROUP_XID",
+            "value": "NaN",
+            "unit": "",
+            "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          }
+        ]
+      },
+      {
+        "uuid": "GPU-5f1c0002-8a2e-4b7d-9c31-0e6f2a7d0002",
+        "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+        "index": 2,
+        "product": "NVIDIA-A100-SXM4-80GB",
+        "health": "ML_HEALTH_HEALTHY",
+        "smActive": "NaN",
+        "memoryTotalGb": 80,
+        "powerW": "NaN",
+        "powerLimitW": "NaN",
+        "temperatureC": "NaN",
+        "memoryTemperatureC": "NaN",
+        "fields": [
+          {
+            "key": "gpu.util",
+            "label": "GPU utilization",
+            "group": "ML_FIELD_GROUP_UTILIZATION",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.sm_active",
+            "label": "SM active",
+            "group": "ML_FIELD_GROUP_PROFILING",
+            "value": "NaN",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.fb_used",
+            "label": "Framebuffer used",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_USED",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.fb_free",
+            "label": "Framebuffer free",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "value": 80,
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_FREE",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.power",
+            "label": "Power usage",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.power_limit",
+            "label": "Power limit (enforced)",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.temp",
+            "label": "GPU temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.memory_temp",
+            "label": "Memory (HBM) temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.sm_clock",
+            "label": "SM clock",
+            "group": "ML_FIELD_GROUP_CLOCKS",
+            "value": "NaN",
+            "unit": "MHz",
+            "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.sbe_volatile",
+            "label": "SBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.dbe_volatile",
+            "label": "DBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.xid.last",
+            "label": "Last Xid",
+            "group": "ML_FIELD_GROUP_XID",
+            "value": "NaN",
+            "unit": "",
+            "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          }
+        ]
+      },
+      {
+        "uuid": "GPU-5f1c0003-8a2e-4b7d-9c31-0e6f2a7d0003",
+        "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+        "index": 3,
+        "product": "NVIDIA-A100-SXM4-80GB",
+        "health": "ML_HEALTH_HEALTHY",
+        "smActive": "NaN",
+        "memoryTotalGb": 80,
+        "powerW": "NaN",
+        "powerLimitW": "NaN",
+        "temperatureC": "NaN",
+        "memoryTemperatureC": "NaN",
+        "fields": [
+          {
+            "key": "gpu.util",
+            "label": "GPU utilization",
+            "group": "ML_FIELD_GROUP_UTILIZATION",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.sm_active",
+            "label": "SM active",
+            "group": "ML_FIELD_GROUP_PROFILING",
+            "value": "NaN",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.fb_used",
+            "label": "Framebuffer used",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_USED",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.fb_free",
+            "label": "Framebuffer free",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "value": 80,
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_FREE",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.power",
+            "label": "Power usage",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.power_limit",
+            "label": "Power limit (enforced)",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.temp",
+            "label": "GPU temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.memory_temp",
+            "label": "Memory (HBM) temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.sm_clock",
+            "label": "SM clock",
+            "group": "ML_FIELD_GROUP_CLOCKS",
+            "value": "NaN",
+            "unit": "MHz",
+            "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.sbe_volatile",
+            "label": "SBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.dbe_volatile",
+            "label": "DBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.xid.last",
+            "label": "Last Xid",
+            "group": "ML_FIELD_GROUP_XID",
+            "value": "NaN",
+            "unit": "",
+            "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          }
+        ]
+      },
+      {
+        "uuid": "GPU-5f1c0004-8a2e-4b7d-9c31-0e6f2a7d0004",
+        "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+        "index": 4,
+        "product": "NVIDIA-A100-SXM4-80GB",
+        "health": "ML_HEALTH_HEALTHY",
+        "smActive": "NaN",
+        "memoryTotalGb": 80,
+        "powerW": "NaN",
+        "powerLimitW": "NaN",
+        "temperatureC": "NaN",
+        "memoryTemperatureC": "NaN",
+        "fields": [
+          {
+            "key": "gpu.util",
+            "label": "GPU utilization",
+            "group": "ML_FIELD_GROUP_UTILIZATION",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.sm_active",
+            "label": "SM active",
+            "group": "ML_FIELD_GROUP_PROFILING",
+            "value": "NaN",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.fb_used",
+            "label": "Framebuffer used",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_USED",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.fb_free",
+            "label": "Framebuffer free",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "value": 80,
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_FREE",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.power",
+            "label": "Power usage",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.power_limit",
+            "label": "Power limit (enforced)",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.temp",
+            "label": "GPU temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.memory_temp",
+            "label": "Memory (HBM) temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.sm_clock",
+            "label": "SM clock",
+            "group": "ML_FIELD_GROUP_CLOCKS",
+            "value": "NaN",
+            "unit": "MHz",
+            "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.sbe_volatile",
+            "label": "SBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.dbe_volatile",
+            "label": "DBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.xid.last",
+            "label": "Last Xid",
+            "group": "ML_FIELD_GROUP_XID",
+            "value": "NaN",
+            "unit": "",
+            "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          }
+        ]
+      },
+      {
+        "uuid": "GPU-5f1c0005-8a2e-4b7d-9c31-0e6f2a7d0005",
+        "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+        "index": 5,
+        "product": "NVIDIA-A100-SXM4-80GB",
+        "health": "ML_HEALTH_HEALTHY",
+        "smActive": "NaN",
+        "memoryTotalGb": 80,
+        "powerW": "NaN",
+        "powerLimitW": "NaN",
+        "temperatureC": "NaN",
+        "memoryTemperatureC": "NaN",
+        "fields": [
+          {
+            "key": "gpu.util",
+            "label": "GPU utilization",
+            "group": "ML_FIELD_GROUP_UTILIZATION",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.sm_active",
+            "label": "SM active",
+            "group": "ML_FIELD_GROUP_PROFILING",
+            "value": "NaN",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.fb_used",
+            "label": "Framebuffer used",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_USED",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.fb_free",
+            "label": "Framebuffer free",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "value": 80,
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_FREE",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.power",
+            "label": "Power usage",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.power_limit",
+            "label": "Power limit (enforced)",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.temp",
+            "label": "GPU temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.memory_temp",
+            "label": "Memory (HBM) temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.sm_clock",
+            "label": "SM clock",
+            "group": "ML_FIELD_GROUP_CLOCKS",
+            "value": "NaN",
+            "unit": "MHz",
+            "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.sbe_volatile",
+            "label": "SBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.dbe_volatile",
+            "label": "DBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.xid.last",
+            "label": "Last Xid",
+            "group": "ML_FIELD_GROUP_XID",
+            "value": "NaN",
+            "unit": "",
+            "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          }
+        ]
+      },
+      {
+        "uuid": "GPU-5f1c0006-8a2e-4b7d-9c31-0e6f2a7d0006",
+        "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+        "index": 6,
+        "product": "NVIDIA-A100-SXM4-80GB",
+        "health": "ML_HEALTH_HEALTHY",
+        "smActive": "NaN",
+        "memoryTotalGb": 80,
+        "powerW": "NaN",
+        "powerLimitW": "NaN",
+        "temperatureC": "NaN",
+        "memoryTemperatureC": "NaN",
+        "fields": [
+          {
+            "key": "gpu.util",
+            "label": "GPU utilization",
+            "group": "ML_FIELD_GROUP_UTILIZATION",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.sm_active",
+            "label": "SM active",
+            "group": "ML_FIELD_GROUP_PROFILING",
+            "value": "NaN",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.fb_used",
+            "label": "Framebuffer used",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_USED",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.fb_free",
+            "label": "Framebuffer free",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "value": 80,
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_FREE",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.power",
+            "label": "Power usage",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.power_limit",
+            "label": "Power limit (enforced)",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.temp",
+            "label": "GPU temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.memory_temp",
+            "label": "Memory (HBM) temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.sm_clock",
+            "label": "SM clock",
+            "group": "ML_FIELD_GROUP_CLOCKS",
+            "value": "NaN",
+            "unit": "MHz",
+            "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.sbe_volatile",
+            "label": "SBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.dbe_volatile",
+            "label": "DBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.xid.last",
+            "label": "Last Xid",
+            "group": "ML_FIELD_GROUP_XID",
+            "value": "NaN",
+            "unit": "",
+            "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          }
+        ]
+      },
+      {
+        "uuid": "GPU-5f1c0007-8a2e-4b7d-9c31-0e6f2a7d0007",
+        "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0",
+        "index": 7,
+        "product": "NVIDIA-A100-SXM4-80GB",
+        "health": "ML_HEALTH_HEALTHY",
+        "smActive": "NaN",
+        "memoryTotalGb": 80,
+        "powerW": "NaN",
+        "powerLimitW": "NaN",
+        "temperatureC": "NaN",
+        "memoryTemperatureC": "NaN",
+        "fields": [
+          {
+            "key": "gpu.util",
+            "label": "GPU utilization",
+            "group": "ML_FIELD_GROUP_UTILIZATION",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_DEV_GPU_UTIL",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.sm_active",
+            "label": "SM active",
+            "group": "ML_FIELD_GROUP_PROFILING",
+            "value": "NaN",
+            "unit": "ratio",
+            "sourceField": "DCGM_FI_PROF_SM_ACTIVE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.fb_used",
+            "label": "Framebuffer used",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_USED",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.fb_free",
+            "label": "Framebuffer free",
+            "group": "ML_FIELD_GROUP_MEMORY",
+            "value": 80,
+            "unit": "GB",
+            "sourceField": "DCGM_FI_DEV_FB_FREE",
+            "collection": "ML_COLLECTION_COLLECTED"
+          },
+          {
+            "key": "gpu.power",
+            "label": "Power usage",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_POWER_USAGE",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.power_limit",
+            "label": "Power limit (enforced)",
+            "group": "ML_FIELD_GROUP_POWER",
+            "value": "NaN",
+            "unit": "W",
+            "sourceField": "DCGM_FI_DEV_ENFORCED_POWER_LIMIT",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.temp",
+            "label": "GPU temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_GPU_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.memory_temp",
+            "label": "Memory (HBM) temperature",
+            "group": "ML_FIELD_GROUP_THERMAL",
+            "value": "NaN",
+            "unit": "C",
+            "sourceField": "DCGM_FI_DEV_MEMORY_TEMP",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.sm_clock",
+            "label": "SM clock",
+            "group": "ML_FIELD_GROUP_CLOCKS",
+            "value": "NaN",
+            "unit": "MHz",
+            "sourceField": "DCGM_FI_DEV_SM_CLOCK",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.sbe_volatile",
+            "label": "SBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_SBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.ecc.dbe_volatile",
+            "label": "DBE (volatile)",
+            "group": "ML_FIELD_GROUP_ECC",
+            "value": "NaN",
+            "unit": "count",
+            "sourceField": "DCGM_FI_DEV_ECC_DBE_VOL_TOTAL",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          },
+          {
+            "key": "gpu.xid.last",
+            "label": "Last Xid",
+            "group": "ML_FIELD_GROUP_XID",
+            "value": "NaN",
+            "unit": "",
+            "sourceField": "DCGM_FI_DEV_XID_ERRORS",
+            "collection": "ML_COLLECTION_NOT_COLLECTED",
+            "missingSource": "not exported by this cluster's DCGM exporter (fake-gpu-operator 0.2.1 exports DCGM_FI_DEV_GPU_UTIL, DCGM_FI_DEV_FB_USED and DCGM_FI_DEV_FB_FREE only)"
+          }
+        ]
+      }
+    ]
+  }
+}
