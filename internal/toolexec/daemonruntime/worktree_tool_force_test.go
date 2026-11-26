@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/store"
 
@@ -50,7 +52,7 @@ func TestWorktreeToolForceResetsStaleBranchesAfterValidation(t *testing.T) {
 		oldHeads[dir] = fixture.run(dir, "rev-parse", "refs/heads/feat/again")
 		rc.Repos = append(rc.Repos, &core.Repo{ID: uuid.NewString(), ProjectID: project.ID, Name: name, RelativePath: name})
 	}
-	tool := tools.NewWorktreeTool(repo, daemonplacement.NewRecords(repo.ORM()), store.NewChatExtStore(repo.ORM()), machine, nil, chatupdates.NewFromORM(repo.ORM(), repo, nil))
+	tool := tools.NewWorktreeTool(rowreads.WithRepo(repo), daemonplacement.NewRecords(repo.ORM()), store.NewChatExtStore(repo.ORM()), machine, nil, chatupdates.NewFromORM(repo.ORM(), repo, nil))
 	call := func(name, base string) tools.ToolResponse {
 		input, err := json.Marshal(tools.WorktreeParams{Action: "create", Name: name, Branch: "feat/again", BaseBranch: base, Force: true})
 		require.NoError(t, err)

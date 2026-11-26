@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -93,7 +94,7 @@ func TestInitializeGitRepoDoesNotPolluteNestedRepos(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	repos, err := repo.ListReposByProject(ctx, projectID)
+	repos, err := store.ListReposByProject(ctx, repo.ORM(), projectID)
 	require.NoError(t, err)
 	require.Len(t, repos, 2, "must not add a root repo row when nested repos already exist")
 	for _, r := range repos {
@@ -121,7 +122,7 @@ func TestInitializeGitRepoRegistersRootRepoWhenNoneExist(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	repos, err := repo.ListReposByProject(ctx, projectID)
+	repos, err := store.ListReposByProject(ctx, repo.ORM(), projectID)
 	require.NoError(t, err)
 	require.Len(t, repos, 1, "root repo must be registered (worktrees gate on it)")
 	assert.Equal(t, "", repos[0].RelativePath)

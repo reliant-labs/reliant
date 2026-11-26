@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -80,7 +81,7 @@ type Stores struct {
 	CapacityStores
 	EventStores
 	TriggerStores
-	RowStores
+	rowreads.Reads
 }
 
 // NewStores joins the repository facade with the generated trigger stores.
@@ -98,7 +99,7 @@ func NewStores(repo *db.Repo) Stores {
 			workflows:     store.NewWorkflowExtStore(orm),
 		},
 		TriggerStores: TriggerStores{triggers: store.NewTriggerExtStore(orm)},
-		RowStores:     NewRowStores(repo),
+		Reads:         rowreads.Of(repo),
 	}
 }
 

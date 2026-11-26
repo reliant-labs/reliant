@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -113,7 +114,7 @@ func TestListProjectReposAdoptsUnregisteredRepos(t *testing.T) {
 	assert.Equal(t, "", repos[0].RelativePath)
 
 	// The adoption persisted: registry row exists and IsGitRepo trued up.
-	persisted, err := repo.ListReposByProject(ctx, project.ID)
+	persisted, err := store.ListReposByProject(ctx, repo.ORM(), project.ID)
 	require.NoError(t, err)
 	require.Len(t, persisted, 1)
 	updated, err := repo.GetProject(ctx, project.ID)

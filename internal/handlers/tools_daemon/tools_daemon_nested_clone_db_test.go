@@ -147,7 +147,7 @@ func TestNestedFailure_NeverReadsInstalled(t *testing.T) {
 		f := newOrgMachinesFixture(t)
 		f.nestedSetUp(t, f.ctx, f.globex, f.globexMachine)
 		f.failNested(t, f.globex.ID, f.globexMachine)
-		rs := reconcileStore{f.repo, store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}
+		rs := reconcileStore{rowreads.WithRepo(f.repo), store.NewProjectDaemonDetachmentExtStore(f.repo.ORM()), store.NewProjectExtStore(f.repo.ORM()), store.NewProjectDaemonExtStore(f.repo.ORM())}
 
 		for range 2 {
 			installed, err := settleStaleInstall(f.ctx, rs, f.everythingHere, f.checkout(t, f.globex.ID, f.globexMachine), f.scope(t, "globex"))

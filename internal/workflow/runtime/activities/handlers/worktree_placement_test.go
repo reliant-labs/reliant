@@ -242,7 +242,7 @@ func TestCreateWorktreeActivity_AdoptsReposFromThePlacedMachine(t *testing.T) {
 
 	assert.Equal(t, []string{"daemon-b"}, f.router.daemonsFor("repo.discover"))
 	assertActivityPlacedOn(t, f.router, wt, "daemon-b")
-	repos, err := f.repo.ListReposByProject(context.Background(), f.projectID)
+	repos, err := store.ListReposByProject(context.Background(), f.repo.ORM(), f.projectID)
 	require.NoError(t, err)
 	assert.Len(t, repos, 1)
 }

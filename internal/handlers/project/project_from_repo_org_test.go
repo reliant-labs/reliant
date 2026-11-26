@@ -26,7 +26,10 @@ import (
 
 // unreadableMachines is a repository whose machine reads fail (not "no
 // such machine": an outage).
-type unreadableMachines struct{ *db.Repo }
+type unreadableMachines struct {
+	*db.Repo
+	rowreads.Reads
+}
 
 func (unreadableMachines) GetDaemon(context.Context, string) (*db.Daemon, error) {
 	return nil, errors.New("connection reset")
@@ -70,7 +73,7 @@ func TestCreateProjectFromRepo_AuthorizesTheMachineBeforeTheClone(t *testing.T) 
 		return cp, err
 	}
 
-	cp, err := clone(t, unreadableMachines{repo}, globexMachine, "globex")
+	cp, err := clone(t, unreadableMachines{Repo: repo, Reads: rowreads.Of(repo)}, globexMachine, "globex")
 	assert.Equal(t, connect.CodeInternal, codeOf(err), "%v", err)
 	assert.Zero(t, cp.calls, "cloned with the machine's org unchecked")
 

@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -50,21 +52,21 @@ func TestReconcileProjectDaemonsRecordsForgeAppsOnConnect(t *testing.T) {
 		return projectPathState{Exists: true}, nil
 	}
 
-	_, _, err := reconcileProjectDaemons(ctx, reconcileStore{repo, store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", check)
+	_, _, err := reconcileProjectDaemons(ctx, reconcileStore{rowreads.WithRepo(repo), store.NewProjectDaemonDetachmentExtStore(repo.ORM()), store.NewProjectExtStore(repo.ORM()), store.NewProjectDaemonExtStore(repo.ORM())}, daemonID, userID, nil, "", check)
 	require.NoError(t, err)
 
 	apps, err := repo.ListRepoForgeAppsByProject(ctx, newer.ID)
 	require.NoError(t, err)
 	require.Len(t, apps, 1)
 	require.Equal(t, "api", apps[0].Name)
-	repos, err := repo.ListReposByProject(ctx, newer.ID)
+	repos, err := store.ListReposByProject(ctx, repo.ORM(), newer.ID)
 	require.NoError(t, err)
 	require.NotNil(t, repos[0].ForgeAppsScannedAt)
 
 	apps, err = repo.ListRepoForgeAppsByProject(ctx, older.ID)
 	require.NoError(t, err)
 	require.Empty(t, apps)
-	repos, err = repo.ListReposByProject(ctx, older.ID)
+	repos, err = store.ListReposByProject(ctx, repo.ORM(), older.ID)
 	require.NoError(t, err)
 	require.Nil(t, repos[0].ForgeAppsScannedAt, "an old daemon leaves the apps unknown")
 }

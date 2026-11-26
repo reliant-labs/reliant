@@ -60539,9 +60539,7 @@
       "field": "Repos",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/project.RepoLister",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60903,9 +60901,7 @@
       "field": "Repos",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/repo.RepoLister",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -62821,9 +62817,7 @@
       "field": "Repos",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.RepoLister",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
