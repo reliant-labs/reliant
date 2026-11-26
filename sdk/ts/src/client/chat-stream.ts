@@ -33,8 +33,11 @@ const LOG_PREFIX_STREAM = "[📡 ChatStream]";
 
 // Chat gap-resync pacing. Chat gaps are exact (per-chat sequences are
 // contiguous and never filtered), so the interval only guards against
-// reconnect loops.
+// reconnect loops: a gap inside it is resynced when it ends, never dropped.
+// A resync that did not move the cursor (a sequence the server cannot
+// replay) doubles the interval, up to the cap, until one does.
 const CHAT_GAP_RESYNC_MIN_INTERVAL_MS = 1_000;
+const CHAT_GAP_RESYNC_MAX_INTERVAL_MS = 30_000;
 
 /**
  * The server refused the chat: StreamChatUpdates answers NotFound for a chat
@@ -153,6 +156,19 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   // stream, the chat's user-level updates that scope filters out.
   private projectId: string | undefined = undefined;
   private lastChatGapResyncAt = 0;
+  // Gap resync bookkeeping. A sequence gap means the updates from the gap on
+  // were discarded, so every gap must end in a connection that replays past
+  // it. `gapResyncInFlight`: a resync connection was asked for and no
+  // connection has caught up since. `gapResyncThrough`: the highest gap
+  // sequence not yet known to be covered (0n: none). `gapResyncTimer`: a
+  // resync deferred to the end of the pacing interval.
+  private gapResyncInFlight = false;
+  private gapResyncThrough = 0n;
+  private gapResyncTimer: ReturnType<typeof setTimeout> | null = null;
+  // The cursor the last resync started from, and how many resyncs in a row
+  // started from it (no progress), for the pacing.
+  private gapResyncFrom = -1n;
+  private gapResyncsWithoutProgress = 0;
   // How the current connection is bringing the chat up to date, for the
   // onReplayStarted / onCaughtUp hooks: null until its first snapshot or
   // update batch, and the persisted updates it delivered before caught_up.
@@ -257,6 +273,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     const resumeFrom = this.callbacks.resolveChatResumeSequence?.(chatId) ?? 0n;
     this.chatId = chatId;
     this.lastChatSequence = resumeFrom > 0n ? resumeFrom : 0n;
+    this.resetGapResync();
     this.setChatSyncPendingFor(chatId);
     this.resetConnectionSync();
     if (this.lastChatSequence > 0n) {
@@ -283,6 +300,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.releaseChatCursor();
     this.chatId = undefined;
     this.lastChatSequence = 0n;
+    this.resetGapResync();
     this.setChatSyncPendingFor(null);
     this.close(false);
   }
@@ -304,6 +322,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
   stop(): void {
     this.log.info("Stopping");
     this.releaseChatCursor();
+    this.resetGapResync();
     this.setChatSyncPendingFor(null);
     this.close(true);
   }
@@ -357,6 +376,7 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
     this.rejectedChatIds.add(chatId);
     this.chatId = undefined;
     this.lastChatSequence = 0n;
+    this.resetGapResync();
     this.setChatSyncPendingFor(null);
     this.close(false);
     this.callbacks.onChatSubscriptionRejected?.(chatId);
@@ -397,23 +417,84 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
    * A persisted chat update was missed upstream (sequence gap). Reconnect
    * preserving the cursor; the server replays (since_seq, latest] from the
    * DB, restoring the missed updates in order.
+   *
+   * No gap is ever dropped: handleEvent has already discarded the updates
+   * from the gap on, so a gap nobody resyncs leaves the chat stale until the
+   * next persisted update. A gap seen while a resync connection is still
+   * catching up is recorded and checked against its caught_up
+   * (settleGapResync); a gap inside the pacing interval is resynced when the
+   * interval ends.
    */
   private resyncAfterGap(gapSeq: bigint): void {
-    const now = Date.now();
-    if (now - this.lastChatGapResyncAt < CHAT_GAP_RESYNC_MIN_INTERVAL_MS) {
-      // A resync is already in flight; its replay covers this gap too.
+    if (gapSeq > this.gapResyncThrough) this.gapResyncThrough = gapSeq;
+    if (this.gapResyncInFlight || this.gapResyncTimer !== null) {
+      this.log.debug("Chat update sequence gap while a resync is pending — recorded for it",
+        { chatId: this.chatId?.slice(0, 8), gapSeq: Number(gapSeq) },
+      );
       return;
     }
-    this.lastChatGapResyncAt = now;
+    const interval = Math.min(
+      CHAT_GAP_RESYNC_MIN_INTERVAL_MS * Math.pow(2, Math.min(this.gapResyncsWithoutProgress, 5)),
+      CHAT_GAP_RESYNC_MAX_INTERVAL_MS,
+    );
+    const wait = this.lastChatGapResyncAt + interval - Date.now();
+    if (wait > 0) {
+      this.gapResyncTimer = setTimeout(() => {
+        this.gapResyncTimer = null;
+        this.startGapResync();
+      }, wait);
+      return;
+    }
+    this.startGapResync();
+  }
+
+  private startGapResync(): void {
+    if (!this.chatId || this.isIntentionallyClosed) return;
+    if (this.lastChatSequence >= this.gapResyncThrough) {
+      // A connection since the gap already replayed past it.
+      this.gapResyncThrough = 0n;
+      return;
+    }
+    this.lastChatGapResyncAt = Date.now();
+    this.gapResyncInFlight = true;
+    this.gapResyncsWithoutProgress = this.lastChatSequence === this.gapResyncFrom ? this.gapResyncsWithoutProgress + 1 : 0;
+    this.gapResyncFrom = this.lastChatSequence;
 
     this.log.warn("Chat update sequence gap detected — resyncing from last contiguous sequence",
       {
-        chatId: this.chatId?.slice(0, 8),
+        chatId: this.chatId.slice(0, 8),
         lastContiguous: Number(this.lastChatSequence),
-        gapSeq: Number(gapSeq),
+        gapSeq: Number(this.gapResyncThrough),
       },
     );
     this.reconnectNow("resubscribe");
+  }
+
+  /**
+   * A connection caught up: its replay (or snapshot) brought the cursor to
+   * the server's state as of its start. If a gap recorded since is still
+   * ahead of the cursor, resync again; otherwise the gaps are covered.
+   */
+  private settleGapResync(): void {
+    this.gapResyncInFlight = false;
+    if (this.gapResyncThrough === 0n || this.gapResyncTimer !== null) return;
+    if (this.lastChatSequence >= this.gapResyncThrough) {
+      this.gapResyncThrough = 0n;
+      return;
+    }
+    this.resyncAfterGap(this.gapResyncThrough);
+  }
+
+  /** Forget the gap resync state: the stream is leaving the chat it belonged to. */
+  private resetGapResync(): void {
+    this.gapResyncInFlight = false;
+    this.gapResyncThrough = 0n;
+    this.gapResyncFrom = -1n;
+    this.gapResyncsWithoutProgress = 0;
+    if (this.gapResyncTimer !== null) {
+      clearTimeout(this.gapResyncTimer);
+      this.gapResyncTimer = null;
+    }
   }
 
   protected openStream(signal: AbortSignal): AsyncIterable<ChatStreamEvent> {
@@ -589,6 +670,8 @@ export class ChatStream extends ReconnectingStream<ChatStreamEvent> {
           replayedUpdates: this.connectionReplayedUpdates,
           latestSequence: Number(event.event.value.latestSequence),
         });
+        // A gap recorded while this connection caught up may still be ahead of it.
+        this.settleGapResync();
         break;
       }
 

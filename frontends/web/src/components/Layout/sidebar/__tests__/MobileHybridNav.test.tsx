@@ -97,14 +97,37 @@ describe("the phone's nav", () => {
     expect(screen.getByTestId("nav-usage-billing")).toBeInTheDocument();
   });
 
-  it("drills into Agents on the phone's chats, never the old nav, and its back header goes to the Overview", () => {
-    const onNavigate = renderAt(mobileChatPath("c1"));
+  it("drills into Agents on the phone's chats, never the old nav", () => {
+    renderAt(mobileChatPath("c1"));
     expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
     expect(screen.queryByTestId("nav-ai-providers")).toBeNull();
     expect(screen.getByTestId("mobile-nav-new-chat")).toBeInTheDocument();
     expect(screen.getByTestId("mobile-nav-chats")).toHaveAttribute("aria-current", "page");
+  });
+
+  // reliant #3264: Back navigated to backHref, a desktop page (the Overview),
+  // which on a phone left the phone shell and closed the drawer.
+  it("shows the top level in place on Back from a drill-in, without navigating", () => {
+    const onNavigate = renderAt(mobileChatsPath());
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    // The link still names the desktop page, for a new tab.
+    expect(screen.getByTestId("nav-back")).toHaveAttribute("href", consolePath("shopfront", { kind: "overview" }));
     fireEvent.click(screen.getByTestId("nav-back"));
-    expect(onNavigate).toHaveBeenLastCalledWith(consolePath("shopfront", { kind: "overview" }), { drill: true });
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("nav-drill-in")).toBeNull();
+    expect(screen.getByTestId("nav-top")).toBeInTheDocument();
+    // The top-level areas are reachable from the chat list now, the Inbox included.
+    expect(screen.getByTestId("sidebar-inbox-button")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-observability")).toBeInTheDocument();
+  });
+
+  it("drills into Agents again from the top level Back showed", () => {
+    const onNavigate = renderAt(mobileChatsPath());
+    fireEvent.click(screen.getByTestId("nav-back"));
+    fireEvent.click(screen.getByTestId("nav-agents"));
+    expect(onNavigate).toHaveBeenLastCalledWith(expect.any(String), { drill: true });
+    // The screen did not change (the chat list is Agents' page), and the drill-in is back.
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
   });
 
   it("lists the Inbox in Agents' drill-in on the phone's chats, a destination that closes the drawer", () => {

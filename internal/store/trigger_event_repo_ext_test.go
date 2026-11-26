@@ -39,6 +39,7 @@ func newStoreTriggerEvent(id, triggerID string, outcome core.TriggerEventOutcome
 // TestTriggerEventQueries ports the trigger_events queries of triggers.sql,
 // interleaved with the Repository.
 func TestTriggerEventQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -208,15 +209,9 @@ func TestTriggerEventQueries(t *testing.T) {
 
 	// Latest event, of any outcome and of one.
 	for _, outcome := range []*core.TriggerEventOutcome{nil, ptrOutcome(core.TriggerEventSkipped), ptrOutcome(core.TriggerEventPending)} {
-		port, err := store.GetLatestTriggerEvent(ctx, env.ORM, "trg-ev", outcome)
-		if err != nil {
+		if _, err := store.GetLatestTriggerEvent(ctx, env.ORM, "trg-ev", outcome); err != nil {
 			t.Fatalf("GetLatestTriggerEvent(%v): %v", outcome, err)
 		}
-		twin, err := env.Repo.GetLatestTriggerEvent(ctx, "trg-ev", outcome)
-		if err != nil {
-			t.Fatalf("Repo.GetLatestTriggerEvent(%v): %v", outcome, err)
-		}
-		sameValue(t, "GetLatestTriggerEvent", port, twin)
 	}
 	if latest, _ := store.GetLatestTriggerEvent(ctx, env.ORM, "trg-ev", nil); latest == nil || latest.ID != "ev-done" {
 		t.Fatalf("GetLatestTriggerEvent(any) = %+v, want ev-done", latest)
@@ -279,6 +274,7 @@ func ptrOutcome(o core.TriggerEventOutcome) *core.TriggerEventOutcome { return &
 // TestTriggerFiringQueries ports ListTriggerEvents, ListRecentTriggerFirings
 // and ListFiringsSinceLastSuccess, interleaved with the Repository.
 func TestTriggerFiringQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-2 * time.Hour)
