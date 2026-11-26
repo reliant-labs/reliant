@@ -22,14 +22,18 @@ type Verdict struct {
 	SimulatedBase bool   `json:"simulated_base,omitempty"`
 
 	// The gate's verdict (the last attempt's).
-	Class        GateClass `json:"class,omitempty"`
-	Landable     bool      `json:"landable"`
-	Isolation    string    `json:"isolation,omitempty"`
-	Machine      string    `json:"machine,omitempty"`
-	ReasonCode   string    `json:"reason_code,omitempty"`
-	Reason       string    `json:"reason,omitempty"`
-	FailingTests []string  `json:"failing_tests,omitempty"`
-	InfraMatches []string  `json:"infra_matches,omitempty"`
+	Class    GateClass `json:"class,omitempty"`
+	Landable bool      `json:"landable"`
+	// UnisolatedAccepted marks a landable pass outside an isolation
+	// boundary, which the repository's gate.allow_unisolated accepts. The
+	// database lets a runc batch land only with it.
+	UnisolatedAccepted bool     `json:"unisolated_accepted,omitempty"`
+	Isolation          string   `json:"isolation,omitempty"`
+	Machine            string   `json:"machine,omitempty"`
+	ReasonCode         string   `json:"reason_code,omitempty"`
+	Reason             string   `json:"reason,omitempty"`
+	FailingTests       []string `json:"failing_tests,omitempty"`
+	InfraMatches       []string `json:"infra_matches,omitempty"`
 	// Attempts are the earlier gates of this batch (an unproven one retried
 	// on another member).
 	Attempts []GateAttempt `json:"attempts,omitempty"`

@@ -270,7 +270,7 @@ func (r *round) recover(ctx context.Context) error {
 				if _, err := st.RequeueQueueEntries(ctx, b.ID); err != nil {
 					return err
 				}
-			case !v.Shadow && !r.shadow && v.Landable:
+			case !v.Shadow && !r.shadow && v.Landable && (!v.UnisolatedAccepted || r.cfg.Gate.AllowUnisolated):
 				if err := r.land(ctx, b, v); err != nil {
 					return err
 				}
