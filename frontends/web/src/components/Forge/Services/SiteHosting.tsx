@@ -116,7 +116,7 @@ export function SiteTraffic({ name, site }: { name: string; site: SiteEnv }) {
               {view && <MetricLine timestamps={view.series.timestamps} values={view.series.hitRatio} unit="percent" label={`Cache hit ratio of ${name}`} />}
             </MetricCard>
             <MetricCard title="Bandwidth" figure={view ? formatBinaryBytes(view.totals.bytes) : "—"} detail="traffic telemetry, not the bill" loading={loading} empty={empty} testId="site-traffic-bandwidth">
-              {view && <MetricLine timestamps={view.series.timestamps} values={view.series.bytes} unit="bytes" label={`Bytes sent by ${name}`} />}
+              {view && <MetricLine timestamps={view.series.timestamps} values={view.series.bytes} unit="bytes" format={formatBinaryBytes} label={`Bytes sent by ${name}`} />}
             </MetricCard>
             <MetricCard
               title="Errors"

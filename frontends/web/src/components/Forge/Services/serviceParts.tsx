@@ -77,6 +77,7 @@ export function MetricLine({
   values,
   series,
   unit,
+  format,
   label,
   tone,
 }: {
@@ -84,8 +85,10 @@ export function MetricLine({
   values?: (number | null)[];
   series?: ChartSeries[];
   unit: ValueUnit;
+  /** How a value reads where the unit's formatter is not the page's (binary bytes). */
+  format?: (value: number) => string;
   label: string;
   tone?: ChartSeries["tone"];
 }) {
-  return <UPlotChart height={110} timestamps={timestamps} series={series ?? [{ label, values: values ?? [], tone }]} unit={unit} label={label} legend={false} />;
+  return <UPlotChart height={110} timestamps={timestamps} series={series ?? [{ label, values: values ?? [], tone }]} unit={unit} format={format} label={label} legend={false} />;
 }

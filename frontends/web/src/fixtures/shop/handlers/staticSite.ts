@@ -61,7 +61,7 @@ export const ORG_USAGE = {
 };
 
 /** The cache hit ratio the story's traffic holds to, and its error rates. */
-export const TRAFFIC_STORY = { hitRatio: 0.93, rate4xx: 0.011, rate5xx: 0.0004 } as const;
+export const TRAFFIC_STORY = { hitRatio: 0.93, rate4xx: 0.011, rate5xx: 0.002 } as const;
 
 /** Bytes per response: an edge hit (logged with headers), an origin answer (body only). */
 const HIT_BYTES = 14_200;
@@ -174,7 +174,7 @@ export function shopStaticSiteTraffic(req: GetStaticSiteTrafficRequest) {
   let missBytes = 0;
   for (let t = Math.floor(start / step) * step, i = 0; t < end; t += step, i += 1) {
     const n = Math.round(hourlyRate(weekly, t + step / 2) * (step / HOUR));
-    const c = counts(n, Math.sin(i * 1.7));
+    const c = counts(n, Math.sin(i * 0.35));
     points.push({ start: ts(t), counts: c });
     requests += n;
     hits += Number(c.cacheHits);
