@@ -25,7 +25,7 @@ func (g DispatchGate) Run(ctx context.Context, req GateRequest) (GateResult, err
 	res, err := g.Dispatcher.Dispatch(ctx, gaterun.GateRequest{
 		RepoID: req.RepoID, BatchID: req.BatchID, Attempt: req.Attempt,
 		CandidateRef: req.CandidateRef, CandidateSHA: req.CandidateSHA,
-		Gate: req.Gate, Shadow: req.Shadow,
+		Gate: req.Gate, Shadow: req.Shadow, AllowUnisolated: req.Gate.AllowUnisolated,
 	})
 	if err != nil {
 		if ctx.Err() != nil {
