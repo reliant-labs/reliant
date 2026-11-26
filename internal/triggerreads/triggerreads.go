@@ -4,6 +4,8 @@
 // plus those reads, answered by the generated trigger stores. The facade no
 // longer carries them; a role that owns its trigger reads takes a store role
 // instead, and this wrapper goes when the last role that names them does.
+//
+//forge:exclude-contract: a transitional wrapper over a store handle; it holds no state and goes with the last role that names these reads
 package triggerreads
 
 import (

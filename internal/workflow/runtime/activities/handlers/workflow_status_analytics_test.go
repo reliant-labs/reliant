@@ -3,12 +3,13 @@ package handlers
 
 import (
 	"context"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // is_child is what the product dashboards filter on to count a run once. It

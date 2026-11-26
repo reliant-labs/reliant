@@ -3,7 +3,6 @@ package trigger
 
 import (
 	"context"
-	"github.com/reliant-labs/reliant/internal/store"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A trigger may now have no machine, but only by saying so: an empty daemon_id
