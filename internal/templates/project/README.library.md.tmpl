@@ -1,0 +1,67 @@
+# {{.Name}}
+
+A Go library scaffolded with [Forge](https://github.com/reliant-labs/forge).
+
+## Layout
+
+```
+{{.Name}}/
+├── pkg/{{.Name}}/  # Public API (importable as {{.Module}}/pkg/{{.Name}})
+├── internal/        # Private implementation packages
+├── docs/            # Architecture Decision Records
+├── forge.yaml       # Forge project manifest (kind: library)
+├── go.mod
+└── Taskfile.yml
+```
+
+## Quick start
+
+```bash
+task deps   # go mod download
+task test   # go test -race ./..., recorded with its coverage
+task lint   # golangci-lint run
+task fmt    # goimports + go mod tidy
+```
+
+## Test results and coverage
+
+`task test` records every lane it runs, with its coverage, under
+`.forge/tests/runs/` (gitignored); `task test:report` summarises the last
+run. `FORGE_TESTS=off` records nothing for one run.
+
+CI's "Report test results" step uploads the run to your project's control
+plane when the repository secret `FORGE_CONTROL_PLANE_TOKEN` holds a token with
+the `tests:write` scope. Mint one while signed in to the web app under
+Settings → API tokens (Reliant cloud:
+https://forge.reliantlabs.io/settings/tokens), then store it:
+
+```bash
+gh secret set FORGE_CONTROL_PLANE_TOKEN
+```
+
+Without the secret the step prints one line and stays green; it never
+decides the job's result. A token with `deploy:write` also uploads.
+`tests.upload: never` in `forge.yaml` turns upload off.
+
+## Adding code
+
+- **Public API** lives under `pkg/{{.Name}}/`. Anything you want
+  importers to use goes here.
+- **Private helpers** live under `internal/`. Use
+  `forge scaffold package <name>` to scaffold a new internal package with
+  a contract interface and a generated mock.
+- **Tests** live next to the code (`xxx_test.go`). Runnable examples
+  go into `Example*` test functions; they show up rendered in
+  generated docs and run as part of `go test`.
+
+## Versioning
+
+This module follows [Semantic Versioning](https://semver.org). Cut
+releases by tagging the repository:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Importers will pull the tagged version via `go get {{.Module}}@v0.1.0`.

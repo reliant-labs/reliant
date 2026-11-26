@@ -1,0 +1,4 @@
+--- stdout
+--- error
+https://cp.example cannot delete apps: it does not serve DeployService/GetAppDeletion (an older control plane, or one with app deletion not configured); nothing was changed
+fix: `forge app teardown` deletes every env and stops all billing while keeping the app's name and releases; deleting the app itself needs a control plane with app deletion

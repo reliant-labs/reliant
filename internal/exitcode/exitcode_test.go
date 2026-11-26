@@ -1,0 +1,57 @@
+package exitcode
+
+import (
+	"errors"
+	"fmt"
+	"testing"
+)
+
+type coded int
+
+func (c coded) Error() string { return "coded" }
+func (c coded) ExitCode() int { return int(c) }
+
+func TestOf(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"nil", nil, 0},
+		{"plain", errors.New("boom"), 1},
+		{"coded 2", coded(2), 2},
+		{"coded 8 wrapped", fmt.Errorf("wrap: %w", coded(8)), 8},
+		{"joined keeps the coded one", errors.Join(errors.New("write"), coded(2)), 2},
+		{"coded 0 is still a failure", coded(0), 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Of(tc.err); got != tc.want {
+				t.Fatalf("Of = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+type verdict struct{ coded }
+
+func (verdict) IsVerdict() bool { return true }
+
+func TestLine(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil", nil, ""},
+		{"a failure is an Error", errors.New("boom"), "Error: boom"},
+		{"a coded failure is an Error", coded(2), "Error: coded"},
+		{"a verdict is said plainly", verdict{coded(9)}, "coded"},
+		{"a wrapped verdict too", fmt.Errorf("upgrade: %w", verdict{coded(9)}), "upgrade: coded"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := Line(tc.err); got != tc.want {
+				t.Fatalf("Line = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -1,0 +1,52 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// forge writes it ONCE (write-if-absent). The command tree + component wiring is
+// owned code — add a component by hand-editing here (or via `forge scaffold`), never a
+// re-derivation. Deleting it sticks; `forge project rescaffold <path>` re-creates it from template.
+// Source: operator {{.Name}} (one file per operator — devspace idiom).
+//
+// REAL per-operator subcommand, in the operators/ command group. `<bin> {{.Name}}`
+// runs a supervisor process for ONLY the {{.Name}} operator: no workers and no
+// other operators run. The command composes ITSELF — its Operators closure runs
+// the TYPED (*app.Components).Operator{{.FieldName}} accessor (operator{{.FieldName}},
+// re-derived next door in {{.Name}}_accessor_gen.go); there is no name filter and
+// no re-selection. Sibling components are still CONSTRUCTED by the DI
+// graph (cross-component reads stay nil-safe); only this operator is supervised.
+//
+// Mount is cmd.MountNone by default: the operator↔service linkage is not modeled
+// yet. An operator that COLOCATES a Connect service (a controller that also
+// serves its own API) hand-wires that service's typed Mount here — replace
+// cmd.MountNone with (*app.Components).Mount<Svc> — until the capability model
+// lands. (`forge project disown` this file to own that edit across regenerations.)
+//
+// main.go names this command's exported New…Cmd constructor explicitly and
+// passes it to cmd.Execute — the tree is assembled in the composition root,
+// not via init() self-registration.
+package operators
+
+import (
+	"github.com/spf13/cobra"
+
+	"{{.Module}}/cmd/{{.Bin}}/cmd"
+	"{{.Module}}/internal/app"
+	"{{.Module}}/pkg/config"
+)
+
+// New{{.FieldName}}Cmd is the cobra subcommand that runs only the {{.Name}} operator.
+func New{{.FieldName}}Cmd(deps cmd.Deps) *cobra.Command {
+	c := &cobra.Command{
+		Use:   "{{.Name}}",
+		Short: "Run only the {{.Name}} operator",
+		Long:  "Run a supervisor process for only the {{.Name}} operator. No Connect services are mounted and no workers/other operators run; the DI graph still constructs everything so cross-component reads stay nil-safe.",
+		RunE: func(c *cobra.Command, args []string) error {
+			deps.Cmd = c
+			return cmd.Serve(c.Context(), deps, cmd.ServeSpec{
+				// MountNone by default — replace with the colocated service's typed
+				// Mount if this operator serves an API (see the file header).
+				Mount:     cmd.MountNone,
+				Operators: func(c *app.Components) []app.OperatorEntry { return []app.OperatorEntry{operator{{.FieldName}}(c)} },
+			})
+		},
+	}
+	config.RegisterFlags(c)
+	return c
+}
