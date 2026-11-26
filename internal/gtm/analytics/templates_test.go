@@ -74,8 +74,9 @@ var identifierish = regexp.MustCompile(`(?i)(^id$|id$|ids$|_id|uuid|visitor|sess
 
 // TestNoTemplateMentionsAnIdentifier: no template selects, groups by, or
 // otherwise names a user, session, visitor or any other identifier column.
-// The one exception is EnvId inside the environment-scope predicate, which
-// only narrows rows and is never returned.
+// The exceptions: EnvId inside the environment-scope predicate, which only
+// narrows rows, and UserId inside the one uniq(UserId) the k-anonymity
+// threshold counts. Neither is ever returned.
 func TestNoTemplateMentionsAnIdentifier(t *testing.T) {
 	literal := regexp.MustCompile(`'(?:[^'\\]|\\.)*'`)
 	word := regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
@@ -84,15 +85,32 @@ func TestNoTemplateMentionsAnIdentifier(t *testing.T) {
 		if strings.Count(sql, scope) != 1 {
 			t.Fatalf("%s: the scope predicate should appear once:\n%s", name, sql)
 		}
-		rest := literal.ReplaceAllString(strings.Replace(sql, scope, "", 1), "''")
+		kAnon := q.Template != gtm.AnalyticsEventTrend
+		if want := map[bool]int{true: 1, false: 0}[kAnon]; strings.Count(sql, peopleExpr) != want || strings.Count(sql, "UserId") != want {
+			t.Fatalf("%s: UserId should appear only as %q, %d time(s):\n%s", name, peopleExpr, want, sql)
+		}
+		rest := strings.Replace(strings.Replace(sql, scope, "", 1), peopleExpr, "", 1)
+		rest = literal.ReplaceAllString(rest, "''")
 		for _, w := range word.FindAllString(rest, -1) {
 			if identifierish.MatchString(w) {
 				t.Errorf("%s: names %q:\n%s", name, w, sql)
 			}
 		}
-		for _, banned := range []string{"UserId", "user_id", "SessionId", "DayVisitor", "OrgId", "TraceId", "SpanId", "EnvId"} {
+		for _, banned := range []string{"UserId", "user_id", "SessionId", "DayVisitor", "VisitorId", "OrgId", "TraceId", "SpanId", "EnvId"} {
 			if strings.Contains(rest, banned) {
-				t.Errorf("%s: mentions %s outside the scope predicate:\n%s", name, banned, sql)
+				t.Errorf("%s: mentions %s outside the scope predicate and uniq(UserId):\n%s", name, banned, sql)
+			}
+		}
+		if kAnon {
+			// The statement returns kind, the dimension and the counts; the
+			// per-group user count stays inside it.
+			outer := sql[strings.Index(sql, ")\nSELECT ")+2:]
+			outer = outer[:strings.Index(outer, "\n")]
+			if strings.Contains(outer, "people") || !strings.HasSuffix(outer, countColumn+", "+groupsColumn+", "+hiddenColumn+" FROM (") {
+				t.Errorf("%s: returns %q", name, outer)
+			}
+			if !strings.Contains(sql, "WHERE people >= 3 ") || !strings.Contains(sql, "countIf(people < 3) AS hidden_groups") {
+				t.Errorf("%s: no k=3 threshold:\n%s", name, sql)
 			}
 		}
 	}
@@ -106,11 +124,17 @@ func TestNoTemplateMentionsAnIdentifier(t *testing.T) {
 
 func TestSQLLimitIsTheQueryLimit(t *testing.T) {
 	for _, limit := range []int{1, 50, gtm.MaxAnalyticsRows} {
-		q := sqlQueries["event_counts"]
+		for _, name := range []string{"event_counts", "property_breakdown"} {
+			q := sqlQueries[name]
+			q.Limit = limit
+			if sql := buildSQL(q); strings.Count(sql, " LIMIT ") != 1 || !strings.Contains(sql, " LIMIT "+strconv.Itoa(limit)+")\n") {
+				t.Errorf("%s limit %d: %s", name, limit, sql)
+			}
+		}
+		q := sqlQueries["event_trend"]
 		q.Limit = limit
-		sql := buildSQL(q)
-		if !strings.HasSuffix(sql, " LIMIT "+strconv.Itoa(limit)) {
-			t.Errorf("limit %d: %s", limit, sql)
+		if sql := buildSQL(q); !strings.HasSuffix(sql, "\nLIMIT "+strconv.Itoa(limit)) {
+			t.Errorf("event_trend limit %d: %s", limit, sql)
 		}
 	}
 }

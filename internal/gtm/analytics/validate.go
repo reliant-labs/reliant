@@ -24,26 +24,74 @@ var name = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
 // validName reports whether s may be emitted as a name literal.
 func validName(s string) bool { return name.MatchString(s) }
 
-// identifierWords are the words of a property name that make it an
-// identifier: a breakdown by one would list ids, people or secrets.
+// identifierWords are whole words of a property name that make it an
+// identifier: a breakdown by one would list ids, people, devices or secrets.
+// They are short or common, so they match only as a whole word.
 var identifierWords = map[string]bool{
-	"id": true, "ids": true, "uid": true, "uuid": true, "guid": true, "sid": true,
-	"user": true, "users": true, "userid": true, "username": true,
-	"session": true, "sessionid": true, "visitor": true, "device": true, "anon": true, "anonymous": true,
-	"org": true, "email": true, "mail": true, "phone": true, "ip": true,
-	"token": true, "key": true, "secret": true, "password": true,
+	"id": true, "ids": true, "uid": true, "uids": true, "sid": true, "pid": true,
+	"ip": true, "ips": true, "mac": true, "org": true, "orgs": true, "users": true,
+	"anon": true, "anonymous": true, "mail": true, "tel": true, "msisdn": true, "key": true, "keys": true, "pwd": true, "auth": true, "bearer": true,
+	"name": true, "names": true, "login": true, "handle": true, "addr": true, "ssn": true, "dob": true,
+	"birthday": true, "birthdate": true, "card": true, "pan": true, "cvv": true, "iban": true, "bic": true,
+	"jwt": true, "xff": true, "adid": true, "aaid": true, "gaid": true, "idfa": true, "idfv": true,
+	"imei": true, "imsi": true, "iccid": true, "ua": true,
+}
+
+// identifierStems match anywhere in a word or in the whole name run
+// together ("useremail", "ipaddress", "x-forwarded-for"): each is long or
+// distinctive enough that a harmless name rarely contains it.
+var identifierStems = []string{
+	"user", "email", "phone", "session", "visitor", "uuid", "guid", "token", "secret", "password", "passwd",
+	"apikey", "accesskey", "secretkey", "privatekey", "cookie", "fingerprint", "forwarded", "address",
+	"username", "fullname", "firstname", "lastname", "surname", "givenname", "familyname", "nickname",
+	"creditcard", "cardnumber", "mobilenumber", "birth", "passport", "gclid", "fbclid", "msclkid", "dclid",
+	"ttclid", "wbraid", "gbraid", "idfa", "imei", "jwt", "anonymous", "deviceid", "clientid", "customerid", "accountid",
+}
+
+// idWords are the words that end in "id" without naming an identifier.
+// Any other word (or name run together) ending in "id" or "ids" — orgid,
+// traceid, visitorid, planid — is taken for an identifier.
+var idWords = []string{
+	"paid", "unpaid", "prepaid", "valid", "invalid", "android", "avoid", "devoid", "void", "said", "rapid",
+	"fluid", "liquid", "hybrid", "grid", "acid", "solid", "humid", "vivid", "lucid", "druid", "pyramid",
+	"stupid", "timid", "tepid", "rigid", "candid", "splendid", "morbid", "cupid", "squid", "plaid",
+	"braid", "maid", "raid", "arid",
 }
 
 // identifierProperty reports whether a property name looks like it names an
-// identifier: any of its words (split on _ . : - and on camelCase) is one of
-// identifierWords.
+// identifier. Each of its words (split on _ . : - and on camelCase) and the
+// whole name run together are tried: a word in identifierWords, a stem of
+// identifierStems anywhere, or an "id"/"ids" ending that is not an idWords
+// word.
 func identifierProperty(p string) bool {
-	for _, w := range words(p) {
-		if identifierWords[w] {
+	ws := words(p)
+	candidates := append(ws, strings.Join(ws, ""))
+	for _, w := range candidates {
+		if identifierWords[w] || idEnding(w) {
 			return true
+		}
+		for _, s := range identifierStems {
+			if strings.Contains(w, s) {
+				return true
+			}
 		}
 	}
 	return false
+}
+
+// idEnding reports whether w ends in "id" or "ids" other than as one of
+// idWords.
+func idEnding(w string) bool {
+	w = strings.TrimSuffix(w, "s")
+	if !strings.HasSuffix(w, "id") {
+		return false
+	}
+	for _, ok := range idWords {
+		if strings.HasSuffix(w, ok) {
+			return false
+		}
+	}
+	return true
 }
 
 // words splits a name on its separators and camelCase humps, lowercased:
@@ -76,16 +124,12 @@ func words(s string) []string {
 	return out
 }
 
-// validate checks q again, whatever the caller did: the domain's rules
-// (gtm.AnalyticsQuery.Validate), then this package's own: names, the sql
-// templates' shorter window, distinct funnel steps and no identifier
-// property.
+// validate checks q again, whatever the caller did: this package's own rules
+// (names, the sql templates' window, distinct funnel steps, no identifier
+// property), then the domain's (gtm.AnalyticsQuery.Validate).
 func validate(orgID string, q gtm.AnalyticsQuery) error {
 	if strings.TrimSpace(orgID) == "" {
 		return ErrNoOrg
-	}
-	if err := q.Validate(); err != nil {
-		return err
 	}
 	for _, e := range q.Events {
 		if !validName(e) {
@@ -112,5 +156,7 @@ func validate(orgID string, q gtm.AnalyticsQuery) error {
 	if q.Template != gtm.AnalyticsFunnel && q.To.Sub(q.From) > MaxSQLWindow {
 		return ErrWindowTooLong
 	}
-	return nil
+	// This package's own rules come first, so their fixed errors are what a
+	// caller sees; the domain's rules then cover the rest.
+	return q.Validate()
 }

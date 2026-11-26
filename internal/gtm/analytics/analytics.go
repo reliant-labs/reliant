@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"net"
 	"net/http"
+	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -97,15 +100,48 @@ func newClient(d Deps) *client {
 	return &client{cp: d.CP, token: d.Token, log: log}
 }
 
+// ErrInsecureControlPlaneURL is a control-plane URL the analytics token
+// would cross in the clear: anything but https, or http to a loopback host.
+var ErrInsecureControlPlaneURL = errors.New("analytics: the control-plane URL must be https (http only to a loopback host)")
+
 // NewObservabilityClient is the control plane's ObservabilityService at
-// baseURL (ControlPlaneConfig.url), over an instrumented HTTP client.
-func NewObservabilityClient(baseURL string) ObservabilityClient {
+// baseURL (ControlPlaneConfig.url), over an instrumented HTTP client. The
+// bearer token rides on every request, so baseURL must be https, or http to
+// a loopback host (a local control plane); anything else is
+// ErrInsecureControlPlaneURL.
+func NewObservabilityClient(baseURL string) (ObservabilityClient, error) {
 	return NewObservabilityClientWith(observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second}), baseURL)
 }
 
 // NewObservabilityClientWith is NewObservabilityClient over httpClient.
-func NewObservabilityClientWith(httpClient *http.Client, baseURL string) ObservabilityClient {
-	return controlplanev1connect.NewObservabilityServiceClient(httpClient, strings.TrimRight(baseURL, "/"))
+func NewObservabilityClientWith(httpClient *http.Client, baseURL string) (ObservabilityClient, error) {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if err := checkControlPlaneURL(base); err != nil {
+		return nil, err
+	}
+	return controlplanev1connect.NewObservabilityServiceClient(httpClient, base), nil
+}
+
+// checkControlPlaneURL refuses a base URL that is not https, except http to
+// localhost or a loopback IP.
+func checkControlPlaneURL(base string) error {
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" || u.User != nil {
+		return ErrInsecureControlPlaneURL
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		host := u.Hostname()
+		if host == "localhost" {
+			return nil
+		}
+		if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+			return nil
+		}
+	}
+	return ErrInsecureControlPlaneURL
 }
 
 // Query runs q over orgID's product events.
@@ -197,7 +233,8 @@ func mapCPError(err error) error {
 	return gtm.ErrAnalyticsFailed
 }
 
-// decode reads resp as q's result.
+// decode reads resp as q's result. Every string a row carries from the
+// control plane goes through redact.
 func decode(q gtm.AnalyticsQuery, resp *obsv1.QueryPanelResponse) (gtm.AnalyticsResult, error) {
 	res := gtm.AnalyticsResult{Template: q.Template, From: q.From, To: q.To, Truncated: resp.GetTruncated()}
 	if q.Template == gtm.AnalyticsFunnel {
@@ -206,6 +243,9 @@ func decode(q gtm.AnalyticsQuery, resp *obsv1.QueryPanelResponse) (gtm.Analytics
 			return gtm.AnalyticsResult{}, fmt.Errorf("funnel: %d steps for %d events", len(steps), len(q.Events))
 		}
 		for i, s := range steps {
+			if s.GetEvent() != q.Events[i] {
+				return gtm.AnalyticsResult{}, fmt.Errorf("funnel: step %d is %q, want %q", i+1, s.GetEvent(), q.Events[i])
+			}
 			res.Rows = append(res.Rows, gtm.AnalyticsRow{
 				Event: q.Events[i],
 				Step:  i + 1,
@@ -216,40 +256,53 @@ func decode(q gtm.AnalyticsQuery, resp *obsv1.QueryPanelResponse) (gtm.Analytics
 		return res, nil
 	}
 
-	count, groups := -1, -1
-	for i, col := range resp.GetColumns() {
-		switch col {
-		case countColumn:
-			count = i
-		case groupsColumn:
-			groups = i
+	col := map[string]int{countColumn: -1, groupsColumn: -1, hiddenColumn: -1}
+	for i, c := range resp.GetColumns() {
+		if _, ok := col[c]; ok {
+			col[c] = i
 		}
 	}
-	if count < 0 {
-		return gtm.AnalyticsResult{}, errors.New("sql: no count column")
+	if col[countColumn] < 0 || col[groupsColumn] < 0 {
+		return gtm.AnalyticsResult{}, errors.New("sql: missing a count column")
 	}
-	total := int64(0)
+	kAnon := q.Template != gtm.AnalyticsEventTrend
+	if kAnon && col[hiddenColumn] < 0 {
+		return gtm.AnalyticsResult{}, errors.New("sql: no hidden_groups column")
+	}
+	total, summaries := int64(0), 0
 	for _, r := range resp.GetRows() {
 		missing := make(map[int]bool, len(r.GetMissingValueIndexes()))
 		for _, m := range r.GetMissingValueIndexes() {
 			missing[int(m)] = true
 		}
-		value := func(i int) int64 {
+		value := func(name string) int64 {
+			i := col[name]
 			if i < 0 || i >= len(r.GetValues()) || missing[i] {
 				return 0
 			}
 			return int64(r.GetValues()[i])
 		}
-		if n := value(groups); n > total {
+		g := r.GetGroup()
+		if kAnon {
+			switch g[kindColumn] {
+			case kindSummary:
+				summaries++
+				total = value(groupsColumn)
+				res.HiddenGroups = int(value(hiddenColumn))
+				continue
+			case kindGroup:
+			default:
+				return gtm.AnalyticsResult{}, fmt.Errorf("sql: row kind %q", g[kindColumn])
+			}
+		} else if n := value(groupsColumn); n > total {
 			total = n
 		}
-		row := gtm.AnalyticsRow{Count: value(count)}
-		g := r.GetGroup()
+		row := gtm.AnalyticsRow{Count: value(countColumn)}
 		switch q.Template {
 		case gtm.AnalyticsEventCounts:
-			row.Event = g[eventColumn]
+			row.Event = redact(g[eventColumn])
 		case gtm.AnalyticsEventTrend:
-			row.Event = g[eventColumn]
+			row.Event = redact(g[eventColumn])
 			day, err := time.Parse(time.DateOnly, g[dayColumn])
 			if err != nil {
 				return gtm.AnalyticsResult{}, fmt.Errorf("sql: day %q: %w", g[dayColumn], err)
@@ -257,12 +310,39 @@ func decode(q gtm.AnalyticsQuery, resp *obsv1.QueryPanelResponse) (gtm.Analytics
 			row.Day = day
 		case gtm.AnalyticsPropertyBreakdown:
 			row.Event = q.Events[0]
-			row.Value = g[valueColumn]
+			row.Value = redact(g[valueColumn])
 		}
 		res.Rows = append(res.Rows, row)
 	}
+	if kAnon && summaries != 1 {
+		return gtm.AnalyticsResult{}, fmt.Errorf("sql: %d summary rows", summaries)
+	}
+	// A union's rows come back in no set order: put them in the template's.
+	if q.Template == gtm.AnalyticsEventTrend {
+		// The statement took the newest days under its LIMIT; the answer
+		// reads oldest first.
+		sort.SliceStable(res.Rows, func(i, j int) bool {
+			a, b := res.Rows[i], res.Rows[j]
+			if !a.Day.Equal(b.Day) {
+				return a.Day.Before(b.Day)
+			}
+			return a.Event < b.Event
+		})
+	} else {
+		sort.SliceStable(res.Rows, func(i, j int) bool {
+			a, b := res.Rows[i], res.Rows[j]
+			if a.Count != b.Count {
+				return a.Count > b.Count
+			}
+			return a.Event+"\x00"+a.Value < b.Event+"\x00"+b.Value
+		})
+	}
 	if len(res.Rows) > q.Limit {
-		res.Rows = res.Rows[:q.Limit]
+		if q.Template == gtm.AnalyticsEventTrend {
+			res.Rows = res.Rows[len(res.Rows)-q.Limit:]
+		} else {
+			res.Rows = res.Rows[:q.Limit]
+		}
 		res.Truncated = true
 	}
 	if total > int64(len(res.Rows)) {

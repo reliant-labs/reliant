@@ -69,21 +69,38 @@ func FuzzName(f *testing.F) {
 		}
 		q := gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{s}, Property: "route", From: from, To: to, Limit: 5}
 		if err := validate(tenantZero, q); err == nil {
-			if sql := buildSQL(q); strings.Count(sql, "'") != 4 {
-				t.Fatalf("a name changed the statement's quoting:\n%s", sql)
+			plain := q
+			plain.Events = []string{"x"}
+			if sql := buildSQL(q); strings.Count(sql, "'") != strings.Count(buildSQL(plain), "'") ||
+				strings.Replace(sql, "EventName = "+lit(s), "EventName = "+lit("x"), 1) != buildSQL(plain) {
+				t.Fatalf("a name changed the statement beyond its literal:\n%s", sql)
 			}
 		}
 	})
 }
 
 func TestIdentifierProperty(t *testing.T) {
-	for _, p := range []string{"userId", "user_id", "UserID", "user", "session.id", "sessionId", "email", "emailAddress",
-		"ip", "client_ip", "uuid", "anonId", "orgId", "org", "api_key", "token", "visitor", "deviceId", "id", "account_id", "HTTPUserID"} {
+	for _, p := range []string{
+		"userId", "user_id", "UserID", "user", "session.id", "sessionId", "email", "emailAddress",
+		"ip", "client_ip", "uuid", "anonId", "orgId", "org", "api_key", "token", "visitor", "deviceId", "id", "account_id", "HTTPUserID",
+		// All-lowercase compounds and the words a first cut missed (review of #3843).
+		"customerid", "accountid", "visitorid", "anonymousid", "clientid", "orgid", "traceid", "emailaddress", "useremail",
+		"ipaddress", "phonenumber", "apikey", "accesskey", "x-forwarded-for", "name", "full_name", "first_name", "lastName",
+		"login", "handle", "address", "ssn", "dob", "card", "iban", "fingerprint", "cookie", "jwt", "gclid", "fbclid",
+		"msclkid", "idfa", "adid", "imei",
+		// More of the same shapes.
+		"plan_id", "planids", "user-agent", "userAgent", "MAC", "mac_address", "sessionuuid", "access_token", "refresh-token",
+		"password", "credit_card", "cardNumber", "birthDate", "date_of_birth", "screenName", "username", "ttclid", "wbraid",
+	} {
 		if !identifierProperty(p) {
 			t.Errorf("identifierProperty(%q) = false, want true (words %v)", p, words(p))
 		}
 	}
-	for _, p := range []string{"route", "plan", "paid", "android", "valid", "browser", "country", "referrer", "utm_source", "status", "variant", "HTTPStatus", "flag"} {
+	for _, p := range []string{
+		"route", "plan", "paid", "android", "valid", "browser", "country", "referrer", "utm_source", "status", "variant",
+		"HTTPStatus", "flag", "is_valid", "prepaid", "android_version", "device_type", "client", "account_type", "theme",
+		"locale", "os", "region", "utm_campaign", "tier", "billing.interval", "hybrid_mode", "grid",
+	} {
 		if identifierProperty(p) {
 			t.Errorf("identifierProperty(%q) = true, want false (words %v)", p, words(p))
 		}
