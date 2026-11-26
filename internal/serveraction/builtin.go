@@ -9,7 +9,28 @@ package serveraction
 // each with its Handler bound on the worker (app.WorkerServerActions). Every
 // one of them runs only while the server's pipeline.enabled switch is on.
 func builtinSpecs() []Spec {
-	return prSpecs()
+	return append(prSpecs(), queueSpecs()...)
+}
+
+// QueueEnqueue is the queue.enqueue action (pipeline build plan M7;
+// internal/mergequeue.EnqueueHandler).
+const QueueEnqueue = "reliant/queue.enqueue@1"
+
+func queueSpecs() []Spec {
+	return []Spec{{
+		Name:        QueueEnqueue,
+		Description: "Put the PR's current head in the merge queue, if the server finds it admissible",
+		Params: map[string]any{
+			"type":                 "object",
+			"required":             []any{"record_id"},
+			"additionalProperties": false,
+			"properties": map[string]any{
+				"record_id": map[string]any{"type": "string", "minLength": 1},
+				"head":      map[string]any{"type": "string"},
+			},
+		},
+		Mutates: true,
+	}}
 }
 
 // The pr.* actions (pipeline build plan M5; internal/pipeline/practions).
