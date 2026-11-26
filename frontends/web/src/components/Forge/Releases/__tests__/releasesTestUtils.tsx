@@ -2,25 +2,26 @@
 
 /**
  * Renders a Releases page the way the console does — a query client, the
- * ReleasesApi and ObservabilityApi seams (fixtures), and URL state held in
+ * fixture ledger served as DeployService (ReleasesFixtureScope), the
+ * ObservabilityApi seam (fixtures), and URL state held in
  * component state so a test can click and assert on what changed. Every test
  * file mocks `@tanstack/react-router`'s useNavigate (forge-ui Link needs it).
  */
 
 import { useState, type ReactElement } from "react";
 import { render, type RenderResult } from "@testing-library/react";
-import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import type { QueryClient } from "@tanstack/react-query";
 import { vi } from "vitest";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import type { PromotionList } from "@/services/controlPlane/observability/deliveryTypes";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { ReleasesApiProvider, type ReleasesApi } from "@/services/forge/ReleasesApiContext";
 
 import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
 import { ReleaseDetail, type ReleaseDetailSearch } from "../ReleaseDetail";
 import { ReleasesList, type PromoteControl, type ReleasesSearch } from "../ReleasesList";
-import { FIXTURE_DELIVERY, FIXTURE_DORA, RELEASE_ENVS, RELEASE_PROJECT } from "../__fixtures__/releaseFixtures";
+import { FIXTURE_DELIVERY, FIXTURE_DORA, RELEASE_ENVS, RELEASE_PROJECT, type ReleasesFixtureApi } from "../__fixtures__/releaseFixtures";
+import { ReleasesFixtureScope } from "../__fixtures__/releaseFixtureTransport";
 
 export function fixtureObsApi(over: Partial<ObservabilityApi> = {}): ObservabilityApi {
   return {
@@ -35,13 +36,11 @@ export function fixtureObsApi(over: Partial<ObservabilityApi> = {}): Observabili
   };
 }
 
-function wrap(api: ReleasesApi, obs: ObservabilityApi, ui: ReactElement, client = createTestQueryClient()): RenderResult {
+function wrap(api: ReleasesFixtureApi, obs: ObservabilityApi, ui: ReactElement, client = createTestQueryClient()): RenderResult {
   return render(
-    <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={obs}>
-        <ReleasesApiProvider api={api}>{ui}</ReleasesApiProvider>
-      </ObservabilityApiProvider>
-    </QueryClientProvider>
+    <ReleasesFixtureScope api={api} client={client}>
+      <ObservabilityApiProvider api={obs}>{ui}</ObservabilityApiProvider>
+    </ReleasesFixtureScope>
   );
 }
 
@@ -53,7 +52,7 @@ export interface Harness<S> extends RenderResult {
 }
 
 export function renderList(
-  api: ReleasesApi,
+  api: ReleasesFixtureApi,
   {
     env = "prod",
     search = {},
@@ -92,7 +91,7 @@ export function renderList(
 }
 
 export function renderDetail(
-  api: ReleasesApi,
+  api: ReleasesFixtureApi,
   version: string,
   { env = "prod", search = {}, blocked = null }: { env?: string; search?: ReleaseDetailSearch; blocked?: string | null } = {}
 ): Harness<ReleaseDetailSearch> {

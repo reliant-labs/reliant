@@ -74,7 +74,7 @@ import {
   useGetDeployStatus,
   useStartDeploy,
 } from "./forge-service-hooks_gen";
-import { releaseKeys } from "./release-queries";
+import { invalidateReleaseReadsInOrg } from "./release-queries";
 import {
   cloudAvailabilityFromError,
   cloudErrorDetail,
@@ -171,8 +171,9 @@ function orgCloudKey<Args extends readonly string[]>(name: string) {
  * The control plane's reads, which have no generated hooks. Keyed by the FORGE
  * project name and the control plane's environment id — not the Reliant
  * project id — because that is what the control plane knows them by. Under
- * ["forge"], beside the Releases (`releaseKeys`) and Domains (`domainKeys`)
- * families, which are control-plane reads too.
+ * ["forge"], beside the Domains (`domainKeys`) family, a control-plane read
+ * too. The Releases pages' reads are on DeployService's generated keys
+ * (hooks/release-queries.ts).
  */
 export const forgeCloudKeys = {
   all: ["forge"] as const,
@@ -1062,7 +1063,7 @@ export function useApplyForgePromote(projectId: string | null | undefined) {
         const response = await applyPromote(request);
         // The Releases pages (every ledger and rollout) and the Live view of
         // the org it ran in moved; another org's did not.
-        void queryClient.invalidateQueries({ queryKey: releaseKeys.org(orgId) });
+        void invalidateReleaseReadsInOrg(queryClient, orgId);
         void queryClient.invalidateQueries({ queryKey: [...forgeCloudKeys.liveView.all, orgId ?? ""] });
         return appliedPromoteOf(response);
       } catch (error) {

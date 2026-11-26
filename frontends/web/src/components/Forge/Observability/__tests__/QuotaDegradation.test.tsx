@@ -36,7 +36,7 @@ import { createFixtureApi } from "../__fixtures__/fixtureApi";
 import { OverviewHome } from "../../Workloads/OverviewHome";
 import { STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture } from "../../Workloads/__fixtures__/workloadFixtures";
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
+import { ReleasesFixtureScope } from "../../Releases/__fixtures__/releaseFixtureTransport";
 import { RepoMetaProvider } from "@/services/forge/RepoMetaContext";
 import { ObsAsOf, ObsQuotaBanner } from "../ObsStates";
 
@@ -287,13 +287,13 @@ describe("when the allowance runs out", () => {
   it("retains the Services list's request figures and error-log links with an as-of badge during the pause", async () => {
     const r = rig();
     render(
-      <ReleasesApiProvider api={createReleasesFixtureApi()}>
+      <ReleasesFixtureScope api={createReleasesFixtureApi()}>
         <RepoMetaProvider api={createRepoMetaFixture()}>
           <OverviewHome project={WORKLOADS_PROJECT} env="prod" envs={STRIP_ENVS} envsLoading={false}
             search={{ range: "1h" }} onSearch={vi.fn()} navigateTo={vi.fn()}
             hrefs={{ workload: (name) => `/workloads/${name}`, release: (version) => `/releases/${version}`, releases: "/releases", alerts: "/alerts", scoped: (env) => `/overview?env=${env}` }} />
         </RepoMetaProvider>
-      </ReleasesApiProvider>,
+      </ReleasesFixtureScope>,
       { wrapper: r.wrapper }
     );
     await flush();

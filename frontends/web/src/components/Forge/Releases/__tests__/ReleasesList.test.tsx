@@ -11,9 +11,14 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { releaseKeys } from "@/hooks/release-queries";
+import { create } from "@bufbuild/protobuf";
+
+import { ListDeployPromotionsResponseSchema } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
+import { deployServiceKeys } from "@/hooks/controlplane/deploy-service-hooks_gen";
+import { promotionsRequest } from "@/hooks/release-queries";
 
 import { PROMOTIONS, RELEASES, createReleasesFixtureApi } from "../__fixtures__/releaseFixtures";
+import { wirePromotion } from "../__fixtures__/releaseFixtureTransport";
 import { fixtureObsApi, renderList } from "./releasesTestUtils";
 
 vi.mock("@tanstack/react-router", async (importOriginal) => ({
@@ -204,7 +209,10 @@ describe("review edge cases", () => {
     const index = ledger.findIndex((p) => p.releaseVersion === V[1]);
     const late = { ...ledger[index]!, gates: [...ledger[index]!.gates, { name: "smoke", status: "failed" as const, rawStatus: "", summary: "", url: "", recordedBy: "", finishedAt: new Date().toISOString(), source: "recorded" as const }] };
     act(() => {
-      harness.client.setQueryData(releaseKeys.promotions(null, "env-prod"), ledger.map((p, i) => (i === index ? late : p)));
+      harness.client.setQueryData(
+        deployServiceKeys.listPromotions(promotionsRequest("env-prod", null)),
+        create(ListDeployPromotionsResponseSchema, { promotions: ledger.map((p, i) => wirePromotion(i === index ? late : p)) }),
+      );
     });
     await waitFor(() => expect(row(V[1]!)).toHaveTextContent("2/3"));
   });
