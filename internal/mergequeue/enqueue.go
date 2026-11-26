@@ -14,7 +14,7 @@ import (
 
 // EnqueueAction is the queue.enqueue server action's name. Its Spec is in
 // serveraction's builtin catalog.
-const EnqueueAction = "reliant/queue.enqueue@1"
+const EnqueueAction = serveraction.QueueEnqueue
 
 // EnqueueHandler implements queue.enqueue@1: `with: {record_id}`. It
 // recomputes admission on the server (§3.1) from DB state and the

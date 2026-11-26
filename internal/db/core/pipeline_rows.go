@@ -48,13 +48,19 @@ type PipelineRepo struct {
 	BaseBranch           string
 	Mode                 PipelineRepoMode
 	// ConfigSHA and ConfigJSON are the validated .reliant/pipeline.yaml at
-	// that sha of BaseBranch; empty until it has been read.
-	ConfigSHA               string
-	ConfigJSON              json.RawMessage
-	QueueState              PipelineQueueState
-	QueuePausedByDecisionID string
-	CreatedByUserID         string
-	CreatedAt, UpdatedAt    time.Time
+	// that sha of BaseBranch; empty until it has been read. ConfigJSON is
+	// the file as JSON: JSON is YAML, so config.Parse (or config.Load)
+	// reads it back.
+	ConfigSHA  string
+	ConfigJSON json.RawMessage
+	// ConfigError is why the file read from BaseBranch at ConfigErrorSHA
+	// was not recorded (missing, unreadable, invalid); the config above
+	// stayed in force. Empty once a valid file is recorded.
+	ConfigError, ConfigErrorSHA string
+	QueueState                  PipelineQueueState
+	QueuePausedByDecisionID     string
+	CreatedByUserID             string
+	CreatedAt, UpdatedAt        time.Time
 	// Version is the compare-and-set counter: every Set* names the version
 	// it read.
 	Version int64
@@ -71,6 +77,21 @@ type PipelineRepoEnrolment struct {
 	// BaseBranch defaults to main.
 	BaseBranch      string
 	CreatedByUserID string
+}
+
+// PipelineConfigChange is a gate stage a pipeline.yaml change on the base
+// branch turned off or back on: one pipeline_setting_changes row with
+// changed_via config, recorded with the config that carried it. The
+// repository, its org and project, and the config sha are the config's.
+type PipelineConfigChange struct {
+	Setting            PipelineSetting
+	OldValue, NewValue string
+	// ConfigRecordID is the PR that landed the change; empty when it is
+	// not known (a direct push).
+	ConfigRecordID string
+	// The actor at the provider: the merging PR's author, else whoever
+	// pushed. All three are required.
+	ChangedByProvider, ChangedByProviderUserID, ChangedByLogin string
 }
 
 // PRPipeline is one PR's place in the pipeline's state machine

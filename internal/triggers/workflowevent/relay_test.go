@@ -127,9 +127,15 @@ func TestDispatchWorkflowRunsTheActivityForItsEvent(t *testing.T) {
 // activity does, and returns it without claiming it.
 func emitFinished(ctx context.Context, f *fixture, chatID string) (*core.RunEvent, error) {
 	f.t.Helper()
+	return emitFinishedAs(ctx, f, chatID, "code-review")
+}
+
+// emitFinishedAs is emitFinished for a run of workflowName.
+func emitFinishedAs(ctx context.Context, f *fixture, chatID, workflowName string) (*core.RunEvent, error) {
+	f.t.Helper()
 	runID := "run-" + chatID
 	if _, err := runevents.EmitTerminal(ctx, runevents.NewStore(f.repo.ORM()), runevents.Terminal{
-		ChatID: chatID, WorkflowID: chatID, WorkflowName: "code-review", RunID: runID, Outcome: core.RunEventFinished,
+		ChatID: chatID, WorkflowID: chatID, WorkflowName: workflowName, RunID: runID, Outcome: core.RunEventFinished,
 	}, time.Now().UTC()); err != nil {
 		return nil, err
 	}
