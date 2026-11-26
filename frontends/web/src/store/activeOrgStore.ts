@@ -218,7 +218,11 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "observability-billing",
   "forge",
   "forgeService",
+  // hooks/identity-queries.ts: the caller's org outside the org tree, then
+  // every IdentityService read on its generated keys (an environment's
+  // sign-in service, its users).
   "identity",
+  "controlplane.v1.IdentityService",
   "dashboards",
   "deploy-usage",
   // Generated DeployService reads (hooks/controlplane): usage rows, the collection policy's environments.
