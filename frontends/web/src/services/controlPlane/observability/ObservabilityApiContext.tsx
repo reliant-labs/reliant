@@ -116,7 +116,8 @@ export interface ObservabilityApi {
 /**
  * The real client on `transport`: a TransportScope's (lib/transportScope.tsx),
  * or undefined for the app's. Each method hands it to its RPC function, which
- * passes it to obsClient / getControlPlaneClient.
+ * passes it to getControlPlaneClient. A scope's transport skips the app's
+ * observability read stage (obsInterceptors.ts): no read queue, no quota guard.
  */
 function apiOn(transport: Transport | undefined): ObservabilityApi {
   return {

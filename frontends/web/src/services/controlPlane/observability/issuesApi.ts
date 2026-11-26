@@ -34,7 +34,8 @@ import {
   type IssueTimelineEntry as WireTimelineEntry,
 } from "@/gen/controlplane/services/issues/v1/issues_pb";
 
-import { obsClient } from "./obsClient";
+import { getControlPlaneClient } from "../client";
+import { obsCall } from "./obsInterceptors";
 import { msOf } from "./api";
 import type {
   AddIssueCommentRequest,
@@ -63,7 +64,7 @@ import type {
 import { mapClient } from "./client";
 
 function client(transport?: Transport) {
-  return obsClient(IssuesService, transport);
+  return getControlPlaneClient(IssuesService, transport);
 }
 
 function timestamp(ms: number): Timestamp {
@@ -253,7 +254,7 @@ export async function listIssues(req: ListIssuesRequest, options: { signal?: Abo
     sort: WIRE_SORT[req.sort],
     pageSize: req.pageSize ?? 0,
     pageToken: req.pageToken ?? "",
-  }, options);
+  }, obsCall(options));
   return { issues: res.issues.map(mapIssue), nextPageToken: res.nextPageToken };
 }
 
@@ -262,13 +263,13 @@ export async function getIssue(req: { issueId: string; window?: { startMs: numbe
   const res = await client(transport).getIssue({
     issueId: req.issueId,
     timeRange: req.window ? { start: timestamp(req.window.startMs), end: timestamp(req.window.endMs) } : undefined,
-  }, options);
+  }, obsCall(options));
   return mapIssueDetail(res);
 }
 
 /** One issue's events, newest first, a page at a time (default range: its first to its last event). */
 export async function listIssueEvents(req: { issueId: string; pageSize?: number; pageToken?: string; userId?: string }, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<IssueEventList> {
-  const res = await client(transport).listIssueEvents({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "", userId: req.userId || undefined }, options);
+  const res = await client(transport).listIssueEvents({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "", userId: req.userId || undefined }, obsCall(options));
   return { events: res.events.map(mapIssueEvent), nextPageToken: res.nextPageToken };
 }
 
@@ -333,7 +334,7 @@ export async function linkIssueChat(req: LinkIssueChatRequest, transport?: Trans
 
 /** One page of an issue's timeline, oldest first. A merged issue answers with the issue it was merged into (`issueId`). */
 export async function listIssueTimeline(req: { issueId: string; pageSize?: number; pageToken?: string }, transport?: Transport): Promise<IssueTimelineList> {
-  const res = await client(transport).listIssueTimeline({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" });
+  const res = await client(transport).listIssueTimeline({ issueId: req.issueId, pageSize: req.pageSize ?? 0, pageToken: req.pageToken ?? "" }, obsCall());
   const entries = res.entries.map(mapTimelineEntry).filter((e): e is IssueTimelineEntry => e !== null);
   return { entries, nextPageToken: res.nextPageToken, issueId: res.issueId || req.issueId };
 }

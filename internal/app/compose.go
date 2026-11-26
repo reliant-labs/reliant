@@ -486,6 +486,7 @@ func (g *Graph) newPauseService() (*v2workflow.PauseService, error) {
 	return NewPauseService(PauseServiceDeps{
 		Temporal: g.TemporalClient(),
 		DB:       g.Database(),
+		Updates:  g.chatUpdates(),
 	})
 }
 
