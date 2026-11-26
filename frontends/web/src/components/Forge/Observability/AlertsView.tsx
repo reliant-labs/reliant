@@ -78,6 +78,22 @@ export function observabilityOff(env: ObsEnvironment): boolean {
   return env.declared?.observability?.enabled === false;
 }
 
+/**
+ * Whether an alert on `envId` belongs on this page. An env page's read is
+ * already narrowed by the server. A project page shows its picked
+ * environments, or with none picked every environment of the project, never
+ * another project's, nor an alert on no environment at all (an org-level
+ * rule, such as one on an ML run). The org page shows the picked
+ * environments, or everything.
+ */
+export function alertInView(place: ObsPlace, envIds: readonly string[]): (envId: string) => boolean {
+  if (place.kind === "env") return () => true;
+  if (envIds.length) return (envId) => envIds.includes(envId);
+  if (place.kind === "org") return () => true;
+  const own = new Set(place.environments.map((env) => env.id));
+  return (envId) => own.has(envId);
+}
+
 export interface AlertsViewProps {
   orgId: string;
   place: ObsPlace;
@@ -96,9 +112,9 @@ export function AlertsView({ orgId, place, envIds, range, tab, rule, navigate }:
   }, [place, envIds]);
   // The server narrows by one env id; several are filtered here.
   const serverEnv = environments.length === 1 ? environments[0].id : undefined;
-  const inView = (envId: string) => !envIds.length || envIds.includes(envId) || place.kind === "env";
+  const inView = useMemo(() => alertInView(place, envIds), [place, envIds]);
   const alerts = useAlerts(orgId, serverEnv);
-  const firing = useMemo(() => (alerts.data ?? []).filter((a) => inView(a.envId)), [alerts.data, envIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  const firing = useMemo(() => (alerts.data ?? []).filter((a) => inView(a.envId)), [alerts.data, inView]);
   const rules = useMemo(() => declaredRules(environments), [environments]);
   // The demo starts read-only (obsReadOnly.tsx); elsewhere a refused write makes it so.
   const demo = useObsReadOnly();
