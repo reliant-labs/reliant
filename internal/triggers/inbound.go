@@ -73,6 +73,10 @@ type AcceptOptions struct {
 	Batch *Batch
 	// Receipt links a targeted durable receipt to its first event atomically.
 	Receipt *IntakeReceipt
+	// ExplicitDedupeKey marks InboundEvent.DedupeKey as a caller's own
+	// idempotency key: a declared dedupe_key does not replace it, so a repeat
+	// of the same key always names the same event.
+	ExplicitDedupeKey bool
 }
 
 // IntakeReceipt fences event creation when processing one durable webhook.
@@ -89,6 +93,9 @@ type AcceptResult struct {
 	// Duplicate means a row for this (kind, dedupe key) already existed and
 	// nothing new was written. EventID and Outcome are that row's.
 	Duplicate bool
+	// ChatID is the chat the event launched, or will launch while it is
+	// pending (EventChatID); empty when the event settled without a run.
+	ChatID string
 }
 
 // Intake records arrived events and starts their fires.
@@ -202,6 +209,12 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		}
 		decl, err = activationFor(ctx, PinnedTo(workflows, def), trigger)
 	}
+	// A person's "run now" may supply inputs for this firing; they count
+	// toward what the activation needs, as they do at launch.
+	setupTrigger := trigger
+	if opts.Manual {
+		setupTrigger = WithFireParams(trigger, FireInputsOf(ev.Payload, ev.Sender))
+	}
 	// Who caused the event is resolved BEFORE any filter, because the filters
 	// read it, and is frozen on the row so the history can explain a skip.
 	origin := in.enrich(ctx, trigger, &ev)
@@ -214,14 +227,14 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		outcome, detail = core.TriggerEventFailed, err.Error()
 	case err != nil:
 		return nil, fmt.Errorf("resolve trigger %s's declaration: %w", trigger.ID, err)
-	case len(SetupIssues(decl, trigger)) > 0:
+	case len(SetupIssues(decl, setupTrigger)) > 0:
 		// An activation that was never finished (or whose workflow has since
 		// grown a required input) cannot launch anything, and its filter reads
 		// the very params that are missing, so evaluating it would only
 		// report a misleading "did not match". Say what is wrong instead.
 		// Recorded as skipped, not failed: the automation did not break, it is
 		// waiting for its owner, and health reads that from the workflow.
-		outcome, detail = core.TriggerEventSkipped, SetupDetail(SetupIssues(decl, trigger))
+		outcome, detail = core.TriggerEventSkipped, SetupDetail(SetupIssues(decl, setupTrigger))
 	case !opts.Manual:
 		outcome, detail = in.applyOriginGuards(ctx, trigger, decl, ev, origin, occurredAt)
 		if outcome == core.TriggerEventPending {
@@ -237,7 +250,10 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	if opts.Receipt != nil {
 		dedupeAt = opts.Receipt.ReceivedAt
 	}
-	dedupeKey := in.declaredDedupeKeyAt(ctx, trigger, decl, ev, occurredAt, dedupeAt)
+	dedupeKey := ev.DedupeKey
+	if !opts.ExplicitDedupeKey {
+		dedupeKey = in.declaredDedupeKeyAt(ctx, trigger, decl, ev, occurredAt, dedupeAt)
+	}
 	row := &core.TriggerEvent{
 		ID:            uuid.NewString(),
 		TriggerID:     &trigger.ID,
@@ -276,6 +292,12 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 
 func (in *Intake) startRecordedEvent(ctx context.Context, triggerID string, row *core.TriggerEvent, duplicate, manual bool) *AcceptResult {
 	res := &AcceptResult{EventID: row.ID, Outcome: row.Outcome, Detail: row.OutcomeDetail, Duplicate: duplicate}
+	switch {
+	case row.ChatID != nil:
+		res.ChatID = *row.ChatID
+	case row.Outcome == core.TriggerEventPending:
+		res.ChatID = EventChatID(row.Kind, row.DedupeKey)
+	}
 	if row.Outcome == core.TriggerEventPending {
 		// A crash after the write is repaired by the redriver. Re-delivery
 		// names the same event and does not create a second launch intent.

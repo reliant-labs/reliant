@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/sdk/go/gen/reliant/v1/reliantv1connect"
@@ -106,6 +107,41 @@ type Fired struct {
 	// launched, or use [TriggersClient.Fire] with a follow-up
 	// [TriggersClient.Events].
 	FireWorkflowID string
+	// EventID is the firing's event (TriggerEvent.Id). With
+	// [WithFireIdempotencyKey], a repeated key returns the first request's.
+	// Empty for a schedule trigger, whose event is recorded when its fire runs.
+	EventID string
+	// ChatID is the run's session, once it launches (TriggerEvent.ChatId).
+	// Empty for a schedule trigger and for an event that did not launch.
+	ChatID string
+}
+
+// FireOption adjusts one [TriggersClient.Fire].
+type FireOption func(*fireConfig)
+
+type fireConfig struct {
+	inputs map[string]any
+	key    *string
+}
+
+// WithFireInputs supplies workflow inputs for this one firing, by input name.
+// Each name must be an input the trigger's workflow declares, set neither by
+// the activation nor from each event, and each value must fit its type: the
+// server refuses the call (ErrInvalidArgument) otherwise. Only an event
+// trigger (webhook, integration, workflow event) that activates a declared
+// workflow trigger takes inputs. Values are JSON-shaped: strings, numbers,
+// bools, nil, []any and map[string]any.
+func WithFireInputs(inputs map[string]any) FireOption {
+	return func(c *fireConfig) { c.inputs = inputs }
+}
+
+// WithFireIdempotencyKey makes the fire safe to retry. A call that repeats a
+// key already used on this trigger starts nothing and returns the first call's
+// event and session (Fired.EventID, Fired.ChatID), whatever inputs the repeat
+// carries. The key is 1 to 255 printable ASCII characters with no spaces, and
+// belongs to the trigger. Only an event trigger takes one.
+func WithFireIdempotencyKey(key string) FireOption {
+	return func(c *fireConfig) { c.key = &key }
 }
 
 // Fire fires a trigger now, by id or name. A manual fire is the caller saying
@@ -113,17 +149,41 @@ type Fired struct {
 //
 // The firing is asynchronous: Fire returns once it is accepted, not once a run
 // exists. List [TriggersClient.Events] for the outcome and the run it launched.
-func (t *TriggersClient) Fire(ctx context.Context, idOrName string) (*Fired, error) {
+//
+// With no options it behaves as it always has. [WithFireInputs] and
+// [WithFireIdempotencyKey] are for an event trigger.
+func (t *TriggersClient) Fire(ctx context.Context, idOrName string, opts ...FireOption) (*Fired, error) {
 	const op = "triggers.fire"
+	var cfg fireConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	req := &reliantv1.FireTriggerRequest{IdempotencyKey: cfg.key}
+	if len(cfg.inputs) > 0 {
+		req.Inputs = make(map[string]*structpb.Value, len(cfg.inputs))
+		for name, v := range cfg.inputs {
+			val, err := structpb.NewValue(v)
+			if err != nil {
+				return nil, t.c.fail(op, ErrInvalidArgument, "input %q is not a JSON-shaped value: %v", name, err)
+			}
+			req.Inputs[name] = val
+		}
+	}
 	tr, err := t.Get(ctx, idOrName)
 	if err != nil {
 		return nil, err
 	}
-	resp, err := t.triggers.FireTrigger(ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: tr.GetId()}))
+	req.Id = tr.GetId()
+	resp, err := t.triggers.FireTrigger(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, t.c.wrap(op, err)
 	}
-	return &Fired{TriggerID: tr.GetId(), FireWorkflowID: resp.Msg.GetFireWorkflowId()}, nil
+	return &Fired{
+		TriggerID:      tr.GetId(),
+		FireWorkflowID: resp.Msg.GetFireWorkflowId(),
+		EventID:        resp.Msg.GetEventId(),
+		ChatID:         resp.Msg.GetChatId(),
+	}, nil
 }
 
 // EventFilter filters a trigger's firings.

@@ -49,6 +49,11 @@ const daemonMissingDetail = "trigger's daemon no longer exists; edit the trigger
 // same key.
 const payloadManual = "manual"
 
+// PayloadInputs is the payload key under which a manual fire records the
+// workflow inputs its caller supplied (FireTriggerRequest.inputs). The launch
+// overlays them on the activation's params; see manualFireInputs.
+const PayloadInputs = "inputs"
+
 // maxSeedPayload bounds the event JSON copied into the seed message. The full
 // payload is always on trigger.payload; the seed is the agent's first look,
 // and a megabyte of it would crowd out the prompt.
@@ -467,6 +472,65 @@ func (f *EventFirer) buildSpec(ctx context.Context, trigger *core.Trigger, ev *c
 	return eventSpec(ctx, f.repo, trigger, ev, decl)
 }
 
+// FireInputsOf are the inputs a person's "run now" supplied. Only an event the
+// signed-in caller recorded as a manual fire carries them: a delivery's
+// payload is built by its receiver, and its sender is never a user.
+func FireInputsOf(payload map[string]any, sender *core.TriggerSender) map[string]any {
+	if payload[payloadManual] != true || sender == nil || sender.Kind != core.TriggerSenderKindUser {
+		return nil
+	}
+	inputs, _ := payload[PayloadInputs].(map[string]any)
+	return inputs
+}
+
+// WithFireParams is t with a manual fire's supplied inputs on top of its
+// params, for judging whether the activation is set up for this firing: a
+// required input the caller supplies is not missing. t is not modified.
+func WithFireParams(t *core.Trigger, inputs map[string]any) *core.Trigger {
+	if len(inputs) == 0 {
+		return t
+	}
+	withInputs := *t
+	withInputs.Params = make(map[string]any, len(t.Params)+len(inputs))
+	for k, v := range t.Params {
+		withInputs.Params[k] = v
+	}
+	for k, v := range inputs {
+		withInputs.Params[k] = v
+	}
+	return &withInputs
+}
+
+// withFireInputs overlays a manual fire's supplied inputs on values, which it
+// does not modify. An input the declaration maps from each event stays the
+// event's, as it does over a stored param.
+func withFireInputs(values map[string]any, ev *core.TriggerEvent, decl *Declaration) map[string]any {
+	supplied := FireInputsOf(ev.Payload, ev.Sender)
+	if len(supplied) == 0 {
+		return values
+	}
+	out := make(map[string]any, len(values)+len(supplied))
+	for k, v := range values {
+		out[k] = v
+	}
+	for k, v := range supplied {
+		if decl != nil {
+			if _, mapped := decl.Inputs[k]; mapped {
+				continue
+			}
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// EventChatID is the id of the chat an inbound event launches. It is derived
+// from the event's identity, so every launch of the event, a re-fire included,
+// names the same chat.
+func EventChatID(kind core.TriggerEventKind, dedupeKey string) string {
+	return uuid.NewSHA1(chatIDNamespace, []byte("event:"+string(kind)+":"+dedupeKey)).String()
+}
+
 func eventSpec(ctx context.Context, repo OwnerSource, trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
 	values := trigger.Params
 	scope := ActivationScope(ctx, repo, trigger, decl, FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: ev.Origin}.Root())
@@ -477,6 +541,7 @@ func eventSpec(ctx context.Context, repo OwnerSource, trigger *core.Trigger, ev 
 		}
 		values = merged
 	}
+	values = withFireInputs(values, ev, decl)
 	prompt, err := LaunchPrompt(trigger, decl, scope)
 	if err != nil {
 		return launch.Spec{}, err
@@ -496,7 +561,7 @@ func eventSpec(ctx context.Context, repo OwnerSource, trigger *core.Trigger, ev 
 		WorktreeID: trigger.WorktreeID,
 		// Name-based on the event's identity: a re-fire derives the same
 		// chat, so the launcher's own idempotency catches it.
-		NewChatID: uuid.NewSHA1(chatIDNamespace, []byte("event:"+string(ev.Kind)+":"+ev.DedupeKey)).String(),
+		NewChatID: EventChatID(ev.Kind, ev.DedupeKey),
 		Title:     &title,
 		Workflow:  trigger.Workflow,
 		DaemonID:  trigger.DaemonID,

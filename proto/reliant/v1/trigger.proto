@@ -1453,6 +1453,40 @@ message TriggerFailure {
 message FireTriggerRequest {
   // Id of the trigger to run now.
   string id = 1;
+
+  // Workflow input values for this one firing, by input name. They overlay
+  // the activation's stored params and are checked like them: every name must
+  // be an input the activation's workflow declares, and every value must fit
+  // that input's type and constraints. An input the trigger's own `inputs:`
+  // mapping sets from each event cannot be supplied here.
+  //
+  // Only an activation of a workflow's declared event trigger (webhook,
+  // integration or workflow_event) takes inputs. A schedule trigger, or an
+  // ad hoc trigger that declares no inputs, refuses them. Omitted, the firing
+  // runs with the activation's stored params, as it always has.
+  map<string, google.protobuf.Value> inputs = 2 [(buf.validate.field).map = {
+    max_pairs: 64
+    keys: {
+      string: {
+        min_len: 1
+        max_len: 128
+      }
+    }
+  }];
+
+  // Names this firing so a retry of the request is harmless. A request that
+  // repeats a key already used on this trigger starts nothing: it returns the
+  // event the first request recorded (same event_id and chat_id), whatever
+  // that event's outcome and whatever inputs the repeat carries. The repeat's
+  // inputs are validated and then discarded, never merged or compared. Keys
+  // are scoped to the trigger, so the same key on two triggers names two
+  // firings. Only an event trigger honours a key; a schedule trigger refuses
+  // one. Printable ASCII with no spaces, 1 to 255 characters.
+  optional string idempotency_key = 3 [(buf.validate.field).string = {
+    min_len: 1
+    max_len: 255
+    pattern: "^[!-~]+$"
+  }];
 }
 
 // FireTriggerResponse is the response for FireTrigger.
@@ -1460,6 +1494,17 @@ message FireTriggerResponse {
   // Id of the fire workflow this request started. The firing itself is
   // asynchronous: poll ListTriggerEvents for its outcome.
   string fire_workflow_id = 1;
+
+  // Id of the event row the firing recorded (TriggerEvent.id). For a repeated
+  // idempotency_key it is the first request's event. Empty for a schedule
+  // trigger, whose event is recorded when its fire runs.
+  string event_id = 2;
+
+  // Id the run's chat has, or will have once the event launches (the same id
+  // as TriggerEvent.chat_id). It is derived from the event, so a repeated
+  // idempotency_key returns the same id. Empty when the event settled without
+  // launching a run (skipped or failed) and for a schedule trigger.
+  string chat_id = 3;
 }
 
 // ListTriggerEventsRequest is the request for ListTriggerEvents.

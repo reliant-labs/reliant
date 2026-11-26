@@ -8,11 +8,9 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
-	"github.com/google/uuid"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
@@ -327,25 +325,4 @@ func (s *Service) RotateWebhookToken(
 		Trigger: s.render(ctx, trigger),
 		Webhook: cred,
 	}), nil
-}
-
-// fireInbound is "run now" for an inbound trigger: a manual event with an
-// empty payload except the marker, recorded and launched like any delivery.
-func (s *Service) fireInbound(ctx context.Context, trigger *core.Trigger) (string, error) {
-	if s.deps.Intake == nil {
-		return "", inboundUnavailable(string(trigger.Kind))
-	}
-	requester := auth.MustGetUserID(ctx)
-	res, err := s.deps.Intake.Accept(ctx, trigger, triggers.InboundEvent{
-		Kind:      trigger.Kind.EventKind(),
-		DedupeKey: trigger.ID + ":manual-" + uuid.NewString(),
-		Payload:   map[string]any{"manual": true, "requested_by": requester},
-		// "Run now" is sent by the signed-in person who pressed it, not by
-		// the trigger's source.
-		Sender: &core.TriggerSender{Kind: core.TriggerSenderKindUser, ID: requester, Verified: true},
-	}, triggers.AcceptOptions{Manual: true})
-	if err != nil {
-		return "", svcerr.WrapOr(err, svcerr.Unavailable("record fire failed"))
-	}
-	return triggers.EventFireWorkflowID(res.EventID), nil
 }
