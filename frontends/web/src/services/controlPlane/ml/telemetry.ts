@@ -11,6 +11,7 @@
  *
  *   subjectFilters / subjectOfAttributes  a subject as QueryScope filters, and back
  *   mlMetricName                          a neutral key ("train/loss") as a metric name
+ *   ML_STEP_KEY                           the optimizer step, the x a training chart plots against
  *   mlEventName / eventKindOfName         an MlEventKind as a log record's `event.name`
  *   subjectAlertLabels / alertMatches     a subject as the labels its alerts carry
  *
@@ -197,6 +198,15 @@ export function subjectOfFilters(filters: readonly AttributeFilter[]): SubjectRe
 export function mlMetricName(key: string): string {
   return `ml.${(isFamily(key) ? key.slice(0, -2) : key).replace(/\//g, ".")}`;
 }
+
+/**
+ * The optimizer step the trainer is on: a gauge (`ml.train.step`) on the
+ * same attributes as every training metric. A training chart reads it
+ * beside its keys and plots each point at the step running at that point's
+ * time (kit/telemetry.ts onStepAxis); a run that does not report it is
+ * plotted against time.
+ */
+export const ML_STEP_KEY = "train/step";
 
 /** A key that reads every key under its prefix ("eval/*"). */
 export const isFamily = (key: string) => key.endsWith("/*");

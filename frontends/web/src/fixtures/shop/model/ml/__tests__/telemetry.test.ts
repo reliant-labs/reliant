@@ -8,7 +8,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { MlCollection, MlEventKind, MlSubjectKind } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlAxis, MlCollection, MlEventKind, MlSubjectKind } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { onStepAxis } from "@/components/Forge/Ml/kit/telemetry";
+import { ML_STEP_KEY } from "@/services/controlPlane/ml/telemetry";
 
 import { PROFILES, RUNS, STRAGGLER_RANK, TRACES } from "../world";
 import { mlObs } from "./mlObs";
@@ -28,6 +30,23 @@ describe("ML telemetry over ObservabilityService", () => {
     expect(loss[0].x[0]).toBeLessThan(loss[2].x[0]);
     const moe = await obs.series({ kind: MlSubjectKind.PHASE, id: `${v3}/sft` }, ["moe/*"]);
     expect(moe[0].collection).not.toBe(MlCollection.COLLECTED);
+  });
+
+  it("serves the trainer's step per attempt, so the views put loss on the step axis where a resume overlays the steps it redid", async () => {
+    const read = await obs.series({ kind: MlSubjectKind.PHASE, id: `${v3}/sft` }, ["train/loss", ML_STEP_KEY], { groupBy: "attempt" });
+    const steps = read.filter((s) => s.key === ML_STEP_KEY);
+    expect(steps.map((s) => s.group)).toEqual(["attempt 1", "attempt 2", "attempt 3"]);
+    expect(steps.every((s) => s.collection === MlCollection.COLLECTED && s.y.every((y, i) => i === 0 || y >= s.y[i - 1]))).toBe(true);
+    const stepped = onStepAxis(read)!;
+    expect(stepped.map((s) => [s.key, s.group])).toEqual([
+      ["train/loss", "attempt 1"],
+      ["train/loss", "attempt 2"],
+      ["train/loss", "attempt 3"],
+    ]);
+    expect(stepped.every((s) => s.axis === MlAxis.STEP && s.x.length > 0)).toBe(true);
+    // Attempt 3 resumed from a checkpoint before attempt 2 died: its first step is one attempt 2 already took.
+    const [, a2, a3] = stepped;
+    expect(a3.x[0]).toBeLessThan(a2.x[a2.x.length - 1]);
   });
 
   it("answers a family split by key, and a rank-grouped heatmap's 64 rows", async () => {

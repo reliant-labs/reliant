@@ -26,6 +26,7 @@
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 
 import { MlAxis, MlCollection, MlSubjectKind } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { ML_STEP_KEY } from "@/services/controlPlane/ml/telemetry";
 
 import { evalScore, V3_STRAGGLER_STEP, v3GradNorm, v3LmLoss, v3LossCurve, v3Lr, v3Mfu, v3StepTimeMs, v3TokensPerSecond, v3TrainLoss, v3ValLoss } from "./curves";
 import {
@@ -447,6 +448,8 @@ const sourceShare = (phase: string, step: number, src: (typeof SOURCES)[number])
 const SKIPPED = [38_710, 38_720, 38_731];
 
 export const TRAIN_KEYS: readonly KeyDef[] = [
+  // The step the trainer is on (ML_STEP_KEY): on the time axis, what a training chart plots its points against.
+  { key: ML_STEP_KEY, label: "Step", unit: "", simple: true, gen: (p) => p.step },
   { key: "train/loss", label: "Train loss", unit: "", simple: true, gen: lossOf },
   { key: "train/lm_loss", label: "LM loss", unit: "", simple: true, gen: (p) => (isV3(p.run) ? v3LmLoss(p.a.phase, p.step) : lossOf(p) - 0.006) },
   {

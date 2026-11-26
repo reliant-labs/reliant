@@ -10,12 +10,14 @@ import {
   MlCollection,
   MlSubjectKind,
   type MlAttempt,
+  type MlPhase,
   type MlRank,
   type MlSeries,
   type MlSubject,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { attemptId } from "../../kit/ids";
+import type { MlBand } from "../../kit/charts";
 import type { RunScope } from "../runScope";
 
 // ── Scope ─────────────────────────────────────────────────────────────────────
@@ -145,6 +147,21 @@ export function ema(values: readonly number[], weight: number): number[] {
     n++;
     return last / (1 - Math.pow(weight, n));
   });
+}
+
+/** The steps an attempt redid: from where it resumed to where the previous one died (drawn as a band). */
+export function redoneBands(phase: MlPhase | null): MlBand[] {
+  if (!phase) return [];
+  const attempts = [...phase.attempts].sort((a, b) => a.n - b.n);
+  const out: MlBand[] = [];
+  for (let i = 1; i < attempts.length; i++) {
+    const prev = attempts[i - 1];
+    const next = attempts[i];
+    const from = Number(next.startStep);
+    const to = Number(prev.endStep);
+    if (to > from) out.push({ from, to, label: `redone by attempt ${next.n} (${(to - from).toLocaleString("en-US")} steps)`, tone: "warning" });
+  }
+  return out;
 }
 
 /** The last collected value in a series list for a key (the tile header). */

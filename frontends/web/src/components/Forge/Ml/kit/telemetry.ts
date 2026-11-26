@@ -7,7 +7,8 @@
  * subject by the attributes its telemetry carries
  * (services/controlPlane/ml/telemetry.ts):
  *
- *   useMlSeries   metrics (QueryPanel), as the chart kit's MlSeries
+ *   useMlSeries   metrics (QueryPanel), as the chart kit's MlSeries, on the
+ *                 step axis when asked and the trainer reports its step
  *   useMlEvents   ML event records (SearchLogs over `event.name: ml.*`), as MlEvent
  *   useMlAlerts   the org's pending and firing alerts on the subject (ListAlerts)
  *   useMlScope    the subject as an ObsScope, for Observability's own views
@@ -36,6 +37,7 @@ import {
   ML_ATTR,
   ML_EVENT_ATTR,
   ML_GROUP_BY,
+  ML_STEP_KEY,
   mlMetricName,
   subjectFilters,
   subjectKindOfName,
@@ -76,9 +78,17 @@ export function useMlScope(subject: SubjectRef, signal: MlSignal): ObsScope {
 
 // ── Series ────────────────────────────────────────────────────────────────────
 
+/** What a training chart plots against: the optimizer step (where the trainer reports it), or time. */
+export type MlXAxis = "step" | "time";
+
+/** A run page's `?axis`: step unless it says time. */
+export const xAxisOf = (axis: string | undefined): MlXAxis => (axis === "time" ? "time" : "step");
+
 export interface MlSeriesOptions {
   /** A series per member: "rank", "attempt", "device", "node", "pool", "replica", "revision". */
   groupBy?: string;
+  /** "step" also reads ML_STEP_KEY and plots every series against it (onStepAxis); default time. */
+  axis?: MlXAxis;
   /** Percentile series per key ("p50", "p95", "p99"); none reads the mean. */
   stats?: readonly string[];
   range?: RangePreset;
@@ -164,6 +174,51 @@ export function seriesOfPanel(result: PanelResult, keys: readonly string[], stat
   return out;
 }
 
+/** x of every point of `mapping` (time → step), at time `t`, linearly between its points; NaN outside it. */
+function stepAt(times: readonly number[], steps: readonly number[], t: number): number {
+  if (times.length === 0 || t < times[0] || t > times[times.length - 1]) return NaN;
+  let lo = 0;
+  let hi = times.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (times[mid] <= t) lo = mid;
+    else hi = mid;
+  }
+  if (times[hi] === times[lo]) return steps[lo];
+  return Math.round(steps[lo] + ((steps[hi] - steps[lo]) * (t - times[lo])) / (times[hi] - times[lo]));
+}
+
+/**
+ * Time-axis series re-plotted on the step axis: each point's x is the step
+ * the trainer was on at that point's time, read from the ML_STEP_KEY series
+ * of the same group (an attempt's own steps, so a resume overlays the steps
+ * it redid), else from all of them in time order. Null when nothing in
+ * `series` reports the step: the caller stays on time. The step series
+ * themselves are not returned.
+ */
+export function onStepAxis(series: readonly MlSeries[]): MlSeries[] | null {
+  const steps = series.filter((s) => s.key === ML_STEP_KEY && s.collection === MlCollection.COLLECTED && s.x.length > 0);
+  if (steps.length === 0) return null;
+  const byGroup = new Map(steps.map((s) => [s.group, s]));
+  const all = steps.flatMap((s) => s.x.map((x, i) => [x, s.y[i]] as const)).sort((a, b) => a[0] - b[0]);
+  const merged = { x: all.map((p) => p[0]), y: all.map((p) => p[1]) };
+  return series
+    .filter((s) => s.key !== ML_STEP_KEY)
+    .map((s) => {
+      if (s.collection !== MlCollection.COLLECTED) return create(MlSeriesSchema, { ...s, axis: MlAxis.STEP });
+      const m = byGroup.get(s.group) ?? merged;
+      const x: number[] = [];
+      const y: number[] = [];
+      s.x.forEach((t, i) => {
+        const step = stepAt(m.x, m.y, t);
+        if (!Number.isFinite(step)) return;
+        x.push(step);
+        y.push(s.y[i]);
+      });
+      return create(MlSeriesSchema, { ...s, axis: MlAxis.STEP, x, y });
+    });
+}
+
 /** Two series reads as one: loading while either is, failed when either failed, the series of both. */
 export function mergeSeries(a: MlQuery<{ series: MlSeries[] }>, b: MlQuery<{ series: MlSeries[] }>): MlQuery<{ series: MlSeries[] }> {
   const da = okData(a);
@@ -198,11 +253,19 @@ function splitLabel(label: string, keys: readonly string[], stats: readonly stri
 export function useMlSeries(subject: SubjectRef, keys: readonly string[], opts: MlSeriesOptions = {}): MlQuery<{ series: MlSeries[] }> {
   const scope = useMlScope(subject, "metrics");
   const statsKey = (opts.stats ?? []).join(",");
+  const step = opts.axis === "step";
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const panel = useMemo(() => seriesPanel(keys, { groupBy: opts.groupBy, stats: opts.stats }), [keys.join(","), opts.groupBy, statsKey]);
+  const read = useMemo(() => (step ? [...keys, ML_STEP_KEY] : [...keys]), [keys.join(","), step]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const panel = useMemo(() => seriesPanel(read, { groupBy: opts.groupBy, stats: opts.stats }), [read, opts.groupBy, statsKey]);
   const query = usePanelQuery(scope, opts.range ?? "24h", panel, [], [], { enabled: opts.enabled ?? true });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const series = useMemo(() => (query.data ? { series: seriesOfPanel(query.data, keys, opts.stats) } : undefined), [query.data, keys.join(","), statsKey]);
+  const series = useMemo(() => {
+    if (!query.data) return undefined;
+    const all = seriesOfPanel(query.data, read, opts.stats);
+    // On the step axis where the trainer reports its step; otherwise time, without the step series.
+    return { series: (step ? onStepAxis(all) : null) ?? all.filter((s) => s.key !== ML_STEP_KEY || keys.includes(ML_STEP_KEY)) };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.data, read, statsKey, step]);
   return asMl(query, series);
 }
 

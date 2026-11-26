@@ -8,7 +8,7 @@
 
 import { AlertTriangle, Check, EyeOff, X } from "lucide-react";
 
-import { MlEventKind, MlSubjectKind, type MlHealthCheck, type MlKueueWorkload, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlAxis, MlEventKind, MlSubjectKind, type MlHealthCheck, type MlKueueWorkload, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import {
   EmptyNote,
@@ -27,8 +27,12 @@ import {
   StatusDot,
   SubjectLink,
   tsMs,
+  num,
   useMlEvents,
+  useMlSearch,
   useMlSeries,
+  xAxisOf,
+  type MlBand,
 } from "../../kit";
 import { phaseId } from "../../kit/ids";
 import { scopeRange, type RunScope } from "../runScope";
@@ -49,8 +53,10 @@ export function OverviewTab({ scope }: { scope: RunScope }) {
   const { detail, run, phase, attempt } = scope;
   const subject = seriesSubject(scope);
   const range = scopeRange(scope);
-  const loss = useMlSeries(subject, LOSS_KEYS, { range });
-  const tput = useMlSeries(subject, THROUGHPUT_KEYS, { range });
+  const [search] = useMlSearch();
+  const axis = xAxisOf(search.axis);
+  const loss = useMlSeries(subject, LOSS_KEYS, { axis, range });
+  const tput = useMlSeries(subject, THROUGHPUT_KEYS, { axis, range });
   const events = useMlEvents(subject, { kinds: CHART_EVENTS, range });
   const evs = events.data?.kind === "ok" ? events.data.data.events : [];
   const p = seriesPhase(detail, phase);
@@ -59,6 +65,13 @@ export function OverviewTab({ scope }: { scope: RunScope }) {
   const productive = segs.find((s) => s.label === "Productive");
   const syncKey = `run-overview-${run.id}`;
   const lossSeries = named(loss.data?.kind === "ok" ? loss.data.data.series : []);
+  const stepped = lossSeries.some((s) => s.axis === MlAxis.STEP);
+  // The phase's data segments (a spike, a shard swap, warmup) are stretches of steps.
+  const bands: MlBand[] = stepped
+    ? (p?.segments ?? [])
+        .filter((s) => /spike|shard|warmup|anneal/i.test(`${s.name} ${s.note}`))
+        .map((s) => ({ from: num(s.fromStep), to: num(s.toStep), label: s.name, tone: /spike|shard/i.test(`${s.name} ${s.note}`) ? "warning" : "neutral" }))
+    : [];
   const tputSeries = named(tput.data?.kind === "ok" ? tput.data.data.series : []);
   const workloadAttempt = attempt ?? [...(p?.attempts ?? [])].sort((a, b) => b.n - a.n)[0] ?? null;
 
@@ -111,8 +124,8 @@ export function OverviewTab({ scope }: { scope: RunScope }) {
 
       </div>
       <div className="min-w-0 space-y-4">
-        <Panel title="Loss" note={`${p?.key ?? ""} · markers: checkpoints, restarts, spikes`} testId="ml-run-loss">
-          <MlChart series={lossSeries} events={evs} label="Loss" height={200} syncKey={syncKey} what="Loss" testId="ml-run-loss-chart" />
+        <Panel title="Loss" note={`${p?.key ?? ""} · ${stepped ? "step" : "time"} axis · markers: checkpoints, restarts, spikes`} testId="ml-run-loss">
+          <MlChart series={lossSeries} events={evs} bands={bands} label="Loss" height={200} syncKey={syncKey} what="Loss" testId="ml-run-loss-chart" />
         </Panel>
 
         <Panel title="Throughput" note="tokens/s and MFU" testId="ml-run-throughput">

@@ -9,7 +9,7 @@ import "@/components/Forge/Ml/__tests__/jsdomShims";
  * trainingTelemetry.ts (model/ml/telemetry.ts).
  */
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -82,6 +82,18 @@ describe("training observability tabs", () => {
     expect(screen.getByTestId("ml-metric-eval/gsm8k")).toBeInTheDocument();
   });
 
+  it("metrics: on the step axis by default, the redone steps shaded; ?axis=time plots wall time", async () => {
+    mount(() => <Scoped tab={MetricsTab} phase="sft" />);
+    expect(await screen.findByTestId("ml-metric-train/loss")).toBeInTheDocument();
+    expect(screen.getByTestId("ml-metrics-axis-step")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("ml-metrics-legend")).toHaveTextContent("steps redone after a failure");
+    cleanup();
+    mount(() => <Scoped tab={MetricsTab} phase="sft" />, "?axis=time");
+    expect(await screen.findByTestId("ml-metric-train/loss")).toBeInTheDocument();
+    expect(screen.getByTestId("ml-metrics-axis-time")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("ml-metrics-legend")).not.toHaveTextContent("steps redone");
+  });
+
   it("metrics: ?q keeps only matching tiles", async () => {
     mount(() => <Scoped tab={MetricsTab} phase="sft" />, "?q=mfu");
     expect(await screen.findByTestId("ml-metric-throughput/mfu")).toBeInTheDocument();
@@ -130,5 +142,7 @@ describe("run comparison", () => {
     expect(screen.getByTestId("ml-compare-config-table")).toHaveTextContent("lr");
     expect(screen.getByTestId("ml-compare-system")).toHaveTextContent(RUNS.v1.name);
     expect(await screen.findByTestId("ml-compare-train/loss")).toBeInTheDocument();
+    // Every run reports its step, so runs from different weeks line up by step.
+    await waitFor(() => expect(screen.getByTestId("ml-compare-axis")).toHaveTextContent("step axis"));
   });
 });

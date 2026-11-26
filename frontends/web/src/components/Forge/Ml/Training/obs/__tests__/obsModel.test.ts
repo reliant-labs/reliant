@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   GetMlRunResponseSchema,
   MlCollection,
+  MlPhaseSchema,
   MlRankSchema,
   MlSeriesSchema,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
@@ -18,6 +19,7 @@ import {
   filterSections,
   METRIC_SECTIONS,
   rankHeatmap,
+  redoneBands,
   seriesForTile,
   stragglersOf,
   workspaceKeys,
@@ -54,6 +56,16 @@ describe("metrics workspace", () => {
     expect(ema([3, 4], 0)).toEqual([3, 4]);
   });
 
+});
+
+describe("redone steps", () => {
+  it("shades the steps each resume redid", () => {
+    const phase = create(MlPhaseSchema, { attempts: [{ n: 1, startStep: 0n, endStep: 12_400n }, { n: 2, startStep: 12_000n, endStep: 32_750n }, { n: 3, startStep: 32_000n, endStep: 41_200n }] });
+    expect(redoneBands(phase).map((b) => [b.from, b.to])).toEqual([
+      [12_000, 12_400],
+      [32_000, 32_750],
+    ]);
+  });
 });
 
 describe("system", () => {

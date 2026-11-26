@@ -22,7 +22,7 @@ const EVAL_KEYS = ["eval/*"];
 export function EvalsTab({ scope }: { scope: RunScope }) {
   const { detail, run } = scope;
   const subject = seriesSubject(scope);
-  const series = useMlSeries(subject, EVAL_KEYS, { range: scopeRange(scope) });
+  const series = useMlSeries(subject, EVAL_KEYS, { axis: "step", range: scopeRange(scope) });
   const suites = useMl("listMlEvalSuites", {});
   const suiteList = suites.data?.kind === "ok" ? suites.data.data.suites : [];
   const gate = suiteList.find((s) => s.name === "release-gate") ?? suiteList[0];
