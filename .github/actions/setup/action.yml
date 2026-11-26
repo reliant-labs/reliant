@@ -344,9 +344,12 @@ runs:
           install -m 0755 "${RUNNER_TEMP}/${f}/rg" "$d/rg"
         fi
         # The cicd self-hosted runners (merge-queue.yml) have no sudo and a
-        # read-only /usr; the machine carries ripgrep in /usr/bin, which is on
-        # PATH and one of the fixed paths internal/cmdutil's finder looks in.
-        if [ "${RUNNER_ENV:-}" != self-hosted ]; then
+        # read-only /usr: there the pinned rg goes on PATH instead
+        # (internal/fileutil finds it with exec.LookPath).
+        # TestSetupRipgrepOnSelfHostedRunners holds both branches.
+        if [ "${RUNNER_ENV:-}" = self-hosted ]; then
+          echo "$d" >> "$GITHUB_PATH"
+        else
           sudo install -m 0755 "$d/rg" /usr/local/bin/rg
         fi
 
