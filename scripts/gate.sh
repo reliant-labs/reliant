@@ -97,6 +97,24 @@ lane_repo() {
   task ci:migration-order BASE="$base" && task ci:repo-checks BASE="$base"
 }
 
+# part_logs NAME: the logs a release gate part's output names, resolved where
+# they live: as written, or relative to the part's private checkout
+# ($logs/checkout-NAME, where release-gate.sh runs), or anywhere under it by
+# name; and every *.log under that checkout, since a passing step prints no
+# path. Printed to stdout for HOST_RE.
+part_logs() {
+  local name=$1 dir="$logs/checkout-$1" f
+  {
+    grep -oE '[^ ;()]+\.log' "$logs/$name.log" | sort -u | while read -r f; do
+      if [[ -f "$f" ]]; then cat "$f"
+      elif [[ -f "$dir/$f" ]]; then cat "$dir/$f"
+      elif [[ -d "$dir" ]]; then find "$dir" -name "$(basename "$f")" -type f -exec cat {} + 2>/dev/null
+      fi
+    done
+    [[ -d "$dir" ]] && find "$dir" -path "$dir/snap" -prune -o -name '*.log' -type f -exec cat {} + 2>/dev/null
+  } 2>/dev/null || true
+}
+
 # lane NAME: run it with its output in $logs/NAME.log; record "<status> <seconds>".
 # A release gate part keeps each step's output in its own log, which the
 # summary names: those count for HOST_RE too.
@@ -106,8 +124,7 @@ lane() {
   ("lane_$name") >"$logs/$name.log" 2>&1 || rc=$?
   if ((rc == 0)); then
     status=PASS
-  elif ((rc == 2)) || grep -qE "$HOST_RE" "$logs/$name.log" ||
-    { grep -oE '[^ ;()]+\.log' "$logs/$name.log" | sort -u | while read -r f; do [[ -f "$f" ]] && cat "$f"; done; } | grep -qE "$HOST_RE"; then
+  elif ((rc == 2)) || grep -qE "$HOST_RE" "$logs/$name.log" || part_logs "$name" | grep -qE "$HOST_RE"; then
     status=UNPROVEN
   else
     status=FAIL
@@ -127,11 +144,21 @@ fi
 at_once=${GATE_JOBS:-${#selected[@]}}
 [[ "$at_once" =~ ^[1-9][0-9]*$ ]] || { echo "error: GATE_JOBS must be a positive number" >&2; exit 2; }
 echo "reliant gate: $(git rev-parse --short HEAD), ${#selected[@]} lane(s), ${at_once} at once, logs in $logs"
+declare -A pid_of=()
 for s in "${selected[@]}"; do
   while (($(jobs -rp | wc -l) >= at_once)); do wait -n; done
   lane "$s" &
+  pid_of[$s]=$!
 done
-wait
+# Join every lane by its pid, so the summary below only ever reads a lane
+# that has finished (review B1 on #3823). A lane whose process ended without
+# writing its status (killed, a bug in this script) proved nothing: UNPROVEN,
+# with its exit code, never a silent PASS.
+for s in "${selected[@]}"; do
+  rc=0
+  wait "${pid_of[$s]}" || rc=$?
+  [[ -s "$logs/$s.status" ]] || echo "UNPROVEN 0 $rc" >"$logs/$s.status"
+done
 
 failed=0 unproven=0
 printf '\n%-8s %-9s %7s  %s\n' LANE RESULT SECONDS LOG
