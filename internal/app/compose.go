@@ -485,6 +485,7 @@ func (g *Graph) newPauseService() (*v2workflow.PauseService, error) {
 	return NewPauseService(PauseServiceDeps{
 		Temporal: g.TemporalClient(),
 		DB:       g.Database(),
+		Updates:  g.chatUpdates(),
 	})
 }
 
@@ -672,11 +673,13 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Router:           g.WorkerDaemonRouter(),
 		ConfigProvider:   g.StoredConfigProvider(),
 		Launcher:         g.RunLauncher(),
+		Runs:             g.RunLifecycle(),
 		Credentials:      g.WorkerIntegrationCredentials(),
 		WriteLedger:      g.IntegrationsWriteledger(),
 		Pollers:          g.TriggerPollers(),
 		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
 		Network:          g.ServerProcessConfig.GetNetwork(),
+		Pipeline:         g.ServerProcessConfig.GetPipeline(),
 		Recorder:         g.AccountRecorder(),
 		DB:               g.Database(),
 		// Read here, not in workersetup, so the worker root's config reach
@@ -1341,21 +1344,22 @@ func (g *Graph) newForge() (*forge.Service, error) {
 // newInbox constructs the inbox handler (internal/handlers/inbox).
 func (g *Graph) newInbox() (*inbox.Service, error) {
 	return inbox.New(inbox.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		Chats:       store.NewChatsWithActivityExtStore(g.Database().ORM()),
-		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
-		Machines:    store.NewDaemonExtStore(g.Database().ORM()),
-		OrgKeys:     g.CredentialsOrgaccounts(),
-		Items:       store.NewInboxDismissalExtStore(g.Database().ORM()),
-		Firings:     store.NewTriggerEventExtStore(g.Database().ORM()),
-		Notices:     store.NewTriggerExtStore(g.Database().ORM()),
-		Recoveries:  store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
-		Marks:       store.NewWorktreeExtStore(g.Database().ORM()),
-		Storage:     worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
-		Sweeper:     g.WorktreeSweep(),
-		Orgs:        g.OrgResolver(),
+		Logger:        g.Log,
+		Config:        g.Cfg,
+		Repo:          g.Database(),
+		Chats:         store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
+		Machines:      store.NewDaemonExtStore(g.Database().ORM()),
+		OrgKeys:       g.CredentialsOrgaccounts(),
+		Items:         store.NewInboxDismissalExtStore(g.Database().ORM()),
+		Firings:       store.NewTriggerEventExtStore(g.Database().ORM()),
+		Notices:       store.NewTriggerExtStore(g.Database().ORM()),
+		Registrations: store.NewTriggerRegistrationExtStore(g.Database().ORM()),
+		Recoveries:    store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
+		Marks:         store.NewWorktreeExtStore(g.Database().ORM()),
+		Storage:       worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
+		Sweeper:       g.WorktreeSweep(),
+		Orgs:          g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: g.CallerControlPlane().Client(),
@@ -1685,6 +1689,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Triggers:    store.NewTriggerExtStore(g.Database().ORM()),
 		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
 		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
 		Drafts:      g.Workflowdrafts(),

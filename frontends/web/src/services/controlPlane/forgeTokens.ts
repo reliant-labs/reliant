@@ -131,6 +131,10 @@ export const FORGE_TOKEN_SCOPE_GROUPS: readonly ForgeTokenScopeGroup[] = [
     title: "Changes",
     description: "Remote config, gradual rollouts and A/B tests. Launching one shifts production traffic.",
     scopes: [
+      {
+        scope: "changes:read",
+        label: "Read an environment's changes snapshot, for an app not on Reliant hosting (changes:write and changes:launch include it)",
+      },
       { scope: "changes:write", label: "Draft, edit and stop changes (stopping is the kill switch)" },
       {
         scope: "changes:launch",

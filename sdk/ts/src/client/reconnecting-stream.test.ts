@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
+  FIRST_FRAME_TIMEOUT_MS,
   isConnectionLevelFailure,
   ReconnectingStream,
   RESUME_LIVENESS_GRACE_MS,
   RESUME_REPLACE_AFTER_HIDDEN_MS,
   RESUME_REPLACE_MIN_INTERVAL_MS,
   SHORT_LIVED_CONNECTION_MS,
+  STALLED_ATTEMPT_MIN_AGE_MS,
   STREAM_STALE_TIMEOUT_MS,
   WATCHDOG_TICK_MS,
   type StreamEnvironment,
@@ -47,6 +49,10 @@ class TestStream extends ReconnectingStream<string> {
   }
   get attempts(): number {
     return this.reconnectAttempts;
+  }
+  /** An internal replacement (a gap resync, a scope change). */
+  resubscribe(): void {
+    this.reconnectNow("resubscribe");
   }
 
   protected openStream(signal: AbortSignal): AsyncIterable<string> {
@@ -125,7 +131,8 @@ describe("reconnecting", () => {
 
   it("backs off exponentially after failures and never gives up", async () => {
     const s = new TestStream({ wake: fakeWake().wake });
-    s.scripts = Array.from({ length: 14 }, () => ({ then: new ConnectError("down", Code.Unavailable) }));
+    // Every attempt fails (a script left over would stay open with no first frame).
+    s.scripts = Array.from({ length: 30 }, () => ({ then: new ConnectError("down", Code.Unavailable) }));
     s.start();
     await settle();
     const opensAt: number[] = [];
@@ -327,6 +334,186 @@ describe("supersession", () => {
     await settle();
     expect(s.handled).toEqual(["old-1", "new-1"]);
     expect(s.errors).toEqual([]);
+    s.stop();
+  });
+});
+
+describe("internal resubscribe", () => {
+  const down = () => new ConnectError("down", Code.Unavailable);
+
+  it("replaces a live connection at once, even after earlier failures", async () => {
+    const s = new TestStream({ wake: fakeWake().wake });
+    s.scripts = [{ then: down() }, { events: ["a"], then: "stay" }, { events: ["b"], then: "stay" }];
+    s.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(s.connected).toBe(true);
+    expect(s.attempts).toBe(1);
+
+    // A gap resync on a connection that is delivering frames: no backoff.
+    s.resubscribe();
+    await settle();
+    expect(s.opens).toHaveLength(3);
+    expect(s.opens[1]!.aborted).toBe(true);
+    expect(s.handled).toEqual(["a", "b"]);
+    expect(s.attempts).toBe(0);
+    s.stop();
+  });
+
+  it("still backs off while nothing is getting through", async () => {
+    const s = new TestStream({ wake: fakeWake().wake });
+    s.scripts = [{ then: down() }, { then: "stay" }, { events: ["a"], then: "stay" }];
+    s.start();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(s.opens).toHaveLength(2);
+    expect(s.connected).toBe(false);
+
+    s.resubscribe();
+    await settle();
+    expect(s.opens).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(s.opens).toHaveLength(3);
+    s.stop();
+  });
+});
+
+describe("first-frame deadline", () => {
+  it("replaces an attempt that never delivers its first frame", async () => {
+    const lost = vi.fn();
+    const s = new TestStream({ wake: fakeWake().wake, onConnectionLost: lost });
+    s.scripts = [{ then: "stay" }, { events: ["a"], then: "stay" }];
+    s.start();
+    await vi.advanceTimersByTimeAsync(FIRST_FRAME_TIMEOUT_MS - 1);
+    expect(s.opens).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(s.opens[0]!.aborted).toBe(true);
+    expect(lost).toHaveBeenCalledTimes(1);
+
+    // Retried as a failure before the first frame: after the first backoff step.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(s.opens).toHaveLength(2);
+    expect(s.connected).toBe(true);
+    expect(s.errors).toEqual([]);
+    s.stop();
+  });
+
+  it("doubles the budget for each attempt in a row that gets no first frame", async () => {
+    const s = new TestStream({ wake: fakeWake().wake });
+    s.scripts = Array.from({ length: 6 }, () => ({ then: "stay" as const }));
+    s.start();
+    const opensAt: number[] = [0];
+    let last = 1;
+    for (let t = 0; t < 120_000; t += 500) {
+      await vi.advanceTimersByTimeAsync(500);
+      if (s.opens.length !== last) {
+        opensAt.push(t + 500);
+        last = s.opens.length;
+      }
+    }
+    // 15s budget + 1s backoff, 30s + 2s, 60s + 4s.
+    expect(opensAt).toEqual([0, 16_000, 48_000, 112_000]);
+    s.stop();
+  });
+
+  it("measures the wait on the active clock, so time the page was not running does not count", async () => {
+    let active = 0;
+    const s = new TestStream({ wake: fakeWake().wake, activeNow: () => active });
+    s.scripts = [{ then: "stay" }, { events: ["a"], then: "stay" }];
+    s.start();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(s.opens).toHaveLength(1);
+
+    active += FIRST_FRAME_TIMEOUT_MS;
+    await vi.advanceTimersByTimeAsync(FIRST_FRAME_TIMEOUT_MS + 1_000);
+    expect(s.opens).toHaveLength(2);
+    s.stop();
+  });
+
+  it("leaves a hidden page's attempt to the wake handlers", async () => {
+    const w = fakeWake();
+    const s = new TestStream({ wake: w.wake });
+    s.scripts = [{ then: "stay" }, { events: ["a"], then: "stay" }];
+    s.start();
+    w.hide();
+    await vi.advanceTimersByTimeAsync(5 * FIRST_FRAME_TIMEOUT_MS);
+    expect(s.opens).toHaveLength(1);
+    w.show();
+    await settle();
+    expect(s.opens).toHaveLength(2);
+    expect(s.connected).toBe(true);
+    s.stop();
+  });
+
+  it("is off when the tuning says silence is normal", async () => {
+    const s = new TestStream({ wake: fakeWake().wake, tuning: { liveness: false } });
+    s.scripts = [{ then: "stay" }];
+    s.start();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(s.opens).toHaveLength(1);
+    s.stop();
+  });
+});
+
+describe("host resume signals", () => {
+  function signals() {
+    let listener: ((reason: string) => void) | null = null;
+    return {
+      resumeSignals: (l: (reason: string) => void) => {
+        listener = l;
+        return () => {
+          listener = null;
+        };
+      },
+      get bound() {
+        return listener !== null;
+      },
+      emit: (reason: string) => listener?.(reason),
+    };
+  }
+
+  it("replace an attempt still waiting for its first frame, and nothing else", async () => {
+    const sig = signals();
+    const s = new TestStream({ wake: fakeWake().wake, resumeSignals: sig.resumeSignals });
+    s.scripts = [{ then: "stay" }, { events: ["a"], then: "stay" }];
+    s.start();
+    await settle();
+    expect(sig.bound).toBe(true);
+
+    // An attempt opened by the same wake is left alone.
+    sig.emit("resume");
+    await settle();
+    expect(s.opens).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(STALLED_ATTEMPT_MIN_AGE_MS);
+    sig.emit("connection-lost");
+    await settle();
+    expect(s.opens).toHaveLength(2);
+    expect(s.opens[0]!.aborted).toBe(true);
+    expect(s.connected).toBe(true);
+    expect(s.attempts).toBe(0);
+
+    // A connected stream is the wake handlers' and the watchdog's.
+    await vi.advanceTimersByTimeAsync(STALLED_ATTEMPT_MIN_AGE_MS);
+    sig.emit("clock-jump");
+    await settle();
+    expect(s.opens).toHaveLength(2);
+
+    s.stop();
+    expect(sig.bound).toBe(false);
+  });
+
+  it("ignore the echo of the stream's own connection-lost report", async () => {
+    const sig = signals();
+    const s = new TestStream({
+      wake: fakeWake().wake,
+      resumeSignals: sig.resumeSignals,
+      onConnectionLost: () => sig.emit("connection-lost"),
+    });
+    s.scripts = [{ then: "stay" }, { events: ["a"], then: "stay" }];
+    s.start();
+    await vi.advanceTimersByTimeAsync(FIRST_FRAME_TIMEOUT_MS);
+    expect(s.opens).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(s.opens).toHaveLength(2);
     s.stop();
   });
 });

@@ -38,6 +38,7 @@ func TestIsStructuralNode(t *testing.T) {
 		NodeTypeWorkflow,
 		NodeTypeLoop,
 		NodeTypeJoin,
+		NodeTypeReview,
 	}
 	for _, nt := range structuralTypes {
 		if !IsStructuralNode(nt) {
@@ -75,6 +76,7 @@ func TestNodeTypeConstants(t *testing.T) {
 		"NodeTypeWorkflow":       NodeTypeWorkflow,
 		"NodeTypeLoop":           NodeTypeLoop,
 		"NodeTypeJoin":           NodeTypeJoin,
+		"NodeTypeReview":         NodeTypeReview,
 	}
 	expected := map[string]string{
 		"NodeTypeCallLLM":        "call_llm",
@@ -87,6 +89,7 @@ func TestNodeTypeConstants(t *testing.T) {
 		"NodeTypeWorkflow":       "workflow",
 		"NodeTypeLoop":           "loop",
 		"NodeTypeJoin":           "join",
+		"NodeTypeReview":         "review",
 	}
 	for name, got := range tests {
 		if want := expected[name]; got != want {
@@ -120,6 +123,7 @@ func TestIsKnownNodeType(t *testing.T) {
 		NodeTypeWorkflow,
 		NodeTypeLoop,
 		NodeTypeJoin,
+		NodeTypeReview,
 	}
 	for _, nt := range allTypes {
 		if !IsKnownNodeType(nt) {
