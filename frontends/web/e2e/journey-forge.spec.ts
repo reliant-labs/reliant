@@ -81,7 +81,7 @@ test.describe('the forge journey in Reliant, signed in', () => {
   const SAMPLE = '/forge/p/sample_shop';
   const TRACE = 'sample_4bf92f3577b34da6a3ce929d0e0e4736';
   const ISSUE = 'sample_iss-orders-deadline';
-  const T = 14;
+  const T = 16;
   const callout = (page: Page) => page.getByTestId('tour-callout').or(page.getByTestId('tour-card'));
 
   async function atStep(page: Page, n: number, title: string) {
@@ -124,9 +124,11 @@ test.describe('the forge journey in Reliant, signed in', () => {
       ['Errors, grouped by release', /\/observability\/errors$/, `[data-testid='obs-issue-${ISSUE}'], [data-testid='lead-featured-issue'][data-issue-id='${ISSUE}'], [data-testid='lead-issue-row'][data-issue-id='${ISSUE}']`],
       ['How an agent gets called', /\/observability\/alerts$/, "[data-testid='obs-alerts-firing']"],
       ['Hand it to an agent', /\/observability\/errors$/, "[data-testid='ask-reliant-actions']"],
+      ['Who uses the app', /\/analytics$/, "[data-tour='nav-analytics']"],
+      ["The app's database", /\/data$/, "[data-tour='nav-data']"],
       ["The app's tests", /\/tests$/, "[data-tour='nav-tests']"],
       ['What each release ships', /\/security\/vulnerabilities$/, "[data-tour='nav-security']"],
-      ['Secrets, domains and costs', /\/secrets$/, "[data-tour='nav-configure']"],
+      ['Secrets, domains and activity', /\/secrets$/, "[data-tour='nav-configure']"],
       ['Try it on your app', /\/secrets$/, null],
     ];
     for (const [i, [title, path, target]] of steps.entries()) {
@@ -247,6 +249,8 @@ test.describe('the demo page-entry tour', () => {
       ['How an agent gets called', /\/observability\/alerts$/, "[data-testid='obs-alerts-firing']"],
       ['What your agent reads', null, null],
       ['Hand it to an agent', /\/observability\/errors$/, "[data-testid='ask-reliant-actions']"],
+      ['Who uses the app', /\/analytics$/, "[data-tour='nav-analytics']"],
+      ["The app's database", /\/data$/, "[data-tour='nav-data']"],
       ['How it was built', /\/forge\/p\/shop$/, null],
       ['Try it on your app', null, null],
     ];

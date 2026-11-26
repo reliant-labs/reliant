@@ -30,7 +30,7 @@ import { QueryClientProvider, skipToken, useQuery } from "@tanstack/react-query"
 import { setTransport } from "@/lib/connect";
 import { queryClient } from "@/lib/query-client";
 import { mockTransport } from "@/lib/test-utils";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { listProjectsResponse } from "@/test/projectList";
 import userEvent from "@testing-library/user-event";
 import {
@@ -286,11 +286,11 @@ function renderAt(
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <ObservabilityApiProvider api={createFixtureApi({ onCall: options.onObsCall })}>
+      <ObservabilityFixtures api={createFixtureApi({ onCall: options.onObsCall })}>
         <ShellFrameContext.Provider value={{ inShell, navDocked: inShell }}>
           <RouterProvider router={router} />
         </ShellFrameContext.Provider>
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>,
   );
   return router;
@@ -406,7 +406,8 @@ describe("the project Metrics catalog", () => {
       orgId: "org-1",
       projectId: "barkshop",
       envIds: [],
-      filters: [{ key: "status", op: "eq", value: "ok" }],
+      // Decoded off the wire, as the server reads it: an eq filter carries no value list.
+      filters: [{ key: "status", op: "eq", value: "ok", values: [] }],
     })));
     const request = onObsCall.mock.calls.find(([rpc]) => rpc === "ListMetrics")?.[1];
     expect(request.window.endMs - request.window.startMs).toBe(6 * 60 * 60_000);
