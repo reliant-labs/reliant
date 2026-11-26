@@ -43,6 +43,7 @@ func sameValue(t *testing.T, what string, got, want any) {
 // TestTriggerQueries ports the triggers queries of triggers.sql, interleaved
 // with the Repository.
 func TestTriggerQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -305,6 +306,7 @@ func TestTriggerQueries(t *testing.T) {
 // TestTriggerRegistrationQueries ports the trigger_registrations queries of
 // triggers.sql, interleaved with the Repository.
 func TestTriggerRegistrationQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -391,6 +393,7 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 // TestListAccessRoutedTriggers ports integration_access.sql's
 // ListAccessRoutedTriggers, interleaved with the Repository.
 func TestListAccessRoutedTriggers(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)

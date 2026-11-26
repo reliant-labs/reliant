@@ -17,6 +17,7 @@ import (
 // TestProjectQueries ports projects.sql: every project read and write
 // through the store, interleaved with the Repository on the same database.
 func TestProjectQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -170,6 +171,7 @@ func TestProjectQueries(t *testing.T) {
 
 // TestRepoQueries ports repos.sql.
 func TestRepoQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -222,6 +224,7 @@ func TestRepoQueries(t *testing.T) {
 
 // TestProjectDaemonQueries ports project_daemons.sql.
 func TestProjectDaemonQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	p := storetest.SeedProjectID
@@ -302,6 +305,7 @@ func TestProjectDaemonQueries(t *testing.T) {
 // TestVisibilityAndFavoriteQueries ports visibility.sql's overrides and
 // command_favorites.sql.
 func TestVisibilityAndFavoriteQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	wf := reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_WORKFLOW
@@ -362,6 +366,7 @@ func newWorktree(id, name, branch string, at time.Time) *core.Worktree {
 // Archived rows (deleted_at set) must stay addressable everywhere the original
 // queries addressed them, despite forge projecting deleted_at as soft delete.
 func TestWorktreeQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -625,6 +630,7 @@ func TestWorktreeQueries(t *testing.T) {
 // with no owner. Those list with no path, and the sweep skips every step that
 // needs one.
 func TestReclaimListsOnlyTheOwnersInstalledCheckout(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -682,6 +688,7 @@ func TestReclaimListsOnlyTheOwnersInstalledCheckout(t *testing.T) {
 // The sweep's reads of a user or a row with no id answer an error, never every
 // user's or every row's.
 func TestWorktreeSweepReads_EmptyIDsFailClosed(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	if _, err := store.ListLiveWorktreePathsForUser(ctx, env.ORM, ""); err == nil {

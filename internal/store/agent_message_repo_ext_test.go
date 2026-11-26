@@ -62,6 +62,7 @@ func requireSameMail(t *testing.T, label string, got, want *core.AgentMessage) {
 // (chat-collaboration.md §6.1): both enqueue paths write author_user_id, both
 // reads return it, and an owner's (nil) author stays nil, never "".
 func TestAgentMessageAuthorRoundTrip(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedMailbox(t, env, "au-chat", "au-main")
@@ -115,6 +116,7 @@ func TestAgentMessageAuthorRoundTrip(t *testing.T) {
 }
 
 func TestAgentMessageDrain(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedMailbox(t, env, "mb-chat", "mb-parent", "mb-child")
@@ -254,6 +256,7 @@ func mustMail(t *testing.T, env *storetest.Env, id string) *core.AgentMessage {
 }
 
 func TestAgentMessageCancelAndClaim(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedMailbox(t, env, "cl-chat", "cl-parent", "cl-child")
@@ -324,6 +327,7 @@ func TestAgentMessageCancelAndClaim(t *testing.T) {
 }
 
 func TestAgentMessageSpawnReports(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedMailbox(t, env, "sr-chat", "sr-parent", "sr-child", "sr-other")

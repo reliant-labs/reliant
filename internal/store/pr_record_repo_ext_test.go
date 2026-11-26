@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,11 +34,11 @@ type prChange struct {
 	delta   core.PRRecordDelta
 }
 
-var prIDs int
+// prIDs numbers delivery ids; atomic, because the tests run in parallel.
+var prIDs atomic.Int64
 
 func prNewID() string {
-	prIDs++
-	return fmt.Sprintf("id-%d", prIDs)
+	return fmt.Sprintf("id-%d", prIDs.Add(1))
 }
 
 func (c prChange) change() core.PRRecordChange {
@@ -82,6 +83,7 @@ func getPR(t *testing.T, env *storetest.Env) *core.PRRecord {
 // delivered late changes nothing, a tie applies only its label delta, and a
 // redelivery applies nothing.
 func TestPRRecordSnapshotOrdering(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 
@@ -153,6 +155,7 @@ const prShaC = "cccccccccccccccccccccccccccccccccccccccc"
 // time. Each applies its own transition, in either order, and a full snapshot
 // completes a slim one of the same second.
 func TestPRRecordSameSecondTransitions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	yes, no := true, false
 
@@ -241,6 +244,7 @@ func TestPRRecordSameSecondTransitions(t *testing.T) {
 // TestPRRecordConcurrentFirstDeliveries: deliveries of one new pull request
 // racing each other create one record, and the newest snapshot wins.
 func TestPRRecordConcurrentFirstDeliveries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	var wg sync.WaitGroup
 	changes := make([]core.PRRecordChange, 8)
@@ -270,6 +274,7 @@ func TestPRRecordConcurrentFirstDeliveries(t *testing.T) {
 // TestPRRecordReviewsAndChecks: review markers are kept once, and the newest
 // run of a check wins regardless of delivery order.
 func TestPRRecordReviewsAndChecks(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := prChange{key: "r1", updated: 1, head: prShaA}.change()
@@ -311,6 +316,7 @@ func TestPRRecordReviewsAndChecks(t *testing.T) {
 
 // TestHasFreshIntegrationAccess reads the routing grants.
 func TestHasFreshIntegrationAccess(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := prBase
