@@ -275,3 +275,12 @@ type MainHealthRecord struct {
 	// ObservedAt defaults to now.
 	ObservedAt time.Time
 }
+
+// StaleQueueEntry is an entry still in the queue whose PR record no longer
+// holds it: RecordState is the record's state ("" when the record is gone)
+// and RecordHead its head.
+type StaleQueueEntry struct {
+	Entry       *QueueEntry
+	RecordState string
+	RecordHead  string
+}
