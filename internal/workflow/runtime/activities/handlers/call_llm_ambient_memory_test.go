@@ -347,7 +347,7 @@ func TestCallLLM_ExcludeAmbientMemoryIncompleteLineageNoProviderRequest(t *testi
 			for _, alreadyExcluded := range []bool{false, true} {
 				_, err := h.sqlDB.ExecContext(ctx, "UPDATE threads SET exclude_ambient_memory = $1 WHERE id = $2", alreadyExcluded, chat.ID)
 				require.NoError(t, err)
-				excluded, err := h.Repo().ResolveThreadAmbientMemoryExclusion(ctx, chat.ID, chat.ID, false)
+				excluded, err := store.ResolveThreadAmbientMemoryExclusion(ctx, h.Repo().ORM(), chat.ID, chat.ID, false)
 				require.ErrorContains(t, err, "incomplete lineage")
 				require.False(t, excluded)
 				var out CallLLMOutput

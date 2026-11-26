@@ -185,7 +185,7 @@ func (m *MockChatRows) GetChatRow(ctx context.Context, id string) (*db.ChatRow, 
 var _ ChatRows = (*MockChatRows)(nil)
 
 // forge:section MockRepository
-// forge:hash=35db9f04cf01146116554d4dae2e6f0de843483ae0db88b4e60d7125e85e9589
+// forge:hash=a3fcaf6ac36a4445837af03e947e416f9508893f4e6a688d402af8f07e24e8dd
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -207,7 +207,6 @@ type MockRepository struct {
 	ListLiveToolCallsByChatFunc                              func(context.Context, string) ([]*db.ToolCall, error)
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
@@ -351,15 +350,6 @@ func (m *MockRepository) GetThread(ctx context.Context, id string) (*db.Thread, 
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockRepository) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.

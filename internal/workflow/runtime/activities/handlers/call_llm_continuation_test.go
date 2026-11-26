@@ -419,6 +419,10 @@ type nudgeSaveFailingRepo struct {
 	mu     sync.Mutex
 }
 
+func (r *nudgeSaveFailingRepo) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return tools.WithChats(r.Repo).ResolveThreadAmbientMemoryExclusion(ctx, chatID, threadID, requested)
+}
+
 func (r *nudgeSaveFailingRepo) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	return chatviews.Of(r.Repo).GetChat(ctx, id)
 }

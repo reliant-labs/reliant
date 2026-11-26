@@ -62912,6 +62912,17 @@
     },
     {
       "consumer": "WorktreeReclaim",
+      "field": "Chats",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Chats",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorktreeReclaim",
       "field": "Daemons",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Daemons",
       "methods": [],

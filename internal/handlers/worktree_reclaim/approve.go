@@ -79,7 +79,7 @@ func (s *Service) sendApprovals(ctx context.Context, userID, daemonID string, de
 	for _, i := range approved {
 		p := shown[decisions[i].Key]
 		if p.GetRowId() != "" {
-			chat, err := s.deps.Repo.GetLiveChatIDForWorktree(ctx, p.GetRowId())
+			chat, err := s.deps.Chats.GetLiveChatIDForWorktree(ctx, p.GetRowId())
 			switch {
 			case err != nil:
 				refuse(results[i], "unverified", "could not check whether a chat is still open in it; approve again")

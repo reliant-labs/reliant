@@ -54,7 +54,7 @@ func TestWorktreeRunActivities_ParentChatRunsDoNotHoldASubAgentWorktree(t *testi
 	require.WithinDuration(t, time.Now().Add(-3*24*time.Hour), acts["sub"].LastActive, 2*time.Minute,
 		"its last activity is its own run's stop, not the orchestrator's")
 
-	running, err := env.Repo.ListWorktreeIDsWithRunningChat(ctx, []string{"sub", *chat.WorktreeID})
+	running, err := store.ListWorktreeIDsWithRunningChat(ctx, env.Repo.ORM(), []string{"sub", *chat.WorktreeID})
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{*chat.WorktreeID: true}, running)
 

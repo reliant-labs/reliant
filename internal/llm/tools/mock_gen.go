@@ -1129,7 +1129,7 @@ func (m *MockLaunchedRunCounter) CountLiveLaunchedRuns(ctx context.Context, user
 var _ LaunchedRunCounter = (*MockLaunchedRunCounter)(nil)
 
 // forge:section MockWorktreeChatLister
-// forge:hash=b65b9a33b8651777926bc2b9046d0d0a4728d7759e97df63ceb6e26fb7e28f07
+// forge:hash=f0f91e8af364d50ce6b6061d96e255359b28cad8c5a30f596bc06740eb193b50
 
 // MockWorktreeChatLister is a test mock for the WorktreeChatLister interface.
 //
@@ -1139,7 +1139,8 @@ var _ LaunchedRunCounter = (*MockLaunchedRunCounter)(nil)
 // "MockWorktreeChatLister.<Method>Func not set" error.
 type MockWorktreeChatLister struct {
 	contractkit.Recorder
-	ListChatsForWorktreeFunc func(context.Context, string, string, int) ([]db.WorktreeChat, error)
+	ListChatsForWorktreeFunc     func(context.Context, string, string, int) ([]db.WorktreeChat, error)
+	GetLiveChatIDForWorktreeFunc func(context.Context, string) (string, error)
 }
 
 // ListChatsForWorktree records the call and delegates to ListChatsForWorktreeFunc when set.
@@ -1149,6 +1150,15 @@ func (m *MockWorktreeChatLister) ListChatsForWorktree(ctx context.Context, userI
 		return m.ListChatsForWorktreeFunc(ctx, userID, worktreeID, limit)
 	}
 	return nil, contractkit.MockNotSet("MockWorktreeChatLister", "ListChatsForWorktree")
+}
+
+// GetLiveChatIDForWorktree records the call and delegates to GetLiveChatIDForWorktreeFunc when set.
+func (m *MockWorktreeChatLister) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
+	m.Recorder.Record("GetLiveChatIDForWorktree", ctx, worktreeID)
+	if m.GetLiveChatIDForWorktreeFunc != nil {
+		return m.GetLiveChatIDForWorktreeFunc(ctx, worktreeID)
+	}
+	return "", contractkit.MockNotSet("MockWorktreeChatLister", "GetLiveChatIDForWorktree")
 }
 
 // Compile-time check.
@@ -1793,7 +1803,7 @@ func (m *MockgenerateVideoStore) GetChat(ctx context.Context, id string) (*db.Ch
 var _ generateVideoStore = (*MockgenerateVideoStore)(nil)
 
 // forge:section MockspawnStatusStore
-// forge:hash=54d2e3d90a6d0919b46626de3b1979b9cdaa81eb962f898319777d86b30dc5a7
+// forge:hash=b03d9c8df3cd0c02745da90fe45561a802599251911710a327bf6e1d085b7312
 
 // MockspawnStatusStore is a test mock for the spawnStatusStore interface.
 //
@@ -1805,7 +1815,6 @@ type MockspawnStatusStore struct {
 	contractkit.Recorder
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
@@ -1862,15 +1871,6 @@ func (m *MockspawnStatusStore) GetThread(ctx context.Context, id string) (*db.Th
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockspawnStatusStore", "GetThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockspawnStatusStore) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockspawnStatusStore", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
@@ -2431,7 +2431,7 @@ func (m *MocklistRunsStore) GetChat(ctx context.Context, id string) (*db.Chat, e
 var _ listRunsStore = (*MocklistRunsStore)(nil)
 
 // forge:section MockgetRunStore
-// forge:hash=4d8a8fe19556da20c8d1fd14a87d73927f38a755d9635666716590078f8a9f25
+// forge:hash=9d3d2b6023bed767bbc7e74a203a4d6aef6ef2ea4e981d32779ce50a30baaf6d
 
 // MockgetRunStore is a test mock for the getRunStore interface.
 //
@@ -2443,7 +2443,6 @@ type MockgetRunStore struct {
 	contractkit.Recorder
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
@@ -2499,15 +2498,6 @@ func (m *MockgetRunStore) GetThread(ctx context.Context, id string) (*db.Thread,
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockgetRunStore", "GetThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockgetRunStore) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockgetRunStore", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.
@@ -3327,7 +3317,7 @@ func (m *MockrunScenarioStore) GetChat(ctx context.Context, id string) (*db.Chat
 var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 
 // forge:section MockworktreeStore
-// forge:hash=d31dc5d657ff518fd536029ced07b3c6cbb5176ee64f6a3885eed97d7d6f6578
+// forge:hash=74a1317479b5ff710ecda4c6677c8b5e6b3aee7ca4c892e441e663840291356c
 
 // MockworktreeStore is a test mock for the worktreeStore interface.
 //
@@ -3337,18 +3327,17 @@ var _ runScenarioStore = (*MockrunScenarioStore)(nil)
 // "MockworktreeStore.<Method>Func not set" error.
 type MockworktreeStore struct {
 	contractkit.Recorder
-	CreateWorktreeFunc           func(context.Context, *db.Worktree) error
-	UpdateWorktreeFunc           func(context.Context, *db.Worktree) error
-	ArchiveWorktreeFunc          func(context.Context, string) error
-	GetLiveWorktreeByNameFunc    func(context.Context, string, string) (*db.Worktree, error)
-	ListWorktreesByBranchFunc    func(context.Context, string, string) ([]*db.Worktree, error)
-	SettleCheckoutTeardownFunc   func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
-	GetRepoByProjectAndPathFunc  func(context.Context, string, string) (*core.Repo, error)
-	CreateRepoFunc               func(context.Context, *core.Repo) error
-	ListReposByProjectFunc       func(context.Context, string) ([]*core.Repo, error)
-	UpdateProjectFunc            func(context.Context, *db.Project, string) error
-	GetLiveChatIDForWorktreeFunc func(context.Context, string) (string, error)
-	ListWorktreesFunc            func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
+	CreateWorktreeFunc          func(context.Context, *db.Worktree) error
+	UpdateWorktreeFunc          func(context.Context, *db.Worktree) error
+	ArchiveWorktreeFunc         func(context.Context, string) error
+	GetLiveWorktreeByNameFunc   func(context.Context, string, string) (*db.Worktree, error)
+	ListWorktreesByBranchFunc   func(context.Context, string, string) ([]*db.Worktree, error)
+	SettleCheckoutTeardownFunc  func(context.Context, string, string, string) (*db.CheckoutTeardown, error)
+	GetRepoByProjectAndPathFunc func(context.Context, string, string) (*core.Repo, error)
+	CreateRepoFunc              func(context.Context, *core.Repo) error
+	ListReposByProjectFunc      func(context.Context, string) ([]*core.Repo, error)
+	UpdateProjectFunc           func(context.Context, *db.Project, string) error
+	ListWorktreesFunc           func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
 }
 
 // CreateWorktree records the call and delegates to CreateWorktreeFunc when set.
@@ -3439,15 +3428,6 @@ func (m *MockworktreeStore) UpdateProject(ctx context.Context, project *db.Proje
 		return m.UpdateProjectFunc(ctx, project, userID)
 	}
 	return contractkit.MockNotSet("MockworktreeStore", "UpdateProject")
-}
-
-// GetLiveChatIDForWorktree records the call and delegates to GetLiveChatIDForWorktreeFunc when set.
-func (m *MockworktreeStore) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
-	m.Recorder.Record("GetLiveChatIDForWorktree", ctx, worktreeID)
-	if m.GetLiveChatIDForWorktreeFunc != nil {
-		return m.GetLiveChatIDForWorktreeFunc(ctx, worktreeID)
-	}
-	return "", contractkit.MockNotSet("MockworktreeStore", "GetLiveChatIDForWorktree")
 }
 
 // ListWorktrees records the call and delegates to ListWorktreesFunc when set.

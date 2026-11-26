@@ -50,3 +50,15 @@ func Of(s any) Chats {
 	}
 	return Chats{get: func(context.Context, string) (*core.Chat, error) { return nil, ErrNoChatReads }}
 }
+
+// AmbientMemory latches a thread's ambient-memory exclusion through the
+// generated thread store over the database handle of s (a *db.Repo), or fails
+// when s has none.
+func AmbientMemory(s any) func(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	if o, ok := s.(interface{ ORM() *orm.Client }); ok {
+		if c := o.ORM(); c != nil {
+			return store.NewThreadExtStore(c).ResolveThreadAmbientMemoryExclusion
+		}
+	}
+	return func(context.Context, string, string, bool) (bool, error) { return false, ErrNoChatReads }
+}

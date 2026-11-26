@@ -32,7 +32,7 @@ func machineRepo(t *testing.T, connected bool, proposals ...*pb.WorktreeReclaimP
 		WorktreeReclaim: &pb.WorktreeReclaimProposals{Mode: "on", Total: int32(len(proposals)), Proposals: proposals},
 	})
 	require.NoError(t, err)
-	return &machineStub{StubDaemons: &StubDaemons{
+	return &machineStub{StubChats: &StubChats{GetLiveChatIDForWorktreeFunc: func(context.Context, string) (string, error) { return "", nil }}, StubDaemons: &StubDaemons{
 		GetDaemonFunc: func(_ context.Context, id string) (*core.Daemon, error) {
 			return &core.Daemon{ID: id, UserID: testUser}, nil
 		},
@@ -52,6 +52,7 @@ func machineRepo(t *testing.T, connected bool, proposals ...*pb.WorktreeReclaimP
 type machineStub struct {
 	*StubRepo
 	*StubDaemons
+	*StubChats
 }
 
 // echoSender records what reached the daemon and answers each decision with
@@ -90,7 +91,7 @@ func (e *echoSender) SendDaemonCommandToDaemon(_ context.Context, userID, daemon
 
 func decide(t *testing.T, repo *machineStub, sender Sender, userID string, decisions ...*pb.WorktreeReclaimDecision) (*pb.DecideWorktreeReclaimResponse, error) {
 	t.Helper()
-	svc := NewTestWorktreeReclaim(t, WithWorktreeReclaimDeps(Deps{Repo: repo.StubRepo, Daemons: repo.StubDaemons, Sender: sender}))
+	svc := NewTestWorktreeReclaim(t, WithWorktreeReclaimDeps(Deps{Repo: repo.StubRepo, Daemons: repo.StubDaemons, Chats: repo.StubChats, Sender: sender}))
 	ctx := auth.WithUser(context.Background(), userID, "user", userID+"@example.com")
 	resp, err := svc.DecideWorktreeReclaim(ctx, connect.NewRequest(&pb.DecideWorktreeReclaimRequest{DaemonId: testDaemon, Decisions: decisions}))
 	if err != nil {

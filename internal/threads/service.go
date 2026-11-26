@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/chataccess"
+	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -21,6 +22,7 @@ type Service struct {
 	chats            chataccess.Service
 	messages         Messages
 	senders          Senders
+	ambientMemory    AmbientMemory
 	temporalSignaler TemporalSignaler
 	toolCanceler     ToolCanceler
 }
@@ -28,7 +30,10 @@ type Service struct {
 // New builds a Service from deps. Deps.Repo is required; the signaler and the
 // tool canceler are only needed by InterruptThread and the pause path.
 func New(deps Deps) *Service {
-	return &Service{repo: deps.Repo, chats: deps.Chats, messages: deps.Messages, senders: deps.Senders, temporalSignaler: deps.Signaler, toolCanceler: deps.ToolCanceler}
+	if deps.AmbientMemory == nil {
+		deps.AmbientMemory = repoAmbientMemory{deps.Repo}
+	}
+	return &Service{repo: deps.Repo, chats: deps.Chats, messages: deps.Messages, senders: deps.Senders, ambientMemory: deps.AmbientMemory, temporalSignaler: deps.Signaler, toolCanceler: deps.ToolCanceler}
 }
 
 // CreateThreadOpts contains options for creating a new root thread.
@@ -269,7 +274,7 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 
 		// Commit the runtime policy atomically with thread creation: a crash
 		// between creation and the child's first turn must not lose its cap.
-		excluded, err := s.repo.ResolveThreadAmbientMemoryExclusion(txCtx, opts.ChatID, resultThread.ID, opts.ExcludeAmbientMemory)
+		excluded, err := s.ambientMemory.ResolveThreadAmbientMemoryExclusion(txCtx, opts.ChatID, resultThread.ID, opts.ExcludeAmbientMemory)
 		if err != nil {
 			return fmt.Errorf("persist thread memory exclusion: %w", err)
 		}
@@ -347,4 +352,12 @@ func contextWindowID(chatID, threadID string, sequence int) string {
 // now returns the current UTC time (extracted for testing).
 var now = func() time.Time {
 	return time.Now().UTC()
+}
+
+// repoAmbientMemory is the ambient-memory latch of a repository that has a
+// database handle: the generated thread store over it.
+type repoAmbientMemory struct{ repo any }
+
+func (r repoAmbientMemory) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return chatviews.AmbientMemory(r.repo)(ctx, chatID, threadID, requested)
 }

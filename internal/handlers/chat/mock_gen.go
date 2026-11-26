@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=45f7282e968b50ee8cc0b2f9ffb77a5d0e656e46a25bc49adceafa1e3940ba57
+// forge:hash=aac0b5c2a44813a868090fa4409740185c9c0a5f779c861bea0b6344ef7c6a27
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -291,7 +291,6 @@ type MockRepository struct {
 	CreateNumberedMessageFunc                                func(context.Context, *db.Message) error
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
-	ResolveThreadAmbientMemoryExclusionFunc                  func(context.Context, string, string, bool) (bool, error)
 	GetThreadWithParentFunc                                  func(context.Context, string) (*db.Thread, *string, error)
 	GetRootThreadFunc                                        func(context.Context, string) (*db.Thread, error)
 	CreateWorkflowFunc                                       func(context.Context, *db.Workflow) error
@@ -857,15 +856,6 @@ func (m *MockRepository) GetThread(ctx context.Context, id string) (*db.Thread, 
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetThread")
-}
-
-// ResolveThreadAmbientMemoryExclusion records the call and delegates to ResolveThreadAmbientMemoryExclusionFunc when set.
-func (m *MockRepository) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID string, threadID string, requested bool) (bool, error) {
-	m.Recorder.Record("ResolveThreadAmbientMemoryExclusion", ctx, chatID, threadID, requested)
-	if m.ResolveThreadAmbientMemoryExclusionFunc != nil {
-		return m.ResolveThreadAmbientMemoryExclusionFunc(ctx, chatID, threadID, requested)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "ResolveThreadAmbientMemoryExclusion")
 }
 
 // GetThreadWithParent records the call and delegates to GetThreadWithParentFunc when set.

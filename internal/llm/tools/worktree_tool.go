@@ -837,7 +837,10 @@ func chatStateName(state core.ChatState) string {
 
 // liveChatIn returns the id of a non-archived chat bound to the worktree, or "".
 func (w *worktreeTool) liveChatIn(ctx context.Context, worktreeID string) (string, error) {
-	id, err := w.repo.GetLiveChatIDForWorktree(ctx, worktreeID)
+	if w.chats == nil {
+		return "", fmt.Errorf("cannot check whether chats are using the worktree: chat store is unavailable")
+	}
+	id, err := w.chats.GetLiveChatIDForWorktree(ctx, worktreeID)
 	if err != nil {
 		return "", fmt.Errorf("look up chats using the worktree: %w", err)
 	}
