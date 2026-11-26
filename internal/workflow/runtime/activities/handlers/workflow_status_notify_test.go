@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -92,7 +93,7 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(h.Repo())).Execute, input, &output))
 	require.True(t, output.Success)
 
-	chat, err := h.Repo().GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	// The reason is not stored on the chat; it travels on the user update the
 	// web client notifies from.
@@ -210,7 +211,7 @@ func TestApprovalCreate_MarksScheduleLaunchedChatUnread(t *testing.T) {
 		Title:              "Deploy to production?",
 	}, &output))
 
-	chat, err := h.Repo().GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "schedule", chat.LaunchKind)
 	assert.True(t, chat.Unread, "an automation awaiting approval must still surface")

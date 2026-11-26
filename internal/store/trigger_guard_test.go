@@ -15,6 +15,7 @@ import (
 // the handler reaches them through the generated ext stores, so a blank id
 // must fail before any SQL, never write or read "no trigger".
 func TestWebhookSecretAndFiringsReadsFailClosedOnABlankID(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	if err := store.NewTriggerExtStore(env.ORM).SetTriggerWebhookSecret(ctx, "", []byte("sealed")); err == nil {
@@ -29,6 +30,7 @@ func TestWebhookSecretAndFiringsReadsFailClosedOnABlankID(t *testing.T) {
 // functions, so the generated TriggerExtStore refuses an empty id before any
 // SQL: a lock or projection write can never be aimed at "no trigger".
 func TestTriggerLockAndProjectionFailClosedOnAnEmptyID(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	if err := store.LockTrigger(ctx, env.ORM, ""); err == nil {

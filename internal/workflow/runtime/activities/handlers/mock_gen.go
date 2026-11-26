@@ -3518,7 +3518,7 @@ func (m *MockPreflightDaemonCheckStore) SetChatDaemonBlocked(ctx context.Context
 var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 
 // forge:section MockQuestionCreateStore
-// forge:hash=4dc7ed03f2be6fa9daa9a53a88d391a4c7e6de0c1e8371120393adc7ae66c106
+// forge:hash=a7781d76154428b760443849e680e7543275b357524aa8725a602b8866d20bde
 
 // MockQuestionCreateStore is a test mock for the QuestionCreateStore interface.
 //
@@ -3528,10 +3528,9 @@ var _ PreflightDaemonCheckStore = (*MockPreflightDaemonCheckStore)(nil)
 // "MockQuestionCreateStore.<Method>Func not set" error.
 type MockQuestionCreateStore struct {
 	contractkit.Recorder
-	RunTxFunc              func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	UpdateChatUnreadFunc   func(context.Context, string, bool, string) error
-	EmitQuestionUpdateFunc func(context.Context, string, db.QuestionUpdate) error
-	EmitUserRefetchFunc    func(context.Context, string, db.RefetchType, db.RefetchOpts) error
+	RunTxFunc            func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	UpdateChatUnreadFunc func(context.Context, string, bool, string) error
+	EmitUserRefetchFunc  func(context.Context, string, db.RefetchType, db.RefetchOpts) error
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -3552,15 +3551,6 @@ func (m *MockQuestionCreateStore) UpdateChatUnread(ctx context.Context, chatID s
 	return contractkit.MockNotSet("MockQuestionCreateStore", "UpdateChatUnread")
 }
 
-// EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
-func (m *MockQuestionCreateStore) EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error {
-	m.Recorder.Record("EmitQuestionUpdate", ctx, chatID, update)
-	if m.EmitQuestionUpdateFunc != nil {
-		return m.EmitQuestionUpdateFunc(ctx, chatID, update)
-	}
-	return contractkit.MockNotSet("MockQuestionCreateStore", "EmitQuestionUpdate")
-}
-
 // EmitUserRefetch records the call and delegates to EmitUserRefetchFunc when set.
 func (m *MockQuestionCreateStore) EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error {
 	m.Recorder.Record("EmitUserRefetch", ctx, userID, refetchType, opts)
@@ -3574,7 +3564,7 @@ func (m *MockQuestionCreateStore) EmitUserRefetch(ctx context.Context, userID st
 var _ QuestionCreateStore = (*MockQuestionCreateStore)(nil)
 
 // forge:section MockQuestionResolveStore
-// forge:hash=9ae641fded7aa317fbfac05f7cb2cf6da3bd01f55b895e11e0c0608e248c86d4
+// forge:hash=d30c19712b3d97e15040bfd1ce9512529e231b2ebb2a345bf26d63c726b89e6a
 
 // MockQuestionResolveStore is a test mock for the QuestionResolveStore interface.
 //
@@ -3584,8 +3574,7 @@ var _ QuestionCreateStore = (*MockQuestionCreateStore)(nil)
 // "MockQuestionResolveStore.<Method>Func not set" error.
 type MockQuestionResolveStore struct {
 	contractkit.Recorder
-	GetQuestionByIDFunc    func(context.Context, string) (*db.Question, error)
-	EmitQuestionUpdateFunc func(context.Context, string, db.QuestionUpdate) error
+	GetQuestionByIDFunc func(context.Context, string) (*db.Question, error)
 }
 
 // GetQuestionByID records the call and delegates to GetQuestionByIDFunc when set.
@@ -3595,15 +3584,6 @@ func (m *MockQuestionResolveStore) GetQuestionByID(ctx context.Context, id strin
 		return m.GetQuestionByIDFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockQuestionResolveStore", "GetQuestionByID")
-}
-
-// EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
-func (m *MockQuestionResolveStore) EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error {
-	m.Recorder.Record("EmitQuestionUpdate", ctx, chatID, update)
-	if m.EmitQuestionUpdateFunc != nil {
-		return m.EmitQuestionUpdateFunc(ctx, chatID, update)
-	}
-	return contractkit.MockNotSet("MockQuestionResolveStore", "EmitQuestionUpdate")
 }
 
 // Compile-time check.

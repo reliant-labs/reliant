@@ -184,7 +184,7 @@ func (f *fixture) humanRun(workflowName string) string {
 func (f *fixture) finish(chatID string, outcome core.RunEventOutcome) *core.RunEvent {
 	f.t.Helper()
 	ctx := context.Background()
-	chat, err := f.repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), chatID)
 	require.NoError(f.t, err)
 	name := ""
 	if chat.WorkflowName != nil {
@@ -280,7 +280,7 @@ func TestDispatch_LaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *tes
 	require.NoError(t, err)
 	launched := launchedChat(t, results, tr.ID)
 
-	chat, err := f.repo.GetChat(ctx, launched)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), launched)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, f.daemonID, *chat.ActiveDaemonID)
@@ -308,7 +308,7 @@ func TestDispatch_NoMachineTriggerLaunchesANoMachineRun(t *testing.T) {
 	require.NoError(t, err)
 	launched := launchedChat(t, results, tr.ID)
 
-	chat, err := f.repo.GetChat(ctx, launched)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), launched)
 	require.NoError(t, err)
 	assert.True(t, chat.NoMachine, "the run has no machine, so preflight and tool time never resolve or wake one")
 	assert.Nil(t, chat.ActiveDaemonID)
@@ -326,7 +326,7 @@ func TestDispatch_WorkflowAndOutcomeMismatchesAreNotRecorded(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, results)
 	for _, tr := range []*core.Trigger{otherWorkflow, onlyFailed} {
-		events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.userID, TriggerID: tr.ID, Limit: 10})
+		events, _, err := store.ListTriggerEventsPage(ctx, f.repo.ORM(), core.TriggerEventFilters{UserID: f.userID, TriggerID: tr.ID, Limit: 10})
 		require.NoError(t, err)
 		assert.Empty(t, events, "a mismatched event is not this trigger's firing")
 	}
@@ -385,7 +385,7 @@ func TestDispatch_SenderFilterReadsTheFinishingWorkflow(t *testing.T) {
 	launchedChat(t, results, fromReview.ID)
 	skipped := resultFor(t, results, fromDeploy.ID)
 	assert.Equal(t, core.TriggerEventSkipped, skipped.Outcome)
-	events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.userID, TriggerID: fromDeploy.ID, Limit: 10})
+	events, _, err := store.ListTriggerEventsPage(ctx, f.repo.ORM(), core.TriggerEventFilters{UserID: f.userID, TriggerID: fromDeploy.ID, Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, events, 1)
 	assert.Equal(t, "code-review", events[0].Event.Sender.ID, "a skipped firing records who it was from")

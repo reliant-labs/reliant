@@ -89,7 +89,7 @@ func newPreemptionTestActivity(store ExecuteToolsStore, rows WorkspaceRows, tool
 func (f *durableStatusFixture) runBatch(t *testing.T, executor toolexec.ToolExecutor, calls ...message.ToolCall) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	err := f.h.ExecuteActivity(newPreemptionTestActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), dbstore.NewAgentMessageExtStore(f.h.Repo().ORM()), executor).Execute, ExecuteToolsInput{
+	err := f.h.ExecuteActivity(newPreemptionTestActivity(tools.WithChats(f.h.Repo()), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), dbstore.NewAgentMessageExtStore(f.h.Repo().ORM()), executor).Execute, ExecuteToolsInput{
 		ChatID:    f.chatID,
 		Thread:    f.chatID,
 		ToolCalls: calls,
@@ -237,7 +237,7 @@ func TestPreemption_OneMessageEndsEveryWaitInTheBatch(t *testing.T) {
 			executor.entered = make(chan string, 2)
 			first, second := waitCall(), waitCall()
 			ready := make(chan struct{})
-			store := &preemptionBarrierStore{ExecuteToolsStore: f.h.Repo(), MailboxPreempter: dbstore.NewAgentMessageExtStore(f.h.Repo().ORM()), beforePoll: func() { <-ready }}
+			store := &preemptionBarrierStore{ExecuteToolsStore: tools.WithChats(f.h.Repo()), MailboxPreempter: dbstore.NewAgentMessageExtStore(f.h.Repo().ORM()), beforePoll: func() { <-ready }}
 			if lateSibling {
 				preempted := make(chan struct{})
 				answer := executor.onPreempt

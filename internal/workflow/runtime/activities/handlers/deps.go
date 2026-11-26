@@ -489,14 +489,12 @@ type PreflightDaemonCheckStore interface {
 type QuestionCreateStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
-	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 }
 
 // QuestionResolveStore is what QuestionResolveActivity reads and writes.
 type QuestionResolveStore interface {
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
-	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 }
 
 // QuestionWriter creates and resolves questions and announces the chat's

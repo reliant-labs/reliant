@@ -177,7 +177,7 @@ func TestCompactionOverflow_SaveReloadAndSkip(t *testing.T) {
 			input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 			input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
 			driver := &fitSummarizer{limit: limit}
-			compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
+			compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: tools.WithChats(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()})
 			var out CompactOutput
 			require.NoError(t, h.ExecuteActivity(compact.Execute, input, &out))
 			after, err := LoadMessagesForLLM(ctx, h.Repo(), toolCallsOf(h.Repo()), chatID, thread, nil)

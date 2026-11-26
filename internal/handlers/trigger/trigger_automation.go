@@ -60,7 +60,7 @@ func (g *automationGrants) releaseIfUnused(ctx context.Context, userID, daemonID
 	if g == nil || g.client == nil || daemonID == "" {
 		return
 	}
-	all, err := g.triggers.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
+	all, err := g.triggers.ListTriggersForUser(ctx, core.TriggerFilters{UserID: userID})
 	if err != nil {
 		logging.WarnContext(ctx, "could not check remaining triggers before revoking automation token",
 			"user_id", userID, "daemon_id", daemonID, "error", err)

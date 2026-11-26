@@ -12,6 +12,7 @@ import (
 
 	forgedb "github.com/reliant-labs/reliant/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -86,22 +87,22 @@ func TestChatOriginMigrationBackfillsFromLaunchEvent(t *testing.T) {
 
 	for _, kind := range kinds {
 		id := "bf-" + string(kind)
-		chat, err := repo.GetChat(ctx, id)
+		chat, err := store.GetChat(ctx, repo.ORM(), id)
 		require.NoError(t, err)
 		assert.Equal(t, core.ChatOriginOf(kind), chat.Origin, "%s: the backfill and the launcher agree", id)
 		assert.Equal(t, kind == core.TriggerEventKindChatStart, chat.ListInSidebar, "%s: only a person's chat lists", id)
 	}
-	legacy, err := repo.GetChat(ctx, "bf-legacy")
+	legacy, err := store.GetChat(ctx, repo.ORM(), "bf-legacy")
 	require.NoError(t, err)
 	assert.Equal(t, core.ChatOriginUser, legacy.Origin)
 	assert.True(t, legacy.ListInSidebar, "a chat with no launch event is a conversation")
 
-	continued, err := repo.GetChat(ctx, "bf-continued")
+	continued, err := store.GetChat(ctx, repo.ORM(), "bf-continued")
 	require.NoError(t, err)
 	assert.Equal(t, core.ChatOriginAutomation, continued.Origin, "the earliest event is the launch event")
 	assert.False(t, continued.ListInSidebar)
 
-	adopted, err := repo.GetChat(ctx, "bf-adopted")
+	adopted, err := store.GetChat(ctx, repo.ORM(), "bf-adopted")
 	require.NoError(t, err)
 	assert.Equal(t, core.ChatOriginAutomation, adopted.Origin, "adoption never rewrites origin")
 	assert.True(t, adopted.ListInSidebar)

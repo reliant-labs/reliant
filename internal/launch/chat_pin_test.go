@@ -53,7 +53,7 @@ func TestLaunchPinsANewChatThatNamesNoMachine(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, "vm", *chat.ActiveDaemonID)
@@ -74,7 +74,7 @@ func TestLaunchPinnerNeverOverridesAChoiceOrNoMachine(t *testing.T) {
 			Params: mockModelParams(t), Messages: userSeed("hi"), DaemonID: "chosen",
 		})
 		require.NoError(t, err)
-		chat, err := repo.GetChat(ctx, result.Chat.ID)
+		chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "chosen", *chat.ActiveDaemonID)
 	})
@@ -88,7 +88,7 @@ func TestLaunchPinnerNeverOverridesAChoiceOrNoMachine(t *testing.T) {
 			Params: mockModelParams(t), Messages: userSeed("hi"), NoMachine: true,
 		})
 		require.NoError(t, err)
-		chat, err := repo.GetChat(ctx, result.Chat.ID)
+		chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 		require.NoError(t, err)
 		assert.Nil(t, chat.ActiveDaemonID)
 		assert.True(t, chat.NoMachine)
@@ -107,7 +107,7 @@ func TestLaunchWithoutAPinnerLeavesTheChatUnpinned(t *testing.T) {
 		Params: mockModelParams(t), Messages: userSeed("hi"),
 	})
 	require.NoError(t, err)
-	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 }

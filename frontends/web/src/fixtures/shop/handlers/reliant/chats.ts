@@ -1,8 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * ChatService, ApprovalService, QuestionService and AttachmentService: the
- * sidebar's chats (workspace.ts) and their transcripts (data/transcripts/).
+ * ChatService, ApprovalService, QuestionService, AttachmentService and
+ * SharingService: the sidebar's chats (workspace.ts) and their transcripts
+ * (data/transcripts/). The approval and the questions are also the Inbox's
+ * (inbox.ts).
  *
  * THE fixture chat, CHAT_IDS.cartTotals, is three turns of a get-it-right run,
  * so one chat shows every state the transcript draws:
@@ -33,6 +35,7 @@ import { ApprovalService, ApprovalStatus, ApprovalType } from "@/gen/reliant/v1/
 import { AttachmentService, GetAttachmentResponseSchema } from "@/gen/reliant/v1/attachment_pb";
 import { ChatService, ListMessagesResponseSchema, WorkflowState, WorkflowStopReason, type Message, type WorkflowExecutionSchema } from "@/gen/reliant/v1/chat_pb";
 import { QuestionService } from "@/gen/reliant/v1/question_pb";
+import { SharingService } from "@/gen/reliant/v1/sharing_pb";
 import { ChatUpdateDataSchema, ChatUpdateType, type ChatUpdateData } from "@/gen/reliant/v1/streaming_pb";
 
 import checkoutTotalJson from "../../data/attachments/checkout-total.json?raw";
@@ -43,7 +46,7 @@ import subAgentsJson from "../../data/transcripts/sub-agents.json?raw";
 import taxRatesJson from "../../data/transcripts/tax-rates.json?raw";
 import { packJson } from "../../packJson";
 import { MINUTE, demoNow } from "../../shopStory";
-import { CHAT_IDS, chats, workflowIdOf, worktreeSummary } from "../../workspace";
+import { CHAT_IDS, chats, projects, workflowIdOf, worktreeSummary } from "../../workspace";
 import { serve } from "../serve";
 
 const MAIN = CHAT_IDS.cartTotals;
@@ -137,6 +140,46 @@ const ASK_USER = {
   }],
 };
 
+/** The rate-limit chat's blocking question: the run waits on it (the chat is awaiting input). */
+const ASK_RATE_LIMIT = {
+  type: "ask_user",
+  questions: [{
+    question: "How many /checkout requests a minute should each client get?",
+    options: [
+      { label: "60 per IP, 600 per API key", description: "Anonymous shoppers are held tighter than integrations" },
+      { label: "120 per IP, 1200 per API key", description: "Twice the headroom for flash sales" },
+    ],
+  }],
+};
+
+/** What the chat shows, and the Inbox lists: the fixture chat's shell call waiting for approval. */
+export const cartTotalsApproval = () => ({
+  id: "appr-c1-push", chatId: MAIN, approvalType: ApprovalType.TOOL_CALL, entityId: "blk-c1-approve",
+  status: ApprovalStatus.PENDING, title: "Run shell command", description: "git push origin fix/per-unit-discounts",
+  createdAt: atSeq(13), messageId: "lm-13", workflowId: WF_MAIN,
+});
+
+/** The fixture chat's async question (ask_user without blocking): the agent kept working. */
+export const cartTotalsQuestion = () => ({
+  questionId: "q-c1-cap", chatId: MAIN, workflowId: WF_MAIN, stepId: "implement", status: "pending", createdAt: atSeq(12),
+  metadata: JSON.stringify(ASK_USER), threadId: MAIN, async: true, toolCallId: "ask1",
+});
+
+/** The rate-limit chat's pending question, asked two minutes ago. */
+export const rateLimitQuestion = () => ({
+  questionId: "q-rl-limits", chatId: CHAT_IDS.rateLimit, workflowId: workflowIdOf(CHAT_IDS.rateLimit), stepId: "agent", status: "pending",
+  createdAt: new Date(demoNow() - 2 * MINUTE).toISOString(), metadata: JSON.stringify(ASK_RATE_LIMIT), threadId: CHAT_IDS.rateLimit,
+  async: false, toolCallId: "ask-rl-1",
+});
+
+/** A chat's projects: every chat works in its own project alone (the `chat-attached-projects` overlay attaches docs). */
+function chatProjects(req: { chatId: string }) {
+  const chat = chats().find((c) => c.id === req.chatId);
+  if (!chat) return { projects: [] };
+  const project = projects().find((p) => p.id === chat.projectId)!;
+  return { projects: [{ projectId: project.id, name: project.name, primary: true, daemonId: chat.activeDaemonId, path: project.path, attachedAt: "" }] };
+}
+
 export function chatHandlers() {
   return {
     ...serve(ChatService, {
@@ -159,27 +202,19 @@ export function chatHandlers() {
         return { messages, total: messages.length, count: messages.length, hasMore: false, oldestSeq: 1n };
       },
       getWorkflowExecutions: (req) => ({ allRootWorkflows: req.chatId === MAIN ? workflowTree() : [] }),
+      listChatProjects: chatProjects,
+      // Nothing is queued for an agent: every message Alex sent has been delivered.
+      listQueuedAgentMessages: () => ({ messages: [] }),
     }),
+    // Nobody has shared a chat with the org yet.
+    ...serve(SharingService, { listSharedChats: () => ({ chats: [] }) }),
     ...serve(ApprovalService, {
-      listApprovalsByChat: (req) =>
-        req.chatId === MAIN
-          ? {
-              approvals: [{
-                id: "appr-c1-push", chatId: MAIN, approvalType: ApprovalType.TOOL_CALL, entityId: "blk-c1-approve",
-                status: ApprovalStatus.PENDING, title: "Run shell command", description: "git push origin fix/per-unit-discounts",
-                createdAt: atSeq(13), messageId: "lm-13", workflowId: WF_MAIN,
-              }],
-              total: 1,
-            }
-          : { approvals: [], total: 0 },
+      listApprovalsByChat: (req) => (req.chatId === MAIN ? { approvals: [cartTotalsApproval()], total: 1 } : { approvals: [], total: 0 }),
     }),
     ...serve(QuestionService, {
-      listAsyncQuestions: (req) => ({
-        questions: req.chatId === MAIN
-          ? [{ questionId: "q-c1-cap", chatId: MAIN, workflowId: WF_MAIN, stepId: "implement", status: "pending", createdAt: atSeq(12), metadata: JSON.stringify(ASK_USER), threadId: MAIN, async: true, toolCallId: "ask1" }]
-          : [],
-      }),
-      listPendingQuestions: () => ({ questions: [] }),
+      listAsyncQuestions: (req) => ({ questions: req.chatId === MAIN ? [cartTotalsQuestion()] : [] }),
+      // The rate-limit chat waits on its question; an async question is never pending here.
+      listPendingQuestions: (req) => ({ questions: !req.chatId || req.chatId === CHAT_IDS.rateLimit ? [rateLimitQuestion()] : [] }),
     }),
     ...serve(AttachmentService, {
       // The fixture chat's turn 2 image ("checkout-total.png"); its markdown spec is listed on the message, never fetched.
