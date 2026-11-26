@@ -54,7 +54,8 @@ var identifierStems = []string{
 // identifierNames are whole property names that name an identifier though
 // their words, in other names, do not: "mobile" alone is a number, while
 // is_mobile, mobile_os and mobile_app are categories.
-var identifierNames = map[string]bool{"mobile": true}
+// mobile_no, mobileNo and mobile_num are the number by another name.
+var identifierNames = map[string]bool{"mobile": true, "mobile_no": true, "mobile_num": true, "mobile_nr": true}
 
 // categoryProperties are names the rules above would refuse that are
 // categories, not identifiers: a plan's name, a token count, an auth method.

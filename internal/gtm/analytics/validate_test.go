@@ -98,7 +98,7 @@ func TestIdentifierProperty(t *testing.T) {
 		"geolocation",
 		// Near the allowed category names, still refused.
 		"user_name", "plan_owner_name", "session_token", "auth_token", "card_number", "user_email", "org_id", "iphone_serial",
-		"mobileNumber", "Mobile", "contact_form_email", "sender_email", "location_id", "user_names",
+		"mobileNumber", "Mobile", "mobile_no", "mobileNo", "mobile_num", "contact_form_email", "sender_email", "location_id", "user_names",
 	} {
 		if !identifierProperty(p) {
 			t.Errorf("identifierProperty(%q) = false, want true (words %v)", p, words(p))

@@ -314,7 +314,9 @@ func decode(q gtm.AnalyticsQuery, resp *obsv1.QueryPanelResponse) (gtm.Analytics
 	// Redacted groups fold into one Redacted row (per day, for a trend),
 	// their counts summed: listing them apart would say how many distinct
 	// identifier-shaped values there are and how often each was seen, which
-	// is what redaction hides, while the folded row keeps the totals true.
+	// is what redaction hides. The folded count covers only the redacted
+	// groups among the top-Limit rows returned, not every redacted group in
+	// the window.
 	res.Rows = foldRedacted(res.Rows)
 	sortRows(q.Template, res.Rows)
 	return res, nil
