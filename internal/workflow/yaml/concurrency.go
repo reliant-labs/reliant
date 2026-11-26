@@ -96,7 +96,7 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 	return policy, nil
 }
 
-// cancelsRunning reports whether concurrency.cancel_running lets a newer
+// cancelsRunning reports wether concurrency.cancel_running lets a newer
 // firing cancel a running run (anything but unset or never).
 func cancelsRunning(policy *reliantv1.WorkflowConcurrency) bool {
 	switch policy.GetCancelRunning() {
