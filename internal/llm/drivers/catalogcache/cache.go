@@ -241,17 +241,10 @@ func (c *Cache[V]) Peek(key string) (V, bool) {
 func (c *Cache[V]) Evict(key string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	e := c.entries[key]
-	switch {
-	case e == nil:
-	case e.inflight == nil:
-		delete(c.entries, key)
-	default:
-		// A fetch in flight still lands in this entry; only what it would
-		// replace is forgotten.
-		var zero V
-		e.good, e.goodAt, e.err, e.errAt = zero, time.Time{}, nil, time.Time{}
-	}
+	// Detach even an in-flight entry. Its existing waiters can still receive
+	// their result, but subsequent callers must start a new fetch; the old
+	// fetch must never restore the evicted catalog.
+	delete(c.entries, key)
 }
 
 // Expire makes key's cached answer due: a good report is served stale while

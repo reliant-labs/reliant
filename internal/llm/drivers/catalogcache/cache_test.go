@@ -264,6 +264,69 @@ func TestEvict_NextGetFetches(t *testing.T) {
 	assert.Equal(t, "v2", got)
 }
 
+// An evicted refresh may finish before or after its replacement, but must
+// neither restore the old catalog nor be shared by post-eviction callers.
+func TestEvict_DetachesInflightRefresh(t *testing.T) {
+	t.Parallel()
+	for _, oldFirst := range []bool{true, false} {
+		name := "old_finishes_last"
+		if oldFirst {
+			name = "old_finishes_first"
+		}
+		t.Run(name, func(t *testing.T) {
+			c, clock := newTestCache(t)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			c.Store("k", "seed", nil)
+			clock.advance(6 * time.Minute)
+			release := make(chan struct{})
+			var once sync.Once
+			unblock := func() { once.Do(func() { close(release) }) }
+			defer unblock()
+			got, err := c.Get(ctx, "k", func(ctx context.Context) (string, error) {
+				select {
+				case <-release:
+					return "refused", nil
+				case <-ctx.Done():
+					return "", ctx.Err()
+				}
+			})
+			require.NoError(t, err)
+			require.Equal(t, "seed", got)
+			c.mu.Lock()
+			old := c.entries["k"].inflight
+			c.mu.Unlock()
+			require.NotNil(t, old)
+			finishOld := func() {
+				unblock()
+				select {
+				case <-old.done:
+				case <-ctx.Done():
+					t.Fatal("evicted fetch did not finish")
+				}
+			}
+
+			c.Evict("k")
+			if oldFirst {
+				finishOld()
+			}
+			_, ok := c.Peek("k")
+			require.False(t, ok, "eviction must forget the old report")
+			got, err = c.Get(ctx, "k", func(context.Context) (string, error) {
+				return "fresh", nil
+			})
+			require.NoError(t, err)
+			require.Equal(t, "fresh", got, "a post-eviction Get must not join the old fetch")
+			if !oldFirst {
+				finishOld()
+			}
+			got, ok = c.Peek("k")
+			require.True(t, ok)
+			assert.Equal(t, "fresh", got, "the evicted fetch must not overwrite its replacement")
+		})
+	}
+}
+
 // A caller that gives up returns its own context's error, and the fetch it
 // started still lands for the callers after it.
 func TestGet_CallerCancellationDoesNotFailTheSharedFetch(t *testing.T) {
