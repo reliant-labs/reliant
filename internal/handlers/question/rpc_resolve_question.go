@@ -128,7 +128,7 @@ func (s *Service) saveUserReplyMessage(ctx context.Context, question *db.Questio
 	var response map[string]interface{}
 	if err := json.Unmarshal([]byte(responseData), &response); err != nil {
 		// If not JSON, use the raw string as the reply
-		_, err := s.deps.Repo.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
+		_, err := s.deps.Writer.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
 			int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), responseData, &question.WorkflowID, nil, nil)
 		return err
 	}
@@ -151,7 +151,7 @@ func (s *Service) saveUserReplyMessage(ctx context.Context, question *db.Questio
 		return nil
 	}
 
-	_, err := s.deps.Repo.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
+	_, err := s.deps.Writer.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
 		int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), replyText, &question.WorkflowID, nil, nil)
 	return err
 }

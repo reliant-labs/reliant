@@ -38,6 +38,11 @@ type ChatViews interface {
 // Repository is the slice of *db.Repo the question handlers use.
 type Repository interface {
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
+}
+
+// MessageWriter saves the user's reply after the question is authorized.
+// messagewrite.Service satisfies it.
+type MessageWriter interface {
 	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error)
 }
 

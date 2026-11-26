@@ -60880,6 +60880,17 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Question",
+      "field": "Writer",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/question.MessageWriter",
+      "methods": [],
+      "candidates": [
+        "Database"
+      ],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "QueuedDelivery",
       "field": "Deliverer",
       "interface": "github.com/reliant-labs/reliant/internal/queueddelivery.Service",
@@ -63201,6 +63212,14 @@
     {
       "code": "binding_unresolved",
       "component": "Question.Refetch",
+      "source": {
+        "path": "internal/handlers/question/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Question.Writer",
       "source": {
         "path": "internal/handlers/question/service.go",
         "symbol": "New"

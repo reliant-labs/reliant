@@ -127,7 +127,7 @@ func (m *MockChatViews) GetChat(ctx context.Context, id string) (*db.Chat, error
 var _ ChatViews = (*MockChatViews)(nil)
 
 // forge:section MockRepository
-// forge:hash=8630a8bd5b330307baeabee596126213839cbd50c60ac66e19fcf46e13cfd568
+// forge:hash=62c58c0521d920badf9c23e1373264297545cb98847850158c268f1bbdc39b58
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -137,8 +137,7 @@ var _ ChatViews = (*MockChatViews)(nil)
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	GetQuestionByIDFunc     func(context.Context, string) (*db.Question, error)
-	SaveMessageToThreadFunc func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
+	GetQuestionByIDFunc func(context.Context, string) (*db.Question, error)
 }
 
 // GetQuestionByID records the call and delegates to GetQuestionByIDFunc when set.
@@ -150,17 +149,34 @@ func (m *MockRepository) GetQuestionByID(ctx context.Context, id string) (*db.Qu
 	return nil, contractkit.MockNotSet("MockRepository", "GetQuestionByID")
 }
 
+// Compile-time check.
+var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockMessageWriter
+// forge:hash=446b83a8e7439e1b281658c6553af704cbc62f02085d2ce198cfa4e719ac74cd
+
+// MockMessageWriter is a test mock for the MessageWriter interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockMessageWriter.<Method>Func not set" error.
+type MockMessageWriter struct {
+	contractkit.Recorder
+	SaveMessageToThreadFunc func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
+}
+
 // SaveMessageToThread records the call and delegates to SaveMessageToThreadFunc when set.
-func (m *MockRepository) SaveMessageToThread(ctx context.Context, chatID string, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error) {
+func (m *MockMessageWriter) SaveMessageToThread(ctx context.Context, chatID string, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error) {
 	m.Recorder.Record("SaveMessageToThread", ctx, chatID, thread, role, content, workflowID, attachmentIDs, displayStyle)
 	if m.SaveMessageToThreadFunc != nil {
 		return m.SaveMessageToThreadFunc(ctx, chatID, thread, role, content, workflowID, attachmentIDs, displayStyle)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "SaveMessageToThread")
+	return nil, contractkit.MockNotSet("MockMessageWriter", "SaveMessageToThread")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ MessageWriter = (*MockMessageWriter)(nil)
 
 // forge:section MockResolver
 // forge:hash=d6b79bde1a52bb605ac3f8a18f44fd6961fb9b92417a8314caac53c431b1e443

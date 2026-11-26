@@ -21,6 +21,8 @@ type Deps struct {
 
 	// Repo reads and resolves questions and the chats that own them.
 	Repo Repository
+	// Writer persists a user's reply to an authorized question.
+	Writer MessageWriter
 	// Refetch tells the user\'s clients to re-read what a write changed
 	// (UserRefetch, deps.go).
 	Refetch UserRefetch
@@ -55,6 +57,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("question: Deps.Repo is required")
+	}
+	if d.Writer == nil {
+		return fmt.Errorf("question: Deps.Writer is required")
 	}
 	if d.Refetch == nil {
 		return fmt.Errorf("question: Deps.Refetch is required")

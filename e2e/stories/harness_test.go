@@ -443,6 +443,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
+		Writer:    s.Repo,
 		Refetch:   chatupdates.NewFromORM(s.Repo.ORM(), s.Repo, nil),
 		Logger:    slog.Default(),
 		Config:    &typedconfig.Config{},

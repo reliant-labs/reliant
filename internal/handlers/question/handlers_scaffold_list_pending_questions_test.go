@@ -19,7 +19,7 @@ func TestListPendingQuestions_Generated(t *testing.T) {
 	t.Parallel()
 
 	// No question or chat exists (emptyQuestionRepo).
-	svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Mailbox: &question.MockMailbox{}, Repo: emptyQuestionRepo(), ChatRows: emptyChatRows(), ChatViews: emptyChatViews()}))
+	svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Writer: &question.MockMessageWriter{}, Mailbox: &question.MockMailbox{}, Repo: emptyQuestionRepo(), ChatRows: emptyChatRows(), ChatViews: emptyChatViews()}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListPendingQuestionsRequest, pb.ListPendingQuestionsResponse]{
 		{

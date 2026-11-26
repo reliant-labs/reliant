@@ -42,7 +42,7 @@ func TestListPendingQuestions_LeavesOutQuestionsOfAnOrgTheCallerMayNotRead(t *te
 	chatRows := &MockChatRows{GetChatRowFunc: func(_ context.Context, id string) (*db.ChatRow, error) {
 		return &db.ChatRow{ID: id, UserID: "test-user", OrgID: chatOrgs[id]}, nil
 	}}
-	svc := NewTestQuestion(t, WithQuestionDeps(Deps{ChatRows: chatRows, Questions: questions}))
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Writer: &MockMessageWriter{}, ChatRows: chatRows, Questions: questions}))
 	ids := func(ctx context.Context) []string {
 		t.Helper()
 		resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{}))

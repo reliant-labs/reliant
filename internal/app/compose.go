@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/credentials/orgaccounts"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/daemonmirror"
+	"github.com/reliant-labs/reliant/internal/messagewrite"
 	"github.com/reliant-labs/reliant/internal/questions"
 
 	"github.com/nats-io/nats.go/jetstream"
@@ -1534,7 +1535,19 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
+	repo := g.Database()
+	o := repo.ORM()
+	writer, err := messagewrite.NewInstrumented(messagewrite.Deps{
+		Tx: repo, Order: store.NewMessageOrderCounterExtStore(o), Messages: store.NewMessageExtStore(o),
+		Windows: store.NewContextWindowExtStore(o), Threads: store.NewThreadExtStore(o),
+		Workflows: store.NewWorkflowExtStore(o), Blocks: store.NewMessageContentBlockExtStore(o),
+		Attachments: store.NewAttachmentExtStore(o), Updates: repo,
+	})
+	if err != nil {
+		return nil, err
+	}
 	return question.New(question.Deps{
+		Writer:    writer,
 		Refetch:   g.chatUpdates(),
 		Logger:    g.Log,
 		Config:    g.Cfg,
