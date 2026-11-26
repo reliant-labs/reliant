@@ -27,11 +27,15 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Transport } from "@connectrpc/connect";
 
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 import { observabilityHandlers } from "@/fixtures/shop/handlers/observability";
 import { transport as appTransport } from "@/lib/connect";
 import { createTransportScope, TransportScopeProvider, type TransportScope } from "@/lib/transportScope";
 import { mockTransport } from "@/lib/test-utils";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+
+/** The services whose reads run on generated hooks or a scope's client: their handlers answer from the fake. */
+const WIRE_SERVICES = new Set([ObservabilityService.typeName, RumService.typeName]);
 
 /**
  * The fake's ObservabilityService reads on the wire; a relative window
@@ -42,7 +46,7 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
  */
 export function observabilityFixtureTransport(api: () => ObservabilityApi, now: () => number = Date.now): Transport {
   const pick = (method: { parent: { typeName: string }; name: string }): Transport => {
-    if (method.parent.typeName !== ObservabilityService.typeName) return appTransport;
+    if (!WIRE_SERVICES.has(method.parent.typeName)) return appTransport;
     const handlers = observabilityHandlers(api(), { now }) as Parameters<typeof mockTransport>[0];
     return handlers && `${method.parent.typeName}/${method.name}` in handlers ? mockTransport(handlers) : appTransport;
   };

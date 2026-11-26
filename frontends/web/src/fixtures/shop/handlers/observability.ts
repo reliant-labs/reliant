@@ -246,7 +246,7 @@ export function observabilityHandlers(fixtures: ObservabilityApi = createShopApi
     ...deliveryHandlers(fixtures),
     ...issuesHandlers(fixtures),
     ...userHandlers(fixtures),
-    ...rumHandlers(fixtures),
+    ...rumHandlers(fixtures, { now }),
     ...dashboardsHandlers(fixtures),
     // The demo has no billing: answered as a control plane without the billing API.
     ...observabilityBillingHandlers(),

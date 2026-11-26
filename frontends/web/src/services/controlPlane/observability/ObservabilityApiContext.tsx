@@ -236,8 +236,17 @@ export type GeneratedObservabilityReads =
   | "getReleaseHealth"
   | "listFrontendReplay";
 
+/**
+ * RumService's reads: the list, a session and its timeline on its generated
+ * hooks (hooks/controlplane/rum-service-hooks_gen.ts), the replay's pages on
+ * the nearest TransportScope's client (Sessions/ReplayPlayer.tsx). The shop
+ * pack's wire handlers (fixtures/shop/handlers/rum.ts) serve them from this
+ * contract; the context does not hand them out.
+ */
+export type GeneratedRumReads = "listSessions" | "getSession" | "getSessionTimeline" | "getSessionReplay";
+
 /** What a view may call through the context: everything but the reads on generated hooks. */
-export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads>;
+export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads | GeneratedRumReads>;
 
 /** The provided api, else the real client on the nearest TransportScope's transport, else on the app's. */
 export function useObservabilityApi(): ObservabilityContextApi {
