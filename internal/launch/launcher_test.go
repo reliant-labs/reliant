@@ -417,6 +417,7 @@ func TestLaunchGenerateTitleIsOptional(t *testing.T) {
 		GenerateTitle: true,
 	})
 	require.NoError(t, err)
+	launcher.waitForTitleStarts()
 	assert.Contains(t, withTitle.startedIDs(), "generate-title-"+result.Chat.ID)
 
 	without := &fakeStarter{}

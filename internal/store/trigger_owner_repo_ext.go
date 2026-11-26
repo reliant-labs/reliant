@@ -206,7 +206,13 @@ func LockUserOrgs(ctx context.Context, db orm.Context, userID string, reads ...O
 	if userID == "" {
 		return fmt.Errorf("org lock: user is required")
 	}
-	if _, err := db.Bun().NewRaw(userOrgLockSQL, userID).Exec(ctx); err != nil {
+	return lockUserOrgs(ctx, db, userOrgLockSQL, userID, reads)
+}
+
+// lockUserOrgs takes the org lock with lockSQL (exclusive or shared), then
+// re-checks each read.
+func lockUserOrgs(ctx context.Context, db orm.Context, lockSQL, userID string, reads []OrgRead) error {
+	if _, err := db.Bun().NewRaw(lockSQL, userID).Exec(ctx); err != nil {
 		return fmt.Errorf("take the org lock: %w", err)
 	}
 	for _, read := range reads {

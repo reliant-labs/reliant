@@ -1,6 +1,10 @@
 package store
 
 import (
+	"context"
+	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
@@ -35,6 +39,22 @@ import (
 // project, and the project's chats in id order, before it writes.
 // TestOrgSensitiveWritesTakeTheOrgLock (internal/db) fails a
 // write of the listed kinds that does not take it.
+//
+// Shared mode (LockUserOrgsShared). What the lock protects a write from is an
+// org CHANGE, and only the backfill and the moves (a project's, a chat's)
+// change one. A write that only needs the orgs it read to stay fixed until it
+// commits, and that relies on the lock for nothing else, may take it shared:
+// shared holders run beside one another and every exclusive holder still
+// excludes them, both ways. A launch is such a write: everything else it must
+// keep apart from another launch has its own guard (launch.launchNew), and
+// before the org lock existed launches of one user never serialized. Taken
+// exclusive, it made a user's launches queue behind one another for the whole
+// of each launch transaction, which is where a burst of one user's trigger
+// fires (one webhook fanning out to dozens of triggers) left a StartChat
+// waiting hundreds of milliseconds. A transaction that took the lock shared
+// must never take it exclusive later: two holders upgrading would deadlock.
+// The shared and exclusive forms share one key, so a release that takes it
+// exclusive still excludes this one's shared holders during a rolling deploy.
 
 // OrgRead is the org a decision read from one row: compared under the lock,
 // a row whose org is no longer Org (a backfill stamped it, or it is gone)
@@ -69,6 +89,22 @@ var orgReadSQL = map[string]string{
 // since #2537's first release, so a backfill of the previous release, during
 // a rolling deploy, serializes with this one's writes too.
 const userOrgLockSQL = `SELECT pg_advisory_xact_lock(hashtextextended('org-backfill:' || ?, 0))`
+
+// userOrgLockSharedSQL is userOrgLockSQL's shared form, on the same key.
+const userOrgLockSharedSQL = `SELECT pg_advisory_xact_lock_shared(hashtextextended('org-backfill:' || ?, 0))`
+
+// LockUserOrgsShared is LockUserOrgs in shared mode (see "Shared mode"
+// above): it waits for, and keeps out, every exclusive holder of userID's org
+// lock — the backfill, a project or chat move, every other org-sensitive
+// write — but not another shared holder. Same rules otherwise: inside a
+// transaction, before any row lock of it, and never followed by LockUserOrgs
+// in the same transaction.
+func LockUserOrgsShared(ctx context.Context, db orm.Context, userID string, reads ...OrgRead) error {
+	if userID == "" {
+		return fmt.Errorf("org lock: user is required")
+	}
+	return lockUserOrgs(ctx, db, userOrgLockSharedSQL, userID, reads)
+}
 
 // sameOrg is IS NOT DISTINCT FROM.
 func sameOrg(stored, read *string) bool {

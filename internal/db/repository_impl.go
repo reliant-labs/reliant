@@ -2744,6 +2744,13 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
 }
 
+// LockUserOrgsShared is LockUserOrgs in shared mode
+// (store.LockUserOrgsShared): it excludes the backfill, the moves and every
+// exclusive holder, but not another shared one.
+func (r *Repo) LockUserOrgsShared(ctx context.Context, userID string, reads ...OrgRead) error {
+	return store.LockUserOrgsShared(ctx, r.ORM(), userID, reads...)
+}
+
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	return store.GetTrigger(ctx, r.ORM(), id)
 }
