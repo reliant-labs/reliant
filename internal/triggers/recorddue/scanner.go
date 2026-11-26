@@ -15,8 +15,8 @@
 //
 // It clears nothing: whoever acts on the record (pr.next) moves or clears its
 // next_action_at by compare-and-set. Until then the record stays due and is
-// found again on every scan, and the event's dedupe key (trigger, record, due
-// time) makes each repeat a no-op: a record fires once per due time, however
+// found again on each traversal, and the event's dedupe key (trigger, record,
+// due time) makes each repeat a no-op: a record fires once per due time, however
 // many scans, workers or redeliveries see it. Rows are scanned FOR UPDATE
 // SKIP LOCKED and held while their events are recorded, so two workers'
 // scans split the due rows rather than both firing them.
@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -46,10 +47,9 @@ const BatchSize = 100
 
 // Store is what the scan reads. *db.Repo satisfies it.
 type Store interface {
-	// WithDuePRPipelines calls fn with the due pr_pipeline rows (at most
-	// limit) and their records, the rows locked while fn runs; it does not
-	// call fn when none is due.
-	WithDuePRPipelines(ctx context.Context, now time.Time, limit int, fn func([]core.DuePRPipeline) error) error
+	// WithDuePRPipelinesAfter locks one page after the cursor while fn runs.
+	// It returns the last examined row, or nil to restart from the beginning.
+	WithDuePRPipelinesAfter(ctx context.Context, now time.Time, limit int, after *core.PRPipeline, fn func([]core.DuePRPipeline) error) (*core.PRPipeline, error)
 	ListEnabledTriggersOfKind(ctx context.Context, kind core.TriggerKind) ([]*core.Trigger, error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 }
@@ -62,6 +62,8 @@ type Intake interface {
 
 // Scanner is the due scan.
 type Scanner struct {
+	mu       sync.Mutex
+	after    *core.PRPipeline
 	store    Store
 	intake   Intake
 	scope    func(context.Context) context.Context
@@ -100,9 +102,11 @@ func (s *Scanner) Run(ctx context.Context) error {
 // cannot be recorded is logged and skipped, so one broken activation cannot
 // keep the others from firing; the error is a scan that could not run.
 func (s *Scanner) Scan(ctx context.Context) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	now := s.now().UTC()
 	fired := 0
-	err := s.store.WithDuePRPipelines(ctx, now, BatchSize, func(due []core.DuePRPipeline) error {
+	next, err := s.store.WithDuePRPipelinesAfter(ctx, now, BatchSize, s.after, func(due []core.DuePRPipeline) error {
 		if len(due) == 0 {
 			return nil
 		}
@@ -131,6 +135,12 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 		}
 		return nil
 	})
+	if err == nil {
+		// Advance even when no activation fired; still-due, filtered or broken
+		// records must not monopolize the next tick. Wrap after the last page
+		// so newly due rows behind the cursor are examined on the next pass.
+		s.after = next
+	}
 	return fired, err
 }
 
