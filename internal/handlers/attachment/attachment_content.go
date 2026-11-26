@@ -3,6 +3,7 @@ package attachment
 
 import (
 	"bytes"
+	"encoding/binary"
 	"mime"
 	"net/http"
 	"strings"
@@ -81,29 +82,26 @@ var inlineSafeTypes = map[string]bool{
 	"application/pdf": true,
 }
 
-// sniffContentType is http.DetectContentType, plus every ISO base media file
-// as video/mp4. Go's sniffer reports video/mp4 only when an "mp4" brand is
-// listed, so a QuickTime clip (brand "qt  ", which generate_video can store)
-// or a fragmented mp4 (iso5, iso6, dash) comes back application/octet-stream.
-// One label covers them all, because a <video> element reads the container
-// from the bytes, not from Content-Type. The HEIF and AVIF image brands share
-// the box and are not video, so they stay downloads.
+// sniffContentType extends Go's sniffer only for known QuickTime and fragmented
+// MP4 major brands. Unknown ISO base media formats must remain downloads, not
+// become inline video merely because they contain an ftyp box.
 func sniffContentType(data []byte) string {
 	sniffed := http.DetectContentType(data)
-	if sniffed != "application/octet-stream" || len(data) < 12 || string(data[4:8]) != "ftyp" {
+	if sniffed != "application/octet-stream" || len(data) < 16 || string(data[4:8]) != "ftyp" {
 		return sniffed
 	}
-	if isoImageBrands[string(data[8:12])] {
+	// Require a complete ordinary ftyp box: header, major brand, minor version,
+	// then zero or more four-byte compatible brands. Extended sizes fail closed.
+	size := binary.BigEndian.Uint32(data[:4])
+	if size < 16 || uint64(size) > uint64(len(data)) || size%4 != 0 {
 		return sniffed
 	}
-	return "video/mp4"
-}
-
-// isoImageBrands are the major brands of ISO base media files that are still
-// images (HEIF, AVIF), not video.
-var isoImageBrands = map[string]bool{
-	"avif": true, "avis": true, "heic": true, "heix": true, "heim": true, "heis": true,
-	"hevc": true, "hevx": true, "hevm": true, "hevs": true, "mif1": true, "msf1": true,
+	switch string(data[8:12]) {
+	case "qt  ", "iso5", "iso6", "dash":
+		return "video/mp4"
+	default:
+		return sniffed
+	}
 }
 
 // contentDisposition is the Content-Disposition header for disposition and

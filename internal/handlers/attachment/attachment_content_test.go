@@ -198,7 +198,7 @@ func TestAttachmentContent_FilenameCannotInjectHeaders(t *testing.T) {
 	assert.Empty(t, rec.Header().Get("X-Injected"))
 }
 
-func TestAttachmentContent_ISOBaseMediaIsVideo(t *testing.T) {
+func TestAttachmentContent_ISOBaseMediaKnownVideoBrands(t *testing.T) {
 	h, _ := newContentHandler(t, "owner")
 	for _, id := range []string{"mov-1", "fmp4-1"} {
 		rec := getContent(t, h, id)
@@ -211,6 +211,31 @@ func TestAttachmentContent_ISOBaseMediaIsVideo(t *testing.T) {
 	assert.Equal(t, "application/octet-stream", rec.Header().Get("Content-Type"))
 	assert.Equal(t, `attachment; filename=pic.avif`, rec.Header().Get("Content-Disposition"))
 	assertLockedDown(t, rec)
+}
+
+func TestAttachmentContent_UnknownAndMalformedISOBaseMediaDownload(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"unknown", "\x00\x00\x00\x14ftypzzzz\x00\x00\x00\x00zzzz"},
+		{"document", "\x00\x00\x00\x14ftypjp2 \x00\x00\x00\x00jp2 "},
+		{"audio", "\x00\x00\x00\x14ftypM4A \x00\x00\x00\x00M4A "},
+		{"avif", "\x00\x00\x00\x14ftypavif\x00\x00\x00\x00avif"},
+		{"heif", "\x00\x00\x00\x14ftypmif1\x00\x00\x00\x00mif1"},
+		{"truncated header", "\x00\x00\x00\x14ftypqt  "},
+		{"truncated box", "\x00\x00\x00\x18ftypiso6\x00\x00\x00\x00iso6"},
+		{"short box", "\x00\x00\x00\x0cftypdash\x00\x00\x00\x00dash"},
+		{"unaligned box", "\x00\x00\x00\x13ftypiso5\x00\x00\x00\x00iso"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &MockContentReader{GetAttachmentFunc: func(context.Context, string) (*core.Attachment, error) {
+				return &core.Attachment{UserID: "owner", Filename: "clip.mp4", MimeType: "video/mp4", Content: []byte(tc.body)}, nil
+			}}
+			h := AttachmentContentHandler(repo, func(*http.Request) (string, error) { return "owner", nil })
+			rec := getContent(t, h, "unknown")
+			assert.Equal(t, "application/octet-stream", rec.Header().Get("Content-Type"))
+			assert.Equal(t, `attachment; filename=clip.mp4`, rec.Header().Get("Content-Disposition"))
+			assertLockedDown(t, rec)
+		})
+	}
 }
 
 func TestAttachmentContent_RangeKeepsTheHeaders(t *testing.T) {
