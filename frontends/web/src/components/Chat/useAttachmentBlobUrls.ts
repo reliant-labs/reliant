@@ -21,6 +21,8 @@ interface LoadableAttachment {
 export interface AttachmentBlobUrls {
   /** attachment id -> blob URL, present once the bytes have arrived. */
   blobUrls: Map<string, string>;
+  /** The same bytes backing each URL, for actions that require a Blob immediately. */
+  blobs: Map<string, Blob>;
   /** attachment ids whose fetch failed. */
   failedIds: Set<string>;
 }
@@ -32,7 +34,10 @@ export function isImageMimeType(mimeType: string | undefined): boolean {
 export function useAttachmentBlobUrls(
   attachments: readonly LoadableAttachment[] | undefined,
 ): AttachmentBlobUrls {
-  const [blobUrls, setBlobUrls] = useState<Map<string, string>>(new Map());
+  const [{ blobUrls, blobs }, setLoaded] = useState({
+    blobUrls: new Map<string, string>(),
+    blobs: new Map<string, Blob>(),
+  });
   const [failedIds, setFailedIds] = useState<Set<string>>(new Set());
   const blobUrlsRef = useRef<Map<string, string>>(blobUrls);
   blobUrlsRef.current = blobUrls;
@@ -56,7 +61,8 @@ export function useAttachmentBlobUrls(
     let cancelled = false;
 
     const loadImages = async () => {
-      const loaded = new Map<string, string>();
+      const loadedUrls = new Map<string, string>();
+      const loadedBlobs = new Map<string, Blob>();
 
       for (const attachment of attachmentsRef.current || []) {
         if (cancelled) break;
@@ -68,7 +74,8 @@ export function useAttachmentBlobUrls(
           // Check before creating the URL: one we create after unmount has no
           // owner left to revoke it.
           if (cancelled) break;
-          loaded.set(attachment.id, URL.createObjectURL(blob));
+          loadedUrls.set(attachment.id, URL.createObjectURL(blob));
+          loadedBlobs.set(attachment.id, blob);
         } catch (error) {
           if (cancelled) break;
           console.error("Error loading image:", { id: attachment.id, error });
@@ -77,11 +84,14 @@ export function useAttachmentBlobUrls(
       }
 
       if (cancelled) {
-        loaded.forEach((url) => URL.revokeObjectURL(url));
+        loadedUrls.forEach((url) => URL.revokeObjectURL(url));
         return;
       }
-      if (loaded.size > 0) {
-        setBlobUrls((prev) => new Map([...prev, ...loaded]));
+      if (loadedUrls.size > 0) {
+        setLoaded((prev) => ({
+          blobUrls: new Map([...prev.blobUrls, ...loadedUrls]),
+          blobs: new Map([...prev.blobs, ...loadedBlobs]),
+        }));
       }
     };
 
@@ -106,5 +116,5 @@ export function useAttachmentBlobUrls(
     };
   }, []);
 
-  return { blobUrls, failedIds };
+  return { blobUrls, blobs, failedIds };
 }
