@@ -1049,7 +1049,7 @@ type WorkflowEventRelayDeps struct {
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
 	return workflowevent.NewRelay(store.NewRunEventExtStore(d.DB.ORM()), d.Temporal.Client, v2workflow.SharedTaskQueue).
-		WithRoutes(d.DB), nil
+		WithRoutes(store.NewTriggerExtStore(d.DB.ORM())), nil
 }
 
 type TriggerDeliveryRelayDeps struct {
