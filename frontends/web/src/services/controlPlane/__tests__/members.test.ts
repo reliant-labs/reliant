@@ -29,7 +29,6 @@ import {
   inviteMember,
   isTerminalInviteRefusal,
   leaveOrganization,
-  listMembershipActivity,
   memberErrorMessage,
   memberNamesBySubject,
   removeMember,
@@ -59,13 +58,6 @@ describe("org-acting rpcs name their org", () => {
     const seen = vi.fn(() => response);
     setTransport(mockTransport({ [`OrganizationService.${rpc}`]: seen }));
     await call();
-    expect(seen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }));
-  });
-
-  it("ListMembershipActivity carries org_id", async () => {
-    const seen = vi.fn(() => ({ events: [] }));
-    setTransport(mockTransport({ "ActivityService.ListMembershipActivity": seen }));
-    await listMembershipActivity(ORG);
     expect(seen).toHaveBeenCalledWith(expect.objectContaining({ orgId: ORG }));
   });
 

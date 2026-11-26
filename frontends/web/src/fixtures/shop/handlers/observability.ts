@@ -243,7 +243,7 @@ export function observabilityHandlers(fixtures: ObservabilityApi = createShopApi
   return {
     ...observabilityServiceHandlers(fixtures, now),
     ...alertingHandlers(fixtures),
-    ...deliveryHandlers(fixtures),
+    ...deliveryHandlers(fixtures, { now }),
     ...issuesHandlers(fixtures),
     ...userHandlers(fixtures),
     ...rumHandlers(fixtures),

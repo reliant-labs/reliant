@@ -297,7 +297,7 @@ export function MetricsExplorer({ project, org: orgPlace, env, environments, sea
   // ── Comparison and markers ──
   const releases = useReleaseMarkers(scope, range, environments, true);
   const delivery = useMemo(() => (scope ? deliveryScopeOf(scope, environments) : null), [scope, environments]);
-  const promotions = useReleases(delivery, "days:30", () => ({ startMs: Date.now() - 30 * 86_400_000, endMs: Date.now() }), { enabled: !!envId });
+  const promotions = useReleases(delivery, 30 * 86_400_000, { enabled: !!envId });
   const now = Date.now();
   const target = compareTarget(state.compare, range, promotions.data?.promotions ?? [], envId, now);
   const releaseTarget = compareTarget("release", range, promotions.data?.promotions ?? [], envId, now);

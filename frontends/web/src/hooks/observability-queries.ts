@@ -19,7 +19,7 @@ import { useCallback, useEffect } from "react";
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type InfiniteData, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
 
@@ -57,12 +57,15 @@ import {
   workloadRequest,
   workloadsRequest,
 } from "@/services/controlPlane/observability/api";
-import { mapReleaseHealth, releaseHealthRequest } from "@/services/controlPlane/observability/deliveryApi";
+import { doraMetricsRequest, mapReleaseHealth, releaseHealthRequest, releasesRequest, toDoraMetrics, toPromotionList } from "@/services/controlPlane/observability/deliveryApi";
 import { metricCatalogRequest, metricExemplarsRequest, metricRequest, toMetricCatalog, toMetricDetail, toMetricExemplars } from "@/services/controlPlane/observability/metricsApi";
 import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
 import { useObservabilityApi, type ObservabilityContextApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
-import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
+import type { ListActivityResponse } from "@/gen/controlplane/services/activity/v1/activity_pb";
+import { activityServiceKeys, useListActivityInfinite } from "@/hooks/controlplane/activity-service-hooks_gen";
+import { deliveryInsightsServiceKeys, useGetDoraMetrics, useListReleases } from "@/hooks/controlplane/delivery-insights-service-hooks_gen";
+import { activityRequest, toActivityList, type ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
 import { alertingRetry, FilterUnsupportedError, issuesRetry, obsRetry, obsRetryDelay, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
 import type {
@@ -797,45 +800,36 @@ export function useAlertingMutation<TArgs, TResult>(orgId: string | null, run: (
 // ── Delivery (DeliveryInsightsService) ───────────────────────────────────────
 
 /**
- * The release ledger and DORA, keyed by the delivery scope (org, project,
+ * The release ledger and DORA run on DeliveryInsightsService's generated
+ * hooks, keyed by their request: the delivery scope (org, project,
  * environments) — not the telemetry scope: attribute filters mean nothing to
- * the ledger beyond the environments they name (deliveryScope.ts).
+ * the ledger beyond the environments they name (deliveryScope.ts). `root()`
+ * is every one of them, for the panel's Refresh.
  */
 export const deliveryKeys = {
-  root: () => ["observability", "delivery"] as const,
-  all: (scope: DeliveryScope | null) => [...deliveryKeys.root(), scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? []] as const,
+  root: () => deliveryInsightsServiceKeys.all,
 };
 
+const NO_DELIVERY_SCOPE: DeliveryScope = { orgId: "", envIds: [] };
+
 /**
- * Promotions over a window resolved when the query runs (`window()`), cached
- * under `windowKey` ("range:1h", "days:30", "around:<promotion>"…) so a preset
- * stays one entry rather than one per millisecond.
+ * Promotions over the last `lastMs`, relative to the server's clock, so the
+ * request and its key stay put while the window moves and a refetch re-reads
+ * "the last 30 days" as of now.
  */
-export function useReleases(
-  scope: DeliveryScope | null,
-  windowKey: string,
-  window: () => TimeWindow,
-  options: { enabled?: boolean; limit?: number } = {}
-) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: [...deliveryKeys.all(scope), "releases", windowKey, options.limit ?? 0] as const,
-    queryFn: () => api.listReleases({ ...(scope as DeliveryScope), window: window(), limit: options.limit }),
+export function useReleases(scope: DeliveryScope | null, lastMs: number, options: { enabled?: boolean; limit?: number } = {}) {
+  return useListReleases(releasesRequest({ ...(scope ?? NO_DELIVERY_SCOPE), window: relativeWindow(lastMs), limit: options.limit }), {
+    select: toPromotionList,
     enabled: !!scope && (options.enabled ?? true),
     staleTime: 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
 }
 
-/** DORA over the last `days`, failing a deployment rolled back within `failureHours`. */
+/** DORA over the last `days` (relative to the server's clock), failing a deployment rolled back within `failureHours`. */
 export function useDoraMetrics(scope: DeliveryScope | null, days: number, failureHours: number) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: [...deliveryKeys.all(scope), "dora", days, failureHours] as const,
-    queryFn: () => {
-      const end = Date.now();
-      return api.getDoraMetrics({ ...(scope as DeliveryScope), window: { startMs: end - days * 86_400_000, endMs: end }, failureWindowHours: failureHours });
-    },
+  return useGetDoraMetrics(doraMetricsRequest({ ...(scope ?? NO_DELIVERY_SCOPE), window: relativeWindow(days * 86_400_000), failureWindowHours: failureHours }), {
+    select: toDoraMetrics,
     enabled: !!scope,
     staleTime: 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
@@ -1224,29 +1218,23 @@ export function useLinkIssueChat() {
 
 // ── Activity (ActivityService) ────────────────────────────────────────────────
 
+/**
+ * The activity feed runs on ActivityService's generated infinite hook, keyed
+ * by its request (the scope and the target it narrows to). `root()` is every
+ * feed, which an issue's triage, assignment and the panel's Refresh re-read.
+ */
 export const activityKeys = {
-  root: () => ["observability", "activity"] as const,
-  feed: (scope: DeliveryScope | null, target: { kind?: string; id?: string }) =>
-    [...activityKeys.root(), scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], target.kind ?? "", target.id ?? ""] as const,
+  root: () => activityServiceKeys.listActivity.all,
 };
 
 export const ACTIVITY_PAGE_SIZE = 50;
 
+const activityPages = (data: InfiniteData<ListActivityResponse, string>): InfiniteData<ActivityList, string> => ({ ...data, pages: data.pages.map(toActivityList) });
+
 /** The scope's activity, newest first; narrowed to one object for its History. */
 export function useActivity(scope: DeliveryScope | null, target: { kind?: string; id?: string } = {}, options: { enabled?: boolean } = {}) {
-  const api = useObservabilityApi();
-  return useInfiniteQuery({
-    queryKey: activityKeys.feed(scope, target),
-    queryFn: ({ pageParam }): Promise<ActivityList> =>
-      api.listActivity({
-        ...(scope as DeliveryScope),
-        targetKind: target.kind,
-        targetId: target.id,
-        pageSize: ACTIVITY_PAGE_SIZE,
-        pageToken: pageParam ?? undefined,
-      }),
-    initialPageParam: null as string | null,
-    getNextPageParam: (last) => last.nextPageToken || undefined,
+  return useListActivityInfinite(activityRequest({ ...(scope ?? NO_DELIVERY_SCOPE), targetKind: target.kind, targetId: target.id, pageSize: ACTIVITY_PAGE_SIZE }), {
+    select: activityPages,
     enabled: !!scope && (options.enabled ?? true),
     staleTime: 30_000,
     retry: obsRetry, retryDelay: obsRetryDelay,

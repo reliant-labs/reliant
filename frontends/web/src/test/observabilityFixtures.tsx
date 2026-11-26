@@ -4,11 +4,13 @@
  * A model-level ObservabilityApi fake for a component or hook test, served the
  * way the app reads it: through ObservabilityApiProvider for the reads that
  * still go through the context, AND on the wire for ObservabilityService's
- * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …),
- * which call their QueryClient's transport and never the context.
+ * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …)
+ * and DeliveryInsightsService's and ActivityService's (useReleases,
+ * useDoraMetrics, useActivity), which call their QueryClient's transport and
+ * never the context.
  *
  * The wire half is the shop fixture pack's handlers (fixtures/shop/handlers/
- * observability.ts) over the fake: each decodes the request into the model,
+ * observability.ts, delivery.ts, activity.ts) over the fake: each decodes the request into the model,
  * asks the fake, and encodes its answer, so the hook's real request builder
  * and `select` mapper run. A relative window resolves against the wall clock
  * (`Date.now()`), as the fakes' data is laid out around it.
@@ -26,7 +28,10 @@ import { useMemo, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Transport } from "@connectrpc/connect";
 
+import { ActivityService } from "@/gen/controlplane/services/activity/v1/activity_pb";
+import { DeliveryInsightsService } from "@/gen/controlplane/services/delivery_insights/v1/delivery_insights_pb";
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { activityHandlers } from "@/fixtures/shop/handlers/activity";
 import { observabilityHandlers } from "@/fixtures/shop/handlers/observability";
 import { transport as appTransport } from "@/lib/connect";
 import { createTransportScope, TransportScopeProvider, type TransportScope } from "@/lib/transportScope";
@@ -41,9 +46,16 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
  * setTransport(...) still answers it.
  */
 export function observabilityFixtureTransport(api: () => ObservabilityApi, now: () => number = Date.now): Transport {
+  const handlersOf: Record<string, () => unknown> = {
+    // observabilityHandlers carries DeliveryInsightsService's too (handlers/delivery.ts).
+    [ObservabilityService.typeName]: () => observabilityHandlers(api(), { now }),
+    [DeliveryInsightsService.typeName]: () => observabilityHandlers(api(), { now }),
+    [ActivityService.typeName]: () => activityHandlers(api()),
+  };
   const pick = (method: { parent: { typeName: string }; name: string }): Transport => {
-    if (method.parent.typeName !== ObservabilityService.typeName) return appTransport;
-    const handlers = observabilityHandlers(api(), { now }) as Parameters<typeof mockTransport>[0];
+    const of = handlersOf[method.parent.typeName];
+    if (!of) return appTransport;
+    const handlers = of() as Parameters<typeof mockTransport>[0];
     return handlers && `${method.parent.typeName}/${method.name}` in handlers ? mockTransport(handlers) : appTransport;
   };
   return {

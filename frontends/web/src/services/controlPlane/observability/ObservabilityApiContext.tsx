@@ -236,8 +236,17 @@ export type GeneratedObservabilityReads =
   | "getReleaseHealth"
   | "listFrontendReplay";
 
+/**
+ * DeliveryInsightsService (the release ledger, DORA) and ActivityService (the
+ * activity feed) run on their generated hooks too (hooks/observability-queries.ts
+ * useReleases/useDoraMetrics/useActivity). They stay on ObservabilityApi as the
+ * model-level contract; fixtures/shop/handlers/delivery.ts and activity.ts
+ * serve them to the hooks.
+ */
+export type GeneratedDeliveryActivityReads = "listReleases" | "getDoraMetrics" | "listActivity";
+
 /** What a view may call through the context: everything but the reads on generated hooks. */
-export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads>;
+export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads | GeneratedDeliveryActivityReads>;
 
 /** The provided api, else the real client on the nearest TransportScope's transport, else on the app's. */
 export function useObservabilityApi(): ObservabilityContextApi {
