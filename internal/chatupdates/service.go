@@ -19,6 +19,17 @@ type service struct {
 	publisher Publisher
 }
 
+func (s *service) EmitQuestionUpdate(ctx context.Context, chatID string, update core.QuestionUpdate) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
+	data, err := core.MarshalUpdate(update)
+	if err != nil {
+		return fmt.Errorf("failed to marshal question update: %w", err)
+	}
+	return s.appendChat(ctx, chatID, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION, core.EntityIDForQuestion(update.QuestionID), data)
+}
+
 func (s *service) EmitChatRefetch(ctx context.Context, chatID string, refetchType core.RefetchType) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
@@ -27,6 +38,12 @@ func (s *service) EmitChatRefetch(ctx context.Context, chatID string, refetchTyp
 	if err != nil {
 		return fmt.Errorf("failed to marshal refetch data: %w", err)
 	}
+	return s.appendChat(ctx, chatID, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH, "refetch-"+string(refetchType), string(data))
+}
+
+// appendChat appends one chat update and publishes it once the transaction
+// commits.
+func (s *service) appendChat(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID, data string) error {
 	// The sequence allocation and the insert share one transaction: the
 	// counter's row lock is what keeps sequence order equal to commit order,
 	// and a rollback must take both back. READ COMMITTED for the reason the
@@ -34,7 +51,7 @@ func (s *service) EmitChatRefetch(ctx context.Context, chatID string, refetchTyp
 	// waiter takes the next number instead of aborting with 40001. A call
 	// inside an outer transaction inherits its isolation.
 	return s.tx.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
-		update, err := s.store.AppendChatUpdate(ctx, chatID, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH, "refetch-"+string(refetchType), string(data))
+		update, err := s.store.AppendChatUpdate(ctx, chatID, updateType, entityID, data)
 		if err != nil {
 			return err
 		}

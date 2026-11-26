@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 const runNowAutomationOnlyYAML = `name: nightly-digest
@@ -114,7 +115,7 @@ func TestRunNow_RecordsManualRunKind(t *testing.T) {
 	assert.Equal(t, "triage", event.Payload["workflow"])
 	assert.Nil(t, event.Payload["replay"], "a plain run replays nothing")
 
-	chat, err := f.repo.GetChat(f.ctx, chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.NotNil(t, chat.AdoptedAt, "the person who pressed the button owns the run")
 	assert.Equal(t, core.ChatOriginManualRun, chat.Origin)

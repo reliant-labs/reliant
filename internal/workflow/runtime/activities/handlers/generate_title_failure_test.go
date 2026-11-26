@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // failingTitleDriver fails the request the way a provider outage does.
@@ -90,7 +91,7 @@ func TestGenerateTitle_LLMFailureReturnsErrorInsteadOfSilentFallback(t *testing.
 	driver := &failingTitleDriver{
 		err: errors.New("error parsing response json: invalid character '\\x03' looking for beginning of value"),
 	}
-	activity := &GenerateTitleActivity{repo: repo, driverResolver: failingTitleResolver(driver)}
+	activity := &GenerateTitleActivity{repo: tools.WithChats(repo), driverResolver: failingTitleResolver(driver)}
 
 	firstMessage := "creating titles of chats is broken, it's just using my text"
 	_, err := activity.Execute(context.Background(), GenerateTitleInput{
@@ -103,7 +104,7 @@ func TestGenerateTitle_LLMFailureReturnsErrorInsteadOfSilentFallback(t *testing.
 
 	// Nothing may be persisted on a failed attempt — a retry must still see an
 	// untitled chat, since the activity returns early once a title exists.
-	chat, getErr := repo.GetChat(context.Background(), chatID)
+	chat, getErr := store.GetChat(context.Background(), repo.ORM(), chatID)
 	require.NoError(t, getErr)
 	assert.Empty(t, chat.Title, "a failed attempt must not persist a title")
 	assert.NotEqual(t, firstMessage, chat.Title)
@@ -118,7 +119,7 @@ func TestGenerateTitle_UseFallbackWritesTruncatedFirstMessage(t *testing.T) {
 
 	// The driver must never be consulted on the fallback path.
 	driver := &failingTitleDriver{err: errors.New("must not be called")}
-	activity := &GenerateTitleActivity{repo: repo, driverResolver: failingTitleResolver(driver)}
+	activity := &GenerateTitleActivity{repo: tools.WithChats(repo), driverResolver: failingTitleResolver(driver)}
 
 	out, err := activity.Execute(context.Background(), GenerateTitleInput{
 		ChatID:       chatID,
@@ -130,7 +131,7 @@ func TestGenerateTitle_UseFallbackWritesTruncatedFirstMessage(t *testing.T) {
 	assert.Equal(t, "creating titles of chats is broken", out.Title)
 	assert.Zero(t, driver.calls, "fallback must not call the LLM")
 
-	chat, getErr := repo.GetChat(context.Background(), chatID)
+	chat, getErr := store.GetChat(context.Background(), repo.ORM(), chatID)
 	require.NoError(t, getErr)
 	assert.Equal(t, "creating titles of chats is broken", chat.Title)
 }
@@ -147,7 +148,7 @@ func TestGenerateTitle_EmptyGeneratedTitleIsAnError(t *testing.T) {
 
 	d := &titleDriver{resp: setTitleCall(`{"title":"   "}`)}
 	var opts llm.DriverOptions
-	activity := &GenerateTitleActivity{repo: repo, driverResolver: titleResolver(d, &opts)}
+	activity := &GenerateTitleActivity{repo: tools.WithChats(repo), driverResolver: titleResolver(d, &opts)}
 
 	_, err := activity.Execute(context.Background(), GenerateTitleInput{
 		ChatID:       chatID,
@@ -156,7 +157,7 @@ func TestGenerateTitle_EmptyGeneratedTitleIsAnError(t *testing.T) {
 
 	require.Error(t, err, "a blank title must not be persisted")
 
-	chat, getErr := repo.GetChat(context.Background(), chatID)
+	chat, getErr := store.GetChat(context.Background(), repo.ORM(), chatID)
 	require.NoError(t, getErr)
 	assert.Empty(t, chat.Title)
 }
@@ -170,13 +171,13 @@ func TestGenerateTitle_AlreadyTitledChatSkipsLLM(t *testing.T) {
 	ctx := context.Background()
 	chatID := seedTitleChat(t, repo)
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	chat.Title = "Existing Title"
 	require.NoError(t, repo.UpdateChat(ctx, chat))
 
 	driver := &failingTitleDriver{err: errors.New("must not be called")}
-	activity := &GenerateTitleActivity{repo: repo, driverResolver: failingTitleResolver(driver)}
+	activity := &GenerateTitleActivity{repo: tools.WithChats(repo), driverResolver: failingTitleResolver(driver)}
 
 	out, err := activity.Execute(ctx, GenerateTitleInput{
 		ChatID:       chatID,

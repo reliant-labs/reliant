@@ -33,13 +33,14 @@ type inflightRepo struct {
 	items     *MockItems
 	firings   *MockFirings
 	notices   *MockNotices
+	regs      *MockRegistrations
 	storage   *MockStorage
 	now, peak atomic.Int32
 }
 
 // deps is the service's Deps over r: its repository and its recovery list.
 func (r *inflightRepo) deps() Deps {
-	return Deps{Repo: r, Chats: r.chats, ProjectRows: r.MockProjectReader, Items: r.items, Firings: r.firings, Notices: r.notices, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
+	return Deps{Repo: r, Chats: r.chats, ProjectRows: r.MockProjectReader, Items: r.items, Firings: r.firings, Notices: r.notices, Registrations: r.regs, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
 }
 
 func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
@@ -58,7 +59,7 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 }
 
 func newInflightRepo(hold time.Duration) *inflightRepo {
-	r := &inflightRepo{MockRepository: &MockRepository{}, MockProjectReader: &MockProjectReader{}, chats: &MockChats{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, storage: &MockStorage{}}
+	r := &inflightRepo{MockRepository: &MockRepository{}, MockProjectReader: &MockProjectReader{}, chats: &MockChats{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, regs: &MockRegistrations{}, storage: &MockStorage{}}
 	m := r.MockRepository
 	// The org account notices: nothing paused, nothing on personal accounts.
 	r.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }
@@ -96,7 +97,7 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 	r.firings.InboxEpisodesFunc = func(ctx context.Context, userID string, ids []string, per, _ int) (map[string][]*core.TriggerEventWithRun, error) {
 		return firings(ctx, userID, ids, per)
 	}
-	m.ListTriggerRegistrationsFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
+	r.regs.ListTriggerRegistrationsForUserFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}

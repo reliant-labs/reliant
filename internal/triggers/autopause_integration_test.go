@@ -72,7 +72,7 @@ func (f *fireFixture) stored(t *testing.T) *core.Trigger {
 
 func (f *fireFixture) events(t *testing.T) []*core.TriggerEvent {
 	t.Helper()
-	rows, _, err := f.repo.ListTriggerEvents(context.Background(), core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 50})
+	rows, _, err := store.ListTriggerEventsPage(context.Background(), f.repo.ORM(), core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 50})
 	require.NoError(t, err)
 	events := make([]*core.TriggerEvent, 0, len(rows))
 	for _, row := range rows {
@@ -83,7 +83,7 @@ func (f *fireFixture) events(t *testing.T) []*core.TriggerEvent {
 
 func (f *fireFixture) changes(t *testing.T, op string) int {
 	t.Helper()
-	changes, err := f.repo.ListTriggerChanges(context.Background(), f.trigger.UserID, f.trigger.ID)
+	changes, err := store.TriggerChanges(context.Background(), f.repo.ORM(), f.trigger.UserID, f.trigger.ID)
 	require.NoError(t, err)
 	n := 0
 	for _, c := range changes {
@@ -135,7 +135,7 @@ func TestAutoPause_RemovedCreatorsTriggerPausesAndResumesAfterRejoining(t *testi
 			// Rejoined, the creator resumes it: the reason is cleared and it
 			// launches.
 			membership.set(false, "acme", "home")
-			require.NoError(t, f.repo.SetTriggerEnabled(ctx, f.trigger.ID, true))
+			require.NoError(t, store.EnableTrigger(ctx, f.repo.ORM(), f.trigger.ID, true))
 			stored = f.stored(t)
 			assert.True(t, stored.Enabled)
 			assert.Empty(t, stored.PausedReason)

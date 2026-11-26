@@ -12,6 +12,7 @@ import (
 )
 
 func TestThreadAmbientMemoryExclusionMonotonicLineage(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	require.NoError(t, store.InsertChat(ctx, env.ORM, convChat("memory-chat", time.Now().UTC())))
@@ -62,6 +63,7 @@ func TestThreadAmbientMemoryExclusionMonotonicLineage(t *testing.T) {
 }
 
 func TestThreadAmbientMemoryExclusionDepthBoundary(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	require.NoError(t, store.InsertChat(ctx, env.ORM, convChat("depth-chat", time.Now().UTC())))

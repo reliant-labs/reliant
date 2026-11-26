@@ -6,7 +6,8 @@
  * machine running), observability at 6.4 of 10 GB, three paid invoices, and
  * the org's month: shop (a ~$61 forecast, over prod,
  * staging and dev) plus ledger, a small backend and its database, so Usage &
- * billing lists two projects.
+ * billing lists two projects. LLMGatewayService's spend is the Reliant AI
+ * spend the overview reports: $18.40 over 412 requests in 30 days.
  *
  * Part of the app layer only (../app.ts): the demo's console reads no
  * billing. Every amount and window is relative to the pack clock.
@@ -17,6 +18,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { PlanTier, SubscriptionStatus, type PlanSchema } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { BillingService, ComputeIneligibleReason, OrganizationUsageGranularity, OrganizationUsageGroupBy, StorageBillingBasis, StorageProduct, type ProjectCostAmountSchema } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { LLMGatewayService } from "@/gen/controlplane/services/llm_gateway/v1/llm_gateway_pb";
 import { ObservabilityBillingService, ObservabilityQuotaState } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
 import { DAY, DEMO_ORG, HOUR, MINUTE, demoNow } from "../shopStory";
@@ -268,6 +270,15 @@ export function billingScenarioHandlers() {
       getStorageUsage: () => storageUsage(),
       listCurrentUserInvoices: () => ({ invoices: invoices() }),
       listOrganizationUsage: (req) => organizationUsage(req),
+    }),
+    ...serve(LLMGatewayService, {
+      // The org's Reliant AI spend in the window asked for (30 days): the overview's $18.40 and 412 requests, by model.
+      getLLMSpend: () => {
+        const entry = (model: string, spend: number, requests: bigint) => ({
+          keyId: "shop-llmkey-alex", keyName: "Reliant AI", model, spend, requests, periodStart: ts(demoNow() - 30 * DAY), periodEnd: ts(demoNow()),
+        });
+        return { entries: [entry("claude-sonnet-5", 14.1, 268n), entry("claude-haiku-4-5", 4.3, 144n)], totalSpend: 18.4, sampleDays: 30 };
+      },
     }),
     ...serve(ObservabilityBillingService, {
       getObservabilityUsage: () => ({

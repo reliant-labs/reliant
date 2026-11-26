@@ -61,7 +61,7 @@ func machineUpAt(env *testsuite.TestWorkflowEnvironment, upAt time.Time, checks 
 			return map[string]interface{}{"daemon_available": true}, nil
 		}
 		if final, _ := in["final"].(bool); final {
-			return nil, errors.New("Your machine didn't come online in time")
+			return nil, preflightVerdict("Your machine didn't come online in time")
 		}
 		return map[string]interface{}{"waiting": true}, nil
 	}
@@ -140,7 +140,7 @@ func TestWaitForDaemon_CapExhaustionSetsFinalAndFails(t *testing.T) {
 			final, _ := in["final"].(bool)
 			finals = append(finals, final)
 			if final {
-				return nil, errors.New("machine never came up")
+				return nil, preflightVerdict("machine never came up")
 			}
 			return map[string]interface{}{"waiting": true}, nil
 		})
@@ -202,7 +202,7 @@ func TestPreflightFailureMessage_ShowsTheActivityMessage(t *testing.T) {
 	const want = "Your machine didn't come online within 10 minutes. Check that it is running"
 	env := newPreflightWaitEnv(t)
 	var activityErr error
-	env.OnActivity("PreflightDaemonCheck", mock.Anything, mock.Anything).Return(nil, errors.New(want))
+	env.OnActivity("PreflightDaemonCheck", mock.Anything, mock.Anything).Return(nil, preflightVerdict(want))
 	env.RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 		activityErr = waitForDaemon(ctx, map[string]interface{}{"chat_id": "c1"})
 		return nil
@@ -214,4 +214,72 @@ func TestPreflightFailureMessage_ShowsTheActivityMessage(t *testing.T) {
 	require.Contains(t, activityErr.Error(), "activity error", "precondition: the raw error carries Temporal's wrapping")
 	require.Equal(t, want, preflightFailureMessage(activityErr))
 	require.Equal(t, "plain", preflightFailureMessage(errors.New("plain")), "a non-activity error is shown as-is")
+}
+
+// preflightVerdict is a failure the real PreflightDaemonCheck decides itself
+// (handlers.preflightFailure): non-retryable, of its type. (Not imported: the
+// handlers package depends on this one.)
+func preflightVerdict(msg string) error {
+	return temporal.NewNonRetryableApplicationError(msg, "PreflightDaemonCheckFailed", nil)
+}
+
+// One lost heartbeat — a worker restarting mid-slice — used to fail the whole
+// run (obs 5a36f26f, "[Workflow Runtime] TimeoutError"): the check ran with
+// MaximumAttempts 1. It is retried now, and the run carries on.
+func TestWaitForDaemon_LostHeartbeatIsRetried(t *testing.T) {
+	env := newPreflightWaitEnv(t)
+	env.OnActivity("PreflightDaemonCheck", mock.Anything, mock.Anything).
+		Return(nil, temporal.NewHeartbeatTimeoutError()).Once()
+	env.OnActivity("PreflightDaemonCheck", mock.Anything, mock.Anything).
+		Return(map[string]interface{}{"daemon_available": true}, nil).Once()
+
+	env.ExecuteWorkflow(preflightWaitWorkflow)
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError(), "one lost heartbeat must not fail the run")
+	env.AssertExpectations(t)
+}
+
+// The ladder is short: a check that keeps timing out still fails the run,
+// after preflightActivityMaxAttempts attempts.
+func TestWaitForDaemon_RetriesAreBounded(t *testing.T) {
+	env := newPreflightWaitEnv(t)
+	attempts := 0
+	env.OnActivity("PreflightDaemonCheck", mock.Anything, mock.Anything).
+		Return(func(map[string]interface{}) (map[string]interface{}, error) {
+			attempts++
+			return nil, temporal.NewHeartbeatTimeoutError()
+		})
+
+	env.ExecuteWorkflow(preflightWaitWorkflow)
+
+	require.Error(t, env.GetWorkflowError())
+	require.Equal(t, int(preflightActivityMaxAttempts), attempts)
+	require.Equal(t, int32(3), preflightActivityMaxAttempts)
+}
+
+// A verdict the check decides itself — no machine, a refused wake, a wait that
+// ran out — is not retried: it fails the run on the first attempt, as before.
+func TestWaitForDaemon_VerdictIsNotRetried(t *testing.T) {
+	env := newPreflightWaitEnv(t)
+	attempts := 0
+	env.OnActivity("PreflightDaemonCheck", mock.Anything, mock.Anything).
+		Return(func(map[string]interface{}) (map[string]interface{}, error) {
+			attempts++
+			return nil, preflightVerdict("this workflow requires a daemon but none is available")
+		})
+
+	env.ExecuteWorkflow(preflightWaitWorkflow)
+
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "requires a daemon")
+	require.Equal(t, 1, attempts)
+}
+
+// What the transcript shows for a failed attempt follows the ladder: a
+// retryable failure on attempt 1 of 3 reads as retrying, not as final.
+func TestResolveMaxAttempts_PreflightLadder(t *testing.T) {
+	require.Equal(t, preflightActivityMaxAttempts, resolveMaxAttempts(activity.Info{ActivityType: activity.Type{Name: "PreflightDaemonCheck"}}))
+	require.Equal(t, int32(1), resolveMaxAttempts(activity.Info{ActivityType: activity.Type{Name: "MachineResumeWake"}}))
 }

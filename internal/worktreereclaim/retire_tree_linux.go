@@ -46,6 +46,11 @@ type retirementTree struct {
 	tracked     map[string]trackedKind
 	head        string
 	trackedRead bool
+	// source is the checkout's source checkout (sourceCheckout), which a
+	// never-listed file may be a copy of (sourceCovers), looked up when the
+	// inventory first meets one.
+	source     string
+	sourceRead bool
 }
 
 // maxRetirementEntries bounds one inventory. A checkout with its installs
@@ -57,6 +62,10 @@ const maxRetirementEntries = 500_000
 
 type retirementEntry struct {
 	stat unix.Stat_t
+	// covered: a never-listed file that does not hold the tree only because
+	// the source checkout holds a copy of it (sourceCovers). remove judges it
+	// again on the file it is about to unlink.
+	covered bool
 }
 
 func retirementOpen(dir int, name string, directory bool) (*os.File, error) {
@@ -415,6 +424,11 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 		if len(children) > maxStripWalk {
 			return errors.New("retirement directory budget exceeded")
 		}
+		// A never-listed directory is judged by what it holds (below); one
+		// that holds nothing is data to the classifier too.
+		if len(children) == 0 && rel != "" && !t.scratch && !inPackage && neverListed(rel) && !t.trackedPath(ctx, rel, st.Mode) {
+			return fmt.Errorf("protected descendant: %s", rel)
+		}
 		if t.installRoot(rel) {
 			r := readInstallRecord(dir)
 			rec = &r
@@ -439,8 +453,18 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 			if err := unix.Fstatat(int(dir.Fd()), name, &s, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 				return err
 			}
+			// A never-listed name holds the tree unless HEAD tracks it or
+			// the source checkout holds a copy of it, judged as the
+			// classifier judges it (sourceCovers): a regular file once it
+			// is open, below, and a directory by its contents, every one of
+			// which is never-listed too.
+			covered := false
 			if !t.scratch && !inPackage && neverListed(path) && !t.trackedPath(ctx, path, s.Mode) {
-				return fmt.Errorf("protected descendant: %s", path)
+				kind := s.Mode & unix.S_IFMT
+				if (kind != unix.S_IFREG && kind != unix.S_IFDIR) || t.sourceCheckout(ctx) == "" {
+					return fmt.Errorf("protected descendant: %s", path)
+				}
+				covered = kind == unix.S_IFREG
 			}
 			if s.Dev != st.Dev {
 				return errors.New("retirement crosses filesystem")
@@ -473,17 +497,20 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 				}
 				var opened unix.Stat_t
 				err = unix.Fstat(int(f.Fd()), &opened)
+				if err == nil && !retirementSame(s, opened) {
+					err = errors.New("file identity changed")
+				}
+				if err == nil && covered && !sourceCovers(t.source, t.path, path, f) {
+					err = fmt.Errorf("protected descendant: %s", path)
+				}
 				f.Close()
 				if err != nil {
 					return err
 				}
-				if !retirementSame(s, opened) {
-					return errors.New("file identity changed")
-				}
 				// A file with other links (pnpm hard-links its store into every
 				// node_modules) loses only this name: unlinkat never frees
 				// content another link still names.
-				entries[path] = retirementEntry{stat: s}
+				entries[path] = retirementEntry{stat: s, covered: covered}
 				if s.Nlink == 1 {
 					bytes += s.Size
 				}
@@ -524,7 +551,8 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 // that has one (2026-11-07: 174 of 470 live worktrees on one machine, all of
 // control-plane's and reliant's, so no workspace that contains them could
 // ever be retired). Only HEAD's own paths are exempt: an ignored or
-// untracked file inside a tracked secrets/ is still a protected descendant.
+// untracked file inside a tracked secrets/ is still a protected descendant,
+// unless the source checkout holds a copy of it (sourceCovers).
 // The exemption is tied to the commit it was read from (validate), so a
 // HEAD that moves after inspection holds the tree. A checkout git cannot
 // read exempts nothing. A regenerable subtree never consults it.
@@ -544,6 +572,20 @@ func (t *retirementTree) trackedPath(ctx context.Context, rel string, mode uint3
 	default:
 		return false
 	}
+}
+
+// sourceCheckout is the source checkout of the checkout being inventoried,
+// read once; "" for a regenerable subtree, which is not a checkout, and when
+// there is none.
+func (t *retirementTree) sourceCheckout(ctx context.Context) string {
+	if t.subtree {
+		return ""
+	}
+	if !t.sourceRead {
+		t.sourceRead = true
+		t.source = sourceCheckout(ctx, t.path)
+	}
+	return t.source
 }
 
 // trackedKind is what HEAD's tree holds at a path, for trackedPath.
@@ -707,10 +749,15 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 			} else {
 				var opened unix.Stat_t
 				err = unix.Fstat(int(f.Fd()), &opened)
-				f.Close()
 				if err == nil && !retirementIdentity(st, opened) {
 					err = errors.New("entry replaced while opening")
 				}
+				// The source's copy can change after validate: a file kept
+				// only for it is judged again as it is about to go.
+				if err == nil && e.covered && !sourceCovers(t.source, t.path, p, f) {
+					err = errors.New("source copy changed at deletion boundary")
+				}
+				f.Close()
 			}
 		}
 		if err == nil {

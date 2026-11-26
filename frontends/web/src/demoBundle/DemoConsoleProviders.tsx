@@ -29,9 +29,6 @@ import type { ProductAnalyticsHub } from "@/components/Forge/Console/consoleNavM
 import { LedConsoleProvider, type LedConsoleHost } from "@/components/Forge/Console/ledConsole";
 import { AskAgentModeProvider } from "@/components/Forge/Observability/AskReliant/askAgentMode";
 
-/** The sample shop's environments in promotion order: the scope control lists them so. */
-export const DEMO_ENV_ORDER = ["dev", "staging", "prod"] as const;
-
 const PRODUCT_ANALYTICS: ProductAnalyticsHub = { open: { kind: "dashboard", dashKind: "release", key: PEOPLE_DASHBOARD_KEYS[0] }, keys: PEOPLE_DASHBOARD_KEYS };
 
 /** Each of the demo's own pages' breadcrumb. */
@@ -77,8 +74,9 @@ export function demoSectionOf(pathname: string, search: Record<string, unknown>)
  *  - Product analytics, the sample shop's Users · Product · Acquisition hub;
  *  - an agent card on Errors, Traces, Alerts and Releases, and the sample
  *    shop's issues explained in plain words;
- *  - "How releases work" from the Releases sentence, a page of the demo's;
- *  - the environments in promotion order (dev, staging, prod).
+ *  - "How releases work" from the Releases sentence, a page of the demo's.
+ *
+ * The environments keep the app's order (prod first, Console/envScope.ts).
  *
  * The guided tour walks this same console: its steps open the console's own
  * pages and ring the led pages' rows and cards.
@@ -92,7 +90,6 @@ export function DemoConsoleHost({ children }: { children: ReactNode }) {
       aside: agentAside,
       explainIssue: explainShopIssue,
       releasesExplainer: { href: demoSectionHref(DEMO_SECTION_RELEASES), label: "How releases work" },
-      envOrder: DEMO_ENV_ORDER,
     }),
     [section]
   );

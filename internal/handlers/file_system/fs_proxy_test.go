@@ -16,6 +16,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 	"github.com/stretchr/testify/assert"
@@ -49,6 +50,9 @@ func (r *recordingFSDaemonRouter) SendDaemonCommand(_ context.Context, _ string,
 func newProxy(t *testing.T, router Router, repo any) *Service {
 	t.Helper()
 	deps := Deps{Router: router}
+	if r, ok := repo.(*db.Repo); ok && r != nil {
+		repo = tools.WithChats(r)
+	}
 	if r, ok := repo.(Repository); ok {
 		deps.Repo = r
 	}

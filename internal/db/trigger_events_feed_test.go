@@ -53,7 +53,7 @@ func TestListTriggerEvents_PaginatesTiedOccurredAt(t *testing.T) {
 	var seen []string
 	var cursor *core.TriggerEventCursor
 	for page := 0; page < 10; page++ {
-		items, hasMore, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{
+		items, hasMore, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{
 			UserID: "test-user", TriggerID: tr.ID, Limit: 2, After: cursor,
 		})
 		require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestListTriggerEvents_OutcomeFilter(t *testing.T) {
 	feedEvent(t, repo, "ev-f", tr.ID, "test-user", core.TriggerEventFailed, base.Add(-time.Minute))
 
 	list := func(outcomes ...core.TriggerEventOutcome) []string {
-		items, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{
+		items, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{
 			UserID: "test-user", TriggerID: tr.ID, Limit: 10, Outcomes: outcomes,
 		})
 		require.NoError(t, err)
@@ -129,7 +129,7 @@ func TestListTriggerEvents_JoinsRunState(t *testing.T) {
 	// A skipped firing has no run, and a launched firing whose chat is gone has none either.
 	feedEvent(t, repo, "ev-skipped", tr.ID, "test-user", core.TriggerEventSkipped, base.Add(time.Hour))
 
-	items, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: tr.ID, Limit: 50})
+	items, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{UserID: "test-user", TriggerID: tr.ID, Limit: 50})
 	require.NoError(t, err)
 	require.Len(t, items, 9)
 
@@ -170,7 +170,7 @@ func TestListTriggerEvents_ScopedToUser(t *testing.T) {
 	base := time.Now().UTC().Truncate(time.Microsecond)
 	feedEvent(t, repo, "ev-mine", tr.ID, "test-user", core.TriggerEventSkipped, base)
 
-	items, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "someone-else", TriggerID: tr.ID, Limit: 10})
+	items, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{UserID: "someone-else", TriggerID: tr.ID, Limit: 10})
 	require.NoError(t, err)
 	assert.Empty(t, items, "another user must never read this trigger's firings")
 
@@ -178,7 +178,7 @@ func TestListTriggerEvents_ScopedToUser(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, recent)
 
-	_, _, err = repo.ListTriggerEvents(ctx, core.TriggerEventFilters{TriggerID: tr.ID, Limit: 10})
+	_, _, err = store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{TriggerID: tr.ID, Limit: 10})
 	assert.Error(t, err, "an empty user must be refused, not read as 'all users'")
 }
 

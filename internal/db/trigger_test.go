@@ -190,7 +190,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 		t.Errorf("after update Config: got %s", updated.Config)
 	}
 
-	if err := repo.DeleteTrigger(ctx, want.ID); err != nil {
+	if err := store.RemoveTrigger(ctx, repo.ORM(), want.ID); err != nil {
 		t.Fatalf("DeleteTrigger: %v", err)
 	}
 	if _, err := repo.GetTrigger(ctx, want.ID); !errors.Is(err, core.ErrTriggerNotFound) {
@@ -307,7 +307,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 
-	if err := repo.SetTriggerEnabled(ctx, trigger.ID, false); err != nil {
+	if err := store.EnableTrigger(ctx, repo.ORM(), trigger.ID, false); err != nil {
 		t.Fatalf("SetTriggerEnabled(false): %v", err)
 	}
 	got, err := repo.GetTrigger(ctx, trigger.ID)
@@ -318,7 +318,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 		t.Error("after SetTriggerEnabled(false): got enabled=true")
 	}
 
-	if err := repo.SetTriggerEnabled(ctx, trigger.ID, true); err != nil {
+	if err := store.EnableTrigger(ctx, repo.ORM(), trigger.ID, true); err != nil {
 		t.Fatalf("SetTriggerEnabled(true): %v", err)
 	}
 	got, err = repo.GetTrigger(ctx, trigger.ID)
@@ -329,7 +329,7 @@ func TestSetTriggerEnabled(t *testing.T) {
 		t.Error("after SetTriggerEnabled(true): got enabled=false")
 	}
 
-	if err := repo.SetTriggerEnabled(ctx, "trg-nope", true); !errors.Is(err, core.ErrTriggerNotFound) {
+	if err := store.EnableTrigger(ctx, repo.ORM(), "trg-nope", true); !errors.Is(err, core.ErrTriggerNotFound) {
 		t.Errorf("SetTriggerEnabled on missing row: got %v, want ErrTriggerNotFound", err)
 	}
 }
@@ -522,7 +522,7 @@ func TestListTriggerEventsOrderAndLimit(t *testing.T) {
 		t.Fatalf("CreateTriggerEvent(foreign): %v", err)
 	}
 
-	all, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 10})
+	all, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 10})
 	if err != nil {
 		t.Fatalf("ListTriggerEvents: %v", err)
 	}
@@ -531,7 +531,7 @@ func TestListTriggerEventsOrderAndLimit(t *testing.T) {
 		t.Errorf("ListTriggerEvents order: got %v, want %v (newest first)", got, wantOrder)
 	}
 
-	limited, _, err := repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 2})
+	limited, _, err := store.ListTriggerEventsPage(ctx, repo.ORM(), core.TriggerEventFilters{UserID: "test-user", TriggerID: trigger.ID, Limit: 2})
 	if err != nil {
 		t.Fatalf("ListTriggerEvents(limit=2): %v", err)
 	}
@@ -554,7 +554,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 
 	// Never fired: (nil, nil), not an error. This is the overlap check's first
 	// run, and it must not look like a failure.
-	latest, err := repo.GetLatestTriggerEvent(ctx, trigger.ID, nil)
+	latest, err := store.GetLatestTriggerEvent(ctx, repo.ORM(), trigger.ID, nil)
 	if err != nil {
 		t.Fatalf("GetLatestTriggerEvent(no events): %v", err)
 	}
@@ -573,7 +573,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 		}
 	}
 
-	latest, err = repo.GetLatestTriggerEvent(ctx, trigger.ID, nil)
+	latest, err = store.GetLatestTriggerEvent(ctx, repo.ORM(), trigger.ID, nil)
 	if err != nil {
 		t.Fatalf("GetLatestTriggerEvent(unfiltered): %v", err)
 	}
@@ -585,7 +585,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 	// skipped one started no run, so it says nothing about whether the
 	// previous run is still going.
 	wantLaunched := core.TriggerEventLaunched
-	latest, err = repo.GetLatestTriggerEvent(ctx, trigger.ID, &wantLaunched)
+	latest, err = store.GetLatestTriggerEvent(ctx, repo.ORM(), trigger.ID, &wantLaunched)
 	if err != nil {
 		t.Fatalf("GetLatestTriggerEvent(launched): %v", err)
 	}
@@ -595,7 +595,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 
 	// An outcome that never occurred is also (nil, nil).
 	wantFailed := core.TriggerEventFailed
-	latest, err = repo.GetLatestTriggerEvent(ctx, trigger.ID, &wantFailed)
+	latest, err = store.GetLatestTriggerEvent(ctx, repo.ORM(), trigger.ID, &wantFailed)
 	if err != nil {
 		t.Fatalf("GetLatestTriggerEvent(failed): %v", err)
 	}
@@ -623,7 +623,7 @@ func TestDeleteTriggerNullsEventTriggerID(t *testing.T) {
 		t.Fatalf("CreateTriggerEvent: %v", err)
 	}
 
-	if err := repo.DeleteTrigger(ctx, trigger.ID); err != nil {
+	if err := store.RemoveTrigger(ctx, repo.ORM(), trigger.ID); err != nil {
 		t.Fatalf("DeleteTrigger: %v", err)
 	}
 

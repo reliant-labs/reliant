@@ -52,6 +52,7 @@ func runEventIDs(rows []*core.RunEvent) []string {
 // TestRunEventLifecycle covers the outbox row's life: insert with dedupe, the
 // two reads, a nil payload and a zero CreatedAt, dispatch and prune.
 func TestRunEventLifecycle(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	ids := seedRunEvents(t, env, "rw", 4)
@@ -176,6 +177,7 @@ func TestRunEventLifecycle(t *testing.T) {
 // TestRunEventEmitterQueries covers the reads the emitter makes before
 // writing a blocked event.
 func TestRunEventEmitterQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-blk")
@@ -245,6 +247,7 @@ func TestRunEventEmitterQueries(t *testing.T) {
 // TestLockChatForRunEventBlocksOtherTransactions: the row lock one transaction
 // takes holds a second transaction's lock on the same chat until it commits.
 func TestLockChatForRunEventBlocksOtherTransactions(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-rowlock")
@@ -327,6 +330,7 @@ func previousReleaseClaim(env *storetest.Env, now, lease time.Time, max int) ([]
 // ones (two of them tied on created_at), a claim takes the claimable rows
 // oldest first, capped at max, and leases them.
 func TestClaimRunEvents(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	ids := seedRunEvents(t, env, "ev", 8)
@@ -417,6 +421,7 @@ func TestClaimRunEvents(t *testing.T) {
 // outbox at once, half through the port and half through the previous
 // release's statement; SKIP LOCKED must hand every row to exactly one.
 func TestClaimRunEventsConcurrentClaimersAreDisjoint(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ids := seedRunEvents(t, env, "cc", 120)
 	now, lease := l2Base.Add(time.Hour), l2Base.Add(2*time.Hour)

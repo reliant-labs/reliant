@@ -47,6 +47,9 @@ export const SHOP_REMOTE = `https://${DEMO_REPO}.git`;
 
 export const PROJECT_IDS = { shop: "shop-proj-shop", docs: "shop-proj-docs" } as const;
 
+/** The reliant release the server runs (SystemService/Version) and the cloud machine's daemon reports. */
+export const RELIANT_RELEASE = { version: "v1.31.0", commit: "4e1b7c2a9d3f5e6081b2c3d4e5f60718293a4b5c" } as const;
+
 /** Alex's two machines: a cloud machine that is up, and a laptop that is asleep. */
 export const DAEMON_IDS = { cloud: "shop-d-cloud", laptop: "shop-d-laptop" } as const;
 export const DAEMON_NAMES = { cloud: "cloud-machine", laptop: "alex-macbook" } as const;
@@ -78,6 +81,7 @@ export const CHAT_IDS = {
 
 export const CHAT_TITLES = {
   cartTotals: "Refactor cart totals and fix multi-quantity discounts",
+  rateLimit: "Add rate limiting to /checkout",
   taxRates: "Move tax rates behind the pricing config",
   stripeSdk: "Upgrade the Stripe SDK to v18",
 } as const;
@@ -115,6 +119,8 @@ export function daemons(): DaemonInfo[] {
       daemonId: DAEMON_IDS.cloud, userId: APP_USER.id, hostname: DAEMON_NAMES.cloud, platform: "linux/amd64",
       status: DaemonStatus.ACTIVE, connectedAt: tsAgo(3 * HOUR), lastHeartbeat: tsAgo(5000),
       daemonType: "cloud", lifecyclePhase: DaemonLifecyclePhase.READY, size: "m", createdAt: tsAgo(12 * DAY),
+      // The build its daemon reported on attach (the Agent sandboxes page shows it).
+      version: RELIANT_RELEASE.version, commit: RELIANT_RELEASE.commit,
     }),
     create(DaemonInfoSchema, {
       daemonId: DAEMON_IDS.laptop, userId: APP_USER.id, hostname: DAEMON_NAMES.laptop, platform: "darwin/arm64",
@@ -201,10 +207,11 @@ export function chat(o: ChatInit): Chat {
 export function chats(): Chat[] {
   return [
     chat({ id: CHAT_IDS.cartTotals, title: CHAT_TITLES.cartTotals, ago: 5000, activity: ChatActivity.RUNNING, workflowState: WorkflowState.ACTIVE, workflowStopReason: WorkflowStopReason.UNSPECIFIED, workflowName: "builtin://get-it-right", appName: "shop" }),
-    chat({ id: CHAT_IDS.rateLimit, title: "Add rate limiting to /checkout", worktree: "rateLimit", activity: ChatActivity.AWAITING_INPUT, workflowState: WorkflowState.ACTIVE, ago: 2 * MINUTE }),
+    chat({ id: CHAT_IDS.rateLimit, title: CHAT_TITLES.rateLimit, worktree: "rateLimit", activity: ChatActivity.AWAITING_INPUT, workflowState: WorkflowState.ACTIVE, ago: 2 * MINUTE }),
     chat({ id: CHAT_IDS.loadTest, title: "Load-test the limiter (spawned from rate limiting)", worktree: "rateLimit", unread: true, ago: 40 * MINUTE }),
     chat({ id: CHAT_IDS.stripeWebhooks, title: "Retry Stripe webhooks with idempotency keys", worktree: "stripeWebhooks", activity: ChatActivity.ERROR, workflowStopReason: WorkflowStopReason.FAILED, ago: 3 * HOUR, appName: "shop" }),
-    chat({ id: CHAT_IDS.nightlyCi, title: "Nightly: triage failing CI", launchKind: "trigger.schedule", triggerId: "shop-trg-nightly", ago: 7 * HOUR }),
+    // Last night's firing failed (the automation is failing: handlers/reliant/workflows.ts).
+    chat({ id: CHAT_IDS.nightlyCi, title: "Nightly: triage failing CI", launchKind: "trigger.schedule", triggerId: "shop-trg-nightly", activity: ChatActivity.ERROR, workflowStopReason: WorkflowStopReason.FAILED, ago: 7 * HOUR }),
     chat({ id: CHAT_IDS.mjmlEmails, title: "Migrate order confirmation emails from inline HTML strings to MJML templates with snapshot tests", ago: 26 * HOUR }),
     chat({ id: CHAT_IDS.untitled, title: "", ago: 3 * DAY }),
     chat({ id: CHAT_IDS.taxRates, title: CHAT_TITLES.taxRates, ago: 12 * MINUTE }),

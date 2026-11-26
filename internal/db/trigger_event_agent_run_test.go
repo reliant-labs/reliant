@@ -94,7 +94,7 @@ func TestCountLiveLaunchedRuns_CountsOnlyLiveRunsOfThatKindAndUser(t *testing.T)
 		id := uuid.NewString()
 		chatWithRootWorkflow(t, repo, id, id, status)
 		if user != "test-user" {
-			chat, err := repo.GetChat(ctx, id)
+			chat, err := store.GetChat(ctx, repo.ORM(), id)
 			require.NoError(t, err)
 			chat.UserID = user
 			require.NoError(t, repo.UpdateChat(ctx, chat))

@@ -41,6 +41,33 @@ func SetUserJWT(userID, token string) {
 	userJWTsMu.Unlock()
 }
 
+// OfferUserJWT stores token for userID like SetUserJWT, except that it keeps
+// the token already held when that one is a live JWT expiring no earlier.
+// Workflow activities carry the token captured at the run's start
+// (RuntimeContext.UserJWT) to whichever worker picks them up; offering it,
+// rather than setting it, never replaces a fresher token a later turn already
+// delivered to this process with an older one. Tokens whose expiry cannot be
+// read are not compared: the offered one wins, as with SetUserJWT.
+func OfferUserJWT(userID, token string) {
+	if userID == "" || strings.TrimSpace(token) == "" {
+		return
+	}
+	userJWTsMu.Lock()
+	defer userJWTsMu.Unlock()
+	if held, ok := userJWTs[userID]; ok && outlasts(held, token, time.Now()) {
+		return
+	}
+	userJWTs[userID] = token
+}
+
+// outlasts reports whether held is a live JWT whose exp is no earlier than
+// offered's. Both expiries must be readable.
+func outlasts(held, offered string, now time.Time) bool {
+	he, okh := jwtExp(held)
+	oe, oko := jwtExp(offered)
+	return okh && oko && now.Before(time.Unix(he, 0)) && he >= oe
+}
+
 // GetUserJWT returns the latest JWT for the given user, unless it has
 // expired. The cache outlives the session that filled it, and every caller
 // treats a present token as "the user is signed in": an expired one fails at
@@ -62,21 +89,31 @@ func GetUserJWT(userID string) (string, bool) {
 // token already accepted by the interceptor is still worth presenting. A value
 // that is not a JWT, or carries no exp, is not judged expired.
 func jwtExpired(token string, now time.Time) bool {
+	exp, ok := jwtExp(token)
+	if !ok {
+		return false
+	}
+	return !now.Before(time.Unix(exp, 0))
+}
+
+// jwtExp is token's exp claim, read without verifying the signature; false
+// when token is not a JWT or carries no exp.
+func jwtExp(token string) (int64, bool) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return false
+		return 0, false
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return false
+		return 0, false
 	}
 	var claims struct {
 		Exp int64 `json:"exp"`
 	}
 	if json.Unmarshal(payload, &claims) != nil || claims.Exp == 0 {
-		return false
+		return 0, false
 	}
-	return !now.Before(time.Unix(claims.Exp, 0))
+	return claims.Exp, true
 }
 
 // WithUser returns ctx carrying the authenticated caller under the keys the

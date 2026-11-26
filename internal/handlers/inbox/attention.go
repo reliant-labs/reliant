@@ -71,7 +71,7 @@ func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, reads
 			if len(ids) == 0 {
 				return nil
 			}
-			regs, err = s.deps.Repo.ListTriggerRegistrations(gctx, userID, ids)
+			regs, err = s.deps.Registrations.ListTriggerRegistrationsForUser(gctx, userID, ids)
 			return err
 		})
 	})

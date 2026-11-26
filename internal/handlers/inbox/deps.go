@@ -78,6 +78,13 @@ type Firings interface {
 	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 }
 
+// Registrations reads the integration registrations of the caller's triggers,
+// for the health of a polled automation. store.TriggerRegistrationExtStore
+// satisfies it.
+type Registrations interface {
+	ListTriggerRegistrationsForUser(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
+}
+
 // Notices are the automations of the org-provider-accounts §11 notices: paused
 // for want of an org account, and still on their owner's own accounts.
 // store.TriggerExtStore satisfies it.
@@ -116,7 +123,6 @@ type Repository interface {
 	AssignUnassignedOrg(ctx context.Context, userID, orgID string) error
 
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
-	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 }
