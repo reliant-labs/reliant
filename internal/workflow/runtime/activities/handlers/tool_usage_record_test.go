@@ -79,7 +79,7 @@ func toolSpanDurations(spans []sdktrace.ReadOnlySpan) map[string]int64 {
 func TestExecuteTools_RecordsEachCallsOutcomeAndClassPerToolKind(t *testing.T) {
 	rec := recordHandlerSpans(t)
 	h, chatID := newValidationChat(t)
-	chat, err := h.Repo().GetChat(context.Background(), chatID)
+	chat, err := store.GetChat(context.Background(), h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 
 	integration := firstIntegrationTool(t)

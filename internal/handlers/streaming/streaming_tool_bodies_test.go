@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/messageproto"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -98,7 +99,7 @@ func TestChatStreamToolBodies(t *testing.T) {
 
 	t.Run("unset is FULL, byte for byte: snapshot and update frames", func(t *testing.T) {
 		svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
-		chat, err := repo.GetChatRow(ctx, f.ChatID)
+		chat, err := store.GetChatRow(ctx, repo.ORM(), f.ChatID)
 		require.NoError(t, err)
 		marshal := func(mode reliantv1.ToolBodyMode) []byte {
 			snapshot, _, err := svc.buildChatSnapshot(ctx, chat, chatSyncOptions{toolBodies: mode})

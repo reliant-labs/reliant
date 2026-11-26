@@ -76,7 +76,7 @@ func newScenario(t *testing.T, workflow string) *scenario {
 	require.NoError(t, triggertest.Update(ctx, f.repo, f.trigger))
 	return &scenario{
 		repo: f.repo, starter: f.starter, intake: intake, firer: firer, trigger: f.trigger, userID: f.trigger.UserID,
-		recorder: writeledger.New(writeledger.Deps{Store: writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), Runs: f.repo}),
+		recorder: writeledger.New(writeledger.Deps{Store: writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), Runs: writeledger.NewRuns(f.repo.ORM())}),
 		chats:    map[string]string{},
 	}
 }

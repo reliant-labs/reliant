@@ -52,7 +52,7 @@ func (s *Service) ResumeChat(
 	// sent anyway, the resume would be held and release the next pause the
 	// run takes on its own. For it, Resume is the wake alone: its threads
 	// parked on a usage limit retry, and its stopped sub-agents resume.
-	if root, err := s.deps.Repo.GetWorkflow(ctx, *chat.WorkflowID); err == nil && root != nil && root.Status == db.Active() {
+	if root, err := s.deps.Workflows.LoadWorkflow(ctx, *chat.WorkflowID); err == nil && root != nil && root.Status == db.Active() {
 		if err := s.resumeWholeChat(ctx, chat); err != nil {
 			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resume workflow"))
 		}

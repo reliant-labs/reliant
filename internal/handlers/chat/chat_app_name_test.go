@@ -69,7 +69,7 @@ func TestStartChat_AppName(t *testing.T) {
 		resp, err := start(app)
 		require.NoError(t, err, name)
 		assert.Nil(t, resp.Msg.GetChat().AppName, "%s: a chat about no app is untagged", name)
-		stored, err := f.repo.GetChat(f.ctx, resp.Msg.GetChat().GetId())
+		stored, err := store.GetChat(f.ctx, f.repo.ORM(), resp.Msg.GetChat().GetId())
 		require.NoError(t, err)
 		assert.Nil(t, stored.AppName, name)
 	}
@@ -168,7 +168,7 @@ func TestBranchChat_KeepsTheAppName(t *testing.T) {
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{ChatId: sourceChatID, MessageId: messageID}))
 	require.NoError(t, err)
 	assert.Equal(t, "storefront", resp.Msg.GetChat().GetAppName())
-	branch, err := repo.GetChat(ctx, resp.Msg.GetChat().GetId())
+	branch, err := store.GetChat(ctx, repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, branch.AppName)
 	assert.Equal(t, "storefront", *branch.AppName)

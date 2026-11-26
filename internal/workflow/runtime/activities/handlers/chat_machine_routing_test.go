@@ -78,7 +78,7 @@ func TestExecuteTools_LiveChatStaysOnMachineWhenSecondCloudRegisters(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, "ws-ws-e164d47d", defaultID, "prove default resolution now chooses the new cloud machine")
 	run()
-	stored, err := h.Repo().GetChat(ctx, chat)
+	stored, err := store.GetChat(ctx, h.Repo().ORM(), chat)
 	require.NoError(t, err)
 	assert.Equal(t, original, *stored.ActiveDaemonID)
 }

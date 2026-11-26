@@ -1,0 +1,3 @@
+# want: gate
+version: 1
+check: "task ci"

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/rowreads"
-
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -419,6 +419,10 @@ type nudgeSaveFailingRepo struct {
 	rowreads.Reads
 	failed int
 	mu     sync.Mutex
+}
+
+func (r *nudgeSaveFailingRepo) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	return chatviews.Of(r.Repo).GetChat(ctx, id)
 }
 
 func (r *nudgeSaveFailingRepo) SaveMessageAtomic(ctx context.Context, w db.AtomicMessageWrite) (*db.AtomicMessageResult, error) {

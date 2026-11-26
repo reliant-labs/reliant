@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=02899ca75f14064fe357179814007540cad798e48e5f631e8ac6cb3416692f5b
+// forge:hash=cc272f3a2c6acfe7c8f98acf1ce2f1c49861f31079c00ed968a9a79616232116
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -327,13 +327,11 @@ type MockRepository struct {
 	SeedSeqCounterForForkFunc                                func(context.Context, string, string) error
 	RunTxFunc                                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	UpdateChatFunc                                           func(context.Context, *db.Chat) error
-	GetWorkflowFunc                                          func(context.Context, string) (*db.Workflow, error)
 	UpdateWorkflowStatusFunc                                 func(context.Context, string, db.WorkflowStatus) error
 	CompareAndSwapWorkflowStatusFunc                         func(context.Context, string, db.WorkflowStatus, db.WorkflowStatus) (bool, error)
 	DeleteWorkflowCheckpointFunc                             func(context.Context, string) error
 	CascadeTerminalStatusToDescendantsFunc                   func(context.Context, string, db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtreeFunc                 func(context.Context, string, db.WorkflowStopReason) error
-	EmitQuestionUpdateFunc                                   func(context.Context, string, db.QuestionUpdate) error
 	LockChatRunControlFunc                                   func(context.Context, string) (func(), error)
 	ClaimWorkflowStartFunc                                   func(context.Context, string) (bool, error)
 	CountMessagesInChatFunc                                  func(context.Context, string) (int, error)
@@ -1184,15 +1182,6 @@ func (m *MockRepository) UpdateChat(ctx context.Context, chat *db.Chat) error {
 	return contractkit.MockNotSet("MockRepository", "UpdateChat")
 }
 
-// GetWorkflow records the call and delegates to GetWorkflowFunc when set.
-func (m *MockRepository) GetWorkflow(ctx context.Context, id string) (*db.Workflow, error) {
-	m.Recorder.Record("GetWorkflow", ctx, id)
-	if m.GetWorkflowFunc != nil {
-		return m.GetWorkflowFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetWorkflow")
-}
-
 // UpdateWorkflowStatus records the call and delegates to UpdateWorkflowStatusFunc when set.
 func (m *MockRepository) UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error {
 	m.Recorder.Record("UpdateWorkflowStatus", ctx, id, status)
@@ -1236,15 +1225,6 @@ func (m *MockRepository) CascadeTerminalStatusToThreadSubtree(ctx context.Contex
 		return m.CascadeTerminalStatusToThreadSubtreeFunc(ctx, workflowID, reason)
 	}
 	return contractkit.MockNotSet("MockRepository", "CascadeTerminalStatusToThreadSubtree")
-}
-
-// EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
-func (m *MockRepository) EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error {
-	m.Recorder.Record("EmitQuestionUpdate", ctx, chatID, update)
-	if m.EmitQuestionUpdateFunc != nil {
-		return m.EmitQuestionUpdateFunc(ctx, chatID, update)
-	}
-	return contractkit.MockNotSet("MockRepository", "EmitQuestionUpdate")
 }
 
 // LockChatRunControl records the call and delegates to LockChatRunControlFunc when set.

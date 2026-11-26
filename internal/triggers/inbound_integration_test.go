@@ -74,7 +74,7 @@ func TestInboundDeliveryLaunchesOnceAndAdoptsTheReceiversRow(t *testing.T) {
 	}
 	assert.Equal(t, 1, f.starter.startCount(), "one delivery, however many fires, starts one run")
 
-	events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 10})
+	events, _, err := store.ListTriggerEventsPage(ctx, f.repo.ORM(), core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 10})
 	require.NoError(t, err)
 	require.Len(t, events, 1, "the launch adopts the receiver's row instead of writing a second one")
 	stored := events[0].Event
@@ -112,7 +112,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			require.NoError(t, err)
 			require.Equal(t, string(core.TriggerEventLaunched), out.Outcome)
 
-			chat, err := f.repo.GetChat(ctx, out.ChatID)
+			chat, err := store.GetChat(ctx, f.repo.ORM(), out.ChatID)
 			require.NoError(t, err)
 			require.NotNil(t, chat.ActiveDaemonID, "the run is pinned to a daemon")
 			assert.Equal(t, f.trigger.DaemonID, *chat.ActiveDaemonID, "the run is pinned to the trigger's daemon")

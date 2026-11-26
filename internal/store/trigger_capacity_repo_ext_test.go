@@ -40,6 +40,7 @@ func claimCapacity(ctx context.Context, env *storetest.Env, id string, scope sto
 }
 
 func TestTriggerCapacityRedriveFairnessPreservesOrdinaryDeliveryBudget(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -81,6 +82,7 @@ func TestTriggerCapacityRedriveFairnessPreservesOrdinaryDeliveryBudget(t *testin
 }
 
 func TestTriggerCapacityUnboundStartDoesNotHidePendingScopeHead(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -105,6 +107,7 @@ func TestTriggerCapacityUnboundStartDoesNotHidePendingScopeHead(t *testing.T) {
 // A released unbound launch has nothing left to recover. Redriving it every
 // rotation would share the batch with the real scope heads and starve them.
 func TestTriggerCapacityReleasedUnboundLaunchIsNotRedriven(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -134,6 +137,7 @@ func TestTriggerCapacityReleasedUnboundLaunchIsNotRedriven(t *testing.T) {
 }
 
 func TestTriggerCapacityOperatorReleaseRequiresRootFence(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -165,6 +169,7 @@ func TestTriggerCapacityOperatorReleaseRequiresRootFence(t *testing.T) {
 }
 
 func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -260,6 +265,7 @@ func TestTriggerCapacityFIFOAndCrashRetry(t *testing.T) {
 // A chain Temporal reported closed frees its slot at once, start attempt fresh
 // or not; only the exact observed chain can, and the absence path still waits.
 func TestTriggerCapacityClosedChainReleaseNeedsNoAgedAttempt(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -292,6 +298,7 @@ func TestTriggerCapacityClosedChainReleaseNeedsNoAgedAttempt(t *testing.T) {
 }
 
 func TestTriggerCapacityConcurrentWorkers(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -330,6 +337,7 @@ func TestTriggerCapacityConcurrentWorkers(t *testing.T) {
 }
 
 func TestTriggerCapacityScopeAndTransactionFences(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -409,6 +417,7 @@ func releasedFlag(t *testing.T, env *storetest.Env, id string) bool {
 // not the fence. The release UPDATE itself requires the last start attempt to
 // be older than core.StartAttemptBound.
 func TestTriggerCapacityReleaseSnapshotCannotAgeIntoAuthority(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	e := launchedUnbound(t, env, "snapshot-event", "snapshot-root", core.Pending())
@@ -435,6 +444,7 @@ func TestTriggerCapacityReleaseSnapshotCannotAgeIntoAuthority(t *testing.T) {
 }
 
 func TestTriggerCapacityUnboundReleaseRequiresAgedStartAttempt(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	e := launchedUnbound(t, env, "inflight-event", "inflight-root", core.Pending())
@@ -459,6 +469,7 @@ func TestTriggerCapacityUnboundReleaseRequiresAgedStartAttempt(t *testing.T) {
 // slot it claims is not releasable once its root then leaves PENDING; and a
 // slot already released refuses the claim.
 func TestTriggerCapacityRetryClaimRacesAgedRelease(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	e := launchedUnbound(t, env, "retry-event", "retry-root", core.Pending())
@@ -518,6 +529,7 @@ func TestTriggerCapacityRetryClaimRacesAgedRelease(t *testing.T) {
 // The failed-start fence moves the root through the shared status writer
 // (completed_at stamped), and only once both the failure and the attempt aged.
 func TestTriggerCapacityFailedStartFenceRequiresAgedAttempt(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	e := launchedUnbound(t, env, "fence-event", "fence-root", core.Pending())

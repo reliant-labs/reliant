@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The upgrade path out of a chat with no machine (research/NO_MACHINE_CHATS.md
@@ -28,7 +29,7 @@ func (e *startDaemonEnv) startNoMachine(t *testing.T) *db.Chat {
 	t.Helper()
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.NoMachine = boolPtr(true) })
 	require.NoError(t, err)
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	require.True(t, chat.NoMachine)
 	return chat
@@ -91,7 +92,7 @@ func TestSetChatDaemonConnectsAChatWithNoMachine(t *testing.T) {
 	assert.False(t, resp.Msg.GetChat().GetNoMachine(), "the response is the connected chat")
 	assert.Equal(t, daemonID, resp.Msg.GetChat().GetActiveDaemonId())
 
-	stored, err := e.repo.GetChat(e.ctx, chat.ID)
+	stored, err := store.GetChat(e.ctx, e.repo.ORM(), chat.ID)
 	require.NoError(t, err)
 	assert.False(t, stored.NoMachine, "connecting clears no_machine in the same write")
 	require.NotNil(t, stored.ActiveDaemonID)
@@ -122,7 +123,7 @@ func TestSetChatDaemonClearingNeverGivesAMachineChatNoMachine(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, cleared.Msg.GetChat().GetNoMachine())
 
-	stored, err := e.repo.GetChat(e.ctx, chatID)
+	stored, err := store.GetChat(e.ctx, e.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Nil(t, stored.ActiveDaemonID)
 	assert.False(t, stored.NoMachine, "a chat on a machine can never become no-machine")
@@ -137,7 +138,7 @@ func TestSetChatDaemonRejectsADaemonTheCallerDoesNotOwn(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
-	stored, err := e.repo.GetChat(e.ctx, chat.ID)
+	stored, err := store.GetChat(e.ctx, e.repo.ORM(), chat.ID)
 	require.NoError(t, err)
 	assert.True(t, stored.NoMachine, "a rejected connect leaves the chat as it was")
 	assert.Nil(t, stored.ActiveDaemonID)
@@ -163,7 +164,7 @@ func TestBranchChatWithNoMachineCarriesTheConversationAndNoMachine(t *testing.T)
 	require.NoError(t, err)
 	assert.True(t, branched.Msg.GetChat().GetNoMachine())
 
-	branch, err := e.repo.GetChat(e.ctx, branched.Msg.GetChat().GetId())
+	branch, err := store.GetChat(e.ctx, e.repo.ORM(), branched.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	assert.True(t, branch.NoMachine)
 	assert.Nil(t, branch.ActiveDaemonID, "a branch with no machine pins no daemon")
@@ -171,7 +172,7 @@ func TestBranchChatWithNoMachineCarriesTheConversationAndNoMachine(t *testing.T)
 	assert.Equal(t, e.mainWorktreeID(t), *branch.WorktreeID, "not the source's machine-bound worktree")
 	assert.Len(t, e.router.selectors, wakesBefore, "branching wakes nothing")
 
-	source, err := e.repo.GetChat(e.ctx, sourceID)
+	source, err := store.GetChat(e.ctx, e.repo.ORM(), sourceID)
 	require.NoError(t, err)
 	assert.False(t, source.NoMachine, "the original chat is left intact")
 	require.NotNil(t, source.ActiveDaemonID)
@@ -193,7 +194,7 @@ func TestBranchChatWithNoMachineCarriesTheConversationAndNoMachine(t *testing.T)
 			})
 			require.NoError(t, err)
 			assert.Len(t, e.router.selectors, wakes, "a no-machine branch's first send must not wake a daemon")
-			started, err := e.repo.GetChat(e.ctx, branchID)
+			started, err := store.GetChat(e.ctx, e.repo.ORM(), branchID)
 			require.NoError(t, err)
 			assert.True(t, started.NoMachine)
 			assert.Nil(t, started.ActiveDaemonID)
@@ -253,7 +254,7 @@ func TestStartChatRefusesNoMachineForAMachineBranch(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
-	stored, err := e.repo.GetChat(context.Background(), branchID)
+	stored, err := store.GetChat(context.Background(), e.repo.ORM(), branchID)
 	require.NoError(t, err)
 	assert.False(t, stored.NoMachine)
 }

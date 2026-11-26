@@ -183,7 +183,7 @@ func (f continueFixture) queueForMachine(t *testing.T) {
 
 func (f continueFixture) activity(t *testing.T) reliantv1.ChatActivity {
 	t.Helper()
-	chat, err := f.repo.GetChat(f.ctx, f.chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	return reliantv1.ChatActivity(*chat.Activity)
 }
@@ -268,7 +268,7 @@ func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread is revived before the run starts, so the mailbox sweep cannot take its queued rows")
 
-	wf, err := f.repo.GetWorkflow(f.ctx, f.chatID)
+	wf, err := store.LoadWorkflow(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), wf.Status, "recorded running before the lock is released")
 }
@@ -341,7 +341,7 @@ func TestAbandonMachineWait_DropsTheQueueAndEndsTheWait(t *testing.T) {
 	f.queueForMachine(t)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
 	require.NoError(t, f.repo.SetChatDaemonBlocked(f.ctx, f.chatID, true))
-	chat, err := f.repo.GetChat(f.ctx, f.chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 
 	f.svc.abandonMachineWait(f.ctx, chat)
@@ -360,7 +360,7 @@ func TestAbandonMachineWait_LeavesARunThatIsNotWaiting(t *testing.T) {
 
 	f := newContinueFixture(t, true)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
-	chat, err := f.repo.GetChat(f.ctx, f.chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 
 	f.svc.abandonMachineWait(f.ctx, chat)
@@ -385,7 +385,7 @@ func TestSendMessage_WhileTheRunWaitsForItsMachine_KeepsTheWaitAndNudgesIt(t *te
 	_, err := svc.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "and also this"))
 	require.NoError(t, err)
 
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_DAEMON, reliantv1.ChatActivity(*chat.Activity),
 		"the run is still waiting for its machine, and still reads that way")

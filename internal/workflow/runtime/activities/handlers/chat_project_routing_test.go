@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -197,7 +198,7 @@ func TestChatProjects_CollidingNamesAreNamedByID(t *testing.T) {
 	twin := f.attach(t, "Test Project", "cloud-box", t.TempDir())
 
 	ctx := context.Background()
-	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	primary, err := f.h.Repo().GetProject(ctx, f.project)
 	require.NoError(t, err)

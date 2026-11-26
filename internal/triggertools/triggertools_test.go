@@ -134,13 +134,13 @@ func setup(t *testing.T, publicURL string) *env {
 
 	svc, err := trigger.New(trigger.Deps{
 		Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: rowreads.WithRepo(repo), Chats: store.NewChatExtStore(repo.ORM()), OrgMoves: store.NewProjectOrgMoveExtStore(repo.ORM()),
-		Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()),
+		Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()), Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()),
 		Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM()), Syncer: e.backend, Fires: e.backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
 	require.NoError(t, err)
 	e.svc = svc
-	e.list = tools.NewListTriggersTool(repo, triggertools.New(svc))
+	e.list = tools.NewListTriggersTool(tools.WithChats(repo), triggertools.New(svc))
 	return e
 }
 

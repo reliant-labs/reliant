@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -85,7 +86,25 @@ func endSubAgent(ctx workflow.Context, exhaustion retryExhaustionError, stepID s
 	})
 	_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", exhaustion.payload()).Get(ctx, nil)
 
-	return &subAgentFailedError{StepID: stepID, Reason: reason, Err: exhaustion.Err}
+	// The caller's logSubAgentEnd line is this failure's one report, so the
+	// layers it unwinds through (the loop, the inline workflow, SpawnInline)
+	// pass it up at DEBUG.
+	return markReported(&subAgentFailedError{StepID: stepID, Reason: reason, Err: exhaustion.Err})
+}
+
+// logSubAgentEnd is the one log line for a sub-agent that endSubAgent is about
+// to end: at ERROR when its cause is a server fault, at WARN when it is not —
+// the provider being overloaded or out of capacity, or the user's error. The
+// agent ending and reporting to its parent is the runtime working as
+// designed; the cause decides whether anyone has to act. Each layer the error
+// then passed through logged it at ERROR again, so one provider overload in a
+// sub-agent was two ERROR issues (prod cc984602 and eb44dcba, 2026-11-25).
+func logSubAgentEnd(logger log.Logger, cause error, msg string, keyvals ...interface{}) {
+	if keepsErrorLevel(cause) && !providerCapacityError(cause) {
+		logger.Error(msg, keyvals...)
+		return
+	}
+	logger.Warn(msg, keyvals...)
 }
 
 // stoppedAgentNextStep is what the user is told to do about a sub-agent that

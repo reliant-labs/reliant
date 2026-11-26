@@ -131,7 +131,7 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusFailed, db.Failed())
 	stoppedSpawnRun(t, repo, ctx, fx, "tc-stopped")
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	workflowName := "builtin://agent"
 	chat.WorkflowName = &workflowName
@@ -244,7 +244,7 @@ func TestThreadAcceptsParamUpdate_StoppedSubAgentDoesAFinishedOneDoesNot(t *test
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	service := &Service{deps: Deps{Repo: rowreads.WithRepo(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 
 	require.NoError(t, service.threadAcceptsParamUpdate(ctx, chat, fx.childThreadID), "a running agent accepts param changes")

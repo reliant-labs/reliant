@@ -146,7 +146,7 @@ func TestUsageLimitWait_MarkerDrivesChatActivity(t *testing.T) {
 		t.Fatalf("a live run parked on a usage limit reads WAITING_FOR_USAGE_LIMIT (7), got %d", got)
 	}
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	if err != nil {
 		t.Fatalf("GetChat: %v", err)
 	}
@@ -172,7 +172,7 @@ func TestUsageLimitWait_MarkerDrivesChatActivity(t *testing.T) {
 	if err := providerbackofftest.New(t, repo).RecordUsageLimitWait(ctx, chatID, chatID, "", true, now.Add(5*time.Minute), now.Add(time.Minute)); err != nil {
 		t.Fatalf("RecordUsageLimitWait probe: %v", err)
 	}
-	chat, _ = repo.GetChat(ctx, chatID)
+	chat, _ = store.GetChat(ctx, repo.ORM(), chatID)
 	if !chat.UsageLimitProbing {
 		t.Error("an unknown reset must read as a probe, not a promised time")
 	}
@@ -184,7 +184,7 @@ func TestUsageLimitWait_MarkerDrivesChatActivity(t *testing.T) {
 	if got := activity(); got != 1 {
 		t.Fatalf("after the wait the run reads RUNNING (1), got %d", got)
 	}
-	chat, _ = repo.GetChat(ctx, chatID)
+	chat, _ = store.GetChat(ctx, repo.ORM(), chatID)
 	if chat.UsageLimitResumesAt != nil {
 		t.Errorf("a stale resume time outlived the wait: %v", chat.UsageLimitResumesAt)
 	}

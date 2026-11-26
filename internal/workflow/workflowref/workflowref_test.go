@@ -3,10 +3,12 @@ package workflowref
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"testing/fstest"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -218,4 +220,13 @@ func TestLayout_ScenariosOfNoWorkflowAreReported(t *testing.T) {
 	require.Len(t, problems, 1)
 	assert.Contains(t, problems[0].Error(), "blog/scenarios/: these scenarios belong to no workflow")
 	assert.Contains(t, problems[0].Error(), `blog.yaml is named "blog-content-pipeline"`)
+}
+
+// A miss is the caller's to fix: user class (so INFO, never an issue), with
+// its wire code left as it was.
+func TestNotFoundIsAUserError(t *testing.T) {
+	err := fmt.Errorf("workflow %q: %w", "hotpath", notFound("no project workflow is named %q", "hotpath"))
+	require.ErrorIs(t, err, ErrNotFound)
+	require.True(t, svcerr.IsUserError(err))
+	require.Equal(t, svcerr.Code(errors.New("x")), svcerr.Code(err))
 }

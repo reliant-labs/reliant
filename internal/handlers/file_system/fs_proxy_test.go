@@ -51,7 +51,7 @@ func (r *recordingFSDaemonRouter) SendDaemonCommand(_ context.Context, _ string,
 func newProxy(t *testing.T, router Router, repo any) *Service {
 	t.Helper()
 	deps := Deps{Router: router}
-	if r, ok := repo.(*db.Repo); ok {
+	if r, ok := repo.(*db.Repo); ok && r != nil {
 		repo = rowreads.WithRepo(r)
 	}
 	if r, ok := repo.(Repository); ok {

@@ -138,7 +138,7 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) 
 	assert.Equal(t, []string{"resume:" + fx.rootThreadID, "wake:" + fx.rootThreadID}, *fx.log,
 		"resume first, then the doorbell: a thread parked on its own wait wakes only for the doorbell")
 
-	root, err := fx.repo.GetWorkflow(fx.ctx, fx.rootThreadID)
+	root, err := store.LoadWorkflow(fx.ctx, fx.repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status, "the resumed run reads as running")
 

@@ -119,7 +119,7 @@ func TestStartChatWithDaemonIDPinsTheChatAndTheRun(t *testing.T) {
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(chosen) })
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, chosen, *chat.ActiveDaemonID)
@@ -134,7 +134,7 @@ func TestStartChatWithoutDaemonIDLeavesSelectionToTheRuntime(t *testing.T) {
 	resp, err := e.start(t, nil)
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 	require.Len(t, e.temporal.inputs, 1)
@@ -190,7 +190,7 @@ func TestStartChatBranchRejectsADaemonThatConflictsWithItsWorktree(t *testing.T)
 	assert.Empty(t, e.router.selectors)
 	assert.Empty(t, e.temporal.inputs)
 
-	chat, err := e.repo.GetChat(e.ctx, fx.chatID)
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, pinned, *chat.ActiveDaemonID, "the branch keeps its worktree's daemon")
 }

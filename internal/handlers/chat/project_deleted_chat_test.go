@@ -81,7 +81,7 @@ func TestAChatOfADeletedProjectIsHiddenFromASavedIDUntilRestored(t *testing.T) {
 		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "viewer %s: %v", name, err)
 	}
 	assert.True(t, errors.Is(bareRow(f.Owner), core.ErrChatNotFound), "the checked bare-row read refuses it too")
-	row, err := repo.GetChatRow(context.Background(), f.ChatID)
+	row, err := store.GetChatRow(context.Background(), repo.ORM(), f.ChatID)
 	require.NoError(t, err, "the store's unauthorized read, which the purge relies on, still sees the chat")
 	assert.True(t, row.ProjectDeleted)
 

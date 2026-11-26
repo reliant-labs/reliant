@@ -69,7 +69,7 @@ func TestSetChatDaemon_SetAndClear(t *testing.T) {
 	assert.Equal(t, daemonID, *resp.Msg.Chat.ActiveDaemonId)
 
 	// Verify it persisted
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, daemonID, *chat.ActiveDaemonID)
@@ -84,7 +84,7 @@ func TestSetChatDaemon_SetAndClear(t *testing.T) {
 	assert.Nil(t, resp.Msg.Chat.ActiveDaemonId)
 
 	// Verify cleared
-	chat, err = repo.GetChat(ctx, chatID)
+	chat, err = store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 }

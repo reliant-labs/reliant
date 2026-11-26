@@ -307,6 +307,25 @@ from `frontends/web/src/components/Claim/useClaimFlow.ts`, and never the token:
 The public demo's `demo_cta_clicked` has `cta` `deploy` (Deploy yours free, to
 reliantlabs.io/products/forge#start), `signup` or `install`.
 
+## Forge Changes (`flag_evaluated`)
+
+The web app's changes are declared in `changes.yaml` at the repo root, read
+through the generated accessors in `frontends/web/src/lib/changes_gen.ts`, over
+the snapshot `lib/changesStore.ts` loads once per page from
+`/_forge/changes.json` (the desktop app never loads one: every change is its
+default there). The forge web runtime, not `trackEvent`, records each useful
+evaluation as `flag_evaluated` (`flag`, `variant`, `provider=forge`, `run`,
+`unit`, `reason`, `revision`), once per person, change, variant and run per day;
+a change at its default records nothing. A change whose unit is `user` is
+evaluated with the signed-in person's id (`userChangeContext`), never for a
+guest or an API-key session. The readout (console, Analytics › Experiments)
+counts a user as assigned at their first `flag_evaluated` of the run and as
+converted when the outcome event follows within the window.
+
+| change | where | variants | outcome to read it by |
+| --- | --- | --- | --- |
+| `pending-provider-copy` | `OnboardingFlow/PendingProviderBanner.tsx`, evaluated the first time the banner shows | `current` (default, today's banner), `outcome-first` | `pending_provider_connect_clicked` (`provider`, `via`) |
+
 ## LLM usage ledger (not a product event)
 
 `llm_call_usage` is a service record, not telemetry: the analytics toggle does

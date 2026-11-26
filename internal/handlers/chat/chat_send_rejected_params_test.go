@@ -136,7 +136,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 				assert.Zero(t, pc.resumes, "a refused send must not resume the run")
 			}
 
-			wf, err := repo.GetWorkflow(ctx, fx.rootThreadID)
+			wf, err := store.LoadWorkflow(ctx, repo.ORM(), fx.rootThreadID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.dbStatus, wf.Status, "a refused send must not move the run's status")
 			turn, err := repo.ChatPersonTurnAt(ctx, fx.chatID)

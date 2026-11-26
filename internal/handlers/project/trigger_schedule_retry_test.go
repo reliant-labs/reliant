@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // A trigger schedule sync that fails after a project delete or restore is
@@ -272,7 +273,7 @@ func TestTriggerScheduleRetryConvergesAgainAfterALaterWrite(t *testing.T) {
 	f := newDeleteAuthFixture(t)
 	temporal := &temporalSchedules{repo: f.repo}
 	svc, owner := retryingService(t, f, temporal, 5)
-	require.NoError(t, f.repo.SetTriggerEnabled(ctx, f.trigger, false))
+	require.NoError(t, store.EnableTrigger(ctx, f.repo.ORM(), f.trigger, false))
 
 	// Call 1 (the request's) fails; call 2 (the retry's) reads the row while
 	// the trigger is off and is held there until the test lets it write.
@@ -294,7 +295,7 @@ func TestTriggerScheduleRetryConvergesAgainAfterALaterWrite(t *testing.T) {
 	}
 
 	// A write turns the trigger on, and its own sync (call 3) converges.
-	require.NoError(t, f.repo.SetTriggerEnabled(ctx, f.trigger, true))
+	require.NoError(t, store.EnableTrigger(ctx, f.repo.ORM(), f.trigger, true))
 	svc.convergeTriggerSchedules(owner, []string{f.trigger})
 	paused, _ := temporal.schedule(f.trigger)
 	require.False(t, paused)

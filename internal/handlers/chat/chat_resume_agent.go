@@ -64,7 +64,7 @@ func isResumableStoppedAgent(thread *db.Thread, chat *db.Chat) bool {
 // still finds out.
 func (s *Service) stoppedAgentResumability(ctx context.Context, chat *db.Chat, thread *db.Thread) stoppedAgentResumability {
 	var r stoppedAgentResumability
-	if rootRun, err := s.deps.Repo.GetWorkflow(ctx, chat.MainThreadID()); err == nil && rootRun != nil {
+	if rootRun, err := s.deps.Workflows.LoadWorkflow(ctx, chat.MainThreadID()); err == nil && rootRun != nil {
 		r.runLive = rootRun.Status.Live()
 	}
 

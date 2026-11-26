@@ -20,6 +20,7 @@ import (
 // TestDaemonQueries ports the daemons hand SQL of the Repository and the
 // daemon registry, interleaved with the Repository on the same database.
 func TestDaemonQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -194,6 +195,7 @@ func TestDaemonQueries(t *testing.T) {
 
 // TestDaemonAttachmentQueries ports the daemon_attachment hand SQL.
 func TestDaemonAttachmentQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -312,6 +314,7 @@ func TestDaemonAttachmentQueries(t *testing.T) {
 // TestBackgroundProcessQueries ports the background_processes and
 // background_process_output hand SQL.
 func TestBackgroundProcessQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)

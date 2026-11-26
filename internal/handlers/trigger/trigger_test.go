@@ -150,7 +150,7 @@ func setupTriggerTest(t *testing.T) *triggerTestEnv {
 
 	tokens, err := automationtokens.New(automationtokens.Deps{DB: repo.ORM(), Sealer: db.NewTestVault(t, repo)})
 	require.NoError(t, err)
-	deps := Deps{Repo: rowreads.WithRepo(repo), Chats: store.NewChatExtStore(repo.ORM()), Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
+	deps := Deps{Repo: rowreads.WithRepo(repo), Chats: store.NewChatExtStore(repo.ORM()), Owners: realOwners(t, repo), Firings: store.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()), Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Pools: store.NewMachinePoolExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend, AutomationKeys: tokens}
 	return &triggerTestEnv{
 		tokens:    tokens,
 		svc:       NewTestTrigger(t, WithTriggerDeps(deps)),
@@ -383,8 +383,8 @@ func TestServiceWithoutTemporal(t *testing.T) {
 	require.Nil(t, fires, "TemporalBackend without a client must return a nil interface")
 
 	for name, deps := range map[string]Deps{
-		"nil Syncer and Fires":             {Repo: rowreads.WithRepo(env.repo), Projects: projectaccesstest.For(env.repo)},
-		"TemporalBackend without a client": {Repo: rowreads.WithRepo(env.repo), Projects: projectaccesstest.For(env.repo), Syncer: syncer, Fires: fires},
+		"nil Syncer and Fires":             realStores(env.repo, Deps{Repo: rowreads.WithRepo(env.repo), Projects: projectaccesstest.For(env.repo)}),
+		"TemporalBackend without a client": realStores(env.repo, Deps{Repo: rowreads.WithRepo(env.repo), Projects: projectaccesstest.For(env.repo), Syncer: syncer, Fires: fires}),
 	} {
 		t.Run(name, func(t *testing.T) {
 			// Stored while Temporal was available; served without it.

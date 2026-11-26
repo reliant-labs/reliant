@@ -14,6 +14,7 @@ import (
 
 // The inbox.sql port (P5b L1b), interleaved with the Repository.
 func TestInboxQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -115,6 +116,7 @@ func TestInboxQueries(t *testing.T) {
 // keyed by the chat and when it asked; an answered one, another person's and
 // an archived chat's are not.
 func TestInboxListsPersonalFundingQuestion(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 13, 6, 0, 0, 123456000, time.UTC)
@@ -173,6 +175,7 @@ func mustExecConv(t *testing.T, env *storetest.Env, query string, args ...any) {
 // Every Inbox read and write takes the owner and refuses an empty one: a
 // store List with no owner would otherwise answer every user's rows.
 func TestInboxStore_EmptyOwnerFailsClosed(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	ids := []string{"approval:a1"}

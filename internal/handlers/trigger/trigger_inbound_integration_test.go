@@ -131,7 +131,7 @@ func TestInboundTriggersFireEndToEnd(t *testing.T) {
 	}
 
 	launchedHook := waitForLaunched(t, repo, userID, hook.GetId())
-	chat, err := repo.GetChat(ctx, *launchedHook.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launchedHook.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, userID, chat.UserID)
 	body, _ := launchedHook.Payload["body"].(map[string]any)
@@ -190,7 +190,7 @@ func waitForLaunched(t *testing.T, repo *db.Repo, userID, triggerID string) *cor
 	launched := core.TriggerEventLaunched
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		ev, err := repo.GetLatestTriggerEvent(context.Background(), triggerID, &launched)
+		ev, err := store.GetLatestTriggerEvent(context.Background(), repo.ORM(), triggerID, &launched)
 		if err == nil && ev != nil && ev.ChatID != nil {
 			return ev
 		}
@@ -205,7 +205,7 @@ func assertFirings(t *testing.T, repo *db.Repo, userID, triggerID string, want m
 	// Give a would-be duplicate fire time to (wrongly) land.
 	// forge:lint-disable-next-line forge-test-fixed-sleep: asserting nothing happens — a duplicate fire correctly suppressed leaves no event to wait for
 	time.Sleep(time.Second)
-	events, _, err := repo.ListTriggerEvents(context.Background(), core.TriggerEventFilters{UserID: userID, TriggerID: triggerID, Limit: 50})
+	events, _, err := store.ListTriggerEventsPage(context.Background(), repo.ORM(), core.TriggerEventFilters{UserID: userID, TriggerID: triggerID, Limit: 50})
 	require.NoError(t, err)
 	got := map[core.TriggerEventOutcome]int{}
 	for _, ev := range events {

@@ -183,7 +183,7 @@ func TestEffectiveWorktreeID_ThreadBeatsChat(t *testing.T) {
 	chatWT := f.worktree(t, "chat-wt", "daemon-a")
 	threadWT := f.worktree(t, "thread-wt", "daemon-b")
 	chatID := f.chat(t, chatWT)
-	chat, err := f.repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 
 	// Unbound thread and unknown thread both fall back to the chat's.
@@ -213,7 +213,7 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 	f := newSpawnWorktreeFixture(t)
 	ctx := context.Background()
 	wtID := f.worktree(t, "feature-x", "daemon-b")
-	chat, err := f.repo.GetChat(ctx, f.chatID)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	project, err := f.repo.GetProject(ctx, f.projectID)
 	require.NoError(t, err)

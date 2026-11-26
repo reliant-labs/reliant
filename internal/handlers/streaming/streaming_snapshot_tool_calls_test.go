@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The snapshot no longer replays the chat's tool_call update history; it
@@ -94,7 +95,7 @@ func TestChatSnapshot_InWindowInheritedInFlightCallIsCancelledLikeItsBlock(t *te
 
 	// The viewing thread is the chat's root workflow id; without one the
 	// inherited-call rule has nothing to compare against.
-	chat, err := repo.GetChat(ctx, fixture.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fixture.ChatID)
 	require.NoError(t, err)
 	chat.WorkflowID = &fixture.ThreadID
 	require.NoError(t, repo.UpdateChat(ctx, chat))

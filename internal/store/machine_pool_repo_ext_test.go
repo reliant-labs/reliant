@@ -19,6 +19,7 @@ import (
 // Postgres: membership by durable label, phase, install, the synced catalog,
 // and live runs counted from pool-placed chats only.
 func TestMachinePoolQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -197,6 +198,7 @@ func TestMachinePoolQueries(t *testing.T) {
 // user's or (for an unbound credential) a reserved one; a no-op when already
 // applied; refused past the label limit.
 func TestMergeDeclaredDaemonLabels(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	for _, d := range []*db.Daemon{

@@ -152,7 +152,7 @@ func shortMachineWait() *machineWait {
 
 func (f *chatMachineRecovery) pinIs(t *testing.T, want string) {
 	t.Helper()
-	chat, err := f.h.Repo().GetChat(context.Background(), f.chat)
+	chat, err := store.GetChat(context.Background(), f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, want, *chat.ActiveDaemonID)
@@ -206,7 +206,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	require.NoError(t, err)
 	require.True(t, wakeOut.Waiting || wakeOut.NotComing != "", "nil snapshot must not consider online cicd ready for this chat")
 
-	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	sel := toolDaemonSelector("", chatDaemonSelector(chat, nil))
 	_, err = f.remote.EnsureWorkspace(ctx, f.user, sel, toolexec.WorkspaceEnsureRequest{Path: f.path})

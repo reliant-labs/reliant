@@ -22,6 +22,7 @@ func orgp(s string) *string { return &s }
 // rows with none yet), and the backfill fills only NULL, giving a chat its
 // project's org when the project has one.
 func TestOrgScopedListsAndBackfill(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) // fixed: nothing here depends on the wall clock
@@ -52,10 +53,10 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 	if got, err := env.Repo.GetProject(ctx, "p-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
 		t.Fatalf("GetProject org = %v, %v; want acme", got.OrgID, err)
 	}
-	if got, err := env.Repo.GetChatRow(ctx, "c-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
+	if got, err := store.GetChatRow(ctx, env.Repo.ORM(), "c-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
 		t.Fatalf("GetChatRow org = %v, %v; want acme", got, err)
 	}
-	if got, err := env.Repo.GetChat(ctx, "c-home"); err != nil || got.OrgID == nil || *got.OrgID != "home" {
+	if got, err := store.GetChat(ctx, env.Repo.ORM(), "c-home"); err != nil || got.OrgID == nil || *got.OrgID != "home" {
 		t.Fatalf("GetChat (the view) org = %v, %v; want home", got, err)
 	}
 
@@ -117,7 +118,7 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 	}
 	wantOrg := map[string]string{"c-acme": "acme", "c-home": "home", "c-legacy": "home", "c-unresolved": "acme", "c-other": ""}
 	for id, want := range wantOrg {
-		got, err := env.Repo.GetChatRow(ctx, id)
+		got, err := store.GetChatRow(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -142,6 +143,7 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 // previous one stamped, until nothing of the user's is left unassigned; a
 // chat takes its project's org whichever batch either was stamped in.
 func TestAssignUnassignedOrg_SpansBatches(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
@@ -183,7 +185,7 @@ func TestAssignUnassignedOrg_SpansBatches(t *testing.T) {
 			t.Fatalf("project %s org = %v, want %s", id, got.OrgID, want)
 		}
 		for j := range 2 {
-			chat, err := env.Repo.GetChatRow(ctx, fmt.Sprintf("c-%s-%d", id, j))
+			chat, err := store.GetChatRow(ctx, env.Repo.ORM(), fmt.Sprintf("c-%s-%d", id, j))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -199,6 +201,7 @@ func TestAssignUnassignedOrg_SpansBatches(t *testing.T) {
 // that org's rows, and the backfill gives a trigger its project's org, a saved
 // workflow the default org, and a run its chat's.
 func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -221,7 +224,7 @@ func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
 	convWorkflow(t, env, "w-legacy", "c-legacy", core.WorkflowStateActive, core.StopReasonUnspecified)
 	runOrg := func(id string) *string {
 		t.Helper()
-		w, err := env.Repo.GetWorkflow(ctx, id)
+		w, err := store.LoadWorkflow(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -344,6 +347,7 @@ func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
 // take another. A later pass with a different default stamps the project and
 // its chats alike.
 func TestAssignUnassignedOrg_ChatsWaitForTheirProject(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
@@ -382,7 +386,7 @@ func TestAssignUnassignedOrg_ChatsWaitForTheirProject(t *testing.T) {
 	}
 	chatOrg := func(id string) string {
 		return org(func() (*string, error) {
-			c, err := env.Repo.GetChatRow(ctx, id)
+			c, err := store.GetChatRow(ctx, env.Repo.ORM(), id)
 			if err != nil {
 				return nil, err
 			}
@@ -437,6 +441,7 @@ func TestAssignUnassignedOrg_ChatsWaitForTheirProject(t *testing.T) {
 // A trigger follows its project as a chat does: one in a project a
 // concurrent write holds waits for it, and ends in its project's org.
 func TestAssignUnassignedOrg_TriggersWaitForTheirProject(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
@@ -491,6 +496,7 @@ func TestAssignUnassignedOrg_TriggersWaitForTheirProject(t *testing.T) {
 // its project's), stamped on insert whatever the writer, so it keeps that org
 // after the resource is gone; one about nothing of an org has none.
 func TestUserUpdatesAreStampedWithTheirOrg(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)

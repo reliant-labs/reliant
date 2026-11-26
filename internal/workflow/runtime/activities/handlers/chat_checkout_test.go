@@ -116,7 +116,7 @@ func TestExecuteTools_ABranchWorktreeUnderTheCreationPathIsNeverRebased(t *testi
 	}
 	require.NoError(t, os.MkdirAll(wt.Path, 0o755))
 	require.NoError(t, f.h.Repo().CreateWorktree(ctx, wt))
-	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	chat.WorktreeID = &wt.ID
 	require.NoError(t, f.h.Repo().UpdateChat(ctx, chat))
@@ -155,7 +155,7 @@ func TestExecuteTools_ASelectorNamingAnotherMachineThanTheBranchOwnerIsRefused(t
 		Status: 1, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}
 	require.NoError(t, f.h.Repo().CreateWorktree(ctx, wt))
-	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	chat.WorktreeID = &wt.ID
 	require.NoError(t, f.h.Repo().UpdateChat(ctx, chat))

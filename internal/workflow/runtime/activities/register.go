@@ -251,8 +251,8 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCompactActivity(handlers.CompactDeps{Store: deps.Repo, Threads: deps.Threads, ToolResults: toolCalls, DriverResolver: deps.DriverResolver}).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
-	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewCompactActivity(handlers.CompactDeps{Store: tools.WithChats(deps.Repo), Threads: deps.Threads, ToolResults: toolCalls, DriverResolver: deps.DriverResolver}).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
+	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(tools.WithChats(deps.Repo), deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 
 	// ========================================================================
@@ -294,7 +294,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewCreateWorktreeActivity(repoRows, workspaceRows, deps.DaemonRouter))
-	v2.RegisterActivity(registry, handlers.NewGitPublishActivity(deps.Repo, workspaceRows, deps.DaemonRouter, deps.Connections).WithLedger(deps.WriteLedger))
+	v2.RegisterActivity(registry, handlers.NewGitPublishActivity(tools.WithChats(deps.Repo), workspaceRows, deps.DaemonRouter, deps.Connections).WithLedger(deps.WriteLedger))
 	v2.RegisterActivity(registry, handlers.NewDeleteWorktreeActivity(repoRows, workspaceRows, deps.DaemonRouter))
 
 	// ========================================================================

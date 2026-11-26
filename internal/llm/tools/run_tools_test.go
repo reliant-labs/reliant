@@ -197,9 +197,9 @@ func TestRunTools_RejectARunTheUserDoesNotOwn(t *testing.T) {
 		tool Tool
 		call func(runID string) any
 	}{
-		{GetRunToolName, NewGetRunTool(repo, store.NewWorkflowExtStore(repo.ORM())), func(id string) any { return GetRunParams{RunID: id} }},
-		{ControlRunToolName, NewControlRunTool(repo, ctl), func(id string) any { return ControlRunParams{RunID: id, Action: "cancel"} }},
-		{SendToRunToolName, NewSendToRunTool(repo, ctl), func(id string) any { return SendToRunParams{RunID: id, Message: "hi"} }},
+		{GetRunToolName, NewGetRunTool(WithChats(repo), store.NewWorkflowExtStore(repo.ORM())), func(id string) any { return GetRunParams{RunID: id} }},
+		{ControlRunToolName, NewControlRunTool(WithChats(repo), ctl), func(id string) any { return ControlRunParams{RunID: id, Action: "cancel"} }},
+		{SendToRunToolName, NewSendToRunTool(WithChats(repo), ctl), func(id string) any { return SendToRunParams{RunID: id, Message: "hi"} }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -234,7 +234,7 @@ func TestListRuns_OnlyListsTheCallersRuns(t *testing.T) {
 	theirs := uuid.NewString()
 	seedRun(t, repo, runSeed{id: theirs, user: "someone-else", title: "theirs", status: db.Active()})
 
-	resp := callRunTool(t, NewListRunsTool(repo), callerRC(callerID, "tc"), ListRunsToolName, ListRunsParams{})
+	resp := callRunTool(t, NewListRunsTool(WithChats(repo)), callerRC(callerID, "tc"), ListRunsToolName, ListRunsParams{})
 	require.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, mine)
 	assert.NotContains(t, resp.Content, theirs, "another user's run must never be listed")
@@ -253,12 +253,12 @@ func TestRunTools_RejectManagingTheirOwnRun(t *testing.T) {
 	rc := callerRC(callerID, "tc-self")
 
 	for _, action := range []string{"pause", "resume", "cancel"} {
-		resp := callRunTool(t, NewControlRunTool(repo, ctl), rc, ControlRunToolName,
+		resp := callRunTool(t, NewControlRunTool(WithChats(repo), ctl), rc, ControlRunToolName,
 			ControlRunParams{RunID: callerID, Action: action})
 		require.True(t, resp.IsError, "control_run %s on yourself must be refused", action)
 		assert.Contains(t, resp.Content, "spawn_stop", "the refusal points at the right tool")
 	}
-	resp := callRunTool(t, NewSendToRunTool(repo, ctl), rc, SendToRunToolName,
+	resp := callRunTool(t, NewSendToRunTool(WithChats(repo), ctl), rc, SendToRunToolName,
 		SendToRunParams{RunID: callerID, Message: "talking to myself"})
 	require.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "spawn_send")
@@ -304,7 +304,7 @@ func TestControlRun_EachActionCallsTheRightLifecycleMethod(t *testing.T) {
 			seedRun(t, repo, runSeed{id: target, user: runTestUser, status: tc.state})
 			ctl := &fakeRunController{resumeResult: RunResumeResult{Resumed: true}}
 
-			resp := callRunTool(t, NewControlRunTool(repo, ctl), callerRC(callerID, "tc-"+tc.action),
+			resp := callRunTool(t, NewControlRunTool(WithChats(repo), ctl), callerRC(callerID, "tc-"+tc.action),
 				ControlRunToolName, ControlRunParams{RunID: target, Action: tc.action})
 			require.False(t, resp.IsError, resp.Content)
 			tc.check(t, ctl, target)
@@ -335,7 +335,7 @@ func TestControlRun_RefusesNonsenseTransitionsWithoutCallingTheLifecycle(t *test
 			target := uuid.NewString()
 			seedRun(t, repo, runSeed{id: target, user: runTestUser, status: tc.state})
 			ctl := &fakeRunController{}
-			resp := callRunTool(t, NewControlRunTool(repo, ctl), callerRC(callerID, "tc"),
+			resp := callRunTool(t, NewControlRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 				ControlRunToolName, ControlRunParams{RunID: target, Action: tc.action})
 			assert.Equal(t, tc.wantError, resp.IsError, resp.Content)
 			assert.Contains(t, resp.Content, tc.wantText)
@@ -355,7 +355,7 @@ func TestControlRun_ReportsALifecycleFailureInsteadOfClaimingSuccess(t *testing.
 	seedRun(t, repo, runSeed{id: target, user: runTestUser, status: db.Active()})
 
 	ctl := &fakeRunController{err: errors.New("temporal unreachable")}
-	resp := callRunTool(t, NewControlRunTool(repo, ctl), callerRC(callerID, "tc"),
+	resp := callRunTool(t, NewControlRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 		ControlRunToolName, ControlRunParams{RunID: target, Action: "cancel"})
 	require.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "temporal unreachable")
@@ -364,7 +364,7 @@ func TestControlRun_ReportsALifecycleFailureInsteadOfClaimingSuccess(t *testing.
 	paused := uuid.NewString()
 	seedRun(t, repo, runSeed{id: paused, user: runTestUser, status: db.Paused()})
 	ctl = &fakeRunController{resumeResult: RunResumeResult{Resumed: false, Detail: "workflow session was interrupted"}}
-	resp = callRunTool(t, NewControlRunTool(repo, ctl), callerRC(callerID, "tc2"),
+	resp = callRunTool(t, NewControlRunTool(WithChats(repo), ctl), callerRC(callerID, "tc2"),
 		ControlRunToolName, ControlRunParams{RunID: paused, Action: "resume"})
 	require.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "interrupted")
@@ -390,7 +390,7 @@ func TestSendToRun_NonLiveRunReportsNotDeliveredAndNeverStarts(t *testing.T) {
 			seedRun(t, repo, runSeed{id: target, user: runTestUser, status: state})
 			ctl := &fakeRunController{delivered: true}
 
-			resp := callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+			resp := callRunTool(t, NewSendToRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 				SendToRunToolName, SendToRunParams{RunID: target, Message: "wake up"})
 			require.False(t, resp.IsError, "a non-live run is an outcome, not an error: %s", resp.Content)
 			assert.Contains(t, resp.Content, "Not delivered")
@@ -415,13 +415,13 @@ func TestSendToRun_TargetsAThreadAndReportsNoRunningAgent(t *testing.T) {
 	seedRun(t, repo, runSeed{id: target, user: runTestUser, status: db.Active()})
 
 	ctl := &fakeRunController{delivered: true}
-	resp := callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+	resp := callRunTool(t, NewSendToRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 		SendToRunToolName, SendToRunParams{RunID: target, Thread: " implement ", Message: "status?"})
 	require.False(t, resp.IsError, resp.Content)
 	assert.Equal(t, []string{"implement"}, ctl.threads, "the named agent reaches the messenger")
 
 	ctl = &fakeRunController{notDeliveredReason: errreason.RunNoListeningAgent}
-	resp = callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+	resp = callRunTool(t, NewSendToRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 		SendToRunToolName, SendToRunParams{RunID: target, Message: "anyone?"})
 	require.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "Not delivered: no agent is running in run "+target)
@@ -442,7 +442,7 @@ func TestSendToRun_LiveRunIsDeliveredThroughTheMessenger(t *testing.T) {
 			seedRun(t, repo, runSeed{id: target, user: runTestUser, status: state})
 			ctl := &fakeRunController{delivered: true}
 
-			resp := callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+			resp := callRunTool(t, NewSendToRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 				SendToRunToolName, SendToRunParams{RunID: target, Message: "status?"})
 			require.False(t, resp.IsError, resp.Content)
 			assert.Equal(t, []string{runTestUser + "/" + target + "/status?"}, ctl.deliveries)
@@ -467,12 +467,12 @@ func TestSendToRun_SubjectTravelsWithTheMessage(t *testing.T) {
 	seedRun(t, repo, runSeed{id: target, user: runTestUser, status: db.Active()})
 	ctl := &fakeRunController{delivered: true}
 
-	resp := callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+	resp := callRunTool(t, NewSendToRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 		SendToRunToolName, SendToRunParams{RunID: target, Message: "details", Subject: "  PR stuck: review asked for changes "})
 	require.False(t, resp.IsError, resp.Content)
 	assert.Equal(t, []RunSender{{ThreadID: callerID, Subject: "PR stuck: review asked for changes"}}, ctl.senders)
 
-	resp = callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+	resp = callRunTool(t, NewSendToRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 		SendToRunToolName, SendToRunParams{RunID: target, Message: "details", Subject: "two\nlines"})
 	assert.True(t, resp.IsError, "a multi-line subject is refused, not cut")
 	assert.Len(t, ctl.senders, 1, "a refused subject delivers nothing")
@@ -489,7 +489,7 @@ func TestSendToRun_MessengerReportingNotDeliveredIsNotDelivered(t *testing.T) {
 	seedRun(t, repo, runSeed{id: target, user: runTestUser, status: db.Active()})
 
 	ctl := &fakeRunController{delivered: false}
-	resp := callRunTool(t, NewSendToRunTool(repo, ctl), callerRC(callerID, "tc"),
+	resp := callRunTool(t, NewSendToRunTool(WithChats(repo), ctl), callerRC(callerID, "tc"),
 		SendToRunToolName, SendToRunParams{RunID: target, Message: "late"})
 	require.False(t, resp.IsError)
 	assert.Contains(t, resp.Content, "Not delivered")
@@ -511,7 +511,7 @@ func TestGetRun_ReportsStateWorkflowAndLastAssistantMessage(t *testing.T) {
 	seedMessage(t, repo, context.Background(), target, target, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "first draft")
 	seedMessage(t, repo, context.Background(), target, target, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "found 3 issues")
 
-	resp := callRunTool(t, NewGetRunTool(repo, store.NewWorkflowExtStore(repo.ORM())), callerRC(callerID, "tc"), GetRunToolName, GetRunParams{RunID: target})
+	resp := callRunTool(t, NewGetRunTool(WithChats(repo), store.NewWorkflowExtStore(repo.ORM())), callerRC(callerID, "tc"), GetRunToolName, GetRunParams{RunID: target})
 	require.False(t, resp.IsError, resp.Content)
 
 	var detail RunDetail
@@ -540,21 +540,21 @@ func TestListRuns_FiltersByStateAndReportsEachRunsRootState(t *testing.T) {
 		seedRun(t, repo, runSeed{id: id, user: runTestUser, status: state})
 	}
 
-	resp := callRunTool(t, NewListRunsTool(repo), callerRC(callerID, "tc"), ListRunsToolName, ListRunsParams{State: "paused"})
+	resp := callRunTool(t, NewListRunsTool(WithChats(repo)), callerRC(callerID, "tc"), ListRunsToolName, ListRunsParams{State: "paused"})
 	require.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, ids["paused"])
 	for _, other := range []string{"running", "completed", "failed"} {
 		assert.NotContains(t, resp.Content, ids[other], "state filter must exclude %s", other)
 	}
 
-	all := callRunTool(t, NewListRunsTool(repo), callerRC(callerID, "tc2"), ListRunsToolName, ListRunsParams{})
+	all := callRunTool(t, NewListRunsTool(WithChats(repo)), callerRC(callerID, "tc2"), ListRunsToolName, ListRunsParams{})
 	for name, id := range ids {
 		assert.Contains(t, all.Content, id, name)
 	}
 	assert.Contains(t, all.Content, "[failed]")
 	assert.Contains(t, all.Content, "[completed]")
 
-	bad := callRunTool(t, NewListRunsTool(repo), callerRC(callerID, "tc3"), ListRunsToolName, ListRunsParams{State: "bogus"})
+	bad := callRunTool(t, NewListRunsTool(WithChats(repo)), callerRC(callerID, "tc3"), ListRunsToolName, ListRunsParams{State: "bogus"})
 	assert.True(t, bad.IsError)
 }
 
@@ -576,7 +576,7 @@ func TestListRuns_OmitsBuilderTestRuns(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, created)
 
-	resp := callRunTool(t, NewListRunsTool(repo), callerRC(callerID, "tc"), ListRunsToolName, ListRunsParams{})
+	resp := callRunTool(t, NewListRunsTool(WithChats(repo)), callerRC(callerID, "tc"), ListRunsToolName, ListRunsParams{})
 	require.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, realID)
 	assert.NotContains(t, resp.Content, testID)

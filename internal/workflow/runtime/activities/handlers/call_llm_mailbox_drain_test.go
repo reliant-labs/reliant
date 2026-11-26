@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
-
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
 

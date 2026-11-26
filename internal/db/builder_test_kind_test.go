@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // builder.test is a trigger-event kind of its own (WORKFLOW_UI.md §13 G6). The
@@ -33,7 +34,7 @@ func TestTriggerEvent_BuilderTestKindIsAccepted(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, created)
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builder.test", chat.LaunchKind)
 }
@@ -57,7 +58,7 @@ func TestBuilderTestRunIsNotListedInSidebar(t *testing.T) {
 	recordLaunchEvent(t, repo, "interactive", core.TriggerEventKindChatStart, nil, now)
 
 	for _, id := range []string{"bt-run", "bt-run-awaiting"} {
-		chat, err := repo.GetChat(ctx, id)
+		chat, err := store.GetChat(ctx, repo.ORM(), id)
 		require.NoError(t, err)
 		assert.False(t, chat.ListInSidebar, id)
 	}

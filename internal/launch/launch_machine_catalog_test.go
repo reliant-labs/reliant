@@ -241,7 +241,7 @@ func TestLaunchUnpinnedPendingChatReadsTheMachineItWillBePinnedTo(t *testing.T) 
 	inputs := starter.lastRootInput(t).Inputs
 	assert.Equal(t, "prod", inputs["env"])
 	assert.NotContains(t, inputs, "region")
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, cicd, *chat.ActiveDaemonID)

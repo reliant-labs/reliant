@@ -45,7 +45,7 @@ func TestGeneratedStoreRoundTripsAgainstPostgres(t *testing.T) {
 	}
 
 	// The Repository reads the same row.
-	twin, err := env.Repo.GetChat(ctx, "chat-roundtrip")
+	twin, err := store.GetChat(ctx, env.Repo.ORM(), "chat-roundtrip")
 	if err != nil {
 		t.Fatalf("Repo.GetChat: %v", err)
 	}

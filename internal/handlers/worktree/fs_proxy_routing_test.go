@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
@@ -314,7 +315,7 @@ func TestFileSystemProxy_ChatFromAnotherProject_IsIgnored(t *testing.T) {
 	// The handler scopes the tree with filepreview.ResolveBasePath; the main
 	// checkout stands in for the request machine's own.
 	mainCheckout := func(context.Context) (string, error) { return project.Path, nil }
-	base, err := filepreview.ResolveBasePath(f.ctx, f.repo, f.projectID, nil, &chatID, mainCheckout)
+	base, err := filepreview.ResolveBasePath(f.ctx, tools.WithChats(f.repo), f.projectID, nil, &chatID, mainCheckout)
 	require.NoError(t, err)
 	assert.Equal(t, project.Path, base, "another project's chat must not scope this project's tree to its worktree")
 }

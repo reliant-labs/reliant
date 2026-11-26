@@ -474,7 +474,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Chats:          store.NewChatExtStore(s.Repo.ORM()),
 		Owners:         triggerOwners(t, s.Repo),
 		Firings:        store.NewTriggerEventExtStore(s.Repo.ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(s.Repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(s.Repo.ORM()), Triggers: store.NewTriggerExtStore(s.Repo.ORM()), FiringReads: store.NewTriggerEventExtStore(s.Repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(s.Repo.ORM()),
 		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
 		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
 		Pools:    store.NewMachinePoolExtStore(s.Repo.ORM()),
@@ -813,7 +813,7 @@ func (h *Harness) WaitToolExecuting(scriptID string) {
 func (h *Harness) WaitWorkflowStatus(workflowID string, want db.WorkflowStatus) {
 	h.T.Helper()
 	h.eventually(fmt.Sprintf("workflow %s to reach status %s", workflowID, want), func() (bool, string) {
-		wf, err := h.Stack.Repo.GetWorkflow(h.Ctx, workflowID)
+		wf, err := store.LoadWorkflow(h.Ctx, h.Stack.Repo.ORM(), workflowID)
 		if err != nil || wf == nil {
 			return false, fmt.Sprintf("get workflow: %v", err)
 		}
@@ -916,7 +916,7 @@ func TextOf(m MessageWithBlocks) string {
 // Chat fetches the chat row.
 func (h *Harness) Chat(chatID string) *db.Chat {
 	h.T.Helper()
-	row, err := h.Stack.Repo.GetChat(h.Ctx, chatID)
+	row, err := store.GetChat(h.Ctx, h.Stack.Repo.ORM(), chatID)
 	require.NoError(h.T, err, "get chat")
 	return row
 }

@@ -65,7 +65,7 @@ func TestUnpinnedChatStaysOnTheMachineThatHasTheProjectWhenALaptopConnects(t *te
 	require.NoError(t, err)
 	chatID := resp.Msg.GetChat().GetId()
 
-	chat, err := e.repo.GetChat(e.ctx, chatID)
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID, "an unpinned start is pinned before its run")
 	assert.Equal(t, vm, *chat.ActiveDaemonID, "the machine with the project, not the connected laptop")
@@ -84,7 +84,7 @@ func TestSendMessageToALegacyUnpinnedChatPinsItToTheMachineWithTheProject(t *tes
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	require.Nil(t, chat.ActiveDaemonID, "precondition: a chat from before pinning")
 
@@ -117,7 +117,7 @@ func TestSendMessageToALegacyUnpinnedChatPinsItToTheMachineWithTheProject(t *tes
 	_, err = svc.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "continue"))
 	require.NoError(t, err)
 
-	stored, err := repo.GetChat(ctx, fx.chatID)
+	stored, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	require.NotNil(t, stored.ActiveDaemonID)
 	assert.Equal(t, vm, *stored.ActiveDaemonID)
@@ -129,7 +129,7 @@ func TestSendMessageToALegacyUnpinnedChatPinsItToTheMachineWithTheProject(t *tes
 
 	_, err = svc.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "and again"))
 	require.NoError(t, err)
-	stored, err = repo.GetChat(ctx, fx.chatID)
+	stored, err = store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, vm, *stored.ActiveDaemonID)
 }
@@ -144,7 +144,7 @@ func TestStartChatWithNoInstallsPinsTheRoutersDefault(t *testing.T) {
 	resp, err := e.start(t, nil)
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, only, *chat.ActiveDaemonID)
@@ -160,7 +160,7 @@ func TestStartChatNoMachineIsNeverPinned(t *testing.T) {
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.NoMachine = ptr.Of(true) })
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 	assert.True(t, chat.NoMachine)

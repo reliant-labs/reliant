@@ -21,7 +21,7 @@ import (
 // list both derive from.
 func activityOfChat(t *testing.T, f *durableStatusFixture) int {
 	t.Helper()
-	chat, err := f.h.Repo().GetChat(context.Background(), f.chatID)
+	chat, err := store.GetChat(context.Background(), f.h.Repo().ORM(), f.chatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.Activity)
 	return *chat.Activity
