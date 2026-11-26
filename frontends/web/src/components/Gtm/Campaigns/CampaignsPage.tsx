@@ -4,9 +4,10 @@
  * GTM › Campaigns: each campaign's goal and period, and a board of what it
  * holds (its ideas, posts and emails) by stage. The campaign is `?campaign=`.
  *
- * Cards move freely between Drafting and In review (UpdateItem status, on
- * the revision on screen). A move into Approved is a person's approval, so it
- * opens the approval dialog and the card moves only once that is confirmed.
+ * Cards move between Drafting and In review (UpdateItem status, on the
+ * revision on screen), a paused one back to Drafting. A move into Approved
+ * is a person's approval, so it opens the approval dialog and the card moves
+ * only once that is confirmed.
  * Nothing moves into Out from here: posting is outside GTM, and an email goes
  * out only through the agent, behind an approval card in the chat.
  */
@@ -26,8 +27,9 @@ import { toast } from "@/lib/toast-manager";
 
 import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
 import { ItemDialog } from "../shared/ItemDialog";
+import { canApprove } from "../shared/lifecycle";
 import { PersonActionDialog, PersonOnlyTag } from "../shared/PersonAction";
-import { CAMPAIGN_STATUS, formatDay, formatWhen, IDEA_STATUS, ITEM_KIND, kindAndChannel, tsMs } from "../shared/ui";
+import { CAMPAIGN_STATUS, formatDay, formatWhen, IDEA_STATUS, isItemOut, ITEM_KIND, kindAndChannel, tsMs } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
 
 type Stage = "ideas" | "drafting" | "review" | "approved" | "out";
@@ -49,9 +51,6 @@ const STAGE_OF: Partial<Record<GtmItemStatus, Stage>> = {
   [GtmItemStatus.SENT]: "out",
   [GtmItemStatus.PUBLISHED]: "out",
 };
-
-/** Item statuses a card moves between without an approval. */
-const UNGATED: readonly GtmItemStatus[] = [GtmItemStatus.DRAFT, GtmItemStatus.REVIEW, GtmItemStatus.PAUSED];
 
 const IDEA_CARD = "idea:";
 const ITEM_CARD = "item:";
@@ -125,28 +124,39 @@ export function CampaignsView() {
   const columns = useMemo(() => (selected ? columnsOf(ideas, items, selected.id) : []), [ideas, items, selected]);
   const select = (id: string) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, campaign: id }) } as never);
 
+  // The moves a person may make on the board (shared/lifecycle.ts): DRAFT <-> REVIEW,
+  // PAUSED -> DRAFT, and DRAFT or REVIEW -> APPROVED behind a confirm. Nothing
+  // moves into Out, and an approved item leaves Approved only by an edit (back
+  // to review) or a pause, from its drawer.
   function onCardMove(cardId: string, _from: string, to: string) {
     if (!cardId.startsWith(ITEM_CARD)) return; // ideas stay in Ideas: their posts move, not they
     const item = items.find((i) => ITEM_CARD + i.id === cardId);
-    if (!item || !UNGATED.includes(item.status)) return;
-    if (to === "drafting" || to === "review") {
-      const status = to === "drafting" ? GtmItemStatus.DRAFT : GtmItemStatus.REVIEW;
-      if (status !== item.status) move.mutate({ orgId, id: item.id, expectedRevision: item.revision, status });
-      return;
-    }
-    if (to === "approved") {
-      setApproving(item);
-      return;
-    }
+    if (!item) return;
+    const moveTo = (status: GtmItemStatus) => move.mutate({ orgId, id: item.id, expectedRevision: item.revision, status });
     if (to === "out") {
       toast.info(
         item.kind === GtmItemKind.EMAIL
           ? "Emails go out through the agent, after you approve its card in the chat. Nothing sends from this board."
           : "Posting happens outside GTM. Nothing publishes from this board.",
       );
+      return;
     }
+    if (isItemOut(item.status)) return;
+    if (item.status === GtmItemStatus.PAUSED) {
+      if (to === "drafting") moveTo(GtmItemStatus.DRAFT);
+      else toast.info("A paused item resumes as a draft first.");
+      return;
+    }
+    if (item.status === GtmItemStatus.APPROVED || item.status === GtmItemStatus.SCHEDULED) {
+      if (to !== "approved") toast.info("An approved item goes back to review when you edit it. Open it to edit or pause it.");
+      return;
+    }
+    if (to === "drafting" && item.status !== GtmItemStatus.DRAFT) moveTo(GtmItemStatus.DRAFT);
+    else if (to === "review" && item.status !== GtmItemStatus.REVIEW) moveTo(GtmItemStatus.REVIEW);
+    else if (to === "approved" && canApprove(item)) setApproving(item);
   }
 
+  const truncated = [ideasQ.data, itemsQ.data, campaignsQ.data].some((r) => !!r?.nextPageToken);
   const header = <PageHeader title="Campaigns" meta={<span>Each campaign's ideas, posts and emails, by stage.</span>} className="" />;
   if (campaignsQ.isPending) {
     return (
@@ -187,6 +197,11 @@ export function CampaignsView() {
           Moving into Approved <PersonOnlyTag />
         </span>
       </div>
+      {truncated && (
+        <p className="text-xs text-ink-muted" data-testid="gtm-campaigns-truncated">
+          Showing the first {PAGE.campaigns} campaigns, {PAGE.ideas} ideas and {PAGE.items} posts and emails.
+        </p>
+      )}
       <div className="h-[620px]" data-testid="gtm-campaign-board">
         <KanbanBoard
           columns={columns}

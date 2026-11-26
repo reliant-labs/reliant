@@ -107,6 +107,25 @@ describe("CampaignsView", () => {
     expect(screen.queryByRole("button", { name: /^send/i })).not.toBeInTheDocument();
   });
 
+  it("resumes a paused item only as a draft, and leaves an approved one where it is", async () => {
+    const paused = create(GtmItemSchema, { ...draft, id: "item-4", title: "Paused post", status: GtmItemStatus.PAUSED, revision: 7 });
+    const approved = create(GtmItemSchema, { ...draft, id: "item-5", title: "Approved post", status: GtmItemStatus.APPROVED, revision: 8 });
+    const update = vi.fn(() => ({}));
+    renderGtm(<CampaignsView />, { ...reads(update), "GtmService.ListItems": { response: { items: [paused, approved] } } }, { path: "/gtm/campaigns" });
+    fireEvent.click(await screen.findByRole("button", { name: "move Paused post to review" }));
+    expect(toasts.info).toHaveBeenCalledWith(expect.stringMatching(/resumes as a draft/));
+    fireEvent.click(screen.getByRole("button", { name: "move Approved post to drafting" }));
+    expect(update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "move Paused post to drafting" }));
+    await waitFor(() => expect(update).toHaveBeenCalledWith(expect.objectContaining({ id: "item-4", expectedRevision: 7, status: GtmItemStatus.DRAFT })));
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("says when a list was cut at its first page", async () => {
+    renderGtm(<CampaignsView />, { ...reads(), "GtmService.ListItems": { response: { items: [draft], nextPageToken: "more" } } }, { path: "/gtm/campaigns" });
+    expect(await screen.findByTestId("gtm-campaigns-truncated")).toBeInTheDocument();
+  });
+
   it("does not move what is already out", async () => {
     const update = vi.fn(() => ({}));
     renderGtm(<CampaignsView />, reads(update), { path: "/gtm/campaigns" });
