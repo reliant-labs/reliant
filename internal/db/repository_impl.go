@@ -82,32 +82,6 @@ func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunList
 	return store.ListRuns(ctx, r.ORM(), filters)
 }
 
-// ListUnlaunchedTriggerEvents is the run log's other half: the trigger
-// events that started no run, under the same filters and keyset as ListRuns.
-//
-// Deprecated: use store.RunListExtStore.ListUnlaunchedTriggerEvents; the run
-// handler reads it through Deps.RunLists.
-func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListFilters) ([]*UnlaunchedTriggerEvent, bool, error) {
-	return store.ListUnlaunchedTriggerEvents(ctx, r.ORM(), filters)
-}
-
-// LastRunPerWorkflow is store.LastRunPerWorkflow.
-//
-// Deprecated: use store.RunListExtStore.LastRunPerWorkflow.
-func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
-	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
-}
-
-// LastRunPerWorkflowAndOrg is the newest run of each (workflow, org) pair:
-// LastRunPerWorkflow's candidates, before a caller drops the orgs a person
-// may no longer see (store.LastRunPerWorkflowAndOrg).
-//
-// Deprecated: use store.RunListExtStore.LastRunPerWorkflowAndOrg; the run
-// handler reads it through Deps.RunLists.
-func (r *Repo) LastRunPerWorkflowAndOrg(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
-	return store.LastRunPerWorkflowAndOrg(ctx, r.ORM(), filters)
-}
-
 // ==================== Messages ====================
 
 // CreateMessage creates a message record in the database.
@@ -1600,21 +1574,46 @@ func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, 
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
 // store.GetProjectConfigRecord whenever that column is all a caller needs: the
 // full row carries every indexed skill body and can run to tens of MB.
+//
+// A value this Repo read before is served again while the record is
+// unchanged (catalogColumnCache).
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectWorkflowsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.workflows", projectID, store.GetProjectWorkflowsJSONVersioned)
 }
 
 // GetProjectPresetsJSON reads one column of the project config record: the
 // synced .reliant/presets. It returns svcerr.NotFound when the
-// project has no record.
+// project has no record. Cached as GetProjectWorkflowsJSON is.
 func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.presets", projectID, store.GetProjectPresetsJSONVersioned)
+}
+
+// projectConfigColumn reads one JSON column of projectID's config record
+// through the catalog column cache, svcerr.NotFound when there is none.
+func (r *Repo) projectConfigColumn(ctx context.Context, column, projectID string,
+	versioned func(ctx context.Context, db orm.Context, projectID string) (*string, string, bool, error),
+) (*string, error) {
+	value, found, err := r.catalogColumns().read(ctx, catalogColumnKey{column: column, projectID: projectID}, catalogColumnReads{
+		version: func(ctx context.Context) (string, bool, error) {
+			return store.ProjectConfigVersion(ctx, r.ORM(), projectID)
+		},
+		versioned: func(ctx context.Context) (*string, string, bool, error) {
+			return versioned(ctx, r.ORM(), projectID)
+		},
+	}, r.fillsCatalogColumns(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, store.MissingProjectConfig()
+	}
+	return value, nil
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2005,6 +2004,13 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 	}
 
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
+}
+
+// CopyChatPlans gives toThreadID a pending copy of every plan of fromChatID
+// and of their tasks, in one statement (store.CopyChatPlans). A branch
+// starts with its source chat's plans this way.
+func (r *Repo) CopyChatPlans(ctx context.Context, fromChatID, toThreadID string) error {
+	return store.CopyChatPlans(ctx, r.ORM(), fromChatID, toThreadID, int32(PlanStatusPending), int32(TaskStatusPending))
 }
 
 // ==================== Tasks ====================
@@ -2745,9 +2751,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
-	if id == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
 	return store.GetTrigger(ctx, r.ORM(), id)
 }
 
@@ -2756,13 +2759,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
-}
-
-func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.RemoveTrigger(ctx, r.ORM(), id)
 }
 
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
@@ -2806,28 +2802,6 @@ func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEvent
 	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
-// UpdateTriggerEventOutcome is store.UpdateTriggerEventOutcome.
-//
-// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventOutcome; a launch reads the
-// ledger through launch.Deps.TriggerEvents.
-func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
-	if id == "" {
-		return fmt.Errorf("trigger event ID cannot be empty")
-	}
-	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
-}
-
-// UpdateTriggerEventPayload is store.UpdateTriggerEventPayload.
-//
-// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventPayload; a launch reads the
-// ledger through launch.Deps.TriggerEvents.
-func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
-	if id == "" {
-		return fmt.Errorf("trigger event ID cannot be empty")
-	}
-	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
-}
-
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
 //
 // Deprecated: use store.RunEventExtStore.ClaimRunEvents; the relay reads it
@@ -2847,44 +2821,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
-// GetLatestTriggerEvent returns the trigger's latest firing, optionally
-// filtered by outcome, and (nil, nil) when it has never fired.
-func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
-	if triggerID == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.GetLatestTriggerEvent(ctx, r.ORM(), triggerID, outcome)
-}
-
-func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
-}
-
-func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
-	if id == "" {
-		return nil, core.ErrTriggerNotFound
-	}
-	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
-}
-
-// ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
-//
-// Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
-// ledger through launch.Deps.TriggerEvents.
-func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
-	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
-}
-
-func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
 }
 
 // ==================== Step Executions ====================

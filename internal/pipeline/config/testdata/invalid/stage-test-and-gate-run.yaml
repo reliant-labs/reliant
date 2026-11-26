@@ -1,0 +1,6 @@
+# want: gate.stages.test
+version: 1
+gate:
+  run: "go test ./..."
+  stages:
+    test: {run: "go test -race ./..."}

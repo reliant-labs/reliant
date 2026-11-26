@@ -96,7 +96,7 @@ import { deliveryHandlers } from "./delivery";
 import { issuesHandlers, wireIssue } from "./issues";
 import { rumHandlers } from "./rum";
 import { userHandlers } from "./user";
-import { dbl, int64, msOfDuration, points, ts, tsOpt, windowOf } from "./wire";
+import { dbl, instantOf, int64, msOfDuration, points, ts, tsOpt, windowOf, type PackClock } from "./wire";
 
 const SERVICE = ObservabilityService.typeName;
 const rpc = (method: string) => `${SERVICE}/${method}`;
@@ -123,12 +123,13 @@ const OP: Record<number, AttributeOp> = {
 
 /**
  * A QueryScope as the console's ObsScope, window and services. A relative
- * time range (the generated hooks' "the last hour") is resolved against `now`,
+ * time range (the generated hooks' "the last hour") is resolved against `clock`,
  * and a scope with no time range reads the hour before it: the PACK's clock
  * (shopStory.ts demoNow), which the story is told at, never the wall clock,
  * which a test or a pinned pack is not at.
  */
-export function modelScope(scope: QueryScope | undefined, now: number = demoNow()): ObsScope & { window: TimeWindow; services: string[] } {
+export function modelScope(scope: QueryScope | undefined, clock: PackClock = demoNow): ObsScope & { window: TimeWindow; services: string[] } {
+  const now = instantOf(clock);
   const window = windowOf(scope?.timeRange, now);
   return {
     orgId: scope?.orgId ?? "",
@@ -242,9 +243,9 @@ function wireSpan(s: Span) {
  * ObservabilityService's here, each other service's from its own module.
  * Each returns a proto message (create()), as a server would.
  */
-export function observabilityHandlers(fixtures: ObservabilityApi = createShopApi(), { now = demoNow }: { now?: () => number } = {}) {
+export function observabilityHandlers(fixtures: ObservabilityApi = createShopApi(), { clock = demoNow }: { clock?: PackClock } = {}) {
   return {
-    ...observabilityServiceHandlers(fixtures, now),
+    ...observabilityServiceHandlers(fixtures, clock),
     ...alertingHandlers(fixtures),
     ...deliveryHandlers(fixtures),
     ...issuesHandlers(fixtures),
@@ -256,11 +257,11 @@ export function observabilityHandlers(fixtures: ObservabilityApi = createShopApi
   };
 }
 
-/** ObservabilityService's reads; a relative window resolves against `now` (modelScope). */
-function observabilityServiceHandlers(fixtures: ObservabilityApi, now: () => number) {
+/** ObservabilityService's reads; a relative window resolves against the pack's `clock` (modelScope). */
+function observabilityServiceHandlers(fixtures: ObservabilityApi, clock: PackClock) {
   return {
     [TELEMETRY_RPCS.listTraces]: async (req: ListTracesRequest) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const res = await fixtures.listTraces({
         ...scope,
         rootSpanName: req.rootSpanName ?? "",
@@ -285,7 +286,7 @@ function observabilityServiceHandlers(fixtures: ObservabilityApi, now: () => num
       });
     },
     [TELEMETRY_RPCS.getTrace]: async (req: GetTraceRequest) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const trace = await fixtures.getTrace({ ...scope, traceId: req.traceId });
       return create(GetTraceResponseSchema, {
         traceId: trace.traceId,
@@ -296,7 +297,7 @@ function observabilityServiceHandlers(fixtures: ObservabilityApi, now: () => num
       });
     },
     [TELEMETRY_RPCS.searchLogs]: async (req: SearchLogsRequest) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const { query, traceId, spanId } = splitLogQuery(req.query);
       const res = await fixtures.searchLogs({
         ...scope,
@@ -310,7 +311,7 @@ function observabilityServiceHandlers(fixtures: ObservabilityApi, now: () => num
       return create(SearchLogsResponseSchema, { logs: res.records.map(wireLog), nextPageToken: res.nextCursor, effectiveTimeRange: effectiveRange(scope.window) });
     },
     [TELEMETRY_RPCS.getServiceOverview]: async (req: GetServiceOverviewRequest) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const res = await fixtures.getServiceOverview({ ...scope, groupBy: [...req.groupBy] });
       return create(GetServiceOverviewResponseSchema, {
         trendStepSeconds: res.trendStepSeconds,
@@ -333,7 +334,7 @@ function observabilityServiceHandlers(fixtures: ObservabilityApi, now: () => num
       });
     },
     [TELEMETRY_RPCS.getFlamegraph]: async (req: GetFlamegraphRequest) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const res = await fixtures.getFlamegraph({ ...scope, service: req.service, profileType: req.profileType, traceId: req.traceId || undefined });
       return create(GetFlamegraphResponseSchema, {
         speedscopeJson: res.speedscopeJson,
@@ -345,16 +346,16 @@ function observabilityServiceHandlers(fixtures: ObservabilityApi, now: () => num
       });
     },
     [TELEMETRY_RPCS.getServiceSignals]: async (req: GetServiceSignalsRequest) => {
-      const res = await fixtures.getServiceSignals(modelScope(req.scope, now()));
+      const res = await fixtures.getServiceSignals(modelScope(req.scope, clock));
       return create(GetServiceSignalsResponseSchema, {
         truncated: res.truncated,
         services: res.services.map((s) => ({ service: s.service, emitting: [...s.emitting], declared: [...s.declared], declarationKnown: s.declarationKnown })),
       });
     },
-    ...panelHandlers(fixtures, now),
-    ...workloadHandlers(fixtures, now),
-    ...graphHandlers(fixtures, now),
-    ...metricHandlers(fixtures, now),
+    ...panelHandlers(fixtures, clock),
+    ...workloadHandlers(fixtures, clock),
+    ...graphHandlers(fixtures, clock),
+    ...metricHandlers(fixtures, clock),
     ...releaseHealthHandlers(fixtures),
   };
 }
@@ -434,10 +435,10 @@ const modelMetricKind = (t: WireMetricType | undefined): MetricKind | undefined 
 
 const SIGNAL_OF: Partial<Record<WireSignal, "traces" | "logs" | "metrics">> = { [WireSignal.TRACES]: "traces", [WireSignal.LOGS]: "logs", [WireSignal.METRICS]: "metrics" };
 
-function panelHandlers(fixtures: ObservabilityApi, now: () => number) {
+function panelHandlers(fixtures: ObservabilityApi, clock: PackClock) {
   return completed(ObservabilityService, mockService(ObservabilityService, {
     queryPanel: async (req) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const panel = modelPanel(req.panel);
       const res = await fixtures.queryPanel({
         ...scope,
@@ -472,7 +473,7 @@ function panelHandlers(fixtures: ObservabilityApi, now: () => number) {
       };
     },
     listAttributeValues: async (req) => {
-      const res = await fixtures.listAttributeValues({ ...modelScope(req.scope, now()), key: req.key, prefix: req.prefix ?? "", signal: req.signal === undefined ? undefined : SIGNAL_OF[req.signal], limit: req.limit });
+      const res = await fixtures.listAttributeValues({ ...modelScope(req.scope, clock), key: req.key, prefix: req.prefix ?? "", signal: req.signal === undefined ? undefined : SIGNAL_OF[req.signal], limit: req.limit });
       return { values: res.values.map((v) => ({ value: v.value, count: int64(v.count) })), truncated: res.truncated };
     },
     listFrontendReplay: async (req) => {
@@ -625,10 +626,10 @@ function wireWorkload(w: Workload) {
   };
 }
 
-function workloadHandlers(fixtures: ObservabilityApi, now: () => number) {
+function workloadHandlers(fixtures: ObservabilityApi, clock: PackClock) {
   return completed(ObservabilityService, mockService(ObservabilityService, {
     listWorkloads: async (req) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const res = await fixtures.listWorkloads({ ...scope, services: scope.services.length ? scope.services : undefined });
       return {
         truncated: res.truncated,
@@ -645,7 +646,7 @@ function workloadHandlers(fixtures: ObservabilityApi, now: () => number) {
       };
     },
     getWorkload: async (req) => {
-      const res = await fixtures.getWorkload({ ...modelScope(req.scope, now()), workload: req.workload, container: req.container, stepSeconds: req.stepSeconds });
+      const res = await fixtures.getWorkload({ ...modelScope(req.scope, clock), workload: req.workload, container: req.container, stepSeconds: req.stepSeconds });
       return {
         stepSeconds: res.stepSeconds,
         truncated: res.truncated,
@@ -705,10 +706,10 @@ function wireQuality(q: GraphQuality | null) {
   };
 }
 
-function graphHandlers(fixtures: ObservabilityApi, now: () => number) {
+function graphHandlers(fixtures: ObservabilityApi, clock: PackClock) {
   return completed(ObservabilityService, mockService(ObservabilityService, {
     getServiceGraph: async (req) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const res = await fixtures.getServiceGraph({
         ...scope,
         services: scope.services,
@@ -747,7 +748,7 @@ function graphHandlers(fixtures: ObservabilityApi, now: () => number) {
       };
     },
     getServiceGraphCatalog: async (req) => {
-      const scope = modelScope(req.scope, now());
+      const scope = modelScope(req.scope, clock);
       const res = await fixtures.getServiceGraphCatalog({ ...scope, services: scope.services, rpcService: req.rpcService, rpcIds: [...req.rpcIds] });
       return {
         methods: res.methods.map((m) => ({
@@ -800,14 +801,14 @@ const wireMetricInfo = (m: MetricCatalogEntry) => ({
   stability: m.stability,
 });
 
-function metricHandlers(fixtures: ObservabilityApi, now: () => number) {
+function metricHandlers(fixtures: ObservabilityApi, clock: PackClock) {
   return completed(ObservabilityService, mockService(ObservabilityService, {
     listMetrics: async (req) => {
-      const res = await fixtures.listMetricCatalog({ ...modelScope(req.scope, now()), name: req.nameContains, limit: req.limit });
+      const res = await fixtures.listMetricCatalog({ ...modelScope(req.scope, clock), name: req.nameContains, limit: req.limit });
       return { metrics: res.metrics.map(wireMetricInfo), truncated: res.truncated };
     },
     getMetric: async (req) => {
-      const res = await fixtures.getMetric({ ...modelScope(req.scope, now()), name: req.metricName, kind: modelMetricKind(req.metricType) });
+      const res = await fixtures.getMetric({ ...modelScope(req.scope, clock), name: req.metricName, kind: modelMetricKind(req.metricType) });
       return {
         info: wireMetricInfo(res.info),
         intervalSeconds: res.intervalSeconds,
@@ -818,12 +819,12 @@ function metricHandlers(fixtures: ObservabilityApi, now: () => number) {
     },
     listMetricExemplars: async (req) => {
       const res = await fixtures.listMetricExemplars({
-        ...modelScope(req.scope, now()),
+        ...modelScope(req.scope, clock),
         name: req.metricName,
         kind: modelMetricKind(req.metricType),
         where: req.where.map((p) => ({ field: p.field, op: p.op, value: p.value, values: [...p.values] })),
         group: { ...req.group },
-        range: windowOf(req.timeRange, now()),
+        range: windowOf(req.timeRange, clock),
         minValue: req.minValue,
         limit: req.limit,
       });

@@ -59,6 +59,7 @@ import {
   toAttributeValues,
   toFlamegraph,
   toListTraces,
+  toObservabilityUsage,
   toPanelResult,
   toSearchLogs,
   toServiceOverview,
@@ -79,6 +80,7 @@ import { mapReleaseHealth, releaseHealthRequest } from "@/services/controlPlane/
 import { metricCatalogRequest, metricExemplarsRequest, metricRequest, toMetricCatalog, toMetricDetail, toMetricExemplars } from "@/services/controlPlane/observability/metricsApi";
 import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
 import { useObservabilityApi, type ObservabilityContextApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useGetObservabilityUsage } from "@/hooks/controlplane/observability-billing-service-hooks_gen";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
@@ -138,7 +140,6 @@ export const obsKeys = {
   /** A postgres panel's read (AppDatabaseService); a telemetry panel's is the generated QueryPanel read's (panelQueryKey). */
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset?: PanelOffset) =>
     [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset ?? null] as const,
-  usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
 };
 
 /** What names a scope in a QueryScope's protojson: everything but the window and the services filter. */
@@ -183,6 +184,19 @@ export function invalidateObsScope(client: QueryClient, scope: ObsScope | null):
   return Promise.all([
     client.invalidateQueries({ queryKey: obsKeys.all(scope) }),
     named === undefined ? undefined : client.invalidateQueries({ queryKey: observabilityServiceKeys.all, predicate: (query) => keyScope(query.queryKey) === named }),
+  ]).then(() => undefined);
+}
+
+/**
+ * Every observability read, whatever its scope: the hand-written ones under
+ * `["observability"]` and ObservabilityService's generated ones (workloads, a
+ * workload, the overview, …), which that prefix no longer covers. For a write
+ * that changes what all of them show (a workload restart).
+ */
+export function invalidateAllObservability(client: QueryClient): Promise<void> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: ["observability"] }),
+    client.invalidateQueries({ queryKey: observabilityServiceKeys.all }),
   ]).then(() => undefined);
 }
 
@@ -696,10 +710,10 @@ export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
  * hour; polling faster would only re-read the same hour.
  */
 export function useObservabilityUsage(orgId: string | null) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.usage(orgId),
-    queryFn: () => api.getObservabilityUsage(orgId as string),
+  // ObservabilityBillingService's generated read (the billing panel's own key
+  // and fetch), mapped to the legacy panel's model.
+  return useGetObservabilityUsage({ orgId: orgId ?? "" }, {
+    select: toObservabilityUsage,
     enabled: !!orgId,
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,
