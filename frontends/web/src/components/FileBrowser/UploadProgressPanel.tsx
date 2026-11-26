@@ -3,6 +3,12 @@ import Tooltip from "../forge-ui/tooltip";
 import { cn } from "../../lib/utils";
 import { formatBytes } from "../../lib/formatBytes";
 import { useFileUploadStore, type UploadItem, type UploadStatus } from "../../store/fileUploadStore";
+import {
+  isDownloadActive,
+  useFileDownloadStore,
+  type DownloadItem,
+  type DownloadStatus,
+} from "../../store/fileDownloadStore";
 import { uploadFolderLabel } from "./UploadConflictDialog";
 
 const STATUS_LABEL: Record<UploadStatus, string> = {
@@ -97,24 +103,131 @@ function UploadRow({ item }: { item: UploadItem }) {
   );
 }
 
+const DOWNLOAD_STATUS_LABEL: Record<DownloadStatus, string> = {
+  preparing: "Zipping",
+  downloading: "Downloading",
+  done: "Downloaded",
+  failed: "Failed",
+  cancelled: "Cancelled",
+};
+
+function downloadPercent(item: DownloadItem): number {
+  if (item.status === "done") return 100;
+  if (item.status === "preparing") {
+    if (!item.filesTotal) return 0;
+    return Math.min(100, Math.floor(((item.filesDone ?? 0) / item.filesTotal) * 100));
+  }
+  if (item.totalBytes === 0) return 0;
+  return Math.min(100, Math.floor((item.bytesDone / item.totalBytes) * 100));
+}
+
+function downloadStatusText(item: DownloadItem): string {
+  if (item.status === "preparing") {
+    return item.filesTotal ? `Zipping… ${item.filesDone ?? 0} of ${item.filesTotal} files` : "Zipping…";
+  }
+  if (item.status === "done" && item.skipped) {
+    return `${DOWNLOAD_STATUS_LABEL.done} · ${item.skipped} ${item.skipped === 1 ? "item" : "items"} skipped`;
+  }
+  return DOWNLOAD_STATUS_LABEL[item.status];
+}
+
+function downloadSizeText(item: DownloadItem): string | null {
+  if (item.status === "failed" || item.status === "cancelled" || item.status === "preparing") return null;
+  if (item.totalBytes === 0) return item.bytesDone > 0 ? formatBytes(item.bytesDone) : null;
+  const done = item.status === "done" ? item.totalBytes : item.bytesDone;
+  return `${downloadPercent(item)}% · ${formatBytes(done)} of ${formatBytes(item.totalBytes)}`;
+}
+
+function DownloadRow({ item }: { item: DownloadItem }) {
+  const cancel = useFileDownloadStore((state) => state.cancel);
+  const dismiss = useFileDownloadStore((state) => state.dismiss);
+  const active = isDownloadActive(item);
+  const percent = downloadPercent(item);
+  const sizeText = downloadSizeText(item);
+
+  return (
+    <li className="px-3 py-2" data-testid="download-row" data-status={item.status}>
+      <div className="flex items-center gap-2">
+        <span className="flex h-4 w-4 shrink-0 items-center justify-center" aria-hidden="true">
+          {active && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+          {item.status === "done" && <Check className="h-3.5 w-3.5 text-success-ink" />}
+          {item.status === "failed" && <AlertCircle className="h-3.5 w-3.5 text-destructive-ink" />}
+        </span>
+        <span className="min-w-0 flex-1 truncate text-ui text-foreground" title={item.name}>
+          {item.name}
+        </span>
+        <div className="flex shrink-0 items-center">
+          {active ? (
+            <RowAction label={`Cancel download of ${item.name}`} icon={<X className="h-3.5 w-3.5" />} onClick={() => cancel(item.id)} />
+          ) : (
+            <RowAction label={`Dismiss ${item.name}`} icon={<X className="h-3.5 w-3.5" />} onClick={() => dismiss(item.id)} />
+          )}
+        </div>
+      </div>
+      <div className="ml-6 mt-1 flex items-center gap-2 text-meta text-muted-foreground">
+        <span className="min-w-0 flex-1 truncate">{downloadStatusText(item)}</span>
+        {sizeText && <span className="shrink-0 tabular-nums">{sizeText}</span>}
+      </div>
+      {active && (
+        <div
+          role="progressbar"
+          aria-label={`${item.status === "preparing" ? "Zipping" : "Downloading"} ${item.name}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          className="ml-6 mt-1.5 h-1 overflow-hidden rounded-full bg-border"
+        >
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-300"
+            // Runtime geometry: the fill's width is the download's progress.
+            style={{ width: `${percent}%` }}
+          />
+        </div>
+      )}
+      {item.status === "failed" && item.error && (
+        <p className="ml-6 mt-1 text-meta text-destructive-ink">{item.error}</p>
+      )}
+    </li>
+  );
+}
+
+function panelHeading(activeUploads: number, activeDownloads: number, hasUploads: boolean, hasDownloads: boolean) {
+  const count = (n: number) => `${n} ${n === 1 ? "file" : "files"}`;
+  if (!hasDownloads) return activeUploads > 0 ? `Uploading ${count(activeUploads)}` : "Uploads";
+  if (!hasUploads) return activeDownloads > 0 ? `Downloading ${count(activeDownloads)}` : "Downloads";
+  const active = activeUploads + activeDownloads;
+  return active > 0 ? `Transferring ${count(active)}` : "Transfers";
+}
+
 /**
- * The Files tab's upload list: one row per queued, running or finished
- * upload, under the tree. Hidden while there is nothing to show.
+ * The Files tab's transfers list, under the tree: one row per queued,
+ * running or finished upload, then one per large download (a file read
+ * piecewise, or a folder zipped and read). Hidden while there is nothing to
+ * show.
  */
 export function UploadProgressPanel() {
   const items = useFileUploadStore((state) => state.items);
-  const clearFinished = useFileUploadStore((state) => state.clearFinished);
-  if (items.length === 0) return null;
+  const clearFinishedUploads = useFileUploadStore((state) => state.clearFinished);
+  const downloads = useFileDownloadStore((state) => state.items);
+  const clearFinishedDownloads = useFileDownloadStore((state) => state.clearFinished);
+  if (items.length === 0 && downloads.length === 0) return null;
 
   const remaining = items.filter((item) => item.status === "queued" || item.status === "uploading").length;
-  const finished = items.some((item) => item.status === "done" || item.status === "cancelled");
+  const downloading = downloads.filter(isDownloadActive).length;
+  const finished =
+    items.some((item) => item.status === "done" || item.status === "cancelled") ||
+    downloads.some((item) => item.status === "done" || item.status === "cancelled");
+  const heading = panelHeading(remaining, downloading, items.length > 0, downloads.length > 0);
+  const label = downloads.length === 0 ? "Uploads" : items.length === 0 ? "Downloads" : "Transfers";
+  const clearFinished = () => {
+    clearFinishedUploads();
+    clearFinishedDownloads();
+  };
 
   return (
-    <section aria-label="Uploads" className="shrink-0 border-t border-border bg-background" data-testid="upload-panel">
+    <section aria-label={label} className="shrink-0 border-t border-border bg-background" data-testid="upload-panel">
       <div className="flex items-center gap-2 px-3 pt-2">
-        <h3 className="flex-1 text-ui font-medium text-muted-foreground">
-          {remaining > 0 ? `Uploading ${remaining} ${remaining === 1 ? "file" : "files"}` : "Uploads"}
-        </h3>
+        <h3 className="flex-1 text-ui font-medium text-muted-foreground">{heading}</h3>
         {finished && (
           <button
             type="button"
@@ -128,6 +241,9 @@ export function UploadProgressPanel() {
       <ul className="max-h-48 overflow-y-auto">
         {items.map((item) => (
           <UploadRow key={item.id} item={item} />
+        ))}
+        {downloads.map((item) => (
+          <DownloadRow key={item.id} item={item} />
         ))}
       </ul>
     </section>

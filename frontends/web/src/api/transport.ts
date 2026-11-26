@@ -300,6 +300,15 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
   "reliant.v1.FileSystemService/CommitFileUpload": 125_000,
   "reliant.v1.FileSystemService/AbortFileUpload": 35_000,
   "reliant.v1.FileSystemService/GetFileUploadStatus": 35_000,
+  // Files tab downloads (api/fileDownload.ts). A piece is up to 1 MiB of
+  // response body on the user's downlink, and preparing a folder archive
+  // walks the whole folder on the machine first: at the 10s default a slow
+  // link or a big folder was aborted here while the server was still
+  // working. These mirror the server's budgets plus 5s, as the uploads do.
+  "reliant.v1.FileSystemService/ReadFileRange": 50_000,
+  "reliant.v1.FileSystemService/PrepareFolderArchive": 65_000,
+  "reliant.v1.FileSystemService/GetFolderArchiveStatus": 20_000,
+  "reliant.v1.FileSystemService/ReleaseFolderArchive": 35_000,
 };
 
 /**

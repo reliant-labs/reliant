@@ -1194,7 +1194,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
                 type="button"
                 onClick={() => {
                   setDownloading(true);
-                  void downloadWorkspaceFile(file.path, file.name, effectiveWorktreeId).finally(() => setDownloading(false));
+                  void downloadWorkspaceFile(file.path, file.name, effectiveWorktreeId, previewInfo?.size).finally(() => setDownloading(false));
                 }}
                 disabled={downloading}
                 aria-label={`Download ${file.name}`}

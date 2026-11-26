@@ -252,6 +252,18 @@ describe('per-procedure timeouts', () => {
     expect(timeoutForProcedure(svc, 'AbortFileUpload')).toBe(35_000)
     expect(timeoutForProcedure(svc, 'GetFileUploadStatus')).toBe(35_000)
   })
+
+  it('gives the Files tab download RPCs the server budget plus headroom', async () => {
+    // A ranged piece is 1 MiB on the user's downlink, and preparing a folder
+    // archive walks the folder first: the 10s default cut both off while the
+    // server was still working.
+    const { timeoutForProcedure } = await import('../transport')
+    const svc = 'reliant.v1.FileSystemService'
+    expect(timeoutForProcedure(svc, 'ReadFileRange')).toBe(50_000)
+    expect(timeoutForProcedure(svc, 'PrepareFolderArchive')).toBe(65_000)
+    expect(timeoutForProcedure(svc, 'GetFolderArchiveStatus')).toBe(20_000)
+    expect(timeoutForProcedure(svc, 'ReleaseFolderArchive')).toBe(35_000)
+  })
 })
 
 describe('in-flight starvation diagnostics', () => {

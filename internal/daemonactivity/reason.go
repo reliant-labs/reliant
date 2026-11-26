@@ -140,6 +140,15 @@ var userActionCommands = map[string]bool{
 	"fs.upload_begin":  true,
 	"fs.upload_chunk":  true,
 	"fs.upload_commit": true,
+	// A person downloading a large file or a folder from the Files tab:
+	// every piece, and the status polls while a folder is zipped, so a
+	// long download is never mistaken for idleness. The polls run only
+	// while a download the person started is in progress.
+	"fs.archive_prepare": true,
+	"fs.archive_read":    true,
+	"fs.archive_release": true,
+	"fs.archive_status":  true,
+	"fs.read_range":      true,
 
 	"git.clone":   true,
 	"git.pull":    true,

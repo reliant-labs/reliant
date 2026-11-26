@@ -32,7 +32,7 @@ schema ApiServerConfigChatCollaboration:
     enabled: bool = False
 
 # forge:section schema ApiServerConfig
-# forge:hash=70a5c3da826d1b4b0a2342182ff37dacf56916fcbbc2188976a71baeed9bd5b5
+# forge:hash=0556a3fba5025126d056e931c6c24ec84b0651e2d97504e14fedcf7bc80a327c
 schema ApiServerConfig:
     # JWT public key PEM for token validation
     jwt_public_key: str = ""
@@ -116,6 +116,8 @@ schema ApiServerConfig:
     max_upload_size: int = 10485760
     # Largest file uploaded into a workspace through the Files tab, in bytes
     max_workspace_upload_size: int = 2147483648
+    # Largest folder, in bytes of file content, downloaded as .zip through the Files tab
+    max_folder_archive_size: int = 2147483648
     # Worktree auto-archive: dry-run, on or off
     worktree_auto_archive: str = "dry-run"
     # How long a landed worktree's chats must be quiet before it is archived (0 = off)
@@ -235,7 +237,7 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "apiServerConfigEnvMap: config_secrets names ${[_n for _n in config_secrets if _n not in _sensitive]}, which is not a `sensitive` field of ApiServerConfig. Sensitive fields: ${sorted([_k for _k in _sensitive])}. Add `sensitive: true` to the field's (forge.v1.config) annotation in its config proto, or drop the name from this workload's config_secrets."
     {
         # forge:section apiServerConfigEnvMap values (root)
-        # forge:hash=e19c7e09f7d047257199de3fa19f0b37af983f13ed4557e138f16ce72f6bfa32
+        # forge:hash=643ccb7adb297573a61e0f32a59f2d0ec7a16e9f54a2b1e18ab4f81430a6315b
         "JWT_PUBLIC_KEY" = c.jwt_public_key
         "JWT_PUBLIC_KEY_FILE" = c.jwt_public_key_file
         "RELIANT_JWKS_URL" = c.jwks_url
@@ -272,6 +274,7 @@ apiServerConfigEnvMap = lambda c: ApiServerConfig, config_secrets: [str] -> {str
         "MCP_OAUTH_SCOPES" = c.mcp_oauth_scopes
         "MAX_UPLOAD_SIZE" = str(c.max_upload_size)
         "MAX_WORKSPACE_UPLOAD_SIZE" = str(c.max_workspace_upload_size)
+        "MAX_FOLDER_ARCHIVE_SIZE" = str(c.max_folder_archive_size)
         "RELIANT_WORKTREE_AUTO_ARCHIVE" = c.worktree_auto_archive
         "RELIANT_WORKTREE_LANDED_IDLE" = c.worktree_landed_idle
         "RELIANT_WORKTREE_RECLAIM_QUIET" = c.worktree_reclaim_quiet
@@ -2183,7 +2186,7 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
             # forge:section root api env (root)
-            # forge:hash=ad9dafb4669d45f2cd7f83d60569745e6f837d4bfacd7c42271db51750e1e20a
+            # forge:hash=b10aa6c43f1401efa267f9b8fe3292c61e2c9e019689a9c9f6909a2ef8c0d3e5
             "JWT_PUBLIC_KEY",
             "JWT_PUBLIC_KEY_FILE",
             "RELIANT_JWKS_URL",
@@ -2220,6 +2223,7 @@ ROOTS: {str: Root} = {
             "MCP_OAUTH_SCOPES",
             "MAX_UPLOAD_SIZE",
             "MAX_WORKSPACE_UPLOAD_SIZE",
+            "MAX_FOLDER_ARCHIVE_SIZE",
             "RELIANT_WORKTREE_AUTO_ARCHIVE",
             "RELIANT_WORKTREE_LANDED_IDLE",
             "RELIANT_WORKTREE_RECLAIM_QUIET",

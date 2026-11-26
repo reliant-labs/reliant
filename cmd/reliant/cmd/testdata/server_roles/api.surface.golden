@@ -37,6 +37,7 @@ JWT_ROLES_CLAIM kind=string flag="jwt-roles-claim" default="auto" required=false
 JWT_SIGNING_METHOD kind=string flag="jwt-signing-method" default="RS256" required=false optional=false sensitive=false allowed=[] aliases=[]
 LIVENESS_PATHS kind=string flag="" default="/health,/healthz" required=false optional=false sensitive=false allowed=[] aliases=[]
 LOG_FORMAT kind=string flag="log-format" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+MAX_FOLDER_ARCHIVE_SIZE kind=int64 flag="" default="2147483648" required=false optional=false sensitive=false allowed=[] aliases=[]
 MAX_UPLOAD_SIZE kind=int64 flag="" default="10485760" required=false optional=false sensitive=false allowed=[] aliases=[]
 MAX_WORKSPACE_UPLOAD_SIZE kind=int64 flag="" default="2147483648" required=false optional=false sensitive=false allowed=[] aliases=[]
 MCP_OAUTH_ISSUERS kind=repeated string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

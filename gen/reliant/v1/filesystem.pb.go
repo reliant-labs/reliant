@@ -253,6 +253,62 @@ func (UploadConflictPolicy) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{3}
 }
 
+// FolderArchiveState is how far a folder archive has got.
+type FolderArchiveState int32
+
+const (
+	FolderArchiveState_FOLDER_ARCHIVE_STATE_UNSPECIFIED FolderArchiveState = 0
+	// The machine is still zipping the folder.
+	FolderArchiveState_FOLDER_ARCHIVE_STATE_RUNNING FolderArchiveState = 1
+	// The archive is complete and can be read (ReadFileRange).
+	FolderArchiveState_FOLDER_ARCHIVE_STATE_READY FolderArchiveState = 2
+	// Zipping failed; error says why. The archive is gone.
+	FolderArchiveState_FOLDER_ARCHIVE_STATE_FAILED FolderArchiveState = 3
+)
+
+// Enum value maps for FolderArchiveState.
+var (
+	FolderArchiveState_name = map[int32]string{
+		0: "FOLDER_ARCHIVE_STATE_UNSPECIFIED",
+		1: "FOLDER_ARCHIVE_STATE_RUNNING",
+		2: "FOLDER_ARCHIVE_STATE_READY",
+		3: "FOLDER_ARCHIVE_STATE_FAILED",
+	}
+	FolderArchiveState_value = map[string]int32{
+		"FOLDER_ARCHIVE_STATE_UNSPECIFIED": 0,
+		"FOLDER_ARCHIVE_STATE_RUNNING":     1,
+		"FOLDER_ARCHIVE_STATE_READY":       2,
+		"FOLDER_ARCHIVE_STATE_FAILED":      3,
+	}
+)
+
+func (x FolderArchiveState) Enum() *FolderArchiveState {
+	p := new(FolderArchiveState)
+	*p = x
+	return p
+}
+
+func (x FolderArchiveState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FolderArchiveState) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_filesystem_proto_enumTypes[4].Descriptor()
+}
+
+func (FolderArchiveState) Type() protoreflect.EnumType {
+	return &file_reliant_v1_filesystem_proto_enumTypes[4]
+}
+
+func (x FolderArchiveState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FolderArchiveState.Descriptor instead.
+func (FolderArchiveState) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{4}
+}
+
 // FileNode represents a file or directory in the tree
 type FileNode struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -3453,6 +3509,634 @@ func (x *GetFileUploadStatusResponse) GetSize() int64 {
 	return 0
 }
 
+type ReadFileRangeRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId  string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	WorktreeId *string                `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	ChatId     *string                `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	// The file to read: relative to the workspace, or absolute on the machine
+	// that holds it (as DownloadFile accepts). Exactly one of path and
+	// archive_id is set.
+	Path string `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	// A folder archive PrepareFolderArchive made, once it is ready.
+	ArchiveId *string `protobuf:"bytes,5,opt,name=archive_id,json=archiveId,proto3,oneof" json:"archive_id,omitempty"`
+	// Where the piece starts in the file.
+	Offset int64 `protobuf:"varint,6,opt,name=offset,proto3" json:"offset,omitempty"`
+	// How many bytes to read; the server serves at most 1 MiB a piece, and 0
+	// asks for that much.
+	Length int32 `protobuf:"varint,7,opt,name=length,proto3" json:"length,omitempty"`
+	// The version an earlier piece reported. When set and the file is no
+	// longer that version, the read is refused (FailedPrecondition, reason
+	// "file_changed_during_download").
+	IfVersion     *string `protobuf:"bytes,8,opt,name=if_version,json=ifVersion,proto3,oneof" json:"if_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadFileRangeRequest) Reset() {
+	*x = ReadFileRangeRequest{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadFileRangeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadFileRangeRequest) ProtoMessage() {}
+
+func (x *ReadFileRangeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadFileRangeRequest.ProtoReflect.Descriptor instead.
+func (*ReadFileRangeRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *ReadFileRangeRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ReadFileRangeRequest) GetWorktreeId() string {
+	if x != nil && x.WorktreeId != nil {
+		return *x.WorktreeId
+	}
+	return ""
+}
+
+func (x *ReadFileRangeRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
+	}
+	return ""
+}
+
+func (x *ReadFileRangeRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ReadFileRangeRequest) GetArchiveId() string {
+	if x != nil && x.ArchiveId != nil {
+		return *x.ArchiveId
+	}
+	return ""
+}
+
+func (x *ReadFileRangeRequest) GetOffset() int64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *ReadFileRangeRequest) GetLength() int32 {
+	if x != nil {
+		return x.Length
+	}
+	return 0
+}
+
+func (x *ReadFileRangeRequest) GetIfVersion() string {
+	if x != nil && x.IfVersion != nil {
+		return *x.IfVersion
+	}
+	return ""
+}
+
+type ReadFileRangeResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The bytes from offset; fewer than asked only at the end of the file.
+	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	// The file's whole size in bytes.
+	TotalSize int64 `protobuf:"varint,2,opt,name=total_size,json=totalSize,proto3" json:"total_size,omitempty"`
+	// The file's identity and version (its size and modification time): the
+	// same for every piece of an unchanged file. Pass it as if_version.
+	Version string `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	// The base name to save as (for an archive, the folder's name + ".zip").
+	Filename string `protobuf:"bytes,4,opt,name=filename,proto3" json:"filename,omitempty"`
+	// MIME type; "application/octet-stream" when unknown.
+	ContentType string `protobuf:"bytes,5,opt,name=content_type,json=contentType,proto3" json:"content_type,omitempty"`
+	// Set on the piece that reaches the end of the file.
+	Eof           bool `protobuf:"varint,6,opt,name=eof,proto3" json:"eof,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReadFileRangeResponse) Reset() {
+	*x = ReadFileRangeResponse{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadFileRangeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadFileRangeResponse) ProtoMessage() {}
+
+func (x *ReadFileRangeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadFileRangeResponse.ProtoReflect.Descriptor instead.
+func (*ReadFileRangeResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *ReadFileRangeResponse) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *ReadFileRangeResponse) GetTotalSize() int64 {
+	if x != nil {
+		return x.TotalSize
+	}
+	return 0
+}
+
+func (x *ReadFileRangeResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ReadFileRangeResponse) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *ReadFileRangeResponse) GetContentType() string {
+	if x != nil {
+		return x.ContentType
+	}
+	return ""
+}
+
+func (x *ReadFileRangeResponse) GetEof() bool {
+	if x != nil {
+		return x.Eof
+	}
+	return false
+}
+
+type PrepareFolderArchiveRequest struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId  string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	WorktreeId *string                `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	ChatId     *string                `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	// The workspace-relative folder to zip; "" or "/" is the workspace root.
+	Path          string `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareFolderArchiveRequest) Reset() {
+	*x = PrepareFolderArchiveRequest{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareFolderArchiveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareFolderArchiveRequest) ProtoMessage() {}
+
+func (x *PrepareFolderArchiveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareFolderArchiveRequest.ProtoReflect.Descriptor instead.
+func (*PrepareFolderArchiveRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *PrepareFolderArchiveRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *PrepareFolderArchiveRequest) GetWorktreeId() string {
+	if x != nil && x.WorktreeId != nil {
+		return *x.WorktreeId
+	}
+	return ""
+}
+
+func (x *PrepareFolderArchiveRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
+	}
+	return ""
+}
+
+func (x *PrepareFolderArchiveRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+type PrepareFolderArchiveResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The archive, opaque to the client: GetFolderArchiveStatus,
+	// ReadFileRange and ReleaseFolderArchive name it.
+	ArchiveId string `protobuf:"bytes,1,opt,name=archive_id,json=archiveId,proto3" json:"archive_id,omitempty"`
+	// The name to save the archive as: the folder's name + ".zip".
+	Filename string `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	// How many files, and bytes of file content, the archive will hold.
+	TotalFiles int64 `protobuf:"varint,3,opt,name=total_files,json=totalFiles,proto3" json:"total_files,omitempty"`
+	TotalBytes int64 `protobuf:"varint,4,opt,name=total_bytes,json=totalBytes,proto3" json:"total_bytes,omitempty"`
+	// The most file content a folder archive may hold on this server, in bytes.
+	MaxSize       int64 `protobuf:"varint,5,opt,name=max_size,json=maxSize,proto3" json:"max_size,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PrepareFolderArchiveResponse) Reset() {
+	*x = PrepareFolderArchiveResponse{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PrepareFolderArchiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PrepareFolderArchiveResponse) ProtoMessage() {}
+
+func (x *PrepareFolderArchiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PrepareFolderArchiveResponse.ProtoReflect.Descriptor instead.
+func (*PrepareFolderArchiveResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *PrepareFolderArchiveResponse) GetArchiveId() string {
+	if x != nil {
+		return x.ArchiveId
+	}
+	return ""
+}
+
+func (x *PrepareFolderArchiveResponse) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *PrepareFolderArchiveResponse) GetTotalFiles() int64 {
+	if x != nil {
+		return x.TotalFiles
+	}
+	return 0
+}
+
+func (x *PrepareFolderArchiveResponse) GetTotalBytes() int64 {
+	if x != nil {
+		return x.TotalBytes
+	}
+	return 0
+}
+
+func (x *PrepareFolderArchiveResponse) GetMaxSize() int64 {
+	if x != nil {
+		return x.MaxSize
+	}
+	return 0
+}
+
+type GetFolderArchiveStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	WorktreeId    *string                `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	ChatId        *string                `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	ArchiveId     string                 `protobuf:"bytes,4,opt,name=archive_id,json=archiveId,proto3" json:"archive_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFolderArchiveStatusRequest) Reset() {
+	*x = GetFolderArchiveStatusRequest{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFolderArchiveStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFolderArchiveStatusRequest) ProtoMessage() {}
+
+func (x *GetFolderArchiveStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFolderArchiveStatusRequest.ProtoReflect.Descriptor instead.
+func (*GetFolderArchiveStatusRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *GetFolderArchiveStatusRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *GetFolderArchiveStatusRequest) GetWorktreeId() string {
+	if x != nil && x.WorktreeId != nil {
+		return *x.WorktreeId
+	}
+	return ""
+}
+
+func (x *GetFolderArchiveStatusRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
+	}
+	return ""
+}
+
+func (x *GetFolderArchiveStatusRequest) GetArchiveId() string {
+	if x != nil {
+		return x.ArchiveId
+	}
+	return ""
+}
+
+type GetFolderArchiveStatusResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	State FolderArchiveState     `protobuf:"varint,1,opt,name=state,proto3,enum=reliant.v1.FolderArchiveState" json:"state,omitempty"`
+	// Progress: files and bytes of file content zipped so far, of the totals.
+	FilesDone  int64 `protobuf:"varint,2,opt,name=files_done,json=filesDone,proto3" json:"files_done,omitempty"`
+	FilesTotal int64 `protobuf:"varint,3,opt,name=files_total,json=filesTotal,proto3" json:"files_total,omitempty"`
+	BytesDone  int64 `protobuf:"varint,4,opt,name=bytes_done,json=bytesDone,proto3" json:"bytes_done,omitempty"`
+	BytesTotal int64 `protobuf:"varint,5,opt,name=bytes_total,json=bytesTotal,proto3" json:"bytes_total,omitempty"`
+	// The archive's size in bytes, once it is READY.
+	ArchiveSize int64 `protobuf:"varint,6,opt,name=archive_size,json=archiveSize,proto3" json:"archive_size,omitempty"`
+	// Why zipping failed, when FAILED.
+	Error string `protobuf:"bytes,7,opt,name=error,proto3" json:"error,omitempty"`
+	// Entries left out: symlinks that lead outside the workspace or to a
+	// folder, credential stores, and anything that could not be read.
+	Skipped       int64 `protobuf:"varint,8,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetFolderArchiveStatusResponse) Reset() {
+	*x = GetFolderArchiveStatusResponse{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetFolderArchiveStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetFolderArchiveStatusResponse) ProtoMessage() {}
+
+func (x *GetFolderArchiveStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetFolderArchiveStatusResponse.ProtoReflect.Descriptor instead.
+func (*GetFolderArchiveStatusResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *GetFolderArchiveStatusResponse) GetState() FolderArchiveState {
+	if x != nil {
+		return x.State
+	}
+	return FolderArchiveState_FOLDER_ARCHIVE_STATE_UNSPECIFIED
+}
+
+func (x *GetFolderArchiveStatusResponse) GetFilesDone() int64 {
+	if x != nil {
+		return x.FilesDone
+	}
+	return 0
+}
+
+func (x *GetFolderArchiveStatusResponse) GetFilesTotal() int64 {
+	if x != nil {
+		return x.FilesTotal
+	}
+	return 0
+}
+
+func (x *GetFolderArchiveStatusResponse) GetBytesDone() int64 {
+	if x != nil {
+		return x.BytesDone
+	}
+	return 0
+}
+
+func (x *GetFolderArchiveStatusResponse) GetBytesTotal() int64 {
+	if x != nil {
+		return x.BytesTotal
+	}
+	return 0
+}
+
+func (x *GetFolderArchiveStatusResponse) GetArchiveSize() int64 {
+	if x != nil {
+		return x.ArchiveSize
+	}
+	return 0
+}
+
+func (x *GetFolderArchiveStatusResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *GetFolderArchiveStatusResponse) GetSkipped() int64 {
+	if x != nil {
+		return x.Skipped
+	}
+	return 0
+}
+
+type ReleaseFolderArchiveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	WorktreeId    *string                `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	ChatId        *string                `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	ArchiveId     string                 `protobuf:"bytes,4,opt,name=archive_id,json=archiveId,proto3" json:"archive_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseFolderArchiveRequest) Reset() {
+	*x = ReleaseFolderArchiveRequest{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseFolderArchiveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseFolderArchiveRequest) ProtoMessage() {}
+
+func (x *ReleaseFolderArchiveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseFolderArchiveRequest.ProtoReflect.Descriptor instead.
+func (*ReleaseFolderArchiveRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ReleaseFolderArchiveRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ReleaseFolderArchiveRequest) GetWorktreeId() string {
+	if x != nil && x.WorktreeId != nil {
+		return *x.WorktreeId
+	}
+	return ""
+}
+
+func (x *ReleaseFolderArchiveRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
+	}
+	return ""
+}
+
+func (x *ReleaseFolderArchiveRequest) GetArchiveId() string {
+	if x != nil {
+		return x.ArchiveId
+	}
+	return ""
+}
+
+type ReleaseFolderArchiveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReleaseFolderArchiveResponse) Reset() {
+	*x = ReleaseFolderArchiveResponse{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReleaseFolderArchiveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReleaseFolderArchiveResponse) ProtoMessage() {}
+
+func (x *ReleaseFolderArchiveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReleaseFolderArchiveResponse.ProtoReflect.Descriptor instead.
+func (*ReleaseFolderArchiveResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{53}
+}
+
 var File_reliant_v1_filesystem_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_filesystem_proto_rawDesc = "" +
@@ -3808,7 +4492,88 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x1bGetFileUploadStatusResponse\x12\x16\n" +
 	"\x06exists\x18\x01 \x01(\bR\x06exists\x12%\n" +
 	"\x0ebytes_received\x18\x02 \x01(\x03R\rbytesReceived\x12\x12\n" +
-	"\x04size\x18\x03 \x01(\x03R\x04size*e\n" +
+	"\x04size\x18\x03 \x01(\x03R\x04size\"\xbf\x02\n" +
+	"\x14ReadFileRangeRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
+	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
+	"worktreeId\x88\x01\x01\x12\x1c\n" +
+	"\achat_id\x18\x03 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x12\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\x12\"\n" +
+	"\n" +
+	"archive_id\x18\x05 \x01(\tH\x02R\tarchiveId\x88\x01\x01\x12\x16\n" +
+	"\x06offset\x18\x06 \x01(\x03R\x06offset\x12\x16\n" +
+	"\x06length\x18\a \x01(\x05R\x06length\x12\"\n" +
+	"\n" +
+	"if_version\x18\b \x01(\tH\x03R\tifVersion\x88\x01\x01B\x0e\n" +
+	"\f_worktree_idB\n" +
+	"\n" +
+	"\b_chat_idB\r\n" +
+	"\v_archive_idB\r\n" +
+	"\v_if_version\"\xb5\x01\n" +
+	"\x15ReadFileRangeResponse\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1d\n" +
+	"\n" +
+	"total_size\x18\x02 \x01(\x03R\ttotalSize\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12\x1a\n" +
+	"\bfilename\x18\x04 \x01(\tR\bfilename\x12!\n" +
+	"\fcontent_type\x18\x05 \x01(\tR\vcontentType\x12\x10\n" +
+	"\x03eof\x18\x06 \x01(\bR\x03eof\"\xb0\x01\n" +
+	"\x1bPrepareFolderArchiveRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
+	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
+	"worktreeId\x88\x01\x01\x12\x1c\n" +
+	"\achat_id\x18\x03 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x12\n" +
+	"\x04path\x18\x04 \x01(\tR\x04pathB\x0e\n" +
+	"\f_worktree_idB\n" +
+	"\n" +
+	"\b_chat_id\"\xb6\x01\n" +
+	"\x1cPrepareFolderArchiveResponse\x12\x1d\n" +
+	"\n" +
+	"archive_id\x18\x01 \x01(\tR\tarchiveId\x12\x1a\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x1f\n" +
+	"\vtotal_files\x18\x03 \x01(\x03R\n" +
+	"totalFiles\x12\x1f\n" +
+	"\vtotal_bytes\x18\x04 \x01(\x03R\n" +
+	"totalBytes\x12\x19\n" +
+	"\bmax_size\x18\x05 \x01(\x03R\amaxSize\"\xbd\x01\n" +
+	"\x1dGetFolderArchiveStatusRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
+	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
+	"worktreeId\x88\x01\x01\x12\x1c\n" +
+	"\achat_id\x18\x03 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"archive_id\x18\x04 \x01(\tR\tarchiveIdB\x0e\n" +
+	"\f_worktree_idB\n" +
+	"\n" +
+	"\b_chat_id\"\xa9\x02\n" +
+	"\x1eGetFolderArchiveStatusResponse\x124\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x1e.reliant.v1.FolderArchiveStateR\x05state\x12\x1d\n" +
+	"\n" +
+	"files_done\x18\x02 \x01(\x03R\tfilesDone\x12\x1f\n" +
+	"\vfiles_total\x18\x03 \x01(\x03R\n" +
+	"filesTotal\x12\x1d\n" +
+	"\n" +
+	"bytes_done\x18\x04 \x01(\x03R\tbytesDone\x12\x1f\n" +
+	"\vbytes_total\x18\x05 \x01(\x03R\n" +
+	"bytesTotal\x12!\n" +
+	"\farchive_size\x18\x06 \x01(\x03R\varchiveSize\x12\x14\n" +
+	"\x05error\x18\a \x01(\tR\x05error\x12\x18\n" +
+	"\askipped\x18\b \x01(\x03R\askipped\"\xbb\x01\n" +
+	"\x1bReleaseFolderArchiveRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
+	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
+	"worktreeId\x88\x01\x01\x12\x1c\n" +
+	"\achat_id\x18\x03 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"archive_id\x18\x04 \x01(\tR\tarchiveIdB\x0e\n" +
+	"\f_worktree_idB\n" +
+	"\n" +
+	"\b_chat_id\"\x1e\n" +
+	"\x1cReleaseFolderArchiveResponse*e\n" +
 	"\fFileNodeType\x12\x1e\n" +
 	"\x1aFILE_NODE_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13FILE_NODE_TYPE_FILE\x10\x01\x12\x1c\n" +
@@ -3830,7 +4595,12 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\"UPLOAD_CONFLICT_POLICY_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bUPLOAD_CONFLICT_POLICY_FAIL\x10\x01\x12$\n" +
 	" UPLOAD_CONFLICT_POLICY_OVERWRITE\x10\x02\x12!\n" +
-	"\x1dUPLOAD_CONFLICT_POLICY_RENAME\x10\x032\x8d\x15\n" +
+	"\x1dUPLOAD_CONFLICT_POLICY_RENAME\x10\x03*\x9d\x01\n" +
+	"\x12FolderArchiveState\x12$\n" +
+	" FOLDER_ARCHIVE_STATE_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cFOLDER_ARCHIVE_STATE_RUNNING\x10\x01\x12\x1e\n" +
+	"\x1aFOLDER_ARCHIVE_STATE_READY\x10\x02\x12\x1f\n" +
+	"\x1bFOLDER_ARCHIVE_STATE_FAILED\x10\x032\x8c\x1a\n" +
 	"\x11FileSystemService\x12P\n" +
 	"\vGetFileTree\x12\x1e.reliant.v1.GetFileTreeRequest\x1a\x1f.reliant.v1.GetFileTreeResponse\"\x00\x12Y\n" +
 	"\x0eGetFileContent\x12!.reliant.v1.GetFileContentRequest\x1a\".reliant.v1.GetFileContentResponse\"\x00\x12\xbc\x01\n" +
@@ -3850,7 +4620,11 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x0fUploadFileChunk\x12\".reliant.v1.UploadFileChunkRequest\x1a#.reliant.v1.UploadFileChunkResponse\"l\xa2\xbb\x18h:f:dfile upload through the daemon: one piece of a staged file, high-volume and not yet in the workspace\x12\xb0\x01\n" +
 	"\x10CommitFileUpload\x12#.reliant.v1.CommitFileUploadRequest\x1a$.reliant.v1.CommitFileUploadResponse\"Q\xa2\xbb\x18M:K:Ifile upload through the daemon: git records the file once it is committed\x12\xba\x01\n" +
 	"\x0fAbortFileUpload\x12\".reliant.v1.AbortFileUploadRequest\x1a#.reliant.v1.AbortFileUploadResponse\"^\xa2\xbb\x18Z:X:Vfile upload through the daemon: discards staged bytes that never reached the workspace\x12k\n" +
-	"\x13GetFileUploadStatus\x12&.reliant.v1.GetFileUploadStatusRequest\x1a'.reliant.v1.GetFileUploadStatusResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x13GetFileUploadStatus\x12&.reliant.v1.GetFileUploadStatusRequest\x1a'.reliant.v1.GetFileUploadStatusResponse\"\x03\x90\x02\x01\x12Y\n" +
+	"\rReadFileRange\x12 .reliant.v1.ReadFileRangeRequest\x1a!.reliant.v1.ReadFileRangeResponse\"\x03\x90\x02\x01\x12\xd6\x01\n" +
+	"\x14PrepareFolderArchive\x12'.reliant.v1.PrepareFolderArchiveRequest\x1a(.reliant.v1.PrepareFolderArchiveResponse\"k\xa2\xbb\x18g:e:cfolder download through the daemon: a temporary archive outside the workspace, deleted once fetched\x12t\n" +
+	"\x16GetFolderArchiveStatus\x12).reliant.v1.GetFolderArchiveStatusRequest\x1a*.reliant.v1.GetFolderArchiveStatusResponse\"\x03\x90\x02\x01\x12\xd2\x01\n" +
+	"\x14ReleaseFolderArchive\x12'.reliant.v1.ReleaseFolderArchiveRequest\x1a(.reliant.v1.ReleaseFolderArchiveResponse\"g\xa2\xbb\x18c:a:_folder download through the daemon: deletes a temporary archive that was never in the workspaceB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_filesystem_proto_rawDescOnce sync.Once
@@ -3864,119 +4638,137 @@ func file_reliant_v1_filesystem_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_filesystem_proto_rawDescData
 }
 
-var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_reliant_v1_filesystem_proto_msgTypes = make([]protoimpl.MessageInfo, 46)
+var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_reliant_v1_filesystem_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_reliant_v1_filesystem_proto_goTypes = []any{
-	(FileNodeType)(0),                   // 0: reliant.v1.FileNodeType
-	(FileViewerKind)(0),                 // 1: reliant.v1.FileViewerKind
-	(ProjectCheckoutState)(0),           // 2: reliant.v1.ProjectCheckoutState
-	(UploadConflictPolicy)(0),           // 3: reliant.v1.UploadConflictPolicy
-	(*FileNode)(nil),                    // 4: reliant.v1.FileNode
-	(*FileMetadata)(nil),                // 5: reliant.v1.FileMetadata
-	(*FilePreviewInfo)(nil),             // 6: reliant.v1.FilePreviewInfo
-	(*GetFileTreeRequest)(nil),          // 7: reliant.v1.GetFileTreeRequest
-	(*GetFileTreeResponse)(nil),         // 8: reliant.v1.GetFileTreeResponse
-	(*ProjectCheckoutMissing)(nil),      // 9: reliant.v1.ProjectCheckoutMissing
-	(*GetFileContentRequest)(nil),       // 10: reliant.v1.GetFileContentRequest
-	(*GetFileContentResponse)(nil),      // 11: reliant.v1.GetFileContentResponse
-	(*SaveFileContentRequest)(nil),      // 12: reliant.v1.SaveFileContentRequest
-	(*SaveFileContentResponse)(nil),     // 13: reliant.v1.SaveFileContentResponse
-	(*GetFileMetadataRequest)(nil),      // 14: reliant.v1.GetFileMetadataRequest
-	(*GetFileMetadataResponse)(nil),     // 15: reliant.v1.GetFileMetadataResponse
-	(*GetFilePreviewInfoRequest)(nil),   // 16: reliant.v1.GetFilePreviewInfoRequest
-	(*GetFilePreviewInfoResponse)(nil),  // 17: reliant.v1.GetFilePreviewInfoResponse
-	(*CreateFileOrFolderRequest)(nil),   // 18: reliant.v1.CreateFileOrFolderRequest
-	(*CreateFileOrFolderResponse)(nil),  // 19: reliant.v1.CreateFileOrFolderResponse
-	(*DeleteFileOrFolderRequest)(nil),   // 20: reliant.v1.DeleteFileOrFolderRequest
-	(*DeleteFileOrFolderResponse)(nil),  // 21: reliant.v1.DeleteFileOrFolderResponse
-	(*CopyFileRequest)(nil),             // 22: reliant.v1.CopyFileRequest
-	(*CopyFileResponse)(nil),            // 23: reliant.v1.CopyFileResponse
-	(*SearchFilesRequest)(nil),          // 24: reliant.v1.SearchFilesRequest
-	(*SearchFilesResponse)(nil),         // 25: reliant.v1.SearchFilesResponse
-	(*SearchResult)(nil),                // 26: reliant.v1.SearchResult
-	(*SearchMatch)(nil),                 // 27: reliant.v1.SearchMatch
-	(*ReplaceInFilesRequest)(nil),       // 28: reliant.v1.ReplaceInFilesRequest
-	(*ReplaceInFilesResponse)(nil),      // 29: reliant.v1.ReplaceInFilesResponse
-	(*ReplaceResult)(nil),               // 30: reliant.v1.ReplaceResult
-	(*ListDirectoryRequest)(nil),        // 31: reliant.v1.ListDirectoryRequest
-	(*ListDirectoryResponse)(nil),       // 32: reliant.v1.ListDirectoryResponse
-	(*DirectoryEntry)(nil),              // 33: reliant.v1.DirectoryEntry
-	(*CreateDirectoryRequest)(nil),      // 34: reliant.v1.CreateDirectoryRequest
-	(*CreateDirectoryResponse)(nil),     // 35: reliant.v1.CreateDirectoryResponse
-	(*GetFilePreviewRequest)(nil),       // 36: reliant.v1.GetFilePreviewRequest
-	(*GetFilePreviewResponse)(nil),      // 37: reliant.v1.GetFilePreviewResponse
-	(*DownloadFileRequest)(nil),         // 38: reliant.v1.DownloadFileRequest
-	(*DownloadFileResponse)(nil),        // 39: reliant.v1.DownloadFileResponse
-	(*BeginFileUploadRequest)(nil),      // 40: reliant.v1.BeginFileUploadRequest
-	(*BeginFileUploadResponse)(nil),     // 41: reliant.v1.BeginFileUploadResponse
-	(*UploadFileChunkRequest)(nil),      // 42: reliant.v1.UploadFileChunkRequest
-	(*UploadFileChunkResponse)(nil),     // 43: reliant.v1.UploadFileChunkResponse
-	(*CommitFileUploadRequest)(nil),     // 44: reliant.v1.CommitFileUploadRequest
-	(*CommitFileUploadResponse)(nil),    // 45: reliant.v1.CommitFileUploadResponse
-	(*AbortFileUploadRequest)(nil),      // 46: reliant.v1.AbortFileUploadRequest
-	(*AbortFileUploadResponse)(nil),     // 47: reliant.v1.AbortFileUploadResponse
-	(*GetFileUploadStatusRequest)(nil),  // 48: reliant.v1.GetFileUploadStatusRequest
-	(*GetFileUploadStatusResponse)(nil), // 49: reliant.v1.GetFileUploadStatusResponse
+	(FileNodeType)(0),                      // 0: reliant.v1.FileNodeType
+	(FileViewerKind)(0),                    // 1: reliant.v1.FileViewerKind
+	(ProjectCheckoutState)(0),              // 2: reliant.v1.ProjectCheckoutState
+	(UploadConflictPolicy)(0),              // 3: reliant.v1.UploadConflictPolicy
+	(FolderArchiveState)(0),                // 4: reliant.v1.FolderArchiveState
+	(*FileNode)(nil),                       // 5: reliant.v1.FileNode
+	(*FileMetadata)(nil),                   // 6: reliant.v1.FileMetadata
+	(*FilePreviewInfo)(nil),                // 7: reliant.v1.FilePreviewInfo
+	(*GetFileTreeRequest)(nil),             // 8: reliant.v1.GetFileTreeRequest
+	(*GetFileTreeResponse)(nil),            // 9: reliant.v1.GetFileTreeResponse
+	(*ProjectCheckoutMissing)(nil),         // 10: reliant.v1.ProjectCheckoutMissing
+	(*GetFileContentRequest)(nil),          // 11: reliant.v1.GetFileContentRequest
+	(*GetFileContentResponse)(nil),         // 12: reliant.v1.GetFileContentResponse
+	(*SaveFileContentRequest)(nil),         // 13: reliant.v1.SaveFileContentRequest
+	(*SaveFileContentResponse)(nil),        // 14: reliant.v1.SaveFileContentResponse
+	(*GetFileMetadataRequest)(nil),         // 15: reliant.v1.GetFileMetadataRequest
+	(*GetFileMetadataResponse)(nil),        // 16: reliant.v1.GetFileMetadataResponse
+	(*GetFilePreviewInfoRequest)(nil),      // 17: reliant.v1.GetFilePreviewInfoRequest
+	(*GetFilePreviewInfoResponse)(nil),     // 18: reliant.v1.GetFilePreviewInfoResponse
+	(*CreateFileOrFolderRequest)(nil),      // 19: reliant.v1.CreateFileOrFolderRequest
+	(*CreateFileOrFolderResponse)(nil),     // 20: reliant.v1.CreateFileOrFolderResponse
+	(*DeleteFileOrFolderRequest)(nil),      // 21: reliant.v1.DeleteFileOrFolderRequest
+	(*DeleteFileOrFolderResponse)(nil),     // 22: reliant.v1.DeleteFileOrFolderResponse
+	(*CopyFileRequest)(nil),                // 23: reliant.v1.CopyFileRequest
+	(*CopyFileResponse)(nil),               // 24: reliant.v1.CopyFileResponse
+	(*SearchFilesRequest)(nil),             // 25: reliant.v1.SearchFilesRequest
+	(*SearchFilesResponse)(nil),            // 26: reliant.v1.SearchFilesResponse
+	(*SearchResult)(nil),                   // 27: reliant.v1.SearchResult
+	(*SearchMatch)(nil),                    // 28: reliant.v1.SearchMatch
+	(*ReplaceInFilesRequest)(nil),          // 29: reliant.v1.ReplaceInFilesRequest
+	(*ReplaceInFilesResponse)(nil),         // 30: reliant.v1.ReplaceInFilesResponse
+	(*ReplaceResult)(nil),                  // 31: reliant.v1.ReplaceResult
+	(*ListDirectoryRequest)(nil),           // 32: reliant.v1.ListDirectoryRequest
+	(*ListDirectoryResponse)(nil),          // 33: reliant.v1.ListDirectoryResponse
+	(*DirectoryEntry)(nil),                 // 34: reliant.v1.DirectoryEntry
+	(*CreateDirectoryRequest)(nil),         // 35: reliant.v1.CreateDirectoryRequest
+	(*CreateDirectoryResponse)(nil),        // 36: reliant.v1.CreateDirectoryResponse
+	(*GetFilePreviewRequest)(nil),          // 37: reliant.v1.GetFilePreviewRequest
+	(*GetFilePreviewResponse)(nil),         // 38: reliant.v1.GetFilePreviewResponse
+	(*DownloadFileRequest)(nil),            // 39: reliant.v1.DownloadFileRequest
+	(*DownloadFileResponse)(nil),           // 40: reliant.v1.DownloadFileResponse
+	(*BeginFileUploadRequest)(nil),         // 41: reliant.v1.BeginFileUploadRequest
+	(*BeginFileUploadResponse)(nil),        // 42: reliant.v1.BeginFileUploadResponse
+	(*UploadFileChunkRequest)(nil),         // 43: reliant.v1.UploadFileChunkRequest
+	(*UploadFileChunkResponse)(nil),        // 44: reliant.v1.UploadFileChunkResponse
+	(*CommitFileUploadRequest)(nil),        // 45: reliant.v1.CommitFileUploadRequest
+	(*CommitFileUploadResponse)(nil),       // 46: reliant.v1.CommitFileUploadResponse
+	(*AbortFileUploadRequest)(nil),         // 47: reliant.v1.AbortFileUploadRequest
+	(*AbortFileUploadResponse)(nil),        // 48: reliant.v1.AbortFileUploadResponse
+	(*GetFileUploadStatusRequest)(nil),     // 49: reliant.v1.GetFileUploadStatusRequest
+	(*GetFileUploadStatusResponse)(nil),    // 50: reliant.v1.GetFileUploadStatusResponse
+	(*ReadFileRangeRequest)(nil),           // 51: reliant.v1.ReadFileRangeRequest
+	(*ReadFileRangeResponse)(nil),          // 52: reliant.v1.ReadFileRangeResponse
+	(*PrepareFolderArchiveRequest)(nil),    // 53: reliant.v1.PrepareFolderArchiveRequest
+	(*PrepareFolderArchiveResponse)(nil),   // 54: reliant.v1.PrepareFolderArchiveResponse
+	(*GetFolderArchiveStatusRequest)(nil),  // 55: reliant.v1.GetFolderArchiveStatusRequest
+	(*GetFolderArchiveStatusResponse)(nil), // 56: reliant.v1.GetFolderArchiveStatusResponse
+	(*ReleaseFolderArchiveRequest)(nil),    // 57: reliant.v1.ReleaseFolderArchiveRequest
+	(*ReleaseFolderArchiveResponse)(nil),   // 58: reliant.v1.ReleaseFolderArchiveResponse
 }
 var file_reliant_v1_filesystem_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.FileNode.type:type_name -> reliant.v1.FileNodeType
-	4,  // 1: reliant.v1.FileNode.children:type_name -> reliant.v1.FileNode
+	5,  // 1: reliant.v1.FileNode.children:type_name -> reliant.v1.FileNode
 	0,  // 2: reliant.v1.FileMetadata.type:type_name -> reliant.v1.FileNodeType
 	1,  // 3: reliant.v1.FilePreviewInfo.viewer_kind:type_name -> reliant.v1.FileViewerKind
-	4,  // 4: reliant.v1.GetFileTreeResponse.files:type_name -> reliant.v1.FileNode
+	5,  // 4: reliant.v1.GetFileTreeResponse.files:type_name -> reliant.v1.FileNode
 	2,  // 5: reliant.v1.ProjectCheckoutMissing.state:type_name -> reliant.v1.ProjectCheckoutState
-	5,  // 6: reliant.v1.GetFileMetadataResponse.metadata:type_name -> reliant.v1.FileMetadata
-	6,  // 7: reliant.v1.GetFilePreviewInfoResponse.info:type_name -> reliant.v1.FilePreviewInfo
+	6,  // 6: reliant.v1.GetFileMetadataResponse.metadata:type_name -> reliant.v1.FileMetadata
+	7,  // 7: reliant.v1.GetFilePreviewInfoResponse.info:type_name -> reliant.v1.FilePreviewInfo
 	0,  // 8: reliant.v1.CreateFileOrFolderRequest.type:type_name -> reliant.v1.FileNodeType
-	26, // 9: reliant.v1.SearchFilesResponse.results:type_name -> reliant.v1.SearchResult
-	27, // 10: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
-	30, // 11: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
-	33, // 12: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
+	27, // 9: reliant.v1.SearchFilesResponse.results:type_name -> reliant.v1.SearchResult
+	28, // 10: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
+	31, // 11: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
+	34, // 12: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
 	3,  // 13: reliant.v1.BeginFileUploadRequest.on_conflict:type_name -> reliant.v1.UploadConflictPolicy
 	3,  // 14: reliant.v1.CommitFileUploadRequest.on_conflict:type_name -> reliant.v1.UploadConflictPolicy
-	7,  // 15: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
-	10, // 16: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
-	12, // 17: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
-	14, // 18: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
-	16, // 19: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
-	36, // 20: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
-	18, // 21: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
-	20, // 22: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
-	22, // 23: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
-	24, // 24: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
-	28, // 25: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
-	31, // 26: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
-	34, // 27: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
-	38, // 28: reliant.v1.FileSystemService.DownloadFile:input_type -> reliant.v1.DownloadFileRequest
-	40, // 29: reliant.v1.FileSystemService.BeginFileUpload:input_type -> reliant.v1.BeginFileUploadRequest
-	42, // 30: reliant.v1.FileSystemService.UploadFileChunk:input_type -> reliant.v1.UploadFileChunkRequest
-	44, // 31: reliant.v1.FileSystemService.CommitFileUpload:input_type -> reliant.v1.CommitFileUploadRequest
-	46, // 32: reliant.v1.FileSystemService.AbortFileUpload:input_type -> reliant.v1.AbortFileUploadRequest
-	48, // 33: reliant.v1.FileSystemService.GetFileUploadStatus:input_type -> reliant.v1.GetFileUploadStatusRequest
-	8,  // 34: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
-	11, // 35: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
-	13, // 36: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
-	15, // 37: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
-	17, // 38: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
-	37, // 39: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
-	19, // 40: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
-	21, // 41: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
-	23, // 42: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
-	25, // 43: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
-	29, // 44: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
-	32, // 45: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
-	35, // 46: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
-	39, // 47: reliant.v1.FileSystemService.DownloadFile:output_type -> reliant.v1.DownloadFileResponse
-	41, // 48: reliant.v1.FileSystemService.BeginFileUpload:output_type -> reliant.v1.BeginFileUploadResponse
-	43, // 49: reliant.v1.FileSystemService.UploadFileChunk:output_type -> reliant.v1.UploadFileChunkResponse
-	45, // 50: reliant.v1.FileSystemService.CommitFileUpload:output_type -> reliant.v1.CommitFileUploadResponse
-	47, // 51: reliant.v1.FileSystemService.AbortFileUpload:output_type -> reliant.v1.AbortFileUploadResponse
-	49, // 52: reliant.v1.FileSystemService.GetFileUploadStatus:output_type -> reliant.v1.GetFileUploadStatusResponse
-	34, // [34:53] is the sub-list for method output_type
-	15, // [15:34] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	4,  // 15: reliant.v1.GetFolderArchiveStatusResponse.state:type_name -> reliant.v1.FolderArchiveState
+	8,  // 16: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
+	11, // 17: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
+	13, // 18: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
+	15, // 19: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
+	17, // 20: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
+	37, // 21: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
+	19, // 22: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
+	21, // 23: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
+	23, // 24: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
+	25, // 25: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
+	29, // 26: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
+	32, // 27: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
+	35, // 28: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
+	39, // 29: reliant.v1.FileSystemService.DownloadFile:input_type -> reliant.v1.DownloadFileRequest
+	41, // 30: reliant.v1.FileSystemService.BeginFileUpload:input_type -> reliant.v1.BeginFileUploadRequest
+	43, // 31: reliant.v1.FileSystemService.UploadFileChunk:input_type -> reliant.v1.UploadFileChunkRequest
+	45, // 32: reliant.v1.FileSystemService.CommitFileUpload:input_type -> reliant.v1.CommitFileUploadRequest
+	47, // 33: reliant.v1.FileSystemService.AbortFileUpload:input_type -> reliant.v1.AbortFileUploadRequest
+	49, // 34: reliant.v1.FileSystemService.GetFileUploadStatus:input_type -> reliant.v1.GetFileUploadStatusRequest
+	51, // 35: reliant.v1.FileSystemService.ReadFileRange:input_type -> reliant.v1.ReadFileRangeRequest
+	53, // 36: reliant.v1.FileSystemService.PrepareFolderArchive:input_type -> reliant.v1.PrepareFolderArchiveRequest
+	55, // 37: reliant.v1.FileSystemService.GetFolderArchiveStatus:input_type -> reliant.v1.GetFolderArchiveStatusRequest
+	57, // 38: reliant.v1.FileSystemService.ReleaseFolderArchive:input_type -> reliant.v1.ReleaseFolderArchiveRequest
+	9,  // 39: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
+	12, // 40: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
+	14, // 41: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
+	16, // 42: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
+	18, // 43: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
+	38, // 44: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
+	20, // 45: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
+	22, // 46: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
+	24, // 47: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
+	26, // 48: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
+	30, // 49: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
+	33, // 50: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
+	36, // 51: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
+	40, // 52: reliant.v1.FileSystemService.DownloadFile:output_type -> reliant.v1.DownloadFileResponse
+	42, // 53: reliant.v1.FileSystemService.BeginFileUpload:output_type -> reliant.v1.BeginFileUploadResponse
+	44, // 54: reliant.v1.FileSystemService.UploadFileChunk:output_type -> reliant.v1.UploadFileChunkResponse
+	46, // 55: reliant.v1.FileSystemService.CommitFileUpload:output_type -> reliant.v1.CommitFileUploadResponse
+	48, // 56: reliant.v1.FileSystemService.AbortFileUpload:output_type -> reliant.v1.AbortFileUploadResponse
+	50, // 57: reliant.v1.FileSystemService.GetFileUploadStatus:output_type -> reliant.v1.GetFileUploadStatusResponse
+	52, // 58: reliant.v1.FileSystemService.ReadFileRange:output_type -> reliant.v1.ReadFileRangeResponse
+	54, // 59: reliant.v1.FileSystemService.PrepareFolderArchive:output_type -> reliant.v1.PrepareFolderArchiveResponse
+	56, // 60: reliant.v1.FileSystemService.GetFolderArchiveStatus:output_type -> reliant.v1.GetFolderArchiveStatusResponse
+	58, // 61: reliant.v1.FileSystemService.ReleaseFolderArchive:output_type -> reliant.v1.ReleaseFolderArchiveResponse
+	39, // [39:62] is the sub-list for method output_type
+	16, // [16:39] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_filesystem_proto_init() }
@@ -4007,13 +4799,17 @@ func file_reliant_v1_filesystem_proto_init() {
 	file_reliant_v1_filesystem_proto_msgTypes[40].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[42].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[44].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[46].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[48].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[50].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[52].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_filesystem_proto_rawDesc), len(file_reliant_v1_filesystem_proto_rawDesc)),
-			NumEnums:      4,
-			NumMessages:   46,
+			NumEnums:      5,
+			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

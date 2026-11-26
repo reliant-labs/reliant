@@ -36,6 +36,7 @@ import { connectClient } from "../lib/connect";
 import { notifyFilesRewritten } from "../lib/fileRewrites";
 import { queryClient as appQueryClient } from "../lib/query-client";
 import { useProjectStore } from "../store/projectStore";
+import { useChatStore } from "../store/chatStore";
 import { triggerGitStatusRefresh } from "../store/gitStatusStore";
 
 const client = connectClient(FileSystemService);
@@ -264,10 +265,16 @@ export async function captureFileScope(worktreeId?: string): Promise<{
   worktreeId?: string;
   chatId?: string;
 }> {
-  return { projectId: requireProjectId(), worktreeId, chatId: await activeChatIdForAPI() };
+  // Snapshot synchronously, before a picker or directory walk can change the UI.
+  return { projectId: requireProjectId(), worktreeId, chatId: useChatStore.getState().activeChatId ?? undefined };
 }
 
-async function normalizeFilePathForAPI(path: string, worktreeId?: string): Promise<string> {
+/**
+ * The path a request names: a workspace file's path relative to the
+ * workspace (an absolute path inside the given workspace is made relative),
+ * anything else as it is.
+ */
+export async function normalizeFilePathForAPI(path: string, worktreeId?: string): Promise<string> {
   if (!worktreeId) {
     return path;
   }
@@ -485,16 +492,19 @@ export async function createFile(path: string, content: string = "", worktreeId?
  * @param worktreeId - Optional worktree ID to scope the folder creation
  * @returns Promise that resolves when folder is created
  */
-export async function createFolder(path: string, worktreeId?: string): Promise<void> {
+export async function createFolder(
+  path: string,
+  worktreeId?: string,
+  capturedScope?: Awaited<ReturnType<typeof captureFileScope>>,
+): Promise<void> {
   try {
-    const projectId = requireProjectId();
+    const scope = capturedScope ?? await captureFileScope(worktreeId);
+    const { projectId } = scope;
     await client.createFileOrFolder({
-      projectId,
+      ...scope,
       path,
       type: FileNodeType.DIRECTORY,
       content: "",
-      worktreeId,
-      chatId: await activeChatIdForAPI(),
     });
     // Trigger git status refresh after folder creation
     triggerGitStatusRefresh(worktreeId, projectId);

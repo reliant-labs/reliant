@@ -61,6 +61,15 @@ export const ERROR_REASONS = [
   "approval_not_pending",
   /** The operator turned the forge rpc surface off (internal/grpc/forge_api_disabled.go). */
   "forge_api_disabled",
+  // ── reliant: Files tab downloads (handlers/file_system; api/fileDownload.ts) ──
+  /** DownloadFile of a file over its one-response cap, 25 MB (FailedPrecondition). */
+  "file_too_large_to_download",
+  /** ReadFileRange or PrepareFolderArchive on a machine whose Reliant predates them (FailedPrecondition). */
+  "ranged_download_unsupported",
+  /** ReadFileRange: the file changed between two pieces of one download (FailedPrecondition). */
+  "file_changed_during_download",
+  /** PrepareFolderArchive: the folder holds more than the server's cap, 2 GiB by default (FailedPrecondition). */
+  "folder_too_large_to_download",
   // ── reliant: client version floor (internal/errreason.UpgradeRequired) ──
   /** This app is older than the minimum the server serves; it must reload or update. FailedPrecondition. */
   "upgrade_required",
