@@ -239,6 +239,7 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 	}
 	g.Web = BuildWebGraph(append(append([]string{}, tracked...), untracked...), diskReader(root))
 	g.ElectronText = electronTexts(root)
+	g.ForgePin = planForgePin(ctx, root, base, changes, len(whatIf) > 0, g, goModDownload)
 	pl := ClassifyReachCap(changes, g, reachMode, reachCap)
 	pl.Base, pl.Head = base, head
 	if pl.ForgeGen.HooksOnly {
