@@ -196,8 +196,17 @@ const legacyOwnMoveWindow = time.Second
 // the 43 such rows on one machine that still had a quarantine root matched
 // this exactly (30-300ms apart). Any later change at the workspace root
 // moves its mtime past the quarantine root's, and counts again.
+//
+// A row with a move stamp is never legacy: its last move was recorded, and
+// the stamp alone decides (workspaceMtimeIsOwn). The window must not apply
+// to it, because a change at the workspace root that lands in the same
+// filesystem timestamp tick as a recorded rollback's last quarantine-root
+// change reads as a gap of 0, and would be forgiven as the rollback itself.
 func (r *Reclaimer) legacyOwnMove(w Worktree) bool {
 	if r.Root == "" || w.ID == "" || w.Path == "" {
+		return false
+	}
+	if _, err := os.Lstat(r.ownMovePath(w.ID)); err == nil {
 		return false
 	}
 	q := r.quarantineRoot(w.ID)
