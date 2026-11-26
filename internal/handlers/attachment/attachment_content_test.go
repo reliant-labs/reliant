@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,12 +18,18 @@ import (
 
 func newContentHandler(t *testing.T, userID string) (http.Handler, []byte) {
 	t.Helper()
+	// An ISO BMFF ftyp box, so the bytes sniff as video/mp4.
 	body := make([]byte, 1000)
-	for i := range body {
+	ftyp := []byte("\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isommp41")
+	copy(body, ftyp)
+	for i := len(ftyp); i < len(body); i++ {
 		body[i] = byte(i % 251)
 	}
 	atts := map[string]*core.Attachment{
 		"vid-1": {ID: "vid-1", UserID: "owner", Filename: "generated-1.mp4", MimeType: "video/mp4", Content: body, UpdatedAt: time.Unix(1700000000, 0)},
+	}
+	for id, att := range contentFixtures {
+		atts[id] = att
 	}
 	// Only GetAttachment is programmed: the content handler reads, never writes.
 	repo := &MockContentReader{GetAttachmentFunc: func(_ context.Context, id string) (*core.Attachment, error) {
@@ -82,4 +89,104 @@ func TestAttachmentContent_AuthAndOwnership(t *testing.T) {
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/attachments/vid-1/content", nil))
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
+}
+
+// pngHeader is enough of a PNG for the bytes to sniff as image/png.
+const pngHeader = "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00"
+
+const htmlPayload = "<!DOCTYPE html><html><body><script>alert(document.domain)</script></body></html>"
+
+// contentFixtures are attachments whose stored type, filename and bytes
+// disagree in the ways an upload can make them disagree.
+var contentFixtures = map[string]*core.Attachment{
+	"html-1": {ID: "html-1", UserID: "owner", Filename: "page.html", MimeType: "text/html", Content: []byte(htmlPayload)},
+	"svg-1": {ID: "svg-1", UserID: "owner", Filename: "logo.svg", MimeType: "image/svg+xml",
+		Content: []byte(`<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" onload="alert(document.domain)"><script>alert(1)</script></svg>`)},
+	"png-1": {ID: "png-1", UserID: "owner", Filename: "cat.png", MimeType: "image/png", Content: []byte(pngHeader + "rest-of-image")},
+	// Claimed image/png and named .png; the bytes are HTML.
+	"fake-png-1": {ID: "fake-png-1", UserID: "owner", Filename: "cat.png", MimeType: "image/png", Content: []byte(htmlPayload)},
+	// Claimed text/plain; the bytes are a PDF.
+	"pdf-1":  {ID: "pdf-1", UserID: "owner", Filename: "résumé.pdf", MimeType: "text/plain", Content: []byte("%PDF-1.4\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<<>>\nendobj\n")},
+	"crlf-1": {ID: "crlf-1", UserID: "owner", Filename: "a\r\nX-Injected: 1/../b.html", MimeType: "text/html", Content: []byte(htmlPayload)},
+}
+
+func getContent(t *testing.T, h http.Handler, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/api/attachments/"+id+"/content", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	return rec
+}
+
+// assertLockedDown checks the headers every response carries, inline or not.
+func assertLockedDown(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	assert.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+	assert.Equal(t, "sandbox; default-src 'none'", rec.Header().Get("Content-Security-Policy"))
+}
+
+func TestAttachmentContent_HTMLUploadIsADownload(t *testing.T) {
+	h, _ := newContentHandler(t, "owner")
+	rec := getContent(t, h, "html-1")
+	assert.Equal(t, `attachment; filename=page.html`, rec.Header().Get("Content-Disposition"))
+	assert.Equal(t, "application/octet-stream", rec.Header().Get("Content-Type"), "never text/html: the browser must not render it")
+	assertLockedDown(t, rec)
+	assert.Equal(t, htmlPayload, rec.Body.String(), "the bytes are still downloadable, unchanged")
+}
+
+func TestAttachmentContent_SVGUploadIsADownload(t *testing.T) {
+	h, _ := newContentHandler(t, "owner")
+	rec := getContent(t, h, "svg-1")
+	assert.Equal(t, `attachment; filename=logo.svg`, rec.Header().Get("Content-Disposition"))
+	assert.Equal(t, "application/octet-stream", rec.Header().Get("Content-Type"), "never image/svg+xml: SVG runs script")
+	assertLockedDown(t, rec)
+}
+
+func TestAttachmentContent_ImageIsInlineUnderItsSniffedType(t *testing.T) {
+	h, _ := newContentHandler(t, "owner")
+	rec := getContent(t, h, "png-1")
+	assert.Equal(t, `inline; filename=cat.png`, rec.Header().Get("Content-Disposition"))
+	assert.Equal(t, "image/png", rec.Header().Get("Content-Type"))
+	assertLockedDown(t, rec)
+
+	// Video stays inline too, so <video> streaming keeps working.
+	rec = getContent(t, h, "vid-1")
+	assert.Equal(t, "video/mp4", rec.Header().Get("Content-Type"))
+	assert.Equal(t, `inline; filename=generated-1.mp4`, rec.Header().Get("Content-Disposition"))
+	assertLockedDown(t, rec)
+}
+
+func TestAttachmentContent_MislabelledHTMLIsADownload(t *testing.T) {
+	h, _ := newContentHandler(t, "owner")
+	rec := getContent(t, h, "fake-png-1")
+	assert.Equal(t, `attachment; filename=cat.png`, rec.Header().Get("Content-Disposition"),
+		"the claimed image/png and the .png name decide nothing; the bytes are HTML")
+	assert.Equal(t, "application/octet-stream", rec.Header().Get("Content-Type"))
+	assertLockedDown(t, rec)
+}
+
+func TestAttachmentContent_TypeComesFromTheBytes(t *testing.T) {
+	h, _ := newContentHandler(t, "owner")
+	rec := getContent(t, h, "pdf-1")
+	assert.Equal(t, "application/pdf", rec.Header().Get("Content-Type"), "stored as text/plain, served as what it is")
+	assert.Equal(t, `inline; filename*=utf-8''r%C3%A9sum%C3%A9.pdf`, rec.Header().Get("Content-Disposition"))
+	assertLockedDown(t, rec)
+
+	// HEAD answers the same headers as GET.
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/api/attachments/fake-png-1/content", nil))
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, "application/octet-stream", rec.Header().Get("Content-Type"))
+	assert.Contains(t, rec.Header().Get("Content-Disposition"), "attachment")
+}
+
+func TestAttachmentContent_FilenameCannotInjectHeaders(t *testing.T) {
+	h, _ := newContentHandler(t, "owner")
+	rec := getContent(t, h, "crlf-1")
+	cd := rec.Header().Get("Content-Disposition")
+	assert.True(t, strings.HasPrefix(cd, "attachment"), cd)
+	assert.NotContains(t, cd, "\r")
+	assert.NotContains(t, cd, "\n")
+	assert.NotContains(t, cd, "/")
+	assert.Empty(t, rec.Header().Get("X-Injected"))
 }
