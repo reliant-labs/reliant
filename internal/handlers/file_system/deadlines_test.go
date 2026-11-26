@@ -68,6 +68,7 @@ func TestFileSystemRPCDeadlinesOutliveTheirDaemonCommands(t *testing.T) {
 	}
 	assert.Greater(t, deadlines[reliantv1connect.FileSystemServiceSearchFilesProcedure], ms(fsScanTimeoutMs))
 	assert.Greater(t, deadlines[reliantv1connect.FileSystemServiceGetFileTreeProcedure], ms(fsCommandTimeoutMs))
+	assert.Greater(t, deadlines[reliantv1connect.FileSystemServiceListMachineDirectoryProcedure], ms(machineListTimeoutMs))
 	assert.LessOrEqual(t, ms(pickerTimeoutMs)+fsRPCHeadroom, interceptorDefault,
 		"the picker's rpcs are listed as fitting the default")
 }

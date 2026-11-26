@@ -121,6 +121,7 @@ var Matrix = map[string]Viewer{
 	"reliant.v1.FileSystemService/GetFilePreview":              AsOutsider,
 	"reliant.v1.FileSystemService/GetFilePreviewInfo":          AsOutsider,
 	"reliant.v1.FileSystemService/GetFileTree":                 AsOutsider,
+	"reliant.v1.FileSystemService/ListMachineDirectory":        AsOutsider,
 	"reliant.v1.FileSystemService/ReplaceInFiles":              AsOutsider,
 	"reliant.v1.FileSystemService/SaveFileContent":             AsOutsider,
 	"reliant.v1.FileSystemService/SearchFiles":                 AsOutsider,

@@ -2702,6 +2702,251 @@ func (x *DownloadFileResponse) GetSize() int64 {
 	return 0
 }
 
+type ListMachineDirectoryRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The workspace whose machine to browse, as on every other rpc of this
+	// service: the project, and the worktree or chat that places it.
+	ProjectId  string  `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	WorktreeId *string `protobuf:"bytes,2,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`
+	ChatId     *string `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
+	// The directory to list: absolute; "~" or "~/..." for the machine's home
+	// directory; relative to the workspace root (".." is the folder the
+	// workspace is in); empty for the home directory.
+	Path          string `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMachineDirectoryRequest) Reset() {
+	*x = ListMachineDirectoryRequest{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMachineDirectoryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMachineDirectoryRequest) ProtoMessage() {}
+
+func (x *ListMachineDirectoryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMachineDirectoryRequest.ProtoReflect.Descriptor instead.
+func (*ListMachineDirectoryRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *ListMachineDirectoryRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ListMachineDirectoryRequest) GetWorktreeId() string {
+	if x != nil && x.WorktreeId != nil {
+		return *x.WorktreeId
+	}
+	return ""
+}
+
+func (x *ListMachineDirectoryRequest) GetChatId() string {
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
+	}
+	return ""
+}
+
+func (x *ListMachineDirectoryRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+type ListMachineDirectoryResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The directory listed: absolute and cleaned, symlinks not resolved.
+	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	// Its entries in name order. Hidden entries are included; the client
+	// filters them.
+	Entries []*MachineDirectoryEntry `protobuf:"bytes,2,rep,name=entries,proto3" json:"entries,omitempty"`
+	// The machine's home directory, absolute.
+	HomeDir string `protobuf:"bytes,3,opt,name=home_dir,json=homeDir,proto3" json:"home_dir,omitempty"`
+	// The request's workspace root on that machine, absolute: where the
+	// project or worktree tree is, for a client mapping an absolute path back
+	// into it.
+	WorkspaceRoot string `protobuf:"bytes,4,opt,name=workspace_root,json=workspaceRoot,proto3" json:"workspace_root,omitempty"`
+	// True when the directory has more entries than one listing returns
+	// (5000); entries is then the first of them.
+	Truncated     bool `protobuf:"varint,5,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListMachineDirectoryResponse) Reset() {
+	*x = ListMachineDirectoryResponse{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListMachineDirectoryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListMachineDirectoryResponse) ProtoMessage() {}
+
+func (x *ListMachineDirectoryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListMachineDirectoryResponse.ProtoReflect.Descriptor instead.
+func (*ListMachineDirectoryResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *ListMachineDirectoryResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ListMachineDirectoryResponse) GetEntries() []*MachineDirectoryEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *ListMachineDirectoryResponse) GetHomeDir() string {
+	if x != nil {
+		return x.HomeDir
+	}
+	return ""
+}
+
+func (x *ListMachineDirectoryResponse) GetWorkspaceRoot() string {
+	if x != nil {
+		return x.WorkspaceRoot
+	}
+	return ""
+}
+
+func (x *ListMachineDirectoryResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+type MachineDirectoryEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Absolute path on the machine.
+	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// A directory, or a symlink to one.
+	IsDirectory bool  `protobuf:"varint,3,opt,name=is_directory,json=isDirectory,proto3" json:"is_directory,omitempty"`
+	IsSymlink   bool  `protobuf:"varint,4,opt,name=is_symlink,json=isSymlink,proto3" json:"is_symlink,omitempty"`
+	Size        int64 `protobuf:"varint,5,opt,name=size,proto3" json:"size,omitempty"`
+	// RFC 3339; empty when the entry could not be stat'ed (a dangling symlink).
+	Modified      string `protobuf:"bytes,6,opt,name=modified,proto3" json:"modified,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MachineDirectoryEntry) Reset() {
+	*x = MachineDirectoryEntry{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MachineDirectoryEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MachineDirectoryEntry) ProtoMessage() {}
+
+func (x *MachineDirectoryEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MachineDirectoryEntry.ProtoReflect.Descriptor instead.
+func (*MachineDirectoryEntry) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *MachineDirectoryEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MachineDirectoryEntry) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *MachineDirectoryEntry) GetIsDirectory() bool {
+	if x != nil {
+		return x.IsDirectory
+	}
+	return false
+}
+
+func (x *MachineDirectoryEntry) GetIsSymlink() bool {
+	if x != nil {
+		return x.IsSymlink
+	}
+	return false
+}
+
+func (x *MachineDirectoryEntry) GetSize() int64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *MachineDirectoryEntry) GetModified() string {
+	if x != nil {
+		return x.Modified
+	}
+	return ""
+}
+
 var File_reliant_v1_filesystem_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_filesystem_proto_rawDesc = "" +
@@ -2979,7 +3224,31 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x1a\n" +
 	"\bfilename\x18\x03 \x01(\tR\bfilename\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04size*e\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\"\xb0\x01\n" +
+	"\x1bListMachineDirectoryRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
+	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
+	"worktreeId\x88\x01\x01\x12\x1c\n" +
+	"\achat_id\x18\x03 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x12\n" +
+	"\x04path\x18\x04 \x01(\tR\x04pathB\x0e\n" +
+	"\f_worktree_idB\n" +
+	"\n" +
+	"\b_chat_id\"\xcf\x01\n" +
+	"\x1cListMachineDirectoryResponse\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12;\n" +
+	"\aentries\x18\x02 \x03(\v2!.reliant.v1.MachineDirectoryEntryR\aentries\x12\x19\n" +
+	"\bhome_dir\x18\x03 \x01(\tR\ahomeDir\x12%\n" +
+	"\x0eworkspace_root\x18\x04 \x01(\tR\rworkspaceRoot\x12\x1c\n" +
+	"\ttruncated\x18\x05 \x01(\bR\ttruncated\"\xb1\x01\n" +
+	"\x15MachineDirectoryEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12!\n" +
+	"\fis_directory\x18\x03 \x01(\bR\visDirectory\x12\x1d\n" +
+	"\n" +
+	"is_symlink\x18\x04 \x01(\bR\tisSymlink\x12\x12\n" +
+	"\x04size\x18\x05 \x01(\x03R\x04size\x12\x1a\n" +
+	"\bmodified\x18\x06 \x01(\tR\bmodified*e\n" +
 	"\fFileNodeType\x12\x1e\n" +
 	"\x1aFILE_NODE_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13FILE_NODE_TYPE_FILE\x10\x01\x12\x1c\n" +
@@ -2996,7 +3265,7 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\"PROJECT_CHECKOUT_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1ePROJECT_CHECKOUT_STATE_CLONING\x10\x01\x12'\n" +
 	"#PROJECT_CHECKOUT_STATE_CLONE_FAILED\x10\x02\x12!\n" +
-	"\x1dPROJECT_CHECKOUT_STATE_ABSENT\x10\x032\xb5\x0e\n" +
+	"\x1dPROJECT_CHECKOUT_STATE_ABSENT\x10\x032\xa5\x0f\n" +
 	"\x11FileSystemService\x12P\n" +
 	"\vGetFileTree\x12\x1e.reliant.v1.GetFileTreeRequest\x1a\x1f.reliant.v1.GetFileTreeResponse\"\x00\x12Y\n" +
 	"\x0eGetFileContent\x12!.reliant.v1.GetFileContentRequest\x1a\".reliant.v1.GetFileContentResponse\"\x00\x12\xbc\x01\n" +
@@ -3011,7 +3280,8 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x0eReplaceInFiles\x12!.reliant.v1.ReplaceInFilesRequest\x1a\".reliant.v1.ReplaceInFilesResponse\"]\xa2\xbb\x18Y:W:Ubulk file edit through the daemon: git records each changed file once it is committed\x12V\n" +
 	"\rListDirectory\x12 .reliant.v1.ListDirectoryRequest\x1a!.reliant.v1.ListDirectoryResponse\"\x00\x12\xbc\x01\n" +
 	"\x0fCreateDirectory\x12\".reliant.v1.CreateDirectoryRequest\x1a#.reliant.v1.CreateDirectoryResponse\"`\xa2\xbb\x18\\:Z:Xfilesystem edit through the daemon: an empty directory is not even something git records\x12V\n" +
-	"\fDownloadFile\x12\x1f.reliant.v1.DownloadFileRequest\x1a .reliant.v1.DownloadFileResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\fDownloadFile\x12\x1f.reliant.v1.DownloadFileRequest\x1a .reliant.v1.DownloadFileResponse\"\x03\x90\x02\x01\x12n\n" +
+	"\x14ListMachineDirectory\x12'.reliant.v1.ListMachineDirectoryRequest\x1a(.reliant.v1.ListMachineDirectoryResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_filesystem_proto_rawDescOnce sync.Once
@@ -3026,47 +3296,50 @@ func file_reliant_v1_filesystem_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_reliant_v1_filesystem_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
+var file_reliant_v1_filesystem_proto_msgTypes = make([]protoimpl.MessageInfo, 39)
 var file_reliant_v1_filesystem_proto_goTypes = []any{
-	(FileNodeType)(0),                  // 0: reliant.v1.FileNodeType
-	(FileViewerKind)(0),                // 1: reliant.v1.FileViewerKind
-	(ProjectCheckoutState)(0),          // 2: reliant.v1.ProjectCheckoutState
-	(*FileNode)(nil),                   // 3: reliant.v1.FileNode
-	(*FileMetadata)(nil),               // 4: reliant.v1.FileMetadata
-	(*FilePreviewInfo)(nil),            // 5: reliant.v1.FilePreviewInfo
-	(*GetFileTreeRequest)(nil),         // 6: reliant.v1.GetFileTreeRequest
-	(*GetFileTreeResponse)(nil),        // 7: reliant.v1.GetFileTreeResponse
-	(*ProjectCheckoutMissing)(nil),     // 8: reliant.v1.ProjectCheckoutMissing
-	(*GetFileContentRequest)(nil),      // 9: reliant.v1.GetFileContentRequest
-	(*GetFileContentResponse)(nil),     // 10: reliant.v1.GetFileContentResponse
-	(*SaveFileContentRequest)(nil),     // 11: reliant.v1.SaveFileContentRequest
-	(*SaveFileContentResponse)(nil),    // 12: reliant.v1.SaveFileContentResponse
-	(*GetFileMetadataRequest)(nil),     // 13: reliant.v1.GetFileMetadataRequest
-	(*GetFileMetadataResponse)(nil),    // 14: reliant.v1.GetFileMetadataResponse
-	(*GetFilePreviewInfoRequest)(nil),  // 15: reliant.v1.GetFilePreviewInfoRequest
-	(*GetFilePreviewInfoResponse)(nil), // 16: reliant.v1.GetFilePreviewInfoResponse
-	(*CreateFileOrFolderRequest)(nil),  // 17: reliant.v1.CreateFileOrFolderRequest
-	(*CreateFileOrFolderResponse)(nil), // 18: reliant.v1.CreateFileOrFolderResponse
-	(*DeleteFileOrFolderRequest)(nil),  // 19: reliant.v1.DeleteFileOrFolderRequest
-	(*DeleteFileOrFolderResponse)(nil), // 20: reliant.v1.DeleteFileOrFolderResponse
-	(*CopyFileRequest)(nil),            // 21: reliant.v1.CopyFileRequest
-	(*CopyFileResponse)(nil),           // 22: reliant.v1.CopyFileResponse
-	(*SearchFilesRequest)(nil),         // 23: reliant.v1.SearchFilesRequest
-	(*SearchFilesResponse)(nil),        // 24: reliant.v1.SearchFilesResponse
-	(*SearchResult)(nil),               // 25: reliant.v1.SearchResult
-	(*SearchMatch)(nil),                // 26: reliant.v1.SearchMatch
-	(*ReplaceInFilesRequest)(nil),      // 27: reliant.v1.ReplaceInFilesRequest
-	(*ReplaceInFilesResponse)(nil),     // 28: reliant.v1.ReplaceInFilesResponse
-	(*ReplaceResult)(nil),              // 29: reliant.v1.ReplaceResult
-	(*ListDirectoryRequest)(nil),       // 30: reliant.v1.ListDirectoryRequest
-	(*ListDirectoryResponse)(nil),      // 31: reliant.v1.ListDirectoryResponse
-	(*DirectoryEntry)(nil),             // 32: reliant.v1.DirectoryEntry
-	(*CreateDirectoryRequest)(nil),     // 33: reliant.v1.CreateDirectoryRequest
-	(*CreateDirectoryResponse)(nil),    // 34: reliant.v1.CreateDirectoryResponse
-	(*GetFilePreviewRequest)(nil),      // 35: reliant.v1.GetFilePreviewRequest
-	(*GetFilePreviewResponse)(nil),     // 36: reliant.v1.GetFilePreviewResponse
-	(*DownloadFileRequest)(nil),        // 37: reliant.v1.DownloadFileRequest
-	(*DownloadFileResponse)(nil),       // 38: reliant.v1.DownloadFileResponse
+	(FileNodeType)(0),                    // 0: reliant.v1.FileNodeType
+	(FileViewerKind)(0),                  // 1: reliant.v1.FileViewerKind
+	(ProjectCheckoutState)(0),            // 2: reliant.v1.ProjectCheckoutState
+	(*FileNode)(nil),                     // 3: reliant.v1.FileNode
+	(*FileMetadata)(nil),                 // 4: reliant.v1.FileMetadata
+	(*FilePreviewInfo)(nil),              // 5: reliant.v1.FilePreviewInfo
+	(*GetFileTreeRequest)(nil),           // 6: reliant.v1.GetFileTreeRequest
+	(*GetFileTreeResponse)(nil),          // 7: reliant.v1.GetFileTreeResponse
+	(*ProjectCheckoutMissing)(nil),       // 8: reliant.v1.ProjectCheckoutMissing
+	(*GetFileContentRequest)(nil),        // 9: reliant.v1.GetFileContentRequest
+	(*GetFileContentResponse)(nil),       // 10: reliant.v1.GetFileContentResponse
+	(*SaveFileContentRequest)(nil),       // 11: reliant.v1.SaveFileContentRequest
+	(*SaveFileContentResponse)(nil),      // 12: reliant.v1.SaveFileContentResponse
+	(*GetFileMetadataRequest)(nil),       // 13: reliant.v1.GetFileMetadataRequest
+	(*GetFileMetadataResponse)(nil),      // 14: reliant.v1.GetFileMetadataResponse
+	(*GetFilePreviewInfoRequest)(nil),    // 15: reliant.v1.GetFilePreviewInfoRequest
+	(*GetFilePreviewInfoResponse)(nil),   // 16: reliant.v1.GetFilePreviewInfoResponse
+	(*CreateFileOrFolderRequest)(nil),    // 17: reliant.v1.CreateFileOrFolderRequest
+	(*CreateFileOrFolderResponse)(nil),   // 18: reliant.v1.CreateFileOrFolderResponse
+	(*DeleteFileOrFolderRequest)(nil),    // 19: reliant.v1.DeleteFileOrFolderRequest
+	(*DeleteFileOrFolderResponse)(nil),   // 20: reliant.v1.DeleteFileOrFolderResponse
+	(*CopyFileRequest)(nil),              // 21: reliant.v1.CopyFileRequest
+	(*CopyFileResponse)(nil),             // 22: reliant.v1.CopyFileResponse
+	(*SearchFilesRequest)(nil),           // 23: reliant.v1.SearchFilesRequest
+	(*SearchFilesResponse)(nil),          // 24: reliant.v1.SearchFilesResponse
+	(*SearchResult)(nil),                 // 25: reliant.v1.SearchResult
+	(*SearchMatch)(nil),                  // 26: reliant.v1.SearchMatch
+	(*ReplaceInFilesRequest)(nil),        // 27: reliant.v1.ReplaceInFilesRequest
+	(*ReplaceInFilesResponse)(nil),       // 28: reliant.v1.ReplaceInFilesResponse
+	(*ReplaceResult)(nil),                // 29: reliant.v1.ReplaceResult
+	(*ListDirectoryRequest)(nil),         // 30: reliant.v1.ListDirectoryRequest
+	(*ListDirectoryResponse)(nil),        // 31: reliant.v1.ListDirectoryResponse
+	(*DirectoryEntry)(nil),               // 32: reliant.v1.DirectoryEntry
+	(*CreateDirectoryRequest)(nil),       // 33: reliant.v1.CreateDirectoryRequest
+	(*CreateDirectoryResponse)(nil),      // 34: reliant.v1.CreateDirectoryResponse
+	(*GetFilePreviewRequest)(nil),        // 35: reliant.v1.GetFilePreviewRequest
+	(*GetFilePreviewResponse)(nil),       // 36: reliant.v1.GetFilePreviewResponse
+	(*DownloadFileRequest)(nil),          // 37: reliant.v1.DownloadFileRequest
+	(*DownloadFileResponse)(nil),         // 38: reliant.v1.DownloadFileResponse
+	(*ListMachineDirectoryRequest)(nil),  // 39: reliant.v1.ListMachineDirectoryRequest
+	(*ListMachineDirectoryResponse)(nil), // 40: reliant.v1.ListMachineDirectoryResponse
+	(*MachineDirectoryEntry)(nil),        // 41: reliant.v1.MachineDirectoryEntry
 }
 var file_reliant_v1_filesystem_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.FileNode.type:type_name -> reliant.v1.FileNodeType
@@ -3082,39 +3355,42 @@ var file_reliant_v1_filesystem_proto_depIdxs = []int32{
 	26, // 10: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
 	29, // 11: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
 	32, // 12: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
-	6,  // 13: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
-	9,  // 14: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
-	11, // 15: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
-	13, // 16: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
-	15, // 17: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
-	35, // 18: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
-	17, // 19: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
-	19, // 20: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
-	21, // 21: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
-	23, // 22: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
-	27, // 23: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
-	30, // 24: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
-	33, // 25: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
-	37, // 26: reliant.v1.FileSystemService.DownloadFile:input_type -> reliant.v1.DownloadFileRequest
-	7,  // 27: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
-	10, // 28: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
-	12, // 29: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
-	14, // 30: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
-	16, // 31: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
-	36, // 32: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
-	18, // 33: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
-	20, // 34: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
-	22, // 35: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
-	24, // 36: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
-	28, // 37: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
-	31, // 38: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
-	34, // 39: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
-	38, // 40: reliant.v1.FileSystemService.DownloadFile:output_type -> reliant.v1.DownloadFileResponse
-	27, // [27:41] is the sub-list for method output_type
-	13, // [13:27] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	41, // 13: reliant.v1.ListMachineDirectoryResponse.entries:type_name -> reliant.v1.MachineDirectoryEntry
+	6,  // 14: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
+	9,  // 15: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
+	11, // 16: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
+	13, // 17: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
+	15, // 18: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
+	35, // 19: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
+	17, // 20: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
+	19, // 21: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
+	21, // 22: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
+	23, // 23: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
+	27, // 24: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
+	30, // 25: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
+	33, // 26: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
+	37, // 27: reliant.v1.FileSystemService.DownloadFile:input_type -> reliant.v1.DownloadFileRequest
+	39, // 28: reliant.v1.FileSystemService.ListMachineDirectory:input_type -> reliant.v1.ListMachineDirectoryRequest
+	7,  // 29: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
+	10, // 30: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
+	12, // 31: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
+	14, // 32: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
+	16, // 33: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
+	36, // 34: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
+	18, // 35: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
+	20, // 36: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
+	22, // 37: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
+	24, // 38: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
+	28, // 39: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
+	31, // 40: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
+	34, // 41: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
+	38, // 42: reliant.v1.FileSystemService.DownloadFile:output_type -> reliant.v1.DownloadFileResponse
+	40, // 43: reliant.v1.FileSystemService.ListMachineDirectory:output_type -> reliant.v1.ListMachineDirectoryResponse
+	29, // [29:44] is the sub-list for method output_type
+	14, // [14:29] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_filesystem_proto_init() }
@@ -3139,13 +3415,14 @@ func file_reliant_v1_filesystem_proto_init() {
 	file_reliant_v1_filesystem_proto_msgTypes[31].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[32].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[34].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[36].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_filesystem_proto_rawDesc), len(file_reliant_v1_filesystem_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   36,
+			NumMessages:   39,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
