@@ -237,7 +237,7 @@ func (m *MockItems) AttentionManagedChats(ctx context.Context, userID string, ch
 var _ Items = (*MockItems)(nil)
 
 // forge:section MockFirings
-// forge:hash=a8d7095b26d05f683b802909cf1f575621d30df3a1e7b859c727e17146ea2c0d
+// forge:hash=4b5f42fd66f05b8fb8beb9b59e32888248c371d405ddf5708558ee1e3b9b7f5e
 
 // MockFirings is a test mock for the Firings interface.
 //
@@ -247,10 +247,10 @@ var _ Items = (*MockItems)(nil)
 // "MockFirings.<Method>Func not set" error.
 type MockFirings struct {
 	contractkit.Recorder
-	RecentTriggerOutcomesFunc            func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastSuccessFunc          func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastUnmanagedSuccessFunc func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
-	GetLatestTriggerEventFunc            func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
+	RecentTriggerOutcomesFunc func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	InboxEpisodesFunc         func(context.Context, string, []string, int, int) (map[string][]*core.TriggerEventWithRun, error)
+	InboxEpisodeFailuresFunc  func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error)
+	GetLatestTriggerEventFunc func(context.Context, string, *core.TriggerEventOutcome) (*core.TriggerEvent, error)
 }
 
 // RecentTriggerOutcomes records the call and delegates to RecentTriggerOutcomesFunc when set.
@@ -262,22 +262,22 @@ func (m *MockFirings) RecentTriggerOutcomes(ctx context.Context, userID string, 
 	return nil, contractkit.MockNotSet("MockFirings", "RecentTriggerOutcomes")
 }
 
-// FiringsSinceLastSuccess records the call and delegates to FiringsSinceLastSuccessFunc when set.
-func (m *MockFirings) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	m.Recorder.Record("FiringsSinceLastSuccess", ctx, userID, triggerIDs, perTrigger)
-	if m.FiringsSinceLastSuccessFunc != nil {
-		return m.FiringsSinceLastSuccessFunc(ctx, userID, triggerIDs, perTrigger)
+// InboxEpisodes records the call and delegates to InboxEpisodesFunc when set.
+func (m *MockFirings) InboxEpisodes(ctx context.Context, userID string, triggerIDs []string, perTrigger int, window int) (map[string][]*core.TriggerEventWithRun, error) {
+	m.Recorder.Record("InboxEpisodes", ctx, userID, triggerIDs, perTrigger, window)
+	if m.InboxEpisodesFunc != nil {
+		return m.InboxEpisodesFunc(ctx, userID, triggerIDs, perTrigger, window)
 	}
-	return nil, contractkit.MockNotSet("MockFirings", "FiringsSinceLastSuccess")
+	return nil, contractkit.MockNotSet("MockFirings", "InboxEpisodes")
 }
 
-// FiringsSinceLastUnmanagedSuccess records the call and delegates to FiringsSinceLastUnmanagedSuccessFunc when set.
-func (m *MockFirings) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	m.Recorder.Record("FiringsSinceLastUnmanagedSuccess", ctx, userID, triggerIDs, perTrigger)
-	if m.FiringsSinceLastUnmanagedSuccessFunc != nil {
-		return m.FiringsSinceLastUnmanagedSuccessFunc(ctx, userID, triggerIDs, perTrigger)
+// InboxEpisodeFailures records the call and delegates to InboxEpisodeFailuresFunc when set.
+func (m *MockFirings) InboxEpisodeFailures(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	m.Recorder.Record("InboxEpisodeFailures", ctx, userID, triggerIDs, perTrigger)
+	if m.InboxEpisodeFailuresFunc != nil {
+		return m.InboxEpisodeFailuresFunc(ctx, userID, triggerIDs, perTrigger)
 	}
-	return nil, contractkit.MockNotSet("MockFirings", "FiringsSinceLastUnmanagedSuccess")
+	return nil, contractkit.MockNotSet("MockFirings", "InboxEpisodeFailures")
 }
 
 // GetLatestTriggerEvent records the call and delegates to GetLatestTriggerEventFunc when set.
