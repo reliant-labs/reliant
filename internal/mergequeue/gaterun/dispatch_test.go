@@ -227,6 +227,18 @@ func TestDispatchRefusesWithoutAnIsolatedMachine(t *testing.T) {
 	if g.Isolation != IsolationRunc || g.Class != ClassPass || g.Landable() {
 		t.Fatalf("shadow gate on runc: %+v", g)
 	}
+
+	// A repository that is on and opted in to unisolated gates runs on
+	// runc too; marking the batch unisolated_accepted is the caller's.
+	opted := gateRequest()
+	opted.AllowUnisolated = true
+	g, err = newDispatcher(pools, daemons, repoOn).Dispatch(context.Background(), opted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g.Isolation != IsolationRunc || g.Class != ClassPass {
+		t.Fatalf("opted-in gate on runc: %+v", g)
+	}
 }
 
 func TestDispatchErrors(t *testing.T) {
