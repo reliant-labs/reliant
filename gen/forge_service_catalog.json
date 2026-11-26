@@ -52340,6 +52340,11 @@
               "name": "observe",
               "kind": "message",
               "type_name": "reliant.v1.NodeObserve"
+            },
+            {
+              "name": "timeout",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
             }
           ],
           "reliant.v1.WorkflowAttention": [
@@ -60993,7 +60998,9 @@
       "field": "RunLists",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.RunLists",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
