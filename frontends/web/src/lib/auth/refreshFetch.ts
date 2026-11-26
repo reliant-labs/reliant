@@ -76,7 +76,7 @@ export function withTokenRefreshTimeout(
 ): typeof fetch {
   return async (input, init) => {
     if (!isTokenRefreshRequest(input, init)) return base(input, init);
-    const callerSignal = init?.signal ?? undefined;
+    const callerSignal = init?.signal ?? (input instanceof Request ? input.signal : undefined);
     for (let attempt = 1; ; attempt++) {
       try {
         return await boundedFetch(base, input, init, callerSignal, timeoutMs);
@@ -100,24 +100,30 @@ async function boundedFetch(
   callerSignal: AbortSignal | undefined,
   timeoutMs: number,
 ): Promise<Response> {
+  callerSignal?.throwIfAborted();
   const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
+  const timer = setTimeout(() => controller.abort(new AttemptTimedOut()), timeoutMs);
   const onCallerAbort = (): void => controller.abort(callerSignal?.reason);
-  if (callerSignal?.aborted) controller.abort(callerSignal.reason);
   callerSignal?.addEventListener("abort", onCallerAbort);
+  let onAbort = (): void => {};
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => reject(controller.signal.reason);
+    controller.signal.addEventListener("abort", onAbort);
+  });
   try {
-    const response = await base(input, { ...init, signal: controller.signal });
-    const body = NULL_BODY_STATUSES.has(response.status) ? null : await response.arrayBuffer();
-    return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
-  } catch (error) {
-    if (timedOut) throw new AttemptTimedOut();
-    throw error;
+    // Aborting fetch is best effort. Settle independently even when the
+    // transport or its body reader does not respond to the signal.
+    return await Promise.race([
+      aborted,
+      (async () => {
+        const response = await base(input, { ...init, signal: controller.signal });
+        const body = NULL_BODY_STATUSES.has(response.status) ? null : await response.arrayBuffer();
+        return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+      })(),
+    ]);
   } finally {
     clearTimeout(timer);
     callerSignal?.removeEventListener("abort", onCallerAbort);
+    controller.signal.removeEventListener("abort", onAbort);
   }
 }

@@ -95,6 +95,56 @@ describe("withTokenRefreshTimeout", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it.each(["init", "request"])("rejects an already cancelled %s without starting fetch", async (source) => {
+    const caller = new AbortController();
+    const reason = new DOMException("cancelled", "AbortError");
+    caller.abort(reason);
+    const fetchFn = vi.fn(() => new Promise<Response>(() => {}));
+    const input = source === "request" ? new Request(REFRESH_URL, { ...refresh, signal: caller.signal }) : REFRESH_URL;
+    const init = source === "init" ? { ...refresh, signal: caller.signal } : undefined;
+    await expect(withTokenRefreshTimeout(fetchFn)(input, init)).rejects.toBe(reason);
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["headers", "body"])("settles caller cancellation despite an unresponsive %s reader", async (stage) => {
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const fetchFn = vi.fn(() => {
+      if (stage === "headers") {
+        started();
+        return new Promise<Response>(() => {});
+      }
+      const response = new Response();
+      response.arrayBuffer = () => {
+        started();
+        return new Promise<ArrayBuffer>(() => {});
+      };
+      return Promise.resolve(response);
+    });
+    const caller = new AbortController();
+    const reason = new DOMException("cancelled", "AbortError");
+    const pending = withTokenRefreshTimeout(fetchFn)(REFRESH_URL, { ...refresh, signal: caller.signal });
+    const rejected = expect(pending).rejects.toBe(reason);
+    await reading;
+    caller.abort(reason);
+    await rejected;
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("enforces deadlines even when fetch ignores abort", async () => {
+    const fetchFn = vi.fn(() => new Promise<Response>(() => {}));
+    const pending = withTokenRefreshTimeout(fetchFn)(REFRESH_URL, refresh);
+    const rejected = expect(pending).rejects.toBeInstanceOf(TokenRefreshTimeoutError);
+    await vi.advanceTimersByTimeAsync(2 * REFRESH_ATTEMPT_TIMEOUT_MS);
+    await rejected;
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   // What the resend's safety rests on (refreshFetch.ts, "Why resending is
   // safe"): it carries the token the caller still holds, so the server sees it
   // at most one rotation behind; it happens at most once per call; and never
