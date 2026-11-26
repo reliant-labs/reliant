@@ -242,7 +242,7 @@ function wireSpan(s: Span) {
 export function observabilityHandlers(fixtures: ObservabilityApi = createShopApi(), { now = demoNow }: { now?: () => number } = {}) {
   return {
     ...observabilityServiceHandlers(fixtures, now),
-    ...alertingHandlers(fixtures),
+    ...alertingHandlers(fixtures, { now }),
     ...deliveryHandlers(fixtures),
     ...issuesHandlers(fixtures),
     ...userHandlers(fixtures),
