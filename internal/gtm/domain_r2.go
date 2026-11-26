@@ -529,7 +529,14 @@ type ImportStrategyLibraryResult struct {
 	Created   int
 	Updated   int
 	Unchanged int
-	Pruned    int
+	// Pruned is the entries removed now: a prune by a person-class
+	// credential. A token's prune removes nothing.
+	Pruned int
+	// PruneRequestID is the request a token's prune staged; "" when none
+	// was (no prune, a person-class credential, or nothing to remove).
+	PruneRequestID string
+	// WouldRemove is the keys that request would remove.
+	WouldRemove []string
 }
 
 // UseLibraryStrategyInput is the input to Service.UseLibraryStrategy.
@@ -545,6 +552,122 @@ type UseLibraryStrategyResult struct {
 	Strategy Strategy
 	// Campaign is nil when none was asked for.
 	Campaign *Campaign
+}
+
+// CredentialKind is the class of credential a library import came through.
+type CredentialKind string
+
+// CredentialKind values.
+const (
+	// CredentialPerson is a person-class credential: a signed-in session, a
+	// shared key, a browser session.
+	CredentialPerson CredentialKind = "GTM_CREDENTIAL_KIND_PERSON"
+	// CredentialToken is an access token (Actor.ViaToken).
+	CredentialToken CredentialKind = "GTM_CREDENTIAL_KIND_TOKEN"
+)
+
+// PruneRequestStatus is a staged prune's lifecycle.
+type PruneRequestStatus string
+
+// PruneRequestStatus values.
+const (
+	PruneRequestPending   PruneRequestStatus = "GTM_PRUNE_REQUEST_STATUS_PENDING"
+	PruneRequestConfirmed PruneRequestStatus = "GTM_PRUNE_REQUEST_STATUS_CONFIRMED"
+	PruneRequestCancelled PruneRequestStatus = "GTM_PRUNE_REQUEST_STATUS_CANCELLED"
+	// PruneRequestExpired is a request not decided within
+	// LibraryPruneRequestTTL; it can no longer be confirmed.
+	PruneRequestExpired PruneRequestStatus = "GTM_PRUNE_REQUEST_STATUS_EXPIRED"
+)
+
+const (
+	// LibraryPruneRequestTTL is how long a PENDING prune request waits for
+	// a person: from created_at + LibraryPruneRequestTTL on it is EXPIRED.
+	LibraryPruneRequestTTL = 7 * 24 * time.Hour
+
+	DefaultLibraryImportPageSize = 50
+	MaxLibraryImportPageSize     = 200
+)
+
+// LibraryImport is one ImportStrategyLibrary call, for the audit history.
+type LibraryImport struct {
+	ID string
+	// ActorUserID is the user it acted as.
+	ActorUserID    string
+	CredentialKind CredentialKind
+	SourceRevision string
+	Created        int
+	Updated        int
+	Unchanged      int
+	Pruned         int
+	// PruneRequestID is the prune request it staged, if any.
+	PruneRequestID string
+	CreatedAt      time.Time
+}
+
+// LibraryPruneRequest is a prune an import over a token staged: the keys
+// it would remove, waiting for a person.
+type LibraryPruneRequest struct {
+	ID string
+	// RequestedBy is the user the staging import acted as.
+	RequestedBy    string
+	CredentialKind CredentialKind
+	SourceRevision string
+	RemoveKeys     []string
+	// Status is EXPIRED for a PENDING request past ExpiresAt, whatever the
+	// row says.
+	Status PruneRequestStatus
+	// DecidedBy and DecidedAt are who confirmed or cancelled it, and when.
+	DecidedBy string
+	DecidedAt time.Time
+	CreatedAt time.Time
+	ExpiresAt time.Time
+}
+
+// ListLibraryImportsInput is the input to Service.ListLibraryImports.
+type ListLibraryImportsInput struct {
+	PageSize  int
+	PageToken string
+}
+
+// ListLibraryImportsResult is the result of Service.ListLibraryImports.
+type ListLibraryImportsResult struct {
+	Imports       []LibraryImport
+	NextPageToken string
+}
+
+// ListLibraryPruneRequestsInput is the input to
+// Service.ListLibraryPruneRequests. Status "" matches any; PENDING and
+// EXPIRED match as answered (a PENDING row past its TTL is EXPIRED).
+type ListLibraryPruneRequestsInput struct {
+	Status    PruneRequestStatus
+	PageSize  int
+	PageToken string
+}
+
+// ListLibraryPruneRequestsResult is the result of
+// Service.ListLibraryPruneRequests.
+type ListLibraryPruneRequestsResult struct {
+	Requests      []LibraryPruneRequest
+	NextPageToken string
+}
+
+// ConfirmLibraryPruneInput is the input to Service.ConfirmLibraryPrune.
+type ConfirmLibraryPruneInput struct {
+	RequestID string
+}
+
+// ConfirmLibraryPruneResult is the result of Service.ConfirmLibraryPrune.
+type ConfirmLibraryPruneResult struct {
+	// Removed is the entries removed: the request's keys still present and
+	// not imported again since it was made.
+	Removed int
+	// Request is the request, now CONFIRMED.
+	Request LibraryPruneRequest
+}
+
+// CancelLibraryPruneInput is the input to Service.CancelLibraryPrune.
+type CancelLibraryPruneInput struct {
+	RequestID string
 }
 
 // Store filters for the r2/r3 tables (see IdeaFilter).
@@ -624,4 +747,23 @@ type AttachmentFile struct {
 	ContentType string
 	// Size is the attachment's size in bytes, as the attachment store has it.
 	Size int64
+}
+
+// LibraryImportFilter selects audit rows for Store.ListLibraryImports.
+type LibraryImportFilter struct {
+	OrgID  string
+	Limit  int
+	Offset int
+}
+
+// PruneRequestFilter selects prune requests for Store.ListPruneRequests.
+// Status "" matches any. PENDING matches PENDING rows created after
+// ExpiredAtOrBefore; EXPIRED matches EXPIRED rows and PENDING ones created
+// at or before it.
+type PruneRequestFilter struct {
+	OrgID             string
+	Status            PruneRequestStatus
+	ExpiredAtOrBefore time.Time
+	Limit             int
+	Offset            int
 }
