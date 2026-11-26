@@ -1602,11 +1602,13 @@ schema ServerProcessConfigClientVersions:
     refuse_unidentified: bool = False
 
 # forge:section schema ServerProcessConfigPipeline
-# forge:hash=d76a1d86774fa5003dd935898d975f7214d5acbf2b9b4ae92f92172161880e83
+# forge:hash=d5b9568b9a39abb1a5aa25f803ca130c1ed28d03c8bbfaed3b9901c253ce0666
 # ServerProcessConfigPipeline is the pipeline block (PipelineConfig) — author its values in config.k as `pipeline.<field> = ...`.
 schema ServerProcessConfigPipeline:
     # Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them
     enabled: bool = False
+    # Worker only: signs the merge queue's Queue App token requests to control-plane; unset lands as the Reliant App, unenforced
+    github_queue_app_caller_secret: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "github_queue_app_caller_secret" }
 
 # forge:section schema ServerProcessConfigReconciler
 # forge:hash=e7bfa70a2e0f7539d0ee0de18a45da2ad480e8698bc4b7e555fc2dc058a2b41d
@@ -1682,6 +1684,10 @@ SERVER_PROCESS_CONFIG_SENSITIVE_ENV: [str] = [
     "RELIANT_GITHUB_WEBHOOK_SECRET"
     "RELIANT_TEST_INTEGRATION_SECRET"
 
+    # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV pipeline
+    # forge:hash=6594ffda7535afb64244644b45d9c43800553c8535ee696b11b5ab413288d403
+    "GITHUB_QUEUE_APP_CALLER_SECRET"
+
     # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV (root)
     # forge:hash=fa807b1957f7aadf24512d851ee31f0a3cce8a592088aa1c8c31993baf88d46c
     "RELIANT_OAUTH_<KEY>_CLIENT_SECRET"
@@ -1710,6 +1716,10 @@ SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
     "RELIANT_SLACK_SIGNING_SECRET"
     "RELIANT_GITHUB_WEBHOOK_SECRET"
     "RELIANT_TEST_INTEGRATION_SECRET"
+
+    # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV pipeline
+    # forge:hash=c7f4d0012220917673ad816e9119ec61101768b73e2b640f49ba438c01fc155a
+    "GITHUB_QUEUE_APP_CALLER_SECRET"
 
     # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV (root)
     # forge:hash=ba93ebc6a133877e7d793fafefbd1983453237ac12c4626f0f9d7b18d2613c3f
@@ -1750,6 +1760,10 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         "RELIANT_SLACK_SIGNING_SECRET" = forge.SecretRef {name = c.integrations.slack_signing_secret.name, key = c.integrations.slack_signing_secret.key, store_key = "RELIANT_SLACK_SIGNING_SECRET", optional = True}
         "RELIANT_GITHUB_WEBHOOK_SECRET" = forge.SecretRef {name = c.integrations.github_webhook_secret.name, key = c.integrations.github_webhook_secret.key, store_key = "RELIANT_GITHUB_WEBHOOK_SECRET", optional = True}
         "RELIANT_TEST_INTEGRATION_SECRET" = forge.SecretRef {name = c.integrations.test_integration_secret.name, key = c.integrations.test_integration_secret.key, store_key = "RELIANT_TEST_INTEGRATION_SECRET", optional = True}
+
+        # forge:section serverProcessConfigEnvMap secrets pipeline
+        # forge:hash=7943ac5c471d0f0980b001af916026aca87ecfb896d6016baed95fec58c48cdd
+        "GITHUB_QUEUE_APP_CALLER_SECRET" = forge.SecretRef {name = c.pipeline.github_queue_app_caller_secret.name, key = c.pipeline.github_queue_app_caller_secret.key, store_key = "GITHUB_QUEUE_APP_CALLER_SECRET", optional = True}
 
         # forge:section serverProcessConfigEnvMap secrets (end)
         # forge:hash=efede3d8161a204eb8a0d16899c8d3af3adbc86ab32cabf0dd06f8ee1f72642c
@@ -2423,6 +2437,10 @@ ROOTS: {str: Root} = {
             "RELIANT_GITHUB_WEBHOOK_SECRET",
             "RELIANT_TEST_INTEGRATION_SECRET",
 
+            # forge:section root api secrets pipeline
+            # forge:hash=0e900364693545b506c14132378d969b84349b2e39377e48a0a0673636b48e83
+            "GITHUB_QUEUE_APP_CALLER_SECRET",
+
             # forge:section root api secrets (end)
             # forge:hash=51508a9c3d2d78952b193ba57b93e4722f3b40806cc9fe70a9e5e1a9d74571e5
         ]
@@ -2764,6 +2782,10 @@ ROOTS: {str: Root} = {
             "RELIANT_SLACK_SIGNING_SECRET",
             "RELIANT_GITHUB_WEBHOOK_SECRET",
             "RELIANT_TEST_INTEGRATION_SECRET",
+
+            # forge:section root worker secrets pipeline
+            # forge:hash=a077fb7d21011d7bf8648cfea9e6441e8f0bcb0e42a7d2a101cdd2ffc8d6aaa9
+            "GITHUB_QUEUE_APP_CALLER_SECRET",
 
             # forge:section root worker secrets (end)
             # forge:hash=edcab42e181091b2db15b9c6ce9c0fc7d7517adfa83aff3ab74182a177bb91cf
