@@ -202,4 +202,10 @@ func TestVerdictIndependentOfShutdown(t *testing.T) {
 	assert.True(t, verdictIndependentOfShutdown(temporal.NewNonRetryableApplicationError("bad yaml", "TerminalError", nil)), "a terminal error")
 	assert.False(t, verdictIndependentOfShutdown(fmt.Errorf("query: %w", context.Canceled)), "a cancellation")
 	assert.False(t, verdictIndependentOfShutdown(errors.New("nats: connection closed")), "a fault the shutdown can cause")
+	// The daemon transport serializes cancellation as text, so errors.Is
+	// cannot recover it. The released attempt's type still names the drain.
+	released := temporal.NewApplicationErrorWithOptions("the command keeps running", "RunStepReleased",
+		temporal.ApplicationErrorOptions{Category: temporal.ApplicationErrorCategoryBenign,
+			Cause: errors.New("tool request via NATS failed: context canceled")})
+	assert.False(t, verdictIndependentOfShutdown(fmt.Errorf("run step: %w", released)), "a benign release is shutdown fallout, not a user verdict")
 }
