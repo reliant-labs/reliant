@@ -170,7 +170,6 @@ type harness struct {
 	other  *httptest.Server
 	got    *seen
 	gotOth *seen
-	h      http.HandlerFunc
 }
 
 func newHarness(t *testing.T, handler func(w http.ResponseWriter, r *http.Request, otherURL string)) *harness {
@@ -318,6 +317,23 @@ func TestGrowthErrorsAreClassifiedAndNeverEchoTheKey(t *testing.T) {
 			assert.Equal(t, tc.retryable, res.Retryable)
 			assert.Contains(t, res.Content, tc.contains)
 			assert.NotContains(t, res.Content, growthKey)
+		})
+	}
+}
+
+func TestGrowthAgentRunCreateWithoutRecord(t *testing.T) {
+	for name, body := range map[string]string{
+		"absent": `{}`,
+		"null":   `{"agentRun": null}`,
+		"empty":  `{"agentRun": {}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			hn := newHarness(t, ok(body))
+			res, err := hn.run("agent_run.create", map[string]any{"workflow": "community-watch"}, nil)
+			require.NoError(t, err)
+			require.False(t, res.IsError, res.Content)
+			assert.Equal(t, map[string]any{"id": "", "workflow": "", "status": ""}, res.Data)
+			assert.Equal(t, 1, hn.got.count())
 		})
 	}
 }
