@@ -43,6 +43,11 @@ type Deps struct {
 type Scheduler struct {
 	deps Deps
 	adm  admission
+	// The optional deps, defaulted.
+	configs Configs
+	lander  Lander
+	logger  *slog.Logger
+	now     func() time.Time
 }
 
 // New builds a Scheduler.
@@ -50,19 +55,21 @@ func New(d Deps) (*Scheduler, error) {
 	if d.Store == nil || d.Leader == nil || d.Workdirs == nil || d.Gate == nil {
 		return nil, errors.New("mergequeue: Deps needs Store, Leader, Workdirs and Gate")
 	}
-	if d.Configs == nil {
-		d.Configs = StoredConfig{}
+	sch := &Scheduler{deps: d, configs: d.Configs, lander: d.Lander, logger: d.Logger, now: d.Now}
+	if sch.configs == nil {
+		sch.configs = StoredConfig{}
 	}
-	if d.Lander == nil {
-		d.Lander = NoLander{}
+	if sch.lander == nil {
+		sch.lander = NoLander{}
 	}
-	if d.Logger == nil {
-		d.Logger = slog.Default()
+	if sch.logger == nil {
+		sch.logger = slog.Default()
 	}
-	if d.Now == nil {
-		d.Now = time.Now
+	if sch.now == nil {
+		sch.now = time.Now
 	}
-	return &Scheduler{deps: d, adm: admission{store: d.Store, now: d.Now}}, nil
+	sch.adm = admission{store: d.Store, now: sch.now}
+	return sch, nil
 }
 
 // ErrNotLeader is a Tick of a repository another worker leads.
@@ -94,7 +101,7 @@ func (s *Scheduler) Drive(ctx context.Context, repoID string, every time.Duratio
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			s.deps.Logger.WarnContext(ctx, "merge queue tick failed", "repo_id", repoID, "error", err)
+			s.logger.WarnContext(ctx, "merge queue tick failed", "repo_id", repoID, "error", err)
 		}
 		select {
 		case <-ctx.Done():
@@ -132,7 +139,7 @@ func (s *Scheduler) tick(ctx context.Context, repoID string) (Report, error) {
 	case repo.QueueState == core.PipelineQueuePaused:
 		return Report{Idle: "queue paused"}, nil
 	}
-	cfg, err := s.deps.Configs.Resolved(ctx, repo)
+	cfg, err := s.configs.Resolved(ctx, repo)
 	if err != nil {
 		return Report{}, fmt.Errorf("config of %s: %w", repo.Repository, err)
 	}
@@ -201,7 +208,7 @@ type round struct {
 	report    Report
 }
 
-func (r *round) now() time.Time { return r.s.deps.Now() }
+func (r *round) now() time.Time { return r.s.now() }
 
 func (r *round) record(ctx context.Context, id string) (*core.PRRecord, error) {
 	if rec, ok := r.records[id]; ok {
@@ -383,7 +390,7 @@ func (s *Scheduler) wake(ctx context.Context, recordID string) error {
 		if err != nil || p == nil {
 			return err
 		}
-		now := s.deps.Now().UTC()
+		now := s.now().UTC()
 		to := *p
 		to.NextAction, to.NextActionAt = "decide", &now
 		_, err = s.deps.Store.TransitionPRPipeline(ctx, recordID, p.Version, to)

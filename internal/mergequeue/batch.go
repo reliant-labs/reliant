@@ -319,7 +319,7 @@ func (r *round) land(ctx context.Context, batch *core.QueueBatch, v Verdict) err
 			active = append(active, e)
 		}
 	}
-	return r.s.deps.Lander.Land(ctx, LandRequest{Repo: r.repo, Batch: batch, Entries: active, Heads: heads, Trees: trees})
+	return r.s.lander.Land(ctx, LandRequest{Repo: r.repo, Batch: batch, Entries: active, Heads: heads, Trees: trees})
 }
 
 // shadowGit is the queue's git in shadow mode: it pushes only the candidate
