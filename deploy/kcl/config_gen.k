@@ -2063,7 +2063,7 @@ workerConfigEnvMap = lambda c: WorkerConfig, config_secrets: [str] -> {str: str 
 }
 
 # forge:section process-selector ReliantProcess
-# forge:hash=7de625ed40fbd6d5d8e9c212aaff96a06110702898c8d2f10a2032e375b6cd0a
+# forge:hash=9605edd0c8e8d438c0848683c8853ec2ad63e2b99d6c2faa3c001977def94b66
 # The `reliant` binary binds a config per subcommand, so a workload's env is the
 # binary's root config PLUS the config of the subcommand its process runs.
 # ReliantProcess carries the instances (config.k declares one); reliantProcessEnvMap
@@ -2073,7 +2073,7 @@ schema ReliantProcess:
     reliant_config?: ReliantConfig
     # Every process at or below `reliant auth`, `reliant update`.
     auth_config?: AuthConfig
-    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
+    # Every process at or below `reliant auth`, `reliant chat`, `reliant daemon`, `reliant github`, `reliant integrations`, `reliant machine`, `reliant mcp`, `reliant models`, `reliant pipeline`, `reliant preview`, `reliant project`, `reliant providers`, `reliant trigger`, `reliant workflow`, `reliant worktree`.
     cli_config?: CLIConfig
     # Every process at or below `reliant server`, `reliant db migrate`, `reliant db vault`.
     database_config?: DatabaseConfig
@@ -2127,7 +2127,7 @@ reliantProcessEnvMap = lambda p: ReliantProcess, argv: [str], config_secrets: [s
     _cmd = "api_server_config" if _path[:2] == ["server", "api"] else "daemon_config" if _path[:2] == ["daemon", "start"] else "daemon_status_config" if _path[:2] == ["daemon", "status"] else "daemon_stop_config" if _path[:2] == ["daemon", "stop"] else "daemon_logs_config" if _path[:2] == ["daemon", "logs"] else "daemon_register_config" if _path[:2] == ["daemon", "register"] else "gateway_config" if _path[:2] == ["server", "gateway"] else "worker_config" if _path[:2] == ["server", "worker"] else "preview_url_config" if _path[:1] == ["preview-url"] else ""
     _root_sensitive: [str] = RELIANT_CONFIG_SENSITIVE_ENV
     _in_auth_config = any _p in [["auth"], ["update"]] { _path[:len(_p)] == _p }
-    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
+    _in_cli_config = any _p in [["auth"], ["chat"], ["daemon"], ["github"], ["integrations"], ["machine"], ["mcp"], ["models"], ["pipeline"], ["preview"], ["project"], ["providers"], ["trigger"], ["workflow"], ["worktree"]] { _path[:len(_p)] == _p }
     _in_database_config = any _p in [["server"], ["db", "migrate"], ["db", "vault"]] { _path[:len(_p)] == _p }
     _in_server_process_config = any _p in [["server"]] { _path[:len(_p)] == _p }
     _in_vault_maintenance_config = any _p in [["db", "vault"]] { _path[:len(_p)] == _p }
@@ -2384,6 +2384,10 @@ ROOTS: {str: Root} = {
             "RELIANT_CLIENT_VERSION_ENFORCE",
             "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED",
             "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED",
+
+            # forge:section root api env pipeline
+            # forge:hash=0e71b6105d66bad2787bd7538cd7a189ee0e45ba94e236489091a35fad76da09
+            "RELIANT_PIPELINE_ENABLED",
 
             # forge:section root api env reconciler
             # forge:hash=61e1f0cf7fe0f4ecadd5042d5200121cc2fd39886496cc144a3210dea72032f5
