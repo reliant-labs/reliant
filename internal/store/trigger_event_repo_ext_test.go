@@ -39,6 +39,7 @@ func newStoreTriggerEvent(id, triggerID string, outcome core.TriggerEventOutcome
 // TestTriggerEventQueries ports the trigger_events queries of triggers.sql,
 // interleaved with the Repository.
 func TestTriggerEventQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -279,6 +280,7 @@ func ptrOutcome(o core.TriggerEventOutcome) *core.TriggerEventOutcome { return &
 // TestTriggerFiringQueries ports ListTriggerEvents, ListRecentTriggerFirings
 // and ListFiringsSinceLastSuccess, interleaved with the Repository.
 func TestTriggerFiringQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-2 * time.Hour)

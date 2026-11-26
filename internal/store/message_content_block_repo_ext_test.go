@@ -68,6 +68,7 @@ func requireSameBlock(t *testing.T, label string, want, got *core.MessageContent
 }
 
 func TestContentBlocks_RoundTripAcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-blocks")
 	ctx := context.Background()
 	o := f.env.ORM
@@ -242,6 +243,7 @@ func atomicWrite(f *msgFixture, id string, nBlocks int) store.AtomicMessageWrite
 // through the Repository and the store share one ordinal/seq/update-sequence
 // allocator, and read back identically.
 func TestSaveMessageAtomic_InterleavesAcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-atomic")
 	ctx := context.Background()
 	var ids []string
@@ -295,6 +297,7 @@ func TestSaveMessageAtomic_InterleavesAcrossLayers(t *testing.T) {
 // TestSaveMessageAtomic_ThinkingLevel: the effective thinking level a turn ran
 // at is stored on the message through both layers; an empty one is NULL.
 func TestSaveMessageAtomic_ThinkingLevel(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-atomic-thinking")
 	ctx := context.Background()
 	for id, level := range map[string]*string{"t-high": sp("high"), "t-empty": sp(""), "t-none": nil} {
@@ -322,6 +325,7 @@ func TestSaveMessageAtomic_ThinkingLevel(t *testing.T) {
 // TestSaveMessageAtomic_RollsBack: a failing payload builder rolls the whole
 // write back — message, blocks and counters.
 func TestSaveMessageAtomic_RollsBack(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-atomic-rb")
 	ctx := context.Background()
 	boom := errors.New("boom")
@@ -348,6 +352,7 @@ func TestSaveMessageAtomic_RollsBack(t *testing.T) {
 // the Repository and half through the store, 10 messages each into one chat:
 // no unique violation, and seq and the update sequence are both gapless.
 func TestSaveMessageAtomic_ConcurrentWritersAcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-atomic-cc")
 	var (
 		mu         sync.Mutex
