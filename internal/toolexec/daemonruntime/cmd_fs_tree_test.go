@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func gitRun(t *testing.T, dir string, args ...string) {
@@ -283,5 +284,70 @@ func TestHandleFSGetTree_EmbeddedRepoRecursion(t *testing.T) {
 	// The nested repo's own .git dir must be skipped, not listed.
 	if git := findNode(ranger.Children, ".git"); git != nil {
 		t.Errorf("nested .git should be skipped, got %+v", git)
+	}
+}
+
+// A walk is bounded by the request's own deadline, keeping a fifth of the time
+// left (at most maxTreeReplyReserve) for the reply to reach the caller.
+func TestTreeWalkDeadline(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 11, 25, 20, 19, 0, 0, time.UTC)
+	withDeadline := func(d time.Time) context.Context {
+		ctx, cancel := context.WithDeadline(context.Background(), d)
+		t.Cleanup(cancel)
+		return ctx
+	}
+
+	if got := treeWalkDeadline(context.Background(), now); !got.IsZero() {
+		t.Errorf("no request deadline: got %v, want no walk deadline", got)
+	}
+	cases := []struct {
+		name      string
+		remaining time.Duration
+		want      time.Duration // walk deadline, from now
+	}{
+		{"the web's 10s budget keeps the 2s cap", 10 * time.Second, 8 * time.Second},
+		{"a short budget keeps a fifth", 5 * time.Second, 4 * time.Second},
+		{"a long budget keeps the cap", 30 * time.Second, 28 * time.Second},
+		{"a deadline already past walks only the root", -time.Second, -time.Second},
+	}
+	for _, tc := range cases {
+		if got := treeWalkDeadline(withDeadline(now.Add(tc.remaining)), now); !got.Equal(now.Add(tc.want)) {
+			t.Errorf("%s: walk deadline = now%+v, want now%+v", tc.name, got.Sub(now), tc.want)
+		}
+	}
+}
+
+// fs.get_tree answers a request that is out of time with the root listing,
+// marked truncated, instead of walking on past the point anyone is waiting.
+func TestHandleFSGetTree_OutOfTimeReturnsTheRootTruncated(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeFileT(t, filepath.Join(root, "top.txt"), "a")
+	writeFileT(t, filepath.Join(root, "pkg", "inner.txt"), "b")
+
+	payload, err := json.Marshal(fsGetTreeRequest{Path: root, Depth: -1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Millisecond))
+	defer cancel()
+	out, err := handleFSGetTree(ctx, payload)
+	if err != nil {
+		t.Fatalf("handleFSGetTree: %v", err)
+	}
+	var resp fsGetTreeResponse
+	if err := json.Unmarshal(out, &resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.Truncated {
+		t.Error("a walk cut short by the deadline must report truncated")
+	}
+	if findNode(resp.Nodes, "top.txt") == nil {
+		t.Errorf("the root listing must still be returned: %+v", resp.Nodes)
+	}
+	pkg := findNode(resp.Nodes, "pkg")
+	if pkg == nil || len(pkg.Children) != 0 || !pkg.HasChildren {
+		t.Errorf("pkg must come back unread and expandable, got %+v", pkg)
 	}
 }

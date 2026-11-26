@@ -97,6 +97,7 @@ type Reconciler struct {
 	repo       ReconcilerStore
 	runEvents  runevents.Store
 	chats      Chats
+	toolCalls  ToolCallLists
 	workflows  WorkflowLoader
 	daemons    DaemonReader
 	approvals  Approvals
@@ -523,6 +524,7 @@ func New(deps Deps) *Reconciler {
 		repo:                    repo,
 		runEvents:               deps.RunEvents,
 		chats:                   chats,
+		toolCalls:               deps.ToolCalls,
 		questions:               deps.Questions,
 		mailbox:                 deps.Mailbox,
 		orphans:                 deps.Orphans,
@@ -2342,7 +2344,7 @@ func closeStatusLabel(status enums.WorkflowExecutionStatus) string {
 // repaired by Cleanup — including its instruction to verify effects before
 // re-running.
 func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *passStats) (int, error) {
-	stranded, err := r.repo.ListStrandedSpawnToolCalls(ctx)
+	stranded, err := r.toolCalls.ListStrandedSpawnToolCalls(ctx)
 	if err != nil {
 		logPassFailure(ctx, "[Reconciler] Failed to list stranded spawn tool calls", err)
 		return 0, fmt.Errorf("failed to list stranded spawn tool calls: %w", err)
@@ -2467,7 +2469,7 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 // address disjoint rows regardless of which runs first, and re-running
 // either moves nothing. The ordering is not relied upon.
 func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *passStats) (int, error) {
-	stranded, err := r.repo.ListStrandedBackgroundSpawnToolCalls(ctx)
+	stranded, err := r.toolCalls.ListStrandedBackgroundSpawnToolCalls(ctx)
 	if err != nil {
 		logPassFailure(ctx, "[Reconciler] Failed to list stranded background spawn tool calls", err)
 		return 0, fmt.Errorf("failed to list stranded background spawn tool calls: %w", err)

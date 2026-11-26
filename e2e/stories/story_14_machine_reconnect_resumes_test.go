@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Story 14: the daemon-offline breaker pauses a run whose machine dropped, and
@@ -70,7 +71,7 @@ func TestStory14_MachineReconnectResumesBreakerPausedChat(t *testing.T) {
 
 func (h *Harness) pausedForMachineAt(chatID string) *struct{} {
 	h.T.Helper()
-	paused, err := h.Stack.Repo.ListChatsPausedForMachine(h.Ctx, h.UserID, 100)
+	paused, err := store.ListChatsPausedForMachine(h.Ctx, h.Stack.Repo.ORM(), h.UserID, 100)
 	require.NoError(h.T, err)
 	for _, c := range paused {
 		if c.ChatID == chatID {

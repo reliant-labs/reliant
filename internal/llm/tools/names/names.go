@@ -200,7 +200,7 @@ var AllToolNames = []string{
 	"github__repo_list_for_user", "github__repo_get", "github__branch_get", "github__repo_get_content", "github__repo_get_tree",
 	"github__code_search", "github__workflow_dispatch", "github__check_run_list",
 	"github__branch_rules", "github__compare", "github__commit_statuses",
-	"gmail__message_send", "gmail__message_list", "gmail__message_get", "gmail__label_list",
+	"gmail__message_send", "gmail__draft_create", "gmail__message_list", "gmail__message_get", "gmail__label_list",
 	"slack__message_post", "slack__message_reply", "slack__message_update", "slack__reaction_add",
 	"slack__user_lookup_by_email", "slack__conversations_list", "slack__conversations_history",
 	"slack__conversations_replies",
