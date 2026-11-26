@@ -58,6 +58,13 @@ func NewInvokeToolActivityWithDeps(deps ExecuteToolsDeps) *InvokeToolActivity {
 	return &InvokeToolActivity{executeTools: NewExecuteToolsActivityWithDeps(deps)}
 }
 
+// WithUpdates gives the tool-execution path what tells the owner's clients a
+// workspace changed; see ExecuteToolsActivity.WithUpdates.
+func (a *InvokeToolActivity) WithUpdates(u UserRefetcher) *InvokeToolActivity {
+	a.executeTools.WithUpdates(u)
+	return a
+}
+
 // WithToolCallResults gives the tool-execution path the durable-result reader;
 // see ExecuteToolsActivity.WithToolCallResults.
 func (a *InvokeToolActivity) WithToolCallResults(r ToolCallResults) *InvokeToolActivity {

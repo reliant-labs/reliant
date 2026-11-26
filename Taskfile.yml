@@ -799,16 +799,20 @@ tasks:
       - task: generate:controlplane
 
   licenses:
-    desc: "Every Go and npm dependency is on the license allowlist (.license-allowlist, .license-allowlist-npm)"
+    desc: "Every Go and npm dependency's license is allowed (forge.yaml ci.license, .license-allowlist-npm)"
     cmds:
       - task: licenses:go
       - task: licenses:npm
 
   licenses:go:
-    desc: Every Go dependency's license is allowlisted (scripts/check-licenses.sh)
+    # forge's license-check row under forge.yaml ci.license (an allowlist
+    # plus reasoned per-module exceptions); replaced scripts/check-licenses.sh.
+    desc: Every Go dependency's license is allowed (forge ci gate license-check, forge.yaml ci.license)
+    env:
+      CI_ONLY: license-check
     cmds:
       - go mod download
-      - ./scripts/check-licenses.sh {{.CLI_ARGS}}
+      - '{{.FORGE}} ci gate checks'
 
   licenses:npm:
     desc: Every npm dependency of frontends/web is allowlisted (scripts/check-npm-licenses.sh)

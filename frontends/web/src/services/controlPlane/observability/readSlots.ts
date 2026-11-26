@@ -2,7 +2,7 @@
 
 /**
  * Which observability RPCs are ClickHouse reads. A leaf module, importing
- * nothing, so both the read queue (obsClient) and the transport's deadlines
+ * nothing, so both the read queue (obsInterceptors.ts) and the transport's deadlines
  * (api/transport.ts) read the one list without an import cycle.
  */
 
@@ -16,7 +16,7 @@ export const READ_SLOT_SERVICES: ReadonlySet<string> = new Set([
 /**
  * The RPCs that take a server read slot (obsread.Open on the console surface).
  * Mutations and the Postgres-only issue reads do not: they
- * must never wait behind a queue of ClickHouse reads. obsClient.test.ts fails
+ * must never wait behind a queue of ClickHouse reads. obsInterceptors.test.ts fails
  * when a method of these services is in neither this set nor NO_READ_SLOT_RPCS,
  * so a new RPC must be classified.
  */

@@ -1,0 +1,6 @@
+# want: gate.stages.lint
+version: 1
+gate:
+  run: "go test ./..."
+  stages:
+    lint: "go vet ./..."

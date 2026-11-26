@@ -53,7 +53,7 @@ func TestGetWorkflow_AgreesWithRunResolution(t *testing.T) {
 	run, err := workflowsource.Resolve(ctx, repo, workflowsource.Options{UserID: "test-user", ProjectID: projectID}, "shared-flow")
 	require.NoError(t, err)
 
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	got, err := svc.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{Name: "shared-flow", ProjectId: projectID}))
 	require.NoError(t, err)
 	require.Equal(t, string(run.Source), got.Msg.Source)

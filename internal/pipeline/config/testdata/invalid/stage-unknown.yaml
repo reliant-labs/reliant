@@ -1,0 +1,6 @@
+# want: gate.stages.fmt
+version: 1
+gate:
+  run: "go test ./..."
+  stages:
+    fmt: off

@@ -59825,9 +59825,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/mcp.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60233,6 +60231,15 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "PauseService",
+      "field": "Updates",
+      "interface": "github.com/reliant-labs/reliant/internal/chatupdates.Service",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
       "consumer": "Plan",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatStore",
@@ -60270,9 +60277,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ChatRefetcher",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60692,9 +60697,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/provider_account.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60835,9 +60838,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/question.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61012,9 +61013,7 @@
       "field": "RunLists",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.RunLists",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -61230,9 +61229,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/settings.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61578,9 +61575,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ChatRefetcher",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61867,9 +61862,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/tools_daemon.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -62829,9 +62822,7 @@
       "field": "Refetch",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.UserRefetch",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -63077,6 +63068,14 @@
       "source": {
         "path": "internal/handlers/org_usage/service.go",
         "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "PauseService.Updates",
+      "source": {
+        "path": "internal/app/providers.go",
+        "symbol": "NewPauseService"
       }
     },
     {

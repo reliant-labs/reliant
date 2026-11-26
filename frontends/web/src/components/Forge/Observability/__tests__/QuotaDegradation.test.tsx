@@ -9,11 +9,14 @@
  *   - one banner says it, however many views are watching;
  *   - N observers of one key poll once; a hidden tab does not poll;
  *   - a tight (soft) quota slows polls instead of stopping them;
- *   - background polls are the only reads marked as polls.
+ *   - background polls are the only reads marked as polls;
+ *   - a read during the pause never leaves the browser: every read goes through
+ *     the control-plane transport's read stage (obsInterceptors.ts), as in the app.
  */
 
 import { act, render, renderHook, screen, within } from "@testing-library/react";
 import { QueryClientProvider, focusManager, useQuery, type QueryClient } from "@tanstack/react-query";
+import { createClient, createRouterTransport, type HandlerContext } from "@connectrpc/connect";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,7 +26,10 @@ import { obsKeys, useServiceOverview } from "@/hooks/observability-queries";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObsQuotaProvider, RESUME_JITTER_MS, useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { formatClock, quotaPausedError } from "@/services/controlPlane/observability/quota";
-import { SOFT_POLL_FACTOR, isPollRead } from "@/services/controlPlane/observability/quotaStore";
+import { SOFT_POLL_FACTOR, resetObsQuotaStore } from "@/services/controlPlane/observability/quotaStore";
+import { obsCall, obsReadInterceptor } from "@/services/controlPlane/observability/obsInterceptors";
+import { resetObsReadScheduler } from "@/services/controlPlane/observability/readScheduler";
+import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 
 import { createFixtureApi } from "../__fixtures__/fixtureApi";
@@ -58,6 +64,7 @@ function useOverview(scope: ObsScope | null, range: "1h" | "6h") {
 
 interface Rig {
   client: QueryClient;
+  /** Every overview read that reached control-plane, and whether it came as a poll (Forge-Poll). */
   calls: { poll: boolean }[];
   api: ObservabilityApi;
   /** What the next call does: "ok" answers, "quota"/"soft" refuse the way the server does. */
@@ -70,13 +77,28 @@ function rig(random = () => 0.5): Rig {
   const calls: Rig["calls"] = [];
   const mode: Rig["mode"] = { value: "ok" };
   const base = createFixtureApi();
+  // control-plane behind the app's read stage: it records the overview reads
+  // that reach it, and refuses them the way the server does in "quota"/"soft".
+  const controlPlane = createClient(
+    ObservabilityService,
+    createRouterTransport(
+      (router) =>
+        router.service(ObservabilityService, {
+          getServiceOverview: (_req: unknown, ctx: HandlerContext) => {
+            calls.push({ poll: ctx.requestHeader.get("Forge-Poll") === "1" });
+            if (mode.value !== "ok") {
+              throw quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs: RESET, soft: mode.value === "soft" });
+            }
+            return {};
+          },
+        }),
+      { transport: { interceptors: [obsReadInterceptor()] } }
+    )
+  );
   const api: ObservabilityApi = {
     ...base,
-    getServiceOverview: async (req) => {
-      calls.push({ poll: isPollRead() });
-      if (mode.value !== "ok") {
-        throw quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs: RESET, soft: mode.value === "soft" });
-      }
+    getServiceOverview: async (req, options) => {
+      await controlPlane.getServiceOverview({}, obsCall(options));
       return base.getServiceOverview(req);
     },
   };
@@ -95,6 +117,8 @@ const advance = (ms: number) => act(async () => void (await vi.advanceTimersByTi
 
 /** Quota exhaustion is a soft-reporting error too; "soft" mode reuses the exhausted shape with the soft reason. */
 beforeEach(() => {
+  resetObsQuotaStore();
+  resetObsReadScheduler();
   vi.useFakeTimers();
   vi.setSystemTime(START);
   focusManager.setFocused(true);
