@@ -2595,6 +2595,18 @@ message Workflow {
   // node wins), events concatenated (defaults first). Sub-workflows follow
   // their own defaults. See NodeObserve.
   NodeObserve observe = 27;
+  // Timeout bounds a run of this workflow, as a literal Go duration ("3h",
+  // "90m"): more than zero and at most 7 days. It is measured from the run's
+  // start, across continue-as-new, and it keeps counting while the run is
+  // paused, waits for an approval, a question, a machine or capacity: it is
+  // what ends a run that is stuck. When it passes, the run is cancelled the
+  // way a stop cancels it, then ends FAILED with the error "run timeout <d>
+  // exceeded" (failure.error_code "run_timeout"); on_failure and finally
+  // still run, outside the timeout, each bounded as on any ending. It bounds
+  // the run whose root this workflow is; a workflow run by ref or spawned
+  // inside another run is bounded by that run's timeout instead. Unset, the
+  // default, means no bound.
+  CelString timeout = 28;
 }
 
 // WorkflowCheck is a GitHub check run whose lifecycle the engine owns, posted

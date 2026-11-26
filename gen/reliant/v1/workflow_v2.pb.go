@@ -9158,7 +9158,19 @@ type Workflow struct {
 	// merged with each node's own: attributes by key and metrics by name (the
 	// node wins), events concatenated (defaults first). Sub-workflows follow
 	// their own defaults. See NodeObserve.
-	Observe       *NodeObserve `protobuf:"bytes,27,opt,name=observe,proto3" json:"observe,omitempty"`
+	Observe *NodeObserve `protobuf:"bytes,27,opt,name=observe,proto3" json:"observe,omitempty"`
+	// Timeout bounds a run of this workflow, as a literal Go duration ("3h",
+	// "90m"): more than zero and at most 7 days. It is measured from the run's
+	// start, across continue-as-new, and it keeps counting while the run is
+	// paused, waits for an approval, a question, a machine or capacity: it is
+	// what ends a run that is stuck. When it passes, the run is cancelled the
+	// way a stop cancels it, then ends FAILED with the error "run timeout <d>
+	// exceeded" (failure.error_code "run_timeout"); on_failure and finally
+	// still run, outside the timeout, each bounded as on any ending. It bounds
+	// the run whose root this workflow is; a workflow run by ref or spawned
+	// inside another run is bounded by that run's timeout instead. Unset, the
+	// default, means no bound.
+	Timeout       *CelString `protobuf:"bytes,28,opt,name=timeout,proto3" json:"timeout,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9371,6 +9383,13 @@ func (x *Workflow) GetCheck() *WorkflowCheck {
 func (x *Workflow) GetObserve() *NodeObserve {
 	if x != nil {
 		return x.Observe
+	}
+	return nil
+}
+
+func (x *Workflow) GetTimeout() *CelString {
+	if x != nil {
+		return x.Timeout
 	}
 	return nil
 }
@@ -10838,8 +10857,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xf3\n" +
-	"\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xa4\v\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -10870,7 +10888,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vpermissions\x18\x17 \x03(\tR\vpermissions\x12;\n" +
 	"\tattention\x18\x19 \x01(\v2\x1d.reliant.v1.WorkflowAttentionR\tattention\x12/\n" +
 	"\x05check\x18\x1a \x01(\v2\x19.reliant.v1.WorkflowCheckR\x05check\x121\n" +
-	"\aobserve\x18\x1b \x01(\v2\x17.reliant.v1.NodeObserveR\aobserve\x1aL\n" +
+	"\aobserve\x18\x1b \x01(\v2\x17.reliant.v1.NodeObserveR\aobserve\x12/\n" +
+	"\atimeout\x18\x1c \x01(\v2\x15.reliant.v1.CelStringR\atimeout\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
@@ -11319,33 +11338,34 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	101, // 235: reliant.v1.Workflow.attention:type_name -> reliant.v1.WorkflowAttention
 	100, // 236: reliant.v1.Workflow.check:type_name -> reliant.v1.WorkflowCheck
 	14,  // 237: reliant.v1.Workflow.observe:type_name -> reliant.v1.NodeObserve
-	2,   // 238: reliant.v1.SecretDeclaration.environment:type_name -> reliant.v1.CelString
-	2,   // 239: reliant.v1.NodeSecretRef.environment:type_name -> reliant.v1.CelString
-	0,   // 240: reliant.v1.WorkflowConcurrency.waiting:type_name -> reliant.v1.WorkflowConcurrencyWaiting
-	1,   // 241: reliant.v1.WorkflowConcurrency.cancel_running:type_name -> reliant.v1.WorkflowConcurrencyCancelRunning
-	136, // 242: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
-	136, // 243: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
-	137, // 244: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
-	137, // 245: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
-	137, // 246: reliant.v1.ComputeArgs.OutputsEntry.value:type_name -> google.protobuf.Value
-	137, // 247: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	137, // 248: reliant.v1.ReviewArgs.WithEntry.value:type_name -> google.protobuf.Value
-	137, // 249: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	66,  // 250: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	66,  // 251: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	53,  // 252: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
-	75,  // 253: reliant.v1.ToolCapabilities.BoundParamsEntry.value:type_name -> reliant.v1.ToolBoundParams
-	76,  // 254: reliant.v1.ToolBoundParams.ParamsEntry.value:type_name -> reliant.v1.BoundParam
-	136, // 255: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
-	95,  // 256: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
-	97,  // 257: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
-	53,  // 258: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
-	102, // 259: reliant.v1.Workflow.SecretsEntry.value:type_name -> reliant.v1.SecretDeclaration
-	260, // [260:260] is the sub-list for method output_type
-	260, // [260:260] is the sub-list for method input_type
-	260, // [260:260] is the sub-list for extension type_name
-	260, // [260:260] is the sub-list for extension extendee
-	0,   // [0:260] is the sub-list for field type_name
+	2,   // 238: reliant.v1.Workflow.timeout:type_name -> reliant.v1.CelString
+	2,   // 239: reliant.v1.SecretDeclaration.environment:type_name -> reliant.v1.CelString
+	2,   // 240: reliant.v1.NodeSecretRef.environment:type_name -> reliant.v1.CelString
+	0,   // 241: reliant.v1.WorkflowConcurrency.waiting:type_name -> reliant.v1.WorkflowConcurrencyWaiting
+	1,   // 242: reliant.v1.WorkflowConcurrency.cancel_running:type_name -> reliant.v1.WorkflowConcurrencyCancelRunning
+	136, // 243: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
+	136, // 244: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
+	137, // 245: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
+	137, // 246: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
+	137, // 247: reliant.v1.ComputeArgs.OutputsEntry.value:type_name -> google.protobuf.Value
+	137, // 248: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	137, // 249: reliant.v1.ReviewArgs.WithEntry.value:type_name -> google.protobuf.Value
+	137, // 250: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	66,  // 251: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	66,  // 252: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	53,  // 253: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
+	75,  // 254: reliant.v1.ToolCapabilities.BoundParamsEntry.value:type_name -> reliant.v1.ToolBoundParams
+	76,  // 255: reliant.v1.ToolBoundParams.ParamsEntry.value:type_name -> reliant.v1.BoundParam
+	136, // 256: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
+	95,  // 257: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
+	97,  // 258: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
+	53,  // 259: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
+	102, // 260: reliant.v1.Workflow.SecretsEntry.value:type_name -> reliant.v1.SecretDeclaration
+	261, // [261:261] is the sub-list for method output_type
+	261, // [261:261] is the sub-list for method input_type
+	261, // [261:261] is the sub-list for extension type_name
+	261, // [261:261] is the sub-list for extension extendee
+	0,   // [0:261] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_v2_proto_init() }

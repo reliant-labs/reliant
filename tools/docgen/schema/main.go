@@ -114,6 +114,12 @@ var toolHints = map[string]string{
 		"comes from how the run ended, never from this.",
 	"timeout": "A Go duration from 1m to 72h (default 6h), from the firing: a check still not concluded then " +
 		"concludes timed_out.",
+	// Qualified: WorkflowCheck.timeout above is the check's, not the run's.
+	"Workflow.timeout": "Bounds a run, as a literal Go duration more than zero and at most 168h (7 days), e.g. " +
+		"`timeout: 3h`, counted from the run's start and across continue-as-new; it keeps counting while the run is " +
+		"paused or waits for an approval, a question, a machine or capacity. When it passes the run is stopped like a " +
+		"user stop and ends FAILED with \"run timeout <d> exceeded\" (failure.error_code `run_timeout`); on_failure and " +
+		"finally still run, outside it. Only the run's root workflow's applies. Unset: no bound.",
 	"requires": "What a run needs from outside its definition, checked after its machine is up and before its " +
 		"first node: {tools, integrations, repos}. A run missing anything fails at once, naming every " +
 		"missing item with its fix. See WorkflowRequirements below.",
