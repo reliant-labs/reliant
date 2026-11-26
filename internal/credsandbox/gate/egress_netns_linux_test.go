@@ -1,19 +1,20 @@
 // Copyright (c) 2025 Reliant Labs
 
-//go:build linux
+//go:build linux && integration
 
 package gate
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
-
-	"github.com/reliant-labs/forge/pkg/testkit"
+	"time"
 )
 
 // These tests run the real ProvisionScript, real iptables and real packets in
@@ -23,6 +24,9 @@ import (
 // the machine's own tables are never touched.
 
 var netnsAllow = mustPrefixes("10.20.0.0/16")
+
+// netnsScriptTimeout bounds one netns script (each takes 10-30s).
+const netnsScriptTimeout = 3 * time.Minute
 
 // inNetns runs script with sh as root in a fresh network namespace and
 // returns its output. It skips the test where neither root nor passwordless
@@ -41,8 +45,19 @@ func inNetns(t *testing.T, script string) string {
 	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// Bounded, so a stall fails here, naming itself, inside the package's
+	// budget. SIGTERM, which sudo relays to the script (unshare execs it),
+	// whose EXIT trap then cleans up; WaitDelay bounds the rest.
+	ctx, cancel := context.WithTimeout(context.Background(), netnsScriptTimeout)
+	defer cancel()
 	args = append(append([]string{}, prefix...), "unshare", "--net", "sh", path)
-	out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
+	cmd.Cancel = func() error { return cmd.Process.Signal(syscall.SIGTERM) }
+	cmd.WaitDelay = 10 * time.Second
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() != nil {
+		t.Fatalf("netns script did not finish within %s:\n%s", netnsScriptTimeout, out)
+	}
 	if err != nil {
 		t.Fatalf("netns script: %v\n%s", err, out)
 	}
@@ -128,7 +143,6 @@ PATH=/usr/sbin:/sbin:/usr/bin:/bin exec "$real" "$@"
 // complete rule set hooked first, ends in the one canonical shape, and
 // changes nothing when re-run on it.
 func TestProvisionScriptNeverUnguardsInNetns(t *testing.T) {
-	testkit.Slow(t, "runs iptables in throwaway network namespaces, dozens of times")
 	script := EgressPolicy{Allow: netnsAllow}.ProvisionScript()
 	g1 := EgressChain + "-G1"
 	states := []struct {
@@ -262,7 +276,6 @@ func tablesOf(step string) string {
 // public peer is, from the gate, while the host still reaches the private
 // peer.
 func TestProvisionedRulesDenyInNetns(t *testing.T) {
-	testkit.Slow(t, "builds a routed topology of network namespaces and probes it")
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Skip("python3 is needed for the namespace listeners and probes")
 	}
@@ -290,45 +303,68 @@ func TestProvisionedRulesDenyInNetns(t *testing.T) {
 W=$(mktemp -d)
 cleanup() { kill $(cat "$W/pids") 2>/dev/null || true; rm -rf "$W"; }
 trap cleanup EXIT
+trap 'exit 1' INT TERM
 : >"$W/pids"
 cat >"$W/serve.py" <<'RELIANT_EOF'
-import socket, sys, threading
+import errno, socket, sys, threading, time
 port, token = int(sys.argv[1]), sys.argv[2].encode()
-def serve(addr):
+def listen(addr):
     fam = socket.AF_INET6 if ":" in addr else socket.AF_INET
     s = socket.socket(fam, socket.SOCK_STREAM)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     if fam == socket.AF_INET6:
         s.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
-    s.bind((addr, port)); s.listen(16)
+    # A just-added address may not be assignable yet: wait for it.
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            s.bind((addr, port)); break
+        except OSError as e:
+            if e.errno != errno.EADDRNOTAVAIL or time.monotonic() > deadline:
+                raise OSError(e.errno, "binding %s:%d: %s" % (addr, port, e.strerror))
+            time.sleep(0.05)
+    s.listen(16)
+    return s
+def serve(s):
     while True:
         c, _ = s.accept(); c.sendall(token); c.close()
-ts = [threading.Thread(target=serve, args=(a,), daemon=True) for a in sys.argv[3:]]
+# Every socket listens before "ready" is printed.
+ts = [threading.Thread(target=serve, args=(listen(a),), daemon=True) for a in sys.argv[3:]]
 [t.start() for t in ts]
 print("ready", flush=True)
 [t.join() for t in ts]
 RELIANT_EOF
 cat >"$W/probe.py" <<'RELIANT_EOF'
-import socket, sys
-try:
-    info = socket.getaddrinfo(sys.argv[1], int(sys.argv[2]), type=socket.SOCK_STREAM)[0]
-    s = socket.socket(info[0], socket.SOCK_STREAM); s.settimeout(2)
-    s.connect(info[4]); print("yes" if s.recv(64).startswith(b"token-") else "no")
-except Exception:
-    print("no")
+import socket, sys, time
+# probe.py addr port [seconds]: "yes" once the listener answers, retrying for
+# seconds (a positive control waiting out neighbour discovery); "no" if not.
+def once():
+    try:
+        info = socket.getaddrinfo(sys.argv[1], int(sys.argv[2]), type=socket.SOCK_STREAM)[0]
+        s = socket.socket(info[0], socket.SOCK_STREAM); s.settimeout(2)
+        s.connect(info[4]); return s.recv(64).startswith(b"token-")
+    except Exception:
+        return False
+deadline = time.monotonic() + float(sys.argv[3] if len(sys.argv) > 3 else 0)
+ok = once()
+while not ok and time.monotonic() < deadline:
+    time.sleep(0.2); ok = once()
+print("yes" if ok else "no")
 RELIANT_EOF
-mkns() { unshare --net sleep 600 >/dev/null 2>&1 & echo $! >>"$W/pids"; echo $!; }
+# waitfor DESC CMD...: CMD succeeds within 10s, or the script fails naming DESC.
+waitfor() { d=$1; shift; i=0; until "$@"; do i=$((i+1)); [ $i -lt 200 ] || { echo "timed out waiting for $d" >&2; return 1; }; sleep 0.05; done; }
+newns() { [ "$(readlink /proc/$1/ns/net 2>/dev/null)" != "" ] && [ "$(readlink /proc/$1/ns/net)" != "$(readlink /proc/self/ns/net)" ]; }
+mkns() { unshare --net sleep 600 >/dev/null 2>&1 & echo $! >>"$W/pids"; waitfor "namespace of $!" newns $!; echo $!; }
 inns() { p=$1; shift; nsenter -t "$p" -n "$@"; }
 serve() { # ns-pid port addrs...
-	p=$1; shift
-	if [ "$p" = host ]; then python3 "$W/serve.py" "$1" token-x "$@" >>"$W/serve.log" 2>&1 &
-	else nsenter -t "$p" -n python3 "$W/serve.py" "$1" token-x "$@" >>"$W/serve.log" 2>&1 & fi
+	p=$1; port=$2; shift 2
+	if [ "$p" = host ]; then python3 "$W/serve.py" "$port" token-x "$@" >>"$W/serve.log" 2>&1 &
+	else nsenter -t "$p" -n python3 "$W/serve.py" "$port" token-x "$@" >>"$W/serve.log" 2>&1 & fi
 	echo $! >>"$W/pids"
 }
 ip link set lo up
 sysctl -qw net.ipv4.ip_forward=1 net.ipv6.conf.all.forwarding=1
 gate=$(mkns); priv=$(mkns); pub=$(mkns)
-sleep 0.2
 
 ip link add rgatetest0 type bridge
 ip link set rgatetest0 up
@@ -372,25 +408,29 @@ serve host 9090 0.0.0.0 ::
 serve "$priv" 8080 192.168.77.2 fd00:77::2
 serve "$priv" 80 169.254.169.254
 serve "$pub" 8080 203.0.113.2 2001:db8:113::2
-sleep 1
-probe() { # label ns addr port
-	r=$(if [ "$2" = host ]; then python3 "$W/probe.py" "$3" "$4"; else nsenter -t "$2" -n python3 "$W/probe.py" "$3" "$4"; fi)
+ready4() { [ "$(grep -c '^ready$' "$W/serve.log" 2>/dev/null)" -ge 4 ]; }
+waitfor "the four listeners" ready4 || { cat "$W/serve.log" >&2; exit 1; }
+probe() { # label ns addr port [seconds to keep trying]
+	r=$(if [ "$2" = host ]; then python3 "$W/probe.py" "$3" "$4" ${5:-0}; else nsenter -t "$2" -n python3 "$W/probe.py" "$3" "$4" ${5:-0}; fi)
 	echo "REACH $1 $3 $r"
 }
 `)
-	writeProbes := func(phase string) {
+	// Before provisioning every probe is a positive control, retried until
+	// it answers (or 10s pass); after, one try each, since a denial must
+	// hold every time.
+	writeProbes := func(phase string, retry int) {
 		for _, p := range probes {
-			fmt.Fprintf(&sh, "probe %s-gate \"$gate\" %s %d\n", phase, p.addr, p.port)
+			fmt.Fprintf(&sh, "probe %s-gate \"$gate\" %s %d %d\n", phase, p.addr, p.port, retry)
 			if p.fromHostToo {
-				fmt.Fprintf(&sh, "probe %s-host host %s %d\n", phase, p.addr, p.port)
+				fmt.Fprintf(&sh, "probe %s-host host %s %d %d\n", phase, p.addr, p.port, retry)
 			}
 		}
 	}
-	writeProbes("before")
+	writeProbes("before", 10)
 	sh.WriteString(baseTables)
 	fmt.Fprintf(&sh, "cat >\"$W/provision.sh\" <<'RELIANT_EOF'\n%sRELIANT_EOF\n", script)
 	sh.WriteString("RELIANT_GATE_LOCK=\"$W/lock\" sh \"$W/provision.sh\"\n")
-	writeProbes("after")
+	writeProbes("after", 0)
 
 	out := inNetns(t, sh.String())
 	got := map[string]string{}
