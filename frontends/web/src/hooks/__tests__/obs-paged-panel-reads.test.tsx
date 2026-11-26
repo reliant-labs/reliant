@@ -35,7 +35,7 @@ import { resetObsQuotaStore } from "@/services/controlPlane/observability/quotaS
 import { resetObsReadScheduler } from "@/services/controlPlane/observability/readScheduler";
 import type { ObsScope, Panel } from "@/services/controlPlane/observability/types";
 
-import { invalidateObsScope, useSearchLogs, useServiceGraph, usePanelQuery, type LogFilters } from "../observability-queries";
+import { invalidateObsScope, panelQueryKey, useSearchLogs, useServiceGraph, usePanelQuery, type LogFilters } from "../observability-queries";
 
 const SCOPE: ObsScope = { orgId: "org", projectId: "shop", envIds: ["env-prod"], filters: [] };
 const HOUR = 3_600_000;
@@ -97,6 +97,31 @@ afterEach(() => {
 });
 
 describe("QueryPanel on its generated hook", () => {
+  it("shares identical reads only when their Forge-Panel attribution matches", async () => {
+    const { arrivals, client, wrapper } = setup();
+    const { result } = renderHook(
+      () => [
+        usePanelQuery(SCOPE, "1h", PANEL, [], [], { dashboardId: "overview" }),
+        usePanelQuery(SCOPE, "1h", PANEL, [], [], { dashboardId: "traffic" }),
+        usePanelQuery(SCOPE, "1h", { ...PANEL, title: "Same computation" }, [], [], { dashboardId: "overview" }),
+        usePanelQuery(SCOPE, "1h", PANEL, []),
+      ],
+      { wrapper }
+    );
+    await waitFor(() => expect(result.current.every((query) => query.isSuccess)).toBe(true));
+    expect(arrivals.map((a) => a.panel).sort()).toEqual([null, "overview/requests", "traffic/requests"]);
+    expect(arrivals.every((a) => a.method === "queryPanel")).toBe(true);
+    for (const arrival of arrivals) expect(arrival.request).toEqual(arrivals[0]!.request);
+
+    // Exact lookups (such as the drawer's) and scoped refresh must still find the reads.
+    for (const dashboardId of ["overview", "traffic", undefined]) {
+      const key = panelQueryKey(SCOPE, "1h", PANEL, [], [], undefined, dashboardId);
+      expect(client.getQueryData(key)).toMatchObject({ kind: "number" });
+    }
+    await act(async () => void (await invalidateObsScope(client, SCOPE)));
+    expect(arrivals.slice(3).map((a) => a.panel).sort()).toEqual([null, "overview/requests", "traffic/requests"]);
+  });
+
   it("labels a dashboard's read with Forge-Panel, sends a previous period as ends_ago, and a release comparison as bounds ending at it", async () => {
     const { arrivals, wrapper } = setup();
     const promotedAtMs = Date.UTC(2026, 10, 9, 12);

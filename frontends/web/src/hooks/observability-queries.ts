@@ -50,6 +50,7 @@ import {
   effectiveWindowOf,
   flamegraphRequest,
   listTracesRequest,
+  PANEL_HEADER,
   panelHeaders,
   queryPanelRequest,
   relativeWindow,
@@ -149,8 +150,8 @@ function scopeIdentity(scope: Record<string, unknown> | undefined): string | und
 
 /**
  * The scope a generated read's key names: its request (protojson) carries a
- * QueryScope. The request is the key's last object: a paged read's key ends
- * with "infinite" after it.
+ * QueryScope. The request is the key's last object, before any string suffixes
+ * for pagination or panel attribution.
  */
 function keyScope(key: QueryKey | undefined): string | undefined {
   const request = key ? [...key].reverse().find((part) => !!part && typeof part === "object") : undefined;
@@ -563,12 +564,20 @@ export function usePanelSelect(window: ObsWindow) {
 }
 
 /**
- * The cache key of usePanelQuery's read: the generated QueryPanel read's
- * (its request), or, for a postgres panel, the hand-written one's.
+ * The cache key of usePanelQuery's read: the generated QueryPanel key with
+ * any Forge-Panel attribution, or the hand-written postgres panel key.
  */
-export function panelQueryKey(scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[] = [], offset?: PanelOffset): QueryKey {
+export function panelQueryKey(scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[] = [], offset?: PanelOffset, dashboardId?: string): QueryKey {
   if (panel.kind === "postgres") return obsKeys.panel(scope, range, panel, services, groupBy, offset);
-  return observabilityServiceKeys.queryPanel(panelRequest(scope, range, panel, services, groupBy, offset));
+  const key = observabilityServiceKeys.queryPanel(panelRequest(scope, range, panel, services, groupBy, offset));
+  return attributedPanelKey(key, panelHeaders(dashboardId, panel.id));
+}
+
+function attributedPanelKey(key: QueryKey, headers: ReturnType<typeof panelHeaders>): QueryKey {
+  const attribution = headers?.[PANEL_HEADER];
+  // Call options do not affect the generated key. Keep its prefix for scoped
+  // refreshes, but do not deduplicate requests that log under different labels.
+  return attribution ? [...key, PANEL_HEADER, attribution] : key;
 }
 
 function panelRequest(scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset?: PanelOffset) {
@@ -602,13 +611,14 @@ export function usePanelQuery(
   const postgres = panel.kind === "postgres";
   const request = panelRequest(scope, range, panel, services, groupBy, options.offset);
   const select = usePanelSelect(window);
+  const headers = panelHeaders(options.dashboardId, panel.id);
   // One query either way, so a panel is one cache entry: QueryPanel's generated read, or the postgres read.
   const telemetryRead = observabilityServiceQueries.queryPanel(request, {
     select,
     staleTime: 30_000,
     retry: obsRetry,
     retryDelay: obsRetryDelay,
-    callOptions: () => obsCall({ headers: panelHeaders(options.dashboardId, panel.id) }),
+    callOptions: () => obsCall({ headers }),
   });
   const databaseRead = {
     queryKey: obsKeys.panel(scope, range, panel, services, groupBy, options.offset),
@@ -617,7 +627,7 @@ export function usePanelQuery(
     retry: obsRetry,
     retryDelay: obsRetryDelay,
   };
-  const read = (postgres ? databaseRead : telemetryRead) as UseQueryOptions<unknown, Error, PanelResult, QueryKey>;
+  const read = (postgres ? databaseRead : { ...telemetryRead, queryKey: attributedPanelKey(telemetryRead.queryKey, headers) }) as UseQueryOptions<unknown, Error, PanelResult, QueryKey>;
   const query = useQuery({ ...read, enabled });
   // Nor does the quota slow or stop a postgres panel's refresh.
   usePolled(read.queryKey, options.refetchInterval ?? false, enabled, !postgres);
