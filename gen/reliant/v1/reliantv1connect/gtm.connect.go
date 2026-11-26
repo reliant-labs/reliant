@@ -153,8 +153,9 @@ type GtmServiceClient interface {
 	UpdateStrategy(context.Context, *connect.Request[v1.UpdateStrategyRequest]) (*connect.Response[v1.UpdateStrategyResponse], error)
 	// ListChannels lists the org's channels by key. An allowlisted org with no
 	// channel yet is given the default set on its first List or Get (blog,
-	// email, hacker-news, reddit, linkedin, x, youtube), idempotently; nothing
-	// else differs between calls. connection_state is computed per caller.
+	// email, hacker-news, reddit, linkedin, x, youtube), each with a small
+	// generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
+	// side-effect free. connection_state is computed per caller.
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
@@ -182,7 +183,10 @@ type GtmServiceClient interface {
 	// The client PUTs the bytes to upload_url with required_headers before
 	// expires_at, then calls ConfirmAssetUpload. Limits are the service's: 25
 	// MiB per asset (64 MiB when an agent copies a chat attachment), about 2 GiB
-	// per org (ResourceExhausted past either).
+	// per org (ResourceExhausted past either). A PENDING asset counts toward the
+	// org's quota (at its declared size) until it is confirmed or swept: the
+	// storage implementation removes a PENDING asset older than 24 hours, row
+	// and object.
 	CreateAssetUpload(context.Context, *connect.Request[v1.CreateAssetUploadRequest]) (*connect.Response[v1.CreateAssetUploadResponse], error)
 	// ConfirmAssetUpload finishes an upload: the server reads the object,
 	// checks its size against the declared one, sniffs its type against the
@@ -201,17 +205,21 @@ type GtmServiceClient interface {
 	// GetStrategyLibraryEntry returns one library entry by key.
 	GetStrategyLibraryEntry(context.Context, *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error)
 	// ImportStrategyLibrary upserts a batch of library entries by key, at most
-	// 500: a new key is created, a changed entry updated, an equal one left
-	// alone (each counted). With prune, the org's entries whose key is not in
-	// the batch are removed (strategies made from them keep their library_key).
-	// A person's act only (PermissionDenied for an agent).
+	// 500 per call: a new key is created, a changed entry updated, an equal one
+	// left alone (each counted). A library larger than one batch is imported in
+	// several calls. With prune, all_keys must list the library's COMPLETE key
+	// set (every batch's keys), and the org's entries whose key is not in it are
+	// removed, so each batch of a multi-call import may prune safely
+	// (strategies made from a removed entry keep their library_key). A person's
+	// act only (PermissionDenied for an agent).
 	ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error)
 	// UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
 	// goal (from north_star and objective), target metric (from kpis),
 	// category and library_key. With create_first_campaign it also makes a
 	// first DRAFT campaign under it (campaign_name, or the entry's name), whose
-	// planned_channel_ids are the org's channels whose key matches one of the
-	// entry's channel_types. A person or an agent may call it.
+	// planned_channel_ids are the org's ACTIVE channels that fit the entry: a
+	// channel whose channel_types share a type with the entry's channel_types,
+	// or whose key equals one of them. A person or an agent may call it.
 	UseLibraryStrategy(context.Context, *connect.Request[v1.UseLibraryStrategyRequest]) (*connect.Response[v1.UseLibraryStrategyResponse], error)
 	// ListIdeas lists the org's ideas, newest first.
 	ListIdeas(context.Context, *connect.Request[v1.ListIdeasRequest]) (*connect.Response[v1.ListIdeasResponse], error)
@@ -353,14 +361,14 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+GtmServiceListChannelsProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("ListChannels")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		getChannel: connect.NewClient[v1.GetChannelRequest, v1.GetChannelResponse](
 			httpClient,
 			baseURL+GtmServiceGetChannelProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("GetChannel")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithIdempotency(connect.IdempotencyIdempotent),
 			connect.WithClientOptions(opts...),
 		),
 		createChannel: connect.NewClient[v1.CreateChannelRequest, v1.CreateChannelResponse](
@@ -809,8 +817,9 @@ type GtmServiceHandler interface {
 	UpdateStrategy(context.Context, *connect.Request[v1.UpdateStrategyRequest]) (*connect.Response[v1.UpdateStrategyResponse], error)
 	// ListChannels lists the org's channels by key. An allowlisted org with no
 	// channel yet is given the default set on its first List or Get (blog,
-	// email, hacker-news, reddit, linkedin, x, youtube), idempotently; nothing
-	// else differs between calls. connection_state is computed per caller.
+	// email, hacker-news, reddit, linkedin, x, youtube), each with a small
+	// generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
+	// side-effect free. connection_state is computed per caller.
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
@@ -838,7 +847,10 @@ type GtmServiceHandler interface {
 	// The client PUTs the bytes to upload_url with required_headers before
 	// expires_at, then calls ConfirmAssetUpload. Limits are the service's: 25
 	// MiB per asset (64 MiB when an agent copies a chat attachment), about 2 GiB
-	// per org (ResourceExhausted past either).
+	// per org (ResourceExhausted past either). A PENDING asset counts toward the
+	// org's quota (at its declared size) until it is confirmed or swept: the
+	// storage implementation removes a PENDING asset older than 24 hours, row
+	// and object.
 	CreateAssetUpload(context.Context, *connect.Request[v1.CreateAssetUploadRequest]) (*connect.Response[v1.CreateAssetUploadResponse], error)
 	// ConfirmAssetUpload finishes an upload: the server reads the object,
 	// checks its size against the declared one, sniffs its type against the
@@ -857,17 +869,21 @@ type GtmServiceHandler interface {
 	// GetStrategyLibraryEntry returns one library entry by key.
 	GetStrategyLibraryEntry(context.Context, *connect.Request[v1.GetStrategyLibraryEntryRequest]) (*connect.Response[v1.GetStrategyLibraryEntryResponse], error)
 	// ImportStrategyLibrary upserts a batch of library entries by key, at most
-	// 500: a new key is created, a changed entry updated, an equal one left
-	// alone (each counted). With prune, the org's entries whose key is not in
-	// the batch are removed (strategies made from them keep their library_key).
-	// A person's act only (PermissionDenied for an agent).
+	// 500 per call: a new key is created, a changed entry updated, an equal one
+	// left alone (each counted). A library larger than one batch is imported in
+	// several calls. With prune, all_keys must list the library's COMPLETE key
+	// set (every batch's keys), and the org's entries whose key is not in it are
+	// removed, so each batch of a multi-call import may prune safely
+	// (strategies made from a removed entry keep their library_key). A person's
+	// act only (PermissionDenied for an agent).
 	ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error)
 	// UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
 	// goal (from north_star and objective), target metric (from kpis),
 	// category and library_key. With create_first_campaign it also makes a
 	// first DRAFT campaign under it (campaign_name, or the entry's name), whose
-	// planned_channel_ids are the org's channels whose key matches one of the
-	// entry's channel_types. A person or an agent may call it.
+	// planned_channel_ids are the org's ACTIVE channels that fit the entry: a
+	// channel whose channel_types share a type with the entry's channel_types,
+	// or whose key equals one of them. A person or an agent may call it.
 	UseLibraryStrategy(context.Context, *connect.Request[v1.UseLibraryStrategyRequest]) (*connect.Response[v1.UseLibraryStrategyResponse], error)
 	// ListIdeas lists the org's ideas, newest first.
 	ListIdeas(context.Context, *connect.Request[v1.ListIdeasRequest]) (*connect.Response[v1.ListIdeasResponse], error)
@@ -1005,14 +1021,14 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		GtmServiceListChannelsProcedure,
 		svc.ListChannels,
 		connect.WithSchema(gtmServiceMethods.ByName("ListChannels")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceGetChannelHandler := connect.NewUnaryHandler(
 		GtmServiceGetChannelProcedure,
 		svc.GetChannel,
 		connect.WithSchema(gtmServiceMethods.ByName("GetChannel")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithIdempotency(connect.IdempotencyIdempotent),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceCreateChannelHandler := connect.NewUnaryHandler(
