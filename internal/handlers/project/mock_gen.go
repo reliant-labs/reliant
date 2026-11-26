@@ -701,7 +701,7 @@ func (m *MockProjectPurges) ListDeletedProjects(ctx context.Context, userID stri
 var _ ProjectPurges = (*MockProjectPurges)(nil)
 
 // forge:section MockMoveLedger
-// forge:hash=f8016713816e585dc78448b1194818d11ce8c3048ff5f86912ca9ef7b4d4090b
+// forge:hash=99f5c24dafd93d81079f4a24709e0399ffe63b43173dfa4758c33ab7332cd432
 
 // MockMoveLedger is a test mock for the MoveLedger interface.
 //
@@ -717,6 +717,7 @@ type MockMoveLedger struct {
 	FindProjectOrgMoveByRequestFunc func(context.Context, string, string) (*core.ProjectOrgMove, error)
 	GetProjectOrgMoveFunc           func(context.Context, string) (*core.ProjectOrgMove, error)
 	ListProjectOrgMovesFunc         func(context.Context, core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
+	ProjectPipelineEnrolledFunc     func(context.Context, string) (bool, error)
 }
 
 // ProjectOrgMoveBlockers records the call and delegates to ProjectOrgMoveBlockersFunc when set.
@@ -771,6 +772,15 @@ func (m *MockMoveLedger) ListProjectOrgMoves(ctx context.Context, f core.Project
 		return m.ListProjectOrgMovesFunc(ctx, f)
 	}
 	return nil, contractkit.MockNotSet("MockMoveLedger", "ListProjectOrgMoves")
+}
+
+// ProjectPipelineEnrolled records the call and delegates to ProjectPipelineEnrolledFunc when set.
+func (m *MockMoveLedger) ProjectPipelineEnrolled(ctx context.Context, projectID string) (bool, error) {
+	m.Recorder.Record("ProjectPipelineEnrolled", ctx, projectID)
+	if m.ProjectPipelineEnrolledFunc != nil {
+		return m.ProjectPipelineEnrolledFunc(ctx, projectID)
+	}
+	return false, contractkit.MockNotSet("MockMoveLedger", "ProjectPipelineEnrolled")
 }
 
 // Compile-time check.
