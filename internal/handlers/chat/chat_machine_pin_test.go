@@ -20,7 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // placingRouter is the router of a user whose cloud VM has the project and
@@ -102,7 +101,7 @@ func TestSendMessageToALegacyUnpinnedChatPinsItToTheMachineWithTheProject(t *tes
 	wake := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}}
 	svc := &Service{
 		deps: Deps{
-			Repo:        triggerreads.Of(repo),
+			Repo:        repo,
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

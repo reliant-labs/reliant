@@ -30,7 +30,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
@@ -192,7 +191,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 }
 
 func newFastPollPreflight(repo *db.Repo, router toolexec.DaemonRouter) *PreflightDaemonCheckActivity {
-	a := NewPreflightDaemonCheckActivity(triggerreads.Of(repo), workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
+	a := NewPreflightDaemonCheckActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 20 * time.Millisecond
 	return a
 }

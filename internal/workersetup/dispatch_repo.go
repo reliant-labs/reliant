@@ -1,21 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 package workersetup
 
-import (
-	"context"
+import "github.com/reliant-labs/reliant/internal/store"
 
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/store"
-)
-
-// dispatchRepo is the repository as the workflow-event dispatcher sees it: the
-// facade plus the launch-event read of a chat, which the generated trigger
-// event store answers.
-type dispatchRepo struct {
-	*db.Repo
-}
-
-func (r dispatchRepo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
-	return store.NewTriggerEventExtStore(r.ORM()).GetTriggerEventByChatID(ctx, chatID)
+// dispatchTriggerReads is what the workflow-event dispatcher reads of the stored
+// triggers: the event owner's triggers and the launch event of a run.
+type dispatchTriggerReads struct {
+	store.TriggerExtStore
+	store.TriggerEventExtStore
 }

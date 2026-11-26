@@ -252,7 +252,7 @@ func TestOrgOfTriggersSavedWorkflowsAndRuns(t *testing.T) {
 	}
 	triggerIDs := func(scope *core.OrgScope) []string {
 		t.Helper()
-		ts, err := env.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: user, Org: scope})
+		ts, err := store.ListTriggersForUser(ctx, env.Repo.ORM(), core.TriggerFilters{UserID: user, Org: scope})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -108,7 +108,7 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 var _ Questions = (*MockQuestions)(nil)
 
 // forge:section MockMessages
-// forge:hash=e538e6cd1aaecf6b2a3928c5d327dee1754d7f777e4873819637480758889ee8
+// forge:hash=0b082c36e92ab00fea850e4160fec7d05524cf8d0545f97422e5893dd5d464c6
 
 // MockMessages is a test mock for the Messages interface.
 //
@@ -118,8 +118,9 @@ var _ Questions = (*MockQuestions)(nil)
 // "MockMessages.<Method>Func not set" error.
 type MockMessages struct {
 	contractkit.Recorder
-	FindMessageFunc        func(context.Context, string) (*core.Message, error)
-	LatestTurnInThreadFunc func(context.Context, string) (*core.Message, error)
+	FindMessageFunc         func(context.Context, string) (*core.Message, error)
+	LatestTurnInThreadFunc  func(context.Context, string) (*core.Message, error)
+	ClaimUserActivationFunc func(context.Context, string, string, string) (bool, error)
 }
 
 // FindMessage records the call and delegates to FindMessageFunc when set.
@@ -138,6 +139,15 @@ func (m *MockMessages) LatestTurnInThread(ctx context.Context, threadID string) 
 		return m.LatestTurnInThreadFunc(ctx, threadID)
 	}
 	return nil, contractkit.MockNotSet("MockMessages", "LatestTurnInThread")
+}
+
+// ClaimUserActivation records the call and delegates to ClaimUserActivationFunc when set.
+func (m *MockMessages) ClaimUserActivation(ctx context.Context, userID string, chatID string, messageID string) (bool, error) {
+	m.Recorder.Record("ClaimUserActivation", ctx, userID, chatID, messageID)
+	if m.ClaimUserActivationFunc != nil {
+		return m.ClaimUserActivationFunc(ctx, userID, chatID, messageID)
+	}
+	return false, contractkit.MockNotSet("MockMessages", "ClaimUserActivation")
 }
 
 // Compile-time check.
@@ -225,8 +235,34 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 // Compile-time check.
 var _ Spawns = (*MockSpawns)(nil)
 
+// forge:section MockTriggerReads
+// forge:hash=8397ad30d537d8352042cde45bac5f471b265475699993e564528381f18f862c
+
+// MockTriggerReads is a test mock for the TriggerReads interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockTriggerReads.<Method>Func not set" error.
+type MockTriggerReads struct {
+	contractkit.Recorder
+	GetTriggerEventByChatIDFunc func(context.Context, string) (*core.TriggerEvent, error)
+}
+
+// GetTriggerEventByChatID records the call and delegates to GetTriggerEventByChatIDFunc when set.
+func (m *MockTriggerReads) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetTriggerEventByChatID", ctx, chatID)
+	if m.GetTriggerEventByChatIDFunc != nil {
+		return m.GetTriggerEventByChatIDFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockTriggerReads", "GetTriggerEventByChatID")
+}
+
+// Compile-time check.
+var _ TriggerReads = (*MockTriggerReads)(nil)
+
 // forge:section MockRepository
-// forge:hash=b27b60a984b2d7e4bff0228994efd25a96994f8d44a48748339437b037b4e021
+// forge:hash=f25c3a141b38b4a132ab92c9e6eb518de727f6fd0f46ef9296fbd8ab27fe040d
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -258,7 +294,6 @@ type MockRepository struct {
 	ListForkedThreadIDsFunc                                  func(context.Context, []string) ([]string, error)
 	ThreadAwaitsReplyFunc                                    func(context.Context, string) (bool, error)
 	CountMessagesInThreadFunc                                func(context.Context, string) (int, error)
-	ClaimUserActivationFunc                                  func(context.Context, string, string, string) (bool, error)
 	ListTranscriptSiblingMessagesInRangeFunc                 func(context.Context, string, string, int64, *int64, int) ([]*db.Message, error)
 	GetWorkflowByThreadFunc                                  func(context.Context, string, string) (*db.Workflow, error)
 	ListWorkflowsByChatFunc                                  func(context.Context, string) ([]*db.Workflow, error)
@@ -286,7 +321,6 @@ type MockRepository struct {
 	UnarchiveWorktreeFunc                                    func(context.Context, string) error
 	GetWorkflowCheckpointFunc                                func(context.Context, string) (*db.WorkflowCheckpoint, error)
 	ListToolGrantsFunc                                       func(context.Context, string) ([]*db.ToolGrant, error)
-	GetTriggerEventByChatIDFunc                              func(context.Context, string) (*core.TriggerEvent, error)
 	CreateNumberedMessageFunc                                func(context.Context, *db.Message) error
 	CreateThreadFunc                                         func(context.Context, *db.Thread) (*db.Thread, error)
 	GetThreadFunc                                            func(context.Context, string) (*db.Thread, error)
@@ -561,15 +595,6 @@ func (m *MockRepository) CountMessagesInThread(ctx context.Context, threadID str
 	return 0, contractkit.MockNotSet("MockRepository", "CountMessagesInThread")
 }
 
-// ClaimUserActivation records the call and delegates to ClaimUserActivationFunc when set.
-func (m *MockRepository) ClaimUserActivation(ctx context.Context, userID string, chatID string, messageID string) (bool, error) {
-	m.Recorder.Record("ClaimUserActivation", ctx, userID, chatID, messageID)
-	if m.ClaimUserActivationFunc != nil {
-		return m.ClaimUserActivationFunc(ctx, userID, chatID, messageID)
-	}
-	return false, contractkit.MockNotSet("MockRepository", "ClaimUserActivation")
-}
-
 // ListTranscriptSiblingMessagesInRange records the call and delegates to ListTranscriptSiblingMessagesInRangeFunc when set.
 func (m *MockRepository) ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID string, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*db.Message, error) {
 	m.Recorder.Record("ListTranscriptSiblingMessagesInRange", ctx, chatID, mainThreadID, fromSeq, toSeq, limit)
@@ -811,15 +836,6 @@ func (m *MockRepository) ListToolGrants(ctx context.Context, chatID string) ([]*
 		return m.ListToolGrantsFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListToolGrants")
-}
-
-// GetTriggerEventByChatID records the call and delegates to GetTriggerEventByChatIDFunc when set.
-func (m *MockRepository) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
-	m.Recorder.Record("GetTriggerEventByChatID", ctx, chatID)
-	if m.GetTriggerEventByChatIDFunc != nil {
-		return m.GetTriggerEventByChatIDFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetTriggerEventByChatID")
 }
 
 // CreateNumberedMessage records the call and delegates to CreateNumberedMessageFunc when set.

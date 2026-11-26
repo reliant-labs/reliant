@@ -24,7 +24,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 const builderTestDraftYAML = `name: bt-draft
@@ -53,7 +52,7 @@ func newBuilderTestFixture(t *testing.T) *builderTestFixture {
 		repo: repo, ctx: ctx, projectID: projectID,
 		service: &Service{
 			deps: Deps{
-				Repo:        triggerreads.Of(repo),
+				Repo:        repo,
 				Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 				Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 				ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

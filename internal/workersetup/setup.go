@@ -472,7 +472,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		Name: workflowevent.DispatchWorkflowName,
 	})
 	if cfg.TriggerLauncher != nil {
-		dispatcher := workflowevent.NewDispatcher(dispatchRepo{cfg.Database}, cfg.TriggerLauncher, nil).WithWorkflows(declarations).WithAutoPause(triggerAutoPause(cfg))
+		dispatcher := workflowevent.NewDispatcher(cfg.Database, dispatchTriggerReads{store.NewTriggerExtStore(cfg.Database.ORM()), store.NewTriggerEventExtStore(cfg.Database.ORM())}, cfg.TriggerLauncher, nil).WithWorkflows(declarations).WithAutoPause(triggerAutoPause(cfg))
 		w.RegisterActivityWithOptions(
 			workflowevent.NewActivity(store.NewRunEventExtStore(cfg.Database.ORM()), dispatcher).Dispatch,
 			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},

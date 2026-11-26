@@ -17,7 +17,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // GetWorkflowExecutions' BASIC view returns what the chat timeline renders —
@@ -86,7 +85,7 @@ func TestGetWorkflowExecutions_BasicViewReturnsOnlyTimelineSteps(t *testing.T) {
 			OutputJSON: stepOutput(`{"note":"nothing saved"}`), CreatedAt: base.Add(5 * time.Millisecond)},
 	})
 
-	steps, counting := basicViewStepIDs(t, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_BASIC, triggerreads.Of(repo), ctx, chatID)
+	steps, counting := basicViewStepIDs(t, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_BASIC, repo, ctx, chatID)
 
 	require.Equal(t, 1, counting.basicCalls, "BASIC must use exactly one chat-scoped query")
 	require.Zero(t, counting.chatScopedCalls, "BASIC must not run the FULL query")
@@ -121,7 +120,7 @@ func TestGetWorkflowExecutions_BasicViewSiblingIsLoopScoped(t *testing.T) {
 		loopStep("review", "Review", "loop-a", 3, base.Add(2*time.Millisecond), `{"i":3}`),
 	})
 
-	steps, _ := basicViewStepIDs(t, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_BASIC, triggerreads.Of(repo), ctx, chatID)
+	steps, _ := basicViewStepIDs(t, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_BASIC, repo, ctx, chatID)
 
 	require.Contains(t, steps, "review#2")
 	require.Contains(t, steps, "review#3")
@@ -147,7 +146,7 @@ func TestGetWorkflowExecutions_FullViewReturnsInternalSteps(t *testing.T) {
 		{ID: uuid.NewString(), StepID: "compact", ActivityName: "Compact", OutputJSON: stepOutput(`{"t":1}`), CreatedAt: base.Add(time.Millisecond)},
 	})
 
-	steps, counting := basicViewStepIDs(t, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL, triggerreads.Of(repo), ctx, chatID)
+	steps, counting := basicViewStepIDs(t, reliantv1.WorkflowExecutionView_WORKFLOW_EXECUTION_VIEW_FULL, repo, ctx, chatID)
 	require.Len(t, steps, 3)
 	require.Equal(t, 1, counting.chatScopedCalls)
 	require.Zero(t, counting.basicCalls)
@@ -193,7 +192,7 @@ func TestGetWorkflowExecutions_ThreadTreeHasNoPerWorkflowQueries(t *testing.T) {
 		Status: db.Active(), CreatedAt: time.Now().UTC(),
 	}))
 
-	counting := &countingRepo{Repository: triggerreads.Of(repo)}
+	counting := &countingRepo{Repository: repo}
 	service := &Service{deps: Deps{Repo: counting, Chats: chataccesstest.For(counting), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	resp, err := service.GetWorkflowExecutions(ctx, connect.NewRequest(&reliantv1.GetWorkflowExecutionsRequest{ChatId: chatID}))
 	require.NoError(t, err)

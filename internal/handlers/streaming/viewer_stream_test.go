@@ -21,7 +21,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -105,7 +104,7 @@ func newSharedChatService(t *testing.T) (*viewertest.Fixture, *Service) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo), Deltas: noopHub{}, Orgs: f.Membership})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, Orgs: f.Membership})))
 	svc.heartbeatInterval = time.Hour // only the re-authorization ticks
 	svc.reauthorizeInterval = 10 * time.Millisecond
 	return f, svc

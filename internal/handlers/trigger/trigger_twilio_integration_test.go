@@ -43,7 +43,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -236,7 +235,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 // run's nodes see (the chat's launch event, as LoadChatTrigger rebuilds it).
 func assertRunSees(t *testing.T, repo *db.Repo, chatID, condition string) {
 	t.Helper()
-	info := launch.LoadChatTrigger(context.Background(), triggerreads.Of(repo), chatID)
+	info := launch.LoadChatTrigger(context.Background(), store.NewTriggerEventExtStore(repo.ORM()), chatID)
 	require.NotNil(t, info)
 	f, err := triggers.CompileFilter(condition)
 	require.NoError(t, err)

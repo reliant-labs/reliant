@@ -296,6 +296,7 @@ func ptrValue(s *string) string {
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
 	repo         ExecuteToolsStore
+	triggers     AttendanceTriggers
 	preemption   MailboxPreempter
 	rows         WorkspaceRows
 	toolCalls    ToolCalls
@@ -408,6 +409,7 @@ func NewExecuteToolsActivity(storeOrDeps any, legacy ...any) *ExecuteToolsActivi
 func NewExecuteToolsActivityWithDeps(deps ExecuteToolsDeps) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
 		repo:         deps.Store,
+		triggers:     deps.Triggers,
 		rows:         deps.Rows,
 		toolCalls:    deps.ToolCalls,
 		preemption:   deps.Preemption,
@@ -1025,7 +1027,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 // tool asks.
 func (a *ExecuteToolsActivity) runScope(ctx context.Context, chat *db.Chat) func() (drivers.Scope, drivers.RunFunding) {
 	return func() (drivers.Scope, drivers.RunFunding) {
-		who := chatAttendance(ctx, a.repo, chat)
+		who := chatAttendance(ctx, a.repo, a.triggers, chat)
 		scope := llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat), Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
 		if scope.Personal() {
 			return scope, drivers.RunFunding{}

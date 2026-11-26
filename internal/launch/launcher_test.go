@@ -26,7 +26,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/workflow"
 
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
@@ -826,11 +825,11 @@ func TestLoadChatTriggerReturnsTheLaunchEvent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got := LoadChatTrigger(ctx, triggerreads.Of(repo), result.Chat.ID)
+	got := LoadChatTrigger(ctx, store.NewTriggerEventExtStore(repo.ORM()), result.Chat.ID)
 	assert.Equal(t, "chat.start", got.Kind)
 	assert.Equal(t, result.EventID, got.EventID)
 
-	legacy := LoadChatTrigger(ctx, triggerreads.Of(repo), "no-such-chat")
+	legacy := LoadChatTrigger(ctx, store.NewTriggerEventExtStore(repo.ORM()), "no-such-chat")
 	assert.Equal(t, "chat.start", legacy.Kind, "a chat with no event reads as an interactive start")
 }
 

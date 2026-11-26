@@ -12,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // endRun reports the chat's launch run ended failed with errText.
@@ -23,7 +22,7 @@ func (f *streakFixture) endRun(chatID, errText string) {
 		Error: errText, LaunchRun: true,
 	}
 	var out WorkflowStatusOutput
-	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(f.h.Repo()))).Execute, in, &out))
+	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
 }
 
 func (f *streakFixture) trigger() *core.Trigger {

@@ -11,7 +11,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // createTestWorkflowRow inserts a root workflow row for checkpoint tests.
@@ -101,7 +100,7 @@ func TestWorkflowStatus_CheckpointLifecycle(t *testing.T) {
 		}))
 	}
 
-	statusAct := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(repo)))
+	statusAct := NewWorkflowStatusActivity(workflowStatusDeps(repo))
 
 	// One chat shared across subtests (createTestChat's project path is fixed
 	// per repo); each subtest gets its own workflow row.

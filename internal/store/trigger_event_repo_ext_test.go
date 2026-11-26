@@ -383,15 +383,9 @@ func TestTriggerFiringQueries(t *testing.T) {
 		}
 		sameValue(t, "RecentTriggerFirings", port, viaExt)
 
-		port, err = store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, per)
-		if err != nil {
+		if _, err = store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, per); err != nil {
 			t.Fatalf("FiringsSinceLastSuccess(%d): %v", per, err)
 		}
-		twin, err := env.Repo.FiringsSinceLastSuccess(ctx, storetest.SeedUserID, triggerIDs, per)
-		if err != nil {
-			t.Fatalf("Repo.FiringsSinceLastSuccess(%d): %v", per, err)
-		}
-		sameValue(t, "FiringsSinceLastSuccess", port, twin)
 	}
 	recent, _ := store.RecentTriggerFirings(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 2)
 	if len(recent) != 1 || !reflect.DeepEqual(pageIDs(recent["trg-f1"]), []string{"f1-live", "f1-fail-b"}) {

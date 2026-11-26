@@ -232,7 +232,7 @@ func TestTriggerNamesJoined(t *testing.T) {
 	assert.Equal(t, project.Name, got.ProjectName)
 	assert.Equal(t, "build-box", got.DaemonName)
 
-	listed, err := repo.ListTriggers(ctx, core.TriggerFilters{UserID: "test-user"})
+	listed, err := store.ListTriggersForUser(ctx, repo.ORM(), core.TriggerFilters{UserID: "test-user"})
 	require.NoError(t, err)
 	byID := map[string]*core.Trigger{}
 	for _, tr := range listed {
@@ -271,17 +271,17 @@ func TestFiringsSinceLastSuccess_StopsAtTheNewestSuccessAndIsNotWindowed(t *test
 		feedEvent(t, repo, fmt.Sprintf("ev-fail-%02d", i), tr.ID, "test-user", core.TriggerEventFailed, base.Add(time.Duration(i+2)*time.Minute))
 	}
 
-	got, err := repo.FiringsSinceLastSuccess(ctx, "test-user", []string{tr.ID}, 500)
+	got, err := store.FiringsSinceLastSuccess(ctx, repo.ORM(), "test-user", []string{tr.ID}, 500)
 	require.NoError(t, err)
 	require.Len(t, got[tr.ID], 15, "only the failures after the success, beyond the 10-firing window")
 	assert.Equal(t, "ev-fail-14", got[tr.ID][0].Event.ID, "newest first")
 	assert.Equal(t, "ev-fail-00", got[tr.ID][14].Event.ID, "the oldest is the episode's first failure")
 
-	capped, err := repo.FiringsSinceLastSuccess(ctx, "test-user", []string{tr.ID}, 3)
+	capped, err := store.FiringsSinceLastSuccess(ctx, repo.ORM(), "test-user", []string{tr.ID}, 3)
 	require.NoError(t, err)
 	assert.Len(t, capped[tr.ID], 3)
 
-	other, err := repo.FiringsSinceLastSuccess(ctx, "someone-else", []string{tr.ID}, 500)
+	other, err := store.FiringsSinceLastSuccess(ctx, repo.ORM(), "someone-else", []string{tr.ID}, 500)
 	require.NoError(t, err)
 	assert.Empty(t, other[tr.ID], "scoped to the user")
 }

@@ -17,9 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errclass"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -67,10 +65,6 @@ type markerRepo struct {
 	*db.Repo
 	mu     sync.Mutex
 	writes []bool
-}
-
-func (r *markerRepo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
-	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *markerRepo) SetChatDaemonBlocked(_ context.Context, _ string, blocked bool) error {
@@ -132,7 +126,7 @@ func newWaitFixture(t *testing.T, noMachine bool, router toolexec.DaemonRouter) 
 	require.NoError(t, base.CreateChat(ctx, &db.Chat{ID: chatID, UserID: "u1", Title: "t", ProjectID: projectID,
 		State: db.ChatStateIdle, NoMachine: noMachine, CreatedAt: time.Now(), UpdatedAt: time.Now()}))
 	repo := &markerRepo{Repo: base}
-	a := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
+	a := NewPreflightDaemonCheckActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 10 * time.Millisecond
 	return a, repo, chatID
 }

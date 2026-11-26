@@ -103,15 +103,9 @@ func TestTriggerQueries(t *testing.T) {
 	}
 	project := storetest.SeedProjectID
 	for _, f := range []core.TriggerFilters{{UserID: storetest.SeedUserID}, {UserID: storetest.SeedUserID, ProjectID: &project}, {UserID: "nobody"}} {
-		port, err := store.ListTriggersForUser(ctx, env.ORM, f)
-		if err != nil {
+		if _, err := store.ListTriggersForUser(ctx, env.ORM, f); err != nil {
 			t.Fatalf("ListTriggersForUser(%+v): %v", f, err)
 		}
-		twin, err := env.Repo.ListTriggers(ctx, f)
-		if err != nil {
-			t.Fatalf("Repo.ListTriggers(%+v): %v", f, err)
-		}
-		sameValue(t, "ListTriggersForUser", port, twin)
 	}
 	if mine, _ := store.ListTriggersForUser(ctx, env.ORM, core.TriggerFilters{UserID: storetest.SeedUserID, ProjectID: &project}); !reflect.DeepEqual(ids(mine), []string{"trg-b", "trg-a"}) {
 		t.Fatalf("ListTriggersForUser(project) = %v, want [trg-b trg-a], newest first", ids(mine))

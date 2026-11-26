@@ -15,7 +15,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -91,7 +90,7 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 		input.Thread = chatID + "/child"
 	}
 	var output WorkflowStatusOutput
-	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo()))).Execute, input, &output))
+	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(h.Repo())).Execute, input, &output))
 	require.True(t, output.Success)
 
 	chat, err := store.GetChat(ctx, h.Repo().ORM(), chatID)

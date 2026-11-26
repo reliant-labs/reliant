@@ -11,7 +11,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 type pausedForMachineFixture struct {
@@ -33,7 +32,7 @@ func newPausedForMachineFixture(t *testing.T) pausedForMachineFixture {
 	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
 		ID: workflowID, ChatID: chatID, WorkflowName: "builtin://chat", Thread: chatID, Status: db.Active(),
 	}))
-	return pausedForMachineFixture{h: h, activity: NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo()))), chatID: chatID, workflowID: workflowID}
+	return pausedForMachineFixture{h: h, activity: NewWorkflowStatusActivity(workflowStatusDeps(h.Repo())), chatID: chatID, workflowID: workflowID}
 }
 
 func (f pausedForMachineFixture) report(t *testing.T, status string, opts func(*WorkflowStatusInput)) {

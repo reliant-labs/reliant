@@ -262,7 +262,7 @@ func TestListTriggersFiltersByUserAndProject(t *testing.T) {
 		}
 	}
 
-	byUser, err := repo.ListTriggers(ctx, core.TriggerFilters{UserID: "test-user"})
+	byUser, err := store.ListTriggersForUser(ctx, repo.ORM(), core.TriggerFilters{UserID: "test-user"})
 	if err != nil {
 		t.Fatalf("ListTriggers(user): %v", err)
 	}
@@ -271,7 +271,7 @@ func TestListTriggersFiltersByUserAndProject(t *testing.T) {
 	}
 
 	projectID := "proj-other"
-	byProject, err := repo.ListTriggers(ctx, core.TriggerFilters{UserID: "test-user", ProjectID: &projectID})
+	byProject, err := store.ListTriggersForUser(ctx, repo.ORM(), core.TriggerFilters{UserID: "test-user", ProjectID: &projectID})
 	if err != nil {
 		t.Fatalf("ListTriggers(user+project): %v", err)
 	}
@@ -280,7 +280,7 @@ func TestListTriggersFiltersByUserAndProject(t *testing.T) {
 	}
 
 	// Listing without a user is refused: "empty means everyone" is a footgun.
-	if _, err := repo.ListTriggers(ctx, core.TriggerFilters{}); err == nil {
+	if _, err := store.ListTriggersForUser(ctx, repo.ORM(), core.TriggerFilters{}); err == nil {
 		t.Error("ListTriggers with no user must fail rather than list every tenant's triggers")
 	}
 

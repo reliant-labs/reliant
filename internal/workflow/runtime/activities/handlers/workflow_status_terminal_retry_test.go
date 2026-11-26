@@ -12,7 +12,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // refuseTerminalWritesSQL makes the first n writes of a terminal status to
@@ -67,7 +66,7 @@ func TestWorkflowStatus_RefusedTerminalWritesFailTheActivityUntilOneLands(t *tes
 			_, err := h.DB().ExecContext(ctx, fmt.Sprintf(refuseTerminalWritesSQL, workflowID, refused))
 			require.NoError(t, err)
 
-			activity := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
+			activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 			input := WorkflowStatusInput{
 				ChatID: chatID, WorkflowID: workflowID, WorkflowName: "builtin://chat",
 				Status: tc.status, Thread: chatID,
@@ -104,7 +103,7 @@ func TestWorkflowStatus_TerminalStatusOfAMissingRowDoesNotFailTheActivity(t *tes
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	var out WorkflowStatusOutput
 	err := h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID: chatID, WorkflowID: uuid.NewString(), WorkflowName: "builtin://chat",

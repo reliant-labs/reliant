@@ -102,6 +102,9 @@ type Deps struct {
 	// TriggerEvents is the ledger a launch dedupes against
 	// (store.TriggerEventExtStore).
 	TriggerEvents launch.TriggerEventStore
+	// TriggerReads reads the launch event of an existing chat, for the restarts
+	// that rebuild its WorkflowInput.
+	TriggerReads TriggerReads
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and
@@ -144,6 +147,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("chat: Deps.Repo is required")
+	}
+	if d.TriggerReads == nil {
+		return fmt.Errorf("chat: Deps.TriggerReads is required")
 	}
 	if d.Chats == nil {
 		return fmt.Errorf("chat: Deps.Chats is required")

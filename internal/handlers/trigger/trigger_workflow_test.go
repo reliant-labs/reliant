@@ -72,7 +72,7 @@ func outcomes(resp *reliantv1.EnableWorkflowResponse) map[string]reliantv1.Workf
 
 func (e *triggerTestEnv) storedTriggers(t *testing.T) []*core.Trigger {
 	t.Helper()
-	list, err := e.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: e.userID})
+	list, err := store.ListTriggersForUser(context.Background(), e.repo.ORM(), core.TriggerFilters{UserID: e.userID})
 	require.NoError(t, err)
 	return list
 }

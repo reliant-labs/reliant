@@ -26,7 +26,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // The scenario this whole change exists for, end to end, with nothing faked but
@@ -67,7 +66,7 @@ func newScenario(t *testing.T, workflow string) *scenario {
 
 	launcher := launch.New(launch.Deps{Store: f.repo, Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Worktrees: store.NewWorktreeExtStore(f.repo.ORM()), ProjectRows: store.NewProjectExtStore(f.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(f.repo.ORM()), Projects: projectaccess.NewFromORM(f.repo.ORM()), Selections: store.NewChatSelectionExtStore(f.repo.ORM()), Threads: threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
 	workflows := launchableDeclarations{fakeWorkflows: fakeWorkflows{yaml: map[string]string{scenarioWorkflow: workflow}}}
-	enricher := NewOriginEnricher(writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), triggerreads.Of(f.repo), "reliant-labs")
+	enricher := NewOriginEnricher(writeledger.NewLedger(store.NewIntegrationWriteExtStore(f.repo.ORM())), store.NewTriggerEventExtStore(f.repo.ORM()), "reliant-labs")
 	starter := &recordingStarter{}
 	intake := NewIntake(NewStores(f.repo), starter, "").WithWorkflows(workflows).WithEnrichers(enricher)
 	firer := NewEventFirer(NewStores(f.repo), launcher).WithWorkflows(workflows)

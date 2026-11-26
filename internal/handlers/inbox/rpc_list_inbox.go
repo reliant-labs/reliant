@@ -186,7 +186,7 @@ func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, er
 		// them once.
 		var stored []*core.Trigger
 		if err := lim.do(gctx, func() (err error) {
-			stored, err = s.deps.Repo.ListTriggers(gctx, core.TriggerFilters{UserID: userID})
+			stored, err = s.deps.Notices.ListTriggersForUser(gctx, core.TriggerFilters{UserID: userID})
 			// Automation health is the triggers the caller may read: none of
 			// an org they have left.
 			stored = authz.Visible(gctx, userID, stored, authz.CanReadTrigger)

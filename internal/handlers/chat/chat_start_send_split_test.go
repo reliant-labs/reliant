@@ -18,7 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // StartChat is the first send; SendMessage is every send after it. These tests
@@ -46,7 +45,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 	}
 	service := &Service{
 		deps: Deps{
-			Repo:        triggerreads.Of(repo),
+			Repo:        repo,
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -109,7 +108,7 @@ func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
 			temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
 			service := &Service{
 				deps: Deps{
-					Repo:        triggerreads.Of(repo),
+					Repo:        repo,
 					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 					ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

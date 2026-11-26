@@ -23,7 +23,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/lineage"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
@@ -103,7 +102,10 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: f.daemonID, UserID: f.userID}))
 
 	launcher := launch.New(launch.Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: f.starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
-	f.dispatcher = NewDispatcher(triggerreads.Of(repo), launcher, nil)
+	f.dispatcher = NewDispatcher(repo, struct {
+		store.TriggerExtStore
+		store.TriggerEventExtStore
+	}{store.NewTriggerExtStore(repo.ORM()), store.NewTriggerEventExtStore(repo.ORM())}, launcher, nil)
 	return f
 }
 

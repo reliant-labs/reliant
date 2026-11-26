@@ -69,7 +69,7 @@ func (e *triggerTestEnv) createIn(ctx context.Context, projectID string, org *st
 
 func (e *triggerTestEnv) userTriggers(t *testing.T) []*core.Trigger {
 	t.Helper()
-	stored, err := e.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: e.userID})
+	stored, err := store.ListTriggersForUser(context.Background(), e.repo.ORM(), core.TriggerFilters{UserID: e.userID})
 	require.NoError(t, err)
 	return stored
 }

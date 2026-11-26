@@ -19,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // branchAtomicityRepo wraps the real repository behind the chat Repository
@@ -118,7 +117,7 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 
 	sourceChatID, msgID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	failingRepo := &branchAtomicityRepo{Repository: triggerreads.Of(repo), shouldFail: true}
+	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: true}
 	service := &Service{
 		deps: Deps{
 			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),
@@ -181,7 +180,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 
 	sourceChatID, msgID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	failingRepo := &branchAtomicityRepo{Repository: triggerreads.Of(repo), shouldFail: false}
+	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: false}
 	service := &Service{
 		deps: Deps{
 			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),

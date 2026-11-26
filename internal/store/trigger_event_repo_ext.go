@@ -718,6 +718,9 @@ func FiringsSinceLastUnmanagedSuccess(ctx context.Context, db orm.Context, userI
 // firings, so the events carry no body: Payload is empty, Sender and Origin
 // nil (triggerOutcomeColumns).
 func FiringsSinceLastSuccess(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
 	return triggerFiringsByTrigger(ctx, db, "list firings since last success", firingsSinceLastSuccessSQL, userID, triggerIDs, perTrigger)
 }
 

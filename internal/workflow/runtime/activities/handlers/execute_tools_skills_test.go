@@ -17,7 +17,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // The skill tool reads the project's skills through the worker's config
@@ -50,7 +49,7 @@ func TestSkillToolReadsSkillsThroughTheConfigProvider(t *testing.T) {
 	}))
 
 	repo := h.Repo()
-	spy := &fullConfigRowReads{Repo: triggerreads.Of(repo)}
+	spy := &fullConfigRowReads{Repo: repo}
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(spy), store.NewProjectConfigExtStore(repo.ORM()), cfgpkg.DefaultParsedConfigCacheBytes)
 	// The tools factory is composition and takes the concrete *db.Repo, so the
 	// spy watches the activity's and the provider's reads; no tool reads the

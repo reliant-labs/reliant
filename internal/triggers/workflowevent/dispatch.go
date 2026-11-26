@@ -35,11 +35,18 @@ var chatIDNamespace = uuid.MustParse("7d0f3a52-91c4-4b0e-a8f6-3c2e5b19d4a7")
 // Repo is the slice of the repository dispatch reads and writes. The
 // signatures match *db.Repo's, so it satisfies it structurally.
 type Repo interface {
-	lineage.LaunchEventReader
 	triggers.OwnerSource
-	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (created bool, err error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
+}
+
+// TriggerReads is what a dispatch reads of the stored triggers: the event
+// owner's triggers, and the launch event of a run (its lineage). The
+// generated trigger stores answer it: store.TriggerExtStore and
+// store.TriggerEventExtStore, which share no method names.
+type TriggerReads interface {
+	lineage.LaunchEventReader
+	ListTriggersForUser(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 }
 
 // Launcher is the one door a run starts through. Implemented by
@@ -78,6 +85,7 @@ func SpecOf(t *core.Trigger) (Spec, error) {
 // Dispatcher fires the workflow_event triggers a run event matches.
 type Dispatcher struct {
 	repo      Repo
+	reads     TriggerReads
 	launcher  Launcher
 	filter    FilterFunc
 	workflows triggers.WorkflowResolver
@@ -94,11 +102,11 @@ func (d *Dispatcher) WithAutoPause(p *triggers.AutoPause) *Dispatcher {
 }
 
 // NewDispatcher builds a dispatcher. filter nil uses EvaluateFilter.
-func NewDispatcher(repo Repo, launcher Launcher, filter FilterFunc) *Dispatcher {
+func NewDispatcher(repo Repo, reads TriggerReads, launcher Launcher, filter FilterFunc) *Dispatcher {
 	if filter == nil {
 		filter = EvaluateFilter
 	}
-	return &Dispatcher{repo: repo, launcher: launcher, filter: filter, now: time.Now}
+	return &Dispatcher{repo: repo, reads: reads, launcher: launcher, filter: filter, now: time.Now}
 }
 
 // WithWorkflows lets the dispatcher read an activation's declaration. Without
@@ -150,7 +158,7 @@ type Result struct {
 func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result, error) {
 	// Same owner only. The listing is scoped by the EVENT's owner, so another
 	// user's trigger is never even considered.
-	candidates, err := d.repo.ListTriggers(ctx, core.TriggerFilters{UserID: ev.UserID})
+	candidates, err := d.reads.ListTriggersForUser(ctx, core.TriggerFilters{UserID: ev.UserID})
 	if err != nil {
 		return nil, fmt.Errorf("list triggers of %s: %w", ev.UserID, err)
 	}
@@ -220,7 +228,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 		}
 
 		if !chainLoaded {
-			if chain, err = lineage.Of(ctx, d.repo, ev.ChatID); err != nil {
+			if chain, err = lineage.Of(ctx, d.reads, ev.ChatID); err != nil {
 				return results, err
 			}
 			chainLoaded = true

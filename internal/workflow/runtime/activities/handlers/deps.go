@@ -470,14 +470,12 @@ type ProjectWorktreeReader interface {
 
 // MachineResumeWakeStore is what MachineResumeWakeActivity reads and writes.
 type MachineResumeWakeStore interface {
-	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
 }
 
 // PreflightDaemonCheckStore is what PreflightDaemonCheckActivity reads and
 // writes.
 type PreflightDaemonCheckStore interface {
-	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	QueueChatForMachine(ctx context.Context, chatID string, machine *db.QueuedMachine) (bool, error)
 	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
@@ -586,7 +584,9 @@ type TriggerPauser interface {
 
 // WorkflowStatusDeps is what NewWorkflowStatusActivity takes.
 type WorkflowStatusDeps struct {
-	Repo      WorkflowStatusStore
+	Repo WorkflowStatusStore
+	// Triggers reads the trigger a run was launched by (NewTriggerReads).
+	Triggers  StatusTriggers
 	Runs      RunRecords
 	Workflows WorkflowRuns
 	Attention AttentionRecorder
@@ -622,7 +622,6 @@ type WorkflowStatusStore interface {
 	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*db.Message, bool, error)
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	CreateWorkflow(ctx context.Context, workflow *db.Workflow) error
 	UpdateWorkflowStatus(ctx context.Context, id string, status db.WorkflowStatus) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
@@ -635,7 +634,6 @@ type WorkflowStatusStore interface {
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
-	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	threads.Repository
 	ChatTransitioner
 	TransitionMessageWriter
@@ -660,6 +658,10 @@ type SaveMessageDeps struct {
 type CompactDeps struct {
 	// Store is what the activity reads and writes.
 	Store CompactStore
+	// Triggers reads the trigger side of the attendance rule (chatAttendance):
+	// NewTriggerReads. Nil decides nothing, so the run is unattended and
+	// spends the org's sources only.
+	Triggers AttendanceTriggers
 	// Threads saves the compaction summary message.
 	Threads MessageSaver
 	// ToolResults recovers the tool results the history lost.
@@ -689,6 +691,10 @@ type MailboxPreempter interface {
 type ExecuteToolsDeps struct {
 	// Store is what the activity reads and writes.
 	Store ExecuteToolsStore
+	// Triggers reads the trigger side of the attendance rule (chatAttendance):
+	// NewTriggerReads. Nil decides nothing, so the run is unattended and
+	// spends the org's sources only.
+	Triggers AttendanceTriggers
 	// Rows reads the project, worktree and repo rows a call resolves its
 	// workspace from.
 	Rows WorkspaceRows

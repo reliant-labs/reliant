@@ -60,7 +60,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -422,7 +421,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	chatSvc, err := chat.New(chat.Deps{
 		Logger:           slog.Default(),
 		Config:           &typedconfig.Config{},
-		Repo:             triggerreads.Of(s.Repo),
+		Repo:             s.Repo,
 		Chats:            chataccess.NewFromORM(s.Repo.ORM()),
 		ChatRows:         store.NewChatExtStore(s.Repo.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(s.Repo.ORM()),

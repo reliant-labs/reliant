@@ -8,8 +8,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // is_child is what the product dashboards filter on to count a run once. It
@@ -46,7 +44,7 @@ func TestWorkflowStatus_ProductEventsFlagChildRuns(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	rec := newProductEventRecorder()
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	activity.trackerFor = rec.trackerFor
 
 	rootID, childID := uuid.NewString(), uuid.NewString()

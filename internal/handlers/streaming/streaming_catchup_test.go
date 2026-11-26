@@ -19,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/streaming"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // The streams' two catch-up contracts, each owned by the server because only
@@ -271,7 +270,7 @@ func TestStreamUserUpdates_CatchUpReportsCursorWhenEveryUpdateIsFiltered(t *test
 	latest := seeded[len(seeded)-1].SequenceNumber
 
 	project := catchupProject
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo), Deltas: noopHub{}}))),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}}))),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 
 	batch := nextEvent(t, events, "a user batch carrying the cursor", func(ev *reliantv1.UserStreamEvent) bool {
@@ -291,7 +290,7 @@ func TestStreamUserUpdates_CatchUpBatchesCarryCursorPastFilteredTail(t *testing.
 	latest := seeded[len(seeded)-1].SequenceNumber
 
 	project := catchupProject
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo), Deltas: noopHub{}}))),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}}))),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 
 	// Whatever shape the catch-up takes, the client's cursor after it must be
@@ -343,7 +342,7 @@ func TestStreamUserUpdates_LiveSequenceGapIsBackfilledBeforeTheEvent(t *testing.
 
 	hub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo), Deltas: noopHub{}, UserUpdates: hub}))),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub}))),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 
 	// The stream is live (catch-up over: nothing to replay) before anything
@@ -389,7 +388,7 @@ func TestStreamUserUpdates_FilteredLiveEventAdvancesCursorWithoutBackfill(t *tes
 
 	hub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: triggerreads.Of(repo), Deltas: noopHub{}, UserUpdates: hub}))),
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: hub}))),
 		&reliantv1.StreamUserUpdatesRequest{SinceSeq: 0, ProjectId: &project})
 	nextEvent(t, events, "sync", func(ev *reliantv1.UserStreamEvent) bool { return ev.GetSync() != nil })
 	<-hub.subscribed

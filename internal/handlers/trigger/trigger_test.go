@@ -251,7 +251,7 @@ func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
-	stored, err := env.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: env.userID})
+	stored, err := store.ListTriggersForUser(context.Background(), env.repo.ORM(), core.TriggerFilters{UserID: env.userID})
 	require.NoError(t, err)
 	assert.Empty(t, stored, "a trigger whose schedule could not be created must not survive")
 }

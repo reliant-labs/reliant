@@ -3,7 +3,6 @@ package streaming
 import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // withRoles fills the roles d leaves nil from d.Repo: the repo itself when it
@@ -40,8 +39,8 @@ func withRoles(d Deps) Deps {
 
 func roleOf[T any](repo Repository, fromDB func(*db.Repo) T) T {
 	var zero T
-	if r, ok := repo.(triggerreads.Repo); ok {
-		return fromDB(r.Repo)
+	if r, ok := repo.(*db.Repo); ok {
+		return fromDB(r)
 	}
 	if r, ok := repo.(T); ok {
 		return r

@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // These tests drive the activities that create runs, not the store, because
@@ -117,7 +116,7 @@ func TestWorkflowStatus_CreatedRunsCarryAnOwner(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, "chat-user")
 	h.CreateTestChat(ctx, chatID, projectID, "chat-user")
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 
 	rootID := uuid.NewString()
 	var out WorkflowStatusOutput

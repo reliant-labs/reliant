@@ -19,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/threads"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // The root run a chat is created with records its owner at creation. These go
@@ -59,7 +58,7 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
 		deps: Deps{
-			Repo:        triggerreads.Of(repo),
+			Repo:        repo,
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -101,7 +100,7 @@ func TestChatService_BranchChat_RootRunCarriesOwner(t *testing.T) {
 
 	service := &Service{
 		deps: Deps{
-			Repo:        triggerreads.Of(repo),
+			Repo:        repo,
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

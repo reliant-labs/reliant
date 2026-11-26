@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
-	"github.com/reliant-labs/reliant/internal/triggerreads"
 )
 
 // The reconciler's ReapOrphanedThreads runs every pass, on its own
@@ -30,7 +29,7 @@ import (
 // context.Background() — never the activity's transaction, exactly as the
 // reconciler would — and keeps whatever that pass reaped.
 type reapingRepo struct {
-	triggerreads.Repo
+	*db.Repo
 	t      *testing.T
 	reaped []db.ReapedThread
 }
@@ -124,7 +123,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 	}
 
 	// Turn 1 runs and completes; both halves end terminal.
-	plain := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
+	plain := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 	var output WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(plain.Execute, turn("started"), &output))
 	require.NoError(t, h.ExecuteActivity(plain.Execute, turn("completed"), &output))
@@ -133,7 +132,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 	require.Equal(t, db.ThreadStatusCompleted, thread.Status, "precondition: turn 1 closed the thread")
 
 	// Turn 2 starts with a reconciler pass between every write.
-	repo := &reapingRepo{Repo: triggerreads.Of(h.Repo()), t: t}
+	repo := &reapingRepo{Repo: h.Repo(), t: t}
 	interleaved := NewWorkflowStatusActivity(repo.deps())
 	require.NoError(t, h.ExecuteActivity(interleaved.Execute, turn("started"), &output))
 
@@ -181,7 +180,7 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 				ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://chat",
 				Status: "started", Thread: chatID,
 			}
-			plain := NewWorkflowStatusActivity(workflowStatusDeps(triggerreads.Of(h.Repo())))
+			plain := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
 			var output WorkflowStatusOutput
 			require.NoError(t, h.ExecuteActivity(plain.Execute, input, &output))
 
@@ -200,7 +199,7 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 			})
 			require.NoError(t, err)
 
-			repo := &reapingRepo{Repo: triggerreads.Of(h.Repo()), t: t}
+			repo := &reapingRepo{Repo: h.Repo(), t: t}
 			interleaved := NewWorkflowStatusActivity(repo.deps())
 			input.Status = tc.status
 			require.NoError(t, h.ExecuteActivity(interleaved.Execute, input, &output))

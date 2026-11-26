@@ -27,7 +27,7 @@ func TestAgentActivationValidationAuditAndMachineBinding(t *testing.T) {
 	preview, err := env.svc.PrepareActivation(env.ctx, env.userID, tools.ToolCreateTriggerActivation, p)
 	require.NoError(t, err)
 	require.Contains(t, preview.Title, machine)
-	all, err := env.repo.ListTriggers(env.ctx, core.TriggerFilters{UserID: env.userID})
+	all, err := store.ListTriggersForUser(env.ctx, env.repo.ORM(), core.TriggerFilters{UserID: env.userID})
 	require.NoError(t, err)
 	require.Empty(t, all, "preview must not write")
 	_, err = env.svc.ManageActivation(env.ctx, env.userID, tools.ToolCreateTriggerActivation, p, "")
