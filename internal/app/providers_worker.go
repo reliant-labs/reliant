@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghcontents"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -1092,6 +1093,13 @@ type TriggerDeliveryRelayDeps struct {
 	Integrations    *IntegrationSettings
 	Membership      *orgs.Resolver
 	Policies        *orgpolicy.Resolver
+	// Pipeline is the pipeline.enabled switch: on, the PR-record projector
+	// also projects the PR pipeline's enrolled repositories (prrecords
+	// Deps.Pipeline). Off, it is exactly the records projector.
+	Pipeline *configv1.PipelineConfig
+	// ControlPlane is where the projector mints the GitHub App token it
+	// reads a repository's .reliant/pipeline.yaml with; none means no App.
+	ControlPlane *configv1.ControlPlaneConfig
 }
 
 // TriggerDeliveryRelay gives the inbox live membership and policy context.
@@ -1115,9 +1123,19 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 		membership = d.Membership
 	}
 	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
-	if scope := prrecords.NewScope(d.Integrations.PRRecordRepositories); !scope.Empty() {
-		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(prrecords.Deps{
-			Store: store.NewPrRecordExtStore(repo.ORM()), Scope: scope})))
+	records := prrecords.Deps{Store: store.NewPrRecordExtStore(repo.ORM()), Scope: prrecords.NewScope(d.Integrations.PRRecordRepositories)}
+	if d.Pipeline.GetEnabled() {
+		records.Pipeline = repo
+		tokens, err := gitTokens(d.ControlPlane)
+		if err != nil {
+			return nil, err
+		}
+		if tokens != nil {
+			records.Contents = ghcontents.NewInstrumented(ghcontents.Deps{Tokens: tokens})
+		}
+	}
+	if !records.Scope.Empty() || records.Pipeline != nil {
+		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(records)))
 	}
 	return &TriggerDeliveryRelay{relay: relay, membership: membership, policies: d.Policies}, nil
 }
