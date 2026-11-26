@@ -49,8 +49,8 @@ func TestFeatureGated_NotEntitledToolDoesNotExist(t *testing.T) {
 	gateForTest(t)
 
 	for name, entitled := range map[string]map[string]bool{
-		"no entitlements":         nil,
-		"another feature":         {"other": true},
+		"no entitlements":          nil,
+		"another feature":          {"other": true},
 		"the feature, named false": {string(featuregate.GTM): false},
 	} {
 		t.Run(name, func(t *testing.T) {
