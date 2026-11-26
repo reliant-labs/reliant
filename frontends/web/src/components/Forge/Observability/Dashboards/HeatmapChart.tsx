@@ -8,14 +8,24 @@
  *
  * Cells are grid items placed by row and column, only the non-empty ones, so
  * the panel lays out like any other element and needs no coordinate maths.
- * Each cell names its bucket and count on hover; the axis labels name the
- * lowest and highest value bucket and the window's ends.
+ * The axis labels name the lowest and highest value bucket and the window's
+ * ends.
+ *
+ * It reads the time bucket under the pointer like every chart, the compact
+ * one on a card included (UPlotChart's "HOVER", through the same
+ * useChartHover and ChartTooltip): the column is outlined and a tooltip
+ * states its time and each value bucket's count there, highest first. A
+ * finger taps or drags along it; the keyboard focuses it and steps through the
+ * columns that have events with the arrow keys, Home and End.
  */
 
-import { useMemo } from "react";
+import { useCallback, useId, useMemo, useRef } from "react";
 
 import type { HeatmapCellResult, Unit } from "@/services/controlPlane/observability/types";
 
+import { ChartTooltip } from "../charts/ChartTooltip";
+import { describeSample, formatSampleTime, slotAnchor, slotIndexAt, type SampleAnchor, type SampleRow } from "../charts/chartHover";
+import { useChartHover } from "../charts/useChartHover";
 import { formatCount, formatValue } from "../format";
 import { CHART_PALETTE, tokenColor } from "./seriesModel";
 
@@ -55,6 +65,26 @@ export function heatmapGrid(cells: readonly HeatmapCellResult[], stepSeconds = 0
 
 const MAX_COLUMNS = 720;
 
+/**
+ * What the tooltip lists for column `column`: each value bucket with events
+ * there, highest bucket first, as "low–high" and its count; a column with no
+ * events says so in one row. `colorOf` gives a cell's swatch from its count.
+ */
+export function heatmapColumnRows(
+  grid: HeatmapGrid,
+  column: number,
+  unit: Unit,
+  colorOf: (count: number) => string,
+  emptyLabel: string
+): SampleRow[] {
+  const cells = grid.cells.filter((c) => c.column === column).sort((a, b) => b.row - a.row);
+  if (cells.length === 0) return [{ label: emptyLabel, value: "No events", color: colorOf(0) }];
+  return cells.map(({ row, count }) => {
+    const bucket = grid.buckets[row]!;
+    return { label: `${formatValue(bucket.low, unit)}–${formatValue(bucket.high, unit)}`, value: `${formatCount(count)} event${count === 1 ? "" : "s"}`, color: colorOf(count) };
+  });
+}
+
 export function HeatmapChart({
   cells,
   unit,
@@ -79,40 +109,89 @@ export function HeatmapChart({
     [cells, stepSeconds, startSec, endSec]
   );
   const { times, buckets, max } = grid;
-  const strength = (count: number) => (max > 0 ? 0.12 + 0.88 * (Math.log1p(count) / Math.log1p(max)) : 0);
+  const strength = useCallback((count: number) => (max > 0 ? 0.12 + 0.88 * (Math.log1p(count) / Math.log1p(max)) : 0), [max]);
   const at = (sec: number) => new Date(sec * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   const range = (b: { low: number; high: number }) => `${formatValue(b.low, unit)}–${formatValue(b.high, unit)}`;
+
+  // ── Hover: one highlighted time bucket (a column), from the mouse, a finger or the keys.
+  const figureRef = useRef<HTMLElement>(null);
+  const plotRef = useRef<HTMLDivElement>(null);
+  const hintId = useId();
+  const filled = useMemo(() => new Set(grid.cells.map((c) => c.column)), [grid]);
+  const hasSample = useCallback((column: number) => filled.has(column), [filled]);
+  const anchorOf = useCallback(
+    (column: number): SampleAnchor | null => {
+      const rect = plotRef.current?.getBoundingClientRect();
+      return rect ? slotAnchor(rect, column, times.length) : null;
+    },
+    [times.length]
+  );
+  const indexAt = useCallback(
+    (clientX: number) => {
+      const rect = plotRef.current?.getBoundingClientRect();
+      return rect ? slotIndexAt(rect, clientX, times.length) : null;
+    },
+    [times.length]
+  );
+  const { hover, bind, plotStyle } = useChartHover({ rootRef: figureRef, length: times.length, hasSample, anchorOf, indexAt });
+  const sampleSec = hover ? times[hover.index] : undefined;
+  const sampleTime = sampleSec === undefined ? "" : formatSampleTime(sampleSec);
+  const rows = useMemo(
+    () => (hover ? heatmapColumnRows(grid, hover.index, unit, (count) => tokenColor(CHART_PALETTE[0], Math.max(strength(count), 0.12)), label) : []),
+    [hover, grid, unit, strength, label]
+  );
+
   const plot = (
     <div
+      ref={plotRef}
       className="grid min-w-0 flex-1 gap-px rounded-sm bg-ink/[0.03]"
-      style={{ height, gridTemplateColumns: `repeat(${Math.max(times.length, 1)}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${Math.max(buckets.length, 1)}, minmax(0, 1fr))` }}
+      style={{ height, gridTemplateColumns: `repeat(${Math.max(times.length, 1)}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${Math.max(buckets.length, 1)}, minmax(0, 1fr))`, ...plotStyle }}
       aria-hidden="true"
     >
-      {grid.cells.map(({ column, row, count, cell }) => (
+      {grid.cells.map(({ column, row, count }) => (
         <span
           key={`${column}:${row}`}
           className="rounded-[1px]"
           // Highest value bucket at the top.
           style={{ gridColumn: column + 1, gridRow: buckets.length - row, backgroundColor: tokenColor(CHART_PALETTE[0], strength(count)) }}
-          title={compact ? undefined : `${at(cell.timeSec)} · ${range(buckets[row])}: ${formatCount(count)} event${count === 1 ? "" : "s"}`}
         />
       ))}
+      {hover && (
+        <span
+          className="pointer-events-none rounded-[1px] bg-ink/5 ring-1 ring-ink/40"
+          style={{ gridColumn: hover.index + 1, gridRow: "1 / -1" }}
+          data-testid="obs-panel-heatmap-cursor"
+        />
+      )}
     </div>
   );
+  const readout = (
+    <>
+      <span id={hintId} className="sr-only">
+        Left and right arrow keys read each time bucket.
+      </span>
+      <span className="sr-only" aria-live="polite" aria-atomic="true">
+        {hover?.via === "keyboard" && sampleTime ? describeSample(sampleTime, rows) : ""}
+      </span>
+      {hover && sampleTime && <ChartTooltip anchor={hover.anchor} time={sampleTime} rows={rows} />}
+    </>
+  );
+  const interactive = times.length > 0 ? { ...bind, "aria-describedby": hintId } : {};
   const busiest = grid.cells.reduce<HeatmapGrid["cells"][number] | null>((best, c) => (!best || c.count > best.count ? c : best), null);
   const caption = busiest
     ? `${label}: ${formatCount(grid.cells.reduce((sum, c) => sum + c.count, 0))} events from ${range(buckets[0])} to ${range(buckets[buckets.length - 1])}; the busiest cell is ${range(buckets[busiest.row])} at ${at(busiest.cell.timeSec)} with ${formatCount(busiest.count)}.`
     : `${label}: no events.`;
   if (compact) {
     return (
-      <figure data-testid="obs-panel-heatmap" aria-label={label} role="group">
+      <figure ref={figureRef} data-testid="obs-panel-heatmap" aria-label={label} role="group" {...interactive}>
         {plot}
         <figcaption className="sr-only">{caption}</figcaption>
+        {readout}
       </figure>
     );
   }
   return (
-    <figure data-testid="obs-panel-heatmap" aria-label={label} role="group">
+    <figure ref={figureRef} data-testid="obs-panel-heatmap" aria-label={label} role="group" {...interactive}>
       <div className="flex gap-2">
         <div className="flex w-14 shrink-0 flex-col justify-between text-right text-meta tabular-nums text-ink-muted" style={{ height }} aria-hidden="true">
           <span>{formatValue(buckets[buckets.length - 1]?.high ?? null, unit)}</span>
@@ -130,6 +209,7 @@ export function HeatmapChart({
         <span>{times.length ? at(times[times.length - 1]) : ""}</span>
       </div>
       <figcaption className="sr-only">{caption}</figcaption>
+      {readout}
     </figure>
   );
 }

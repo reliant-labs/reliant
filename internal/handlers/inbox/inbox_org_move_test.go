@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // An automation a project move left paused is listed as needing setup until
@@ -24,11 +25,11 @@ func TestListInbox_AMovePausedAutomationNeedsSetup(t *testing.T) {
 		"t-rebind": core.TriggerPausedOrgMoveSetup,
 		"t-check":  core.TriggerPausedOrgMove,
 	} {
-		paused, err := f.repo.PauseTrigger(f.ctx, id, reason)
+		paused, err := store.NewTriggerWritesExtStore(f.repo.ORM()).SystemPauseTrigger(f.ctx, id, reason)
 		require.NoError(t, err)
 		require.True(t, paused)
 	}
-	require.NoError(t, f.repo.SetTriggerEnabled(f.ctx, "t-person", false))
+	require.NoError(t, store.EnableTrigger(f.ctx, f.repo.ORM(), "t-person", false))
 
 	items := inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP)
 	byTrigger := map[string]*reliantv1.InboxItem{}
@@ -51,7 +52,7 @@ func TestListInbox_AMovePausedAutomationNeedsSetup(t *testing.T) {
 	assert.Contains(t, check.GetAutomationNeedsSetup().GetIssues()[0].Message, "check its setup")
 
 	// Turning it on, once it is set up, clears it.
-	require.NoError(t, f.repo.SetTriggerEnabled(f.ctx, "t-rebind", true))
+	require.NoError(t, store.EnableTrigger(f.ctx, f.repo.ORM(), "t-rebind", true))
 	for _, it := range inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP) {
 		assert.NotEqual(t, "t-rebind", it.TriggerId)
 	}

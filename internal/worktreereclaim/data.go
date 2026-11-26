@@ -172,31 +172,64 @@ func (d *dataWalk) visit(rel string) {
 	}
 }
 
-// copyInSource reports whether the source checkout holds a separate,
-// byte-identical copy of this file at the same path. The copy must resolve to
-// a path inside the source checkout (a symlinked directory there could lead
-// back into this worktree, or into another one being removed) and must not be
-// this very file reached another way.
+// copyInSource reports whether the source checkout covers this file
+// (sourceCovers).
 func (d *dataWalk) copyInSource(rel, full string, info os.FileInfo) bool {
 	if info.Size() > maxCompareBytes || d.source == nil {
 		return false
 	}
-	source := d.source()
+	f, err := os.Open(full)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	if opened, err := f.Stat(); err != nil || !os.SameFile(opened, info) {
+		return false
+	}
+	return sourceCovers(d.source(), d.checkout, rel, f)
+}
+
+// sourceCovers reports whether source, the source checkout of checkout ("" when
+// there is none), holds a separate copy of the open regular file have, which is
+// at rel in checkout, such that removing have loses nothing: a byte-identical
+// file at the same path, or for secrets/dev.yaml one holding every value have
+// holds (devSecrets). The copy must be reached with no symlink at any component
+// below the source checkout's root (openSourceCopy: a symlinked directory there
+// could lead back into this checkout, into another one being removed, or out to
+// an unrelated file) and must not be this very file reached another way. The
+// classifier (dataWalk) and the retirement inventory both judge with
+// it, so a copy the one calls not data is one the other may delete.
+func sourceCovers(source, checkout, rel string, have *os.File) bool {
 	if source == "" {
 		return false
 	}
-	src := filepath.Join(source, filepath.FromSlash(rel))
-	si, err := os.Lstat(src)
+	info, err := have.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxCompareBytes {
+		return false
+	}
+	// The copy is opened without following a symlink at any component, so
+	// the descriptor judged is the file at source/rel itself: a path checked
+	// for confinement and then opened again could be redirected in between.
+	// A source path through a symlink is not a copy, wherever it leads.
+	if within(checkout, filepath.Join(source, filepath.FromSlash(rel))) {
+		return false
+	}
+	sf, err := openSourceCopy(source, rel)
+	if err != nil {
+		return false
+	}
+	defer sf.Close()
+	si, err := sf.Stat()
 	if err != nil || !si.Mode().IsRegular() || si.Size() > maxCompareBytes || os.SameFile(si, info) {
 		return false
 	}
-	if !within(source, src) || within(d.checkout, src) {
-		return false
-	}
-	if si.Size() == info.Size() && sameBytes(full, src) {
+	// Read both from the start, past the size the stat saw, so a file that
+	// grew since is compared whole.
+	from := func(f *os.File) io.Reader { return io.NewSectionReader(f, 0, maxCompareBytes+1) }
+	if si.Size() == info.Size() && sameContent(from(have), from(sf)) {
 		return true
 	}
-	return devSecrets(rel) && yamlValuesIn(full, src)
+	return devSecrets(rel) && yamlReaderValuesIn(from(have), from(sf))
 }
 
 // devSecrets reports whether rel is a dev secrets file: secrets/dev.yaml, where
@@ -211,6 +244,21 @@ func devSecrets(rel string) bool {
 // also in the YAML file `other` at the same key path. A file that does not parse
 // is not covered: the caller then holds the worktree.
 func yamlValuesIn(have, other string) bool {
+	a, err := os.Open(have)
+	if err != nil {
+		return false
+	}
+	defer a.Close()
+	b, err := os.Open(other)
+	if err != nil {
+		return false
+	}
+	defer b.Close()
+	return yamlReaderValuesIn(a, b)
+}
+
+// yamlReaderValuesIn is yamlValuesIn over the two documents' contents.
+func yamlReaderValuesIn(have, other io.Reader) bool {
 	a, ok := yamlLeaves(have)
 	if !ok {
 		return false
@@ -228,10 +276,11 @@ func yamlValuesIn(have, other string) bool {
 }
 
 // yamlLeaves flattens a YAML document to its scalar leaves, keyed by key path
-// (list items by index). Anchors and aliases are resolved by the parser.
-func yamlLeaves(path string) (map[string]string, bool) {
-	b, err := os.ReadFile(path)
-	if err != nil {
+// (list items by index). Anchors and aliases are resolved by the parser. A
+// document over maxCompareBytes is not read.
+func yamlLeaves(r io.Reader) (map[string]string, bool) {
+	b, err := io.ReadAll(io.LimitReader(r, maxCompareBytes+1))
+	if err != nil || int64(len(b)) > maxCompareBytes {
 		return nil, false
 	}
 	var doc any
@@ -273,10 +322,16 @@ func sameBytes(a, b string) bool {
 		return false
 	}
 	defer fb.Close()
+	return sameContent(fa, fb)
+}
+
+// sameContent reports whether two readers yield identical bytes. Any read
+// error is "not the same".
+func sameContent(a, b io.Reader) bool {
 	ba, bb := make([]byte, 64<<10), make([]byte, 64<<10)
 	for {
-		na, ea := io.ReadFull(fa, ba)
-		nb, eb := io.ReadFull(fb, bb)
+		na, ea := io.ReadFull(a, ba)
+		nb, eb := io.ReadFull(b, bb)
 		if na != nb || !bytes.Equal(ba[:na], bb[:nb]) {
 			return false
 		}

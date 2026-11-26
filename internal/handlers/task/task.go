@@ -6,15 +6,17 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/planproto"
 )
 
 // chatOfPlan resolves the chat a plan belongs to, through the plan's thread.
-func (s *Service) chatOfPlan(ctx context.Context, plan *core.Plan) (*core.ChatRow, error) {
+func (s *Service) chatOfPlan(ctx context.Context, planID string) (*core.ChatRow, error) {
+	plan, err := s.deps.Plans.GetPlan(ctx, planID)
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
+	}
 	thread, err := s.deps.Threads.GetThread(ctx, plan.ThreadID)
 	if err != nil {
 		return nil, svcerr.WrapOr(fmt.Errorf("failed to get thread for plan: %w", err), svcerr.Internal("failed to get chat"))
@@ -26,33 +28,23 @@ func (s *Service) chatOfPlan(ctx context.Context, plan *core.Plan) (*core.ChatRo
 	return chat, nil
 }
 
-// chatOfPlanID resolves the chat of the plan planID.
-func (s *Service) chatOfPlanID(ctx context.Context, planID string) (*core.ChatRow, error) {
-	plan, err := s.deps.Plans.GetPlan(ctx, planID)
+// writableChatOfPlan is the chat of planID when userID may write it. A caller
+// who may not gets the same NotFound a missing task does, so a task's
+// existence in another tenant is never revealed.
+//
+// TODO(forge#2461): a task reaches its owner through plan -> thread -> chat,
+// which authz decides with org membership and sharing, so no one-column
+// forge:owner can say it. Replace this check with a declaration once forge's
+// CRUD ownership can follow a join.
+func (s *Service) writableChatOfPlan(ctx context.Context, userID, planID string) (*core.ChatRow, error) {
+	chat, err := s.chatOfPlan(ctx, planID)
 	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
-	}
-	return s.chatOfPlan(ctx, plan)
-}
-
-// writableTask reads a task and its chat (task → plan → thread → chat) and
-// refuses a caller who may not write that chat.
-func (s *Service) writableTask(ctx context.Context, userID, taskID string) (*core.Task, *core.ChatRow, error) {
-	if taskID == "" {
-		return nil, nil, svcerr.InvalidArgument("task_id is required")
-	}
-	task, err := s.deps.Tasks.GetTask(ctx, taskID)
-	if err != nil {
-		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get task"))
-	}
-	chat, err := s.chatOfPlanID(ctx, task.PlanID)
-	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if !authz.CanOwnChat(ctx, userID, chat) {
-		return nil, nil, svcerr.PermissionDenied("access denied")
+		return nil, svcerr.NotFound("task")
 	}
-	return task, chat, nil
+	return chat, nil
 }
 
 // emitPlanTasksRefetch tells the chat's clients to re-read its plan and
@@ -61,24 +53,4 @@ func (s *Service) emitPlanTasksRefetch(ctx context.Context, chatID string) {
 	if err := s.deps.Refetch.EmitChatRefetch(ctx, chatID, core.RefetchPlanTasks); err != nil {
 		logging.WarnContext(ctx, "[TaskService] Failed to emit plan_tasks refetch", "error", err)
 	}
-}
-
-// taskToProto is the wire shape of a task.
-func taskToProto(task *core.Task) *reliantv1.Task {
-	out := &reliantv1.Task{
-		Id:        task.ID,
-		PlanId:    task.PlanID,
-		Title:     task.Title,
-		Status:    planproto.TaskStatus(task.Status),
-		Position:  int32(task.Position),
-		CreatedAt: task.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
-		UpdatedAt: task.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
-	}
-	if task.Description != nil {
-		out.Description = *task.Description
-	}
-	if task.ParentTaskID != nil {
-		out.ParentTaskId = task.ParentTaskID
-	}
-	return out
 }

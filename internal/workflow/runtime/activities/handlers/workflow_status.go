@@ -119,6 +119,13 @@ type WorkflowStatusActivity struct {
 	runs      RunRecords
 	workflows WorkflowRuns
 	attention AttentionRecorder
+	// runEvents records the terminal run event (deps.RunEvents).
+	runEvents runevents.Store
+	// updates announces the run's change to the chat's clients (deps.Updates).
+	updates ChatRefetcher
+	// pauser pauses a trigger whose run an org policy refused; nil pauses
+	// nothing (deps.TriggerPauser).
+	pauser TriggerPauser
 	// trackerFor returns the product-event tracker for a user; analytics.ForUser
 	// outside tests.
 	trackerFor func(ctx context.Context, userID string) analytics.Tracker
@@ -131,6 +138,9 @@ func NewWorkflowStatusActivity(deps WorkflowStatusDeps) *WorkflowStatusActivity 
 		runs:       deps.Runs,
 		workflows:  deps.Workflows,
 		attention:  deps.Attention,
+		runEvents:  deps.RunEvents,
+		updates:    deps.Updates,
+		pauser:     deps.Pauser,
 		trackerFor: analytics.ForUser,
 	}
 }
@@ -144,7 +154,7 @@ func (a *WorkflowStatusActivity) Name() string {
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
 	// A worker built without a database cannot record a run's outcome: say so
 	// (Temporal retries the activity) rather than dereference a missing store.
-	if a.repo == nil || a.runs == nil || a.workflows == nil {
+	if a.repo == nil || a.runs == nil || a.workflows == nil || a.runEvents == nil {
 		return WorkflowStatusOutput{}, errors.New("workflow status: the run record store is not configured")
 	}
 	// How the run ended, judged before the status write it lands with.
@@ -294,8 +304,10 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	}
 
 	// Emit refetch signal so frontend updates workflow executions without polling
-	if err := a.repo.EmitChatRefetch(ctx, input.ChatID, db.RefetchWorkflowExecutions); err != nil {
-		logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit workflow executions refetch", "error", err)
+	if a.updates != nil {
+		if err := a.updates.EmitChatRefetch(ctx, input.ChatID, db.RefetchWorkflowExecutions); err != nil {
+			logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit workflow executions refetch", "error", err)
+		}
 	}
 
 	return WorkflowStatusOutput{Success: true}, nil
@@ -443,12 +455,6 @@ func (a *WorkflowStatusActivity) setRunOutcome(ctx context.Context, input Workfl
 	return a.runs.SetWorkflowRunOutcome(ctx, input.WorkflowID, input.resolved.outcome)
 }
 
-// policyTriggerPauser pauses a trigger with a system reason; paused is false
-// when it was already paused. *db.Repo satisfies it.
-type policyTriggerPauser interface {
-	PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error)
-}
-
 // pauseTriggerRefusedByPolicy pauses, once, the trigger whose unattended
 // launch run an org policy ended (control-plane docs/design/org-policies.md
 // §5.1): every later fire would meet the same verdict, and without the pause
@@ -465,8 +471,7 @@ func (a *WorkflowStatusActivity) pauseTriggerRefusedByPolicy(ctx context.Context
 	if !ok {
 		return
 	}
-	pauser, ok := a.repo.(policyTriggerPauser)
-	if !ok {
+	if a.pauser == nil {
 		return
 	}
 	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
@@ -477,7 +482,7 @@ func (a *WorkflowStatusActivity) pauseTriggerRefusedByPolicy(ctx context.Context
 	if triggerID == "" {
 		return
 	}
-	paused, err := pauser.PauseTrigger(ctx, triggerID, core.TriggerPausedOrgPolicy)
+	paused, err := a.pauser.SystemPauseTrigger(ctx, triggerID, core.TriggerPausedOrgPolicy)
 	switch {
 	case err != nil:
 		logging.WarnContext(ctx, "[WorkflowStatus] Could not pause a trigger an org policy refused; its next refused run pauses it",
@@ -919,7 +924,7 @@ func (a *WorkflowStatusActivity) emitTerminal(ctx context.Context, input Workflo
 				"chatID", input.ChatID, "error", err)
 		}
 	}
-	_, err := runevents.EmitTerminal(ctx, a.repo, runevents.Terminal{
+	_, err := runevents.EmitTerminal(ctx, a.runEvents, runevents.Terminal{
 		ChatID:       input.ChatID,
 		WorkflowID:   input.WorkflowID,
 		WorkflowName: input.WorkflowName,

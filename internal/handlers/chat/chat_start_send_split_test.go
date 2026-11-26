@@ -50,7 +50,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
 			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
@@ -72,7 +72,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 		"a rejected send must not persist the message: StartChat will save it when it starts the chat")
 	assert.Empty(t, temporal.signals, "a rejected send must not signal anything")
 
-	root, err := repo.GetWorkflow(ctx, fx.chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Pending(), root.Status, "the chat must still be startable by StartChat")
 }
@@ -113,7 +113,7 @@ func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
 					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 					ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
 					Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-					Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+					Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 					AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 					Temporal:      temporal,
 				},

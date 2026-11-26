@@ -1,0 +1,291 @@
+# yaml-language-server: $schema=../../manifest/schema/manifest.schema.json
+# Growth: Reliant's own go-to-market app. Authored from the Growth repo's
+# protos (proto/services/actions, agents) and its workflow docs
+# (docs/workflows.md), read at origin/main.
+#
+# Growth's API is Connect RPC: every call is a POST of a JSON body to
+# /<package>.<Service>/<Method>. The key travels as "Authorization: Bearer
+# fk_...". The key decides the tenant, so there is no tenant param.
+#
+# FIXED BASE URL. This integration exists so that a Growth key is only ever
+# sent to Growth. The generic `http` integration takes any public host, so a
+# key saved against it can be pointed anywhere by whoever writes the step.
+# Here the origin is a literal in the manifest: no connection param, no
+# allowed_hosts, no `url` action param, no templated host. The origin is the
+# Growth site's edge proxy, which forwards /_api/* (Authorization included) to
+# the API, the same one the community-watch workflow pins.
+#
+# The credential is a per-tenant, non-person `fk_` key. The `growth_exec`
+# connection slot (the executor's own key, bound only in the executor package)
+# is a workflow-package binding, not manifest data: this manifest is the
+# connection type that slot binds. See the PR body.
+#
+# No identity probe: Growth has no unauthenticated-safe "who am I" RPC that a
+# non-person key may call, so a saved connection is checked on first use.
+#
+# Errors are Connect's JSON: {"code": "unauthenticated", "message": "..."}.
+#   401  bad, revoked or expired key: reconnect.
+#   403  the key's kind or role may not call this RPC.
+#   404  not found in this tenant.
+#   429  rate limited: retryable.
+#   5xx  retryable.
+id: growth
+version: 1
+display_name: Growth
+description: "Read and record work in the Growth go-to-market app: its approval inbox status and the run history of its agents."
+icon: growth
+category: marketing
+keywords: [growth, gtm, marketing, go-to-market, approvals, inbox, agent runs, reliant]
+
+connection:
+  base_url: https://lunar-elk.sites.reliantlabs.dev/_api
+  default_headers:
+    Accept: application/json
+  auth:
+    - api_key:
+        in: header
+        name: Authorization
+        prefix: "Bearer "
+        label: Growth API key (fk_...)
+
+actions:
+  - id: inbox.status
+    display_name: Inbox status
+    summary: How many proposed actions wait on the owner, and which are next to expire.
+    description: >-
+      Read the approval inbox, redacted: counts of pending, expired, approved
+      and rejected actions and the oldest-expiring pending items (id,
+      operation, play name, dates; at most 25). It carries no proposer,
+      reason or snapshot, so any tenant key may read it.
+    keywords: [inbox, approvals, pending, actions, review, waiting]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        connection: &connection
+          type: string
+          description: >-
+            Id of a saved Growth connection to use. Omit to use your default
+            Growth connection.
+    request:
+      method: POST
+      path: /services.actions.v1.ActionsService/GetInboxStatus
+      body: {}
+      errors: &growth_errors
+        - status: 429
+          retryable: true
+          message: Growth rate limit exceeded; retry after backing off.
+        - status: 401
+          retryable: false
+          message: >-
+            Growth rejected the API key ({{ type(response) == map ? response.?message.orValue('unauthenticated') : 'unauthenticated' }}):
+            it was revoked, expired or mistyped. Reconnect Growth in Settings with a current key.
+        - status: 403
+          retryable: false
+          message: >-
+            Growth refused the request ({{ type(response) == map ? response.?message.orValue('permission denied') : 'permission denied' }}).
+            This key's kind or role may not call this operation.
+        - status: 404
+          retryable: false
+          message: "Growth returned not found: the record does not exist in this key's tenant."
+        - status_min: 400
+          status_max: 499
+          retryable: false
+          message: "Growth refused the request (HTTP {{ status }}): {{ type(response) == map ? response.?message.orValue('bad request') : 'bad request' }}."
+        - status_min: 500
+          status_max: 599
+          retryable: true
+          message: "Growth failed on its side (HTTP {{ status }}); retry."
+      response_format: json
+      max_response_bytes: 1048576
+    output:
+      select: >-
+        {"pending": response.?pending.orValue(0),
+         "expired": response.?expired.orValue(0),
+         "approved": response.?approved.orValue(0),
+         "rejected": response.?rejected.orValue(0),
+         "pending_items": response.?pendingItems.orValue([])}
+      schema:
+        type: object
+        properties:
+          pending: { type: integer }
+          expired: { type: integer }
+          approved: { type: integer }
+          rejected: { type: integer }
+          pending_items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string }
+                operation: { type: string }
+                playName: { type: string }
+                createdAt: { type: string }
+                expiresAt: { type: string }
+
+  - id: agent_run.list
+    display_name: List agent runs
+    summary: The run history Growth has recorded for its agents, newest first.
+    description: >-
+      List the agent runs recorded in the tenant, newest first by default. A
+      run holds the workflow name, status, reason, output summary and the
+      input it recorded (workflows keep what they already handled there).
+      search matches workflow, reason, status, run_url and output_summary, so
+      filter the result by workflow yourself when you need an exact match.
+    keywords: [runs, history, agents, workflows, memory, seen]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        search:
+          type: string
+          maxLength: 200
+          title: Search
+          description: Only runs whose workflow, reason, status, run URL or output summary contains this text.
+          examples: ["community-watch"]
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+          title: Page size
+          description: How many runs to return, 1 to 100.
+          examples: [50]
+        page_token:
+          type: string
+          maxLength: 500
+          title: Page token
+          description: The next_page_token of the previous page, to read the page after it.
+          examples: ["eyJvIjo1MH0"]
+        connection: *connection
+    request:
+      method: POST
+      path: /services.agents.v1.AgentsService/ListAgentRuns
+      body_expr: >-
+        {"pageSize": params.page_size,
+         "orderBy": "created_at",
+         "descending": true,
+         ?"search": params.?search,
+         ?"pageToken": params.?page_token}
+      errors: *growth_errors
+      response_format: json
+      max_response_bytes: 5242880
+    output:
+      select: >-
+        {"agent_runs": response.?agentRuns.orValue([]),
+         "next_page_token": response.?nextPageToken.orValue(''),
+         "total_count": response.?totalCount.orValue(0)}
+      schema:
+        type: object
+        properties:
+          agent_runs:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string }
+                workflow: { type: string }
+                status: { type: string }
+                reason: { type: string }
+                runUrl: { type: string }
+                outputSummary: { type: string }
+                input: { type: object }
+                startedAt: { type: string }
+                endedAt: { type: string }
+          next_page_token: { type: string }
+          total_count: { type: integer }
+
+  - id: agent_run.create
+    display_name: Record agent run
+    summary: Record that a workflow ran, so Growth can show it and the next run can remember it.
+    description: >-
+      Create an agent run record in the tenant: the workflow name, a status,
+      why it ran, a link to the run and a one-line outcome. Growth shows these
+      in its UI; the record is history, it triggers nothing.
+    keywords: [record, run, log, history, workflow, report]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [workflow]
+      properties:
+        workflow:
+          type: string
+          minLength: 1
+          maxLength: 200
+          title: Workflow
+          description: The name of the workflow that ran.
+          examples: ["community-watch"]
+        status:
+          type: string
+          enum: [AGENT_RUN_STATUS_QUEUED, AGENT_RUN_STATUS_RUNNING, AGENT_RUN_STATUS_SUCCEEDED, AGENT_RUN_STATUS_FAILED, AGENT_RUN_STATUS_CANCELLED]
+          default: AGENT_RUN_STATUS_SUCCEEDED
+          title: Status
+          description: How the run ended, or where it is.
+        reason:
+          type: string
+          maxLength: 1000
+          title: Reason
+          description: Why the run happened, in a sentence.
+          examples: ["Community watch: Reddit and HN since 2026-11-26T08:00Z"]
+        run_link:
+          type: string
+          maxLength: 500
+          title: Run link
+          description: A path or URL to the run in Reliant.
+          examples: ["/workflows/runs/chat_123"]
+        output_summary:
+          type: string
+          maxLength: 2000
+          title: Outcome
+          description: A one-line summary of what the run did.
+          examples: ["3 item(s) posted to Slack"]
+        started_at:
+          type: string
+          format: date-time
+          title: Started at
+          description: When the run started, as an RFC 3339 timestamp.
+          examples: ["2026-11-26T08:00:00Z"]
+        ended_at:
+          type: string
+          format: date-time
+          title: Ended at
+          description: When the run ended, as an RFC 3339 timestamp.
+          examples: ["2026-11-26T08:04:12Z"]
+        connection: *connection
+    request:
+      method: POST
+      path: /services.agents.v1.AgentsService/CreateAgentRun
+      body_expr: >-
+        {"workflow": params.workflow,
+         "status": params.status,
+         ?"reason": params.?reason,
+         ?"runUrl": params.?run_link,
+         ?"outputSummary": params.?output_summary,
+         ?"startedAt": params.?started_at,
+         ?"endedAt": params.?ended_at}
+      errors: *growth_errors
+      response_format: json
+      max_response_bytes: 1048576
+    output:
+      select: >-
+        {"id": response.?agentRun.?id.orValue(''),
+         "workflow": response.?agentRun.?workflow.orValue(''),
+         "status": response.?agentRun.?status.orValue('')}
+      schema:
+        type: object
+        properties:
+          id: { type: string }
+          workflow: { type: string }
+          status: { type: string }

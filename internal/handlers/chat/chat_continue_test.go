@@ -167,7 +167,7 @@ func newContinueFixture(t *testing.T, replays bool) continueFixture {
 	// run itself is never queried (it would be replayed to answer).
 	seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": "claude-opus"}})
 	pause := &resetPause{repo: repo, replays: replays}
-	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause})}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause})}
 	return continueFixture{ctx: ctx, repo: repo, chatID: fx.chatID, threadID: fx.rootThreadID,
 		temporal: temporal, pause: pause, svc: svc}
 }
@@ -181,7 +181,7 @@ func (f continueFixture) queueForMachine(t *testing.T) {
 
 func (f continueFixture) activity(t *testing.T) reliantv1.ChatActivity {
 	t.Helper()
-	chat, err := f.repo.GetChat(f.ctx, f.chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	return reliantv1.ChatActivity(*chat.Activity)
 }
@@ -266,7 +266,7 @@ func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread is revived before the run starts, so the mailbox sweep cannot take its queued rows")
 
-	wf, err := f.repo.GetWorkflow(f.ctx, f.chatID)
+	wf, err := store.LoadWorkflow(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), wf.Status, "recorded running before the lock is released")
 }
@@ -339,7 +339,7 @@ func TestAbandonMachineWait_DropsTheQueueAndEndsTheWait(t *testing.T) {
 	f.queueForMachine(t)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
 	require.NoError(t, f.repo.SetChatDaemonBlocked(f.ctx, f.chatID, true))
-	chat, err := f.repo.GetChat(f.ctx, f.chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 
 	f.svc.abandonMachineWait(f.ctx, chat)
@@ -358,7 +358,7 @@ func TestAbandonMachineWait_LeavesARunThatIsNotWaiting(t *testing.T) {
 
 	f := newContinueFixture(t, true)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
-	chat, err := f.repo.GetChat(f.ctx, f.chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 
 	f.svc.abandonMachineWait(f.ctx, chat)
@@ -378,12 +378,12 @@ func TestSendMessage_WhileTheRunWaitsForItsMachine_KeepsTheWaitAndNudgesIt(t *te
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
 	require.NoError(t, repo.SetChatDaemonBlocked(ctx, fx.chatID, true))
 	temporal := &endedRunTemporalClient{status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
-	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: &resetPause{repo: repo}})}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: &resetPause{repo: repo}})}
 
 	_, err := svc.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "and also this"))
 	require.NoError(t, err)
 
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_DAEMON, reliantv1.ChatActivity(*chat.Activity),
 		"the run is still waiting for its machine, and still reads that way")
@@ -407,7 +407,7 @@ func TestMachineConnected_DeliversTheMessageQueuedForAFailedMachineOnce(t *testi
 
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
-	delivery := queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal})
+	delivery := queueddelivery.New(queueddelivery.Deps{Store: store.NewChatExtStore(f.repo.ORM()), Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal})
 
 	assert.Equal(t, 1, delivery.MachineConnected(f.ctx, "test-user"))
 	assert.Equal(t, 0, delivery.MachineConnected(f.ctx, "test-user"), "a second connect finds nothing queued")

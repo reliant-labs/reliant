@@ -77,11 +77,20 @@ type QuestionCreateActivity struct {
 	repo      QuestionCreateStore
 	writer    QuestionWriter
 	questions QuestionsByStep
+	runEvents runevents.Store
+	updates   UserRefetcher
+}
+
+// WithUpdates sets what tells the owner's inbox an async question arrived; nil
+// announces nothing.
+func (a *QuestionCreateActivity) WithUpdates(u UserRefetcher) *QuestionCreateActivity {
+	a.updates = u
+	return a
 }
 
 // NewQuestionCreateActivity creates a new QuestionCreateActivity
-func NewQuestionCreateActivity(repo QuestionCreateStore, writer QuestionWriter, questions QuestionsByStep) *QuestionCreateActivity {
-	return &QuestionCreateActivity{repo: repo, writer: writer, questions: questions}
+func NewQuestionCreateActivity(repo QuestionCreateStore, writer QuestionWriter, questions QuestionsByStep, runEvents runevents.Store) *QuestionCreateActivity {
+	return &QuestionCreateActivity{repo: repo, writer: writer, questions: questions, runEvents: runEvents}
 }
 
 // Name returns the activity name for registration
@@ -221,36 +230,12 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 			}
 		}
 
-		// Emit question update (include metadata so frontend can render the question)
-		metadata := ""
-		if input.Metadata != nil {
-			metadata = *input.Metadata
-		}
-		logger.Debug("[QuestionCreate] Emitting question update",
-			"questionID", questionID,
-			"chatID", input.ChatID,
-			"metadataLen", len(metadata),
-		)
-		if err := a.repo.EmitQuestionUpdate(txCtx, input.ChatID, db.QuestionUpdate{
-			QuestionID: questionID,
-			ChatID:     input.ChatID,
-			WorkflowID: input.WorkflowID,
-			ThreadID:   input.ThreadID,
-			StepID:     input.StepID,
-			Status:     "pending",
-			Metadata:   metadata,
-			Async:      input.Async,
-			ToolCallID: input.ToolCallID,
-		}); err != nil {
-			return fmt.Errorf("failed to emit question update: %w", err)
-		}
-
 		// An async question blocks nothing: the run goes on. It is an item
 		// in the user's inbox, which no activity change announces, so the
 		// inbox is told to re-read.
 		if input.Async {
-			if chat, err := chatviews.Of(a.repo).GetChat(txCtx, input.ChatID); err == nil && chat != nil {
-				if err := a.repo.EmitUserRefetch(txCtx, chat.UserID, db.RefetchInbox, db.RefetchOpts{ChatID: &input.ChatID}); err != nil {
+			if chat, err := chatviews.Of(a.repo).GetChat(txCtx, input.ChatID); err == nil && chat != nil && a.updates != nil {
+				if err := a.updates.EmitUserRefetch(txCtx, chat.UserID, db.RefetchInbox, db.RefetchOpts{ChatID: &input.ChatID}); err != nil {
 					logger.Warn("[QuestionCreate] Failed to announce an async question to the inbox", "error", err, "chatID", input.ChatID)
 				}
 			}
@@ -259,7 +244,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 
 		// The run is now waiting on a human: a workflow-event "blocked"
 		// transition, recorded with the question it is blocked on.
-		if _, err := runevents.EmitBlocked(txCtx, a.repo, runevents.Blocked{
+		if _, err := runevents.EmitBlocked(txCtx, a.runEvents, runevents.Blocked{
 			ChatID:      input.ChatID,
 			WorkflowID:  input.WorkflowID,
 			BlockerID:   questionID,
@@ -357,25 +342,6 @@ func (a *QuestionResolveActivity) Execute(ctx context.Context, input QuestionRes
 
 	if err := a.writer.ResolveQuestion(ctx, input.QuestionID, responseData); err != nil {
 		return QuestionResolveOutput{}, fmt.Errorf("failed to resolve question: %w", err)
-	}
-
-	// A timed-out question is closed as far as the user is concerned, so the
-	// feed must say so. Without this the last question update stays "pending"
-	// forever and every later open of the chat replays that gate — the question
-	// reappears even though nothing is waiting on it. Best-effort: the DB row
-	// is already resolved, which is what actually unblocks the run.
-	if question != nil {
-		if err := a.repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
-			QuestionID: question.ID,
-			ChatID:     question.ChatID,
-			WorkflowID: question.WorkflowID,
-			ThreadID:   question.ThreadID,
-			StepID:     question.StepID,
-			Status:     "resolved",
-		}); err != nil {
-			logger.Warn("[QuestionResolve] Failed to emit question resolved update",
-				"questionID", input.QuestionID, "error", err)
-		}
 	}
 
 	return QuestionResolveOutput{Success: true}, nil

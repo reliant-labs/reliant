@@ -14,7 +14,7 @@ func RealDeps(repo *db.Repo) Deps {
 		Tasks:   store.NewTaskExtStore(o),
 		Threads: store.NewThreadExtStore(o),
 		Chats:   store.NewChatExtStore(o),
-		Refetch: repo,
-		Tx:      o,
+		Refetch: repo.UpdateWriter(),
+		DB:      o,
 	}
 }

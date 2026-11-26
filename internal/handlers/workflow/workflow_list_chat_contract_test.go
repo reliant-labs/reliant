@@ -99,7 +99,7 @@ nodes:
 		Version:    1,
 	}))
 
-	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
+	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
 	launcher := launch.New(launch.Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
@@ -202,7 +202,7 @@ nodes:
 		}))
 	}
 
-	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
+	workflowService := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 	// StartChat resolves a chat's workflow through the launcher: this is the
 	// one the chat service builds over the same store.
 	launcher := launch.New(launch.Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})

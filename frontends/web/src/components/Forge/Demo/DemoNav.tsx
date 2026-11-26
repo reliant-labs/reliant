@@ -3,7 +3,7 @@
 /**
  * The public demo's nav body, in the app's own frame (demoShellRoutes.tsx
  * mounts AppShellFrame with `nav={DemoNav}`): the shell's one nav column
- * (Layout/sidebar/ShellNavColumn.tsx) with the demo's config (demoNav.ts)
+ * (Layout/sidebar/ShellNavColumn.tsx) with the demo's config (demoNavConfig.ts)
  * and the demo's slots. The renderer, drill-in and phone drawer are the
  * app's; the scope header is static, so no live account/project controls
  * (or their token-dependent hooks) mount on this public host.
@@ -29,8 +29,8 @@ import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 import { consolePageOf, consolePath } from "../Console/paths";
 import { FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { DemoDrawerActions } from "./DemoScreenActions";
-import { demoNav } from "./demoNav";
-import { SidebarOrgLabel, SidebarOrgRow } from "@/components/Layout/sidebar/primitives";
+import { demoNav } from "./demoNavConfig";
+import { SidebarOrgRow, SidebarProjectLabel } from "@/components/Layout/sidebar/primitives";
 import { ForgeBrand } from "@/components/ForgeShell/ForgeBrand";
 
 /** Where the shell reads its scope: a console page's own path, else (a page of the demo's own) shop's Overview. */
@@ -43,7 +43,7 @@ export function DemoNav({ pathname, search, onNavigate }: ShellNavProps) {
   const slots = useMemo<NavSlots>(() => ({ "host-actions": () => (narrow ? <DemoDrawerActions /> : null) }), [narrow]);
   return (
     <ShellNavColumn config={demoNav} slots={slots} shell={shell} pathname={pathname} search={search} onNavigate={onNavigate} flat={narrow} find={false}
-      header={<><SidebarOrgRow><ForgeBrand /></SidebarOrgRow><div data-testid="demo-project-label"><SidebarOrgLabel name="shop" /></div></>} />
+      header={<><SidebarOrgRow><ForgeBrand /></SidebarOrgRow><SidebarProjectLabel name={FIXTURE_PROJECT} testId="demo-project-label" /></>} />
   );
 }
 

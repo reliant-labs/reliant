@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 func storedIdentity(t *testing.T, repo *Repo, id string) core.ActingIdentity {
@@ -29,7 +30,7 @@ func TestTriggerActingIdentityRoundTrip(t *testing.T) {
 
 	app := newTestTrigger("trg-app", "test-user", "test-project", "as the bot")
 	app.ActingIdentity = core.ActingIdentityApp
-	if err := repo.CreateTrigger(ctx, app); err != nil {
+	if err := triggertest.Create(ctx, repo, app); err != nil {
 		t.Fatalf("CreateTrigger: %v", err)
 	}
 	if got := storedIdentity(t, repo, app.ID); got != core.ActingIdentityApp {
@@ -38,14 +39,14 @@ func TestTriggerActingIdentityRoundTrip(t *testing.T) {
 
 	// Update writes it, both ways.
 	app.ActingIdentity = core.ActingIdentityOwner
-	if err := repo.UpdateTrigger(ctx, app); err != nil {
+	if err := triggertest.Update(ctx, repo, app); err != nil {
 		t.Fatalf("UpdateTrigger: %v", err)
 	}
 	if got := storedIdentity(t, repo, app.ID); got != core.ActingIdentityOwner {
 		t.Fatalf("updated to owner, read back %q", got)
 	}
 	app.ActingIdentity = core.ActingIdentityApp
-	if err := repo.UpdateTrigger(ctx, app); err != nil {
+	if err := triggertest.Update(ctx, repo, app); err != nil {
 		t.Fatalf("UpdateTrigger: %v", err)
 	}
 	if got := storedIdentity(t, repo, app.ID); got != core.ActingIdentityApp {
@@ -62,7 +63,7 @@ func TestTriggerActingIdentityEmptyIsTheOwner(t *testing.T) {
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	trigger := newTestTrigger("trg-default", "test-user", "test-project", "default")
-	if err := repo.CreateTrigger(context.Background(), trigger); err != nil {
+	if err := triggertest.Create(context.Background(), repo, trigger); err != nil {
 		t.Fatalf("CreateTrigger with no identity: %v", err)
 	}
 	if got := storedIdentity(t, repo, trigger.ID); got != core.ActingIdentityOwner {

@@ -5,6 +5,10 @@
  * (`controlplane.v1.AccessTokenService` ListMyTokens / CreateMyToken /
  * RevokeMyToken), scoped to the active organization.
  *
+ * Reads and revokes run on the generated hooks
+ * (hooks/controlplane/access-token-service-hooks_gen.ts); this module holds
+ * their `select` mappers and createForgeToken, which picks between two rpcs.
+ *
  * A token acts as the person who made it, clipped to the scopes it names and
  * to what that person holds in the org: the server enforces both, so the
  * scopes offered here are a convenience, never the control.
@@ -12,7 +16,12 @@
 
 import { timestampDate, timestampFromMs } from "@bufbuild/protobuf/wkt";
 
-import { type AccessToken, AccessTokenService } from "@/gen/controlplane/services/access_token/v1/access_token_pb";
+import {
+  type AccessToken,
+  AccessTokenService,
+  type ListMyTokensResponse,
+  type ListTokensResponse,
+} from "@/gen/controlplane/services/access_token/v1/access_token_pb";
 import { getControlPlaneClient } from "./client";
 
 /**
@@ -122,6 +131,10 @@ export const FORGE_TOKEN_SCOPE_GROUPS: readonly ForgeTokenScopeGroup[] = [
     title: "Changes",
     description: "Remote config, gradual rollouts and A/B tests. Launching one shifts production traffic.",
     scopes: [
+      {
+        scope: "changes:read",
+        label: "Read an environment's changes snapshot, for an app not on Reliant hosting (changes:write and changes:launch include it)",
+      },
       { scope: "changes:write", label: "Draft, edit and stop changes (stopping is the kill switch)" },
       {
         scope: "changes:launch",
@@ -246,8 +259,11 @@ function toForgeToken(t: AccessToken): ForgeToken {
   };
 }
 
-export async function listForgeTokens(orgId: string): Promise<ForgeToken[]> {
-  const res = await getControlPlaneClient(AccessTokenService).listMyTokens({ orgId });
+/**
+ * The caller's live tokens in a ListMyTokens answer: the `select` of
+ * `useListMyTokens`. A revoked or ephemeral credential is never listed.
+ */
+export function liveForgeTokens(res: ListMyTokensResponse): ForgeToken[] {
   return res.tokens
     .filter((t) => !t.revokedAt && !t.ephemeral)
     .map(toForgeToken);
@@ -283,22 +299,14 @@ export async function createForgeToken(input: {
   return { secret: res.secret, kind: "personal" };
 }
 
-export async function revokeForgeToken(orgId: string, id: string): Promise<void> {
-  await getControlPlaneClient(AccessTokenService).revokeMyToken({ orgId, id });
-}
-
 /**
- * The organization's live automation tokens (no acting user), such as the
- * source-map tokens this page mints. ListTokens needs the admin role, so it
- * rejects with PermissionDenied for anyone else.
+ * The organization's live automation tokens (no acting user) in a ListTokens
+ * answer, such as the source-map tokens this page mints: the `select` of
+ * `useListTokens`. ListTokens needs the admin role, so it rejects with
+ * PermissionDenied for anyone else.
  */
-export async function listOrgForgeTokens(orgId: string): Promise<ForgeToken[]> {
-  const res = await getControlPlaneClient(AccessTokenService).listTokens({ orgId });
+export function liveOrgForgeTokens(res: ListTokensResponse): ForgeToken[] {
   return res.tokens
     .filter((t) => !t.revokedAt && !t.actingUserId && !t.ephemeral)
     .map(toForgeToken);
-}
-
-export async function revokeOrgForgeToken(orgId: string, id: string): Promise<void> {
-  await getControlPlaneClient(AccessTokenService).revokeToken({ orgId, id });
 }

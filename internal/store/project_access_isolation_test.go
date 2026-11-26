@@ -26,6 +26,7 @@ func (m liveOrgs) IsMember(_ context.Context, userID, orgID string) (bool, bool,
 // another's project, in the same org or not, and a former member reads none of
 // the org's.
 func TestProjectAccess_CrossTenantAgainstTheDatabase(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC()

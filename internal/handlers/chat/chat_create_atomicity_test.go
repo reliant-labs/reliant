@@ -123,7 +123,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
 			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
@@ -208,7 +208,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
 			Questions: &MockQuestions{}, Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
@@ -231,11 +231,11 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	require.NotNil(t, resp.Msg.Chat)
 
 	chatID := resp.Msg.Chat.Id
-	createdChat, getErr := repo.GetChat(ctx, chatID)
+	createdChat, getErr := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, getErr)
 	require.NotNil(t, createdChat)
 
-	wf, wfErr := repo.GetWorkflow(ctx, chatID)
+	wf, wfErr := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, wfErr)
 	require.NotNil(t, wf, "root workflow should exist for the created chat")
 

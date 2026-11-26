@@ -1731,7 +1731,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 				// Build child execution context for this inline workflow
 				var childExecCtx *ExecutionContext
 				if iterExecContext != nil {
-					childExecCtx = iterExecContext.ForChild(step.Node.GetId(), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, model.NodeThreadMemo(evalResult))
+					childExecCtx = workflowNodeContext(e.ctx, e.childTracker, iterExecContext, step.Node, joinNodePath(e.nodePath(), step.Node.GetId()), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, model.NodeThreadMemo(evalResult))
 
 					// Set thread title: use node ID, with ordinal for loop iterations
 					childExecCtx.ThreadTitle = step.Node.GetId()
@@ -2117,7 +2117,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 							runningSteps = append(runningSteps, newRunning)
 							continue
 						}
-						e.logger.Warn("[InlineLoop] Sub-agent step failed; ending this agent and reporting to its parent",
+						logSubAgentEnd(e.logger, stepEvent.Error, "[InlineLoop] Sub-agent step failed; ending this agent and reporting to its parent",
 							"loopID", e.loopID,
 							"iteration", e.iteration,
 							"stepID", running.StepID,

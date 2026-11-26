@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -305,7 +306,7 @@ func (e *env) trigger(userID, integration string, connID *string) string {
 	cfg, err := json.Marshal(core.IntegrationConfig{Integration: integration, Events: []string{"x"}})
 	require.NoError(e.t, err)
 	id := "trg-" + uuid.NewString()
-	require.NoError(e.t, e.repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(e.t, triggertest.Create(ctx, e.repo, &core.Trigger{
 		ID: id, UserID: userID, ProjectID: projectID, Name: id, Kind: core.TriggerKindIntegration, Enabled: true,
 		Workflow: "builtin://agent", DaemonID: "d", Config: cfg, ConnectionID: connID, CreatedAt: now, UpdatedAt: now,
 	}))

@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,7 +37,7 @@ func (e *env) newTrigger(userID, integration string, connID *string) string {
 	cfg, err := json.Marshal(core.IntegrationConfig{Integration: integration, Events: []string{"item.created"}})
 	require.NoError(e.t, err)
 	id := "trg-" + uuid.NewString()
-	require.NoError(e.t, e.repo.CreateTrigger(ctx, &core.Trigger{
+	require.NoError(e.t, triggertest.Create(ctx, e.repo, &core.Trigger{
 		ID: id, UserID: userID, ProjectID: projectID, Name: "t-" + id, Kind: core.TriggerKindIntegration,
 		Enabled: true, Workflow: "builtin://agent", DaemonID: "d1", Config: cfg, ConnectionID: connID,
 		CreatedAt: now, UpdatedAt: now,

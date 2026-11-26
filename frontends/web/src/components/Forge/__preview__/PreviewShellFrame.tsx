@@ -46,7 +46,7 @@ import {
 } from "@/components/Layout/sidebar/navConfig/items";
 import { testsGroup } from "@/components/Layout/sidebar/navConfig/tests";
 import type { NavConfig } from "@/components/Layout/sidebar/navConfig/types";
-import { SidebarOrgLabel, SidebarOrgRow } from "@/components/Layout/sidebar/primitives";
+import { SidebarOrgRow, SidebarProjectLabel } from "@/components/Layout/sidebar/primitives";
 import { ShellNavColumn } from "@/components/Layout/sidebar/ShellNavColumn";
 import { useShellProject, type ShellProject } from "@/components/Layout/sidebar/shellProject";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -65,7 +65,7 @@ const PREVIEW_SESSION = fixedSession({ id: "preview", email: "preview@example.co
 /**
  * The console's rows of the app's own nav (navConfig/hybrid.ts), drawn from
  * the same item objects and in its order, as the demo's nav is
- * (Forge/Demo/demoNav.ts): without the app's chats, Inbox, Settings and
+ * (Forge/Demo/demoNavConfig.ts): without the app's chats, Inbox, Settings and
  * billing, which a preview of the console has nothing behind.
  */
 export const PREVIEW_NAV: NavConfig = {
@@ -99,9 +99,7 @@ function PreviewNav({ pathname, search, onNavigate }: ShellNavProps) {
           <SidebarOrgRow>
             <ForgeBrand />
           </SidebarOrgRow>
-          <div>
-            <SidebarOrgLabel name={DEMO_PROJECT} />
-          </div>
+          <SidebarProjectLabel name={DEMO_PROJECT} />
         </>
       }
     />

@@ -5,6 +5,8 @@ import (
 	"context"
 	"reflect"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestReapOrphanedWorkflowDescendants is the invariant
@@ -82,7 +84,7 @@ func TestReapOrphanedWorkflowDescendants(t *testing.T) {
 
 	assertStatus := func(id string, want WorkflowStatus, why string) {
 		t.Helper()
-		wf, err := repo.GetWorkflow(ctx, id)
+		wf, err := store.LoadWorkflow(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetWorkflow(%s): %v", id, err)
 		}

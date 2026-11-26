@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -32,7 +33,7 @@ func TestExecuteToolsActivity_CapsAggregateToolResultBatch(t *testing.T) {
 	executor.SetResult(secondID, &toolexec.ToolResult{Success: true, Content: secondContent})
 
 	compactionThreshold := int64(10_000)
-	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.h.Repo(), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
+	activityInstance := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.h.Repo()), Rows: workspaceRowsOf(f.h.Repo()), ToolCalls: toolCallsOf(f.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.h.Repo().ORM())})
 	var output ExecuteToolsOutput
 	require.NoError(t, f.h.ExecuteActivity(activityInstance.Execute, ExecuteToolsInput{
 		ChatID:              f.chatID,

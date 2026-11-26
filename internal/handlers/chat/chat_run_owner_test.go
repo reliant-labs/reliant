@@ -38,7 +38,7 @@ func newRunOwnerProject(t *testing.T, ctx context.Context, repo *db.Repo) string
 
 func requireRunOwner(t *testing.T, repo *db.Repo, runID, want string) {
 	t.Helper()
-	run, err := repo.GetWorkflow(context.Background(), runID)
+	run, err := store.LoadWorkflow(context.Background(), repo.ORM(), runID)
 	require.NoError(t, err)
 	require.NotNil(t, run, "run %s was not created", runID)
 	require.NotNil(t, run.OwnerUserID, "run %s was created without an owner", runID)
@@ -63,7 +63,7 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
 			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
@@ -105,7 +105,7 @@ func TestChatService_BranchChat_RootRunCarriesOwner(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
 			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
 		threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),

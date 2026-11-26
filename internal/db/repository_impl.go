@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dblock"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -33,23 +32,6 @@ func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 		return fmt.Errorf("chat cannot be nil")
 	}
 	return store.InsertChat(ctx, r.ORM(), chat)
-}
-
-func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-
-	return store.GetChat(ctx, r.ORM(), id)
-}
-
-// GetChatRow reads a chat's own row from the chats table — no activity view —
-// for a caller that needs none of the activity-derived fields (ChatRow).
-func (r *Repo) GetChatRow(ctx context.Context, id string) (*ChatRow, error) {
-	if id == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetChatRow(ctx, r.ORM(), id)
 }
 
 // GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
@@ -1618,21 +1600,46 @@ func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, 
 // project has no record. Prefer it (and GetProjectPresetsJSON) to
 // store.GetProjectConfigRecord whenever that column is all a caller needs: the
 // full row carries every indexed skill body and can run to tens of MB.
+//
+// A value this Repo read before is served again while the record is
+// unchanged (catalogColumnCache).
 func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectWorkflowsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.workflows", projectID, store.GetProjectWorkflowsJSONVersioned)
 }
 
 // GetProjectPresetsJSON reads one column of the project config record: the
 // synced .reliant/presets. It returns svcerr.NotFound when the
-// project has no record.
+// project has no record. Cached as GetProjectWorkflowsJSON is.
 func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
+	return r.projectConfigColumn(ctx, "project.presets", projectID, store.GetProjectPresetsJSONVersioned)
+}
+
+// projectConfigColumn reads one JSON column of projectID's config record
+// through the catalog column cache, svcerr.NotFound when there is none.
+func (r *Repo) projectConfigColumn(ctx context.Context, column, projectID string,
+	versioned func(ctx context.Context, db orm.Context, projectID string) (*string, string, bool, error),
+) (*string, error) {
+	value, found, err := r.catalogColumns().read(ctx, catalogColumnKey{column: column, projectID: projectID}, catalogColumnReads{
+		version: func(ctx context.Context) (string, bool, error) {
+			return store.ProjectConfigVersion(ctx, r.ORM(), projectID)
+		},
+		versioned: func(ctx context.Context) (*string, string, bool, error) {
+			return versioned(ctx, r.ORM(), projectID)
+		},
+	}, r.fillsCatalogColumns(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, store.MissingProjectConfig()
+	}
+	return value, nil
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2023,6 +2030,13 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 	}
 
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
+}
+
+// CopyChatPlans gives toThreadID a pending copy of every plan of fromChatID
+// and of their tasks, in one statement (store.CopyChatPlans). A branch
+// starts with its source chat's plans this way.
+func (r *Repo) CopyChatPlans(ctx context.Context, fromChatID, toThreadID string) error {
+	return store.CopyChatPlans(ctx, r.ORM(), fromChatID, toThreadID, int32(PlanStatusPending), int32(TaskStatusPending))
 }
 
 // ==================== Tasks ====================
@@ -2458,10 +2472,6 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 	})
 }
 
-func (r *Repo) GetWorkflow(ctx context.Context, id string) (*Workflow, error) {
-	return store.LoadWorkflow(ctx, r.ORM(), id)
-}
-
 func (r *Repo) GetWorkflowByThread(ctx context.Context, chatID, thread string) (*Workflow, error) {
 	return store.FindWorkflowByThread(ctx, r.ORM(), chatID, thread)
 }
@@ -2500,7 +2510,7 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 		if !ok {
 			return nil // CAS failed, nothing to emit
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2563,7 +2573,7 @@ func (r *Repo) CancelStoppedSpawn(ctx context.Context, workflowID string) (bool,
 			return fmt.Errorf("resolve the mailboxes of stopped spawn %s: %w", workflowID, err)
 		}
 		if resolved > 0 {
-			if wf, err := r.GetWorkflow(txCtx, workflowID); err == nil && wf != nil && wf.ChatID != "" {
+			if wf, err := store.LoadWorkflow(txCtx, r.ORM(), workflowID); err == nil && wf != nil && wf.ChatID != "" {
 				r.announceAgentMailboxChanged(txCtx, wf.ChatID)
 			}
 		}
@@ -2598,7 +2608,7 @@ func (r *Repo) AbandonFailedWorkflowStart(ctx context.Context, id string) (bool,
 		if err != nil || !ok {
 			return err
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2622,7 +2632,7 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {
 			return err
 		}
-		wf, err := r.GetWorkflow(txCtx, id)
+		wf, err := store.LoadWorkflow(txCtx, r.ORM(), id)
 		if err != nil {
 			return err
 		}
@@ -2645,7 +2655,7 @@ func (r *Repo) EnsureWorkflowRunning(ctx context.Context, workflowID, chatID str
 	if workflowID == "" {
 		return
 	}
-	wf, err := r.GetWorkflow(ctx, workflowID)
+	wf, err := store.LoadWorkflow(ctx, r.ORM(), workflowID)
 	if err != nil || wf == nil {
 		return // Workflow not tracked yet (WorkflowStatus "started" hasn't fired)
 	}
@@ -2766,17 +2776,7 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
 }
 
-// CreateTrigger inserts t with no org reads, in its own transaction.
-func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		return store.CreateTriggerInOrg(ctx, r.ORM(), t)
-	})
-}
-
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
-	if id == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
 	return store.GetTrigger(ctx, r.ORM(), id)
 }
 
@@ -2785,120 +2785,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
-}
-
-// UpdateTrigger replaces the trigger's definition with no org reads, in its
-// own transaction: a write back of a row as it was (restoreActivation).
-func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		return store.UpdateTriggerInOrg(ctx, r.ORM(), t)
-	})
-}
-
-func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.RemoveTrigger(ctx, r.ORM(), id)
-}
-
-func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		// Turning a trigger on locks its project first: refused while the
-		// project is scheduled for deletion (store.LockProjectsForWrite).
-		if enabled {
-			if err := r.lockTriggerProjects(ctx, id, "", true); err != nil {
-				return err
-			}
-		}
-		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
-			return err
-		}
-		before, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		if revision, ok := automationpolicy.Revision(ctx); ok && !before.UpdatedAt.Equal(revision) {
-			return svcerr.FailedPrecondition("Activation changed after approval; request a new approval")
-		}
-		if err := store.SetTriggerEnabled(ctx, r.ORM(), id, enabled); err != nil {
-			return err
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		op := "pause"
-		if enabled {
-			op = "enable"
-		}
-		return store.RecordTriggerChange(ctx, r.ORM(), op, before, after)
-	})
-}
-
-// lockTriggerProjects takes the key share a trigger write needs on its
-// projects before the trigger's own row lock (store.LockProjectsForWrite):
-// the project it is in now and, when it moves, toProjectID. Only a write
-// that leaves the trigger on, or moves it, is admitted against a deletion;
-// one that leaves it off, in place, locks nothing. The database's admission
-// re-decides under the same lock in the write itself, so a trigger that moved
-// between this read and its row lock is still refused.
-func (r *Repo) lockTriggerProjects(ctx context.Context, triggerID, toProjectID string, enabled bool) error {
-	current, err := store.TriggerProjectID(ctx, r.ORM(), triggerID)
-	if err != nil {
-		return err
-	}
-	if !enabled && (toProjectID == "" || toProjectID == current) {
-		return nil
-	}
-	return store.LockProjectsForWrite(ctx, r.ORM(), current, toProjectID)
-}
-
-// PauseTrigger is the system pausing a trigger that can no longer launch as
-// written, recording reason (core.TriggerPaused*) on the row and the pause in
-// its change history. paused is false when the trigger was already paused (a
-// person did, or a concurrent fire got here first): nothing is written, so a
-// burst of refused fires records one pause.
-func (r *Repo) PauseTrigger(ctx context.Context, id, reason string) (paused bool, err error) {
-	if id == "" {
-		return false, fmt.Errorf("trigger ID cannot be empty")
-	}
-	err = r.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
-		if err := store.LockTrigger(ctx, r.ORM(), id); err != nil {
-			return err
-		}
-		before, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		if !before.Enabled {
-			return nil
-		}
-		if err := store.PauseTrigger(ctx, r.ORM(), id, reason); err != nil {
-			return err
-		}
-		after, err := store.GetTrigger(ctx, r.ORM(), id)
-		if err != nil {
-			return err
-		}
-		paused = true
-		return store.RecordTriggerChange(ctx, r.ORM(), "pause", before, after)
-	})
-	if err != nil {
-		return false, err
-	}
-	return paused, nil
-}
-
-func (r *Repo) LockActivationDependencies(ctx context.Context, userID, projectID string) error {
-	return store.LockActivationDependencies(ctx, r.ORM(), userID, projectID)
-}
-
-func (r *Repo) ListTriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
-	return store.TriggerChanges(ctx, r.ORM(), userID, triggerID)
 }
 
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
@@ -2964,58 +2850,6 @@ func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload
 	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
 }
 
-// ListTriggerEvents returns one page of the trigger's firings newest first,
-// each with the run it launched, and whether more follow.
-func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
-	if f.TriggerID == "" {
-		return nil, false, fmt.Errorf("trigger ID cannot be empty")
-	}
-	if f.UserID == "" {
-		return nil, false, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
-}
-
-// CreateRunEvent inserts the event, doing nothing when its DedupeKey
-// already exists. created=false means the transition was already recorded.
-func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
-	if ev == nil {
-		return false, fmt.Errorf("run event cannot be nil")
-	}
-	if ev.DedupeKey == "" {
-		// An empty key would collide every transition with every other one,
-		// and the second real event would silently read as a retry.
-		return false, fmt.Errorf("run event dedupe key cannot be empty")
-	}
-	return store.InsertRunEvent(ctx, r.ORM(), ev)
-}
-
-// HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
-// of the kind.
-func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
-	if userID == "" {
-		return false, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.HasEnabledTriggerOfKind(ctx, r.ORM(), userID, kind)
-}
-
-// LockChatForRunEvent row-locks the chat until the transaction ends.
-func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
-	if chatID == "" {
-		return fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.LockChatForRunEvent(ctx, r.ORM(), chatID)
-}
-
-// CountOtherPendingBlockers counts the chat's pending approvals and
-// questions other than excludeID.
-func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
-	if chatID == "" {
-		return 0, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.CountOtherPendingBlockers(ctx, r.ORM(), chatID, excludeID)
-}
-
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
 //
 // Deprecated: use store.RunEventExtStore.ClaimRunEvents; the relay reads it
@@ -3037,49 +2871,12 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
-// FiringsSinceLastUnmanagedSuccess returns the legacy inbox failure episode.
-// Attention-managed actors are excluded before the success boundary and cap;
-// callers needing diagnostic health continue to use the unfiltered reads.
-func (r *Repo) FiringsSinceLastUnmanagedSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	return store.FiringsSinceLastUnmanagedSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
-}
-
-// GetLatestTriggerEvent returns the trigger's latest firing, optionally
-// filtered by outcome, and (nil, nil) when it has never fired.
-func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
-	if triggerID == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.GetLatestTriggerEvent(ctx, r.ORM(), triggerID, outcome)
-}
-
-func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
-}
-
-func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
-	if id == "" {
-		return nil, core.ErrTriggerNotFound
-	}
-	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
-}
-
 // ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
 //
 // Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
 // ledger through launch.Deps.TriggerEvents.
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
-}
-
-func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
 }
 
 // ==================== Step Executions ====================

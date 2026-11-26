@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/rundiagnostics"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // ============================================================================
@@ -147,7 +148,7 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 		assert.True(t, output.Success)
 
 		// Verify workflow status was updated to running
-		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
+		updatedWorkflow, err := store.LoadWorkflow(ctx, h.Repo().ORM(), childWorkflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Active(), updatedWorkflow.Status, "Workflow should be running after started")
 	})
@@ -204,7 +205,7 @@ func TestWorkflowStatus_ChildWorkflowCreatedOnMissing(t *testing.T) {
 		// CreateWorkflowWithThread commit; after a short retry the activity
 		// creates the row itself (CreateWorkflow is idempotent, so the
 		// parent's later create is a no-op).
-		created, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
+		created, err := store.LoadWorkflow(ctx, h.Repo().ORM(), childWorkflowID)
 		require.NoError(t, err, "child workflow row should be created on missing")
 		require.NotNil(t, created)
 		assert.Equal(t, db.Active(), created.Status)
@@ -260,7 +261,7 @@ func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
 		assert.True(t, output.Success)
 
 		// Verify workflow status was updated
-		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, workflowID)
+		updatedWorkflow, err := store.LoadWorkflow(ctx, h.Repo().ORM(), workflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Completed(), updatedWorkflow.Status)
 	})
@@ -294,7 +295,7 @@ func TestWorkflowStatus_FailedRecordsWhyOnTheRun(t *testing.T) {
 		ChatID: chatID, WorkflowID: chatID, WorkflowName: "release-forge", Status: "failed", Thread: chatID, Error: reason,
 	}, &output))
 
-	failed, err := h.Repo().GetWorkflow(ctx, chatID)
+	failed, err := store.LoadWorkflow(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Failed(), failed.Status)
 	require.NotNil(t, failed.FailureDetail, "a failed run records why on the run")
@@ -304,7 +305,7 @@ func TestWorkflowStatus_FailedRecordsWhyOnTheRun(t *testing.T) {
 	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID: chatID, WorkflowID: chatID, WorkflowName: "release-forge", Status: "started", Thread: chatID,
 	}, &output))
-	revived, err := h.Repo().GetWorkflow(ctx, chatID)
+	revived, err := store.LoadWorkflow(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Nil(t, revived.FailureDetail, "a live run carries no earlier run's failure")
 }
@@ -416,7 +417,7 @@ func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
 		assert.True(t, output.Success)
 
 		// Verify workflow is still running (no change)
-		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
+		updatedWorkflow, err := store.LoadWorkflow(ctx, h.Repo().ORM(), childWorkflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Active(), updatedWorkflow.Status, "Workflow should still be running")
 	})
@@ -470,7 +471,7 @@ func TestWorkflowStatus_PausedUpdatesStatus(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, output.Success)
 
-		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, workflowID)
+		updatedWorkflow, err := store.LoadWorkflow(ctx, h.Repo().ORM(), workflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Paused(), updatedWorkflow.Status,
 			"Workflow should be paused after 'paused' status update")
@@ -520,7 +521,7 @@ func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, output.Success)
 
-		pausedWf, err := h.Repo().GetWorkflow(ctx, workflowID)
+		pausedWf, err := store.LoadWorkflow(ctx, h.Repo().ORM(), workflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Paused(), pausedWf.Status)
 
@@ -535,7 +536,7 @@ func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, output.Success)
 
-		resumedWf, err := h.Repo().GetWorkflow(ctx, workflowID)
+		resumedWf, err := store.LoadWorkflow(ctx, h.Repo().ORM(), workflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Active(), resumedWf.Status,
 			"Workflow should be running after re-emitting 'started' status")
@@ -593,11 +594,11 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 		}, &output)
 		require.NoError(t, err)
 
-		spawn, err := h.Repo().GetWorkflow(ctx, spawnWorkflowID)
+		spawn, err := store.LoadWorkflow(ctx, h.Repo().ORM(), spawnWorkflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Paused(), spawn.Status)
 
-		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
+		root, err := store.LoadWorkflow(ctx, h.Repo().ORM(), rootWorkflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Paused(), root.Status,
 			"self-pause must mark the ROOT row paused: SendMessage resume routing and the stall watchdog key off it")
@@ -614,11 +615,11 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 		}, &output)
 		require.NoError(t, err)
 
-		spawn, err := h.Repo().GetWorkflow(ctx, spawnWorkflowID)
+		spawn, err := store.LoadWorkflow(ctx, h.Repo().ORM(), spawnWorkflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Active(), spawn.Status)
 
-		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
+		root, err := store.LoadWorkflow(ctx, h.Repo().ORM(), rootWorkflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Active(), root.Status,
 			"post-resume started must un-park the whole chat, not just the notifying row")
@@ -644,7 +645,7 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 			ParentWorkflowID: rootWorkflowID,
 		}, &output))
 
-		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
+		root, err := store.LoadWorkflow(ctx, h.Repo().ORM(), rootWorkflowID)
 		require.NoError(t, err)
 		assert.Equal(t, db.Paused(), root.Status,
 			"a non-resumed started must not un-pause the root row")
@@ -706,7 +707,7 @@ func TestWorkflowStatus_StartedRevivesTerminalThread(t *testing.T) {
 	assert.Nil(t, thread.CompletedAt,
 		"a revived thread must not keep the completed_at of the turn that ended")
 
-	workflow, err := h.Repo().GetWorkflow(ctx, chatID)
+	workflow, err := store.LoadWorkflow(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), workflow.Status)
 }

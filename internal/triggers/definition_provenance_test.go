@@ -15,6 +15,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 const provenanceWorkflow = `name: release
@@ -69,7 +71,7 @@ func newProvenanceProject(t *testing.T) *provenanceProject {
 		DaemonID: p.daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, p.schedule))
+	require.NoError(t, triggertest.Create(ctx, repo, p.schedule))
 	p.webhook = &core.Trigger{
 		ID: uuid.NewString(), UserID: p.userID, ProjectID: p.projectID, Name: "Release on push",
 		Kind: core.TriggerKindWebhook, Enabled: true, Workflow: "release", Message: "release",
@@ -79,7 +81,7 @@ func newProvenanceProject(t *testing.T) *provenanceProject {
 		DaemonID: p.daemonID, Presets: map[string]string{}, Params: map[string]any{}, Config: json.RawMessage(`{}`),
 		CreatedAt: now, UpdatedAt: now,
 	}
-	require.NoError(t, repo.CreateTrigger(ctx, p.webhook))
+	require.NoError(t, triggertest.Create(ctx, repo, p.webhook))
 	return p
 }
 
@@ -192,7 +194,7 @@ func TestFiringAgainstABrokenDefinitionIsRefused(t *testing.T) {
 			assert.Empty(t, launcher.snapshot(), "nothing launched: no older version runs in its place")
 
 			failed := core.TriggerEventFailed
-			ev, err := p.repo.GetLatestTriggerEvent(p.ctx, p.schedule.ID, &failed)
+			ev, err := store.GetLatestTriggerEvent(p.ctx, p.repo.ORM(), p.schedule.ID, &failed)
 			require.NoError(t, err)
 			assert.True(t, strings.HasPrefix(ev.OutcomeDetail, "refused: "), ev.OutcomeDetail)
 			assert.Contains(t, ev.OutcomeDetail, provenancePath)

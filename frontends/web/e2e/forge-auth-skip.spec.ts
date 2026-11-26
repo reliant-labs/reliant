@@ -6,7 +6,7 @@ import { expect, test, type Route } from '@playwright/test';
 // root's <Navigate> did not redirect a second visit to `/`). The forge host
 // now mounts the app's one route tree (routes.tsx, U6): a guest has not
 // onboarded, so the home sends them to /projects (the daemonless home,
-// OnboardingFlow/onboardingGate.ts homeTarget) on every visit.
+// OnboardingFlow/onboardingGatePolicy.ts homeTarget) on every visit.
 
 const LOADED = { timeout: 20_000 };
 const json = (route: Route, body: unknown) =>
@@ -27,7 +27,7 @@ async function mockForgeGuest(page: import('@playwright/test').Page) {
   await page.route('**/reliant.v1.**', (route) => json(route, {}));
   await page.route('**/controlplane.v1.**', (route) => json(route, {}));
   // The guest's own record: not onboarded. (With no record at all the home
-  // sends them to the wizard, which asks again: onboardingGate.ts chatRouteAction.)
+  // sends them to the wizard, which asks again: onboardingGatePolicy.ts chatRouteAction.)
   await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route) =>
     json(route, { user: { id: GUEST.id, email: '', onboardingCompleted: false } }),
   );

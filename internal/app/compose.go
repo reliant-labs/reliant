@@ -32,7 +32,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/questions"
 
 	"github.com/nats-io/nats.go/jetstream"
-
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/accountpurge"
@@ -485,6 +485,7 @@ func (g *Graph) newPauseService() (*v2workflow.PauseService, error) {
 	return NewPauseService(PauseServiceDeps{
 		Temporal: g.TemporalClient(),
 		DB:       g.Database(),
+		Updates:  g.chatUpdates(),
 	})
 }
 
@@ -593,6 +594,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
+		Updates:           g.chatUpdates(),
 		ConnectionVault:   g.CredentialsConnectionvault(),
 		Network:           g.ServerProcessConfig.GetNetwork(),
 		Temporal:          g.TemporalClient(),
@@ -671,11 +673,13 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Router:           g.WorkerDaemonRouter(),
 		ConfigProvider:   g.StoredConfigProvider(),
 		Launcher:         g.RunLauncher(),
+		Runs:             g.RunLifecycle(),
 		Credentials:      g.WorkerIntegrationCredentials(),
 		WriteLedger:      g.IntegrationsWriteledger(),
 		Pollers:          g.TriggerPollers(),
 		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
 		Network:          g.ServerProcessConfig.GetNetwork(),
+		Pipeline:         g.ServerProcessConfig.GetPipeline(),
 		Recorder:         g.AccountRecorder(),
 		DB:               g.Database(),
 		// Read here, not in workersetup, so the worker root's config reach
@@ -1009,6 +1013,8 @@ func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 		Router:     g.APIDaemonRouter(),
 		DB:         g.Database(),
 		Activity:   g.DaemonStatePublisher(),
+		Reconciler: g.ServerProcessConfig.GetReconciler(),
+		Runs:       g.RunLifecycle(),
 	})
 }
 
@@ -1127,6 +1133,7 @@ func (g *Graph) newAttachment() (*attachment.Service, error) {
 		Config:      g.Cfg,
 		Attachments: store.NewAttachmentExtStore(g.Database().ORM()),
 		API:         g.ApiServerConfig,
+		DB:          g.ORM(),
 	})
 }
 
@@ -1256,7 +1263,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()), Triggers: store.NewTriggerExtStore(g.Database().ORM()), FiringReads: store.NewTriggerEventExtStore(g.Database().ORM()), Registrations: store.NewTriggerRegistrationExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
@@ -1339,21 +1346,22 @@ func (g *Graph) newForge() (*forge.Service, error) {
 // newInbox constructs the inbox handler (internal/handlers/inbox).
 func (g *Graph) newInbox() (*inbox.Service, error) {
 	return inbox.New(inbox.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		Chats:       store.NewChatsWithActivityExtStore(g.Database().ORM()),
-		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
-		Machines:    store.NewDaemonExtStore(g.Database().ORM()),
-		OrgKeys:     g.CredentialsOrgaccounts(),
-		Items:       store.NewInboxDismissalExtStore(g.Database().ORM()),
-		Firings:     store.NewTriggerEventExtStore(g.Database().ORM()),
-		Notices:     store.NewTriggerExtStore(g.Database().ORM()),
-		Recoveries:  store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
-		Marks:       store.NewWorktreeExtStore(g.Database().ORM()),
-		Storage:     worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
-		Sweeper:     g.WorktreeSweep(),
-		Orgs:        g.OrgResolver(),
+		Logger:        g.Log,
+		Config:        g.Cfg,
+		Repo:          g.Database(),
+		Chats:         store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
+		Machines:      store.NewDaemonExtStore(g.Database().ORM()),
+		OrgKeys:       g.CredentialsOrgaccounts(),
+		Items:         store.NewInboxDismissalExtStore(g.Database().ORM()),
+		Firings:       store.NewTriggerEventExtStore(g.Database().ORM()),
+		Notices:       store.NewTriggerExtStore(g.Database().ORM()),
+		Registrations: store.NewTriggerRegistrationExtStore(g.Database().ORM()),
+		Recoveries:    store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
+		Marks:         store.NewWorktreeExtStore(g.Database().ORM()),
+		Storage:       worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
+		Sweeper:       g.WorktreeSweep(),
+		Orgs:          g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: g.CallerControlPlane().Client(),
@@ -1427,12 +1435,11 @@ func (g *Graph) newTask() (*task.Service, error) {
 	return task.New(task.Deps{
 		Logger:  g.Log,
 		Config:  g.Cfg,
-		Tasks:   store.NewTaskExtStore(repo.ORM()),
 		Plans:   store.NewPlanExtStore(repo.ORM()),
 		Threads: store.NewThreadExtStore(repo.ORM()),
 		Chats:   store.NewChatExtStore(repo.ORM()),
 		Refetch: g.chatUpdates(),
-		Tx:      repo.ORM(),
+		DB:      g.ORM(),
 	})
 }
 
@@ -1447,7 +1454,7 @@ func (g *Graph) newPlan() (*plan.Service, error) {
 		Threads: store.NewThreadExtStore(repo.ORM()),
 		Chats:   store.NewChatExtStore(repo.ORM()),
 		Refetch: g.chatUpdates(),
-		Tx:      repo.ORM(),
+		DB:      g.ORM(),
 	})
 }
 
@@ -1684,6 +1691,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Triggers:    store.NewTriggerExtStore(g.Database().ORM()),
 		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
 		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
 		Drafts:      g.Workflowdrafts(),
@@ -1961,6 +1969,13 @@ func (g *Graph) newPullRequestRecord() (*pull_request_record.Service, error) {
 	})
 }
 
+// newORM constructs the ORM provider (NewORM, internal/app/providers.go).
+func (g *Graph) newORM() (orm.Context, error) {
+	return NewORM(ORMDeps{
+		Repo: g.Database(),
+	})
+}
+
 // newIntegrationsWriteledger constructs the integrations/writeledger package (internal/integrations/writeledger).
 func (g *Graph) newIntegrationsWriteledger() (writeledger.Service, error) {
 	return writeledger.NewServiceWithForgeMiddleware(writeledger.New(writeledger.Deps{
@@ -2062,6 +2077,7 @@ func (g *Graph) newChatTrace() (*chat_trace.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Store:  g.Database(),
+		Chats:  store.NewChatExtStore(g.Database().ORM()),
 		Spans:  ChatTraceSpans(g.ServerProcessConfig.GetControlPlane()),
 		Now:    nil, // optional — no provider
 	})

@@ -70,7 +70,7 @@ func (s *rendezvousStarter) ExecuteWorkflow(
 	}
 
 	chatID, _ := args[0].(map[string]interface{})["chat_id"].(string)
-	_, chatErr := s.repo.GetChat(ctx, chatID)
+	_, chatErr := store.GetChat(ctx, s.repo.ORM(), chatID)
 	s.mu.Lock()
 	s.titleCalls++
 	s.titleSawChat = chatErr == nil
@@ -132,7 +132,7 @@ func TestLaunchSucceedsWhenTitleStartFails(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	root, err := repo.GetWorkflow(ctx, result.WorkflowID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), result.WorkflowID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status, "the run Temporal accepted is marked active regardless of the title")
 }

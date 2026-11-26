@@ -252,18 +252,6 @@ func TestWorkflowFundingNoQuestion(t *testing.T) {
 	checkProvidersGolden(t, "funding_none.golden", stdout)
 }
 
-func TestWorkflowFundingJSON(t *testing.T) {
-	h := newProvidersHarness(t)
-	q := askedQuestion()
-	q.State = reliantv1.PersonalFundingQuestion_STATE_USE_PERSONAL
-	h.accounts.setQuestion(q)
-	stdout, stderr, err := h.run(t, "workflow", "funding", "chat-1", "--json")
-	if err != nil {
-		t.Fatalf("workflow funding --json: %v (stderr %s)", err, stderr)
-	}
-	checkProvidersGolden(t, "funding_answered.json.golden", stdout)
-}
-
 // A follow never prompts and never answers: it prints one line each time the
 // run starts waiting on the question (a new asked_at), and the run keeps
 // waiting. It reads only, so it cannot spend the person's own account.

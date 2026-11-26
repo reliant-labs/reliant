@@ -127,7 +127,7 @@ func (m *MockChatViews) GetChat(ctx context.Context, id string) (*db.Chat, error
 var _ ChatViews = (*MockChatViews)(nil)
 
 // forge:section MockRepository
-// forge:hash=d60c36c184de1cafa27af31270a7df13b82b065849c9e664b56c482c9098d25c
+// forge:hash=8630a8bd5b330307baeabee596126213839cbd50c60ac66e19fcf46e13cfd568
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -138,7 +138,6 @@ var _ ChatViews = (*MockChatViews)(nil)
 type MockRepository struct {
 	contractkit.Recorder
 	GetQuestionByIDFunc     func(context.Context, string) (*db.Question, error)
-	EmitQuestionUpdateFunc  func(context.Context, string, db.QuestionUpdate) error
 	SaveMessageToThreadFunc func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 }
 
@@ -149,15 +148,6 @@ func (m *MockRepository) GetQuestionByID(ctx context.Context, id string) (*db.Qu
 		return m.GetQuestionByIDFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetQuestionByID")
-}
-
-// EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
-func (m *MockRepository) EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error {
-	m.Recorder.Record("EmitQuestionUpdate", ctx, chatID, update)
-	if m.EmitQuestionUpdateFunc != nil {
-		return m.EmitQuestionUpdateFunc(ctx, chatID, update)
-	}
-	return contractkit.MockNotSet("MockRepository", "EmitQuestionUpdate")
 }
 
 // SaveMessageToThread records the call and delegates to SaveMessageToThreadFunc when set.

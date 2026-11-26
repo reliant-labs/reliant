@@ -40,7 +40,9 @@ const api = { id: "p-api", name: "api", path: "/home/workspace/projects/api", la
 const temp = {
   id: "p-temp",
   name: "temp",
-  path: "/home/workspace/projects/temp",
+  // Where temp was first created: the owner's Mac. cicd is another
+  // machine, so this path means nothing there.
+  path: "/Users/me/src/temp",
   last_active: "2025-02-01T00:00:00Z",
   remote_url: "https://github.com/acme/temp",
 };
@@ -91,8 +93,11 @@ describe("NewChatProjectChip with a picked machine", () => {
       cloneUrl: "https://github.com/acme/temp",
       daemonId: "d-cicd",
       name: "temp",
-      path: "/home/workspace/projects/temp",
     });
+    // Never the source machine's path: nothing shows cicd can create it
+    // (prod, 2026-11-23: "mkdir /Users: permission denied"). The server
+    // picks cicd's own default.
+    expect((createProjectFromRepo.mock.calls[0] as unknown[])[0]).not.toHaveProperty("path");
     expect(openNewChat).toHaveBeenCalledWith({ projectId: "p-temp" });
   });
 

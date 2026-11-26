@@ -141,6 +141,19 @@ func (s *Service) CreateProjectFromRepo(
 	projectID := uuid.New().String()
 	if existing != nil {
 		projectID = existing.ID
+		if req.Msg.GetPath() != "" && s.isOtherPlatformsCheckout(ctx, existing.ID, machine, path) {
+			// Older clients send the project's path from the machine it
+			// already sits on when setting it up on another: a Mac's
+			// /Users/... handed to a Linux box, which fails at once with
+			// "mkdir /Users: permission denied" (prod, 2026-11-23), and on
+			// every retry. A path only machines of another OS hold this
+			// project at is that copy, never a destination chosen for this
+			// machine. A path typed for this machine (Settings' "Clone onto
+			// a machine…") is not, and is honored.
+			logging.InfoContext(ctx, "CreateProjectFromRepo: ignoring another platform's checkout path",
+				"project_id", existing.ID, "daemon_id", daemonID, "path", path)
+			path = s.defaultClonePath(ctx, machine, name)
+		}
 	}
 	requestID := cloneRequestID(projectID, daemonID)
 
@@ -148,10 +161,15 @@ func (s *Service) CreateProjectFromRepo(
 	// row. If this is going to be refused — no credential, machine failed,
 	// not the caller's daemon — it must fail with nothing persisted, rather
 	// than leaving a project the user then has to clean up by hand.
+	//
+	// The control plane queues it only once it holds the user's token, and
+	// the machine's git authenticates with that token over https: a
+	// github.com SSH remote is cloned over its https form (TokenCloneURL).
+	// The project keeps the remote as given.
 	cloneResult, err := s.deps.ControlPlane.CloneRepoOntoDaemon(ctx, auth.BearerToken(req.Header().Get("Authorization")),
 		controlplane.CloneRepoRequest{
 			DaemonID:  daemonID,
-			CloneURL:  cloneURL,
+			CloneURL:  gitremote.TokenCloneURL(cloneURL),
 			Branch:    branch,
 			Path:      path,
 			RequestID: requestID,

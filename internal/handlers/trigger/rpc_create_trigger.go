@@ -87,7 +87,7 @@ func (s *Service) CreateTrigger(
 			err = s.provisionAlerting(ctx, trigger)
 		}
 		if err != nil {
-			if delErr := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); delErr != nil {
+			if delErr := s.deps.Triggers.RemoveTrigger(ctx, trigger.ID); delErr != nil {
 				logging.ErrorContext(ctx, "failed to remove a webhook trigger whose credentials could not be written",
 					"trigger_id", trigger.ID, "error", err, "delete_error", delErr)
 			}
@@ -106,7 +106,7 @@ func (s *Service) CreateTrigger(
 					"trigger_id", trigger.ID, "sync_error", err, "delete_error", schedErr)
 			}
 		}
-		if delErr := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); delErr != nil {
+		if delErr := s.deps.Triggers.RemoveTrigger(ctx, trigger.ID); delErr != nil {
 			logging.ErrorContext(ctx, "failed to remove a trigger whose schedule could not be created",
 				"trigger_id", trigger.ID, "sync_error", err, "delete_error", delErr)
 		}

@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 const securityRoot = `name: secure-parent
@@ -105,7 +106,7 @@ func TestAgentActivationSecretsNeverEnterCardsOrAudit(t *testing.T) {
 	require.NotContains(t, next.Title, secret)
 	_, err = e.svc.ManageActivation(e.ctx, e.userID, tools.ToolUpdateTriggerActivation, update, next.Hash)
 	require.NoError(t, err)
-	history, err := e.repo.ListTriggerChanges(e.ctx, e.userID, result.ID)
+	history, err := store.TriggerChanges(e.ctx, e.repo.ORM(), e.userID, result.ID)
 	require.NoError(t, err)
 	require.Len(t, history, 2)
 	for _, change := range history {
@@ -136,11 +137,6 @@ func (r *approvalBarrierRepo) wait() {
 	r.once.Do(func() { close(r.atWrite); <-r.release })
 }
 
-func (r *approvalBarrierRepo) CreateTrigger(ctx context.Context, tr *core.Trigger) error {
-	r.wait()
-	return r.Repository.CreateTrigger(ctx, tr)
-}
-
 // CreateTriggerInOrg is the write an activation makes since triggers belong
 // to an org (#2537).
 func (r *approvalBarrierRepo) CreateTriggerInOrg(ctx context.Context, tr *core.Trigger, reads ...db.OrgRead) error {
@@ -150,6 +146,18 @@ func (r *approvalBarrierRepo) CreateTriggerInOrg(ctx context.Context, tr *core.T
 
 func (r *approvalBarrierRepo) UpdateTriggerInOrg(ctx context.Context, tr *core.Trigger, reads ...db.OrgRead) error {
 	return r.writes.UpdateTriggerInOrg(ctx, tr, reads...)
+}
+
+func (r *approvalBarrierRepo) EnableTrigger(ctx context.Context, id string, enabled bool) error {
+	return r.writes.EnableTrigger(ctx, id, enabled)
+}
+
+func (r *approvalBarrierRepo) TriggerChanges(ctx context.Context, userID, triggerID string) ([]core.TriggerChange, error) {
+	return r.writes.TriggerChanges(ctx, userID, triggerID)
+}
+
+func (r *approvalBarrierRepo) LockActivationDependencies(ctx context.Context, user, project string) error {
+	return r.writes.LockActivationDependencies(ctx, user, project)
 }
 
 func TestAgentActivationAtomicDependencyMutation(t *testing.T) {

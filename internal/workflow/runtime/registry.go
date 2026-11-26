@@ -506,8 +506,9 @@ const (
 	//
 	// One constant, referenced by both the dispatch site and the reporter, is
 	// what keeps the reported denominator honest: change the ladder and the
-	// badge follows, with no second literal to forget.
-	stepActivityMaxAttempts int32 = 5
+	// badge follows, with no second literal to forget. The value is shared
+	// with activities through types.StepActivityMaxAttempts.
+	stepActivityMaxAttempts = activitytypes.StepActivityMaxAttempts
 
 	// routerActivityStartToClose is the router's own CallLLM dispatch timeout
 	// (router_executor.go). The router shares activityHeartbeatTimeout with
@@ -568,6 +569,22 @@ func spuriousHeartbeatCancel(ctx context.Context, workerStopCh <-chan struct{}) 
 // The SDK closes this channel at the top of Worker.Stop(), so a closed channel
 // means any error the activity produced after that point is shutdown fallout
 // rather than a real failure of the work.
+// verdictIndependentOfShutdown reports whether execErr is an answer the
+// activity reached on its own — the user's error, or a terminal one — rather
+// than how it unwound when the worker went away. A cancellation never is.
+func verdictIndependentOfShutdown(execErr error) bool {
+	if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
+		return false
+	}
+	// RunStepReleased is benign because a rollout is not a fault, not
+	// because the activity reached a user verdict independent of the drain.
+	var appErr *temporal.ApplicationError
+	if errors.As(execErr, &appErr) && appErr.Type() == "RunStepReleased" {
+		return false
+	}
+	return errclass.Classify(execErr) == svcerr.ClassUser || isTerminal(execErr)
+}
+
 func workerStopped(ch <-chan struct{}) bool {
 	if ch == nil {
 		return false
@@ -842,32 +859,11 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		"loopNodeID", inputInfo.LoopNodeID,
 		"loopIteration", inputInfo.LoopIteration)
 
-	// Belt-and-suspenders: if Temporal is executing AGENT work for this
-	// workflow, the workflow IS running. Ensure the DB agrees. This is a fast
-	// no-op when already marked Running, and self-heals stale status otherwise.
-	//
-	// Restricted to agent work for the same reason the stopped-run guard is.
-	// Lifecycle work runs precisely WHILE a run is stopped (that is how it
-	// resumes), and observability work reports on a run that may already have
-	// stopped — letting either one assert "this run is running" would undo a
-	// pause the user just asked for. Only agent work executing is real proof
-	// the run is live.
-	//
-	// Skipped when the context is already cancelled (pause/shutdown in
-	// progress), for the same reason.
-	if w.repo != nil && chatID != "" && ctx.Err() == nil && w.workKind == lifecycle.AgentWork {
-		w.repo.EnsureWorkflowRunning(ctx, workflowID, chatID)
-	}
-
-	// Track execution start time for duration calculation
 	startTime := time.Now()
 
-	// Emit node execution "started" event for UI streaming
-	w.emitNodeExecutionEvent(ctx, "started", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
-
-	// Start heartbeat goroutine for fast cancellation detection.
-	// See activityHeartbeatInterval / activityHeartbeatTimeout for the cadence
-	// and the deadline it is sized against.
+	// Start heartbeating before any database work. Temporal's deadline is
+	// already ticking: even the liveness lookup before the handler can block
+	// longer than PreflightDaemonCheck's heartbeat timeout.
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat() // Stop heartbeat when activity completes
 
@@ -989,6 +985,26 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		}
 	})
 
+	// Belt-and-suspenders: if Temporal is executing AGENT work for this
+	// workflow, the workflow IS running. Ensure the DB agrees. This is a fast
+	// no-op when already marked Running, and self-heals stale status otherwise.
+	//
+	// Restricted to agent work for the same reason the stopped-run guard is.
+	// Lifecycle work runs precisely WHILE a run is stopped (that is how it
+	// resumes), and observability work reports on a run that may already have
+	// stopped — letting either one assert "this run is running" would undo a
+	// pause the user just asked for. Only agent work executing is real proof
+	// the run is live.
+	//
+	// Skipped when the context is already cancelled (pause/shutdown in
+	// progress), for the same reason.
+	if w.repo != nil && chatID != "" && ctx.Err() == nil && w.workKind == lifecycle.AgentWork {
+		w.repo.EnsureWorkflowRunning(ctx, workflowID, chatID)
+	}
+
+	// Emit node execution "started" event for UI streaming
+	w.emitNodeExecutionEvent(ctx, "started", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
+
 	// Setup defer for panic recovery
 	var execErr error
 	defer func() {
@@ -1049,10 +1065,19 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		})
 	}
 
-	// Execute the typed activity directly - no conversion needed!
-	// Temporal already deserialized the input to type I
-	result, execErr := w.activity(ctx, input)
-	execErr = markTextOnlyUserError(execErr)
+	// Heartbeats and stop nudges can now cancel the context during the DB
+	// work above. Don't start agent work after a stop (preflight could wake
+	// a machine). Lifecycle and reporting handlers keep their cleanup paths.
+	var result O
+	if cause := context.Cause(ctx); cause != nil && w.workKind == lifecycle.AgentWork {
+		if realStopInstruction(cause) {
+			return zeroOutput, cause
+		}
+		execErr = cause // Let the existing shutdown and heartbeat-RPC retry handling run.
+	} else {
+		result, execErr = w.activity(ctx, input)
+		execErr = markTextOnlyUserError(execErr)
+	}
 
 	// Calculate execution duration
 	endTime := time.Now()
@@ -1105,7 +1130,13 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		)
 	}
 
-	if execErr != nil && workerStopped(workerStopCh) {
+	// Only an error the shutdown can have caused, though: a verdict that does
+	// not depend on the worker — the user's error, or one already terminal —
+	// is what the activity found, and the next worker would find it again.
+	// Rewritten, a workflow name that does not exist was retried as a
+	// shutdown and lost the class that keeps it off ERROR (prod 5fc6fce4,
+	// 23295ad3).
+	if execErr != nil && workerStopped(workerStopCh) && !verdictIndependentOfShutdown(execErr) {
 		logging.InfoContext(ctx, "[ActivityWrapper] Activity aborted by worker shutdown, returning retryable error",
 			"activityType", activityType,
 			"activityID", activityID,
@@ -1369,11 +1400,18 @@ func exhaustionErrorEventID(workflowID string, err error) string {
 // drift apart silently.
 const infrastructureActivityMaxAttempts int32 = 3
 
-// preflightActivityMaxAttempts: a preflight check reports "still waiting" with
-// a successful result, so a failure is terminal and a retry would only repeat
-// the error card. It carries its own heartbeat timeout (not the graph-step
-// one), so the named switch in resolveMaxAttempts is what reaches it.
-const preflightActivityMaxAttempts int32 = 1
+// preflightActivityMaxAttempts is the ladder waitForDaemon dispatches
+// PreflightDaemonCheck with. A check reports "still waiting" with a successful
+// result, and every failure it decides itself is non-retryable
+// (handlers.PreflightDaemonCheckFailedErrType), so what this retries is a
+// lost heartbeat or a worker that died mid-slice, and a database that did not
+// answer. It carries its own heartbeat timeout (not the graph-step one), so
+// the named switch in resolveMaxAttempts is what reaches it.
+const preflightActivityMaxAttempts int32 = 3
+
+// machineResumeWakeMaxAttempts: MachineResumeWake is dispatched once
+// (machine_resume_wake.go); a failure is reported as final.
+const machineResumeWakeMaxAttempts int32 = 1
 
 // inlineSaveMessageMaxAttempts is the ladder executeSaveMessageInline
 // dispatches SaveMessage with (save_message.go). It is 5, NOT the
@@ -1446,8 +1484,10 @@ func resolveMaxAttempts(info activity.Info) int32 {
 	// No heartbeat: one of the infrastructure dispatches. These are named
 	// rather than shape-matched, because their timeouts are incidental.
 	switch info.ActivityType.Name {
-	case "PreflightDaemonCheck", "MachineResumeWake":
+	case "PreflightDaemonCheck":
 		return preflightActivityMaxAttempts
+	case "MachineResumeWake":
+		return machineResumeWakeMaxAttempts
 	case "SaveMessage":
 		return inlineSaveMessageMaxAttempts
 	case PreflightRequirementsActivityName,

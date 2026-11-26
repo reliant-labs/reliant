@@ -183,6 +183,9 @@ describe("the hybrid nav's shape", () => {
       ]);
       const row = childrenOf(analytics, ctx).find((item) => item.id === "experiments")!;
       expect(hrefOf(row, ctx)).toBe(experiments);
+      // Forge Changes is Beta wherever it is surfaced (owner decision); Analytics itself carries nothing.
+      expect(row.kind === "row" && row.badge?.(ctx)).toEqual({ type: "label", text: "Beta" });
+      expect(analytics.kind === "group" && analytics.badge).toBeFalsy();
       expect(isCurrent(row, ctxAt(consolePath("shopfront", { kind: "experiment", changeId: "c-1" })))).toBe(true);
     } finally {
       changesUI.on = false;
@@ -375,7 +378,7 @@ describe("the nav's tour anchors", () => {
       const console = { project: "shopfront", page: { kind: "secrets" as const }, env: "prod", envs: [] };
       const { container } = render(<NavRenderer config={hybridNav} ctx={ctxAt(href, { console })} slots={{}} onNavigate={vi.fn()} />);
       const anchors = [...container.querySelectorAll("[data-tour]")].map((el) => el.getAttribute("data-tour"));
-      for (const id of ["forge-console-nav", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"]) {
+      for (const id of ["forge-console-nav", "nav-overview", "nav-observability", "nav-analytics", "nav-deployments", "nav-tests", "nav-data", "nav-security", "nav-configure"]) {
         expect(anchors, id).toContain(id);
       }
       // A group's anchor holds the group: its row, and its rows while open (Configure, on Secrets).

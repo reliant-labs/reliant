@@ -89,7 +89,7 @@ import { isForgeAuth } from '@/lib/auth/forge-api'
 //   - AuthGuard holds sign-in for a visitor the landing journey is taking to
 //     the public demo (components/AuthGuard.tsx);
 //   - the phone's chat list sends a person who has not onboarded to their
-//     apps rather than to the wizard (OnboardingFlow/onboardingGate.ts,
+//     apps rather than to the wizard (OnboardingFlow/onboardingGatePolicy.ts,
 //     homeTarget; the desktop home's rule is the same on both brands);
 //   - telemetry reports as `forge-web` (lib/telemetry.ts), and the brand mark
 //     is ForgeBrand (the nav, AuthLayout).
@@ -617,7 +617,7 @@ const proxyAuthRoute = createRoute({
 // Pathless layout route that gates the settings + workflow group on auth +
 // email verification, and its chat routes (the phone's, `/m/chats…`) on
 // finished onboarding (OnboardingGate; which routes is
-// OnboardingFlow/onboardingGate.ts — every other page here works for a person
+// OnboardingFlow/onboardingGatePolicy.ts — every other page here works for a person
 // with no machine). A signed-out deep link keeps where it was going across
 // sign-in (returnHere), and the gate across the wizard.
 // Avoids re-declaring <AuthGuard requireAuth requireEmailVerification>
@@ -1149,7 +1149,7 @@ const onboardingRoute = createRoute({
 // Gated by `authenticatedLayoutRoute` for the same reason the desktop app is.
 // Note there is no mobile *setup* onboarding: a user who has not completed
 // onboarding is redirected from the chat screens to `/onboarding` (see
-// MobileShell, OnboardingFlow/onboardingGate.ts), which is the existing
+// MobileShell, OnboardingFlow/onboardingGatePolicy.ts), which is the existing
 // responsive flow — the guided *tour* is what mobile skips, because it
 // spotlights desktop chrome by DOM selector.
 const mobileLayoutRoute = createRoute({
@@ -1267,9 +1267,13 @@ const mobileDiagnosticsRoute = createRoute({
 const mobileSettingsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
   path: '/m/settings',
-  validateSearch: (search: Record<string, unknown>): { section?: string; returnTo?: string } => ({
+  // `tab=hosting` opens billing on the App hosting card, and `org` is the org a
+  // hosting link was for (lib/mobileRedirect.ts mobileTwinOf).
+  validateSearch: (search: Record<string, unknown>): { section?: string; returnTo?: string; tab?: string; org?: string } => ({
     section: typeof search.section === 'string' ? search.section : undefined,
     returnTo: typeof search.returnTo === 'string' ? search.returnTo : undefined,
+    tab: typeof search.tab === 'string' ? search.tab : undefined,
+    org: typeof search.org === 'string' ? search.org : undefined,
   }),
   component: MobileSettingsScreen,
 })

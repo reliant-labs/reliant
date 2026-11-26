@@ -1,7 +1,7 @@
 /**
  * The daemonless home's hooks (U6): what chats need from the signed-in person
  * (useChatSetup), and the redirect the chat routes run on it
- * (useChatRouteRedirect). The decisions are pure, in ./onboardingGate.ts.
+ * (useChatRouteRedirect). The decisions are pure, in ./onboardingGatePolicy.ts.
  *
  * Neither ever mounts the wizard or completes onboarding: they only read the
  * user record and the daemon list, and navigate.
@@ -15,7 +15,7 @@ import { logger } from "@/lib/logger";
 import { isForgeShell } from "@/lib/shell";
 import type { IndexSearch } from "@/routeSchemas";
 
-import { chatRouteAction, chatSetup, type ChatSetup } from "./onboardingGate";
+import { chatRouteAction, chatSetup, type ChatSetup } from "./onboardingGatePolicy";
 
 /** What chats need from the signed-in person right now (ChatSetup). */
 export function useChatSetup(): ChatSetup {

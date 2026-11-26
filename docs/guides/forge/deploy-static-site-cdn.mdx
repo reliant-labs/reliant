@@ -7,7 +7,7 @@ keywords: ["free static site hosting", "deploy vite app", "deploy next.js static
 
 By the end of this guide you will have a Vite single-page app live on a generated `*.sites.reliantlabs.dev` hostname, served from [Reliant hosting](/hosting/overview)'s static hosting and CDN, with a recorded release you can deploy again or promote. The same steps work for a Next.js static export.
 
-A static site is a complete Forge project with no backend. Reliant owns the bucket, the CDN and the hostname, and one static site per person is free, across the organizations you own that have no hosting plan.
+A static site is a complete Forge project with no backend. Reliant owns the bucket, the CDN and the hostname, and static sites are free in one organization per person, with no limit on how many.
 
 ## Before you begin
 
@@ -138,13 +138,13 @@ A static site is a complete Forge project with no backend. Reliant owns the buck
 
 ## The free tier and a second environment
 
-Without app hosting billing, the free tier covers one static site, counted across environments, so deploy prod first. A second environment's deploy is recorded but held: `env deploy` prints the billing link and exits **7**, and the site goes live by itself once billing is set up, with nothing to re-run. With billing in place, it deploys like the first. [Queued deploys](/hosting/overview#queued-deploys) has the details and the free tier's storage and traffic limits.
+Without app hosting billing, the free tier covers every static site, in every environment, of your free hosting organization (one per person), up to 1 GiB per site and 10 GiB in total. A site in another organization without billing is recorded but held: `env deploy` prints the billing link and exits **7**, and the site goes live by itself once billing is set up, with nothing to re-run. [Queued deploys](/hosting/overview#queued-deploys) has the details and the free tier's storage and traffic limits.
 
 ## What this does not do
 
 - **No rollback command.** To go back, deploy an earlier release, or cut a new one with the fix. [Releases and promotion](/forge/deploy/releases-and-promotion) covers rollback floors.
 - **No code at request time.** There are no server-rendered pages, API routes or middleware. A site that needs a backend gets its own Forge project, reached by URL.
-- **No redirects of your own.** Host redirects such as www to the bare domain cannot be declared. Response headers can: a `_headers` file at the root of the build (`public/_headers` in a Vite app, which the build copies into `dist/`) adds headers such as a `Content-Security-Policy`, in the Netlify and Cloudflare Pages format. See [the static edge and origin](/deep-dives/inside-reliant-hosting#the-static-edge-and-origin).
+- **No host redirects in the build.** A redirect from one hostname to another, such as www to the bare domain, is a domain binding (`forge domain bind www.example.com --env prod --redirect-to example.com`), not a file. Path redirects and response headers are files at the root of the build (`public/` in a Vite app, which the build copies into `dist/`), in the Netlify and Cloudflare Pages format: `_redirects` declares redirects such as `/docs/* https://docs.example.com/:splat 301`, and `_headers` adds headers such as a `Content-Security-Policy`. Rewrites (`200`) and proxying are not supported. See [the static edge and origin](/deep-dives/inside-reliant-hosting#the-static-edge-and-origin).
 - **Replay is masked and off until consent.** The starter's `main.k` sets `_session_replay = True`, but nothing records until a visitor consents, and text and inputs are always masked. Set it to `False` to turn replay off. See [Session timelines and replay](/hosting/observability/session-timelines).
 
 ## Troubleshooting
@@ -160,17 +160,7 @@ Without app hosting billing, the free tier covers one static site, counted acros
 
 ## Next steps
 
-<CardGroup cols={2}>
-  <Card title="Releases and promotion" icon="tags" href="/forge/deploy/releases-and-promotion">
-    How a release is built once and promoted by digest, with approvals and rollback floors.
-  </Card>
-  <Card title="Promote staging to production" icon="arrow-up-right" href="/guides/hosting/promote-release-staging-to-production">
-    Deploy the exact release staging runs to prod with `--from staging`.
-  </Card>
-  <Card title="Custom domains" icon="globe" href="/hosting/custom-domains">
-    Serve the site on a hostname you own, with automatic HTTPS.
-  </Card>
-  <Card title="Deploy without an account" icon="user-x" href="/forge/deploy-without-an-account">
-    Publish an existing app with no signup and hand over a claim link.
-  </Card>
-</CardGroup>
+- [Releases and promotion](/forge/deploy/releases-and-promotion): how a release is built once and promoted by digest, with approvals and rollback floors
+- [Promote staging to production](/guides/hosting/promote-release-staging-to-production): deploy the exact release staging runs to prod with `--from staging`
+- [Custom domains](/hosting/custom-domains): serve the site on a hostname you own, with automatic HTTPS
+- [Deploy without an account](/forge/deploy-without-an-account): publish an existing app with no signup and hand over a claim link

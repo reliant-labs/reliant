@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -54,11 +55,11 @@ func newOrgFireFixture(t *testing.T, projectOrg, triggerOrg *string) *fireFixtur
 		tr.Presets = nil
 		tr.Params = map[string]any{"model": map[string]any{"id": "mock"}}
 	})
-	require.NoError(t, repo.CreateTrigger(ctx, trigger))
+	require.NoError(t, triggertest.Create(ctx, repo, trigger))
 
 	starter := &flakyStarter{}
 	launcher := launch.New(launch.Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: noopRunRecorder{}, TaskQueue: "test-queue"})
-	firer := NewFirer(NewStores(repo), launcher).WithAutoPause(NewAutoPause(repo, nil))
+	firer := NewFirer(NewStores(repo), launcher).WithAutoPause(NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
 	return &fireFixture{repo: repo, starter: starter, firer: firer, trigger: trigger}
 }
 
@@ -71,7 +72,7 @@ func (f *fireFixture) stored(t *testing.T) *core.Trigger {
 
 func (f *fireFixture) events(t *testing.T) []*core.TriggerEvent {
 	t.Helper()
-	rows, _, err := f.repo.ListTriggerEvents(context.Background(), core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 50})
+	rows, _, err := store.ListTriggerEventsPage(context.Background(), f.repo.ORM(), core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 50})
 	require.NoError(t, err)
 	events := make([]*core.TriggerEvent, 0, len(rows))
 	for _, row := range rows {
@@ -82,7 +83,7 @@ func (f *fireFixture) events(t *testing.T) []*core.TriggerEvent {
 
 func (f *fireFixture) changes(t *testing.T, op string) int {
 	t.Helper()
-	changes, err := f.repo.ListTriggerChanges(context.Background(), f.trigger.UserID, f.trigger.ID)
+	changes, err := store.TriggerChanges(context.Background(), f.repo.ORM(), f.trigger.UserID, f.trigger.ID)
 	require.NoError(t, err)
 	n := 0
 	for _, c := range changes {
@@ -134,7 +135,7 @@ func TestAutoPause_RemovedCreatorsTriggerPausesAndResumesAfterRejoining(t *testi
 			// Rejoined, the creator resumes it: the reason is cleared and it
 			// launches.
 			membership.set(false, "acme", "home")
-			require.NoError(t, f.repo.SetTriggerEnabled(ctx, f.trigger.ID, true))
+			require.NoError(t, store.EnableTrigger(ctx, f.repo.ORM(), f.trigger.ID, true))
 			stored = f.stored(t)
 			assert.True(t, stored.Enabled)
 			assert.Empty(t, stored.PausedReason)

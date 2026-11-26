@@ -145,7 +145,7 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
 			Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
-			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 			Temporal:      temporal,
 		},
@@ -163,13 +163,13 @@ func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, checkpoint, "terminate must drop the resume checkpoint")
 
-	root, err := repo.GetWorkflow(ctx, rootID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), rootID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Cancelled(), root.Status,
 		"the root must be CANCELLED, not FAILED — that is what routes the next message to a fresh start")
 
 	for _, id := range []string{spawnID, nestedSpawnID, pausedSpawnID} {
-		wf, err := repo.GetWorkflow(ctx, id)
+		wf, err := store.LoadWorkflow(ctx, repo.ORM(), id)
 		require.NoError(t, err)
 		assert.NotEqual(t, db.Active(), wf.Status,
 			"%s is still RUNNING after terminate — `workflow ps` reports a terminated run as live, "+

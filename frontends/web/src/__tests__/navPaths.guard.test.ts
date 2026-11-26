@@ -60,7 +60,7 @@ const ALLOWED_ROUTE: Record<string, { why: string; texts: readonly string[] }> =
     why: "Matchers: the entry pages the editor preload skips.",
     texts: ["/auth", "/oauth", "/reset-password", "/verify-email", "/upgrade", "/claim"],
   },
-  "components/OnboardingFlow/onboardingGate.ts": {
+  "components/OnboardingFlow/onboardingGatePolicy.ts": {
     why: "Matchers: the chat routes the onboarding gate guards, and the homes the forge brand sends to Apps.",
     texts: ["/project", "/m/chats", "/m/new", "/m"],
   },

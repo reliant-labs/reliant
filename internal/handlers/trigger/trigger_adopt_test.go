@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -213,7 +214,7 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 				rb.WebhookHmacSecret = &secret
 			},
 			check: func(t *testing.T, e *adoptEnv, old, adopted *core.Trigger, resp *reliantv1.AcceptTriggerOfferResponse, oldToken string) {
-				creds, err := e.repo.GetTriggerWebhookCredentials(context.Background(), adopted.ID)
+				creds, err := store.GetTriggerWebhookCredentials(context.Background(), e.repo.ORM(), adopted.ID)
 				require.NoError(t, err)
 				fresh := resp.GetWebhook().GetToken()
 				require.NotEmpty(t, fresh, "the adopter is shown a new token once")
@@ -326,7 +327,7 @@ func TestAdoptAs_EveryCredentialBearingReferenceIsClearedOrReResolved(t *testing
 				unchanged := e.row(t, old.ID)
 				assert.Equal(t, e.userID, unchanged.UserID, "a refused adoption changes nothing")
 				if old.Kind == core.TriggerKindWebhook {
-					creds, err := e.repo.GetTriggerWebhookCredentials(context.Background(), old.ID)
+					creds, err := store.GetTriggerWebhookCredentials(context.Background(), e.repo.ORM(), old.ID)
 					require.NoError(t, err)
 					h := sha256.Sum256([]byte(oldToken))
 					assert.Equal(t, h[:], creds.TokenHash, "a refused adoption leaves the token")
@@ -359,7 +360,7 @@ func TestAdoptAs_AdoptedTriggerIsDisabledAndEnablingGatesAsTheAdopter(t *testing
 		d.Access = map[string]IntegrationAccess{"gh": access}
 	})
 	old, _ := e.made(t, ghDefinition(e.triggerTestEnv, nil))
-	paused, err := e.repo.PauseTrigger(context.Background(), old.ID, core.TriggerPausedCreatorLeftOrg)
+	paused, err := store.NewTriggerWritesExtStore(e.repo.ORM()).SystemPauseTrigger(context.Background(), old.ID, core.TriggerPausedCreatorLeftOrg)
 	require.NoError(t, err)
 	require.True(t, paused)
 	old = e.row(t, old.ID)

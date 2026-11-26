@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +29,7 @@ func TestPinChatDaemonIfUnset_FirstWriterWins(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "vm", stored, "the caller uses what the row holds, not what it asked for")
 
-	chat, err := repo.GetChat(ctx, "pin-first")
+	chat, err := store.GetChat(ctx, repo.ORM(), "pin-first")
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, "vm", *chat.ActiveDaemonID)
@@ -60,7 +61,7 @@ func TestPinChatDaemonIfUnset_ConcurrentSendsAgree(t *testing.T) {
 		require.NoError(t, errs[i])
 		assert.Equal(t, results[0], results[i], "every racer reads back the one stored pin")
 	}
-	chat, err := repo.GetChat(ctx, "pin-race")
+	chat, err := store.GetChat(ctx, repo.ORM(), "pin-race")
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, results[0], *chat.ActiveDaemonID)
@@ -82,7 +83,7 @@ func TestPinChatDaemonIfUnset_NeverPinsANoMachineChat(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, stored)
 
-	chat, err := repo.GetChat(ctx, "pin-nomachine")
+	chat, err := store.GetChat(ctx, repo.ORM(), "pin-nomachine")
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 	assert.True(t, chat.NoMachine)

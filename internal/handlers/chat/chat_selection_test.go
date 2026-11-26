@@ -65,7 +65,7 @@ func selectionFixture(t *testing.T, status db.WorkflowStatus) (context.Context, 
 		absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	}}
 	service := &Service{
-		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
+		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
 		runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: workflow.NewPauseService(workflow.PauseServiceDeps{Temporal: temporal, Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())})}),
 	}
 	return ctx, fx, repo, temporal, service
@@ -220,7 +220,7 @@ func TestUpdateWorkflowParams_ModeOnlySignalsExactlyMode(t *testing.T) {
 // and it is never the chat's selection.
 func TestUpdateWorkflowParams_ThreadScopedCarriesNoPresetAndIsNotStored(t *testing.T) {
 	ctx, fx, repo, temporal, service := selectionFixture(t, db.Active())
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	chat.SelectedPresets = map[string]string{"": "general"}
 	require.NoError(t, repo.UpdateChat(ctx, chat))
@@ -387,7 +387,7 @@ func TestBranchChat_CopiesTheSelectionAndPresets(t *testing.T) {
 	ctx, projectID := branchTestContext(t, repo)
 	sourceChatID, messageID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	source, err := repo.GetChat(ctx, sourceChatID)
+	source, err := store.GetChat(ctx, repo.ORM(), sourceChatID)
 	require.NoError(t, err)
 	source.SelectedPresets = map[string]string{"": "general"}
 	require.NoError(t, repo.UpdateChat(ctx, source))
@@ -400,7 +400,7 @@ func TestBranchChat_CopiesTheSelectionAndPresets(t *testing.T) {
 	_, err = svc.SetPolicy(ctx, sourceChatID, "test-user", "builtin://agent", policy, 0)
 	require.NoError(t, err)
 
-	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})}
+	service := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{ChatId: sourceChatID, MessageId: messageID}))
 	require.NoError(t, err)
 

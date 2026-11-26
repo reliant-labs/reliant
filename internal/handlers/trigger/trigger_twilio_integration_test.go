@@ -18,6 +18,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/questions"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 
@@ -40,7 +41,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/projectaccess"
 	"github.com/reliant-labs/reliant/internal/runs"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -99,10 +99,10 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
 	doer := twilioDoer{target: twilio}
-	store := db.TestConnections(t, repo)
-	tokens := connections.NewTokenSource(store, sealer, providers, doer)
-	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
-	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)
+	vault := db.TestConnections(t, repo)
+	tokens := connections.NewTokenSource(vault, sealer, providers, doer)
+	broker := connections.NewBroker(vault, sealer, providers, doer, "https://reliant.example")
+	conns := connections.NewService(vault, sealer, providers, tokens, broker, doer)
 	connectTwilio := func(userID, account, token string) *core.Connection {
 		conn, err := conns.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
 			UserID: userID, IntegrationID: "twilio", Name: "texts", Kind: connections.APIKeyKindBasic,
@@ -130,7 +130,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	inbound.Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo), Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake})))
 
 	// --- three users -----------------------------------------------------
 	type tenant struct {
@@ -211,7 +211,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, alice.trigger.GetId()+":SMalice1", launchedAlice.DedupeKey)
 	assert.Equal(t, "message.received", launchedAlice.Payload["event"])
 	assert.Equal(t, accountA, launchedAlice.Payload["account"])
-	chat, err := repo.GetChat(ctx, *launchedAlice.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launchedAlice.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, alice.userID, chat.UserID)
 	assertRunSees(t, repo, *launchedAlice.ChatID, "trigger.payload.data.body == 'is the deploy done?'")

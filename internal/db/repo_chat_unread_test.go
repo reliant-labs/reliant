@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,7 @@ func TestUpdateChatUnread_SetsFlagAndAnnouncesIt(t *testing.T) {
 
 	require.NoError(t, repo.UpdateChatUnread(ctx, chatID, true, "workflow_completed"))
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.True(t, chat.Unread)
 	assert.Equal(t, []string{"workflow_completed"}, unreadUpdates(t, repo, "test-user", chatID))
@@ -78,7 +79,7 @@ func TestUpdateChatUnread_InCallerTx_ReturnsSerializationFailureForRetry(t *test
 	err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		attempts++
 		// The first statement fixes this transaction's snapshot.
-		if _, err := repo.GetChat(txCtx, chatID); err != nil {
+		if _, err := store.GetChat(txCtx, repo.ORM(), chatID); err != nil {
 			return err
 		}
 		if attempts == 1 {
@@ -100,7 +101,7 @@ func TestUpdateChatUnread_InCallerTx_ReturnsSerializationFailureForRetry(t *test
 	assert.Equal(t, "40001", pgErr.Code)
 	assert.Equal(t, 2, attempts)
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.True(t, chat.Unread)
 	assert.Equal(t, []string{"question_pending"}, unreadUpdates(t, repo, "test-user", chatID))

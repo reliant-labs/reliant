@@ -75,7 +75,7 @@ func (r *Repo) closePendingQuestionsOfThreads(ctx context.Context, threadIDs ...
 func (r *Repo) announceClosedQuestions(ctx context.Context, closed []store.ClosedQuestion) {
 	chats := make(map[string]bool)
 	for _, q := range closed {
-		if err := r.EmitQuestionUpdate(ctx, q.ChatID, QuestionUpdate{
+		if err := r.UpdateWriter().EmitQuestionUpdate(ctx, q.ChatID, QuestionUpdate{
 			QuestionID: q.ID,
 			ChatID:     q.ChatID,
 			WorkflowID: q.WorkflowID,

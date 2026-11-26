@@ -374,6 +374,33 @@ export async function getFilePreviewBlob(path: string, worktreeId?: string): Pro
   return new Blob([response.content], { type: response.contentType });
 }
 
+export interface DownloadedFile {
+  blob: Blob;
+  filename: string;
+}
+
+/**
+ * Reads a whole file of any kind off the machine that holds it, for saving on
+ * this device. Not a cached read: every call is a fresh download, and the
+ * bytes are handed to the caller and never kept here. The server refuses a
+ * file over its cap (25 MB) with FailedPrecondition and the reason
+ * `file_too_large_to_download`.
+ */
+export async function downloadFile(path: string, worktreeId?: string): Promise<DownloadedFile> {
+  const projectId = requireProjectId();
+  const apiPath = await normalizeFilePathForAPI(path, worktreeId);
+  const response = await client.downloadFile({
+    projectId,
+    path: apiPath,
+    worktreeId,
+    chatId: await activeChatIdForAPI(),
+  });
+  return {
+    blob: new Blob([response.content], { type: response.contentType || "application/octet-stream" }),
+    filename: response.filename,
+  };
+}
+
 export function isBinaryFileError(error: unknown): boolean {
   return error instanceof ConnectError && error.code === Code.FailedPrecondition;
 }

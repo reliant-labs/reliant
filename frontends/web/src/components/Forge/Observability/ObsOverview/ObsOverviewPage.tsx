@@ -27,7 +27,8 @@ import { ArrowRight, BellRing, Bug, Network, Timer } from "lucide-react";
 import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
-import { useAlerts, useIssues, useObsReadApi, useObservabilityOrg, obsKeys } from "@/hooks/observability-queries";
+import { useAlerts, useIssues, useObservabilityOrg, obsKeys } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { cn } from "@/lib/utils";
 import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -36,10 +37,11 @@ import { RANGE_LABELS, RANGE_PRESETS, resolveWindow, type RangePreset } from "@/
 import { useForgeConsole } from "../../Console/consoleContext";
 import { NothingDeployed } from "../../Console/consolePageFrame";
 import { ENV_ALL } from "../../Console/envScope";
-import { Sparkline } from "../../LiveState/Sparkline";
+import { ToOrgObservability, useSeveralApps } from "../../Console/severalProjects";
 import { useAppLiveState } from "../../LiveState/useAppLiveState";
 import { OVERVIEW_RANGE } from "../../Workloads/workloadModel";
 import { VariableSelect } from "../Dashboards/parts";
+import { UPlotChart } from "../charts/UPlotChart";
 import { formatAgo, formatCount, formatDuration, formatPercent, formatRate } from "../format";
 import { shortService } from "../Graph/graphStats";
 import { HealthStrip } from "../Home/HealthStrip";
@@ -88,6 +90,13 @@ function Rows({ count = 3 }: { count?: number }) {
 }
 
 export function ObsOverviewPage() {
+  // Several projects in the shell: Observability's Overview is the org console's, over all of them.
+  const several = useSeveralApps();
+  if (several) return <ToOrgObservability />;
+  return <ProjectObsOverviewPage />;
+}
+
+function ProjectObsOverviewPage() {
   const { forgeProject, env, roster, href } = useForgeConsole();
   const search = useSearch({ strict: false }) as { range?: RangePreset };
   const navigate = useNavigate();
@@ -194,7 +203,7 @@ function ServiceSignals({ app, env, range }: { app: string; env: string; range: 
                     </td>
                     <td className={cn(TD, "text-right")}>{formatRate(h.requestRate)}</td>
                     <td className={cn(TD, "w-24")}>
-                      <Sparkline values={h.rateSeries} timestamps={h.timestamps} format={formatRate} label={`Requests per second to ${row.name}`} />
+                      <UPlotChart compact className="w-16" height={18} timestamps={h.timestamps} series={[{ label: "Requests", values: h.rateSeries }]} unit="rate" label={`Requests per second to ${row.name}`} />
                     </td>
                     <td className={cn(TD, "text-right", h.errorRate >= 0.05 ? "text-danger-ink" : h.errorRate >= 0.01 ? "text-warning-ink" : "")}>{formatPercent(h.errorRate)}</td>
                     <td className={cn(TD, "text-right")}>{formatDuration(h.p95Ms)}</td>
@@ -260,7 +269,7 @@ function useWindow(range: RangePreset) {
 
 function SlowestEndpoints({ scope, range }: { scope: ObsScope | null; range: RangePreset }) {
   const { href, forgeProject } = useForgeConsole();
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   const window = useWindow(range);
   const catalog = useQuery({
     queryKey: [...obsKeys.all(scope), "obs-overview-catalog", window],
@@ -353,7 +362,7 @@ function FiringAlerts({ orgId, envIds, envName }: { orgId: string | null; envIds
 
 function GraphThumbnail({ scope, range }: { scope: ObsScope | null; range: RangePreset }) {
   const { href, forgeProject } = useForgeConsole();
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   const window = useWindow(range);
   const graph = useQuery({
     queryKey: [...obsKeys.all(scope), "obs-overview-graph", window],

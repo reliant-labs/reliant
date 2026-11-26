@@ -30,6 +30,7 @@
               "index",
               "getting-started/deploy-your-app",
               "getting-started/why-reliant",
+              "getting-started/what-reliant-replaces",
               "getting-started/quick-start",
               "getting-started/installation",
               "getting-started/concepts",
@@ -278,6 +279,7 @@
               "hosting/observability/dashboards-and-alerts",
               "forge/observability/speed-insights",
               "forge/observability/product-analytics",
+              "forge/observability/changes",
               "hosting/observability/session-timelines",
               "hosting/observability/profiling",
               "hosting/observability/agents"
@@ -592,6 +594,10 @@
     }
   },
   "redirects": [
+    {
+      "source": "/features/remote-daemons",
+      "destination": "/machines/overview"
+    },
     {
       "source": "/features/deploy-and-host",
       "destination": "/forge/overview"

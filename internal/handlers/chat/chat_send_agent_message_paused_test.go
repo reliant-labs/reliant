@@ -104,7 +104,7 @@ func setupPausedAgentMessageFixture(t *testing.T) pausedAgentMessageFixture {
 	}
 	pause := &orderedPauseController{log: &log}
 	service := &Service{
-		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
+		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
 		runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: pause}),
 	}
 	return pausedAgentMessageFixture{
@@ -136,7 +136,7 @@ func TestSendAgentMessage_PausedChatIsResumedForAMessageToItsRoot(t *testing.T) 
 	assert.Equal(t, []string{"resume:" + fx.rootThreadID, "wake:" + fx.rootThreadID}, *fx.log,
 		"resume first, then the doorbell: a thread parked on its own wait wakes only for the doorbell")
 
-	root, err := fx.repo.GetWorkflow(fx.ctx, fx.rootThreadID)
+	root, err := store.LoadWorkflow(fx.ctx, fx.repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status, "the resumed run reads as running")
 

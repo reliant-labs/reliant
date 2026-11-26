@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/reconciliation"
 )
 
@@ -73,8 +74,8 @@ func newTerminatedRunFixture(t *testing.T) (continueFixture, *reconciliation.Rec
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
 	f.temporal.status = enums.WORKFLOW_EXECUTION_STATUS_TERMINATED
 
-	rec := reconciliation.New(reconciliation.Deps{Store: f.repo, Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Daemons: store.NewDaemonExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: terminatedRunTemporal{f.temporal}, Config: reconciliation.DefaultConfig(), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.repo.ORM()), Announcer: f.repo}), Orphans: store.NewAgentMessageExtStore(f.repo.ORM())})
-	rec.SetQueuedDelivery(queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal}))
+	rec := reconciliation.New(reconciliation.Deps{Store: f.repo, RunEvents: runevents.NewStore(f.repo.ORM()), Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), ToolCalls: store.NewToolCallExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Daemons: store.NewDaemonExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: terminatedRunTemporal{f.temporal}, Config: reconciliation.DefaultConfig(), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.repo.ORM()), Announcer: f.repo.UpdateWriter()}), Orphans: store.NewAgentMessageExtStore(f.repo.ORM())})
+	rec.SetQueuedDelivery(queueddelivery.New(queueddelivery.Deps{Store: store.NewChatExtStore(f.repo.ORM()), Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal}))
 	return f, rec
 }
 
@@ -110,7 +111,7 @@ func TestReconciler_RunEndedByOthers_StartsTheRunThatAnswersTheMessage_Once(t *t
 	runsStarted := f.temporal.runsStarted()
 	require.Len(t, runsStarted, 1, "the user's unanswered message gets its run without being sent again")
 	assert.NotNil(t, runsStarted[0].input.Resume, "it continues from the checkpoint")
-	wf, err := f.repo.GetWorkflow(f.ctx, f.chatID)
+	wf, err := store.LoadWorkflow(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), wf.Status)
 	assert.Contains(t, f.systemNotes(t), "Recovered from an internal error; continuing from your last message.")

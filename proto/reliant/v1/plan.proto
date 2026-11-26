@@ -5,6 +5,8 @@ package reliant.v1;
 
 import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
 import "reliant/v1/common.proto";
 import "reliant/v1/task.proto";
 
@@ -21,29 +23,27 @@ enum PlanComplexity {
 // PlanService handles plan-related operations
 service PlanService {
   // CreatePlan creates a new plan
-  // forge:custom — authorizes the caller through the chat and stores it as the plan's thread
   rpc CreatePlan(CreatePlanRequest) returns (CreatePlanResponse) {}
 
   // GetPlan retrieves a plan by ID
-  // forge:custom — authorizes through the plan's thread and chat, and resolves chat_id from them
   rpc GetPlan(GetPlanRequest) returns (GetPlanResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
   // GetPlanByChatId retrieves a plan by chat ID
+  // forge:query-scope Plan
   rpc GetPlanByChatId(GetPlanByChatIdRequest) returns (GetPlanByChatIdResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
-  // UpdatePlan updates an existing plan
-  // forge:custom — a partial update authorized through the plan's chat, which it notifies to refetch
+  // UpdatePlan updates an existing plan; update_mask names the fields it writes
   rpc UpdatePlan(UpdatePlanRequest) returns (UpdatePlanResponse) {
     option (forge.v1.method) = {
       activity: {
         verb: "update"
         target: {
           kind: "plan"
-          id: "plan_id"
+          id: "plan.id"
           label: "response.plan.title"
         }
       }
@@ -51,25 +51,26 @@ service PlanService {
   }
 
   // DeletePlan deletes a plan
-  // forge:custom — authorized through the plan's chat, which it notifies to refetch
   rpc DeletePlan(DeletePlanRequest) returns (DeletePlanResponse) {
     option (forge.v1.method) = {
       activity: {
         verb: "delete"
         target: {
           kind: "plan"
-          id: "plan_id"
+          id: "id"
         }
       }
     };
   }
 
   // ListPlanTasks lists all tasks for a plan
+  // forge:query-scope Plan
   rpc ListPlanTasks(ListPlanTasksRequest) returns (ListPlanTasksResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 
   // ListPlansByProject lists all plans for a project (cross-workflow sharing)
+  // forge:query-scope Plan
   rpc ListPlansByProject(ListPlansByProjectRequest) returns (ListPlansByProjectResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -83,8 +84,8 @@ message Plan {
   string description = 4;
   PlanStatus status = 5;
   PlanComplexity complexity = 6;
-  string created_at = 7;
-  string updated_at = 8;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
   optional string project_id = 9;
 }
 
@@ -105,7 +106,7 @@ message CreatePlanResponse {
 
 // GetPlanRequest retrieves a plan by ID
 message GetPlanRequest {
-  string plan_id = 1;
+  string id = 1;
 }
 
 // GetPlanResponse returns the requested plan
@@ -124,12 +125,15 @@ message GetPlanByChatIdResponse {
 }
 
 // UpdatePlanRequest updates a plan
+//
+// Wire change (owner-approved, breaking:approved, 2026-11-25; reliant#3253):
+// this message took forge's native CRUD shape. Clients built before it must
+// upgrade; it is not wire-compatible with the previous layout.
 message UpdatePlanRequest {
-  string plan_id = 1;
-  optional string title = 2;
-  optional string description = 3;
-  optional PlanStatus status = 4;
-  optional PlanComplexity complexity = 5;
+  // The plan, carrying its id and the fields update_mask names.
+  Plan plan = 1;
+  // The Plan fields to write (title, description, status, complexity).
+  google.protobuf.FieldMask update_mask = 2;
 }
 
 // UpdatePlanResponse returns the updated plan
@@ -139,13 +143,11 @@ message UpdatePlanResponse {
 
 // DeletePlanRequest deletes a plan
 message DeletePlanRequest {
-  string plan_id = 1;
+  string id = 1;
 }
 
 // DeletePlanResponse confirms deletion
-message DeletePlanResponse {
-  bool success = 1;
-}
+message DeletePlanResponse {}
 
 // ListPlanTasksRequest lists tasks for a plan
 message ListPlanTasksRequest {

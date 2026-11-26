@@ -368,11 +368,12 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Workflows:        store.NewWorkflowExtStore(s.Repo.ORM()),
 		Worktrees:        store.NewWorktreeExtStore(s.Repo.ORM()),
 		ProjectRows:      store.NewProjectExtStore(s.Repo.ORM()),
+		TriggerEvents:    store.NewTriggerEventExtStore(s.Repo.ORM()),
 		Questions:        store.NewQuestionExtStore(s.Repo.ORM()),
 		Spawns:           store.NewToolCallExtStore(s.Repo.ORM()),
 		Selections:       store.NewChatSelectionExtStore(s.Repo.ORM()),
 		Backoff:          providerbackofftest.New(t, s.Repo),
-		Mailbox:          agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		Mailbox:          agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo.UpdateWriter()}),
 		AgentMessages:    store.NewAgentMessageExtStore(s.Repo.ORM()),
 		Messages:         store.NewMessageExtStore(s.Repo.ORM()),
 		ToolBlocks:       store.NewMessageContentBlockExtStore(s.Repo.ORM()),
@@ -389,7 +390,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		ChatViews: store.NewChatsWithActivityExtStore(s.Repo.ORM()),
 		Resolver:  questions.NewFromRepo(s.Repo),
 		Questions: store.NewQuestionExtStore(s.Repo.ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo.UpdateWriter()}),
 		Signals:   pause,
 		Messages:  chatSvc,
 	})
@@ -596,7 +597,7 @@ func (h *Harness) WaitTemporalWorkflowDoneWithin(workflowID string, timeout time
 func (h *Harness) WaitWorkflowStatus(workflowID string, want db.WorkflowStatus) {
 	h.T.Helper()
 	h.eventually(fmt.Sprintf("workflow %s to reach status %s", workflowID, want), func() (bool, string) {
-		wf, err := h.Stack.Repo.GetWorkflow(h.Ctx, workflowID)
+		wf, err := store.LoadWorkflow(h.Ctx, h.Stack.Repo.ORM(), workflowID)
 		if err != nil || wf == nil {
 			return false, fmt.Sprintf("get workflow: %v", err)
 		}

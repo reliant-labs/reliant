@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -88,7 +89,7 @@ func (c *isolationChats) assistantMessage(t *testing.T, chatID, thread string) s
 func (c *isolationChats) runTool(t *testing.T, chatID, thread, toolCallID, input string, executor *mockToolExecutor) *ExecuteToolsOutput {
 	t.Helper()
 	var output ExecuteToolsOutput
-	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: c.h.Repo(), Rows: workspaceRowsOf(c.h.Repo()), ToolCalls: toolCallsOf(c.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(c.h.Repo().ORM())}).Execute, ExecuteToolsInput{
+	require.NoError(t, c.h.ExecuteActivity(NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(c.h.Repo()), Rows: workspaceRowsOf(c.h.Repo()), ToolCalls: toolCallsOf(c.h.Repo()), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(c.h.Repo().ORM())}).Execute, ExecuteToolsInput{
 		ChatID:    chatID,
 		Thread:    thread,
 		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: "bash", Input: input}},
@@ -203,7 +204,7 @@ func TestToolCallIDIsolation_RedispatchInTheSameThreadIsStillNotReExecuted(t *te
 func (c *isolationChats) spawnReportFor(t *testing.T, chatID, child, parent, toolCallID, body string) error {
 	t.Helper()
 	var out EnqueueAgentMessageOutput
-	return c.h.ExecuteActivity(NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(c.h.Repo().ORM()), Announcer: c.h.Repo()})}).Execute, EnqueueAgentMessageInput{
+	return c.h.ExecuteActivity(NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(c.h.Repo().ORM()), Announcer: c.h.Repo().UpdateWriter()})}).Execute, EnqueueAgentMessageInput{
 		ChatID: chatID, FromThreadID: child, ToThreadID: parent,
 		Kind: int32(core.AgentMessageKindCompletion), Body: body, ToolCallID: toolCallID,
 	}, &out)

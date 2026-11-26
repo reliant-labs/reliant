@@ -20,13 +20,22 @@
  * integration. The redirect was also the worst version of this flow on a
  * phone, where returning to a backgrounded tab is least reliable.
  *
+ * App hosting is the organization's agreement (consent, budget, checkout), and
+ * a phone can start it: the screen mounts desktop's `UsageBillingPanel`, the
+ * card the hosting tab leads with, so the consent and the rates it discloses
+ * are one component, not a phone copy that drifts. `/settings/billing?tab=hosting`
+ * opens here scrolled to it (lib/mobileRedirect.ts), and a link naming another
+ * org asks before acting, as desktop's BillingOrgGate does.
+ *
  * This whole screen only renders when `hasControlPlane` (see
  * `MobileSettingsScreen`'s row list) — billing has no meaning without a
  * control-plane backend.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Cpu, Wallet } from "lucide-react";
+import { UsageBillingPanel } from "@/components/Settings/cloud/usage/UsageBillingPanel";
+import { OrgSwitchGate } from "@/components/Orgs/OrgSwitchGate";
 import { hoursReference, hoursSizes, measuredMachineUsage, remainingHeadline } from "@/components/Billing/daemonUsage";
 import { exactUsageDisplay } from "@/components/Billing/exactMachineUsage";
 import {
@@ -123,7 +132,18 @@ function Band({
   );
 }
 
-export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void; backLabel?: string }) {
+export interface MobileBillingScreenProps {
+  onBack: () => void;
+  backLabel?: string;
+  /** Open scrolled to the App hosting card (`?tab=hosting`). */
+  focusHosting?: boolean;
+  /** The org a hosting link was for (`?org=`); another org is asked about first. */
+  hostingOrgId?: string;
+  /** Drops `?org=` once the person stays in, or has switched to, an org. */
+  onDismissHostingOrg?: () => void;
+}
+
+export function MobileBillingScreen({ onBack, backLabel, focusHosting = false, hostingOrgId, onDismissHostingOrg }: MobileBillingScreenProps) {
   const subQ = useComputeSubscription();
   const walletQ = useWalletOverview();
   const usageQ = useComputeUsage("current");
@@ -256,6 +276,16 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
   }, [subQ, checkoutPlanId]);
 
   const loading = subQ.isLoading || walletQ.isLoading || usageQ.isLoading;
+
+  // A hosting link lands on the hosting card once the screen has drawn it,
+  // once per arrival: the person scrolling away is not undone by a refetch.
+  const hostingRef = useRef<HTMLElement>(null);
+  const scrolledToHosting = useRef(false);
+  useEffect(() => {
+    if (!focusHosting || loading || scrolledToHosting.current) return;
+    scrolledToHosting.current = true;
+    hostingRef.current?.scrollIntoView?.({ block: "start" });
+  }, [focusHosting, loading]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -441,6 +471,19 @@ export function MobileBillingScreen({ onBack, backLabel }: { onBack: () => void;
                 </div>
               )}
             </Band>
+
+            {/* App hosting: the organization's agreement. Its own card (the
+                desktop one), so no Band around it. */}
+            <section ref={hostingRef} aria-label="App hosting" data-testid="mobile-hosting-billing" className="scroll-mt-4">
+              <OrgSwitchGate
+                requestedOrgId={hostingOrgId}
+                onDismiss={onDismissHostingOrg ?? (() => undefined)}
+                subject="billing link"
+                testIdPrefix="billing-org"
+              >
+                <UsageBillingPanel />
+              </OrgSwitchGate>
+            </section>
 
             <p className="text-center text-meta text-muted-foreground">
               For invoices, usage charts, and plan comparisons, use desktop.

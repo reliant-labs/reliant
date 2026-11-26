@@ -54,6 +54,14 @@ export interface NavRendererProps {
   onNavigate: (href: string, options?: NavigateOptions) => void;
   /** Every row drawn as a top-level row, icon included (a phone's drawer). */
   flat?: boolean;
+  /**
+   * Leaves a drill-in in place: the back header calls this instead of
+   * navigating to backHref. A phone's drawer shows its top level this way,
+   * because backHref is a desktop page (reliant #3264).
+   */
+  onBack?: () => void;
+  /** Draws the top level even on a route an area claims (after `onBack`). */
+  topLevel?: boolean;
 }
 
 export interface NavigateOptions {
@@ -70,6 +78,10 @@ function allGroups(items: readonly NavItem[], ctx: NavCtx): NavItem[] {
 
 function Badge({ badge }: { badge: NavBadge }) {
   if (badge.type === "dot") return <span role="img" aria-label={badge.label} className="size-2 rounded-full bg-warning" />;
+  if (badge.type === "label") {
+    // A stage, not a status: a quiet outline, never a fill or a status hue.
+    return <span className="rounded-md border border-border px-1.5 text-meta leading-4 text-muted-foreground">{badge.text}</span>;
+  }
   return (
     <span className={cn("tabular-nums", badge.tone === "danger" && "font-medium text-destructive-ink")}>
       {badge.value}
@@ -78,8 +90,8 @@ function Badge({ badge }: { badge: NavBadge }) {
   );
 }
 
-export function NavRenderer({ config, ctx, slots, onNavigate, flat = false }: NavRendererProps) {
-  const area = activeArea(config, ctx);
+export function NavRenderer({ config, ctx, slots, onNavigate, flat = false, onBack, topLevel = false }: NavRendererProps) {
+  const area = topLevel ? null : activeArea(config, ctx);
   const link = (href: string) => href;
   // Where a row at `depth` is drawn, and the icon it shows there.
   const rowDepth = (depth: Depth): Depth => (flat ? 0 : depth);
@@ -261,7 +273,8 @@ export function NavRenderer({ config, ctx, slots, onNavigate, flat = false }: Na
         onClick={(event) => {
           if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
           event.preventDefault();
-          onNavigate(back, { drill: true });
+          if (onBack) onBack();
+          else onNavigate(back, { drill: true });
         }}
         data-testid="nav-back"
         // The drill-in's tour anchor: on an area's routes the nav draws no `nav-top` and no area row,

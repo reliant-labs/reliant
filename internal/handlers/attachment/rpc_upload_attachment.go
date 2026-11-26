@@ -6,11 +6,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"path/filepath"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -96,21 +94,7 @@ func (s *Service) UploadAttachment(
 		"attachmentType", attachmentType,
 		"userID", userID)
 
-	attachmentInfo := &reliantv1.AttachmentInfo{
-		Id:             attachmentID,
-		UserId:         userID,
-		Filename:       filename,
-		Size:           int64(len(content)),
-		MimeType:       mimeType,
-		FileHash:       proto.String(fileHash),
-		FilePath:       relativePath,
-		CreatedAt:      time.Now().Format(time.RFC3339),
-		UpdatedAt:      time.Now().Format(time.RFC3339),
-		Url:            fmt.Sprintf("/api/attachments/%s", attachmentID),
-		AttachmentType: string(attachmentType),
-	}
-
 	return connect.NewResponse(&reliantv1.UploadAttachmentResponse{
-		Attachment: attachmentInfo,
+		Attachment: attachmentToWire(dbAttachment),
 	}), nil
 }

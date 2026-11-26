@@ -27,7 +27,7 @@ import { Database, Layers } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 
 import { useForgeConsole } from "../Console/consoleContext";
@@ -50,7 +50,7 @@ function Frame({ children }: { children: ReactNode }) {
   const { subtitle } = useConsoleNavExtras();
   return (
     <div className="space-y-4" data-testid="console-data">
-      <PageHeader density="compact" title="Data" subtitle={subtitle?.("data") ?? undefined} className="mb-0" />
+      <ConsolePageHeader density="compact" title="Data" subtitle={subtitle?.("data") ?? undefined} className="mb-0" />
       {children}
     </div>
   );

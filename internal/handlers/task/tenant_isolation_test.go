@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -19,11 +20,12 @@ import (
 // through its plan, the plan's thread and that thread's chat: the owner may do
 // everything; a viewer of the shared chat may only list a plan's tasks
 // (ListTasks, ReadChatAccess); another tenant gets nothing. Codes and row
-// effects only, never message text.
+// effects only, never message text. Every refusal of a task the caller may not
+// write is NotFound: a task's existence in another tenant, or in a chat only
+// shared with them, is never revealed.
 //
-// TODO facade wave 1c (task CRUD conversion): another tenant's cases accept
-// PermissionDenied today and NotFound after; tighten each RefusedToday to
-// Code(NotFound) in that PR (owner decision D-B, breaking changes allowed).
+// TODO(forge#2461): the scoping is hand-written in handlers_crud.go (a join
+// through the chat); switch to a forge:owner declaration once forge can follow it.
 func TestTaskTenantIsolation(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
@@ -63,22 +65,19 @@ func TestTaskTenantIsolation(t *testing.T) {
 				return build(f, id)
 			},
 		}
-		if as == viewertest.AsOtherTenant {
-			c.TODO = "facade wave 1c: another tenant's row answers NotFound"
-		}
 		if after != nil {
 			c.After = func(t *testing.T, f *viewertest.Fixture, err error) { after(t, f, id, err) }
 		}
 		cases = append(cases, c)
 	}
 	ok := viewertest.Code(viewertest.OK)
-	viewerRefused := viewertest.Code(connect.CodePermissionDenied)
-	tenantRefused := viewertest.RefusedToday(connect.CodePermissionDenied)
-	getTask := func(_ *viewertest.Fixture, id string) proto.Message { return &pb.GetTaskRequest{TaskId: id} }
+	viewerRefused := viewertest.Code(connect.CodeNotFound)
+	tenantRefused := viewertest.Code(connect.CodeNotFound)
+	getTask := func(_ *viewertest.Fixture, id string) proto.Message { return &pb.GetTaskRequest{Id: id} }
 	updateTask := func(_ *viewertest.Fixture, id string) proto.Message {
-		return &pb.UpdateTaskRequest{TaskId: id, Title: proto.String("renamed")}
+		return &pb.UpdateTaskRequest{Task: &pb.Task{Id: id, Title: "renamed"}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}}}
 	}
-	deleteTask := func(_ *viewertest.Fixture, id string) proto.Message { return &pb.DeleteTaskRequest{TaskId: id} }
+	deleteTask := func(_ *viewertest.Fixture, id string) proto.Message { return &pb.DeleteTaskRequest{Id: id} }
 	unchanged := func(t *testing.T, f *viewertest.Fixture, id string, err error) {
 		require.Error(t, err)
 		require.True(t, exists(t, f, id), "a refused call must leave the task")
@@ -108,9 +107,11 @@ func TestTaskTenantIsolation(t *testing.T) {
 		empty func() proto.Message
 		gone  func() proto.Message
 	}{
-		{"GetTask", func() proto.Message { return &pb.GetTaskRequest{} }, func() proto.Message { return &pb.GetTaskRequest{TaskId: "absent"} }},
-		{"UpdateTask", func() proto.Message { return &pb.UpdateTaskRequest{} }, func() proto.Message { return &pb.UpdateTaskRequest{TaskId: "absent"} }},
-		{"DeleteTask", func() proto.Message { return &pb.DeleteTaskRequest{} }, func() proto.Message { return &pb.DeleteTaskRequest{TaskId: "absent"} }},
+		{"GetTask", func() proto.Message { return &pb.GetTaskRequest{} }, func() proto.Message { return &pb.GetTaskRequest{Id: "absent"} }},
+		{"UpdateTask", func() proto.Message { return &pb.UpdateTaskRequest{} }, func() proto.Message {
+			return &pb.UpdateTaskRequest{Task: &pb.Task{Id: "absent", Title: "x"}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}}}
+		}},
+		{"DeleteTask", func() proto.Message { return &pb.DeleteTaskRequest{} }, func() proto.Message { return &pb.DeleteTaskRequest{Id: "absent"} }},
 	} {
 		rpc := rpc
 		for _, who := range []viewertest.Who{viewertest.AsOwner, viewertest.AsOtherTenant} {
@@ -134,8 +135,7 @@ func TestTaskTenantIsolation(t *testing.T) {
 	cases = append(cases,
 		viewertest.IsolationCase{Name: "ListTasks/owner", Rpc: "ListTasks", As: viewertest.AsOwner, Want: ok, Request: listReq},
 		viewertest.IsolationCase{Name: "ListTasks/viewer", Rpc: "ListTasks", As: viewertest.AsViewer, Want: ok, Request: listReq},
-		viewertest.IsolationCase{Name: "ListTasks/other tenant", Rpc: "ListTasks", As: viewertest.AsOtherTenant, Want: tenantRefused, Request: listReq,
-			TODO: "facade wave 1c: another tenant's plan answers NotFound"},
+		viewertest.IsolationCase{Name: "ListTasks/other tenant", Rpc: "ListTasks", As: viewertest.AsOtherTenant, Want: tenantRefused, Request: listReq},
 		viewertest.IsolationCase{Name: "ListTasks/absent plan", Rpc: "ListTasks", As: viewertest.AsOwner, Want: viewertest.Code(connect.CodeNotFound),
 			Request: func(*testing.T, *viewertest.Fixture) proto.Message {
 				return &pb.ListTasksRequest{PlanId: proto.String("absent")}
@@ -144,8 +144,7 @@ func TestTaskTenantIsolation(t *testing.T) {
 			Request: func(*testing.T, *viewertest.Fixture) proto.Message { return &pb.ListTasksRequest{} }},
 		viewertest.IsolationCase{Name: "CreateTask/owner", Rpc: "CreateTask", As: viewertest.AsOwner, Want: ok, Request: createReq},
 		viewertest.IsolationCase{Name: "CreateTask/viewer", Rpc: "CreateTask", As: viewertest.AsViewer, Want: viewerRefused, Request: createReq},
-		viewertest.IsolationCase{Name: "CreateTask/other tenant", Rpc: "CreateTask", As: viewertest.AsOtherTenant, Want: tenantRefused, Request: createReq,
-			TODO: "facade wave 1c: another tenant's plan answers NotFound"},
+		viewertest.IsolationCase{Name: "CreateTask/other tenant", Rpc: "CreateTask", As: viewertest.AsOtherTenant, Want: tenantRefused, Request: createReq},
 		viewertest.IsolationCase{Name: "CreateTask/absent plan", Rpc: "CreateTask", As: viewertest.AsOwner, Want: viewertest.Code(connect.CodeNotFound),
 			Request: func(*testing.T, *viewertest.Fixture) proto.Message {
 				return &pb.CreateTaskRequest{PlanId: "absent", Title: "x"}

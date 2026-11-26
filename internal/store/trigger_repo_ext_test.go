@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // newStoreTrigger is a trigger with every column the definition carries set,
@@ -42,6 +43,7 @@ func sameValue(t *testing.T, what string, got, want any) {
 // TestTriggerQueries ports the triggers queries of triggers.sql, interleaved
 // with the Repository.
 func TestTriggerQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -57,7 +59,7 @@ func TestTriggerQueries(t *testing.T) {
 	}
 	b := newStoreTrigger("trg-b", "b", base.Add(time.Minute))
 	b.DaemonID, b.NoMachine, b.ActingIdentity, b.Presets, b.Params = "", true, "", nil, nil
-	if err := env.Repo.CreateTrigger(ctx, b); err != nil {
+	if err := triggertest.Create(ctx, env.Repo, b); err != nil {
 		t.Fatalf("Repo.CreateTrigger: %v", err)
 	}
 	for _, id := range []string{"trg-a", "trg-b"} {
@@ -146,7 +148,7 @@ func TestTriggerQueries(t *testing.T) {
 		t.Fatalf("after ReplaceTrigger Repo.GetTrigger = %+v, want the edit, updated_at stamped, kind and owner kept", twin)
 	}
 	twin.Name = "a-twin"
-	if err := env.Repo.UpdateTrigger(ctx, twin); err != nil {
+	if err := triggertest.Update(ctx, env.Repo, twin); err != nil {
 		t.Fatalf("Repo.UpdateTrigger: %v", err)
 	}
 	if got, _ := store.GetTrigger(ctx, env.ORM, "trg-a"); got.Name != "a-twin" {
@@ -179,11 +181,6 @@ func TestTriggerQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTriggerWebhookCredentials: %v", err)
 	}
-	twinCreds, err := env.Repo.GetTriggerWebhookCredentials(ctx, "trg-b")
-	if err != nil {
-		t.Fatalf("Repo.GetTriggerWebhookCredentials: %v", err)
-	}
-	sameValue(t, "GetTriggerWebhookCredentials", creds, twinCreds)
 	if string(creds.TokenHash) != "hash" || string(creds.SecretSealed) != "sealed" {
 		t.Fatalf("credentials = %+v", creds)
 	}
@@ -218,12 +215,12 @@ func TestTriggerQueries(t *testing.T) {
 	if err := store.InsertTrigger(ctx, env.ORM, act); err != nil {
 		t.Fatalf("InsertTrigger(activation): %v", err)
 	}
-	if err := env.Repo.CreateTrigger(ctx, func() *core.Trigger {
+	if err := triggertest.Create(ctx, env.Repo, func() *core.Trigger {
 		tr := newStoreTrigger("trg-act2", "act2", base.Add(4*time.Minute))
 		tr.WorkflowTrigger = strp("weekly")
 		return tr
 	}()); err != nil {
-		t.Fatalf("Repo.CreateTrigger(activation): %v", err)
+		t.Fatalf("triggertest.Create(activation): %v", err)
 	}
 	if err := store.SetTriggerProjection(ctx, env.ORM, "trg-act", core.TriggerProjection{Config: json.RawMessage(`{"cron":["0 * * * *"]}`), Filter: "trigger.ok"}); err != nil {
 		t.Fatalf("SetTriggerProjection: %v", err)
@@ -296,14 +293,12 @@ func TestTriggerQueries(t *testing.T) {
 	if err := store.RemoveTrigger(ctx, env.ORM, "trg-c"); err != nil {
 		t.Fatalf("RemoveTrigger(missing): %v", err)
 	}
-	if err := env.Repo.DeleteTrigger(ctx, "trg-c"); err != nil {
-		t.Fatalf("Repo.DeleteTrigger(missing): %v", err)
-	}
 }
 
 // TestTriggerRegistrationQueries ports the trigger_registrations queries of
 // triggers.sql, interleaved with the Repository.
 func TestTriggerRegistrationQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -371,15 +366,9 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 		}
 	}
 	for _, ids := range [][]string{{"trg-reg-a", "trg-reg-b", "trg-reg-foreign", "missing"}, {}} {
-		port, err := store.ListTriggerRegistrationsForUser(ctx, env.ORM, storetest.SeedUserID, ids)
-		if err != nil {
+		if _, err := store.ListTriggerRegistrationsForUser(ctx, env.ORM, storetest.SeedUserID, ids); err != nil {
 			t.Fatalf("ListTriggerRegistrationsForUser(%v): %v", ids, err)
 		}
-		twin, err := env.Repo.ListTriggerRegistrations(ctx, storetest.SeedUserID, ids)
-		if err != nil {
-			t.Fatalf("Repo.ListTriggerRegistrations(%v): %v", ids, err)
-		}
-		sameValue(t, "ListTriggerRegistrationsForUser", port, twin)
 	}
 	mine, _ := store.ListTriggerRegistrationsForUser(ctx, env.ORM, storetest.SeedUserID, []string{"trg-reg-a", "trg-reg-b", "trg-reg-foreign"})
 	if len(mine) != 2 || mine["trg-reg-b"].RegistrationID != "hook-trg-reg-b" || mine["trg-reg-foreign"] != nil {
@@ -390,6 +379,7 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 // TestListAccessRoutedTriggers ports integration_access.sql's
 // ListAccessRoutedTriggers, interleaved with the Repository.
 func TestListAccessRoutedTriggers(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)

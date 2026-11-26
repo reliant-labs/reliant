@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -25,7 +26,9 @@ import (
 
 // An action node runs ONE integration action because the graph says so. The
 // action is resolved from the integration catalog by its `uses` reference and
-// executed by the declarative HTTP runtime.
+// executed by the declarative HTTP runtime. A `uses: reliant/...` is a Reliant
+// server action instead (action_server.go), dispatched before the catalog is
+// consulted.
 //
 // Placement: every action the catalog can hold today is `server`/`any`, so it
 // runs right here on the worker with no daemon involved — which is why
@@ -40,6 +43,9 @@ type ActionActivity struct {
 	credentials httpaction.CredentialSource
 	hosted      HostedActionExecutor
 	secrets     SecretResolver
+	// server runs the reliant/ server actions (action_server.go); nil
+	// refuses them as switched off.
+	server *serveraction.Dispatcher
 }
 
 // WithSecretResolver lets an action's credential slots (an http/request header,
@@ -113,6 +119,9 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 	if uses == "" {
 		return nil, fmt.Errorf("action node %s: uses is required", rtx.StepID)
 	}
+	if serveraction.IsRef(uses) {
+		return a.executeServer(ctx, input, uses)
+	}
 	resolved, err := a.catalog.Resolve(uses)
 	if err != nil {
 		return nil, fmt.Errorf("action node %s: %w", rtx.StepID, err)
@@ -180,6 +189,14 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 		site.StepCredential = cred
 	}
 	result, runErr := a.runner.RunAuthenticated(ctx, resolved.Manifest, resolved.Spec, params, a.credentials, site)
+	// A rate limit is waited out before the graph hears of it
+	// (action_rate_limit.go).
+	if limited := rateLimitRetry(ctx, result, runErr); limited != nil {
+		delay, _ := limited.RetryAfter()
+		activity.GetLogger(ctx).Info("[Action] Rate limited; retrying after the wait", "stepID", rtx.StepID, "uses", uses,
+			"status", limited.Status, "reason", limited.Reason, "attempt", limited.Attempt, "retryDelay", delay)
+		return nil, limited
+	}
 	out := &reliantv1.ActionOutput{Uses: uses}
 	if runErr != nil {
 		out.Content = runErr.Error()

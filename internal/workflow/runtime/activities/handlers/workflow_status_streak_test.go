@@ -14,6 +14,8 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 // An automation that fails every hour must notify once per failure streak, not
@@ -48,7 +50,7 @@ func newStreakFixtureOfKind(t *testing.T, kind core.TriggerKind, notifyOnComplet
 	if kind == core.TriggerKindSchedule {
 		cfg, _ = json.Marshal(core.ScheduleConfig{Interval: "1h"})
 	}
-	require.NoError(t, h.Repo().CreateTrigger(ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(ctx, h.Repo(), &core.Trigger{
 		ID: f.triggerID, UserID: f.userID, ProjectID: f.projectID, Name: "hourly",
 		Kind: kind, Enabled: true, Workflow: "wf", DaemonID: "d1",
 		Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
@@ -124,7 +126,7 @@ func (f *streakFixture) report(chatID, status string, launchRun bool) (bool, str
 	}
 	var out WorkflowStatusOutput
 	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
-	chat, err := f.h.Repo().GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), chatID)
 	require.NoError(f.t, err)
 	reason := ""
 	updates, err := f.h.Repo().GetUserUpdatesSince(ctx, f.userID, 0, 200)
@@ -194,7 +196,7 @@ func newStreakFixtureOn(t *testing.T, base *streakFixture, name string) *streakF
 	other := *base
 	other.triggerID = uuid.NewString()
 	cfg, _ := json.Marshal(core.ScheduleConfig{Interval: "1h"})
-	require.NoError(t, base.h.Repo().CreateTrigger(context.Background(), &core.Trigger{
+	require.NoError(t, triggertest.Create(context.Background(), base.h.Repo(), &core.Trigger{
 		ID: other.triggerID, UserID: base.userID, ProjectID: base.projectID, Name: name,
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "wf", DaemonID: "d1",
 		Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,

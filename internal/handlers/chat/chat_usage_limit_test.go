@@ -76,7 +76,7 @@ func TestRetryUsageLimitWait_SignalsOnlyALiveRun(t *testing.T) {
 
 	chatID := seedWaitingRun(t, repo, ctx)
 	temporal := &usageLimitTemporalClient{}
-	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 
 	resp, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 	require.NoError(t, err)
@@ -118,13 +118,13 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	chatID := seedWaitingRun(t, repo, ctx)
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.EqualValues(t, reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT, *chat.Activity)
 
 	temporal := &usageLimitTemporalClient{}
 	svc := &Service{
-		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
+		deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())},
 		runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil, Waits: providerbackofftest.New(t, repo)}),
 	}
 	_, err = svc.TerminateChat(ctx, connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: chatID}))
@@ -134,7 +134,7 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 	backoffs, err := providerbackofftest.New(t, repo).ProviderBackoffByChat(ctx, chatID)
 	require.NoError(t, err)
 	assert.False(t, backoffs[chatID].Waiting(), "the marker is released when the run is stopped")
-	chat, err = repo.GetChat(ctx, chatID)
+	chat, err = store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.NotEqual(t, int(reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_USAGE_LIMIT), *chat.Activity)
 	assert.Nil(t, chat.UsageLimitResumesAt)
@@ -151,7 +151,7 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 	chatID := seedWaitingRun(t, repo, ctx)
 
 	temporal := &usageLimitPayloadClient{}
-	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
+	svc := &Service{deps: Deps{Repo: repo, Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}}
 
 	t.Run("a plain retry carries no model", func(t *testing.T) {
 		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
@@ -182,7 +182,7 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 		resp, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &model}))
 		require.NoError(t, err)
 		assert.True(t, resp.Msg.Woken)
-		chat, err := repo.GetChat(ctx, chatID)
+		chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 		require.NoError(t, err)
 		require.NoError(t, svc.wakeChat(ctx, chat, model, "the chat's model changed"))
 		require.Equal(t, []interface{}{

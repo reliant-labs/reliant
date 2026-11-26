@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 type listRunSeed struct {
@@ -153,7 +155,7 @@ func TestListRuns_Filters(t *testing.T) {
 	trig := "trg-nightly"
 	createTestTriggerProject(t, repo, "p1", "test-user")
 	createTestTriggerProject(t, repo, "p2", "test-user")
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(trig, "test-user", "p1", "Nightly triage")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(trig, "test-user", "p1", "Nightly triage")))
 
 	seedListRun(t, repo, listRunSeed{id: "a", project: "p1", workflow: "wf-one", title: "Fix Login Bug", status: Active(), at: base.Add(1 * time.Hour), launch: core.TriggerEventKindChatStart})
 	seedListRun(t, repo, listRunSeed{id: "b", project: "p2", workflow: "wf-two", title: "Nightly sweep", status: Failed(), at: base.Add(2 * time.Hour), launch: core.TriggerEventKindSchedule, trigger: trig})
@@ -306,7 +308,7 @@ func TestListRuns_CarriesChatAndTriggerColumns(t *testing.T) {
 	ctx := context.Background()
 	trig := "trg-names"
 	createTestTriggerProject(t, repo, "p1", "test-user")
-	require.NoError(t, repo.CreateTrigger(ctx, newTestTrigger(trig, "test-user", "p1", "Nightly triage")))
+	require.NoError(t, triggertest.Create(ctx, repo, newTestTrigger(trig, "test-user", "p1", "Nightly triage")))
 	seedListRun(t, repo, listRunSeed{id: "sched", project: "p1", title: "Nightly sweep", status: Completed(), daemon: "daemon-9", launch: core.TriggerEventKindSchedule, trigger: trig})
 	seedListRun(t, repo, listRunSeed{id: "adhoc", status: Active()})
 
@@ -332,7 +334,7 @@ func TestListRuns_CarriesChatAndTriggerColumns(t *testing.T) {
 	assert.Empty(t, adhoc.DaemonID)
 
 	// Deleting the trigger leaves the run listed, with a blank name.
-	require.NoError(t, repo.DeleteTrigger(ctx, trig))
+	require.NoError(t, store.RemoveTrigger(ctx, repo.ORM(), trig))
 	items, _, err = repo.ListRuns(ctx, RunListFilters{UserID: "test-user", Limit: 50, Workflows: []string{"builtin://agent"}})
 	require.NoError(t, err)
 	assert.Len(t, items, 2)
