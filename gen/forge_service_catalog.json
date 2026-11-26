@@ -546,6 +546,7 @@
         "Projectaccess",
         "Projectpurge",
         "Providerbackoff",
+        "RecordDueScanner",
         "RecordOnlyChecks",
         "RemoteExecutor",
         "RepoUpdateFeed",
@@ -57555,6 +57556,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewQueuedDelivery"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "RecordDueScanner",
+      "name": "RecordDueScanner",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/triggers/recorddue.Scanner",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewRecordDueScanner"
       },
       "methods": [],
       "implementation_candidates": []

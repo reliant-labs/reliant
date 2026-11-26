@@ -126,6 +126,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/workersetup"
@@ -707,6 +708,13 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 	return NewTriggerDeliveryRelay(TriggerDeliveryRelayDeps{
 		ConnectionVault: g.CredentialsConnectionvault(),
 		DB:              g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
+		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+	})
+}
+
+func (g *Graph) newRecordDueScanner() (*recorddue.Scanner, error) {
+	return NewRecordDueScanner(RecordDueScannerDeps{
+		DB: g.Database(), Temporal: g.TemporalClient(), Pipeline: g.ServerProcessConfig.GetPipeline(),
 		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
 	})
 }
