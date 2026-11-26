@@ -1085,6 +1085,60 @@ func (MlFindingState) EnumDescriptor() ([]byte, []int) {
 	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{14}
 }
 
+// MlFindingSeverity is how bad a finding is. (It predates MlSeverity, with
+// the same values, and stays the type of MlFinding.severity.)
+type MlFindingSeverity int32
+
+const (
+	MlFindingSeverity_ML_FINDING_SEVERITY_UNSPECIFIED MlFindingSeverity = 0
+	MlFindingSeverity_ML_FINDING_SEVERITY_CRITICAL    MlFindingSeverity = 1
+	MlFindingSeverity_ML_FINDING_SEVERITY_WARNING     MlFindingSeverity = 2
+	MlFindingSeverity_ML_FINDING_SEVERITY_INFO        MlFindingSeverity = 3
+)
+
+// Enum value maps for MlFindingSeverity.
+var (
+	MlFindingSeverity_name = map[int32]string{
+		0: "ML_FINDING_SEVERITY_UNSPECIFIED",
+		1: "ML_FINDING_SEVERITY_CRITICAL",
+		2: "ML_FINDING_SEVERITY_WARNING",
+		3: "ML_FINDING_SEVERITY_INFO",
+	}
+	MlFindingSeverity_value = map[string]int32{
+		"ML_FINDING_SEVERITY_UNSPECIFIED": 0,
+		"ML_FINDING_SEVERITY_CRITICAL":    1,
+		"ML_FINDING_SEVERITY_WARNING":     2,
+		"ML_FINDING_SEVERITY_INFO":        3,
+	}
+)
+
+func (x MlFindingSeverity) Enum() *MlFindingSeverity {
+	p := new(MlFindingSeverity)
+	*p = x
+	return p
+}
+
+func (x MlFindingSeverity) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (MlFindingSeverity) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[15].Descriptor()
+}
+
+func (MlFindingSeverity) Type() protoreflect.EnumType {
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[15]
+}
+
+func (x MlFindingSeverity) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use MlFindingSeverity.Descriptor instead.
+func (MlFindingSeverity) EnumDescriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{15}
+}
+
 type MlRunState int32
 
 const (
@@ -1092,11 +1146,11 @@ const (
 	MlRunState_ML_RUN_STATE_QUEUED      MlRunState = 1
 	MlRunState_ML_RUN_STATE_RUNNING     MlRunState = 2
 	// Running, with an active problem (MlRun.badges says which).
-	MlRunState_ML_RUN_STATE_DEGRADED  MlRunState = 3
-	MlRunState_ML_RUN_STATE_PAUSED    MlRunState = 4
-	MlRunState_ML_RUN_STATE_SUCCEEDED MlRunState = 5
-	MlRunState_ML_RUN_STATE_FAILED    MlRunState = 6
-	MlRunState_ML_RUN_STATE_CANCELLED MlRunState = 7
+	MlRunState_ML_RUN_STATE_DEGRADED  MlRunState = 6
+	MlRunState_ML_RUN_STATE_PAUSED    MlRunState = 7
+	MlRunState_ML_RUN_STATE_SUCCEEDED MlRunState = 3
+	MlRunState_ML_RUN_STATE_FAILED    MlRunState = 4
+	MlRunState_ML_RUN_STATE_CANCELLED MlRunState = 5
 	MlRunState_ML_RUN_STATE_UNKNOWN   MlRunState = 8
 )
 
@@ -1106,22 +1160,22 @@ var (
 		0: "ML_RUN_STATE_UNSPECIFIED",
 		1: "ML_RUN_STATE_QUEUED",
 		2: "ML_RUN_STATE_RUNNING",
-		3: "ML_RUN_STATE_DEGRADED",
-		4: "ML_RUN_STATE_PAUSED",
-		5: "ML_RUN_STATE_SUCCEEDED",
-		6: "ML_RUN_STATE_FAILED",
-		7: "ML_RUN_STATE_CANCELLED",
+		6: "ML_RUN_STATE_DEGRADED",
+		7: "ML_RUN_STATE_PAUSED",
+		3: "ML_RUN_STATE_SUCCEEDED",
+		4: "ML_RUN_STATE_FAILED",
+		5: "ML_RUN_STATE_CANCELLED",
 		8: "ML_RUN_STATE_UNKNOWN",
 	}
 	MlRunState_value = map[string]int32{
 		"ML_RUN_STATE_UNSPECIFIED": 0,
 		"ML_RUN_STATE_QUEUED":      1,
 		"ML_RUN_STATE_RUNNING":     2,
-		"ML_RUN_STATE_DEGRADED":    3,
-		"ML_RUN_STATE_PAUSED":      4,
-		"ML_RUN_STATE_SUCCEEDED":   5,
-		"ML_RUN_STATE_FAILED":      6,
-		"ML_RUN_STATE_CANCELLED":   7,
+		"ML_RUN_STATE_DEGRADED":    6,
+		"ML_RUN_STATE_PAUSED":      7,
+		"ML_RUN_STATE_SUCCEEDED":   3,
+		"ML_RUN_STATE_FAILED":      4,
+		"ML_RUN_STATE_CANCELLED":   5,
 		"ML_RUN_STATE_UNKNOWN":     8,
 	}
 )
@@ -1137,11 +1191,11 @@ func (x MlRunState) String() string {
 }
 
 func (MlRunState) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[15].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[16].Descriptor()
 }
 
 func (MlRunState) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[15]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[16]
 }
 
 func (x MlRunState) Number() protoreflect.EnumNumber {
@@ -1150,7 +1204,7 @@ func (x MlRunState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlRunState.Descriptor instead.
 func (MlRunState) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{15}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{16}
 }
 
 type MlRunBadge int32
@@ -1202,11 +1256,11 @@ func (x MlRunBadge) String() string {
 }
 
 func (MlRunBadge) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[16].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[17].Descriptor()
 }
 
 func (MlRunBadge) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[16]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[17]
 }
 
 func (x MlRunBadge) Number() protoreflect.EnumNumber {
@@ -1215,7 +1269,7 @@ func (x MlRunBadge) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlRunBadge.Descriptor instead.
 func (MlRunBadge) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{16}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{17}
 }
 
 type MlPhaseKind int32
@@ -1272,11 +1326,11 @@ func (x MlPhaseKind) String() string {
 }
 
 func (MlPhaseKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[17].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[18].Descriptor()
 }
 
 func (MlPhaseKind) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[17]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[18]
 }
 
 func (x MlPhaseKind) Number() protoreflect.EnumNumber {
@@ -1285,7 +1339,7 @@ func (x MlPhaseKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlPhaseKind.Descriptor instead.
 func (MlPhaseKind) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{17}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{18}
 }
 
 type MlPhaseState int32
@@ -1346,11 +1400,11 @@ func (x MlPhaseState) String() string {
 }
 
 func (MlPhaseState) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[18].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[19].Descriptor()
 }
 
 func (MlPhaseState) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[18]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[19]
 }
 
 func (x MlPhaseState) Number() protoreflect.EnumNumber {
@@ -1359,7 +1413,7 @@ func (x MlPhaseState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlPhaseState.Descriptor instead.
 func (MlPhaseState) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{18}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{19}
 }
 
 type MlAttemptEndReason int32
@@ -1437,11 +1491,11 @@ func (x MlAttemptEndReason) String() string {
 }
 
 func (MlAttemptEndReason) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[19].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[20].Descriptor()
 }
 
 func (MlAttemptEndReason) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[19]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[20]
 }
 
 func (x MlAttemptEndReason) Number() protoreflect.EnumNumber {
@@ -1450,7 +1504,7 @@ func (x MlAttemptEndReason) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlAttemptEndReason.Descriptor instead.
 func (MlAttemptEndReason) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{19}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{20}
 }
 
 type MlCheckpointStatus int32
@@ -1492,11 +1546,11 @@ func (x MlCheckpointStatus) String() string {
 }
 
 func (MlCheckpointStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[20].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[21].Descriptor()
 }
 
 func (MlCheckpointStatus) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[20]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[21]
 }
 
 func (x MlCheckpointStatus) Number() protoreflect.EnumNumber {
@@ -1505,7 +1559,7 @@ func (x MlCheckpointStatus) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlCheckpointStatus.Descriptor instead.
 func (MlCheckpointStatus) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{20}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{21}
 }
 
 type MlParamSource int32
@@ -1544,11 +1598,11 @@ func (x MlParamSource) String() string {
 }
 
 func (MlParamSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[21].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[22].Descriptor()
 }
 
 func (MlParamSource) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[21]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[22]
 }
 
 func (x MlParamSource) Number() protoreflect.EnumNumber {
@@ -1557,185 +1611,7 @@ func (x MlParamSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlParamSource.Descriptor instead.
 func (MlParamSource) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{21}
-}
-
-type MlTraceKind int32
-
-const (
-	MlTraceKind_ML_TRACE_KIND_UNSPECIFIED       MlTraceKind = 0
-	MlTraceKind_ML_TRACE_KIND_TRAIN_STEP        MlTraceKind = 1
-	MlTraceKind_ML_TRACE_KIND_CHECKPOINT        MlTraceKind = 2
-	MlTraceKind_ML_TRACE_KIND_DATA_PIPELINE     MlTraceKind = 3
-	MlTraceKind_ML_TRACE_KIND_INFERENCE_REQUEST MlTraceKind = 4
-	MlTraceKind_ML_TRACE_KIND_EVAL              MlTraceKind = 5
-	MlTraceKind_ML_TRACE_KIND_POD_START         MlTraceKind = 6
-)
-
-// Enum value maps for MlTraceKind.
-var (
-	MlTraceKind_name = map[int32]string{
-		0: "ML_TRACE_KIND_UNSPECIFIED",
-		1: "ML_TRACE_KIND_TRAIN_STEP",
-		2: "ML_TRACE_KIND_CHECKPOINT",
-		3: "ML_TRACE_KIND_DATA_PIPELINE",
-		4: "ML_TRACE_KIND_INFERENCE_REQUEST",
-		5: "ML_TRACE_KIND_EVAL",
-		6: "ML_TRACE_KIND_POD_START",
-	}
-	MlTraceKind_value = map[string]int32{
-		"ML_TRACE_KIND_UNSPECIFIED":       0,
-		"ML_TRACE_KIND_TRAIN_STEP":        1,
-		"ML_TRACE_KIND_CHECKPOINT":        2,
-		"ML_TRACE_KIND_DATA_PIPELINE":     3,
-		"ML_TRACE_KIND_INFERENCE_REQUEST": 4,
-		"ML_TRACE_KIND_EVAL":              5,
-		"ML_TRACE_KIND_POD_START":         6,
-	}
-)
-
-func (x MlTraceKind) Enum() *MlTraceKind {
-	p := new(MlTraceKind)
-	*p = x
-	return p
-}
-
-func (x MlTraceKind) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (MlTraceKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[22].Descriptor()
-}
-
-func (MlTraceKind) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[22]
-}
-
-func (x MlTraceKind) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use MlTraceKind.Descriptor instead.
-func (MlTraceKind) EnumDescriptor() ([]byte, []int) {
 	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{22}
-}
-
-type MlSpanStatus int32
-
-const (
-	MlSpanStatus_ML_SPAN_STATUS_UNSPECIFIED MlSpanStatus = 0
-	MlSpanStatus_ML_SPAN_STATUS_OK          MlSpanStatus = 1
-	MlSpanStatus_ML_SPAN_STATUS_ERROR       MlSpanStatus = 2
-)
-
-// Enum value maps for MlSpanStatus.
-var (
-	MlSpanStatus_name = map[int32]string{
-		0: "ML_SPAN_STATUS_UNSPECIFIED",
-		1: "ML_SPAN_STATUS_OK",
-		2: "ML_SPAN_STATUS_ERROR",
-	}
-	MlSpanStatus_value = map[string]int32{
-		"ML_SPAN_STATUS_UNSPECIFIED": 0,
-		"ML_SPAN_STATUS_OK":          1,
-		"ML_SPAN_STATUS_ERROR":       2,
-	}
-)
-
-func (x MlSpanStatus) Enum() *MlSpanStatus {
-	p := new(MlSpanStatus)
-	*p = x
-	return p
-}
-
-func (x MlSpanStatus) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (MlSpanStatus) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[23].Descriptor()
-}
-
-func (MlSpanStatus) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[23]
-}
-
-func (x MlSpanStatus) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use MlSpanStatus.Descriptor instead.
-func (MlSpanStatus) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{23}
-}
-
-type MlProfileKind int32
-
-const (
-	MlProfileKind_ML_PROFILE_KIND_UNSPECIFIED      MlProfileKind = 0
-	MlProfileKind_ML_PROFILE_KIND_PYTORCH_PROFILER MlProfileKind = 1
-	MlProfileKind_ML_PROFILE_KIND_NSIGHT_SYSTEMS   MlProfileKind = 2
-	MlProfileKind_ML_PROFILE_KIND_NSIGHT_COMPUTE   MlProfileKind = 3
-	MlProfileKind_ML_PROFILE_KIND_MEMORY_SNAPSHOT  MlProfileKind = 4
-	MlProfileKind_ML_PROFILE_KIND_FLIGHT_RECORDER  MlProfileKind = 5
-	MlProfileKind_ML_PROFILE_KIND_PY_SPY           MlProfileKind = 6
-	MlProfileKind_ML_PROFILE_KIND_CPU_CONTINUOUS   MlProfileKind = 7
-	// Always-on, low-rate GPU kernel sampling (CUPTI range profiling).
-	MlProfileKind_ML_PROFILE_KIND_GPU_CONTINUOUS MlProfileKind = 8
-)
-
-// Enum value maps for MlProfileKind.
-var (
-	MlProfileKind_name = map[int32]string{
-		0: "ML_PROFILE_KIND_UNSPECIFIED",
-		1: "ML_PROFILE_KIND_PYTORCH_PROFILER",
-		2: "ML_PROFILE_KIND_NSIGHT_SYSTEMS",
-		3: "ML_PROFILE_KIND_NSIGHT_COMPUTE",
-		4: "ML_PROFILE_KIND_MEMORY_SNAPSHOT",
-		5: "ML_PROFILE_KIND_FLIGHT_RECORDER",
-		6: "ML_PROFILE_KIND_PY_SPY",
-		7: "ML_PROFILE_KIND_CPU_CONTINUOUS",
-		8: "ML_PROFILE_KIND_GPU_CONTINUOUS",
-	}
-	MlProfileKind_value = map[string]int32{
-		"ML_PROFILE_KIND_UNSPECIFIED":      0,
-		"ML_PROFILE_KIND_PYTORCH_PROFILER": 1,
-		"ML_PROFILE_KIND_NSIGHT_SYSTEMS":   2,
-		"ML_PROFILE_KIND_NSIGHT_COMPUTE":   3,
-		"ML_PROFILE_KIND_MEMORY_SNAPSHOT":  4,
-		"ML_PROFILE_KIND_FLIGHT_RECORDER":  5,
-		"ML_PROFILE_KIND_PY_SPY":           6,
-		"ML_PROFILE_KIND_CPU_CONTINUOUS":   7,
-		"ML_PROFILE_KIND_GPU_CONTINUOUS":   8,
-	}
-)
-
-func (x MlProfileKind) Enum() *MlProfileKind {
-	p := new(MlProfileKind)
-	*p = x
-	return p
-}
-
-func (x MlProfileKind) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (MlProfileKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[24].Descriptor()
-}
-
-func (MlProfileKind) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[24]
-}
-
-func (x MlProfileKind) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use MlProfileKind.Descriptor instead.
-func (MlProfileKind) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{24}
 }
 
 type MlLineageEdgeKind int32
@@ -1795,11 +1671,11 @@ func (x MlLineageEdgeKind) String() string {
 }
 
 func (MlLineageEdgeKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[25].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[23].Descriptor()
 }
 
 func (MlLineageEdgeKind) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[25]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[23]
 }
 
 func (x MlLineageEdgeKind) Number() protoreflect.EnumNumber {
@@ -1808,7 +1684,7 @@ func (x MlLineageEdgeKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlLineageEdgeKind.Descriptor instead.
 func (MlLineageEdgeKind) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{25}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{23}
 }
 
 type MlVersionSource int32
@@ -1847,11 +1723,11 @@ func (x MlVersionSource) String() string {
 }
 
 func (MlVersionSource) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[26].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[24].Descriptor()
 }
 
 func (MlVersionSource) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[26]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[24]
 }
 
 func (x MlVersionSource) Number() protoreflect.EnumNumber {
@@ -1860,7 +1736,7 @@ func (x MlVersionSource) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlVersionSource.Descriptor instead.
 func (MlVersionSource) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{26}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{24}
 }
 
 type MlReleaseVerdict int32
@@ -1868,9 +1744,15 @@ type MlReleaseVerdict int32
 const (
 	MlReleaseVerdict_ML_RELEASE_VERDICT_UNSPECIFIED MlReleaseVerdict = 0
 	MlReleaseVerdict_ML_RELEASE_VERDICT_PASS        MlReleaseVerdict = 1
-	MlReleaseVerdict_ML_RELEASE_VERDICT_REGRESSED   MlReleaseVerdict = 2
-	MlReleaseVerdict_ML_RELEASE_VERDICT_NOT_PROVEN  MlReleaseVerdict = 3
-	MlReleaseVerdict_ML_RELEASE_VERDICT_PENDING     MlReleaseVerdict = 4
+	MlReleaseVerdict_ML_RELEASE_VERDICT_REGRESSED   MlReleaseVerdict = 4
+	MlReleaseVerdict_ML_RELEASE_VERDICT_NOT_PROVEN  MlReleaseVerdict = 5
+	MlReleaseVerdict_ML_RELEASE_VERDICT_PENDING     MlReleaseVerdict = 6
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	MlReleaseVerdict_ML_RELEASE_VERDICT_FAIL MlReleaseVerdict = 2
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	MlReleaseVerdict_ML_RELEASE_VERDICT_INCONCLUSIVE MlReleaseVerdict = 3
 )
 
 // Enum value maps for MlReleaseVerdict.
@@ -1878,16 +1760,20 @@ var (
 	MlReleaseVerdict_name = map[int32]string{
 		0: "ML_RELEASE_VERDICT_UNSPECIFIED",
 		1: "ML_RELEASE_VERDICT_PASS",
-		2: "ML_RELEASE_VERDICT_REGRESSED",
-		3: "ML_RELEASE_VERDICT_NOT_PROVEN",
-		4: "ML_RELEASE_VERDICT_PENDING",
+		4: "ML_RELEASE_VERDICT_REGRESSED",
+		5: "ML_RELEASE_VERDICT_NOT_PROVEN",
+		6: "ML_RELEASE_VERDICT_PENDING",
+		2: "ML_RELEASE_VERDICT_FAIL",
+		3: "ML_RELEASE_VERDICT_INCONCLUSIVE",
 	}
 	MlReleaseVerdict_value = map[string]int32{
-		"ML_RELEASE_VERDICT_UNSPECIFIED": 0,
-		"ML_RELEASE_VERDICT_PASS":        1,
-		"ML_RELEASE_VERDICT_REGRESSED":   2,
-		"ML_RELEASE_VERDICT_NOT_PROVEN":  3,
-		"ML_RELEASE_VERDICT_PENDING":     4,
+		"ML_RELEASE_VERDICT_UNSPECIFIED":  0,
+		"ML_RELEASE_VERDICT_PASS":         1,
+		"ML_RELEASE_VERDICT_REGRESSED":    4,
+		"ML_RELEASE_VERDICT_NOT_PROVEN":   5,
+		"ML_RELEASE_VERDICT_PENDING":      6,
+		"ML_RELEASE_VERDICT_FAIL":         2,
+		"ML_RELEASE_VERDICT_INCONCLUSIVE": 3,
 	}
 )
 
@@ -1902,11 +1788,11 @@ func (x MlReleaseVerdict) String() string {
 }
 
 func (MlReleaseVerdict) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[27].Descriptor()
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[25].Descriptor()
 }
 
 func (MlReleaseVerdict) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[27]
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[25]
 }
 
 func (x MlReleaseVerdict) Number() protoreflect.EnumNumber {
@@ -1915,62 +1801,65 @@ func (x MlReleaseVerdict) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use MlReleaseVerdict.Descriptor instead.
 func (MlReleaseVerdict) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{27}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{25}
 }
 
-type MlAlertState int32
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlNodeHealth int32
 
 const (
-	MlAlertState_ML_ALERT_STATE_UNSPECIFIED MlAlertState = 0
-	MlAlertState_ML_ALERT_STATE_OK          MlAlertState = 1
-	MlAlertState_ML_ALERT_STATE_PENDING     MlAlertState = 2
-	MlAlertState_ML_ALERT_STATE_FIRING      MlAlertState = 3
-	MlAlertState_ML_ALERT_STATE_SILENCED    MlAlertState = 4
+	MlNodeHealth_ML_NODE_HEALTH_UNSPECIFIED MlNodeHealth = 0
+	MlNodeHealth_ML_NODE_HEALTH_HEALTHY     MlNodeHealth = 1
+	// Something to watch (a correctable error rate, a driver skew), not a fault.
+	MlNodeHealth_ML_NODE_HEALTH_DEGRADED MlNodeHealth = 2
+	// A device is faulty (a fatal Xid, an uncorrectable ECC error,
+	// allocatable below capacity): the node should not get new work.
+	MlNodeHealth_ML_NODE_HEALTH_BAD MlNodeHealth = 3
 )
 
-// Enum value maps for MlAlertState.
+// Enum value maps for MlNodeHealth.
 var (
-	MlAlertState_name = map[int32]string{
-		0: "ML_ALERT_STATE_UNSPECIFIED",
-		1: "ML_ALERT_STATE_OK",
-		2: "ML_ALERT_STATE_PENDING",
-		3: "ML_ALERT_STATE_FIRING",
-		4: "ML_ALERT_STATE_SILENCED",
+	MlNodeHealth_name = map[int32]string{
+		0: "ML_NODE_HEALTH_UNSPECIFIED",
+		1: "ML_NODE_HEALTH_HEALTHY",
+		2: "ML_NODE_HEALTH_DEGRADED",
+		3: "ML_NODE_HEALTH_BAD",
 	}
-	MlAlertState_value = map[string]int32{
-		"ML_ALERT_STATE_UNSPECIFIED": 0,
-		"ML_ALERT_STATE_OK":          1,
-		"ML_ALERT_STATE_PENDING":     2,
-		"ML_ALERT_STATE_FIRING":      3,
-		"ML_ALERT_STATE_SILENCED":    4,
+	MlNodeHealth_value = map[string]int32{
+		"ML_NODE_HEALTH_UNSPECIFIED": 0,
+		"ML_NODE_HEALTH_HEALTHY":     1,
+		"ML_NODE_HEALTH_DEGRADED":    2,
+		"ML_NODE_HEALTH_BAD":         3,
 	}
 )
 
-func (x MlAlertState) Enum() *MlAlertState {
-	p := new(MlAlertState)
+func (x MlNodeHealth) Enum() *MlNodeHealth {
+	p := new(MlNodeHealth)
 	*p = x
 	return p
 }
 
-func (x MlAlertState) String() string {
+func (x MlNodeHealth) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (MlAlertState) Descriptor() protoreflect.EnumDescriptor {
-	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[28].Descriptor()
+func (MlNodeHealth) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[26].Descriptor()
 }
 
-func (MlAlertState) Type() protoreflect.EnumType {
-	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[28]
+func (MlNodeHealth) Type() protoreflect.EnumType {
+	return &file_services_ml_early_access_v1_ml_early_access_proto_enumTypes[26]
 }
 
-func (x MlAlertState) Number() protoreflect.EnumNumber {
+func (x MlNodeHealth) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use MlAlertState.Descriptor instead.
-func (MlAlertState) EnumDescriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{28}
+// Deprecated: Use MlNodeHealth.Descriptor instead.
+func (MlNodeHealth) EnumDescriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{26}
 }
 
 // MlSubject names any entity: its kind and its stable id (the service
@@ -3153,18 +3042,22 @@ func (x *MlFleetSummary) GetTrainingGoodput() float64 {
 
 type MlCluster struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Id    string                 `protobuf:"bytes,6,opt,name=id,proto3" json:"id,omitempty"`
 	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// "gke", "eks", "aks", "other".
 	Provider          string                 `protobuf:"bytes,3,opt,name=provider,proto3" json:"provider,omitempty"`
 	Location          string                 `protobuf:"bytes,4,opt,name=location,proto3" json:"location,omitempty"`
-	KubernetesVersion string                 `protobuf:"bytes,5,opt,name=kubernetes_version,json=kubernetesVersion,proto3" json:"kubernetes_version,omitempty"`
-	LastSeenAt        *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
-	NodeCount         int32                  `protobuf:"varint,7,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
-	GpuCount          int32                  `protobuf:"varint,8,opt,name=gpu_count,json=gpuCount,proto3" json:"gpu_count,omitempty"`
-	Health            MlHealth               `protobuf:"varint,9,opt,name=health,proto3,enum=controlplane.v1.MlHealth" json:"health,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	KubernetesVersion string                 `protobuf:"bytes,7,opt,name=kubernetes_version,json=kubernetesVersion,proto3" json:"kubernetes_version,omitempty"`
+	LastSeenAt        *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	NodeCount         int32                  `protobuf:"varint,8,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
+	GpuCount          int32                  `protobuf:"varint,9,opt,name=gpu_count,json=gpuCount,proto3" json:"gpu_count,omitempty"`
+	Health            MlHealth               `protobuf:"varint,10,opt,name=health,proto3,enum=controlplane.v1.MlHealth" json:"health,omitempty"`
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ClusterId     string `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MlCluster) Reset() {
@@ -3258,6 +3151,14 @@ func (x *MlCluster) GetHealth() MlHealth {
 		return x.Health
 	}
 	return MlHealth_ML_HEALTH_UNSPECIFIED
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlCluster) GetClusterId() string {
+	if x != nil {
+		return x.ClusterId
+	}
+	return ""
 }
 
 type MlPool struct {
@@ -3900,35 +3801,51 @@ func (x *MlShare) GetShare() float64 {
 type MlNode struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "<cluster_id>/<node_name>".
-	Id           string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name         string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	ClusterId    string `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	PoolId       string `protobuf:"bytes,4,opt,name=pool_id,json=poolId,proto3" json:"pool_id,omitempty"`
-	ProviderId   string `protobuf:"bytes,5,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
-	InstanceType string `protobuf:"bytes,6,opt,name=instance_type,json=instanceType,proto3" json:"instance_type,omitempty"`
-	Zone         string `protobuf:"bytes,7,opt,name=zone,proto3" json:"zone,omitempty"`
+	Id           string `protobuf:"bytes,12,opt,name=id,proto3" json:"id,omitempty"`
+	Name         string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	ClusterId    string `protobuf:"bytes,13,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	PoolId       string `protobuf:"bytes,14,opt,name=pool_id,json=poolId,proto3" json:"pool_id,omitempty"`
+	ProviderId   string `protobuf:"bytes,15,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	InstanceType string `protobuf:"bytes,16,opt,name=instance_type,json=instanceType,proto3" json:"instance_type,omitempty"`
+	Zone         string `protobuf:"bytes,17,opt,name=zone,proto3" json:"zone,omitempty"`
 	// A re-imaged node is a new incarnation; history is kept.
-	Incarnation int32    `protobuf:"varint,8,opt,name=incarnation,proto3" json:"incarnation,omitempty"`
-	Health      MlHealth `protobuf:"varint,9,opt,name=health,proto3,enum=controlplane.v1.MlHealth" json:"health,omitempty"`
+	Incarnation int32    `protobuf:"varint,18,opt,name=incarnation,proto3" json:"incarnation,omitempty"`
+	HealthState MlHealth `protobuf:"varint,19,opt,name=health_state,json=healthState,proto3,enum=controlplane.v1.MlHealth" json:"health_state,omitempty"`
 	// 0-100, higher is worse.
-	HealthScore     float64                `protobuf:"fixed64,10,opt,name=health_score,json=healthScore,proto3" json:"health_score,omitempty"`
-	HealthReason    string                 `protobuf:"bytes,11,opt,name=health_reason,json=healthReason,proto3" json:"health_reason,omitempty"`
-	Cordoned        bool                   `protobuf:"varint,12,opt,name=cordoned,proto3" json:"cordoned,omitempty"`
-	Gpus            int32                  `protobuf:"varint,13,opt,name=gpus,proto3" json:"gpus,omitempty"`
-	GpusAllocatable int32                  `protobuf:"varint,14,opt,name=gpus_allocatable,json=gpusAllocatable,proto3" json:"gpus_allocatable,omitempty"`
-	GpusAllocated   int32                  `protobuf:"varint,15,opt,name=gpus_allocated,json=gpusAllocated,proto3" json:"gpus_allocated,omitempty"`
-	BusyRatio       float64                `protobuf:"fixed64,16,opt,name=busy_ratio,json=busyRatio,proto3" json:"busy_ratio,omitempty"`
-	DriverVersion   string                 `protobuf:"bytes,17,opt,name=driver_version,json=driverVersion,proto3" json:"driver_version,omitempty"`
-	CudaVersion     string                 `protobuf:"bytes,18,opt,name=cuda_version,json=cudaVersion,proto3" json:"cuda_version,omitempty"`
-	KernelVersion   string                 `protobuf:"bytes,19,opt,name=kernel_version,json=kernelVersion,proto3" json:"kernel_version,omitempty"`
-	OsImage         string                 `protobuf:"bytes,20,opt,name=os_image,json=osImage,proto3" json:"os_image,omitempty"`
-	BootedAt        *timestamppb.Timestamp `protobuf:"bytes,21,opt,name=booted_at,json=bootedAt,proto3" json:"booted_at,omitempty"`
+	HealthScore     float64                `protobuf:"fixed64,20,opt,name=health_score,json=healthScore,proto3" json:"health_score,omitempty"`
+	HealthReason    string                 `protobuf:"bytes,21,opt,name=health_reason,json=healthReason,proto3" json:"health_reason,omitempty"`
+	Cordoned        bool                   `protobuf:"varint,11,opt,name=cordoned,proto3" json:"cordoned,omitempty"`
+	Gpus            int32                  `protobuf:"varint,22,opt,name=gpus,proto3" json:"gpus,omitempty"`
+	GpusAllocatable int32                  `protobuf:"varint,23,opt,name=gpus_allocatable,json=gpusAllocatable,proto3" json:"gpus_allocatable,omitempty"`
+	GpusAllocated   int32                  `protobuf:"varint,24,opt,name=gpus_allocated,json=gpusAllocated,proto3" json:"gpus_allocated,omitempty"`
+	BusyRatio       float64                `protobuf:"fixed64,25,opt,name=busy_ratio,json=busyRatio,proto3" json:"busy_ratio,omitempty"`
+	DriverVersion   string                 `protobuf:"bytes,7,opt,name=driver_version,json=driverVersion,proto3" json:"driver_version,omitempty"`
+	CudaVersion     string                 `protobuf:"bytes,26,opt,name=cuda_version,json=cudaVersion,proto3" json:"cuda_version,omitempty"`
+	KernelVersion   string                 `protobuf:"bytes,27,opt,name=kernel_version,json=kernelVersion,proto3" json:"kernel_version,omitempty"`
+	OsImage         string                 `protobuf:"bytes,28,opt,name=os_image,json=osImage,proto3" json:"os_image,omitempty"`
+	BootedAt        *timestamppb.Timestamp `protobuf:"bytes,29,opt,name=booted_at,json=bootedAt,proto3" json:"booted_at,omitempty"`
 	// Summaries: no fields here, only in GetMlNode / GetMlDevice.
-	Devices    []*MlDevice        `protobuf:"bytes,22,rep,name=devices,proto3" json:"devices,omitempty"`
-	Conditions []*MlNodeCondition `protobuf:"bytes,23,rep,name=conditions,proto3" json:"conditions,omitempty"`
+	Devices    []*MlDevice        `protobuf:"bytes,30,rep,name=devices,proto3" json:"devices,omitempty"`
+	Conditions []*MlNodeCondition `protobuf:"bytes,31,rep,name=conditions,proto3" json:"conditions,omitempty"`
 	// "none", "mig", "time-slicing", "mps".
-	Sharing       string `protobuf:"bytes,24,opt,name=sharing,proto3" json:"sharing,omitempty"`
-	NvlinkDomain  string `protobuf:"bytes,25,opt,name=nvlink_domain,json=nvlinkDomain,proto3" json:"nvlink_domain,omitempty"`
+	Sharing      string `protobuf:"bytes,8,opt,name=sharing,proto3" json:"sharing,omitempty"`
+	NvlinkDomain string `protobuf:"bytes,32,opt,name=nvlink_domain,json=nvlinkDomain,proto3" json:"nvlink_domain,omitempty"`
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	AcceleratorCount int32 `protobuf:"varint,2,opt,name=accelerator_count,json=acceleratorCount,proto3" json:"accelerator_count,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	AcceleratorsAllocatable int32 `protobuf:"varint,3,opt,name=accelerators_allocatable,json=acceleratorsAllocatable,proto3" json:"accelerators_allocatable,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	AcceleratorsAllocated int32 `protobuf:"varint,4,opt,name=accelerators_allocated,json=acceleratorsAllocated,proto3" json:"accelerators_allocated,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	UtilizationPercent float64 `protobuf:"fixed64,5,opt,name=utilization_percent,json=utilizationPercent,proto3" json:"utilization_percent,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	MemoryUsedPercent float64 `protobuf:"fixed64,6,opt,name=memory_used_percent,json=memoryUsedPercent,proto3" json:"memory_used_percent,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Health MlNodeHealth `protobuf:"varint,9,opt,name=health,proto3,enum=controlplane.v1.MlNodeHealth" json:"health,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Flags         []*MlHealthFlag `protobuf:"bytes,10,rep,name=flags,proto3" json:"flags,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4019,9 +3936,9 @@ func (x *MlNode) GetIncarnation() int32 {
 	return 0
 }
 
-func (x *MlNode) GetHealth() MlHealth {
+func (x *MlNode) GetHealthState() MlHealth {
 	if x != nil {
-		return x.Health
+		return x.HealthState
 	}
 	return MlHealth_ML_HEALTH_UNSPECIFIED
 }
@@ -4136,6 +4053,62 @@ func (x *MlNode) GetNvlinkDomain() string {
 		return x.NvlinkDomain
 	}
 	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlNode) GetAcceleratorCount() int32 {
+	if x != nil {
+		return x.AcceleratorCount
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlNode) GetAcceleratorsAllocatable() int32 {
+	if x != nil {
+		return x.AcceleratorsAllocatable
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlNode) GetAcceleratorsAllocated() int32 {
+	if x != nil {
+		return x.AcceleratorsAllocated
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlNode) GetUtilizationPercent() float64 {
+	if x != nil {
+		return x.UtilizationPercent
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlNode) GetMemoryUsedPercent() float64 {
+	if x != nil {
+		return x.MemoryUsedPercent
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlNode) GetHealth() MlNodeHealth {
+	if x != nil {
+		return x.Health
+	}
+	return MlNodeHealth_ML_NODE_HEALTH_UNSPECIFIED
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlNode) GetFlags() []*MlHealthFlag {
+	if x != nil {
+		return x.Flags
+	}
+	return nil
 }
 
 type MlNodeCondition struct {
@@ -5606,8 +5579,12 @@ func (x *GetMlStackRequest) GetClusterId() string {
 }
 
 type GetMlStackResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Clusters      []*MlClusterSetup      `protobuf:"bytes,1,rep,name=clusters,proto3" json:"clusters,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Clusters []*MlClusterSetup      `protobuf:"bytes,2,rep,name=clusters,proto3" json:"clusters,omitempty"`
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Components    []*MlStackComponent `protobuf:"bytes,1,rep,name=components,proto3" json:"components,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5645,6 +5622,14 @@ func (*GetMlStackResponse) Descriptor() ([]byte, []int) {
 func (x *GetMlStackResponse) GetClusters() []*MlClusterSetup {
 	if x != nil {
 		return x.Clusters
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *GetMlStackResponse) GetComponents() []*MlStackComponent {
+	if x != nil {
+		return x.Components
 	}
 	return nil
 }
@@ -7066,32 +7051,46 @@ type MlFinding struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Id       string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	RuleId   string                 `protobuf:"bytes,2,opt,name=rule_id,json=ruleId,proto3" json:"rule_id,omitempty"`
-	Category MlFindingCategory      `protobuf:"varint,3,opt,name=category,proto3,enum=controlplane.v1.MlFindingCategory" json:"category,omitempty"`
-	Severity MlSeverity             `protobuf:"varint,4,opt,name=severity,proto3,enum=controlplane.v1.MlSeverity" json:"severity,omitempty"`
-	Title    string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
-	Summary  string                 `protobuf:"bytes,6,opt,name=summary,proto3" json:"summary,omitempty"`
+	Category MlFindingCategory      `protobuf:"varint,14,opt,name=category,proto3,enum=controlplane.v1.MlFindingCategory" json:"category,omitempty"`
+	Severity MlFindingSeverity      `protobuf:"varint,3,opt,name=severity,proto3,enum=controlplane.v1.MlFindingSeverity" json:"severity,omitempty"`
+	Title    string                 `protobuf:"bytes,4,opt,name=title,proto3" json:"title,omitempty"`
+	Summary  string                 `protobuf:"bytes,5,opt,name=summary,proto3" json:"summary,omitempty"`
 	// Why it matters, in a sentence with its numbers.
-	Why         string                 `protobuf:"bytes,7,opt,name=why,proto3" json:"why,omitempty"`
-	Impact      *MlImpact              `protobuf:"bytes,8,opt,name=impact,proto3" json:"impact,omitempty"`
-	Subjects    []*MlSubject           `protobuf:"bytes,9,rep,name=subjects,proto3" json:"subjects,omitempty"`
-	ClusterIds  []string               `protobuf:"bytes,10,rep,name=cluster_ids,json=clusterIds,proto3" json:"cluster_ids,omitempty"`
-	State       MlFindingState         `protobuf:"varint,11,opt,name=state,proto3,enum=controlplane.v1.MlFindingState" json:"state,omitempty"`
-	Assignee    string                 `protobuf:"bytes,12,opt,name=assignee,proto3" json:"assignee,omitempty"`
-	PrUrl       string                 `protobuf:"bytes,13,opt,name=pr_url,json=prUrl,proto3" json:"pr_url,omitempty"`
-	FirstSeenAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=first_seen_at,json=firstSeenAt,proto3" json:"first_seen_at,omitempty"`
-	LastSeenAt  *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	Why         string                 `protobuf:"bytes,15,opt,name=why,proto3" json:"why,omitempty"`
+	Impact      *MlImpact              `protobuf:"bytes,16,opt,name=impact,proto3" json:"impact,omitempty"`
+	Subjects    []*MlSubject           `protobuf:"bytes,17,rep,name=subjects,proto3" json:"subjects,omitempty"`
+	ClusterIds  []string               `protobuf:"bytes,18,rep,name=cluster_ids,json=clusterIds,proto3" json:"cluster_ids,omitempty"`
+	State       MlFindingState         `protobuf:"varint,19,opt,name=state,proto3,enum=controlplane.v1.MlFindingState" json:"state,omitempty"`
+	Assignee    string                 `protobuf:"bytes,20,opt,name=assignee,proto3" json:"assignee,omitempty"`
+	PrUrl       string                 `protobuf:"bytes,21,opt,name=pr_url,json=prUrl,proto3" json:"pr_url,omitempty"`
+	FirstSeenAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=first_seen_at,json=firstSeenAt,proto3" json:"first_seen_at,omitempty"`
+	LastSeenAt  *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
 	// The rule as a person reads it, with the metric it reads.
-	Rule           string           `protobuf:"bytes,16,opt,name=rule,proto3" json:"rule,omitempty"`
-	EvidenceSeries []*MlSeries      `protobuf:"bytes,17,rep,name=evidence_series,json=evidenceSeries,proto3" json:"evidence_series,omitempty"`
-	EvidenceTable  *MlEvidenceTable `protobuf:"bytes,18,opt,name=evidence_table,json=evidenceTable,proto3" json:"evidence_table,omitempty"`
-	EvidenceFacts  []*MlFact        `protobuf:"bytes,19,rep,name=evidence_facts,json=evidenceFacts,proto3" json:"evidence_facts,omitempty"`
-	EvidenceEvents []*MlEvent       `protobuf:"bytes,20,rep,name=evidence_events,json=evidenceEvents,proto3" json:"evidence_events,omitempty"`
-	Fix            *MlFix           `protobuf:"bytes,21,opt,name=fix,proto3" json:"fix,omitempty"`
+	Rule           string           `protobuf:"bytes,22,opt,name=rule,proto3" json:"rule,omitempty"`
+	EvidenceSeries []*MlSeries      `protobuf:"bytes,23,rep,name=evidence_series,json=evidenceSeries,proto3" json:"evidence_series,omitempty"`
+	EvidenceTable  *MlEvidenceTable `protobuf:"bytes,24,opt,name=evidence_table,json=evidenceTable,proto3" json:"evidence_table,omitempty"`
+	EvidenceFacts  []*MlFact        `protobuf:"bytes,25,rep,name=evidence_facts,json=evidenceFacts,proto3" json:"evidence_facts,omitempty"`
+	EvidenceEvents []*MlEvent       `protobuf:"bytes,26,rep,name=evidence_events,json=evidenceEvents,proto3" json:"evidence_events,omitempty"`
+	Fix            *MlFix           `protobuf:"bytes,27,opt,name=fix,proto3" json:"fix,omitempty"`
 	// How the fix is verified: "the rule clears for 24h".
-	Verify        string                 `protobuf:"bytes,22,opt,name=verify,proto3" json:"verify,omitempty"`
-	DismissReason string                 `protobuf:"bytes,23,opt,name=dismiss_reason,json=dismissReason,proto3" json:"dismiss_reason,omitempty"`
-	SnoozedUntil  *timestamppb.Timestamp `protobuf:"bytes,24,opt,name=snoozed_until,json=snoozedUntil,proto3" json:"snoozed_until,omitempty"`
-	PodStart      *MlPodStart            `protobuf:"bytes,25,opt,name=pod_start,json=podStart,proto3" json:"pod_start,omitempty"`
+	Verify         string                 `protobuf:"bytes,28,opt,name=verify,proto3" json:"verify,omitempty"`
+	DismissReason  string                 `protobuf:"bytes,29,opt,name=dismiss_reason,json=dismissReason,proto3" json:"dismiss_reason,omitempty"`
+	SnoozedUntil   *timestamppb.Timestamp `protobuf:"bytes,30,opt,name=snoozed_until,json=snoozedUntil,proto3" json:"snoozed_until,omitempty"`
+	StartBreakdown *MlPodStart            `protobuf:"bytes,31,opt,name=start_breakdown,json=startBreakdown,proto3" json:"start_breakdown,omitempty"`
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ClusterId string `protobuf:"bytes,6,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Subject string `protobuf:"bytes,7,opt,name=subject,proto3" json:"subject,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Evidence []*MlEvidence `protobuf:"bytes,8,rep,name=evidence,proto3" json:"evidence,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	FixKcl string `protobuf:"bytes,9,opt,name=fix_kcl,json=fixKcl,proto3" json:"fix_kcl,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	FixCommand string `protobuf:"bytes,10,opt,name=fix_command,json=fixCommand,proto3" json:"fix_command,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	PodStart      *MlPodStartBreakdown `protobuf:"bytes,13,opt,name=pod_start,json=podStart,proto3" json:"pod_start,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7147,11 +7146,11 @@ func (x *MlFinding) GetCategory() MlFindingCategory {
 	return MlFindingCategory_ML_FINDING_CATEGORY_UNSPECIFIED
 }
 
-func (x *MlFinding) GetSeverity() MlSeverity {
+func (x *MlFinding) GetSeverity() MlFindingSeverity {
 	if x != nil {
 		return x.Severity
 	}
-	return MlSeverity_ML_SEVERITY_UNSPECIFIED
+	return MlFindingSeverity_ML_FINDING_SEVERITY_UNSPECIFIED
 }
 
 func (x *MlFinding) GetTitle() string {
@@ -7294,7 +7293,55 @@ func (x *MlFinding) GetSnoozedUntil() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *MlFinding) GetPodStart() *MlPodStart {
+func (x *MlFinding) GetStartBreakdown() *MlPodStart {
+	if x != nil {
+		return x.StartBreakdown
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlFinding) GetClusterId() string {
+	if x != nil {
+		return x.ClusterId
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlFinding) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlFinding) GetEvidence() []*MlEvidence {
+	if x != nil {
+		return x.Evidence
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlFinding) GetFixKcl() string {
+	if x != nil {
+		return x.FixKcl
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlFinding) GetFixCommand() string {
+	if x != nil {
+		return x.FixCommand
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlFinding) GetPodStart() *MlPodStartBreakdown {
 	if x != nil {
 		return x.PodStart
 	}
@@ -7646,48 +7693,64 @@ type MlRun struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name         string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	ExperimentId string                 `protobuf:"bytes,3,opt,name=experiment_id,json=experimentId,proto3" json:"experiment_id,omitempty"`
-	Project      string                 `protobuf:"bytes,4,opt,name=project,proto3" json:"project,omitempty"`
-	Owner        string                 `protobuf:"bytes,5,opt,name=owner,proto3" json:"owner,omitempty"`
-	SweepId      string                 `protobuf:"bytes,6,opt,name=sweep_id,json=sweepId,proto3" json:"sweep_id,omitempty"`
-	Trial        int32                  `protobuf:"varint,7,opt,name=trial,proto3" json:"trial,omitempty"`
-	Tags         []string               `protobuf:"bytes,8,rep,name=tags,proto3" json:"tags,omitempty"`
-	State        MlRunState             `protobuf:"varint,9,opt,name=state,proto3,enum=controlplane.v1.MlRunState" json:"state,omitempty"`
-	Badges       []MlRunBadge           `protobuf:"varint,10,rep,packed,name=badges,proto3,enum=controlplane.v1.MlRunBadge" json:"badges,omitempty"`
+	ExperimentId string                 `protobuf:"bytes,18,opt,name=experiment_id,json=experimentId,proto3" json:"experiment_id,omitempty"`
+	Project      string                 `protobuf:"bytes,3,opt,name=project,proto3" json:"project,omitempty"`
+	Owner        string                 `protobuf:"bytes,19,opt,name=owner,proto3" json:"owner,omitempty"`
+	SweepId      string                 `protobuf:"bytes,20,opt,name=sweep_id,json=sweepId,proto3" json:"sweep_id,omitempty"`
+	Trial        int32                  `protobuf:"varint,21,opt,name=trial,proto3" json:"trial,omitempty"`
+	Tags         []string               `protobuf:"bytes,22,rep,name=tags,proto3" json:"tags,omitempty"`
+	State        MlRunState             `protobuf:"varint,7,opt,name=state,proto3,enum=controlplane.v1.MlRunState" json:"state,omitempty"`
+	Badges       []MlRunBadge           `protobuf:"varint,23,rep,packed,name=badges,proto3,enum=controlplane.v1.MlRunBadge" json:"badges,omitempty"`
 	// The training template and the release that carried it.
-	Template        string                 `protobuf:"bytes,11,opt,name=template,proto3" json:"template,omitempty"`
-	TemplateRelease string                 `protobuf:"bytes,12,opt,name=template_release,json=templateRelease,proto3" json:"template_release,omitempty"`
-	Commit          string                 `protobuf:"bytes,13,opt,name=commit,proto3" json:"commit,omitempty"`
-	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	StartedAt       *timestamppb.Timestamp `protobuf:"bytes,15,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	EndedAt         *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
-	CurrentPhaseKey string                 `protobuf:"bytes,17,opt,name=current_phase_key,json=currentPhaseKey,proto3" json:"current_phase_key,omitempty"`
+	Template        string                 `protobuf:"bytes,4,opt,name=template,proto3" json:"template,omitempty"`
+	TemplateRelease string                 `protobuf:"bytes,24,opt,name=template_release,json=templateRelease,proto3" json:"template_release,omitempty"`
+	Commit          string                 `protobuf:"bytes,25,opt,name=commit,proto3" json:"commit,omitempty"`
+	CreatedAt       *timestamppb.Timestamp `protobuf:"bytes,26,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	StartedAt       *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	EndedAt         *timestamppb.Timestamp `protobuf:"bytes,27,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
+	CurrentPhaseKey string                 `protobuf:"bytes,28,opt,name=current_phase_key,json=currentPhaseKey,proto3" json:"current_phase_key,omitempty"`
 	// Of the current phase.
-	Step          int64 `protobuf:"varint,18,opt,name=step,proto3" json:"step,omitempty"`
-	TotalSteps    int64 `protobuf:"varint,19,opt,name=total_steps,json=totalSteps,proto3" json:"total_steps,omitempty"`
-	TokensSeen    int64 `protobuf:"varint,20,opt,name=tokens_seen,json=tokensSeen,proto3" json:"tokens_seen,omitempty"`
-	TokensPlanned int64 `protobuf:"varint,21,opt,name=tokens_planned,json=tokensPlanned,proto3" json:"tokens_planned,omitempty"`
+	Step          int64 `protobuf:"varint,29,opt,name=step,proto3" json:"step,omitempty"`
+	TotalSteps    int64 `protobuf:"varint,30,opt,name=total_steps,json=totalSteps,proto3" json:"total_steps,omitempty"`
+	TokensSeen    int64 `protobuf:"varint,31,opt,name=tokens_seen,json=tokensSeen,proto3" json:"tokens_seen,omitempty"`
+	TokensPlanned int64 `protobuf:"varint,32,opt,name=tokens_planned,json=tokensPlanned,proto3" json:"tokens_planned,omitempty"`
 	// Unset when not running or not estimable.
-	EtaSeconds         *float64 `protobuf:"fixed64,22,opt,name=eta_seconds,json=etaSeconds,proto3,oneof" json:"eta_seconds,omitempty"`
-	Accelerators       int32    `protobuf:"varint,23,opt,name=accelerators,proto3" json:"accelerators,omitempty"`
-	AcceleratorProduct string   `protobuf:"bytes,24,opt,name=accelerator_product,json=acceleratorProduct,proto3" json:"accelerator_product,omitempty"`
+	EtaSeconds         *float64 `protobuf:"fixed64,33,opt,name=eta_seconds,json=etaSeconds,proto3,oneof" json:"eta_seconds,omitempty"`
+	Accelerators       int32    `protobuf:"varint,34,opt,name=accelerators,proto3" json:"accelerators,omitempty"`
+	AcceleratorProduct string   `protobuf:"bytes,13,opt,name=accelerator_product,json=acceleratorProduct,proto3" json:"accelerator_product,omitempty"`
 	// Productive share of allocated accelerator time, 0-1.
-	Goodput     float64 `protobuf:"fixed64,25,opt,name=goodput,proto3" json:"goodput,omitempty"`
-	Cost        *MlCost `protobuf:"bytes,26,opt,name=cost,proto3" json:"cost,omitempty"`
-	Restarts    int32   `protobuf:"varint,27,opt,name=restarts,proto3" json:"restarts,omitempty"`
-	Preemptions int32   `protobuf:"varint,28,opt,name=preemptions,proto3" json:"preemptions,omitempty"`
+	Goodput     float64 `protobuf:"fixed64,35,opt,name=goodput,proto3" json:"goodput,omitempty"`
+	Cost        *MlCost `protobuf:"bytes,36,opt,name=cost,proto3" json:"cost,omitempty"`
+	Restarts    int32   `protobuf:"varint,14,opt,name=restarts,proto3" json:"restarts,omitempty"`
+	Preemptions int32   `protobuf:"varint,15,opt,name=preemptions,proto3" json:"preemptions,omitempty"`
 	// Headline scalars: "val/loss", "train/loss", "eval/mmlu_pro", "mfu".
-	Summary      map[string]float64 `protobuf:"bytes,29,rep,name=summary,proto3" json:"summary,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
-	Params       map[string]string  `protobuf:"bytes,30,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	ObjectiveKey string             `protobuf:"bytes,31,opt,name=objective_key,json=objectiveKey,proto3" json:"objective_key,omitempty"`
+	Summary      map[string]float64 `protobuf:"bytes,37,rep,name=summary,proto3" json:"summary,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	Params       map[string]string  `protobuf:"bytes,8,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	ObjectiveKey string             `protobuf:"bytes,38,opt,name=objective_key,json=objectiveKey,proto3" json:"objective_key,omitempty"`
 	// The objective's recent values, for a sparkline.
-	Objective  *MlSeries  `protobuf:"bytes,32,opt,name=objective,proto3" json:"objective,omitempty"`
-	Phases     []*MlPhase `protobuf:"bytes,33,rep,name=phases,proto3" json:"phases,omitempty"`
-	ClusterIds []string   `protobuf:"bytes,34,rep,name=cluster_ids,json=clusterIds,proto3" json:"cluster_ids,omitempty"`
+	Objective  *MlSeries  `protobuf:"bytes,39,opt,name=objective,proto3" json:"objective,omitempty"`
+	Phases     []*MlPhase `protobuf:"bytes,40,rep,name=phases,proto3" json:"phases,omitempty"`
+	ClusterIds []string   `protobuf:"bytes,41,rep,name=cluster_ids,json=clusterIds,proto3" json:"cluster_ids,omitempty"`
 	// How it was launched: "forge ml run", "observed", "mlflow import".
-	LaunchedVia   string `protobuf:"bytes,35,opt,name=launched_via,json=launchedVia,proto3" json:"launched_via,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	LaunchedVia string `protobuf:"bytes,42,opt,name=launched_via,json=launchedVia,proto3" json:"launched_via,omitempty"`
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Orchestrator string `protobuf:"bytes,5,opt,name=orchestrator,proto3" json:"orchestrator,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ClusterId string `protobuf:"bytes,6,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	LaunchedBy string `protobuf:"bytes,9,opt,name=launched_by,json=launchedBy,proto3" json:"launched_by,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	FinishedAt *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	AcceleratorCount int32 `protobuf:"varint,12,opt,name=accelerator_count,json=acceleratorCount,proto3" json:"accelerator_count,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Metrics []*MlMetricSeries `protobuf:"bytes,16,rep,name=metrics,proto3" json:"metrics,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	OutputModelDigest string `protobuf:"bytes,17,opt,name=output_model_digest,json=outputModelDigest,proto3" json:"output_model_digest,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *MlRun) Reset() {
@@ -7961,6 +8024,62 @@ func (x *MlRun) GetClusterIds() []string {
 func (x *MlRun) GetLaunchedVia() string {
 	if x != nil {
 		return x.LaunchedVia
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlRun) GetOrchestrator() string {
+	if x != nil {
+		return x.Orchestrator
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlRun) GetClusterId() string {
+	if x != nil {
+		return x.ClusterId
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlRun) GetLaunchedBy() string {
+	if x != nil {
+		return x.LaunchedBy
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlRun) GetFinishedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FinishedAt
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlRun) GetAcceleratorCount() int32 {
+	if x != nil {
+		return x.AcceleratorCount
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlRun) GetMetrics() []*MlMetricSeries {
+	if x != nil {
+		return x.Metrics
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlRun) GetOutputModelDigest() string {
+	if x != nil {
+		return x.OutputModelDigest
 	}
 	return ""
 }
@@ -10770,1832 +10889,6 @@ func (x *MlTokenStats) GetBySource() []*MlShare {
 	return nil
 }
 
-type QueryMlSeriesRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	OrgId   string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Subject *MlSubject             `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	// Metric keys; a key ending in "/*" reads every key under that prefix.
-	Keys []string `protobuf:"bytes,3,rep,name=keys,proto3" json:"keys,omitempty"`
-	Axis MlAxis   `protobuf:"varint,4,opt,name=axis,proto3,enum=controlplane.v1.MlAxis" json:"axis,omitempty"`
-	// The window, for the time axis; unset for the subject's lifetime.
-	From *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=from,proto3,oneof" json:"from,omitempty"`
-	To   *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=to,proto3,oneof" json:"to,omitempty"`
-	// One series per member: "rank", "device", "attempt", "node", "pool",
-	// "replica", "revision"; empty for one series per key.
-	GroupBy *string `protobuf:"bytes,7,opt,name=group_by,json=groupBy,proto3,oneof" json:"group_by,omitempty"`
-	// The most points per series the caller wants.
-	MaxPoints     *int32 `protobuf:"varint,8,opt,name=max_points,json=maxPoints,proto3,oneof" json:"max_points,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryMlSeriesRequest) Reset() {
-	*x = QueryMlSeriesRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[88]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryMlSeriesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryMlSeriesRequest) ProtoMessage() {}
-
-func (x *QueryMlSeriesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[88]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryMlSeriesRequest.ProtoReflect.Descriptor instead.
-func (*QueryMlSeriesRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{88}
-}
-
-func (x *QueryMlSeriesRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *QueryMlSeriesRequest) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *QueryMlSeriesRequest) GetKeys() []string {
-	if x != nil {
-		return x.Keys
-	}
-	return nil
-}
-
-func (x *QueryMlSeriesRequest) GetAxis() MlAxis {
-	if x != nil {
-		return x.Axis
-	}
-	return MlAxis_ML_AXIS_UNSPECIFIED
-}
-
-func (x *QueryMlSeriesRequest) GetFrom() *timestamppb.Timestamp {
-	if x != nil {
-		return x.From
-	}
-	return nil
-}
-
-func (x *QueryMlSeriesRequest) GetTo() *timestamppb.Timestamp {
-	if x != nil {
-		return x.To
-	}
-	return nil
-}
-
-func (x *QueryMlSeriesRequest) GetGroupBy() string {
-	if x != nil && x.GroupBy != nil {
-		return *x.GroupBy
-	}
-	return ""
-}
-
-func (x *QueryMlSeriesRequest) GetMaxPoints() int32 {
-	if x != nil && x.MaxPoints != nil {
-		return *x.MaxPoints
-	}
-	return 0
-}
-
-type QueryMlSeriesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Series        []*MlSeries            `protobuf:"bytes,1,rep,name=series,proto3" json:"series,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryMlSeriesResponse) Reset() {
-	*x = QueryMlSeriesResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[89]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryMlSeriesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryMlSeriesResponse) ProtoMessage() {}
-
-func (x *QueryMlSeriesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[89]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryMlSeriesResponse.ProtoReflect.Descriptor instead.
-func (*QueryMlSeriesResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{89}
-}
-
-func (x *QueryMlSeriesResponse) GetSeries() []*MlSeries {
-	if x != nil {
-		return x.Series
-	}
-	return nil
-}
-
-type ListMlEventsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Subject       *MlSubject             `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	From          *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3,oneof" json:"from,omitempty"`
-	To            *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3,oneof" json:"to,omitempty"`
-	Kinds         []MlEventKind          `protobuf:"varint,5,rep,packed,name=kinds,proto3,enum=controlplane.v1.MlEventKind" json:"kinds,omitempty"`
-	Limit         *int32                 `protobuf:"varint,6,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMlEventsRequest) Reset() {
-	*x = ListMlEventsRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[90]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlEventsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlEventsRequest) ProtoMessage() {}
-
-func (x *ListMlEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[90]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlEventsRequest.ProtoReflect.Descriptor instead.
-func (*ListMlEventsRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{90}
-}
-
-func (x *ListMlEventsRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *ListMlEventsRequest) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *ListMlEventsRequest) GetFrom() *timestamppb.Timestamp {
-	if x != nil {
-		return x.From
-	}
-	return nil
-}
-
-func (x *ListMlEventsRequest) GetTo() *timestamppb.Timestamp {
-	if x != nil {
-		return x.To
-	}
-	return nil
-}
-
-func (x *ListMlEventsRequest) GetKinds() []MlEventKind {
-	if x != nil {
-		return x.Kinds
-	}
-	return nil
-}
-
-func (x *ListMlEventsRequest) GetLimit() int32 {
-	if x != nil && x.Limit != nil {
-		return *x.Limit
-	}
-	return 0
-}
-
-type ListMlEventsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []*MlEvent             `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMlEventsResponse) Reset() {
-	*x = ListMlEventsResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[91]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlEventsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlEventsResponse) ProtoMessage() {}
-
-func (x *ListMlEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[91]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlEventsResponse.ProtoReflect.Descriptor instead.
-func (*ListMlEventsResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{91}
-}
-
-func (x *ListMlEventsResponse) GetEvents() []*MlEvent {
-	if x != nil {
-		return x.Events
-	}
-	return nil
-}
-
-type ListMlLogsRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	OrgId   string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Subject *MlSubject             `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	From    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=from,proto3,oneof" json:"from,omitempty"`
-	To      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=to,proto3,oneof" json:"to,omitempty"`
-	Rank    *int32                 `protobuf:"varint,5,opt,name=rank,proto3,oneof" json:"rank,omitempty"`
-	// "error", "warn", "info", "debug".
-	MinLevel       *string `protobuf:"bytes,6,opt,name=min_level,json=minLevel,proto3,oneof" json:"min_level,omitempty"`
-	Query          *string `protobuf:"bytes,7,opt,name=query,proto3,oneof" json:"query,omitempty"`
-	HighlightsOnly *bool   `protobuf:"varint,8,opt,name=highlights_only,json=highlightsOnly,proto3,oneof" json:"highlights_only,omitempty"`
-	Limit          *int32  `protobuf:"varint,9,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *ListMlLogsRequest) Reset() {
-	*x = ListMlLogsRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[92]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlLogsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlLogsRequest) ProtoMessage() {}
-
-func (x *ListMlLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[92]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlLogsRequest.ProtoReflect.Descriptor instead.
-func (*ListMlLogsRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{92}
-}
-
-func (x *ListMlLogsRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *ListMlLogsRequest) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *ListMlLogsRequest) GetFrom() *timestamppb.Timestamp {
-	if x != nil {
-		return x.From
-	}
-	return nil
-}
-
-func (x *ListMlLogsRequest) GetTo() *timestamppb.Timestamp {
-	if x != nil {
-		return x.To
-	}
-	return nil
-}
-
-func (x *ListMlLogsRequest) GetRank() int32 {
-	if x != nil && x.Rank != nil {
-		return *x.Rank
-	}
-	return 0
-}
-
-func (x *ListMlLogsRequest) GetMinLevel() string {
-	if x != nil && x.MinLevel != nil {
-		return *x.MinLevel
-	}
-	return ""
-}
-
-func (x *ListMlLogsRequest) GetQuery() string {
-	if x != nil && x.Query != nil {
-		return *x.Query
-	}
-	return ""
-}
-
-func (x *ListMlLogsRequest) GetHighlightsOnly() bool {
-	if x != nil && x.HighlightsOnly != nil {
-		return *x.HighlightsOnly
-	}
-	return false
-}
-
-func (x *ListMlLogsRequest) GetLimit() int32 {
-	if x != nil && x.Limit != nil {
-		return *x.Limit
-	}
-	return 0
-}
-
-type ListMlLogsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Lines         []*MlLogLine           `protobuf:"bytes,1,rep,name=lines,proto3" json:"lines,omitempty"`
-	Truncated     bool                   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMlLogsResponse) Reset() {
-	*x = ListMlLogsResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[93]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlLogsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlLogsResponse) ProtoMessage() {}
-
-func (x *ListMlLogsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[93]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlLogsResponse.ProtoReflect.Descriptor instead.
-func (*ListMlLogsResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{93}
-}
-
-func (x *ListMlLogsResponse) GetLines() []*MlLogLine {
-	if x != nil {
-		return x.Lines
-	}
-	return nil
-}
-
-func (x *ListMlLogsResponse) GetTruncated() bool {
-	if x != nil {
-		return x.Truncated
-	}
-	return false
-}
-
-type MlLogLine struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Time  *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
-	// -1 when the line is not from a rank (an init container, the launcher).
-	Rank      int32  `protobuf:"varint,2,opt,name=rank,proto3" json:"rank,omitempty"`
-	Pod       string `protobuf:"bytes,3,opt,name=pod,proto3" json:"pod,omitempty"`
-	NodeId    string `protobuf:"bytes,4,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	Container string `protobuf:"bytes,5,opt,name=container,proto3" json:"container,omitempty"`
-	Level     string `protobuf:"bytes,6,opt,name=level,proto3" json:"level,omitempty"`
-	Message   string `protobuf:"bytes,7,opt,name=message,proto3" json:"message,omitempty"`
-	// "nccl", "xid", "oom", "traceback", "shm", "nan", "watchdog"; empty for
-	// an ordinary line.
-	Highlight     string `protobuf:"bytes,8,opt,name=highlight,proto3" json:"highlight,omitempty"`
-	EventId       string `protobuf:"bytes,9,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	Attempt       int32  `protobuf:"varint,10,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	RunId         string `protobuf:"bytes,11,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	PhaseKey      string `protobuf:"bytes,12,opt,name=phase_key,json=phaseKey,proto3" json:"phase_key,omitempty"`
-	TraceId       string `protobuf:"bytes,13,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlLogLine) Reset() {
-	*x = MlLogLine{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[94]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlLogLine) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlLogLine) ProtoMessage() {}
-
-func (x *MlLogLine) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[94]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlLogLine.ProtoReflect.Descriptor instead.
-func (*MlLogLine) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{94}
-}
-
-func (x *MlLogLine) GetTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Time
-	}
-	return nil
-}
-
-func (x *MlLogLine) GetRank() int32 {
-	if x != nil {
-		return x.Rank
-	}
-	return 0
-}
-
-func (x *MlLogLine) GetPod() string {
-	if x != nil {
-		return x.Pod
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetNodeId() string {
-	if x != nil {
-		return x.NodeId
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetContainer() string {
-	if x != nil {
-		return x.Container
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetLevel() string {
-	if x != nil {
-		return x.Level
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetHighlight() string {
-	if x != nil {
-		return x.Highlight
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetEventId() string {
-	if x != nil {
-		return x.EventId
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetAttempt() int32 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
-}
-
-func (x *MlLogLine) GetRunId() string {
-	if x != nil {
-		return x.RunId
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetPhaseKey() string {
-	if x != nil {
-		return x.PhaseKey
-	}
-	return ""
-}
-
-func (x *MlLogLine) GetTraceId() string {
-	if x != nil {
-		return x.TraceId
-	}
-	return ""
-}
-
-type ListMlTracesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Subject       *MlSubject             `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	Kind          *MlTraceKind           `protobuf:"varint,3,opt,name=kind,proto3,enum=controlplane.v1.MlTraceKind,oneof" json:"kind,omitempty"`
-	Limit         *int32                 `protobuf:"varint,4,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMlTracesRequest) Reset() {
-	*x = ListMlTracesRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[95]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlTracesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlTracesRequest) ProtoMessage() {}
-
-func (x *ListMlTracesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[95]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlTracesRequest.ProtoReflect.Descriptor instead.
-func (*ListMlTracesRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{95}
-}
-
-func (x *ListMlTracesRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *ListMlTracesRequest) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *ListMlTracesRequest) GetKind() MlTraceKind {
-	if x != nil && x.Kind != nil {
-		return *x.Kind
-	}
-	return MlTraceKind_ML_TRACE_KIND_UNSPECIFIED
-}
-
-func (x *ListMlTracesRequest) GetLimit() int32 {
-	if x != nil && x.Limit != nil {
-		return *x.Limit
-	}
-	return 0
-}
-
-type ListMlTracesResponse struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Traces []*MlTraceSummary      `protobuf:"bytes,1,rep,name=traces,proto3" json:"traces,omitempty"`
-	// Why there are none, when there are none: "training-uninstrumented".
-	MissingFindingId string `protobuf:"bytes,2,opt,name=missing_finding_id,json=missingFindingId,proto3" json:"missing_finding_id,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *ListMlTracesResponse) Reset() {
-	*x = ListMlTracesResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[96]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlTracesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlTracesResponse) ProtoMessage() {}
-
-func (x *ListMlTracesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[96]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlTracesResponse.ProtoReflect.Descriptor instead.
-func (*ListMlTracesResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{96}
-}
-
-func (x *ListMlTracesResponse) GetTraces() []*MlTraceSummary {
-	if x != nil {
-		return x.Traces
-	}
-	return nil
-}
-
-func (x *ListMlTracesResponse) GetMissingFindingId() string {
-	if x != nil {
-		return x.MissingFindingId
-	}
-	return ""
-}
-
-type MlTraceSummary struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	TraceId    string                 `protobuf:"bytes,1,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	Kind       MlTraceKind            `protobuf:"varint,2,opt,name=kind,proto3,enum=controlplane.v1.MlTraceKind" json:"kind,omitempty"`
-	Title      string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	Start      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start,proto3" json:"start,omitempty"`
-	DurationMs float64                `protobuf:"fixed64,5,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	// Against the median of its kind, e.g. 1.8.
-	VsMedian float64 `protobuf:"fixed64,6,opt,name=vs_median,json=vsMedian,proto3" json:"vs_median,omitempty"`
-	// The span that took most of it.
-	DominantSpan  string            `protobuf:"bytes,7,opt,name=dominant_span,json=dominantSpan,proto3" json:"dominant_span,omitempty"`
-	Subject       *MlSubject        `protobuf:"bytes,8,opt,name=subject,proto3" json:"subject,omitempty"`
-	Step          int64             `protobuf:"varint,9,opt,name=step,proto3" json:"step,omitempty"`
-	Rank          int32             `protobuf:"varint,10,opt,name=rank,proto3" json:"rank,omitempty"`
-	Error         bool              `protobuf:"varint,11,opt,name=error,proto3" json:"error,omitempty"`
-	Attributes    map[string]string `protobuf:"bytes,12,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlTraceSummary) Reset() {
-	*x = MlTraceSummary{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[97]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlTraceSummary) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlTraceSummary) ProtoMessage() {}
-
-func (x *MlTraceSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[97]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlTraceSummary.ProtoReflect.Descriptor instead.
-func (*MlTraceSummary) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{97}
-}
-
-func (x *MlTraceSummary) GetTraceId() string {
-	if x != nil {
-		return x.TraceId
-	}
-	return ""
-}
-
-func (x *MlTraceSummary) GetKind() MlTraceKind {
-	if x != nil {
-		return x.Kind
-	}
-	return MlTraceKind_ML_TRACE_KIND_UNSPECIFIED
-}
-
-func (x *MlTraceSummary) GetTitle() string {
-	if x != nil {
-		return x.Title
-	}
-	return ""
-}
-
-func (x *MlTraceSummary) GetStart() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Start
-	}
-	return nil
-}
-
-func (x *MlTraceSummary) GetDurationMs() float64 {
-	if x != nil {
-		return x.DurationMs
-	}
-	return 0
-}
-
-func (x *MlTraceSummary) GetVsMedian() float64 {
-	if x != nil {
-		return x.VsMedian
-	}
-	return 0
-}
-
-func (x *MlTraceSummary) GetDominantSpan() string {
-	if x != nil {
-		return x.DominantSpan
-	}
-	return ""
-}
-
-func (x *MlTraceSummary) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *MlTraceSummary) GetStep() int64 {
-	if x != nil {
-		return x.Step
-	}
-	return 0
-}
-
-func (x *MlTraceSummary) GetRank() int32 {
-	if x != nil {
-		return x.Rank
-	}
-	return 0
-}
-
-func (x *MlTraceSummary) GetError() bool {
-	if x != nil {
-		return x.Error
-	}
-	return false
-}
-
-func (x *MlTraceSummary) GetAttributes() map[string]string {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
-type GetMlTraceRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	TraceId       string                 `protobuf:"bytes,2,opt,name=trace_id,json=traceId,proto3" json:"trace_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetMlTraceRequest) Reset() {
-	*x = GetMlTraceRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[98]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetMlTraceRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetMlTraceRequest) ProtoMessage() {}
-
-func (x *GetMlTraceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[98]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetMlTraceRequest.ProtoReflect.Descriptor instead.
-func (*GetMlTraceRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{98}
-}
-
-func (x *GetMlTraceRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *GetMlTraceRequest) GetTraceId() string {
-	if x != nil {
-		return x.TraceId
-	}
-	return ""
-}
-
-type GetMlTraceResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Summary       *MlTraceSummary        `protobuf:"bytes,1,opt,name=summary,proto3" json:"summary,omitempty"`
-	Spans         []*MlSpan              `protobuf:"bytes,2,rep,name=spans,proto3" json:"spans,omitempty"`
-	Truncated     bool                   `protobuf:"varint,3,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetMlTraceResponse) Reset() {
-	*x = GetMlTraceResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[99]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetMlTraceResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetMlTraceResponse) ProtoMessage() {}
-
-func (x *GetMlTraceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[99]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetMlTraceResponse.ProtoReflect.Descriptor instead.
-func (*GetMlTraceResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{99}
-}
-
-func (x *GetMlTraceResponse) GetSummary() *MlTraceSummary {
-	if x != nil {
-		return x.Summary
-	}
-	return nil
-}
-
-func (x *GetMlTraceResponse) GetSpans() []*MlSpan {
-	if x != nil {
-		return x.Spans
-	}
-	return nil
-}
-
-func (x *GetMlTraceResponse) GetTruncated() bool {
-	if x != nil {
-		return x.Truncated
-	}
-	return false
-}
-
-type MlSpan struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	SpanId       string                 `protobuf:"bytes,1,opt,name=span_id,json=spanId,proto3" json:"span_id,omitempty"`
-	ParentSpanId string                 `protobuf:"bytes,2,opt,name=parent_span_id,json=parentSpanId,proto3" json:"parent_span_id,omitempty"`
-	Name         string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Service      string                 `protobuf:"bytes,4,opt,name=service,proto3" json:"service,omitempty"`
-	// "server", "client", "internal", "producer", "consumer".
-	Kind          string                 `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
-	Start         *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=start,proto3" json:"start,omitempty"`
-	DurationMs    float64                `protobuf:"fixed64,7,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	Status        MlSpanStatus           `protobuf:"varint,8,opt,name=status,proto3,enum=controlplane.v1.MlSpanStatus" json:"status,omitempty"`
-	StatusMessage string                 `protobuf:"bytes,9,opt,name=status_message,json=statusMessage,proto3" json:"status_message,omitempty"`
-	Attributes    map[string]string      `protobuf:"bytes,10,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Events        []*MlSpanEvent         `protobuf:"bytes,11,rep,name=events,proto3" json:"events,omitempty"`
-	// The join keys every ML span carries, so one trace joins the device,
-	// kubelet, scheduler and Kueue telemetry of the same moment. Empty when
-	// the span is not in a run (an inference request carries replica, node
-	// and device only).
-	RunId         string `protobuf:"bytes,12,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	PhaseKey      string `protobuf:"bytes,13,opt,name=phase_key,json=phaseKey,proto3" json:"phase_key,omitempty"`
-	Attempt       int32  `protobuf:"varint,14,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	Rank          int32  `protobuf:"varint,15,opt,name=rank,proto3" json:"rank,omitempty"`
-	NodeId        string `protobuf:"bytes,16,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	DeviceUuid    string `protobuf:"bytes,17,opt,name=device_uuid,json=deviceUuid,proto3" json:"device_uuid,omitempty"`
-	Pod           string `protobuf:"bytes,18,opt,name=pod,proto3" json:"pod,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlSpan) Reset() {
-	*x = MlSpan{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[100]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlSpan) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlSpan) ProtoMessage() {}
-
-func (x *MlSpan) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[100]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlSpan.ProtoReflect.Descriptor instead.
-func (*MlSpan) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{100}
-}
-
-func (x *MlSpan) GetSpanId() string {
-	if x != nil {
-		return x.SpanId
-	}
-	return ""
-}
-
-func (x *MlSpan) GetParentSpanId() string {
-	if x != nil {
-		return x.ParentSpanId
-	}
-	return ""
-}
-
-func (x *MlSpan) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *MlSpan) GetService() string {
-	if x != nil {
-		return x.Service
-	}
-	return ""
-}
-
-func (x *MlSpan) GetKind() string {
-	if x != nil {
-		return x.Kind
-	}
-	return ""
-}
-
-func (x *MlSpan) GetStart() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Start
-	}
-	return nil
-}
-
-func (x *MlSpan) GetDurationMs() float64 {
-	if x != nil {
-		return x.DurationMs
-	}
-	return 0
-}
-
-func (x *MlSpan) GetStatus() MlSpanStatus {
-	if x != nil {
-		return x.Status
-	}
-	return MlSpanStatus_ML_SPAN_STATUS_UNSPECIFIED
-}
-
-func (x *MlSpan) GetStatusMessage() string {
-	if x != nil {
-		return x.StatusMessage
-	}
-	return ""
-}
-
-func (x *MlSpan) GetAttributes() map[string]string {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
-func (x *MlSpan) GetEvents() []*MlSpanEvent {
-	if x != nil {
-		return x.Events
-	}
-	return nil
-}
-
-func (x *MlSpan) GetRunId() string {
-	if x != nil {
-		return x.RunId
-	}
-	return ""
-}
-
-func (x *MlSpan) GetPhaseKey() string {
-	if x != nil {
-		return x.PhaseKey
-	}
-	return ""
-}
-
-func (x *MlSpan) GetAttempt() int32 {
-	if x != nil {
-		return x.Attempt
-	}
-	return 0
-}
-
-func (x *MlSpan) GetRank() int32 {
-	if x != nil {
-		return x.Rank
-	}
-	return 0
-}
-
-func (x *MlSpan) GetNodeId() string {
-	if x != nil {
-		return x.NodeId
-	}
-	return ""
-}
-
-func (x *MlSpan) GetDeviceUuid() string {
-	if x != nil {
-		return x.DeviceUuid
-	}
-	return ""
-}
-
-func (x *MlSpan) GetPod() string {
-	if x != nil {
-		return x.Pod
-	}
-	return ""
-}
-
-type MlSpanEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Time          *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Attributes    map[string]string      `protobuf:"bytes,3,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlSpanEvent) Reset() {
-	*x = MlSpanEvent{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[101]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlSpanEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlSpanEvent) ProtoMessage() {}
-
-func (x *MlSpanEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[101]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlSpanEvent.ProtoReflect.Descriptor instead.
-func (*MlSpanEvent) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{101}
-}
-
-func (x *MlSpanEvent) GetTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.Time
-	}
-	return nil
-}
-
-func (x *MlSpanEvent) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *MlSpanEvent) GetAttributes() map[string]string {
-	if x != nil {
-		return x.Attributes
-	}
-	return nil
-}
-
-type ListMlProfilesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Subject       *MlSubject             `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMlProfilesRequest) Reset() {
-	*x = ListMlProfilesRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[102]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlProfilesRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlProfilesRequest) ProtoMessage() {}
-
-func (x *ListMlProfilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[102]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlProfilesRequest.ProtoReflect.Descriptor instead.
-func (*ListMlProfilesRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{102}
-}
-
-func (x *ListMlProfilesRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *ListMlProfilesRequest) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-type ListMlProfilesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Profiles      []*MlProfile           `protobuf:"bytes,1,rep,name=profiles,proto3" json:"profiles,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMlProfilesResponse) Reset() {
-	*x = ListMlProfilesResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[103]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlProfilesResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlProfilesResponse) ProtoMessage() {}
-
-func (x *ListMlProfilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[103]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlProfilesResponse.ProtoReflect.Descriptor instead.
-func (*ListMlProfilesResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{103}
-}
-
-func (x *ListMlProfilesResponse) GetProfiles() []*MlProfile {
-	if x != nil {
-		return x.Profiles
-	}
-	return nil
-}
-
-type MlProfile struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Kind  MlProfileKind          `protobuf:"varint,2,opt,name=kind,proto3,enum=controlplane.v1.MlProfileKind" json:"kind,omitempty"`
-	// "declared window", "auto on regression", "manual", "watchdog".
-	Trigger    string                 `protobuf:"bytes,3,opt,name=trigger,proto3" json:"trigger,omitempty"`
-	Subject    *MlSubject             `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
-	FromStep   int64                  `protobuf:"varint,5,opt,name=from_step,json=fromStep,proto3" json:"from_step,omitempty"`
-	ToStep     int64                  `protobuf:"varint,6,opt,name=to_step,json=toStep,proto3" json:"to_step,omitempty"`
-	Ranks      []int32                `protobuf:"varint,7,rep,packed,name=ranks,proto3" json:"ranks,omitempty"`
-	SizeBytes  int64                  `protobuf:"varint,8,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	CapturedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=captured_at,json=capturedAt,proto3" json:"captured_at,omitempty"`
-	// Where to open it: Perfetto for a trace, a download for Nsight.
-	OpenUrl   string            `protobuf:"bytes,10,opt,name=open_url,json=openUrl,proto3" json:"open_url,omitempty"`
-	OpenLabel string            `protobuf:"bytes,11,opt,name=open_label,json=openLabel,proto3" json:"open_label,omitempty"`
-	Summary   *MlProfileSummary `protobuf:"bytes,12,opt,name=summary,proto3" json:"summary,omitempty"`
-	// A speedscope JSON flamegraph (GetMlProfile only).
-	FlamegraphJson string `protobuf:"bytes,13,opt,name=flamegraph_json,json=flamegraphJson,proto3" json:"flamegraph_json,omitempty"`
-	// Per-rank last collective, for a flight-recorder dump.
-	Collectives   []*MlCollectiveState `protobuf:"bytes,14,rep,name=collectives,proto3" json:"collectives,omitempty"`
-	CapturedBy    string               `protobuf:"bytes,15,opt,name=captured_by,json=capturedBy,proto3" json:"captured_by,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlProfile) Reset() {
-	*x = MlProfile{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[104]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlProfile) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlProfile) ProtoMessage() {}
-
-func (x *MlProfile) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[104]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlProfile.ProtoReflect.Descriptor instead.
-func (*MlProfile) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{104}
-}
-
-func (x *MlProfile) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *MlProfile) GetKind() MlProfileKind {
-	if x != nil {
-		return x.Kind
-	}
-	return MlProfileKind_ML_PROFILE_KIND_UNSPECIFIED
-}
-
-func (x *MlProfile) GetTrigger() string {
-	if x != nil {
-		return x.Trigger
-	}
-	return ""
-}
-
-func (x *MlProfile) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *MlProfile) GetFromStep() int64 {
-	if x != nil {
-		return x.FromStep
-	}
-	return 0
-}
-
-func (x *MlProfile) GetToStep() int64 {
-	if x != nil {
-		return x.ToStep
-	}
-	return 0
-}
-
-func (x *MlProfile) GetRanks() []int32 {
-	if x != nil {
-		return x.Ranks
-	}
-	return nil
-}
-
-func (x *MlProfile) GetSizeBytes() int64 {
-	if x != nil {
-		return x.SizeBytes
-	}
-	return 0
-}
-
-func (x *MlProfile) GetCapturedAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.CapturedAt
-	}
-	return nil
-}
-
-func (x *MlProfile) GetOpenUrl() string {
-	if x != nil {
-		return x.OpenUrl
-	}
-	return ""
-}
-
-func (x *MlProfile) GetOpenLabel() string {
-	if x != nil {
-		return x.OpenLabel
-	}
-	return ""
-}
-
-func (x *MlProfile) GetSummary() *MlProfileSummary {
-	if x != nil {
-		return x.Summary
-	}
-	return nil
-}
-
-func (x *MlProfile) GetFlamegraphJson() string {
-	if x != nil {
-		return x.FlamegraphJson
-	}
-	return ""
-}
-
-func (x *MlProfile) GetCollectives() []*MlCollectiveState {
-	if x != nil {
-		return x.Collectives
-	}
-	return nil
-}
-
-func (x *MlProfile) GetCapturedBy() string {
-	if x != nil {
-		return x.CapturedBy
-	}
-	return ""
-}
-
-// MlProfileSummary is what we compute from a capture (Holistic Trace
-// Analysis): where the time went, the top kernels, overlap and gaps.
-type MlProfileSummary struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	ComputeShare float64                `protobuf:"fixed64,1,opt,name=compute_share,json=computeShare,proto3" json:"compute_share,omitempty"`
-	CommShare    float64                `protobuf:"fixed64,2,opt,name=comm_share,json=commShare,proto3" json:"comm_share,omitempty"`
-	MemcpyShare  float64                `protobuf:"fixed64,3,opt,name=memcpy_share,json=memcpyShare,proto3" json:"memcpy_share,omitempty"`
-	IdleShare    float64                `protobuf:"fixed64,4,opt,name=idle_share,json=idleShare,proto3" json:"idle_share,omitempty"`
-	// Communication hidden behind compute, 0-1.
-	CommOverlap   float64     `protobuf:"fixed64,5,opt,name=comm_overlap,json=commOverlap,proto3" json:"comm_overlap,omitempty"`
-	LaunchBound   bool        `protobuf:"varint,6,opt,name=launch_bound,json=launchBound,proto3" json:"launch_bound,omitempty"`
-	TopKernels    []*MlKernel `protobuf:"bytes,7,rep,name=top_kernels,json=topKernels,proto3" json:"top_kernels,omitempty"`
-	PeakMemoryGb  float64     `protobuf:"fixed64,8,opt,name=peak_memory_gb,json=peakMemoryGb,proto3" json:"peak_memory_gb,omitempty"`
-	Notes         []*MlFact   `protobuf:"bytes,9,rep,name=notes,proto3" json:"notes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlProfileSummary) Reset() {
-	*x = MlProfileSummary{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[105]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlProfileSummary) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlProfileSummary) ProtoMessage() {}
-
-func (x *MlProfileSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[105]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlProfileSummary.ProtoReflect.Descriptor instead.
-func (*MlProfileSummary) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{105}
-}
-
-func (x *MlProfileSummary) GetComputeShare() float64 {
-	if x != nil {
-		return x.ComputeShare
-	}
-	return 0
-}
-
-func (x *MlProfileSummary) GetCommShare() float64 {
-	if x != nil {
-		return x.CommShare
-	}
-	return 0
-}
-
-func (x *MlProfileSummary) GetMemcpyShare() float64 {
-	if x != nil {
-		return x.MemcpyShare
-	}
-	return 0
-}
-
-func (x *MlProfileSummary) GetIdleShare() float64 {
-	if x != nil {
-		return x.IdleShare
-	}
-	return 0
-}
-
-func (x *MlProfileSummary) GetCommOverlap() float64 {
-	if x != nil {
-		return x.CommOverlap
-	}
-	return 0
-}
-
-func (x *MlProfileSummary) GetLaunchBound() bool {
-	if x != nil {
-		return x.LaunchBound
-	}
-	return false
-}
-
-func (x *MlProfileSummary) GetTopKernels() []*MlKernel {
-	if x != nil {
-		return x.TopKernels
-	}
-	return nil
-}
-
-func (x *MlProfileSummary) GetPeakMemoryGb() float64 {
-	if x != nil {
-		return x.PeakMemoryGb
-	}
-	return 0
-}
-
-func (x *MlProfileSummary) GetNotes() []*MlFact {
-	if x != nil {
-		return x.Notes
-	}
-	return nil
-}
-
-type MlKernel struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Name   string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Share  float64                `protobuf:"fixed64,2,opt,name=share,proto3" json:"share,omitempty"`
-	Calls  int64                  `protobuf:"varint,3,opt,name=calls,proto3" json:"calls,omitempty"`
-	MeanUs float64                `protobuf:"fixed64,4,opt,name=mean_us,json=meanUs,proto3" json:"mean_us,omitempty"`
-	// "gemm", "attention", "nccl", "elementwise", "memcpy".
-	Category      string `protobuf:"bytes,5,opt,name=category,proto3" json:"category,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlKernel) Reset() {
-	*x = MlKernel{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[106]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlKernel) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlKernel) ProtoMessage() {}
-
-func (x *MlKernel) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[106]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlKernel.ProtoReflect.Descriptor instead.
-func (*MlKernel) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{106}
-}
-
-func (x *MlKernel) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *MlKernel) GetShare() float64 {
-	if x != nil {
-		return x.Share
-	}
-	return 0
-}
-
-func (x *MlKernel) GetCalls() int64 {
-	if x != nil {
-		return x.Calls
-	}
-	return 0
-}
-
-func (x *MlKernel) GetMeanUs() float64 {
-	if x != nil {
-		return x.MeanUs
-	}
-	return 0
-}
-
-func (x *MlKernel) GetCategory() string {
-	if x != nil {
-		return x.Category
-	}
-	return ""
-}
-
-type MlCollectiveState struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Rank      int32                  `protobuf:"varint,1,opt,name=rank,proto3" json:"rank,omitempty"`
-	LastSeq   int64                  `protobuf:"varint,2,opt,name=last_seq,json=lastSeq,proto3" json:"last_seq,omitempty"`
-	Op        string                 `protobuf:"bytes,3,opt,name=op,proto3" json:"op,omitempty"`
-	SizeBytes int64                  `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
-	// "completed", "started", "scheduled", "not-started".
-	State         string `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`
-	Mismatched    bool   `protobuf:"varint,6,opt,name=mismatched,proto3" json:"mismatched,omitempty"`
-	Pod           string `protobuf:"bytes,7,opt,name=pod,proto3" json:"pod,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlCollectiveState) Reset() {
-	*x = MlCollectiveState{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[107]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlCollectiveState) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlCollectiveState) ProtoMessage() {}
-
-func (x *MlCollectiveState) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[107]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlCollectiveState.ProtoReflect.Descriptor instead.
-func (*MlCollectiveState) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{107}
-}
-
-func (x *MlCollectiveState) GetRank() int32 {
-	if x != nil {
-		return x.Rank
-	}
-	return 0
-}
-
-func (x *MlCollectiveState) GetLastSeq() int64 {
-	if x != nil {
-		return x.LastSeq
-	}
-	return 0
-}
-
-func (x *MlCollectiveState) GetOp() string {
-	if x != nil {
-		return x.Op
-	}
-	return ""
-}
-
-func (x *MlCollectiveState) GetSizeBytes() int64 {
-	if x != nil {
-		return x.SizeBytes
-	}
-	return 0
-}
-
-func (x *MlCollectiveState) GetState() string {
-	if x != nil {
-		return x.State
-	}
-	return ""
-}
-
-func (x *MlCollectiveState) GetMismatched() bool {
-	if x != nil {
-		return x.Mismatched
-	}
-	return false
-}
-
-func (x *MlCollectiveState) GetPod() string {
-	if x != nil {
-		return x.Pod
-	}
-	return ""
-}
-
-type GetMlProfileRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	ProfileId     string                 `protobuf:"bytes,2,opt,name=profile_id,json=profileId,proto3" json:"profile_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetMlProfileRequest) Reset() {
-	*x = GetMlProfileRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[108]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetMlProfileRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetMlProfileRequest) ProtoMessage() {}
-
-func (x *GetMlProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[108]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetMlProfileRequest.ProtoReflect.Descriptor instead.
-func (*GetMlProfileRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{108}
-}
-
-func (x *GetMlProfileRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *GetMlProfileRequest) GetProfileId() string {
-	if x != nil {
-		return x.ProfileId
-	}
-	return ""
-}
-
-type GetMlProfileResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Profile       *MlProfile             `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetMlProfileResponse) Reset() {
-	*x = GetMlProfileResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[109]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetMlProfileResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetMlProfileResponse) ProtoMessage() {}
-
-func (x *GetMlProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[109]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetMlProfileResponse.ProtoReflect.Descriptor instead.
-func (*GetMlProfileResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{109}
-}
-
-func (x *GetMlProfileResponse) GetProfile() *MlProfile {
-	if x != nil {
-		return x.Profile
-	}
-	return nil
-}
-
 type MlLineageNode struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Subject  *MlSubject             `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
@@ -12612,7 +10905,7 @@ type MlLineageNode struct {
 
 func (x *MlLineageNode) Reset() {
 	*x = MlLineageNode{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[110]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12624,7 +10917,7 @@ func (x *MlLineageNode) String() string {
 func (*MlLineageNode) ProtoMessage() {}
 
 func (x *MlLineageNode) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[110]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12637,7 +10930,7 @@ func (x *MlLineageNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlLineageNode.ProtoReflect.Descriptor instead.
 func (*MlLineageNode) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{110}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *MlLineageNode) GetSubject() *MlSubject {
@@ -12688,7 +10981,7 @@ type MlLineageEdge struct {
 
 func (x *MlLineageEdge) Reset() {
 	*x = MlLineageEdge{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[111]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12700,7 +10993,7 @@ func (x *MlLineageEdge) String() string {
 func (*MlLineageEdge) ProtoMessage() {}
 
 func (x *MlLineageEdge) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[111]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12713,7 +11006,7 @@ func (x *MlLineageEdge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlLineageEdge.ProtoReflect.Descriptor instead.
 func (*MlLineageEdge) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{111}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *MlLineageEdge) GetFrom() string {
@@ -12754,7 +11047,7 @@ type GetMlLineageRequest struct {
 
 func (x *GetMlLineageRequest) Reset() {
 	*x = GetMlLineageRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[112]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12766,7 +11059,7 @@ func (x *GetMlLineageRequest) String() string {
 func (*GetMlLineageRequest) ProtoMessage() {}
 
 func (x *GetMlLineageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[112]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12779,7 +11072,7 @@ func (x *GetMlLineageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlLineageRequest.ProtoReflect.Descriptor instead.
 func (*GetMlLineageRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{112}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *GetMlLineageRequest) GetOrgId() string {
@@ -12806,7 +11099,7 @@ type GetMlLineageResponse struct {
 
 func (x *GetMlLineageResponse) Reset() {
 	*x = GetMlLineageResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[113]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12818,7 +11111,7 @@ func (x *GetMlLineageResponse) String() string {
 func (*GetMlLineageResponse) ProtoMessage() {}
 
 func (x *GetMlLineageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[113]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12831,7 +11124,7 @@ func (x *GetMlLineageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlLineageResponse.ProtoReflect.Descriptor instead.
 func (*GetMlLineageResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{113}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *GetMlLineageResponse) GetNodes() []*MlLineageNode {
@@ -12858,7 +11151,7 @@ type ListMlEvalSuitesRequest struct {
 
 func (x *ListMlEvalSuitesRequest) Reset() {
 	*x = ListMlEvalSuitesRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[114]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12870,7 +11163,7 @@ func (x *ListMlEvalSuitesRequest) String() string {
 func (*ListMlEvalSuitesRequest) ProtoMessage() {}
 
 func (x *ListMlEvalSuitesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[114]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12883,7 +11176,7 @@ func (x *ListMlEvalSuitesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlEvalSuitesRequest.ProtoReflect.Descriptor instead.
 func (*ListMlEvalSuitesRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{114}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *ListMlEvalSuitesRequest) GetOrgId() string {
@@ -12909,7 +11202,7 @@ type ListMlEvalSuitesResponse struct {
 
 func (x *ListMlEvalSuitesResponse) Reset() {
 	*x = ListMlEvalSuitesResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[115]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12921,7 +11214,7 @@ func (x *ListMlEvalSuitesResponse) String() string {
 func (*ListMlEvalSuitesResponse) ProtoMessage() {}
 
 func (x *ListMlEvalSuitesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[115]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12934,7 +11227,7 @@ func (x *ListMlEvalSuitesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlEvalSuitesResponse.ProtoReflect.Descriptor instead.
 func (*ListMlEvalSuitesResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{115}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *ListMlEvalSuitesResponse) GetSuites() []*MlEvalSuite {
@@ -12959,7 +11252,7 @@ type MlEvalSuite struct {
 
 func (x *MlEvalSuite) Reset() {
 	*x = MlEvalSuite{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[116]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12971,7 +11264,7 @@ func (x *MlEvalSuite) String() string {
 func (*MlEvalSuite) ProtoMessage() {}
 
 func (x *MlEvalSuite) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[116]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12984,7 +11277,7 @@ func (x *MlEvalSuite) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalSuite.ProtoReflect.Descriptor instead.
 func (*MlEvalSuite) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{116}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *MlEvalSuite) GetId() string {
@@ -13058,7 +11351,7 @@ type MlEvalTask struct {
 
 func (x *MlEvalTask) Reset() {
 	*x = MlEvalTask{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[117]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13070,7 +11363,7 @@ func (x *MlEvalTask) String() string {
 func (*MlEvalTask) ProtoMessage() {}
 
 func (x *MlEvalTask) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[117]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13083,7 +11376,7 @@ func (x *MlEvalTask) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalTask.ProtoReflect.Descriptor instead.
 func (*MlEvalTask) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{117}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *MlEvalTask) GetKey() string {
@@ -13162,7 +11455,7 @@ type MlEvalGate struct {
 
 func (x *MlEvalGate) Reset() {
 	*x = MlEvalGate{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[118]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13174,7 +11467,7 @@ func (x *MlEvalGate) String() string {
 func (*MlEvalGate) ProtoMessage() {}
 
 func (x *MlEvalGate) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[118]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13187,7 +11480,7 @@ func (x *MlEvalGate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalGate.ProtoReflect.Descriptor instead.
 func (*MlEvalGate) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{118}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *MlEvalGate) GetId() string {
@@ -13231,7 +11524,7 @@ type GetMlEvalMatrixRequest struct {
 
 func (x *GetMlEvalMatrixRequest) Reset() {
 	*x = GetMlEvalMatrixRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[119]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13243,7 +11536,7 @@ func (x *GetMlEvalMatrixRequest) String() string {
 func (*GetMlEvalMatrixRequest) ProtoMessage() {}
 
 func (x *GetMlEvalMatrixRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[119]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13256,7 +11549,7 @@ func (x *GetMlEvalMatrixRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlEvalMatrixRequest.ProtoReflect.Descriptor instead.
 func (*GetMlEvalMatrixRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{119}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *GetMlEvalMatrixRequest) GetOrgId() string {
@@ -13299,7 +11592,7 @@ type GetMlEvalMatrixResponse struct {
 
 func (x *GetMlEvalMatrixResponse) Reset() {
 	*x = GetMlEvalMatrixResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[120]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13311,7 +11604,7 @@ func (x *GetMlEvalMatrixResponse) String() string {
 func (*GetMlEvalMatrixResponse) ProtoMessage() {}
 
 func (x *GetMlEvalMatrixResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[120]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13324,7 +11617,7 @@ func (x *GetMlEvalMatrixResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlEvalMatrixResponse.ProtoReflect.Descriptor instead.
 func (*GetMlEvalMatrixResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{120}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *GetMlEvalMatrixResponse) GetSuite() *MlEvalSuite {
@@ -13377,7 +11670,7 @@ type MlEvalRow struct {
 
 func (x *MlEvalRow) Reset() {
 	*x = MlEvalRow{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[121]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13389,7 +11682,7 @@ func (x *MlEvalRow) String() string {
 func (*MlEvalRow) ProtoMessage() {}
 
 func (x *MlEvalRow) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[121]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13402,7 +11695,7 @@ func (x *MlEvalRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalRow.ProtoReflect.Descriptor instead.
 func (*MlEvalRow) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{121}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *MlEvalRow) GetId() string {
@@ -13494,7 +11787,7 @@ type MlEvalCell struct {
 
 func (x *MlEvalCell) Reset() {
 	*x = MlEvalCell{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[122]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13506,7 +11799,7 @@ func (x *MlEvalCell) String() string {
 func (*MlEvalCell) ProtoMessage() {}
 
 func (x *MlEvalCell) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[122]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13519,7 +11812,7 @@ func (x *MlEvalCell) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalCell.ProtoReflect.Descriptor instead.
 func (*MlEvalCell) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{122}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *MlEvalCell) GetRowId() string {
@@ -13596,7 +11889,7 @@ type ListMlEvalRunsRequest struct {
 
 func (x *ListMlEvalRunsRequest) Reset() {
 	*x = ListMlEvalRunsRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[123]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13608,7 +11901,7 @@ func (x *ListMlEvalRunsRequest) String() string {
 func (*ListMlEvalRunsRequest) ProtoMessage() {}
 
 func (x *ListMlEvalRunsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[123]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13621,7 +11914,7 @@ func (x *ListMlEvalRunsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlEvalRunsRequest.ProtoReflect.Descriptor instead.
 func (*ListMlEvalRunsRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{123}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *ListMlEvalRunsRequest) GetOrgId() string {
@@ -13654,7 +11947,7 @@ type ListMlEvalRunsResponse struct {
 
 func (x *ListMlEvalRunsResponse) Reset() {
 	*x = ListMlEvalRunsResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[124]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13666,7 +11959,7 @@ func (x *ListMlEvalRunsResponse) String() string {
 func (*ListMlEvalRunsResponse) ProtoMessage() {}
 
 func (x *ListMlEvalRunsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[124]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13679,7 +11972,7 @@ func (x *ListMlEvalRunsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlEvalRunsResponse.ProtoReflect.Descriptor instead.
 func (*ListMlEvalRunsResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{124}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *ListMlEvalRunsResponse) GetEvalRuns() []*MlEvalRun {
@@ -13721,7 +12014,7 @@ type MlEvalRun struct {
 
 func (x *MlEvalRun) Reset() {
 	*x = MlEvalRun{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[125]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13733,7 +12026,7 @@ func (x *MlEvalRun) String() string {
 func (*MlEvalRun) ProtoMessage() {}
 
 func (x *MlEvalRun) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[125]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13746,7 +12039,7 @@ func (x *MlEvalRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalRun.ProtoReflect.Descriptor instead.
 func (*MlEvalRun) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{125}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *MlEvalRun) GetId() string {
@@ -13910,7 +12203,7 @@ type MlEvalResult struct {
 
 func (x *MlEvalResult) Reset() {
 	*x = MlEvalResult{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[126]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13922,7 +12215,7 @@ func (x *MlEvalResult) String() string {
 func (*MlEvalResult) ProtoMessage() {}
 
 func (x *MlEvalResult) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[126]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13935,7 +12228,7 @@ func (x *MlEvalResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalResult.ProtoReflect.Descriptor instead.
 func (*MlEvalResult) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{126}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *MlEvalResult) GetTaskKey() string {
@@ -13991,7 +12284,7 @@ type MlEvalSliceResult struct {
 
 func (x *MlEvalSliceResult) Reset() {
 	*x = MlEvalSliceResult{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[127]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14003,7 +12296,7 @@ func (x *MlEvalSliceResult) String() string {
 func (*MlEvalSliceResult) ProtoMessage() {}
 
 func (x *MlEvalSliceResult) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[127]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14016,7 +12309,7 @@ func (x *MlEvalSliceResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalSliceResult.ProtoReflect.Descriptor instead.
 func (*MlEvalSliceResult) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{127}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *MlEvalSliceResult) GetSlice() string {
@@ -14050,7 +12343,7 @@ type GetMlEvalRunRequest struct {
 
 func (x *GetMlEvalRunRequest) Reset() {
 	*x = GetMlEvalRunRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[128]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14062,7 +12355,7 @@ func (x *GetMlEvalRunRequest) String() string {
 func (*GetMlEvalRunRequest) ProtoMessage() {}
 
 func (x *GetMlEvalRunRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[128]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14075,7 +12368,7 @@ func (x *GetMlEvalRunRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlEvalRunRequest.ProtoReflect.Descriptor instead.
 func (*GetMlEvalRunRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{128}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *GetMlEvalRunRequest) GetOrgId() string {
@@ -14101,7 +12394,7 @@ type GetMlEvalRunResponse struct {
 
 func (x *GetMlEvalRunResponse) Reset() {
 	*x = GetMlEvalRunResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[129]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14113,7 +12406,7 @@ func (x *GetMlEvalRunResponse) String() string {
 func (*GetMlEvalRunResponse) ProtoMessage() {}
 
 func (x *GetMlEvalRunResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[129]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14126,7 +12419,7 @@ func (x *GetMlEvalRunResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlEvalRunResponse.ProtoReflect.Descriptor instead.
 func (*GetMlEvalRunResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{129}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *GetMlEvalRunResponse) GetEvalRun() *MlEvalRun {
@@ -14152,7 +12445,7 @@ type ListMlEvalSamplesRequest struct {
 
 func (x *ListMlEvalSamplesRequest) Reset() {
 	*x = ListMlEvalSamplesRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[130]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14164,7 +12457,7 @@ func (x *ListMlEvalSamplesRequest) String() string {
 func (*ListMlEvalSamplesRequest) ProtoMessage() {}
 
 func (x *ListMlEvalSamplesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[130]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14177,7 +12470,7 @@ func (x *ListMlEvalSamplesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlEvalSamplesRequest.ProtoReflect.Descriptor instead.
 func (*ListMlEvalSamplesRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{130}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *ListMlEvalSamplesRequest) GetOrgId() string {
@@ -14243,7 +12536,7 @@ type ListMlEvalSamplesResponse struct {
 
 func (x *ListMlEvalSamplesResponse) Reset() {
 	*x = ListMlEvalSamplesResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[131]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14255,7 +12548,7 @@ func (x *ListMlEvalSamplesResponse) String() string {
 func (*ListMlEvalSamplesResponse) ProtoMessage() {}
 
 func (x *ListMlEvalSamplesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[131]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14268,7 +12561,7 @@ func (x *ListMlEvalSamplesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlEvalSamplesResponse.ProtoReflect.Descriptor instead.
 func (*ListMlEvalSamplesResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{131}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *ListMlEvalSamplesResponse) GetSamples() []*MlEvalSample {
@@ -14335,7 +12628,7 @@ type MlEvalSample struct {
 
 func (x *MlEvalSample) Reset() {
 	*x = MlEvalSample{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[132]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14347,7 +12640,7 @@ func (x *MlEvalSample) String() string {
 func (*MlEvalSample) ProtoMessage() {}
 
 func (x *MlEvalSample) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[132]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14360,7 +12653,7 @@ func (x *MlEvalSample) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlEvalSample.ProtoReflect.Descriptor instead.
 func (*MlEvalSample) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{132}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *MlEvalSample) GetId() string {
@@ -14464,7 +12757,7 @@ type ListMlModelsRequest struct {
 
 func (x *ListMlModelsRequest) Reset() {
 	*x = ListMlModelsRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[133]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14476,7 +12769,7 @@ func (x *ListMlModelsRequest) String() string {
 func (*ListMlModelsRequest) ProtoMessage() {}
 
 func (x *ListMlModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[133]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14489,7 +12782,7 @@ func (x *ListMlModelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlModelsRequest.ProtoReflect.Descriptor instead.
 func (*ListMlModelsRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{133}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *ListMlModelsRequest) GetOrgId() string {
@@ -14515,7 +12808,7 @@ type ListMlModelsResponse struct {
 
 func (x *ListMlModelsResponse) Reset() {
 	*x = ListMlModelsResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[134]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14527,7 +12820,7 @@ func (x *ListMlModelsResponse) String() string {
 func (*ListMlModelsResponse) ProtoMessage() {}
 
 func (x *ListMlModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[134]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14540,7 +12833,7 @@ func (x *ListMlModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlModelsResponse.ProtoReflect.Descriptor instead.
 func (*ListMlModelsResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{134}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *ListMlModelsResponse) GetModels() []*MlModel {
@@ -14552,28 +12845,32 @@ func (x *ListMlModelsResponse) GetModels() []*MlModel {
 
 type MlModel struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
-	Id      string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name    string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Project string                 `protobuf:"bytes,3,opt,name=project,proto3" json:"project,omitempty"`
+	Id      string                 `protobuf:"bytes,5,opt,name=id,proto3" json:"id,omitempty"`
+	Name    string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Project string                 `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
 	// The OCI repository.
-	Repository      string     `protobuf:"bytes,4,opt,name=repository,proto3" json:"repository,omitempty"`
-	Description     string     `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
-	LatestVersionId string     `protobuf:"bytes,6,opt,name=latest_version_id,json=latestVersionId,proto3" json:"latest_version_id,omitempty"`
-	VersionCount    int32      `protobuf:"varint,7,opt,name=version_count,json=versionCount,proto3" json:"version_count,omitempty"`
-	Aliases         []*MlAlias `protobuf:"bytes,8,rep,name=aliases,proto3" json:"aliases,omitempty"`
-	ServingServices int32      `protobuf:"varint,9,opt,name=serving_services,json=servingServices,proto3" json:"serving_services,omitempty"`
-	ServingRps      float64    `protobuf:"fixed64,10,opt,name=serving_rps,json=servingRps,proto3" json:"serving_rps,omitempty"`
+	Repository      string     `protobuf:"bytes,3,opt,name=repository,proto3" json:"repository,omitempty"`
+	Description     string     `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	LatestVersionId string     `protobuf:"bytes,7,opt,name=latest_version_id,json=latestVersionId,proto3" json:"latest_version_id,omitempty"`
+	VersionCount    int32      `protobuf:"varint,8,opt,name=version_count,json=versionCount,proto3" json:"version_count,omitempty"`
+	Aliases         []*MlAlias `protobuf:"bytes,9,rep,name=aliases,proto3" json:"aliases,omitempty"`
+	ServingServices int32      `protobuf:"varint,10,opt,name=serving_services,json=servingServices,proto3" json:"serving_services,omitempty"`
+	ServingRps      float64    `protobuf:"fixed64,11,opt,name=serving_rps,json=servingRps,proto3" json:"serving_rps,omitempty"`
 	// The latest gate result: "pass", "fail", "".
-	LastGateStatus    string                 `protobuf:"bytes,11,opt,name=last_gate_status,json=lastGateStatus,proto3" json:"last_gate_status,omitempty"`
-	LastGateVersionId string                 `protobuf:"bytes,12,opt,name=last_gate_version_id,json=lastGateVersionId,proto3" json:"last_gate_version_id,omitempty"`
-	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	LastGateStatus    string                 `protobuf:"bytes,12,opt,name=last_gate_status,json=lastGateStatus,proto3" json:"last_gate_status,omitempty"`
+	LastGateVersionId string                 `protobuf:"bytes,13,opt,name=last_gate_version_id,json=lastGateVersionId,proto3" json:"last_gate_version_id,omitempty"`
+	UpdatedAt         *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Versions      []*MlModelVersion `protobuf:"bytes,4,rep,name=versions,proto3" json:"versions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MlModel) Reset() {
 	*x = MlModel{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[135]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14585,7 +12882,7 @@ func (x *MlModel) String() string {
 func (*MlModel) ProtoMessage() {}
 
 func (x *MlModel) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[135]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14598,7 +12895,7 @@ func (x *MlModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlModel.ProtoReflect.Descriptor instead.
 func (*MlModel) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{135}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *MlModel) GetId() string {
@@ -14692,6 +12989,14 @@ func (x *MlModel) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlModel) GetVersions() []*MlModelVersion {
+	if x != nil {
+		return x.Versions
+	}
+	return nil
+}
+
 type MlAlias struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "production", "staging", "candidate".
@@ -14707,7 +13012,7 @@ type MlAlias struct {
 
 func (x *MlAlias) Reset() {
 	*x = MlAlias{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[136]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14719,7 +13024,7 @@ func (x *MlAlias) String() string {
 func (*MlAlias) ProtoMessage() {}
 
 func (x *MlAlias) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[136]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14732,7 +13037,7 @@ func (x *MlAlias) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlAlias.ProtoReflect.Descriptor instead.
 func (*MlAlias) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{136}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *MlAlias) GetName() string {
@@ -14785,7 +13090,7 @@ type MlAliasMove struct {
 
 func (x *MlAliasMove) Reset() {
 	*x = MlAliasMove{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[137]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14797,7 +13102,7 @@ func (x *MlAliasMove) String() string {
 func (*MlAliasMove) ProtoMessage() {}
 
 func (x *MlAliasMove) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[137]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14810,7 +13115,7 @@ func (x *MlAliasMove) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlAliasMove.ProtoReflect.Descriptor instead.
 func (*MlAliasMove) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{137}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *MlAliasMove) GetAlias() string {
@@ -14872,7 +13177,7 @@ type GetMlModelRequest struct {
 
 func (x *GetMlModelRequest) Reset() {
 	*x = GetMlModelRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[138]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14884,7 +13189,7 @@ func (x *GetMlModelRequest) String() string {
 func (*GetMlModelRequest) ProtoMessage() {}
 
 func (x *GetMlModelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[138]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14897,7 +13202,7 @@ func (x *GetMlModelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlModelRequest.ProtoReflect.Descriptor instead.
 func (*GetMlModelRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{138}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *GetMlModelRequest) GetOrgId() string {
@@ -14926,7 +13231,7 @@ type GetMlModelResponse struct {
 
 func (x *GetMlModelResponse) Reset() {
 	*x = GetMlModelResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[139]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14938,7 +13243,7 @@ func (x *GetMlModelResponse) String() string {
 func (*GetMlModelResponse) ProtoMessage() {}
 
 func (x *GetMlModelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[139]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14951,7 +13256,7 @@ func (x *GetMlModelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlModelResponse.ProtoReflect.Descriptor instead.
 func (*GetMlModelResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{139}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *GetMlModelResponse) GetModel() *MlModel {
@@ -14985,33 +13290,43 @@ func (x *GetMlModelResponse) GetPromotion() []*MlPromotionGate {
 type MlModelVersion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// "<model_id>/<version>".
-	Id      string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	ModelId string `protobuf:"bytes,2,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	Id      string `protobuf:"bytes,8,opt,name=id,proto3" json:"id,omitempty"`
+	ModelId string `protobuf:"bytes,9,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
 	// "v3".
-	Version      string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
-	Digest       string                 `protobuf:"bytes,4,opt,name=digest,proto3" json:"digest,omitempty"`
-	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Source       MlVersionSource        `protobuf:"varint,6,opt,name=source,proto3,enum=controlplane.v1.MlVersionSource" json:"source,omitempty"`
-	RunId        string                 `protobuf:"bytes,7,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	PhaseKey     string                 `protobuf:"bytes,8,opt,name=phase_key,json=phaseKey,proto3" json:"phase_key,omitempty"`
-	Attempt      int32                  `protobuf:"varint,9,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	CheckpointId string                 `protobuf:"bytes,10,opt,name=checkpoint_id,json=checkpointId,proto3" json:"checkpoint_id,omitempty"`
-	BaseModel    string                 `protobuf:"bytes,11,opt,name=base_model,json=baseModel,proto3" json:"base_model,omitempty"`
-	Card         *MlModelCard           `protobuf:"bytes,12,opt,name=card,proto3" json:"card,omitempty"`
+	Version      string                 `protobuf:"bytes,10,opt,name=version,proto3" json:"version,omitempty"`
+	Digest       string                 `protobuf:"bytes,1,opt,name=digest,proto3" json:"digest,omitempty"`
+	CreatedAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Source       MlVersionSource        `protobuf:"varint,11,opt,name=source,proto3,enum=controlplane.v1.MlVersionSource" json:"source,omitempty"`
+	RunId        string                 `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	PhaseKey     string                 `protobuf:"bytes,12,opt,name=phase_key,json=phaseKey,proto3" json:"phase_key,omitempty"`
+	Attempt      int32                  `protobuf:"varint,13,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	CheckpointId string                 `protobuf:"bytes,14,opt,name=checkpoint_id,json=checkpointId,proto3" json:"checkpoint_id,omitempty"`
+	BaseModel    string                 `protobuf:"bytes,15,opt,name=base_model,json=baseModel,proto3" json:"base_model,omitempty"`
+	Card         *MlModelCard           `protobuf:"bytes,16,opt,name=card,proto3" json:"card,omitempty"`
 	// "pass", "fail", "pending", "".
-	GateStatus    string                `protobuf:"bytes,13,opt,name=gate_status,json=gateStatus,proto3" json:"gate_status,omitempty"`
-	GatePassed    int32                 `protobuf:"varint,14,opt,name=gate_passed,json=gatePassed,proto3" json:"gate_passed,omitempty"`
-	GateTotal     int32                 `protobuf:"varint,15,opt,name=gate_total,json=gateTotal,proto3" json:"gate_total,omitempty"`
-	Aliases       []string              `protobuf:"bytes,16,rep,name=aliases,proto3" json:"aliases,omitempty"`
-	Serving       []*MlServingPlacement `protobuf:"bytes,17,rep,name=serving,proto3" json:"serving,omitempty"`
-	CreatedBy     string                `protobuf:"bytes,18,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	GateStatus string                `protobuf:"bytes,17,opt,name=gate_status,json=gateStatus,proto3" json:"gate_status,omitempty"`
+	GatePassed int32                 `protobuf:"varint,18,opt,name=gate_passed,json=gatePassed,proto3" json:"gate_passed,omitempty"`
+	GateTotal  int32                 `protobuf:"varint,19,opt,name=gate_total,json=gateTotal,proto3" json:"gate_total,omitempty"`
+	Aliases    []string              `protobuf:"bytes,20,rep,name=aliases,proto3" json:"aliases,omitempty"`
+	Serving    []*MlServingPlacement `protobuf:"bytes,21,rep,name=serving,proto3" json:"serving,omitempty"`
+	CreatedBy  string                `protobuf:"bytes,22,opt,name=created_by,json=createdBy,proto3" json:"created_by,omitempty"`
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Tag string `protobuf:"bytes,2,opt,name=tag,proto3" json:"tag,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	SizeBytes int64 `protobuf:"varint,5,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	EvalMetrics map[string]float64 `protobuf:"bytes,6,rep,name=eval_metrics,json=evalMetrics,proto3" json:"eval_metrics,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ServingIn     []string `protobuf:"bytes,7,rep,name=serving_in,json=servingIn,proto3" json:"serving_in,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MlModelVersion) Reset() {
 	*x = MlModelVersion{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[140]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15023,7 +13338,7 @@ func (x *MlModelVersion) String() string {
 func (*MlModelVersion) ProtoMessage() {}
 
 func (x *MlModelVersion) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[140]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15036,7 +13351,7 @@ func (x *MlModelVersion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlModelVersion.ProtoReflect.Descriptor instead.
 func (*MlModelVersion) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{140}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *MlModelVersion) GetId() string {
@@ -15165,6 +13480,38 @@ func (x *MlModelVersion) GetCreatedBy() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlModelVersion) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlModelVersion) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlModelVersion) GetEvalMetrics() map[string]float64 {
+	if x != nil {
+		return x.EvalMetrics
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlModelVersion) GetServingIn() []string {
+	if x != nil {
+		return x.ServingIn
+	}
+	return nil
+}
+
 type MlModelCard struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Architecture  string                 `protobuf:"bytes,1,opt,name=architecture,proto3" json:"architecture,omitempty"`
@@ -15189,7 +13536,7 @@ type MlModelCard struct {
 
 func (x *MlModelCard) Reset() {
 	*x = MlModelCard{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[141]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15201,7 +13548,7 @@ func (x *MlModelCard) String() string {
 func (*MlModelCard) ProtoMessage() {}
 
 func (x *MlModelCard) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[141]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15214,7 +13561,7 @@ func (x *MlModelCard) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlModelCard.ProtoReflect.Descriptor instead.
 func (*MlModelCard) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{141}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *MlModelCard) GetArchitecture() string {
@@ -15334,7 +13681,7 @@ type MlServingPlacement struct {
 
 func (x *MlServingPlacement) Reset() {
 	*x = MlServingPlacement{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[142]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15346,7 +13693,7 @@ func (x *MlServingPlacement) String() string {
 func (*MlServingPlacement) ProtoMessage() {}
 
 func (x *MlServingPlacement) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[142]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15359,7 +13706,7 @@ func (x *MlServingPlacement) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlServingPlacement.ProtoReflect.Descriptor instead.
 func (*MlServingPlacement) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{142}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *MlServingPlacement) GetServiceId() string {
@@ -15404,7 +13751,7 @@ type MlGateCheck struct {
 
 func (x *MlGateCheck) Reset() {
 	*x = MlGateCheck{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[143]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15416,7 +13763,7 @@ func (x *MlGateCheck) String() string {
 func (*MlGateCheck) ProtoMessage() {}
 
 func (x *MlGateCheck) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[143]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15429,7 +13776,7 @@ func (x *MlGateCheck) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlGateCheck.ProtoReflect.Descriptor instead.
 func (*MlGateCheck) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{143}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *MlGateCheck) GetName() string {
@@ -15474,7 +13821,7 @@ type MlPromotionGate struct {
 
 func (x *MlPromotionGate) Reset() {
 	*x = MlPromotionGate{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[144]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15486,7 +13833,7 @@ func (x *MlPromotionGate) String() string {
 func (*MlPromotionGate) ProtoMessage() {}
 
 func (x *MlPromotionGate) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[144]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15499,7 +13846,7 @@ func (x *MlPromotionGate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlPromotionGate.ProtoReflect.Descriptor instead.
 func (*MlPromotionGate) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{144}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *MlPromotionGate) GetEnv() string {
@@ -15547,7 +13894,7 @@ type GetMlModelVersionRequest struct {
 
 func (x *GetMlModelVersionRequest) Reset() {
 	*x = GetMlModelVersionRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[145]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15559,7 +13906,7 @@ func (x *GetMlModelVersionRequest) String() string {
 func (*GetMlModelVersionRequest) ProtoMessage() {}
 
 func (x *GetMlModelVersionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[145]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15572,7 +13919,7 @@ func (x *GetMlModelVersionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlModelVersionRequest.ProtoReflect.Descriptor instead.
 func (*GetMlModelVersionRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{145}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *GetMlModelVersionRequest) GetOrgId() string {
@@ -15603,7 +13950,7 @@ type GetMlModelVersionResponse struct {
 
 func (x *GetMlModelVersionResponse) Reset() {
 	*x = GetMlModelVersionResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[146]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15615,7 +13962,7 @@ func (x *GetMlModelVersionResponse) String() string {
 func (*GetMlModelVersionResponse) ProtoMessage() {}
 
 func (x *GetMlModelVersionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[146]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15628,7 +13975,7 @@ func (x *GetMlModelVersionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlModelVersionResponse.ProtoReflect.Descriptor instead.
 func (*GetMlModelVersionResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{146}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *GetMlModelVersionResponse) GetVersion() *MlModelVersion {
@@ -15685,7 +14032,7 @@ type MlModelFile struct {
 
 func (x *MlModelFile) Reset() {
 	*x = MlModelFile{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[147]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15697,7 +14044,7 @@ func (x *MlModelFile) String() string {
 func (*MlModelFile) ProtoMessage() {}
 
 func (x *MlModelFile) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[147]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15710,7 +14057,7 @@ func (x *MlModelFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlModelFile.ProtoReflect.Descriptor instead.
 func (*MlModelFile) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{147}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *MlModelFile) GetPath() string {
@@ -15756,7 +14103,7 @@ type MlServingPerf struct {
 
 func (x *MlServingPerf) Reset() {
 	*x = MlServingPerf{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[148]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15768,7 +14115,7 @@ func (x *MlServingPerf) String() string {
 func (*MlServingPerf) ProtoMessage() {}
 
 func (x *MlServingPerf) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[148]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15781,7 +14128,7 @@ func (x *MlServingPerf) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlServingPerf.ProtoReflect.Descriptor instead.
 func (*MlServingPerf) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{148}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *MlServingPerf) GetHardware() string {
@@ -15846,7 +14193,7 @@ type MlPullPerf struct {
 
 func (x *MlPullPerf) Reset() {
 	*x = MlPullPerf{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[149]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15858,7 +14205,7 @@ func (x *MlPullPerf) String() string {
 func (*MlPullPerf) ProtoMessage() {}
 
 func (x *MlPullPerf) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[149]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15871,7 +14218,7 @@ func (x *MlPullPerf) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlPullPerf.ProtoReflect.Descriptor instead.
 func (*MlPullPerf) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{149}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *MlPullPerf) GetClusterId() string {
@@ -15912,7 +14259,7 @@ type ListMlInferenceServicesRequest struct {
 
 func (x *ListMlInferenceServicesRequest) Reset() {
 	*x = ListMlInferenceServicesRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[150]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15924,7 +14271,7 @@ func (x *ListMlInferenceServicesRequest) String() string {
 func (*ListMlInferenceServicesRequest) ProtoMessage() {}
 
 func (x *ListMlInferenceServicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[150]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15937,7 +14284,7 @@ func (x *ListMlInferenceServicesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlInferenceServicesRequest.ProtoReflect.Descriptor instead.
 func (*ListMlInferenceServicesRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{150}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *ListMlInferenceServicesRequest) GetOrgId() string {
@@ -15963,7 +14310,7 @@ type ListMlInferenceServicesResponse struct {
 
 func (x *ListMlInferenceServicesResponse) Reset() {
 	*x = ListMlInferenceServicesResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[151]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15975,7 +14322,7 @@ func (x *ListMlInferenceServicesResponse) String() string {
 func (*ListMlInferenceServicesResponse) ProtoMessage() {}
 
 func (x *ListMlInferenceServicesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[151]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15988,7 +14335,7 @@ func (x *ListMlInferenceServicesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListMlInferenceServicesResponse.ProtoReflect.Descriptor instead.
 func (*ListMlInferenceServicesResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{151}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *ListMlInferenceServicesResponse) GetServices() []*MlInferenceService {
@@ -16000,49 +14347,69 @@ func (x *ListMlInferenceServicesResponse) GetServices() []*MlInferenceService {
 
 type MlInferenceService struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
-	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Project        string                 `protobuf:"bytes,3,opt,name=project,proto3" json:"project,omitempty"`
-	Env            string                 `protobuf:"bytes,4,opt,name=env,proto3" json:"env,omitempty"`
-	ClusterId      string                 `protobuf:"bytes,5,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	PoolId         string                 `protobuf:"bytes,6,opt,name=pool_id,json=poolId,proto3" json:"pool_id,omitempty"`
-	ModelId        string                 `protobuf:"bytes,7,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
-	ModelVersionId string                 `protobuf:"bytes,8,opt,name=model_version_id,json=modelVersionId,proto3" json:"model_version_id,omitempty"`
+	Id             string                 `protobuf:"bytes,18,opt,name=id,proto3" json:"id,omitempty"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Project        string                 `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
+	Env            string                 `protobuf:"bytes,19,opt,name=env,proto3" json:"env,omitempty"`
+	ClusterId      string                 `protobuf:"bytes,4,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	PoolId         string                 `protobuf:"bytes,20,opt,name=pool_id,json=poolId,proto3" json:"pool_id,omitempty"`
+	ModelId        string                 `protobuf:"bytes,21,opt,name=model_id,json=modelId,proto3" json:"model_id,omitempty"`
+	ModelVersionId string                 `protobuf:"bytes,22,opt,name=model_version_id,json=modelVersionId,proto3" json:"model_version_id,omitempty"`
 	// The revision taking most traffic.
-	RevisionId string `protobuf:"bytes,9,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
-	Release    string `protobuf:"bytes,10,opt,name=release,proto3" json:"release,omitempty"`
+	RevisionId string `protobuf:"bytes,23,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
+	Release    string `protobuf:"bytes,6,opt,name=release,proto3" json:"release,omitempty"`
 	// "vLLM 0.8.5", "SGLang 0.4", "TGI 3.0", "Triton".
-	Runtime             string  `protobuf:"bytes,11,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Accelerators        int32   `protobuf:"varint,12,opt,name=accelerators,proto3" json:"accelerators,omitempty"`
-	AcceleratorProduct  string  `protobuf:"bytes,13,opt,name=accelerator_product,json=acceleratorProduct,proto3" json:"accelerator_product,omitempty"`
-	Replicas            int32   `protobuf:"varint,14,opt,name=replicas,proto3" json:"replicas,omitempty"`
-	ReplicasDesired     int32   `protobuf:"varint,15,opt,name=replicas_desired,json=replicasDesired,proto3" json:"replicas_desired,omitempty"`
-	Rps                 float64 `protobuf:"fixed64,16,opt,name=rps,proto3" json:"rps,omitempty"`
-	TtftP95Ms           float64 `protobuf:"fixed64,17,opt,name=ttft_p95_ms,json=ttftP95Ms,proto3" json:"ttft_p95_ms,omitempty"`
-	ItlP95Ms            float64 `protobuf:"fixed64,18,opt,name=itl_p95_ms,json=itlP95Ms,proto3" json:"itl_p95_ms,omitempty"`
-	E2EP95Ms            float64 `protobuf:"fixed64,19,opt,name=e2e_p95_ms,json=e2eP95Ms,proto3" json:"e2e_p95_ms,omitempty"`
-	QueueP95Ms          float64 `protobuf:"fixed64,20,opt,name=queue_p95_ms,json=queueP95Ms,proto3" json:"queue_p95_ms,omitempty"`
-	ErrorRatio          float64 `protobuf:"fixed64,21,opt,name=error_ratio,json=errorRatio,proto3" json:"error_ratio,omitempty"`
-	SloAttainment       float64 `protobuf:"fixed64,22,opt,name=slo_attainment,json=sloAttainment,proto3" json:"slo_attainment,omitempty"`
-	SloTarget           float64 `protobuf:"fixed64,23,opt,name=slo_target,json=sloTarget,proto3" json:"slo_target,omitempty"`
-	KvCacheRatio        float64 `protobuf:"fixed64,24,opt,name=kv_cache_ratio,json=kvCacheRatio,proto3" json:"kv_cache_ratio,omitempty"`
-	BusyRatio           float64 `protobuf:"fixed64,25,opt,name=busy_ratio,json=busyRatio,proto3" json:"busy_ratio,omitempty"`
-	TokensPerSecond     float64 `protobuf:"fixed64,26,opt,name=tokens_per_second,json=tokensPerSecond,proto3" json:"tokens_per_second,omitempty"`
-	UsdPerMillionTokens float64 `protobuf:"fixed64,27,opt,name=usd_per_million_tokens,json=usdPerMillionTokens,proto3" json:"usd_per_million_tokens,omitempty"`
+	Runtime             string  `protobuf:"bytes,5,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Accelerators        int32   `protobuf:"varint,24,opt,name=accelerators,proto3" json:"accelerators,omitempty"`
+	AcceleratorProduct  string  `protobuf:"bytes,25,opt,name=accelerator_product,json=acceleratorProduct,proto3" json:"accelerator_product,omitempty"`
+	Replicas            int32   `protobuf:"varint,8,opt,name=replicas,proto3" json:"replicas,omitempty"`
+	ReplicasDesired     int32   `protobuf:"varint,26,opt,name=replicas_desired,json=replicasDesired,proto3" json:"replicas_desired,omitempty"`
+	Rps                 float64 `protobuf:"fixed64,27,opt,name=rps,proto3" json:"rps,omitempty"`
+	TtftP95Ms           float64 `protobuf:"fixed64,9,opt,name=ttft_p95_ms,json=ttftP95Ms,proto3" json:"ttft_p95_ms,omitempty"`
+	ItlP95Ms            float64 `protobuf:"fixed64,28,opt,name=itl_p95_ms,json=itlP95Ms,proto3" json:"itl_p95_ms,omitempty"`
+	E2EP95Ms            float64 `protobuf:"fixed64,29,opt,name=e2e_p95_ms,json=e2eP95Ms,proto3" json:"e2e_p95_ms,omitempty"`
+	QueueP95Ms          float64 `protobuf:"fixed64,30,opt,name=queue_p95_ms,json=queueP95Ms,proto3" json:"queue_p95_ms,omitempty"`
+	ErrorRatio          float64 `protobuf:"fixed64,31,opt,name=error_ratio,json=errorRatio,proto3" json:"error_ratio,omitempty"`
+	SloAttainment       float64 `protobuf:"fixed64,32,opt,name=slo_attainment,json=sloAttainment,proto3" json:"slo_attainment,omitempty"`
+	SloTarget           float64 `protobuf:"fixed64,33,opt,name=slo_target,json=sloTarget,proto3" json:"slo_target,omitempty"`
+	KvCacheRatio        float64 `protobuf:"fixed64,34,opt,name=kv_cache_ratio,json=kvCacheRatio,proto3" json:"kv_cache_ratio,omitempty"`
+	BusyRatio           float64 `protobuf:"fixed64,35,opt,name=busy_ratio,json=busyRatio,proto3" json:"busy_ratio,omitempty"`
+	TokensPerSecond     float64 `protobuf:"fixed64,11,opt,name=tokens_per_second,json=tokensPerSecond,proto3" json:"tokens_per_second,omitempty"`
+	UsdPerMillionTokens float64 `protobuf:"fixed64,36,opt,name=usd_per_million_tokens,json=usdPerMillionTokens,proto3" json:"usd_per_million_tokens,omitempty"`
 	// Last 24h.
-	Cost    *MlCost          `protobuf:"bytes,28,opt,name=cost,proto3" json:"cost,omitempty"`
-	Verdict MlReleaseVerdict `protobuf:"varint,29,opt,name=verdict,proto3,enum=controlplane.v1.MlReleaseVerdict" json:"verdict,omitempty"`
+	Cost    *MlCost          `protobuf:"bytes,37,opt,name=cost,proto3" json:"cost,omitempty"`
+	Verdict MlReleaseVerdict `protobuf:"varint,38,opt,name=verdict,proto3,enum=controlplane.v1.MlReleaseVerdict" json:"verdict,omitempty"`
 	// Requests per second over the last 24h, for a sparkline.
-	RpsSeries *MlSeries `protobuf:"bytes,30,opt,name=rps_series,json=rpsSeries,proto3" json:"rps_series,omitempty"`
+	RpsSeries *MlSeries `protobuf:"bytes,39,opt,name=rps_series,json=rpsSeries,proto3" json:"rps_series,omitempty"`
 	// A Changes comparison is running on it.
-	Comparing     bool `protobuf:"varint,31,opt,name=comparing,proto3" json:"comparing,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Comparing bool `protobuf:"varint,40,opt,name=comparing,proto3" json:"comparing,omitempty"`
+	// Deprecated: fields of the first early-access shape, kept for wire compatibility.
+	//
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	Environment string `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ModelDigest string `protobuf:"bytes,7,opt,name=model_digest,json=modelDigest,proto3" json:"model_digest,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	QueueWaitP95Ms float64 `protobuf:"fixed64,10,opt,name=queue_wait_p95_ms,json=queueWaitP95Ms,proto3" json:"queue_wait_p95_ms,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	AcceleratorUtilizationPercent float64 `protobuf:"fixed64,12,opt,name=accelerator_utilization_percent,json=acceleratorUtilizationPercent,proto3" json:"accelerator_utilization_percent,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	KvCacheUsagePercent float64 `protobuf:"fixed64,13,opt,name=kv_cache_usage_percent,json=kvCacheUsagePercent,proto3" json:"kv_cache_usage_percent,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ColdStart *MlPodStartBreakdown `protobuf:"bytes,14,opt,name=cold_start,json=coldStart,proto3" json:"cold_start,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ReleaseVerdict MlReleaseVerdict `protobuf:"varint,15,opt,name=release_verdict,json=releaseVerdict,proto3,enum=controlplane.v1.MlReleaseVerdict" json:"release_verdict,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ReleaseVerdictSummary string `protobuf:"bytes,16,opt,name=release_verdict_summary,json=releaseVerdictSummary,proto3" json:"release_verdict_summary,omitempty"`
+	// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+	ReleaseCheckedAt *timestamppb.Timestamp `protobuf:"bytes,17,opt,name=release_checked_at,json=releaseCheckedAt,proto3" json:"release_checked_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *MlInferenceService) Reset() {
 	*x = MlInferenceService{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[152]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16054,7 +14421,7 @@ func (x *MlInferenceService) String() string {
 func (*MlInferenceService) ProtoMessage() {}
 
 func (x *MlInferenceService) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[152]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16067,7 +14434,7 @@ func (x *MlInferenceService) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlInferenceService.ProtoReflect.Descriptor instead.
 func (*MlInferenceService) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{152}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *MlInferenceService) GetId() string {
@@ -16287,6 +14654,78 @@ func (x *MlInferenceService) GetComparing() bool {
 	return false
 }
 
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetModelDigest() string {
+	if x != nil {
+		return x.ModelDigest
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetQueueWaitP95Ms() float64 {
+	if x != nil {
+		return x.QueueWaitP95Ms
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetAcceleratorUtilizationPercent() float64 {
+	if x != nil {
+		return x.AcceleratorUtilizationPercent
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetKvCacheUsagePercent() float64 {
+	if x != nil {
+		return x.KvCacheUsagePercent
+	}
+	return 0
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetColdStart() *MlPodStartBreakdown {
+	if x != nil {
+		return x.ColdStart
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetReleaseVerdict() MlReleaseVerdict {
+	if x != nil {
+		return x.ReleaseVerdict
+	}
+	return MlReleaseVerdict_ML_RELEASE_VERDICT_UNSPECIFIED
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetReleaseVerdictSummary() string {
+	if x != nil {
+		return x.ReleaseVerdictSummary
+	}
+	return ""
+}
+
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+func (x *MlInferenceService) GetReleaseCheckedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ReleaseCheckedAt
+	}
+	return nil
+}
+
 type GetMlInferenceServiceRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
@@ -16297,7 +14736,7 @@ type GetMlInferenceServiceRequest struct {
 
 func (x *GetMlInferenceServiceRequest) Reset() {
 	*x = GetMlInferenceServiceRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[153]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16309,7 +14748,7 @@ func (x *GetMlInferenceServiceRequest) String() string {
 func (*GetMlInferenceServiceRequest) ProtoMessage() {}
 
 func (x *GetMlInferenceServiceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[153]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16322,7 +14761,7 @@ func (x *GetMlInferenceServiceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlInferenceServiceRequest.ProtoReflect.Descriptor instead.
 func (*GetMlInferenceServiceRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{153}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *GetMlInferenceServiceRequest) GetOrgId() string {
@@ -16361,7 +14800,7 @@ type GetMlInferenceServiceResponse struct {
 
 func (x *GetMlInferenceServiceResponse) Reset() {
 	*x = GetMlInferenceServiceResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[154]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16373,7 +14812,7 @@ func (x *GetMlInferenceServiceResponse) String() string {
 func (*GetMlInferenceServiceResponse) ProtoMessage() {}
 
 func (x *GetMlInferenceServiceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[154]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16386,7 +14825,7 @@ func (x *GetMlInferenceServiceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMlInferenceServiceResponse.ProtoReflect.Descriptor instead.
 func (*GetMlInferenceServiceResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{154}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *GetMlInferenceServiceResponse) GetService() *MlInferenceService {
@@ -16488,7 +14927,7 @@ type MlSliDelta struct {
 
 func (x *MlSliDelta) Reset() {
 	*x = MlSliDelta{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[155]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16500,7 +14939,7 @@ func (x *MlSliDelta) String() string {
 func (*MlSliDelta) ProtoMessage() {}
 
 func (x *MlSliDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[155]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16513,7 +14952,7 @@ func (x *MlSliDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlSliDelta.ProtoReflect.Descriptor instead.
 func (*MlSliDelta) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{155}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *MlSliDelta) GetKey() string {
@@ -16586,7 +15025,7 @@ type MlRevision struct {
 
 func (x *MlRevision) Reset() {
 	*x = MlRevision{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[156]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16598,7 +15037,7 @@ func (x *MlRevision) String() string {
 func (*MlRevision) ProtoMessage() {}
 
 func (x *MlRevision) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[156]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16611,7 +15050,7 @@ func (x *MlRevision) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlRevision.ProtoReflect.Descriptor instead.
 func (*MlRevision) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{156}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *MlRevision) GetId() string {
@@ -16722,7 +15161,7 @@ type MlReplica struct {
 
 func (x *MlReplica) Reset() {
 	*x = MlReplica{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[157]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16734,7 +15173,7 @@ func (x *MlReplica) String() string {
 func (*MlReplica) ProtoMessage() {}
 
 func (x *MlReplica) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[157]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16747,7 +15186,7 @@ func (x *MlReplica) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlReplica.ProtoReflect.Descriptor instead.
 func (*MlReplica) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{157}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *MlReplica) GetId() string {
@@ -16862,7 +15301,7 @@ type MlServingCost struct {
 
 func (x *MlServingCost) Reset() {
 	*x = MlServingCost{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[158]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16874,7 +15313,7 @@ func (x *MlServingCost) String() string {
 func (*MlServingCost) ProtoMessage() {}
 
 func (x *MlServingCost) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[158]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16887,7 +15326,7 @@ func (x *MlServingCost) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlServingCost.ProtoReflect.Descriptor instead.
 func (*MlServingCost) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{158}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *MlServingCost) GetGpuHours_24H() float64 {
@@ -16949,7 +15388,7 @@ type MlChangesComparison struct {
 
 func (x *MlChangesComparison) Reset() {
 	*x = MlChangesComparison{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[159]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16961,7 +15400,7 @@ func (x *MlChangesComparison) String() string {
 func (*MlChangesComparison) ProtoMessage() {}
 
 func (x *MlChangesComparison) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[159]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16974,7 +15413,7 @@ func (x *MlChangesComparison) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlChangesComparison.ProtoReflect.Descriptor instead.
 func (*MlChangesComparison) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{159}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *MlChangesComparison) GetId() string {
@@ -17040,7 +15479,7 @@ type MlChangesArm struct {
 
 func (x *MlChangesArm) Reset() {
 	*x = MlChangesArm{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[160]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17052,7 +15491,7 @@ func (x *MlChangesArm) String() string {
 func (*MlChangesArm) ProtoMessage() {}
 
 func (x *MlChangesArm) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[160]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17065,7 +15504,7 @@ func (x *MlChangesArm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlChangesArm.ProtoReflect.Descriptor instead.
 func (*MlChangesArm) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{160}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *MlChangesArm) GetArm() string {
@@ -17129,7 +15568,7 @@ type MlArmMetric struct {
 
 func (x *MlArmMetric) Reset() {
 	*x = MlArmMetric{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[161]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17141,7 +15580,7 @@ func (x *MlArmMetric) String() string {
 func (*MlArmMetric) ProtoMessage() {}
 
 func (x *MlArmMetric) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[161]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17154,7 +15593,7 @@ func (x *MlArmMetric) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlArmMetric.ProtoReflect.Descriptor instead.
 func (*MlArmMetric) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{161}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *MlArmMetric) GetKey() string {
@@ -17235,7 +15674,7 @@ type MlOnlineEval struct {
 
 func (x *MlOnlineEval) Reset() {
 	*x = MlOnlineEval{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[162]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -17247,7 +15686,7 @@ func (x *MlOnlineEval) String() string {
 func (*MlOnlineEval) ProtoMessage() {}
 
 func (x *MlOnlineEval) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[162]
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17260,7 +15699,7 @@ func (x *MlOnlineEval) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MlOnlineEval.ProtoReflect.Descriptor instead.
 func (*MlOnlineEval) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{162}
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *MlOnlineEval) GetRevisionId() string {
@@ -17312,457 +15751,33 @@ func (x *MlOnlineEval) GetSamples() int64 {
 	return 0
 }
 
-type QueryMlHistogramsRequest struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	OrgId   string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Subject *MlSubject             `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	// "train.step_time", "serve.ttft", "serve.itl", "serve.e2e",
-	// "queue.admission_wait", "ckpt.save_time".
-	Keys          []string               `protobuf:"bytes,3,rep,name=keys,proto3" json:"keys,omitempty"`
-	From          *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=from,proto3,oneof" json:"from,omitempty"`
-	To            *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=to,proto3,oneof" json:"to,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryMlHistogramsRequest) Reset() {
-	*x = QueryMlHistogramsRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[163]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryMlHistogramsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryMlHistogramsRequest) ProtoMessage() {}
-
-func (x *QueryMlHistogramsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[163]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryMlHistogramsRequest.ProtoReflect.Descriptor instead.
-func (*QueryMlHistogramsRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{163}
-}
-
-func (x *QueryMlHistogramsRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *QueryMlHistogramsRequest) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *QueryMlHistogramsRequest) GetKeys() []string {
-	if x != nil {
-		return x.Keys
-	}
-	return nil
-}
-
-func (x *QueryMlHistogramsRequest) GetFrom() *timestamppb.Timestamp {
-	if x != nil {
-		return x.From
-	}
-	return nil
-}
-
-func (x *QueryMlHistogramsRequest) GetTo() *timestamppb.Timestamp {
-	if x != nil {
-		return x.To
-	}
-	return nil
-}
-
-type QueryMlHistogramsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Histograms    []*MlHistogram         `protobuf:"bytes,1,rep,name=histograms,proto3" json:"histograms,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *QueryMlHistogramsResponse) Reset() {
-	*x = QueryMlHistogramsResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[164]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *QueryMlHistogramsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*QueryMlHistogramsResponse) ProtoMessage() {}
-
-func (x *QueryMlHistogramsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[164]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use QueryMlHistogramsResponse.ProtoReflect.Descriptor instead.
-func (*QueryMlHistogramsResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{164}
-}
-
-func (x *QueryMlHistogramsResponse) GetHistograms() []*MlHistogram {
-	if x != nil {
-		return x.Histograms
-	}
-	return nil
-}
-
-type MlHistogram struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Key     string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Label   string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
-	Unit    string                 `protobuf:"bytes,3,opt,name=unit,proto3" json:"unit,omitempty"`
-	Buckets []*MlHistogramBucket   `protobuf:"bytes,4,rep,name=buckets,proto3" json:"buckets,omitempty"`
-	P50     float64                `protobuf:"fixed64,5,opt,name=p50,proto3" json:"p50,omitempty"`
-	P95     float64                `protobuf:"fixed64,6,opt,name=p95,proto3" json:"p95,omitempty"`
-	P99     float64                `protobuf:"fixed64,7,opt,name=p99,proto3" json:"p99,omitempty"`
-	Count   int64                  `protobuf:"varint,8,opt,name=count,proto3" json:"count,omitempty"`
-	// A comparison distribution (the previous revision, attempt 1), if any.
-	CompareLabel   string               `protobuf:"bytes,9,opt,name=compare_label,json=compareLabel,proto3" json:"compare_label,omitempty"`
-	CompareBuckets []*MlHistogramBucket `protobuf:"bytes,10,rep,name=compare_buckets,json=compareBuckets,proto3" json:"compare_buckets,omitempty"`
-	Collection     MlCollection         `protobuf:"varint,11,opt,name=collection,proto3,enum=controlplane.v1.MlCollection" json:"collection,omitempty"`
-	MissingSource  string               `protobuf:"bytes,12,opt,name=missing_source,json=missingSource,proto3" json:"missing_source,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *MlHistogram) Reset() {
-	*x = MlHistogram{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[165]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlHistogram) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlHistogram) ProtoMessage() {}
-
-func (x *MlHistogram) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[165]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlHistogram.ProtoReflect.Descriptor instead.
-func (*MlHistogram) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{165}
-}
-
-func (x *MlHistogram) GetKey() string {
-	if x != nil {
-		return x.Key
-	}
-	return ""
-}
-
-func (x *MlHistogram) GetLabel() string {
-	if x != nil {
-		return x.Label
-	}
-	return ""
-}
-
-func (x *MlHistogram) GetUnit() string {
-	if x != nil {
-		return x.Unit
-	}
-	return ""
-}
-
-func (x *MlHistogram) GetBuckets() []*MlHistogramBucket {
-	if x != nil {
-		return x.Buckets
-	}
-	return nil
-}
-
-func (x *MlHistogram) GetP50() float64 {
-	if x != nil {
-		return x.P50
-	}
-	return 0
-}
-
-func (x *MlHistogram) GetP95() float64 {
-	if x != nil {
-		return x.P95
-	}
-	return 0
-}
-
-func (x *MlHistogram) GetP99() float64 {
-	if x != nil {
-		return x.P99
-	}
-	return 0
-}
-
-func (x *MlHistogram) GetCount() int64 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
-func (x *MlHistogram) GetCompareLabel() string {
-	if x != nil {
-		return x.CompareLabel
-	}
-	return ""
-}
-
-func (x *MlHistogram) GetCompareBuckets() []*MlHistogramBucket {
-	if x != nil {
-		return x.CompareBuckets
-	}
-	return nil
-}
-
-func (x *MlHistogram) GetCollection() MlCollection {
-	if x != nil {
-		return x.Collection
-	}
-	return MlCollection_ML_COLLECTION_UNSPECIFIED
-}
-
-func (x *MlHistogram) GetMissingSource() string {
-	if x != nil {
-		return x.MissingSource
-	}
-	return ""
-}
-
-type MlHistogramBucket struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Lower         float64                `protobuf:"fixed64,1,opt,name=lower,proto3" json:"lower,omitempty"`
-	Upper         float64                `protobuf:"fixed64,2,opt,name=upper,proto3" json:"upper,omitempty"`
-	Count         int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *MlHistogramBucket) Reset() {
-	*x = MlHistogramBucket{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[166]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *MlHistogramBucket) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*MlHistogramBucket) ProtoMessage() {}
-
-func (x *MlHistogramBucket) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[166]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use MlHistogramBucket.ProtoReflect.Descriptor instead.
-func (*MlHistogramBucket) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{166}
-}
-
-func (x *MlHistogramBucket) GetLower() float64 {
-	if x != nil {
-		return x.Lower
-	}
-	return 0
-}
-
-func (x *MlHistogramBucket) GetUpper() float64 {
-	if x != nil {
-		return x.Upper
-	}
-	return 0
-}
-
-func (x *MlHistogramBucket) GetCount() int64 {
-	if x != nil {
-		return x.Count
-	}
-	return 0
-}
-
-type ListMlAlertsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	OrgId         string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
-	Subject       *MlSubject             `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMlAlertsRequest) Reset() {
-	*x = ListMlAlertsRequest{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[167]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlAlertsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlAlertsRequest) ProtoMessage() {}
-
-func (x *ListMlAlertsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[167]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlAlertsRequest.ProtoReflect.Descriptor instead.
-func (*ListMlAlertsRequest) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{167}
-}
-
-func (x *ListMlAlertsRequest) GetOrgId() string {
-	if x != nil {
-		return x.OrgId
-	}
-	return ""
-}
-
-func (x *ListMlAlertsRequest) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-type ListMlAlertsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Alerts        []*MlAlertRule         `protobuf:"bytes,1,rep,name=alerts,proto3" json:"alerts,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListMlAlertsResponse) Reset() {
-	*x = ListMlAlertsResponse{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[168]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListMlAlertsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListMlAlertsResponse) ProtoMessage() {}
-
-func (x *ListMlAlertsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[168]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListMlAlertsResponse.ProtoReflect.Descriptor instead.
-func (*ListMlAlertsResponse) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{168}
-}
-
-func (x *ListMlAlertsResponse) GetAlerts() []*MlAlertRule {
-	if x != nil {
-		return x.Alerts
-	}
-	return nil
-}
-
-type MlAlertRule struct {
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type GetMlMachinesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name  string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	// As declared: "train/loss z-score > 6 for 3 steps".
-	Expression string       `protobuf:"bytes,3,opt,name=expression,proto3" json:"expression,omitempty"`
-	Severity   MlSeverity   `protobuf:"varint,4,opt,name=severity,proto3,enum=controlplane.v1.MlSeverity" json:"severity,omitempty"`
-	State      MlAlertState `protobuf:"varint,5,opt,name=state,proto3,enum=controlplane.v1.MlAlertState" json:"state,omitempty"`
-	Subject    *MlSubject   `protobuf:"bytes,6,opt,name=subject,proto3" json:"subject,omitempty"`
-	// "forge default" or the KCL path that declares it.
-	DeclaredIn  string                 `protobuf:"bytes,7,opt,name=declared_in,json=declaredIn,proto3" json:"declared_in,omitempty"`
-	LastFiredAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=last_fired_at,json=lastFiredAt,proto3" json:"last_fired_at,omitempty"`
-	Fired_7D    int32                  `protobuf:"varint,9,opt,name=fired_7d,json=fired7d,proto3" json:"fired_7d,omitempty"`
-	// What it may do on its own: "rewind to the last good checkpoint",
-	// "cordon the node and start a new attempt"; empty to notify only.
-	AutoAction string `protobuf:"bytes,10,opt,name=auto_action,json=autoAction,proto3" json:"auto_action,omitempty"`
-	// Whether the auto action is on (opt-in).
-	AutoActionEnabled bool `protobuf:"varint,11,opt,name=auto_action_enabled,json=autoActionEnabled,proto3" json:"auto_action_enabled,omitempty"`
-	// "Slack #ml-oncall", "Inbox".
-	RoutedTo      string `protobuf:"bytes,12,opt,name=routed_to,json=routedTo,proto3" json:"routed_to,omitempty"`
-	LastAction    string `protobuf:"bytes,13,opt,name=last_action,json=lastAction,proto3" json:"last_action,omitempty"`
+	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// One connected cluster; unset for every cluster of the org.
+	ClusterId     *string `protobuf:"bytes,2,opt,name=cluster_id,json=clusterId,proto3,oneof" json:"cluster_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *MlAlertRule) Reset() {
-	*x = MlAlertRule{}
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[169]
+func (x *GetMlMachinesRequest) Reset() {
+	*x = GetMlMachinesRequest{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *MlAlertRule) String() string {
+func (x *GetMlMachinesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*MlAlertRule) ProtoMessage() {}
+func (*GetMlMachinesRequest) ProtoMessage() {}
 
-func (x *MlAlertRule) ProtoReflect() protoreflect.Message {
-	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[169]
+func (x *GetMlMachinesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -17773,100 +15788,784 @@ func (x *MlAlertRule) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use MlAlertRule.ProtoReflect.Descriptor instead.
-func (*MlAlertRule) Descriptor() ([]byte, []int) {
-	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{169}
+// Deprecated: Use GetMlMachinesRequest.ProtoReflect.Descriptor instead.
+func (*GetMlMachinesRequest) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{141}
 }
 
-func (x *MlAlertRule) GetId() string {
+func (x *GetMlMachinesRequest) GetOrgId() string {
 	if x != nil {
-		return x.Id
+		return x.OrgId
 	}
 	return ""
 }
 
-func (x *MlAlertRule) GetName() string {
+func (x *GetMlMachinesRequest) GetClusterId() string {
+	if x != nil && x.ClusterId != nil {
+		return *x.ClusterId
+	}
+	return ""
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type GetMlMachinesResponse struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Clusters []*MlCluster           `protobuf:"bytes,1,rep,name=clusters,proto3" json:"clusters,omitempty"`
+	Pools    []*MlNodePool          `protobuf:"bytes,2,rep,name=pools,proto3" json:"pools,omitempty"`
+	// When the inventory these come from was observed.
+	ObservedAt    *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetMlMachinesResponse) Reset() {
+	*x = GetMlMachinesResponse{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[142]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetMlMachinesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetMlMachinesResponse) ProtoMessage() {}
+
+func (x *GetMlMachinesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[142]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetMlMachinesResponse.ProtoReflect.Descriptor instead.
+func (*GetMlMachinesResponse) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{142}
+}
+
+func (x *GetMlMachinesResponse) GetClusters() []*MlCluster {
+	if x != nil {
+		return x.Clusters
+	}
+	return nil
+}
+
+func (x *GetMlMachinesResponse) GetPools() []*MlNodePool {
+	if x != nil {
+		return x.Pools
+	}
+	return nil
+}
+
+func (x *GetMlMachinesResponse) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlNodePool struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ClusterId string                 `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	Name      string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// "nvidia", "amd", "google" or "aws".
+	AcceleratorVendor string `protobuf:"bytes,3,opt,name=accelerator_vendor,json=acceleratorVendor,proto3" json:"accelerator_vendor,omitempty"`
+	// The product, e.g. "NVIDIA H100 80GB HBM3".
+	AcceleratorProduct    string `protobuf:"bytes,4,opt,name=accelerator_product,json=acceleratorProduct,proto3" json:"accelerator_product,omitempty"`
+	AcceleratorsTotal     int32  `protobuf:"varint,5,opt,name=accelerators_total,json=acceleratorsTotal,proto3" json:"accelerators_total,omitempty"`
+	AcceleratorsAllocated int32  `protobuf:"varint,6,opt,name=accelerators_allocated,json=acceleratorsAllocated,proto3" json:"accelerators_allocated,omitempty"`
+	// Allocated, but under 5% utilisation for at least an hour.
+	AcceleratorsIdle int32     `protobuf:"varint,7,opt,name=accelerators_idle,json=acceleratorsIdle,proto3" json:"accelerators_idle,omitempty"`
+	Nodes            []*MlNode `protobuf:"bytes,8,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	// Pool-wide utilisation against allocation over the last 24h, oldest first.
+	Utilization   []*MlUtilizationPoint `protobuf:"bytes,9,rep,name=utilization,proto3" json:"utilization,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MlNodePool) Reset() {
+	*x = MlNodePool{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[143]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlNodePool) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlNodePool) ProtoMessage() {}
+
+func (x *MlNodePool) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[143]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlNodePool.ProtoReflect.Descriptor instead.
+func (*MlNodePool) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{143}
+}
+
+func (x *MlNodePool) GetClusterId() string {
+	if x != nil {
+		return x.ClusterId
+	}
+	return ""
+}
+
+func (x *MlNodePool) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *MlAlertRule) GetExpression() string {
+func (x *MlNodePool) GetAcceleratorVendor() string {
 	if x != nil {
-		return x.Expression
+		return x.AcceleratorVendor
 	}
 	return ""
 }
 
-func (x *MlAlertRule) GetSeverity() MlSeverity {
+func (x *MlNodePool) GetAcceleratorProduct() string {
 	if x != nil {
-		return x.Severity
-	}
-	return MlSeverity_ML_SEVERITY_UNSPECIFIED
-}
-
-func (x *MlAlertRule) GetState() MlAlertState {
-	if x != nil {
-		return x.State
-	}
-	return MlAlertState_ML_ALERT_STATE_UNSPECIFIED
-}
-
-func (x *MlAlertRule) GetSubject() *MlSubject {
-	if x != nil {
-		return x.Subject
-	}
-	return nil
-}
-
-func (x *MlAlertRule) GetDeclaredIn() string {
-	if x != nil {
-		return x.DeclaredIn
+		return x.AcceleratorProduct
 	}
 	return ""
 }
 
-func (x *MlAlertRule) GetLastFiredAt() *timestamppb.Timestamp {
+func (x *MlNodePool) GetAcceleratorsTotal() int32 {
 	if x != nil {
-		return x.LastFiredAt
-	}
-	return nil
-}
-
-func (x *MlAlertRule) GetFired_7D() int32 {
-	if x != nil {
-		return x.Fired_7D
+		return x.AcceleratorsTotal
 	}
 	return 0
 }
 
-func (x *MlAlertRule) GetAutoAction() string {
+func (x *MlNodePool) GetAcceleratorsAllocated() int32 {
 	if x != nil {
-		return x.AutoAction
+		return x.AcceleratorsAllocated
+	}
+	return 0
+}
+
+func (x *MlNodePool) GetAcceleratorsIdle() int32 {
+	if x != nil {
+		return x.AcceleratorsIdle
+	}
+	return 0
+}
+
+func (x *MlNodePool) GetNodes() []*MlNode {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+func (x *MlNodePool) GetUtilization() []*MlUtilizationPoint {
+	if x != nil {
+		return x.Utilization
+	}
+	return nil
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlHealthFlag struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// "xid", "ecc_dbe", "row_remap_failure", "condition" or
+	// "allocatable_below_capacity".
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// The code, e.g. "79" for an Xid.
+	Code string `protobuf:"bytes,2,opt,name=code,proto3" json:"code,omitempty"`
+	// The device it concerns, e.g. "GPU-3"; empty for the node as a whole.
+	Device        string                 `protobuf:"bytes,3,opt,name=device,proto3" json:"device,omitempty"`
+	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	FirstSeenAt   *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=first_seen_at,json=firstSeenAt,proto3" json:"first_seen_at,omitempty"`
+	LastSeenAt    *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MlHealthFlag) Reset() {
+	*x = MlHealthFlag{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[144]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlHealthFlag) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlHealthFlag) ProtoMessage() {}
+
+func (x *MlHealthFlag) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[144]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlHealthFlag.ProtoReflect.Descriptor instead.
+func (*MlHealthFlag) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{144}
+}
+
+func (x *MlHealthFlag) GetKind() string {
+	if x != nil {
+		return x.Kind
 	}
 	return ""
 }
 
-func (x *MlAlertRule) GetAutoActionEnabled() bool {
+func (x *MlHealthFlag) GetCode() string {
 	if x != nil {
-		return x.AutoActionEnabled
-	}
-	return false
-}
-
-func (x *MlAlertRule) GetRoutedTo() string {
-	if x != nil {
-		return x.RoutedTo
+		return x.Code
 	}
 	return ""
 }
 
-func (x *MlAlertRule) GetLastAction() string {
+func (x *MlHealthFlag) GetDevice() string {
 	if x != nil {
-		return x.LastAction
+		return x.Device
 	}
 	return ""
+}
+
+func (x *MlHealthFlag) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *MlHealthFlag) GetFirstSeenAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FirstSeenAt
+	}
+	return nil
+}
+
+func (x *MlHealthFlag) GetLastSeenAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastSeenAt
+	}
+	return nil
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlUtilizationPoint struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Time  *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=time,proto3" json:"time,omitempty"`
+	// Mean utilisation of the pool's accelerators, 0-100.
+	UtilizationPercent float64 `protobuf:"fixed64,2,opt,name=utilization_percent,json=utilizationPercent,proto3" json:"utilization_percent,omitempty"`
+	// Share of the pool's accelerators allocated to pods, 0-100.
+	AllocatedPercent float64 `protobuf:"fixed64,3,opt,name=allocated_percent,json=allocatedPercent,proto3" json:"allocated_percent,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *MlUtilizationPoint) Reset() {
+	*x = MlUtilizationPoint{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[145]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlUtilizationPoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlUtilizationPoint) ProtoMessage() {}
+
+func (x *MlUtilizationPoint) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[145]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlUtilizationPoint.ProtoReflect.Descriptor instead.
+func (*MlUtilizationPoint) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{145}
+}
+
+func (x *MlUtilizationPoint) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *MlUtilizationPoint) GetUtilizationPercent() float64 {
+	if x != nil {
+		return x.UtilizationPercent
+	}
+	return 0
+}
+
+func (x *MlUtilizationPoint) GetAllocatedPercent() float64 {
+	if x != nil {
+		return x.AllocatedPercent
+	}
+	return 0
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlStackComponent struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ClusterId string                 `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	// e.g. "dcgm-exporter", "kueue", "node-problem-detector".
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// "telemetry", "health", "scheduling", "training", "serving" or "drivers".
+	Category string           `protobuf:"bytes,3,opt,name=category,proto3" json:"category,omitempty"`
+	State    MlComponentState `protobuf:"varint,4,opt,name=state,proto3,enum=controlplane.v1.MlComponentState" json:"state,omitempty"`
+	Version  string           `protobuf:"bytes,5,opt,name=version,proto3" json:"version,omitempty"`
+	// How it got there, e.g. "GPU Operator v24.9.0".
+	Via       string `protobuf:"bytes,6,opt,name=via,proto3" json:"via,omitempty"`
+	Namespace string `protobuf:"bytes,7,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// The KCL that declares it (Adopt or Install), as forge ml discover
+	// proposes it.
+	Declaration   string `protobuf:"bytes,8,opt,name=declaration,proto3" json:"declaration,omitempty"`
+	Note          string `protobuf:"bytes,9,opt,name=note,proto3" json:"note,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MlStackComponent) Reset() {
+	*x = MlStackComponent{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[146]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlStackComponent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlStackComponent) ProtoMessage() {}
+
+func (x *MlStackComponent) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[146]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlStackComponent.ProtoReflect.Descriptor instead.
+func (*MlStackComponent) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{146}
+}
+
+func (x *MlStackComponent) GetClusterId() string {
+	if x != nil {
+		return x.ClusterId
+	}
+	return ""
+}
+
+func (x *MlStackComponent) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MlStackComponent) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *MlStackComponent) GetState() MlComponentState {
+	if x != nil {
+		return x.State
+	}
+	return MlComponentState_ML_COMPONENT_STATE_UNSPECIFIED
+}
+
+func (x *MlStackComponent) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *MlStackComponent) GetVia() string {
+	if x != nil {
+		return x.Via
+	}
+	return ""
+}
+
+func (x *MlStackComponent) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *MlStackComponent) GetDeclaration() string {
+	if x != nil {
+		return x.Declaration
+	}
+	return ""
+}
+
+func (x *MlStackComponent) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlEvidence struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Label         string                 `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	Value         string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MlEvidence) Reset() {
+	*x = MlEvidence{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[147]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlEvidence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlEvidence) ProtoMessage() {}
+
+func (x *MlEvidence) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[147]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlEvidence.ProtoReflect.Descriptor instead.
+func (*MlEvidence) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{147}
+}
+
+func (x *MlEvidence) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *MlEvidence) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlPodStartBreakdown struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Workload    string                 `protobuf:"bytes,1,opt,name=workload,proto3" json:"workload,omitempty"`
+	SampleCount int32                  `protobuf:"varint,2,opt,name=sample_count,json=sampleCount,proto3" json:"sample_count,omitempty"`
+	// In order: e.g. "scheduling", "image pull", "container start",
+	// "model load", "ready".
+	Stages        []*MlStartStage `protobuf:"bytes,3,rep,name=stages,proto3" json:"stages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MlPodStartBreakdown) Reset() {
+	*x = MlPodStartBreakdown{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[148]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlPodStartBreakdown) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlPodStartBreakdown) ProtoMessage() {}
+
+func (x *MlPodStartBreakdown) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[148]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlPodStartBreakdown.ProtoReflect.Descriptor instead.
+func (*MlPodStartBreakdown) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{148}
+}
+
+func (x *MlPodStartBreakdown) GetWorkload() string {
+	if x != nil {
+		return x.Workload
+	}
+	return ""
+}
+
+func (x *MlPodStartBreakdown) GetSampleCount() int32 {
+	if x != nil {
+		return x.SampleCount
+	}
+	return 0
+}
+
+func (x *MlPodStartBreakdown) GetStages() []*MlStartStage {
+	if x != nil {
+		return x.Stages
+	}
+	return nil
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlStartStage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	P50Seconds    float64                `protobuf:"fixed64,2,opt,name=p50_seconds,json=p50Seconds,proto3" json:"p50_seconds,omitempty"`
+	P95Seconds    float64                `protobuf:"fixed64,3,opt,name=p95_seconds,json=p95Seconds,proto3" json:"p95_seconds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MlStartStage) Reset() {
+	*x = MlStartStage{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[149]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlStartStage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlStartStage) ProtoMessage() {}
+
+func (x *MlStartStage) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[149]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlStartStage.ProtoReflect.Descriptor instead.
+func (*MlStartStage) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{149}
+}
+
+func (x *MlStartStage) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MlStartStage) GetP50Seconds() float64 {
+	if x != nil {
+		return x.P50Seconds
+	}
+	return 0
+}
+
+func (x *MlStartStage) GetP95Seconds() float64 {
+	if x != nil {
+		return x.P95Seconds
+	}
+	return 0
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlMetricSeries struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// e.g. "loss", "eval/accuracy", "accelerator_utilization".
+	Name          string           `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Unit          string           `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
+	Points        []*MlMetricPoint `protobuf:"bytes,3,rep,name=points,proto3" json:"points,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MlMetricSeries) Reset() {
+	*x = MlMetricSeries{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[150]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlMetricSeries) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlMetricSeries) ProtoMessage() {}
+
+func (x *MlMetricSeries) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[150]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlMetricSeries.ProtoReflect.Descriptor instead.
+func (*MlMetricSeries) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{150}
+}
+
+func (x *MlMetricSeries) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MlMetricSeries) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
+func (x *MlMetricSeries) GetPoints() []*MlMetricPoint {
+	if x != nil {
+		return x.Points
+	}
+	return nil
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+//
+// Deprecated: Marked as deprecated in services/ml_early_access/v1/ml_early_access.proto.
+type MlMetricPoint struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Step          int64                  `protobuf:"varint,1,opt,name=step,proto3" json:"step,omitempty"`
+	Time          *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=time,proto3" json:"time,omitempty"`
+	Value         float64                `protobuf:"fixed64,3,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MlMetricPoint) Reset() {
+	*x = MlMetricPoint{}
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[151]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MlMetricPoint) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MlMetricPoint) ProtoMessage() {}
+
+func (x *MlMetricPoint) ProtoReflect() protoreflect.Message {
+	mi := &file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[151]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MlMetricPoint.ProtoReflect.Descriptor instead.
+func (*MlMetricPoint) Descriptor() ([]byte, []int) {
+	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP(), []int{151}
+}
+
+func (x *MlMetricPoint) GetStep() int64 {
+	if x != nil {
+		return x.Step
+	}
+	return 0
+}
+
+func (x *MlMetricPoint) GetTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Time
+	}
+	return nil
+}
+
+func (x *MlMetricPoint) GetValue() float64 {
+	if x != nil {
+		return x.Value
+	}
+	return 0
 }
 
 var File_services_ml_early_access_v1_ml_early_access_proto protoreflect.FileDescriptor
@@ -17991,19 +16690,22 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x10idle_usd_per_day\x18\t \x01(\x01R\ridleUsdPerDay\x122\n" +
 	"\bcost_24h\x18\n" +
 	" \x01(\v2\x17.controlplane.v1.MlCostR\acost24h\x12)\n" +
-	"\x10training_goodput\x18\v \x01(\x01R\x0ftrainingGoodput\"\xc3\x02\n" +
+	"\x10training_goodput\x18\v \x01(\x01R\x0ftrainingGoodput\"\xe6\x02\n" +
 	"\tMlCluster\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x02id\x18\x06 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprovider\x18\x03 \x01(\tR\bprovider\x12\x1a\n" +
 	"\blocation\x18\x04 \x01(\tR\blocation\x12-\n" +
-	"\x12kubernetes_version\x18\x05 \x01(\tR\x11kubernetesVersion\x12<\n" +
-	"\flast_seen_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"\x12kubernetes_version\x18\a \x01(\tR\x11kubernetesVersion\x12<\n" +
+	"\flast_seen_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"lastSeenAt\x12\x1d\n" +
 	"\n" +
-	"node_count\x18\a \x01(\x05R\tnodeCount\x12\x1b\n" +
-	"\tgpu_count\x18\b \x01(\x05R\bgpuCount\x121\n" +
-	"\x06health\x18\t \x01(\x0e2\x19.controlplane.v1.MlHealthR\x06health\"\xe5\x04\n" +
+	"node_count\x18\b \x01(\x05R\tnodeCount\x12\x1b\n" +
+	"\tgpu_count\x18\t \x01(\x05R\bgpuCount\x121\n" +
+	"\x06health\x18\n" +
+	" \x01(\x0e2\x19.controlplane.v1.MlHealthR\x06health\x12!\n" +
+	"\n" +
+	"cluster_id\x18\x01 \x01(\tB\x02\x18\x01R\tclusterId\"\xe5\x04\n" +
 	"\x06MlPool\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -18066,39 +16768,47 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\aMlShare\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value\x12\x14\n" +
-	"\x05share\x18\x03 \x01(\x01R\x05share\"\xf7\x06\n" +
+	"\x05share\x18\x03 \x01(\x01R\x05share\"\x8a\n" +
+	"\n" +
 	"\x06MlNode\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
+	"\x02id\x18\f \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
-	"cluster_id\x18\x03 \x01(\tR\tclusterId\x12\x17\n" +
-	"\apool_id\x18\x04 \x01(\tR\x06poolId\x12\x1f\n" +
-	"\vprovider_id\x18\x05 \x01(\tR\n" +
+	"cluster_id\x18\r \x01(\tR\tclusterId\x12\x17\n" +
+	"\apool_id\x18\x0e \x01(\tR\x06poolId\x12\x1f\n" +
+	"\vprovider_id\x18\x0f \x01(\tR\n" +
 	"providerId\x12#\n" +
-	"\rinstance_type\x18\x06 \x01(\tR\finstanceType\x12\x12\n" +
-	"\x04zone\x18\a \x01(\tR\x04zone\x12 \n" +
-	"\vincarnation\x18\b \x01(\x05R\vincarnation\x121\n" +
-	"\x06health\x18\t \x01(\x0e2\x19.controlplane.v1.MlHealthR\x06health\x12!\n" +
-	"\fhealth_score\x18\n" +
-	" \x01(\x01R\vhealthScore\x12#\n" +
-	"\rhealth_reason\x18\v \x01(\tR\fhealthReason\x12\x1a\n" +
-	"\bcordoned\x18\f \x01(\bR\bcordoned\x12\x12\n" +
-	"\x04gpus\x18\r \x01(\x05R\x04gpus\x12)\n" +
-	"\x10gpus_allocatable\x18\x0e \x01(\x05R\x0fgpusAllocatable\x12%\n" +
-	"\x0egpus_allocated\x18\x0f \x01(\x05R\rgpusAllocated\x12\x1d\n" +
+	"\rinstance_type\x18\x10 \x01(\tR\finstanceType\x12\x12\n" +
+	"\x04zone\x18\x11 \x01(\tR\x04zone\x12 \n" +
+	"\vincarnation\x18\x12 \x01(\x05R\vincarnation\x12<\n" +
+	"\fhealth_state\x18\x13 \x01(\x0e2\x19.controlplane.v1.MlHealthR\vhealthState\x12!\n" +
+	"\fhealth_score\x18\x14 \x01(\x01R\vhealthScore\x12#\n" +
+	"\rhealth_reason\x18\x15 \x01(\tR\fhealthReason\x12\x1a\n" +
+	"\bcordoned\x18\v \x01(\bR\bcordoned\x12\x12\n" +
+	"\x04gpus\x18\x16 \x01(\x05R\x04gpus\x12)\n" +
+	"\x10gpus_allocatable\x18\x17 \x01(\x05R\x0fgpusAllocatable\x12%\n" +
+	"\x0egpus_allocated\x18\x18 \x01(\x05R\rgpusAllocated\x12\x1d\n" +
 	"\n" +
-	"busy_ratio\x18\x10 \x01(\x01R\tbusyRatio\x12%\n" +
-	"\x0edriver_version\x18\x11 \x01(\tR\rdriverVersion\x12!\n" +
-	"\fcuda_version\x18\x12 \x01(\tR\vcudaVersion\x12%\n" +
-	"\x0ekernel_version\x18\x13 \x01(\tR\rkernelVersion\x12\x19\n" +
-	"\bos_image\x18\x14 \x01(\tR\aosImage\x127\n" +
-	"\tbooted_at\x18\x15 \x01(\v2\x1a.google.protobuf.TimestampR\bbootedAt\x123\n" +
-	"\adevices\x18\x16 \x03(\v2\x19.controlplane.v1.MlDeviceR\adevices\x12@\n" +
+	"busy_ratio\x18\x19 \x01(\x01R\tbusyRatio\x12%\n" +
+	"\x0edriver_version\x18\a \x01(\tR\rdriverVersion\x12!\n" +
+	"\fcuda_version\x18\x1a \x01(\tR\vcudaVersion\x12%\n" +
+	"\x0ekernel_version\x18\x1b \x01(\tR\rkernelVersion\x12\x19\n" +
+	"\bos_image\x18\x1c \x01(\tR\aosImage\x127\n" +
+	"\tbooted_at\x18\x1d \x01(\v2\x1a.google.protobuf.TimestampR\bbootedAt\x123\n" +
+	"\adevices\x18\x1e \x03(\v2\x19.controlplane.v1.MlDeviceR\adevices\x12@\n" +
 	"\n" +
-	"conditions\x18\x17 \x03(\v2 .controlplane.v1.MlNodeConditionR\n" +
+	"conditions\x18\x1f \x03(\v2 .controlplane.v1.MlNodeConditionR\n" +
 	"conditions\x12\x18\n" +
-	"\asharing\x18\x18 \x01(\tR\asharing\x12#\n" +
-	"\rnvlink_domain\x18\x19 \x01(\tR\fnvlinkDomain\"\xcb\x01\n" +
+	"\asharing\x18\b \x01(\tR\asharing\x12#\n" +
+	"\rnvlink_domain\x18  \x01(\tR\fnvlinkDomain\x12/\n" +
+	"\x11accelerator_count\x18\x02 \x01(\x05B\x02\x18\x01R\x10acceleratorCount\x12=\n" +
+	"\x18accelerators_allocatable\x18\x03 \x01(\x05B\x02\x18\x01R\x17acceleratorsAllocatable\x129\n" +
+	"\x16accelerators_allocated\x18\x04 \x01(\x05B\x02\x18\x01R\x15acceleratorsAllocated\x123\n" +
+	"\x13utilization_percent\x18\x05 \x01(\x01B\x02\x18\x01R\x12utilizationPercent\x122\n" +
+	"\x13memory_used_percent\x18\x06 \x01(\x01B\x02\x18\x01R\x11memoryUsedPercent\x129\n" +
+	"\x06health\x18\t \x01(\x0e2\x1d.controlplane.v1.MlNodeHealthB\x02\x18\x01R\x06health\x127\n" +
+	"\x05flags\x18\n" +
+	" \x03(\v2\x1d.controlplane.v1.MlHealthFlagB\x02\x18\x01R\x05flags\"\xcb\x01\n" +
 	"\x0fMlNodeCondition\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x16\n" +
 	"\x06status\x18\x02 \x01(\tR\x06status\x12\x10\n" +
@@ -18239,9 +16949,12 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\"\n" +
 	"\n" +
 	"cluster_id\x18\x02 \x01(\tH\x00R\tclusterId\x88\x01\x01B\r\n" +
-	"\v_cluster_id\"Q\n" +
+	"\v_cluster_id\"\x98\x01\n" +
 	"\x12GetMlStackResponse\x12;\n" +
-	"\bclusters\x18\x01 \x03(\v2\x1f.controlplane.v1.MlClusterSetupR\bclusters\"\xd2\x02\n" +
+	"\bclusters\x18\x02 \x03(\v2\x1f.controlplane.v1.MlClusterSetupR\bclusters\x12E\n" +
+	"\n" +
+	"components\x18\x01 \x03(\v2!.controlplane.v1.MlStackComponentB\x02\x18\x01R\n" +
+	"components\"\xd2\x02\n" +
 	"\x0eMlClusterSetup\x124\n" +
 	"\acluster\x18\x01 \x01(\v2\x1a.controlplane.v1.MlClusterR\acluster\x12;\n" +
 	"\bcoverage\x18\x02 \x03(\v2\x1f.controlplane.v1.MlCoverageItemR\bcoverage\x12:\n" +
@@ -18369,36 +17082,44 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x04rows\x18\x02 \x03(\v2\x1e.controlplane.v1.MlEvidenceRowR\x04rows\"[\n" +
 	"\rMlEvidenceRow\x12\x14\n" +
 	"\x05cells\x18\x01 \x03(\tR\x05cells\x124\n" +
-	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\"\xeb\b\n" +
+	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\"\x85\v\n" +
 	"\tMlFinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\arule_id\x18\x02 \x01(\tR\x06ruleId\x12>\n" +
-	"\bcategory\x18\x03 \x01(\x0e2\".controlplane.v1.MlFindingCategoryR\bcategory\x127\n" +
-	"\bseverity\x18\x04 \x01(\x0e2\x1b.controlplane.v1.MlSeverityR\bseverity\x12\x14\n" +
-	"\x05title\x18\x05 \x01(\tR\x05title\x12\x18\n" +
-	"\asummary\x18\x06 \x01(\tR\asummary\x12\x10\n" +
-	"\x03why\x18\a \x01(\tR\x03why\x121\n" +
-	"\x06impact\x18\b \x01(\v2\x19.controlplane.v1.MlImpactR\x06impact\x126\n" +
-	"\bsubjects\x18\t \x03(\v2\x1a.controlplane.v1.MlSubjectR\bsubjects\x12\x1f\n" +
-	"\vcluster_ids\x18\n" +
-	" \x03(\tR\n" +
+	"\bcategory\x18\x0e \x01(\x0e2\".controlplane.v1.MlFindingCategoryR\bcategory\x12>\n" +
+	"\bseverity\x18\x03 \x01(\x0e2\".controlplane.v1.MlFindingSeverityR\bseverity\x12\x14\n" +
+	"\x05title\x18\x04 \x01(\tR\x05title\x12\x18\n" +
+	"\asummary\x18\x05 \x01(\tR\asummary\x12\x10\n" +
+	"\x03why\x18\x0f \x01(\tR\x03why\x121\n" +
+	"\x06impact\x18\x10 \x01(\v2\x19.controlplane.v1.MlImpactR\x06impact\x126\n" +
+	"\bsubjects\x18\x11 \x03(\v2\x1a.controlplane.v1.MlSubjectR\bsubjects\x12\x1f\n" +
+	"\vcluster_ids\x18\x12 \x03(\tR\n" +
 	"clusterIds\x125\n" +
-	"\x05state\x18\v \x01(\x0e2\x1f.controlplane.v1.MlFindingStateR\x05state\x12\x1a\n" +
-	"\bassignee\x18\f \x01(\tR\bassignee\x12\x15\n" +
-	"\x06pr_url\x18\r \x01(\tR\x05prUrl\x12>\n" +
-	"\rfirst_seen_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\vfirstSeenAt\x12<\n" +
-	"\flast_seen_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"\x05state\x18\x13 \x01(\x0e2\x1f.controlplane.v1.MlFindingStateR\x05state\x12\x1a\n" +
+	"\bassignee\x18\x14 \x01(\tR\bassignee\x12\x15\n" +
+	"\x06pr_url\x18\x15 \x01(\tR\x05prUrl\x12>\n" +
+	"\rfirst_seen_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\vfirstSeenAt\x12<\n" +
+	"\flast_seen_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"lastSeenAt\x12\x12\n" +
-	"\x04rule\x18\x10 \x01(\tR\x04rule\x12B\n" +
-	"\x0fevidence_series\x18\x11 \x03(\v2\x19.controlplane.v1.MlSeriesR\x0eevidenceSeries\x12G\n" +
-	"\x0eevidence_table\x18\x12 \x01(\v2 .controlplane.v1.MlEvidenceTableR\revidenceTable\x12>\n" +
-	"\x0eevidence_facts\x18\x13 \x03(\v2\x17.controlplane.v1.MlFactR\revidenceFacts\x12A\n" +
-	"\x0fevidence_events\x18\x14 \x03(\v2\x18.controlplane.v1.MlEventR\x0eevidenceEvents\x12(\n" +
-	"\x03fix\x18\x15 \x01(\v2\x16.controlplane.v1.MlFixR\x03fix\x12\x16\n" +
-	"\x06verify\x18\x16 \x01(\tR\x06verify\x12%\n" +
-	"\x0edismiss_reason\x18\x17 \x01(\tR\rdismissReason\x12?\n" +
-	"\rsnoozed_until\x18\x18 \x01(\v2\x1a.google.protobuf.TimestampR\fsnoozedUntil\x128\n" +
-	"\tpod_start\x18\x19 \x01(\v2\x1b.controlplane.v1.MlPodStartR\bpodStart\"\\\n" +
+	"\x04rule\x18\x16 \x01(\tR\x04rule\x12B\n" +
+	"\x0fevidence_series\x18\x17 \x03(\v2\x19.controlplane.v1.MlSeriesR\x0eevidenceSeries\x12G\n" +
+	"\x0eevidence_table\x18\x18 \x01(\v2 .controlplane.v1.MlEvidenceTableR\revidenceTable\x12>\n" +
+	"\x0eevidence_facts\x18\x19 \x03(\v2\x17.controlplane.v1.MlFactR\revidenceFacts\x12A\n" +
+	"\x0fevidence_events\x18\x1a \x03(\v2\x18.controlplane.v1.MlEventR\x0eevidenceEvents\x12(\n" +
+	"\x03fix\x18\x1b \x01(\v2\x16.controlplane.v1.MlFixR\x03fix\x12\x16\n" +
+	"\x06verify\x18\x1c \x01(\tR\x06verify\x12%\n" +
+	"\x0edismiss_reason\x18\x1d \x01(\tR\rdismissReason\x12?\n" +
+	"\rsnoozed_until\x18\x1e \x01(\v2\x1a.google.protobuf.TimestampR\fsnoozedUntil\x12D\n" +
+	"\x0fstart_breakdown\x18\x1f \x01(\v2\x1b.controlplane.v1.MlPodStartR\x0estartBreakdown\x12!\n" +
+	"\n" +
+	"cluster_id\x18\x06 \x01(\tB\x02\x18\x01R\tclusterId\x12\x1c\n" +
+	"\asubject\x18\a \x01(\tB\x02\x18\x01R\asubject\x12;\n" +
+	"\bevidence\x18\b \x03(\v2\x1b.controlplane.v1.MlEvidenceB\x02\x18\x01R\bevidence\x12\x1b\n" +
+	"\afix_kcl\x18\t \x01(\tB\x02\x18\x01R\x06fixKcl\x12#\n" +
+	"\vfix_command\x18\n" +
+	" \x01(\tB\x02\x18\x01R\n" +
+	"fixCommand\x12E\n" +
+	"\tpod_start\x18\r \x01(\v2$.controlplane.v1.MlPodStartBreakdownB\x02\x18\x01R\bpodStart\"\\\n" +
 	"\x18ListMlExperimentsRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1d\n" +
 	"\aproject\x18\x02 \x01(\tH\x00R\aproject\x88\x01\x01B\n" +
@@ -18430,50 +17151,60 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\b_projectB\x10\n" +
 	"\x0e_experiment_id\"@\n" +
 	"\x12ListMlRunsResponse\x12*\n" +
-	"\x04runs\x18\x01 \x03(\v2\x16.controlplane.v1.MlRunR\x04runs\"\xb8\v\n" +
+	"\x04runs\x18\x01 \x03(\v2\x16.controlplane.v1.MlRunR\x04runs\"\x8d\x0e\n" +
 	"\x05MlRun\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12#\n" +
-	"\rexperiment_id\x18\x03 \x01(\tR\fexperimentId\x12\x18\n" +
-	"\aproject\x18\x04 \x01(\tR\aproject\x12\x14\n" +
-	"\x05owner\x18\x05 \x01(\tR\x05owner\x12\x19\n" +
-	"\bsweep_id\x18\x06 \x01(\tR\asweepId\x12\x14\n" +
-	"\x05trial\x18\a \x01(\x05R\x05trial\x12\x12\n" +
-	"\x04tags\x18\b \x03(\tR\x04tags\x121\n" +
-	"\x05state\x18\t \x01(\x0e2\x1b.controlplane.v1.MlRunStateR\x05state\x123\n" +
-	"\x06badges\x18\n" +
-	" \x03(\x0e2\x1b.controlplane.v1.MlRunBadgeR\x06badges\x12\x1a\n" +
-	"\btemplate\x18\v \x01(\tR\btemplate\x12)\n" +
-	"\x10template_release\x18\f \x01(\tR\x0ftemplateRelease\x12\x16\n" +
-	"\x06commit\x18\r \x01(\tR\x06commit\x129\n" +
+	"\rexperiment_id\x18\x12 \x01(\tR\fexperimentId\x12\x18\n" +
+	"\aproject\x18\x03 \x01(\tR\aproject\x12\x14\n" +
+	"\x05owner\x18\x13 \x01(\tR\x05owner\x12\x19\n" +
+	"\bsweep_id\x18\x14 \x01(\tR\asweepId\x12\x14\n" +
+	"\x05trial\x18\x15 \x01(\x05R\x05trial\x12\x12\n" +
+	"\x04tags\x18\x16 \x03(\tR\x04tags\x121\n" +
+	"\x05state\x18\a \x01(\x0e2\x1b.controlplane.v1.MlRunStateR\x05state\x123\n" +
+	"\x06badges\x18\x17 \x03(\x0e2\x1b.controlplane.v1.MlRunBadgeR\x06badges\x12\x1a\n" +
+	"\btemplate\x18\x04 \x01(\tR\btemplate\x12)\n" +
+	"\x10template_release\x18\x18 \x01(\tR\x0ftemplateRelease\x12\x16\n" +
+	"\x06commit\x18\x19 \x01(\tR\x06commit\x129\n" +
 	"\n" +
-	"created_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
+	"created_at\x18\x1a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"started_at\x18\x0f \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
-	"\bended_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12*\n" +
-	"\x11current_phase_key\x18\x11 \x01(\tR\x0fcurrentPhaseKey\x12\x12\n" +
-	"\x04step\x18\x12 \x01(\x03R\x04step\x12\x1f\n" +
-	"\vtotal_steps\x18\x13 \x01(\x03R\n" +
+	"started_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
+	"\bended_at\x18\x1b \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12*\n" +
+	"\x11current_phase_key\x18\x1c \x01(\tR\x0fcurrentPhaseKey\x12\x12\n" +
+	"\x04step\x18\x1d \x01(\x03R\x04step\x12\x1f\n" +
+	"\vtotal_steps\x18\x1e \x01(\x03R\n" +
 	"totalSteps\x12\x1f\n" +
-	"\vtokens_seen\x18\x14 \x01(\x03R\n" +
+	"\vtokens_seen\x18\x1f \x01(\x03R\n" +
 	"tokensSeen\x12%\n" +
-	"\x0etokens_planned\x18\x15 \x01(\x03R\rtokensPlanned\x12$\n" +
-	"\veta_seconds\x18\x16 \x01(\x01H\x00R\n" +
+	"\x0etokens_planned\x18  \x01(\x03R\rtokensPlanned\x12$\n" +
+	"\veta_seconds\x18! \x01(\x01H\x00R\n" +
 	"etaSeconds\x88\x01\x01\x12\"\n" +
-	"\faccelerators\x18\x17 \x01(\x05R\faccelerators\x12/\n" +
-	"\x13accelerator_product\x18\x18 \x01(\tR\x12acceleratorProduct\x12\x18\n" +
-	"\agoodput\x18\x19 \x01(\x01R\agoodput\x12+\n" +
-	"\x04cost\x18\x1a \x01(\v2\x17.controlplane.v1.MlCostR\x04cost\x12\x1a\n" +
-	"\brestarts\x18\x1b \x01(\x05R\brestarts\x12 \n" +
-	"\vpreemptions\x18\x1c \x01(\x05R\vpreemptions\x12=\n" +
-	"\asummary\x18\x1d \x03(\v2#.controlplane.v1.MlRun.SummaryEntryR\asummary\x12:\n" +
-	"\x06params\x18\x1e \x03(\v2\".controlplane.v1.MlRun.ParamsEntryR\x06params\x12#\n" +
-	"\robjective_key\x18\x1f \x01(\tR\fobjectiveKey\x127\n" +
-	"\tobjective\x18  \x01(\v2\x19.controlplane.v1.MlSeriesR\tobjective\x120\n" +
-	"\x06phases\x18! \x03(\v2\x18.controlplane.v1.MlPhaseR\x06phases\x12\x1f\n" +
-	"\vcluster_ids\x18\" \x03(\tR\n" +
+	"\faccelerators\x18\" \x01(\x05R\faccelerators\x12/\n" +
+	"\x13accelerator_product\x18\r \x01(\tR\x12acceleratorProduct\x12\x18\n" +
+	"\agoodput\x18# \x01(\x01R\agoodput\x12+\n" +
+	"\x04cost\x18$ \x01(\v2\x17.controlplane.v1.MlCostR\x04cost\x12\x1a\n" +
+	"\brestarts\x18\x0e \x01(\x05R\brestarts\x12 \n" +
+	"\vpreemptions\x18\x0f \x01(\x05R\vpreemptions\x12=\n" +
+	"\asummary\x18% \x03(\v2#.controlplane.v1.MlRun.SummaryEntryR\asummary\x12:\n" +
+	"\x06params\x18\b \x03(\v2\".controlplane.v1.MlRun.ParamsEntryR\x06params\x12#\n" +
+	"\robjective_key\x18& \x01(\tR\fobjectiveKey\x127\n" +
+	"\tobjective\x18' \x01(\v2\x19.controlplane.v1.MlSeriesR\tobjective\x120\n" +
+	"\x06phases\x18( \x03(\v2\x18.controlplane.v1.MlPhaseR\x06phases\x12\x1f\n" +
+	"\vcluster_ids\x18) \x03(\tR\n" +
 	"clusterIds\x12!\n" +
-	"\flaunched_via\x18# \x01(\tR\vlaunchedVia\x1a:\n" +
+	"\flaunched_via\x18* \x01(\tR\vlaunchedVia\x12&\n" +
+	"\forchestrator\x18\x05 \x01(\tB\x02\x18\x01R\forchestrator\x12!\n" +
+	"\n" +
+	"cluster_id\x18\x06 \x01(\tB\x02\x18\x01R\tclusterId\x12#\n" +
+	"\vlaunched_by\x18\t \x01(\tB\x02\x18\x01R\n" +
+	"launchedBy\x12?\n" +
+	"\vfinished_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampB\x02\x18\x01R\n" +
+	"finishedAt\x12/\n" +
+	"\x11accelerator_count\x18\f \x01(\x05B\x02\x18\x01R\x10acceleratorCount\x12=\n" +
+	"\ametrics\x18\x10 \x03(\v2\x1f.controlplane.v1.MlMetricSeriesB\x02\x18\x01R\ametrics\x122\n" +
+	"\x13output_model_digest\x18\x11 \x01(\tB\x02\x18\x01R\x11outputModelDigest\x1a:\n" +
 	"\fSummaryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\x1a9\n" +
@@ -18803,206 +17534,7 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x19tokens_per_second_per_gpu\x18\x04 \x01(\x01R\x15tokensPerSecondPerGpu\x12#\n" +
 	"\rpadding_ratio\x18\x05 \x01(\x01R\fpaddingRatio\x12'\n" +
 	"\x0fsequence_length\x18\x06 \x01(\x05R\x0esequenceLength\x125\n" +
-	"\tby_source\x18\a \x03(\v2\x18.controlplane.v1.MlShareR\bbySource\"\xfa\x02\n" +
-	"\x14QueryMlSeriesRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x124\n" +
-	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x12\x12\n" +
-	"\x04keys\x18\x03 \x03(\tR\x04keys\x12+\n" +
-	"\x04axis\x18\x04 \x01(\x0e2\x17.controlplane.v1.MlAxisR\x04axis\x123\n" +
-	"\x04from\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x04from\x88\x01\x01\x12/\n" +
-	"\x02to\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x02to\x88\x01\x01\x12\x1e\n" +
-	"\bgroup_by\x18\a \x01(\tH\x02R\agroupBy\x88\x01\x01\x12\"\n" +
-	"\n" +
-	"max_points\x18\b \x01(\x05H\x03R\tmaxPoints\x88\x01\x01B\a\n" +
-	"\x05_fromB\x05\n" +
-	"\x03_toB\v\n" +
-	"\t_group_byB\r\n" +
-	"\v_max_points\"J\n" +
-	"\x15QueryMlSeriesResponse\x121\n" +
-	"\x06series\x18\x01 \x03(\v2\x19.controlplane.v1.MlSeriesR\x06series\"\xb1\x02\n" +
-	"\x13ListMlEventsRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x124\n" +
-	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x123\n" +
-	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x04from\x88\x01\x01\x12/\n" +
-	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x02to\x88\x01\x01\x122\n" +
-	"\x05kinds\x18\x05 \x03(\x0e2\x1c.controlplane.v1.MlEventKindR\x05kinds\x12\x19\n" +
-	"\x05limit\x18\x06 \x01(\x05H\x02R\x05limit\x88\x01\x01B\a\n" +
-	"\x05_fromB\x05\n" +
-	"\x03_toB\b\n" +
-	"\x06_limit\"H\n" +
-	"\x14ListMlEventsResponse\x120\n" +
-	"\x06events\x18\x01 \x03(\v2\x18.controlplane.v1.MlEventR\x06events\"\xb4\x03\n" +
-	"\x11ListMlLogsRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x124\n" +
-	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x123\n" +
-	"\x04from\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x04from\x88\x01\x01\x12/\n" +
-	"\x02to\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x02to\x88\x01\x01\x12\x17\n" +
-	"\x04rank\x18\x05 \x01(\x05H\x02R\x04rank\x88\x01\x01\x12 \n" +
-	"\tmin_level\x18\x06 \x01(\tH\x03R\bminLevel\x88\x01\x01\x12\x19\n" +
-	"\x05query\x18\a \x01(\tH\x04R\x05query\x88\x01\x01\x12,\n" +
-	"\x0fhighlights_only\x18\b \x01(\bH\x05R\x0ehighlightsOnly\x88\x01\x01\x12\x19\n" +
-	"\x05limit\x18\t \x01(\x05H\x06R\x05limit\x88\x01\x01B\a\n" +
-	"\x05_fromB\x05\n" +
-	"\x03_toB\a\n" +
-	"\x05_rankB\f\n" +
-	"\n" +
-	"_min_levelB\b\n" +
-	"\x06_queryB\x12\n" +
-	"\x10_highlights_onlyB\b\n" +
-	"\x06_limit\"d\n" +
-	"\x12ListMlLogsResponse\x120\n" +
-	"\x05lines\x18\x01 \x03(\v2\x1a.controlplane.v1.MlLogLineR\x05lines\x12\x1c\n" +
-	"\ttruncated\x18\x02 \x01(\bR\ttruncated\"\xea\x02\n" +
-	"\tMlLogLine\x12.\n" +
-	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x12\n" +
-	"\x04rank\x18\x02 \x01(\x05R\x04rank\x12\x10\n" +
-	"\x03pod\x18\x03 \x01(\tR\x03pod\x12\x17\n" +
-	"\anode_id\x18\x04 \x01(\tR\x06nodeId\x12\x1c\n" +
-	"\tcontainer\x18\x05 \x01(\tR\tcontainer\x12\x14\n" +
-	"\x05level\x18\x06 \x01(\tR\x05level\x12\x18\n" +
-	"\amessage\x18\a \x01(\tR\amessage\x12\x1c\n" +
-	"\thighlight\x18\b \x01(\tR\thighlight\x12\x19\n" +
-	"\bevent_id\x18\t \x01(\tR\aeventId\x12\x18\n" +
-	"\aattempt\x18\n" +
-	" \x01(\x05R\aattempt\x12\x15\n" +
-	"\x06run_id\x18\v \x01(\tR\x05runId\x12\x1b\n" +
-	"\tphase_key\x18\f \x01(\tR\bphaseKey\x12\x19\n" +
-	"\btrace_id\x18\r \x01(\tR\atraceId\"\xc7\x01\n" +
-	"\x13ListMlTracesRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x124\n" +
-	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x125\n" +
-	"\x04kind\x18\x03 \x01(\x0e2\x1c.controlplane.v1.MlTraceKindH\x00R\x04kind\x88\x01\x01\x12\x19\n" +
-	"\x05limit\x18\x04 \x01(\x05H\x01R\x05limit\x88\x01\x01B\a\n" +
-	"\x05_kindB\b\n" +
-	"\x06_limit\"}\n" +
-	"\x14ListMlTracesResponse\x127\n" +
-	"\x06traces\x18\x01 \x03(\v2\x1f.controlplane.v1.MlTraceSummaryR\x06traces\x12,\n" +
-	"\x12missing_finding_id\x18\x02 \x01(\tR\x10missingFindingId\"\x8c\x04\n" +
-	"\x0eMlTraceSummary\x12\x19\n" +
-	"\btrace_id\x18\x01 \x01(\tR\atraceId\x120\n" +
-	"\x04kind\x18\x02 \x01(\x0e2\x1c.controlplane.v1.MlTraceKindR\x04kind\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\x120\n" +
-	"\x05start\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12\x1f\n" +
-	"\vduration_ms\x18\x05 \x01(\x01R\n" +
-	"durationMs\x12\x1b\n" +
-	"\tvs_median\x18\x06 \x01(\x01R\bvsMedian\x12#\n" +
-	"\rdominant_span\x18\a \x01(\tR\fdominantSpan\x124\n" +
-	"\asubject\x18\b \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x12\x12\n" +
-	"\x04step\x18\t \x01(\x03R\x04step\x12\x12\n" +
-	"\x04rank\x18\n" +
-	" \x01(\x05R\x04rank\x12\x14\n" +
-	"\x05error\x18\v \x01(\bR\x05error\x12O\n" +
-	"\n" +
-	"attributes\x18\f \x03(\v2/.controlplane.v1.MlTraceSummary.AttributesEntryR\n" +
-	"attributes\x1a=\n" +
-	"\x0fAttributesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"E\n" +
-	"\x11GetMlTraceRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x19\n" +
-	"\btrace_id\x18\x02 \x01(\tR\atraceId\"\x9c\x01\n" +
-	"\x12GetMlTraceResponse\x129\n" +
-	"\asummary\x18\x01 \x01(\v2\x1f.controlplane.v1.MlTraceSummaryR\asummary\x12-\n" +
-	"\x05spans\x18\x02 \x03(\v2\x17.controlplane.v1.MlSpanR\x05spans\x12\x1c\n" +
-	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\xa6\x05\n" +
-	"\x06MlSpan\x12\x17\n" +
-	"\aspan_id\x18\x01 \x01(\tR\x06spanId\x12$\n" +
-	"\x0eparent_span_id\x18\x02 \x01(\tR\fparentSpanId\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
-	"\aservice\x18\x04 \x01(\tR\aservice\x12\x12\n" +
-	"\x04kind\x18\x05 \x01(\tR\x04kind\x120\n" +
-	"\x05start\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x05start\x12\x1f\n" +
-	"\vduration_ms\x18\a \x01(\x01R\n" +
-	"durationMs\x125\n" +
-	"\x06status\x18\b \x01(\x0e2\x1d.controlplane.v1.MlSpanStatusR\x06status\x12%\n" +
-	"\x0estatus_message\x18\t \x01(\tR\rstatusMessage\x12G\n" +
-	"\n" +
-	"attributes\x18\n" +
-	" \x03(\v2'.controlplane.v1.MlSpan.AttributesEntryR\n" +
-	"attributes\x124\n" +
-	"\x06events\x18\v \x03(\v2\x1c.controlplane.v1.MlSpanEventR\x06events\x12\x15\n" +
-	"\x06run_id\x18\f \x01(\tR\x05runId\x12\x1b\n" +
-	"\tphase_key\x18\r \x01(\tR\bphaseKey\x12\x18\n" +
-	"\aattempt\x18\x0e \x01(\x05R\aattempt\x12\x12\n" +
-	"\x04rank\x18\x0f \x01(\x05R\x04rank\x12\x17\n" +
-	"\anode_id\x18\x10 \x01(\tR\x06nodeId\x12\x1f\n" +
-	"\vdevice_uuid\x18\x11 \x01(\tR\n" +
-	"deviceUuid\x12\x10\n" +
-	"\x03pod\x18\x12 \x01(\tR\x03pod\x1a=\n" +
-	"\x0fAttributesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xde\x01\n" +
-	"\vMlSpanEvent\x12.\n" +
-	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12L\n" +
-	"\n" +
-	"attributes\x18\x03 \x03(\v2,.controlplane.v1.MlSpanEvent.AttributesEntryR\n" +
-	"attributes\x1a=\n" +
-	"\x0fAttributesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"d\n" +
-	"\x15ListMlProfilesRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x124\n" +
-	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\"P\n" +
-	"\x16ListMlProfilesResponse\x126\n" +
-	"\bprofiles\x18\x01 \x03(\v2\x1a.controlplane.v1.MlProfileR\bprofiles\"\xce\x04\n" +
-	"\tMlProfile\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x122\n" +
-	"\x04kind\x18\x02 \x01(\x0e2\x1e.controlplane.v1.MlProfileKindR\x04kind\x12\x18\n" +
-	"\atrigger\x18\x03 \x01(\tR\atrigger\x124\n" +
-	"\asubject\x18\x04 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x12\x1b\n" +
-	"\tfrom_step\x18\x05 \x01(\x03R\bfromStep\x12\x17\n" +
-	"\ato_step\x18\x06 \x01(\x03R\x06toStep\x12\x14\n" +
-	"\x05ranks\x18\a \x03(\x05R\x05ranks\x12\x1d\n" +
-	"\n" +
-	"size_bytes\x18\b \x01(\x03R\tsizeBytes\x12;\n" +
-	"\vcaptured_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"capturedAt\x12\x19\n" +
-	"\bopen_url\x18\n" +
-	" \x01(\tR\aopenUrl\x12\x1d\n" +
-	"\n" +
-	"open_label\x18\v \x01(\tR\topenLabel\x12;\n" +
-	"\asummary\x18\f \x01(\v2!.controlplane.v1.MlProfileSummaryR\asummary\x12'\n" +
-	"\x0fflamegraph_json\x18\r \x01(\tR\x0eflamegraphJson\x12D\n" +
-	"\vcollectives\x18\x0e \x03(\v2\".controlplane.v1.MlCollectiveStateR\vcollectives\x12\x1f\n" +
-	"\vcaptured_by\x18\x0f \x01(\tR\n" +
-	"capturedBy\"\xef\x02\n" +
-	"\x10MlProfileSummary\x12#\n" +
-	"\rcompute_share\x18\x01 \x01(\x01R\fcomputeShare\x12\x1d\n" +
-	"\n" +
-	"comm_share\x18\x02 \x01(\x01R\tcommShare\x12!\n" +
-	"\fmemcpy_share\x18\x03 \x01(\x01R\vmemcpyShare\x12\x1d\n" +
-	"\n" +
-	"idle_share\x18\x04 \x01(\x01R\tidleShare\x12!\n" +
-	"\fcomm_overlap\x18\x05 \x01(\x01R\vcommOverlap\x12!\n" +
-	"\flaunch_bound\x18\x06 \x01(\bR\vlaunchBound\x12:\n" +
-	"\vtop_kernels\x18\a \x03(\v2\x19.controlplane.v1.MlKernelR\n" +
-	"topKernels\x12$\n" +
-	"\x0epeak_memory_gb\x18\b \x01(\x01R\fpeakMemoryGb\x12-\n" +
-	"\x05notes\x18\t \x03(\v2\x17.controlplane.v1.MlFactR\x05notes\"\x7f\n" +
-	"\bMlKernel\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
-	"\x05share\x18\x02 \x01(\x01R\x05share\x12\x14\n" +
-	"\x05calls\x18\x03 \x01(\x03R\x05calls\x12\x17\n" +
-	"\amean_us\x18\x04 \x01(\x01R\x06meanUs\x12\x1a\n" +
-	"\bcategory\x18\x05 \x01(\tR\bcategory\"\xb9\x01\n" +
-	"\x11MlCollectiveState\x12\x12\n" +
-	"\x04rank\x18\x01 \x01(\x05R\x04rank\x12\x19\n" +
-	"\blast_seq\x18\x02 \x01(\x03R\alastSeq\x12\x0e\n" +
-	"\x02op\x18\x03 \x01(\tR\x02op\x12\x1d\n" +
-	"\n" +
-	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\x12\x14\n" +
-	"\x05state\x18\x05 \x01(\tR\x05state\x12\x1e\n" +
-	"\n" +
-	"mismatched\x18\x06 \x01(\bR\n" +
-	"mismatched\x12\x10\n" +
-	"\x03pod\x18\a \x01(\tR\x03pod\"K\n" +
-	"\x13GetMlProfileRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1d\n" +
-	"\n" +
-	"profile_id\x18\x02 \x01(\tR\tprofileId\"L\n" +
-	"\x14GetMlProfileResponse\x124\n" +
-	"\aprofile\x18\x01 \x01(\v2\x1a.controlplane.v1.MlProfileR\aprofile\"\xa7\x01\n" +
+	"\tby_source\x18\a \x03(\v2\x18.controlplane.v1.MlShareR\bbySource\"\xa7\x01\n" +
 	"\rMlLineageNode\x124\n" +
 	"\asubject\x18\x01 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x1a\n" +
@@ -19183,26 +17715,27 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\n" +
 	"\b_project\"H\n" +
 	"\x14ListMlModelsResponse\x120\n" +
-	"\x06models\x18\x01 \x03(\v2\x18.controlplane.v1.MlModelR\x06models\"\xf0\x03\n" +
+	"\x06models\x18\x01 \x03(\v2\x18.controlplane.v1.MlModelR\x06models\"\xb1\x04\n" +
 	"\aMlModel\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\aproject\x18\x03 \x01(\tR\aproject\x12\x1e\n" +
+	"\x02id\x18\x05 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aproject\x18\x02 \x01(\tR\aproject\x12\x1e\n" +
 	"\n" +
-	"repository\x18\x04 \x01(\tR\n" +
+	"repository\x18\x03 \x01(\tR\n" +
 	"repository\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\x12*\n" +
-	"\x11latest_version_id\x18\x06 \x01(\tR\x0flatestVersionId\x12#\n" +
-	"\rversion_count\x18\a \x01(\x05R\fversionCount\x122\n" +
-	"\aaliases\x18\b \x03(\v2\x18.controlplane.v1.MlAliasR\aaliases\x12)\n" +
-	"\x10serving_services\x18\t \x01(\x05R\x0fservingServices\x12\x1f\n" +
-	"\vserving_rps\x18\n" +
-	" \x01(\x01R\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12*\n" +
+	"\x11latest_version_id\x18\a \x01(\tR\x0flatestVersionId\x12#\n" +
+	"\rversion_count\x18\b \x01(\x05R\fversionCount\x122\n" +
+	"\aaliases\x18\t \x03(\v2\x18.controlplane.v1.MlAliasR\aaliases\x12)\n" +
+	"\x10serving_services\x18\n" +
+	" \x01(\x05R\x0fservingServices\x12\x1f\n" +
+	"\vserving_rps\x18\v \x01(\x01R\n" +
 	"servingRps\x12(\n" +
-	"\x10last_gate_status\x18\v \x01(\tR\x0elastGateStatus\x12/\n" +
-	"\x14last_gate_version_id\x18\f \x01(\tR\x11lastGateVersionId\x129\n" +
+	"\x10last_gate_status\x18\f \x01(\tR\x0elastGateStatus\x12/\n" +
+	"\x14last_gate_version_id\x18\r \x01(\tR\x11lastGateVersionId\x129\n" +
 	"\n" +
-	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xa0\x01\n" +
+	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12?\n" +
+	"\bversions\x18\x04 \x03(\v2\x1f.controlplane.v1.MlModelVersionB\x02\x18\x01R\bversions\"\xa0\x01\n" +
 	"\aMlAlias\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -19225,33 +17758,42 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x05model\x18\x01 \x01(\v2\x18.controlplane.v1.MlModelR\x05model\x12;\n" +
 	"\bversions\x18\x02 \x03(\v2\x1f.controlplane.v1.MlModelVersionR\bversions\x12A\n" +
 	"\ralias_history\x18\x03 \x03(\v2\x1c.controlplane.v1.MlAliasMoveR\faliasHistory\x12>\n" +
-	"\tpromotion\x18\x04 \x03(\v2 .controlplane.v1.MlPromotionGateR\tpromotion\"\xff\x04\n" +
+	"\tpromotion\x18\x04 \x03(\v2 .controlplane.v1.MlPromotionGateR\tpromotion\"\xf4\x06\n" +
 	"\x0eMlModelVersion\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x19\n" +
-	"\bmodel_id\x18\x02 \x01(\tR\amodelId\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\tR\aversion\x12\x16\n" +
-	"\x06digest\x18\x04 \x01(\tR\x06digest\x129\n" +
+	"\x02id\x18\b \x01(\tR\x02id\x12\x19\n" +
+	"\bmodel_id\x18\t \x01(\tR\amodelId\x12\x18\n" +
+	"\aversion\x18\n" +
+	" \x01(\tR\aversion\x12\x16\n" +
+	"\x06digest\x18\x01 \x01(\tR\x06digest\x129\n" +
 	"\n" +
-	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x128\n" +
-	"\x06source\x18\x06 \x01(\x0e2 .controlplane.v1.MlVersionSourceR\x06source\x12\x15\n" +
-	"\x06run_id\x18\a \x01(\tR\x05runId\x12\x1b\n" +
-	"\tphase_key\x18\b \x01(\tR\bphaseKey\x12\x18\n" +
-	"\aattempt\x18\t \x01(\x05R\aattempt\x12#\n" +
-	"\rcheckpoint_id\x18\n" +
-	" \x01(\tR\fcheckpointId\x12\x1d\n" +
+	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x128\n" +
+	"\x06source\x18\v \x01(\x0e2 .controlplane.v1.MlVersionSourceR\x06source\x12\x15\n" +
+	"\x06run_id\x18\x04 \x01(\tR\x05runId\x12\x1b\n" +
+	"\tphase_key\x18\f \x01(\tR\bphaseKey\x12\x18\n" +
+	"\aattempt\x18\r \x01(\x05R\aattempt\x12#\n" +
+	"\rcheckpoint_id\x18\x0e \x01(\tR\fcheckpointId\x12\x1d\n" +
 	"\n" +
-	"base_model\x18\v \x01(\tR\tbaseModel\x120\n" +
-	"\x04card\x18\f \x01(\v2\x1c.controlplane.v1.MlModelCardR\x04card\x12\x1f\n" +
-	"\vgate_status\x18\r \x01(\tR\n" +
+	"base_model\x18\x0f \x01(\tR\tbaseModel\x120\n" +
+	"\x04card\x18\x10 \x01(\v2\x1c.controlplane.v1.MlModelCardR\x04card\x12\x1f\n" +
+	"\vgate_status\x18\x11 \x01(\tR\n" +
 	"gateStatus\x12\x1f\n" +
-	"\vgate_passed\x18\x0e \x01(\x05R\n" +
+	"\vgate_passed\x18\x12 \x01(\x05R\n" +
 	"gatePassed\x12\x1d\n" +
 	"\n" +
-	"gate_total\x18\x0f \x01(\x05R\tgateTotal\x12\x18\n" +
-	"\aaliases\x18\x10 \x03(\tR\aaliases\x12=\n" +
-	"\aserving\x18\x11 \x03(\v2#.controlplane.v1.MlServingPlacementR\aserving\x12\x1d\n" +
+	"gate_total\x18\x13 \x01(\x05R\tgateTotal\x12\x18\n" +
+	"\aaliases\x18\x14 \x03(\tR\aaliases\x12=\n" +
+	"\aserving\x18\x15 \x03(\v2#.controlplane.v1.MlServingPlacementR\aserving\x12\x1d\n" +
 	"\n" +
-	"created_by\x18\x12 \x01(\tR\tcreatedBy\"\xe4\x03\n" +
+	"created_by\x18\x16 \x01(\tR\tcreatedBy\x12\x14\n" +
+	"\x03tag\x18\x02 \x01(\tB\x02\x18\x01R\x03tag\x12!\n" +
+	"\n" +
+	"size_bytes\x18\x05 \x01(\x03B\x02\x18\x01R\tsizeBytes\x12W\n" +
+	"\feval_metrics\x18\x06 \x03(\v20.controlplane.v1.MlModelVersion.EvalMetricsEntryB\x02\x18\x01R\vevalMetrics\x12!\n" +
+	"\n" +
+	"serving_in\x18\a \x03(\tB\x02\x18\x01R\tservingIn\x1a>\n" +
+	"\x10EvalMetricsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xe4\x03\n" +
 	"\vMlModelCard\x12\"\n" +
 	"\farchitecture\x18\x01 \x01(\tR\farchitecture\x12!\n" +
 	"\fparams_total\x18\x02 \x01(\x03R\vparamsTotal\x12#\n" +
@@ -19333,49 +17875,59 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\n" +
 	"\b_project\"b\n" +
 	"\x1fListMlInferenceServicesResponse\x12?\n" +
-	"\bservices\x18\x01 \x03(\v2#.controlplane.v1.MlInferenceServiceR\bservices\"\xb1\b\n" +
+	"\bservices\x18\x01 \x03(\v2#.controlplane.v1.MlInferenceServiceR\bservices\"\xd5\f\n" +
 	"\x12MlInferenceService\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\aproject\x18\x03 \x01(\tR\aproject\x12\x10\n" +
-	"\x03env\x18\x04 \x01(\tR\x03env\x12\x1d\n" +
+	"\x02id\x18\x12 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
+	"\aproject\x18\x02 \x01(\tR\aproject\x12\x10\n" +
+	"\x03env\x18\x13 \x01(\tR\x03env\x12\x1d\n" +
 	"\n" +
-	"cluster_id\x18\x05 \x01(\tR\tclusterId\x12\x17\n" +
-	"\apool_id\x18\x06 \x01(\tR\x06poolId\x12\x19\n" +
-	"\bmodel_id\x18\a \x01(\tR\amodelId\x12(\n" +
-	"\x10model_version_id\x18\b \x01(\tR\x0emodelVersionId\x12\x1f\n" +
-	"\vrevision_id\x18\t \x01(\tR\n" +
+	"cluster_id\x18\x04 \x01(\tR\tclusterId\x12\x17\n" +
+	"\apool_id\x18\x14 \x01(\tR\x06poolId\x12\x19\n" +
+	"\bmodel_id\x18\x15 \x01(\tR\amodelId\x12(\n" +
+	"\x10model_version_id\x18\x16 \x01(\tR\x0emodelVersionId\x12\x1f\n" +
+	"\vrevision_id\x18\x17 \x01(\tR\n" +
 	"revisionId\x12\x18\n" +
-	"\arelease\x18\n" +
-	" \x01(\tR\arelease\x12\x18\n" +
-	"\aruntime\x18\v \x01(\tR\aruntime\x12\"\n" +
-	"\faccelerators\x18\f \x01(\x05R\faccelerators\x12/\n" +
-	"\x13accelerator_product\x18\r \x01(\tR\x12acceleratorProduct\x12\x1a\n" +
-	"\breplicas\x18\x0e \x01(\x05R\breplicas\x12)\n" +
-	"\x10replicas_desired\x18\x0f \x01(\x05R\x0freplicasDesired\x12\x10\n" +
-	"\x03rps\x18\x10 \x01(\x01R\x03rps\x12\x1e\n" +
-	"\vttft_p95_ms\x18\x11 \x01(\x01R\tttftP95Ms\x12\x1c\n" +
+	"\arelease\x18\x06 \x01(\tR\arelease\x12\x18\n" +
+	"\aruntime\x18\x05 \x01(\tR\aruntime\x12\"\n" +
+	"\faccelerators\x18\x18 \x01(\x05R\faccelerators\x12/\n" +
+	"\x13accelerator_product\x18\x19 \x01(\tR\x12acceleratorProduct\x12\x1a\n" +
+	"\breplicas\x18\b \x01(\x05R\breplicas\x12)\n" +
+	"\x10replicas_desired\x18\x1a \x01(\x05R\x0freplicasDesired\x12\x10\n" +
+	"\x03rps\x18\x1b \x01(\x01R\x03rps\x12\x1e\n" +
+	"\vttft_p95_ms\x18\t \x01(\x01R\tttftP95Ms\x12\x1c\n" +
 	"\n" +
-	"itl_p95_ms\x18\x12 \x01(\x01R\bitlP95Ms\x12\x1c\n" +
+	"itl_p95_ms\x18\x1c \x01(\x01R\bitlP95Ms\x12\x1c\n" +
 	"\n" +
-	"e2e_p95_ms\x18\x13 \x01(\x01R\be2eP95Ms\x12 \n" +
-	"\fqueue_p95_ms\x18\x14 \x01(\x01R\n" +
+	"e2e_p95_ms\x18\x1d \x01(\x01R\be2eP95Ms\x12 \n" +
+	"\fqueue_p95_ms\x18\x1e \x01(\x01R\n" +
 	"queueP95Ms\x12\x1f\n" +
-	"\verror_ratio\x18\x15 \x01(\x01R\n" +
+	"\verror_ratio\x18\x1f \x01(\x01R\n" +
 	"errorRatio\x12%\n" +
-	"\x0eslo_attainment\x18\x16 \x01(\x01R\rsloAttainment\x12\x1d\n" +
+	"\x0eslo_attainment\x18  \x01(\x01R\rsloAttainment\x12\x1d\n" +
 	"\n" +
-	"slo_target\x18\x17 \x01(\x01R\tsloTarget\x12$\n" +
-	"\x0ekv_cache_ratio\x18\x18 \x01(\x01R\fkvCacheRatio\x12\x1d\n" +
+	"slo_target\x18! \x01(\x01R\tsloTarget\x12$\n" +
+	"\x0ekv_cache_ratio\x18\" \x01(\x01R\fkvCacheRatio\x12\x1d\n" +
 	"\n" +
-	"busy_ratio\x18\x19 \x01(\x01R\tbusyRatio\x12*\n" +
-	"\x11tokens_per_second\x18\x1a \x01(\x01R\x0ftokensPerSecond\x123\n" +
-	"\x16usd_per_million_tokens\x18\x1b \x01(\x01R\x13usdPerMillionTokens\x12+\n" +
-	"\x04cost\x18\x1c \x01(\v2\x17.controlplane.v1.MlCostR\x04cost\x12;\n" +
-	"\averdict\x18\x1d \x01(\x0e2!.controlplane.v1.MlReleaseVerdictR\averdict\x128\n" +
+	"busy_ratio\x18# \x01(\x01R\tbusyRatio\x12*\n" +
+	"\x11tokens_per_second\x18\v \x01(\x01R\x0ftokensPerSecond\x123\n" +
+	"\x16usd_per_million_tokens\x18$ \x01(\x01R\x13usdPerMillionTokens\x12+\n" +
+	"\x04cost\x18% \x01(\v2\x17.controlplane.v1.MlCostR\x04cost\x12;\n" +
+	"\averdict\x18& \x01(\x0e2!.controlplane.v1.MlReleaseVerdictR\averdict\x128\n" +
 	"\n" +
-	"rps_series\x18\x1e \x01(\v2\x19.controlplane.v1.MlSeriesR\trpsSeries\x12\x1c\n" +
-	"\tcomparing\x18\x1f \x01(\bR\tcomparing\"T\n" +
+	"rps_series\x18' \x01(\v2\x19.controlplane.v1.MlSeriesR\trpsSeries\x12\x1c\n" +
+	"\tcomparing\x18( \x01(\bR\tcomparing\x12$\n" +
+	"\venvironment\x18\x03 \x01(\tB\x02\x18\x01R\venvironment\x12%\n" +
+	"\fmodel_digest\x18\a \x01(\tB\x02\x18\x01R\vmodelDigest\x12-\n" +
+	"\x11queue_wait_p95_ms\x18\n" +
+	" \x01(\x01B\x02\x18\x01R\x0equeueWaitP95Ms\x12J\n" +
+	"\x1faccelerator_utilization_percent\x18\f \x01(\x01B\x02\x18\x01R\x1dacceleratorUtilizationPercent\x127\n" +
+	"\x16kv_cache_usage_percent\x18\r \x01(\x01B\x02\x18\x01R\x13kvCacheUsagePercent\x12G\n" +
+	"\n" +
+	"cold_start\x18\x0e \x01(\v2$.controlplane.v1.MlPodStartBreakdownB\x02\x18\x01R\tcoldStart\x12N\n" +
+	"\x0frelease_verdict\x18\x0f \x01(\x0e2!.controlplane.v1.MlReleaseVerdictB\x02\x18\x01R\x0ereleaseVerdict\x12:\n" +
+	"\x17release_verdict_summary\x18\x10 \x01(\tB\x02\x18\x01R\x15releaseVerdictSummary\x12L\n" +
+	"\x12release_checked_at\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampB\x02\x18\x01R\x10releaseCheckedAt\"T\n" +
 	"\x1cGetMlInferenceServiceRequest\x12\x15\n" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x1d\n" +
 	"\n" +
@@ -19490,64 +18042,74 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x0fguardrail_ratio\x18\x05 \x01(\x01R\x0eguardrailRatio\x12\x1f\n" +
 	"\vjudge_score\x18\x06 \x01(\x01R\n" +
 	"judgeScore\x12\x18\n" +
-	"\asamples\x18\a \x01(\x03R\asamples\"\xf1\x01\n" +
-	"\x18QueryMlHistogramsRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x124\n" +
-	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x12\x12\n" +
-	"\x04keys\x18\x03 \x03(\tR\x04keys\x123\n" +
-	"\x04from\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\x04from\x88\x01\x01\x12/\n" +
-	"\x02to\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampH\x01R\x02to\x88\x01\x01B\a\n" +
-	"\x05_fromB\x05\n" +
-	"\x03_to\"Y\n" +
-	"\x19QueryMlHistogramsResponse\x12<\n" +
+	"\asamples\x18\a \x01(\x03R\asamples\"d\n" +
+	"\x14GetMlMachinesRequest\x12\x15\n" +
+	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\"\n" +
 	"\n" +
-	"histograms\x18\x01 \x03(\v2\x1c.controlplane.v1.MlHistogramR\n" +
-	"histograms\"\xab\x03\n" +
-	"\vMlHistogram\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05label\x18\x02 \x01(\tR\x05label\x12\x12\n" +
-	"\x04unit\x18\x03 \x01(\tR\x04unit\x12<\n" +
-	"\abuckets\x18\x04 \x03(\v2\".controlplane.v1.MlHistogramBucketR\abuckets\x12\x10\n" +
-	"\x03p50\x18\x05 \x01(\x01R\x03p50\x12\x10\n" +
-	"\x03p95\x18\x06 \x01(\x01R\x03p95\x12\x10\n" +
-	"\x03p99\x18\a \x01(\x01R\x03p99\x12\x14\n" +
-	"\x05count\x18\b \x01(\x03R\x05count\x12#\n" +
-	"\rcompare_label\x18\t \x01(\tR\fcompareLabel\x12K\n" +
-	"\x0fcompare_buckets\x18\n" +
-	" \x03(\v2\".controlplane.v1.MlHistogramBucketR\x0ecompareBuckets\x12=\n" +
+	"cluster_id\x18\x02 \x01(\tH\x00R\tclusterId\x88\x01\x01:\x02\x18\x01B\r\n" +
+	"\v_cluster_id\"\xc3\x01\n" +
+	"\x15GetMlMachinesResponse\x126\n" +
+	"\bclusters\x18\x01 \x03(\v2\x1a.controlplane.v1.MlClusterR\bclusters\x121\n" +
+	"\x05pools\x18\x02 \x03(\v2\x1b.controlplane.v1.MlNodePoolR\x05pools\x12;\n" +
+	"\vobserved_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAt:\x02\x18\x01\"\xac\x03\n" +
 	"\n" +
-	"collection\x18\v \x01(\x0e2\x1d.controlplane.v1.MlCollectionR\n" +
-	"collection\x12%\n" +
-	"\x0emissing_source\x18\f \x01(\tR\rmissingSource\"U\n" +
-	"\x11MlHistogramBucket\x12\x14\n" +
-	"\x05lower\x18\x01 \x01(\x01R\x05lower\x12\x14\n" +
-	"\x05upper\x18\x02 \x01(\x01R\x05upper\x12\x14\n" +
-	"\x05count\x18\x03 \x01(\x03R\x05count\"b\n" +
-	"\x13ListMlAlertsRequest\x12\x15\n" +
-	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x124\n" +
-	"\asubject\x18\x02 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\"L\n" +
-	"\x14ListMlAlertsResponse\x124\n" +
-	"\x06alerts\x18\x01 \x03(\v2\x1c.controlplane.v1.MlAlertRuleR\x06alerts\"\x80\x04\n" +
-	"\vMlAlertRule\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1e\n" +
+	"MlNodePool\x12\x1d\n" +
 	"\n" +
-	"expression\x18\x03 \x01(\tR\n" +
-	"expression\x127\n" +
-	"\bseverity\x18\x04 \x01(\x0e2\x1b.controlplane.v1.MlSeverityR\bseverity\x123\n" +
-	"\x05state\x18\x05 \x01(\x0e2\x1d.controlplane.v1.MlAlertStateR\x05state\x124\n" +
-	"\asubject\x18\x06 \x01(\v2\x1a.controlplane.v1.MlSubjectR\asubject\x12\x1f\n" +
-	"\vdeclared_in\x18\a \x01(\tR\n" +
-	"declaredIn\x12>\n" +
-	"\rlast_fired_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vlastFiredAt\x12\x19\n" +
-	"\bfired_7d\x18\t \x01(\x05R\afired7d\x12\x1f\n" +
-	"\vauto_action\x18\n" +
-	" \x01(\tR\n" +
-	"autoAction\x12.\n" +
-	"\x13auto_action_enabled\x18\v \x01(\bR\x11autoActionEnabled\x12\x1b\n" +
-	"\trouted_to\x18\f \x01(\tR\broutedTo\x12\x1f\n" +
-	"\vlast_action\x18\r \x01(\tR\n" +
-	"lastAction*\xc8\x05\n" +
+	"cluster_id\x18\x01 \x01(\tR\tclusterId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12-\n" +
+	"\x12accelerator_vendor\x18\x03 \x01(\tR\x11acceleratorVendor\x12/\n" +
+	"\x13accelerator_product\x18\x04 \x01(\tR\x12acceleratorProduct\x12-\n" +
+	"\x12accelerators_total\x18\x05 \x01(\x05R\x11acceleratorsTotal\x125\n" +
+	"\x16accelerators_allocated\x18\x06 \x01(\x05R\x15acceleratorsAllocated\x12+\n" +
+	"\x11accelerators_idle\x18\a \x01(\x05R\x10acceleratorsIdle\x12-\n" +
+	"\x05nodes\x18\b \x03(\v2\x17.controlplane.v1.MlNodeR\x05nodes\x12E\n" +
+	"\vutilization\x18\t \x03(\v2#.controlplane.v1.MlUtilizationPointR\vutilization:\x02\x18\x01\"\xea\x01\n" +
+	"\fMlHealthFlag\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
+	"\x04code\x18\x02 \x01(\tR\x04code\x12\x16\n" +
+	"\x06device\x18\x03 \x01(\tR\x06device\x12\x18\n" +
+	"\amessage\x18\x04 \x01(\tR\amessage\x12>\n" +
+	"\rfirst_seen_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vfirstSeenAt\x12<\n" +
+	"\flast_seen_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"lastSeenAt:\x02\x18\x01\"\xa6\x01\n" +
+	"\x12MlUtilizationPoint\x12.\n" +
+	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12/\n" +
+	"\x13utilization_percent\x18\x02 \x01(\x01R\x12utilizationPercent\x12+\n" +
+	"\x11allocated_percent\x18\x03 \x01(\x01R\x10allocatedPercent:\x02\x18\x01\"\x9e\x02\n" +
+	"\x10MlStackComponent\x12\x1d\n" +
+	"\n" +
+	"cluster_id\x18\x01 \x01(\tR\tclusterId\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
+	"\bcategory\x18\x03 \x01(\tR\bcategory\x127\n" +
+	"\x05state\x18\x04 \x01(\x0e2!.controlplane.v1.MlComponentStateR\x05state\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\tR\aversion\x12\x10\n" +
+	"\x03via\x18\x06 \x01(\tR\x03via\x12\x1c\n" +
+	"\tnamespace\x18\a \x01(\tR\tnamespace\x12 \n" +
+	"\vdeclaration\x18\b \x01(\tR\vdeclaration\x12\x12\n" +
+	"\x04note\x18\t \x01(\tR\x04note:\x02\x18\x01\"<\n" +
+	"\n" +
+	"MlEvidence\x12\x14\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x02\x18\x01\"\x8f\x01\n" +
+	"\x13MlPodStartBreakdown\x12\x1a\n" +
+	"\bworkload\x18\x01 \x01(\tR\bworkload\x12!\n" +
+	"\fsample_count\x18\x02 \x01(\x05R\vsampleCount\x125\n" +
+	"\x06stages\x18\x03 \x03(\v2\x1d.controlplane.v1.MlStartStageR\x06stages:\x02\x18\x01\"h\n" +
+	"\fMlStartStage\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
+	"\vp50_seconds\x18\x02 \x01(\x01R\n" +
+	"p50Seconds\x12\x1f\n" +
+	"\vp95_seconds\x18\x03 \x01(\x01R\n" +
+	"p95Seconds:\x02\x18\x01\"t\n" +
+	"\x0eMlMetricSeries\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04unit\x18\x02 \x01(\tR\x04unit\x126\n" +
+	"\x06points\x18\x03 \x03(\v2\x1e.controlplane.v1.MlMetricPointR\x06points:\x02\x18\x01\"m\n" +
+	"\rMlMetricPoint\x12\x12\n" +
+	"\x04step\x18\x01 \x01(\x03R\x04step\x12.\n" +
+	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x14\n" +
+	"\x05value\x18\x03 \x01(\x01R\x05value:\x02\x18\x01*\xc8\x05\n" +
 	"\rMlSubjectKind\x12\x1f\n" +
 	"\x1bML_SUBJECT_KIND_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ML_SUBJECT_KIND_ORG\x10\x01\x12\x1b\n" +
@@ -19714,17 +18276,22 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x1dML_FINDING_STATE_FIX_PROPOSED\x10\x03\x12\x1a\n" +
 	"\x16ML_FINDING_STATE_FIXED\x10\x04\x12\x1e\n" +
 	"\x1aML_FINDING_STATE_DISMISSED\x10\x05\x12\x1c\n" +
-	"\x18ML_FINDING_STATE_SNOOZED\x10\x06*\xfc\x01\n" +
+	"\x18ML_FINDING_STATE_SNOOZED\x10\x06*\x99\x01\n" +
+	"\x11MlFindingSeverity\x12#\n" +
+	"\x1fML_FINDING_SEVERITY_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cML_FINDING_SEVERITY_CRITICAL\x10\x01\x12\x1f\n" +
+	"\x1bML_FINDING_SEVERITY_WARNING\x10\x02\x12\x1c\n" +
+	"\x18ML_FINDING_SEVERITY_INFO\x10\x03*\xfc\x01\n" +
 	"\n" +
 	"MlRunState\x12\x1c\n" +
 	"\x18ML_RUN_STATE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13ML_RUN_STATE_QUEUED\x10\x01\x12\x18\n" +
 	"\x14ML_RUN_STATE_RUNNING\x10\x02\x12\x19\n" +
-	"\x15ML_RUN_STATE_DEGRADED\x10\x03\x12\x17\n" +
-	"\x13ML_RUN_STATE_PAUSED\x10\x04\x12\x1a\n" +
-	"\x16ML_RUN_STATE_SUCCEEDED\x10\x05\x12\x17\n" +
-	"\x13ML_RUN_STATE_FAILED\x10\x06\x12\x1a\n" +
-	"\x16ML_RUN_STATE_CANCELLED\x10\a\x12\x18\n" +
+	"\x15ML_RUN_STATE_DEGRADED\x10\x06\x12\x17\n" +
+	"\x13ML_RUN_STATE_PAUSED\x10\a\x12\x1a\n" +
+	"\x16ML_RUN_STATE_SUCCEEDED\x10\x03\x12\x17\n" +
+	"\x13ML_RUN_STATE_FAILED\x10\x04\x12\x1a\n" +
+	"\x16ML_RUN_STATE_CANCELLED\x10\x05\x12\x18\n" +
 	"\x14ML_RUN_STATE_UNKNOWN\x10\b*\xec\x01\n" +
 	"\n" +
 	"MlRunBadge\x12\x1c\n" +
@@ -19789,29 +18356,7 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x1bML_PARAM_SOURCE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18ML_PARAM_SOURCE_TEMPLATE\x10\x01\x12\x1a\n" +
 	"\x16ML_PARAM_SOURCE_LAUNCH\x10\x02\x12\x19\n" +
-	"\x15ML_PARAM_SOURCE_PHASE\x10\x03*\xe3\x01\n" +
-	"\vMlTraceKind\x12\x1d\n" +
-	"\x19ML_TRACE_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
-	"\x18ML_TRACE_KIND_TRAIN_STEP\x10\x01\x12\x1c\n" +
-	"\x18ML_TRACE_KIND_CHECKPOINT\x10\x02\x12\x1f\n" +
-	"\x1bML_TRACE_KIND_DATA_PIPELINE\x10\x03\x12#\n" +
-	"\x1fML_TRACE_KIND_INFERENCE_REQUEST\x10\x04\x12\x16\n" +
-	"\x12ML_TRACE_KIND_EVAL\x10\x05\x12\x1b\n" +
-	"\x17ML_TRACE_KIND_POD_START\x10\x06*_\n" +
-	"\fMlSpanStatus\x12\x1e\n" +
-	"\x1aML_SPAN_STATUS_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11ML_SPAN_STATUS_OK\x10\x01\x12\x18\n" +
-	"\x14ML_SPAN_STATUS_ERROR\x10\x02*\xcc\x02\n" +
-	"\rMlProfileKind\x12\x1f\n" +
-	"\x1bML_PROFILE_KIND_UNSPECIFIED\x10\x00\x12$\n" +
-	" ML_PROFILE_KIND_PYTORCH_PROFILER\x10\x01\x12\"\n" +
-	"\x1eML_PROFILE_KIND_NSIGHT_SYSTEMS\x10\x02\x12\"\n" +
-	"\x1eML_PROFILE_KIND_NSIGHT_COMPUTE\x10\x03\x12#\n" +
-	"\x1fML_PROFILE_KIND_MEMORY_SNAPSHOT\x10\x04\x12#\n" +
-	"\x1fML_PROFILE_KIND_FLIGHT_RECORDER\x10\x05\x12\x1a\n" +
-	"\x16ML_PROFILE_KIND_PY_SPY\x10\x06\x12\"\n" +
-	"\x1eML_PROFILE_KIND_CPU_CONTINUOUS\x10\a\x12\"\n" +
-	"\x1eML_PROFILE_KIND_GPU_CONTINUOUS\x10\b*\xb1\x03\n" +
+	"\x15ML_PARAM_SOURCE_PHASE\x10\x03*\xb1\x03\n" +
 	"\x11MlLineageEdgeKind\x12$\n" +
 	" ML_LINEAGE_EDGE_KIND_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fML_LINEAGE_EDGE_KIND_TRAINED_ON\x10\x01\x12)\n" +
@@ -19829,25 +18374,27 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x1dML_VERSION_SOURCE_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19ML_VERSION_SOURCE_TRAINED\x10\x01\x12\x1c\n" +
 	"\x18ML_VERSION_SOURCE_PUSHED\x10\x02\x12\x1e\n" +
-	"\x1aML_VERSION_SOURCE_IMPORTED\x10\x03*\xb8\x01\n" +
+	"\x1aML_VERSION_SOURCE_IMPORTED\x10\x03*\x82\x02\n" +
 	"\x10MlReleaseVerdict\x12\"\n" +
 	"\x1eML_RELEASE_VERDICT_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17ML_RELEASE_VERDICT_PASS\x10\x01\x12 \n" +
-	"\x1cML_RELEASE_VERDICT_REGRESSED\x10\x02\x12!\n" +
-	"\x1dML_RELEASE_VERDICT_NOT_PROVEN\x10\x03\x12\x1e\n" +
-	"\x1aML_RELEASE_VERDICT_PENDING\x10\x04*\x99\x01\n" +
-	"\fMlAlertState\x12\x1e\n" +
-	"\x1aML_ALERT_STATE_UNSPECIFIED\x10\x00\x12\x15\n" +
-	"\x11ML_ALERT_STATE_OK\x10\x01\x12\x1a\n" +
-	"\x16ML_ALERT_STATE_PENDING\x10\x02\x12\x19\n" +
-	"\x15ML_ALERT_STATE_FIRING\x10\x03\x12\x1b\n" +
-	"\x17ML_ALERT_STATE_SILENCED\x10\x042\xed\x17\n" +
+	"\x1cML_RELEASE_VERDICT_REGRESSED\x10\x04\x12!\n" +
+	"\x1dML_RELEASE_VERDICT_NOT_PROVEN\x10\x05\x12\x1e\n" +
+	"\x1aML_RELEASE_VERDICT_PENDING\x10\x06\x12\x1f\n" +
+	"\x17ML_RELEASE_VERDICT_FAIL\x10\x02\x1a\x02\b\x01\x12'\n" +
+	"\x1fML_RELEASE_VERDICT_INCONCLUSIVE\x10\x03\x1a\x02\b\x01*\x83\x01\n" +
+	"\fMlNodeHealth\x12\x1e\n" +
+	"\x1aML_NODE_HEALTH_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16ML_NODE_HEALTH_HEALTHY\x10\x01\x12\x1b\n" +
+	"\x17ML_NODE_HEALTH_DEGRADED\x10\x02\x12\x16\n" +
+	"\x12ML_NODE_HEALTH_BAD\x10\x03\x1a\x02\x18\x012\xd7\x11\n" +
 	"\x14MlEarlyAccessService\x12Z\n" +
 	"\n" +
 	"GetMlFleet\x12\".controlplane.v1.GetMlFleetRequest\x1a#.controlplane.v1.GetMlFleetResponse\"\x03\x90\x02\x01\x12W\n" +
 	"\tGetMlPool\x12!.controlplane.v1.GetMlPoolRequest\x1a\".controlplane.v1.GetMlPoolResponse\"\x03\x90\x02\x01\x12W\n" +
 	"\tGetMlNode\x12!.controlplane.v1.GetMlNodeRequest\x1a\".controlplane.v1.GetMlNodeResponse\"\x03\x90\x02\x01\x12]\n" +
-	"\vGetMlDevice\x12#.controlplane.v1.GetMlDeviceRequest\x1a$.controlplane.v1.GetMlDeviceResponse\"\x03\x90\x02\x01\x12Z\n" +
+	"\vGetMlDevice\x12#.controlplane.v1.GetMlDeviceRequest\x1a$.controlplane.v1.GetMlDeviceResponse\"\x03\x90\x02\x01\x12f\n" +
+	"\rGetMlMachines\x12%.controlplane.v1.GetMlMachinesRequest\x1a&.controlplane.v1.GetMlMachinesResponse\"\x06\x88\x02\x01\x90\x02\x01\x12Z\n" +
 	"\n" +
 	"GetMlStack\x12\".controlplane.v1.GetMlStackRequest\x1a#.controlplane.v1.GetMlStackResponse\"\x03\x90\x02\x01\x12]\n" +
 	"\vGetMlQueues\x12#.controlplane.v1.GetMlQueuesRequest\x1a$.controlplane.v1.GetMlQueuesResponse\"\x03\x90\x02\x01\x12f\n" +
@@ -19855,19 +18402,8 @@ const file_services_ml_early_access_v1_ml_early_access_proto_rawDesc = "" +
 	"\x11ListMlExperiments\x12).controlplane.v1.ListMlExperimentsRequest\x1a*.controlplane.v1.ListMlExperimentsResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\n" +
 	"ListMlRuns\x12\".controlplane.v1.ListMlRunsRequest\x1a#.controlplane.v1.ListMlRunsResponse\"\x03\x90\x02\x01\x12T\n" +
-	"\bGetMlRun\x12 .controlplane.v1.GetMlRunRequest\x1a!.controlplane.v1.GetMlRunResponse\"\x03\x90\x02\x01\x12c\n" +
-	"\rQueryMlSeries\x12%.controlplane.v1.QueryMlSeriesRequest\x1a&.controlplane.v1.QueryMlSeriesResponse\"\x03\x90\x02\x01\x12`\n" +
-	"\fListMlEvents\x12$.controlplane.v1.ListMlEventsRequest\x1a%.controlplane.v1.ListMlEventsResponse\"\x03\x90\x02\x01\x12Z\n" +
-	"\n" +
-	"ListMlLogs\x12\".controlplane.v1.ListMlLogsRequest\x1a#.controlplane.v1.ListMlLogsResponse\"\x03\x90\x02\x01\x12`\n" +
-	"\fListMlTraces\x12$.controlplane.v1.ListMlTracesRequest\x1a%.controlplane.v1.ListMlTracesResponse\"\x03\x90\x02\x01\x12Z\n" +
-	"\n" +
-	"GetMlTrace\x12\".controlplane.v1.GetMlTraceRequest\x1a#.controlplane.v1.GetMlTraceResponse\"\x03\x90\x02\x01\x12f\n" +
-	"\x0eListMlProfiles\x12&.controlplane.v1.ListMlProfilesRequest\x1a'.controlplane.v1.ListMlProfilesResponse\"\x03\x90\x02\x01\x12`\n" +
-	"\fGetMlProfile\x12$.controlplane.v1.GetMlProfileRequest\x1a%.controlplane.v1.GetMlProfileResponse\"\x03\x90\x02\x01\x12`\n" +
-	"\fGetMlLineage\x12$.controlplane.v1.GetMlLineageRequest\x1a%.controlplane.v1.GetMlLineageResponse\"\x03\x90\x02\x01\x12o\n" +
-	"\x11QueryMlHistograms\x12).controlplane.v1.QueryMlHistogramsRequest\x1a*.controlplane.v1.QueryMlHistogramsResponse\"\x03\x90\x02\x01\x12`\n" +
-	"\fListMlAlerts\x12$.controlplane.v1.ListMlAlertsRequest\x1a%.controlplane.v1.ListMlAlertsResponse\"\x03\x90\x02\x01\x12l\n" +
+	"\bGetMlRun\x12 .controlplane.v1.GetMlRunRequest\x1a!.controlplane.v1.GetMlRunResponse\"\x03\x90\x02\x01\x12`\n" +
+	"\fGetMlLineage\x12$.controlplane.v1.GetMlLineageRequest\x1a%.controlplane.v1.GetMlLineageResponse\"\x03\x90\x02\x01\x12l\n" +
 	"\x10ListMlEvalSuites\x12(.controlplane.v1.ListMlEvalSuitesRequest\x1a).controlplane.v1.ListMlEvalSuitesResponse\"\x03\x90\x02\x01\x12i\n" +
 	"\x0fGetMlEvalMatrix\x12'.controlplane.v1.GetMlEvalMatrixRequest\x1a(.controlplane.v1.GetMlEvalMatrixResponse\"\x03\x90\x02\x01\x12f\n" +
 	"\x0eListMlEvalRuns\x12&.controlplane.v1.ListMlEvalRunsRequest\x1a'.controlplane.v1.ListMlEvalRunsResponse\"\x03\x90\x02\x01\x12`\n" +
@@ -19893,8 +18429,8 @@ func file_services_ml_early_access_v1_ml_early_access_proto_rawDescGZIP() []byte
 	return file_services_ml_early_access_v1_ml_early_access_proto_rawDescData
 }
 
-var file_services_ml_early_access_v1_ml_early_access_proto_enumTypes = make([]protoimpl.EnumInfo, 29)
-var file_services_ml_early_access_v1_ml_early_access_proto_msgTypes = make([]protoimpl.MessageInfo, 179)
+var file_services_ml_early_access_v1_ml_early_access_proto_enumTypes = make([]protoimpl.EnumInfo, 27)
+var file_services_ml_early_access_v1_ml_early_access_proto_msgTypes = make([]protoimpl.MessageInfo, 159)
 var file_services_ml_early_access_v1_ml_early_access_proto_goTypes = []any{
 	(MlSubjectKind)(0),                      // 0: controlplane.v1.MlSubjectKind
 	(MlSeverity)(0),                         // 1: controlplane.v1.MlSeverity
@@ -19911,569 +18447,502 @@ var file_services_ml_early_access_v1_ml_early_access_proto_goTypes = []any{
 	(MlImpactUnit)(0),                       // 12: controlplane.v1.MlImpactUnit
 	(MlFixKind)(0),                          // 13: controlplane.v1.MlFixKind
 	(MlFindingState)(0),                     // 14: controlplane.v1.MlFindingState
-	(MlRunState)(0),                         // 15: controlplane.v1.MlRunState
-	(MlRunBadge)(0),                         // 16: controlplane.v1.MlRunBadge
-	(MlPhaseKind)(0),                        // 17: controlplane.v1.MlPhaseKind
-	(MlPhaseState)(0),                       // 18: controlplane.v1.MlPhaseState
-	(MlAttemptEndReason)(0),                 // 19: controlplane.v1.MlAttemptEndReason
-	(MlCheckpointStatus)(0),                 // 20: controlplane.v1.MlCheckpointStatus
-	(MlParamSource)(0),                      // 21: controlplane.v1.MlParamSource
-	(MlTraceKind)(0),                        // 22: controlplane.v1.MlTraceKind
-	(MlSpanStatus)(0),                       // 23: controlplane.v1.MlSpanStatus
-	(MlProfileKind)(0),                      // 24: controlplane.v1.MlProfileKind
-	(MlLineageEdgeKind)(0),                  // 25: controlplane.v1.MlLineageEdgeKind
-	(MlVersionSource)(0),                    // 26: controlplane.v1.MlVersionSource
-	(MlReleaseVerdict)(0),                   // 27: controlplane.v1.MlReleaseVerdict
-	(MlAlertState)(0),                       // 28: controlplane.v1.MlAlertState
-	(*MlSubject)(nil),                       // 29: controlplane.v1.MlSubject
-	(*MlFact)(nil),                          // 30: controlplane.v1.MlFact
-	(*MlCost)(nil),                          // 31: controlplane.v1.MlCost
-	(*MlCostSlice)(nil),                     // 32: controlplane.v1.MlCostSlice
-	(*MlSeries)(nil),                        // 33: controlplane.v1.MlSeries
-	(*MlEvent)(nil),                         // 34: controlplane.v1.MlEvent
-	(*MlTimeSpan)(nil),                      // 35: controlplane.v1.MlTimeSpan
-	(*MlPodStart)(nil),                      // 36: controlplane.v1.MlPodStart
-	(*MlPodStartStage)(nil),                 // 37: controlplane.v1.MlPodStartStage
-	(*MlPodStartWaterfall)(nil),             // 38: controlplane.v1.MlPodStartWaterfall
-	(*MlWaterfallStage)(nil),                // 39: controlplane.v1.MlWaterfallStage
-	(*GetMlFleetRequest)(nil),               // 40: controlplane.v1.GetMlFleetRequest
-	(*GetMlFleetResponse)(nil),              // 41: controlplane.v1.GetMlFleetResponse
-	(*MlFleetSummary)(nil),                  // 42: controlplane.v1.MlFleetSummary
-	(*MlCluster)(nil),                       // 43: controlplane.v1.MlCluster
-	(*MlPool)(nil),                          // 44: controlplane.v1.MlPool
-	(*MlIdleAllocation)(nil),                // 45: controlplane.v1.MlIdleAllocation
-	(*MlHealthItem)(nil),                    // 46: controlplane.v1.MlHealthItem
-	(*GetMlPoolRequest)(nil),                // 47: controlplane.v1.GetMlPoolRequest
-	(*GetMlPoolResponse)(nil),               // 48: controlplane.v1.GetMlPoolResponse
-	(*MlVersionSkew)(nil),                   // 49: controlplane.v1.MlVersionSkew
-	(*MlShare)(nil),                         // 50: controlplane.v1.MlShare
-	(*MlNode)(nil),                          // 51: controlplane.v1.MlNode
-	(*MlNodeCondition)(nil),                 // 52: controlplane.v1.MlNodeCondition
-	(*MlFieldValue)(nil),                    // 53: controlplane.v1.MlFieldValue
-	(*MlDevice)(nil),                        // 54: controlplane.v1.MlDevice
-	(*MlHealthScoreInput)(nil),              // 55: controlplane.v1.MlHealthScoreInput
-	(*GetMlNodeRequest)(nil),                // 56: controlplane.v1.GetMlNodeRequest
-	(*GetMlNodeResponse)(nil),               // 57: controlplane.v1.GetMlNodeResponse
-	(*MlNodeWorkload)(nil),                  // 58: controlplane.v1.MlNodeWorkload
-	(*MlNvlinkPair)(nil),                    // 59: controlplane.v1.MlNvlinkPair
-	(*MlIbPort)(nil),                        // 60: controlplane.v1.MlIbPort
-	(*MlHostResources)(nil),                 // 61: controlplane.v1.MlHostResources
-	(*MlDiagResult)(nil),                    // 62: controlplane.v1.MlDiagResult
-	(*MlIncarnation)(nil),                   // 63: controlplane.v1.MlIncarnation
-	(*GetMlDeviceRequest)(nil),              // 64: controlplane.v1.GetMlDeviceRequest
-	(*GetMlDeviceResponse)(nil),             // 65: controlplane.v1.GetMlDeviceResponse
-	(*MlDevicePlacement)(nil),               // 66: controlplane.v1.MlDevicePlacement
-	(*GetMlStackRequest)(nil),               // 67: controlplane.v1.GetMlStackRequest
-	(*GetMlStackResponse)(nil),              // 68: controlplane.v1.GetMlStackResponse
-	(*MlClusterSetup)(nil),                  // 69: controlplane.v1.MlClusterSetup
-	(*MlCoverageItem)(nil),                  // 70: controlplane.v1.MlCoverageItem
-	(*MlInventory)(nil),                     // 71: controlplane.v1.MlInventory
-	(*MlCrd)(nil),                           // 72: controlplane.v1.MlCrd
-	(*GetMlQueuesRequest)(nil),              // 73: controlplane.v1.GetMlQueuesRequest
-	(*GetMlQueuesResponse)(nil),             // 74: controlplane.v1.GetMlQueuesResponse
-	(*MlQueuesSummary)(nil),                 // 75: controlplane.v1.MlQueuesSummary
-	(*MlClusterQueue)(nil),                  // 76: controlplane.v1.MlClusterQueue
-	(*MlFlavorQuota)(nil),                   // 77: controlplane.v1.MlFlavorQuota
-	(*MlPendingWorkload)(nil),               // 78: controlplane.v1.MlPendingWorkload
-	(*MlPreemption)(nil),                    // 79: controlplane.v1.MlPreemption
-	(*ListMlFindingsRequest)(nil),           // 80: controlplane.v1.ListMlFindingsRequest
-	(*ListMlFindingsResponse)(nil),          // 81: controlplane.v1.ListMlFindingsResponse
-	(*MlImpact)(nil),                        // 82: controlplane.v1.MlImpact
-	(*MlFix)(nil),                           // 83: controlplane.v1.MlFix
-	(*MlEvidenceTable)(nil),                 // 84: controlplane.v1.MlEvidenceTable
-	(*MlEvidenceRow)(nil),                   // 85: controlplane.v1.MlEvidenceRow
-	(*MlFinding)(nil),                       // 86: controlplane.v1.MlFinding
-	(*ListMlExperimentsRequest)(nil),        // 87: controlplane.v1.ListMlExperimentsRequest
-	(*ListMlExperimentsResponse)(nil),       // 88: controlplane.v1.ListMlExperimentsResponse
-	(*MlExperiment)(nil),                    // 89: controlplane.v1.MlExperiment
-	(*ListMlRunsRequest)(nil),               // 90: controlplane.v1.ListMlRunsRequest
-	(*ListMlRunsResponse)(nil),              // 91: controlplane.v1.ListMlRunsResponse
-	(*MlRun)(nil),                           // 92: controlplane.v1.MlRun
-	(*MlPhase)(nil),                         // 93: controlplane.v1.MlPhase
-	(*MlSegment)(nil),                       // 94: controlplane.v1.MlSegment
-	(*MlAttempt)(nil),                       // 95: controlplane.v1.MlAttempt
-	(*MlRecovery)(nil),                      // 96: controlplane.v1.MlRecovery
-	(*MlRecoveryStage)(nil),                 // 97: controlplane.v1.MlRecoveryStage
-	(*MlKueueWorkload)(nil),                 // 98: controlplane.v1.MlKueueWorkload
-	(*MlRank)(nil),                          // 99: controlplane.v1.MlRank
-	(*MlCheckpoint)(nil),                    // 100: controlplane.v1.MlCheckpoint
-	(*MlHealthCheck)(nil),                   // 101: controlplane.v1.MlHealthCheck
-	(*MlStepStage)(nil),                     // 102: controlplane.v1.MlStepStage
-	(*MlParam)(nil),                         // 103: controlplane.v1.MlParam
-	(*MlParallelism)(nil),                   // 104: controlplane.v1.MlParallelism
-	(*MlDatasetRef)(nil),                    // 105: controlplane.v1.MlDatasetRef
-	(*MlCodeRef)(nil),                       // 106: controlplane.v1.MlCodeRef
-	(*MlRunConfig)(nil),                     // 107: controlplane.v1.MlRunConfig
-	(*MlCostCell)(nil),                      // 108: controlplane.v1.MlCostCell
-	(*MlRunCost)(nil),                       // 109: controlplane.v1.MlRunCost
-	(*GetMlRunRequest)(nil),                 // 110: controlplane.v1.GetMlRunRequest
-	(*GetMlRunResponse)(nil),                // 111: controlplane.v1.GetMlRunResponse
-	(*MlHook)(nil),                          // 112: controlplane.v1.MlHook
-	(*MlHookTarget)(nil),                    // 113: controlplane.v1.MlHookTarget
-	(*MlInsight)(nil),                       // 114: controlplane.v1.MlInsight
-	(*MlLayerStat)(nil),                     // 115: controlplane.v1.MlLayerStat
-	(*MlTokenStats)(nil),                    // 116: controlplane.v1.MlTokenStats
-	(*QueryMlSeriesRequest)(nil),            // 117: controlplane.v1.QueryMlSeriesRequest
-	(*QueryMlSeriesResponse)(nil),           // 118: controlplane.v1.QueryMlSeriesResponse
-	(*ListMlEventsRequest)(nil),             // 119: controlplane.v1.ListMlEventsRequest
-	(*ListMlEventsResponse)(nil),            // 120: controlplane.v1.ListMlEventsResponse
-	(*ListMlLogsRequest)(nil),               // 121: controlplane.v1.ListMlLogsRequest
-	(*ListMlLogsResponse)(nil),              // 122: controlplane.v1.ListMlLogsResponse
-	(*MlLogLine)(nil),                       // 123: controlplane.v1.MlLogLine
-	(*ListMlTracesRequest)(nil),             // 124: controlplane.v1.ListMlTracesRequest
-	(*ListMlTracesResponse)(nil),            // 125: controlplane.v1.ListMlTracesResponse
-	(*MlTraceSummary)(nil),                  // 126: controlplane.v1.MlTraceSummary
-	(*GetMlTraceRequest)(nil),               // 127: controlplane.v1.GetMlTraceRequest
-	(*GetMlTraceResponse)(nil),              // 128: controlplane.v1.GetMlTraceResponse
-	(*MlSpan)(nil),                          // 129: controlplane.v1.MlSpan
-	(*MlSpanEvent)(nil),                     // 130: controlplane.v1.MlSpanEvent
-	(*ListMlProfilesRequest)(nil),           // 131: controlplane.v1.ListMlProfilesRequest
-	(*ListMlProfilesResponse)(nil),          // 132: controlplane.v1.ListMlProfilesResponse
-	(*MlProfile)(nil),                       // 133: controlplane.v1.MlProfile
-	(*MlProfileSummary)(nil),                // 134: controlplane.v1.MlProfileSummary
-	(*MlKernel)(nil),                        // 135: controlplane.v1.MlKernel
-	(*MlCollectiveState)(nil),               // 136: controlplane.v1.MlCollectiveState
-	(*GetMlProfileRequest)(nil),             // 137: controlplane.v1.GetMlProfileRequest
-	(*GetMlProfileResponse)(nil),            // 138: controlplane.v1.GetMlProfileResponse
-	(*MlLineageNode)(nil),                   // 139: controlplane.v1.MlLineageNode
-	(*MlLineageEdge)(nil),                   // 140: controlplane.v1.MlLineageEdge
-	(*GetMlLineageRequest)(nil),             // 141: controlplane.v1.GetMlLineageRequest
-	(*GetMlLineageResponse)(nil),            // 142: controlplane.v1.GetMlLineageResponse
-	(*ListMlEvalSuitesRequest)(nil),         // 143: controlplane.v1.ListMlEvalSuitesRequest
-	(*ListMlEvalSuitesResponse)(nil),        // 144: controlplane.v1.ListMlEvalSuitesResponse
-	(*MlEvalSuite)(nil),                     // 145: controlplane.v1.MlEvalSuite
-	(*MlEvalTask)(nil),                      // 146: controlplane.v1.MlEvalTask
-	(*MlEvalGate)(nil),                      // 147: controlplane.v1.MlEvalGate
-	(*GetMlEvalMatrixRequest)(nil),          // 148: controlplane.v1.GetMlEvalMatrixRequest
-	(*GetMlEvalMatrixResponse)(nil),         // 149: controlplane.v1.GetMlEvalMatrixResponse
-	(*MlEvalRow)(nil),                       // 150: controlplane.v1.MlEvalRow
-	(*MlEvalCell)(nil),                      // 151: controlplane.v1.MlEvalCell
-	(*ListMlEvalRunsRequest)(nil),           // 152: controlplane.v1.ListMlEvalRunsRequest
-	(*ListMlEvalRunsResponse)(nil),          // 153: controlplane.v1.ListMlEvalRunsResponse
-	(*MlEvalRun)(nil),                       // 154: controlplane.v1.MlEvalRun
-	(*MlEvalResult)(nil),                    // 155: controlplane.v1.MlEvalResult
-	(*MlEvalSliceResult)(nil),               // 156: controlplane.v1.MlEvalSliceResult
-	(*GetMlEvalRunRequest)(nil),             // 157: controlplane.v1.GetMlEvalRunRequest
-	(*GetMlEvalRunResponse)(nil),            // 158: controlplane.v1.GetMlEvalRunResponse
-	(*ListMlEvalSamplesRequest)(nil),        // 159: controlplane.v1.ListMlEvalSamplesRequest
-	(*ListMlEvalSamplesResponse)(nil),       // 160: controlplane.v1.ListMlEvalSamplesResponse
-	(*MlEvalSample)(nil),                    // 161: controlplane.v1.MlEvalSample
-	(*ListMlModelsRequest)(nil),             // 162: controlplane.v1.ListMlModelsRequest
-	(*ListMlModelsResponse)(nil),            // 163: controlplane.v1.ListMlModelsResponse
-	(*MlModel)(nil),                         // 164: controlplane.v1.MlModel
-	(*MlAlias)(nil),                         // 165: controlplane.v1.MlAlias
-	(*MlAliasMove)(nil),                     // 166: controlplane.v1.MlAliasMove
-	(*GetMlModelRequest)(nil),               // 167: controlplane.v1.GetMlModelRequest
-	(*GetMlModelResponse)(nil),              // 168: controlplane.v1.GetMlModelResponse
-	(*MlModelVersion)(nil),                  // 169: controlplane.v1.MlModelVersion
-	(*MlModelCard)(nil),                     // 170: controlplane.v1.MlModelCard
-	(*MlServingPlacement)(nil),              // 171: controlplane.v1.MlServingPlacement
-	(*MlGateCheck)(nil),                     // 172: controlplane.v1.MlGateCheck
-	(*MlPromotionGate)(nil),                 // 173: controlplane.v1.MlPromotionGate
-	(*GetMlModelVersionRequest)(nil),        // 174: controlplane.v1.GetMlModelVersionRequest
-	(*GetMlModelVersionResponse)(nil),       // 175: controlplane.v1.GetMlModelVersionResponse
-	(*MlModelFile)(nil),                     // 176: controlplane.v1.MlModelFile
-	(*MlServingPerf)(nil),                   // 177: controlplane.v1.MlServingPerf
-	(*MlPullPerf)(nil),                      // 178: controlplane.v1.MlPullPerf
-	(*ListMlInferenceServicesRequest)(nil),  // 179: controlplane.v1.ListMlInferenceServicesRequest
-	(*ListMlInferenceServicesResponse)(nil), // 180: controlplane.v1.ListMlInferenceServicesResponse
-	(*MlInferenceService)(nil),              // 181: controlplane.v1.MlInferenceService
-	(*GetMlInferenceServiceRequest)(nil),    // 182: controlplane.v1.GetMlInferenceServiceRequest
-	(*GetMlInferenceServiceResponse)(nil),   // 183: controlplane.v1.GetMlInferenceServiceResponse
-	(*MlSliDelta)(nil),                      // 184: controlplane.v1.MlSliDelta
-	(*MlRevision)(nil),                      // 185: controlplane.v1.MlRevision
-	(*MlReplica)(nil),                       // 186: controlplane.v1.MlReplica
-	(*MlServingCost)(nil),                   // 187: controlplane.v1.MlServingCost
-	(*MlChangesComparison)(nil),             // 188: controlplane.v1.MlChangesComparison
-	(*MlChangesArm)(nil),                    // 189: controlplane.v1.MlChangesArm
-	(*MlArmMetric)(nil),                     // 190: controlplane.v1.MlArmMetric
-	(*MlOnlineEval)(nil),                    // 191: controlplane.v1.MlOnlineEval
-	(*QueryMlHistogramsRequest)(nil),        // 192: controlplane.v1.QueryMlHistogramsRequest
-	(*QueryMlHistogramsResponse)(nil),       // 193: controlplane.v1.QueryMlHistogramsResponse
-	(*MlHistogram)(nil),                     // 194: controlplane.v1.MlHistogram
-	(*MlHistogramBucket)(nil),               // 195: controlplane.v1.MlHistogramBucket
-	(*ListMlAlertsRequest)(nil),             // 196: controlplane.v1.ListMlAlertsRequest
-	(*ListMlAlertsResponse)(nil),            // 197: controlplane.v1.ListMlAlertsResponse
-	(*MlAlertRule)(nil),                     // 198: controlplane.v1.MlAlertRule
-	nil,                                     // 199: controlplane.v1.MlEvent.AttributesEntry
-	nil,                                     // 200: controlplane.v1.MlRun.SummaryEntry
-	nil,                                     // 201: controlplane.v1.MlRun.ParamsEntry
-	nil,                                     // 202: controlplane.v1.MlPhase.SummaryEntry
-	nil,                                     // 203: controlplane.v1.MlCheckpoint.MetricsEntry
-	nil,                                     // 204: controlplane.v1.MlCheckpoint.EvalScoresEntry
-	nil,                                     // 205: controlplane.v1.MlTraceSummary.AttributesEntry
-	nil,                                     // 206: controlplane.v1.MlSpan.AttributesEntry
-	nil,                                     // 207: controlplane.v1.MlSpanEvent.AttributesEntry
-	(*timestamppb.Timestamp)(nil),           // 208: google.protobuf.Timestamp
+	(MlFindingSeverity)(0),                  // 15: controlplane.v1.MlFindingSeverity
+	(MlRunState)(0),                         // 16: controlplane.v1.MlRunState
+	(MlRunBadge)(0),                         // 17: controlplane.v1.MlRunBadge
+	(MlPhaseKind)(0),                        // 18: controlplane.v1.MlPhaseKind
+	(MlPhaseState)(0),                       // 19: controlplane.v1.MlPhaseState
+	(MlAttemptEndReason)(0),                 // 20: controlplane.v1.MlAttemptEndReason
+	(MlCheckpointStatus)(0),                 // 21: controlplane.v1.MlCheckpointStatus
+	(MlParamSource)(0),                      // 22: controlplane.v1.MlParamSource
+	(MlLineageEdgeKind)(0),                  // 23: controlplane.v1.MlLineageEdgeKind
+	(MlVersionSource)(0),                    // 24: controlplane.v1.MlVersionSource
+	(MlReleaseVerdict)(0),                   // 25: controlplane.v1.MlReleaseVerdict
+	(MlNodeHealth)(0),                       // 26: controlplane.v1.MlNodeHealth
+	(*MlSubject)(nil),                       // 27: controlplane.v1.MlSubject
+	(*MlFact)(nil),                          // 28: controlplane.v1.MlFact
+	(*MlCost)(nil),                          // 29: controlplane.v1.MlCost
+	(*MlCostSlice)(nil),                     // 30: controlplane.v1.MlCostSlice
+	(*MlSeries)(nil),                        // 31: controlplane.v1.MlSeries
+	(*MlEvent)(nil),                         // 32: controlplane.v1.MlEvent
+	(*MlTimeSpan)(nil),                      // 33: controlplane.v1.MlTimeSpan
+	(*MlPodStart)(nil),                      // 34: controlplane.v1.MlPodStart
+	(*MlPodStartStage)(nil),                 // 35: controlplane.v1.MlPodStartStage
+	(*MlPodStartWaterfall)(nil),             // 36: controlplane.v1.MlPodStartWaterfall
+	(*MlWaterfallStage)(nil),                // 37: controlplane.v1.MlWaterfallStage
+	(*GetMlFleetRequest)(nil),               // 38: controlplane.v1.GetMlFleetRequest
+	(*GetMlFleetResponse)(nil),              // 39: controlplane.v1.GetMlFleetResponse
+	(*MlFleetSummary)(nil),                  // 40: controlplane.v1.MlFleetSummary
+	(*MlCluster)(nil),                       // 41: controlplane.v1.MlCluster
+	(*MlPool)(nil),                          // 42: controlplane.v1.MlPool
+	(*MlIdleAllocation)(nil),                // 43: controlplane.v1.MlIdleAllocation
+	(*MlHealthItem)(nil),                    // 44: controlplane.v1.MlHealthItem
+	(*GetMlPoolRequest)(nil),                // 45: controlplane.v1.GetMlPoolRequest
+	(*GetMlPoolResponse)(nil),               // 46: controlplane.v1.GetMlPoolResponse
+	(*MlVersionSkew)(nil),                   // 47: controlplane.v1.MlVersionSkew
+	(*MlShare)(nil),                         // 48: controlplane.v1.MlShare
+	(*MlNode)(nil),                          // 49: controlplane.v1.MlNode
+	(*MlNodeCondition)(nil),                 // 50: controlplane.v1.MlNodeCondition
+	(*MlFieldValue)(nil),                    // 51: controlplane.v1.MlFieldValue
+	(*MlDevice)(nil),                        // 52: controlplane.v1.MlDevice
+	(*MlHealthScoreInput)(nil),              // 53: controlplane.v1.MlHealthScoreInput
+	(*GetMlNodeRequest)(nil),                // 54: controlplane.v1.GetMlNodeRequest
+	(*GetMlNodeResponse)(nil),               // 55: controlplane.v1.GetMlNodeResponse
+	(*MlNodeWorkload)(nil),                  // 56: controlplane.v1.MlNodeWorkload
+	(*MlNvlinkPair)(nil),                    // 57: controlplane.v1.MlNvlinkPair
+	(*MlIbPort)(nil),                        // 58: controlplane.v1.MlIbPort
+	(*MlHostResources)(nil),                 // 59: controlplane.v1.MlHostResources
+	(*MlDiagResult)(nil),                    // 60: controlplane.v1.MlDiagResult
+	(*MlIncarnation)(nil),                   // 61: controlplane.v1.MlIncarnation
+	(*GetMlDeviceRequest)(nil),              // 62: controlplane.v1.GetMlDeviceRequest
+	(*GetMlDeviceResponse)(nil),             // 63: controlplane.v1.GetMlDeviceResponse
+	(*MlDevicePlacement)(nil),               // 64: controlplane.v1.MlDevicePlacement
+	(*GetMlStackRequest)(nil),               // 65: controlplane.v1.GetMlStackRequest
+	(*GetMlStackResponse)(nil),              // 66: controlplane.v1.GetMlStackResponse
+	(*MlClusterSetup)(nil),                  // 67: controlplane.v1.MlClusterSetup
+	(*MlCoverageItem)(nil),                  // 68: controlplane.v1.MlCoverageItem
+	(*MlInventory)(nil),                     // 69: controlplane.v1.MlInventory
+	(*MlCrd)(nil),                           // 70: controlplane.v1.MlCrd
+	(*GetMlQueuesRequest)(nil),              // 71: controlplane.v1.GetMlQueuesRequest
+	(*GetMlQueuesResponse)(nil),             // 72: controlplane.v1.GetMlQueuesResponse
+	(*MlQueuesSummary)(nil),                 // 73: controlplane.v1.MlQueuesSummary
+	(*MlClusterQueue)(nil),                  // 74: controlplane.v1.MlClusterQueue
+	(*MlFlavorQuota)(nil),                   // 75: controlplane.v1.MlFlavorQuota
+	(*MlPendingWorkload)(nil),               // 76: controlplane.v1.MlPendingWorkload
+	(*MlPreemption)(nil),                    // 77: controlplane.v1.MlPreemption
+	(*ListMlFindingsRequest)(nil),           // 78: controlplane.v1.ListMlFindingsRequest
+	(*ListMlFindingsResponse)(nil),          // 79: controlplane.v1.ListMlFindingsResponse
+	(*MlImpact)(nil),                        // 80: controlplane.v1.MlImpact
+	(*MlFix)(nil),                           // 81: controlplane.v1.MlFix
+	(*MlEvidenceTable)(nil),                 // 82: controlplane.v1.MlEvidenceTable
+	(*MlEvidenceRow)(nil),                   // 83: controlplane.v1.MlEvidenceRow
+	(*MlFinding)(nil),                       // 84: controlplane.v1.MlFinding
+	(*ListMlExperimentsRequest)(nil),        // 85: controlplane.v1.ListMlExperimentsRequest
+	(*ListMlExperimentsResponse)(nil),       // 86: controlplane.v1.ListMlExperimentsResponse
+	(*MlExperiment)(nil),                    // 87: controlplane.v1.MlExperiment
+	(*ListMlRunsRequest)(nil),               // 88: controlplane.v1.ListMlRunsRequest
+	(*ListMlRunsResponse)(nil),              // 89: controlplane.v1.ListMlRunsResponse
+	(*MlRun)(nil),                           // 90: controlplane.v1.MlRun
+	(*MlPhase)(nil),                         // 91: controlplane.v1.MlPhase
+	(*MlSegment)(nil),                       // 92: controlplane.v1.MlSegment
+	(*MlAttempt)(nil),                       // 93: controlplane.v1.MlAttempt
+	(*MlRecovery)(nil),                      // 94: controlplane.v1.MlRecovery
+	(*MlRecoveryStage)(nil),                 // 95: controlplane.v1.MlRecoveryStage
+	(*MlKueueWorkload)(nil),                 // 96: controlplane.v1.MlKueueWorkload
+	(*MlRank)(nil),                          // 97: controlplane.v1.MlRank
+	(*MlCheckpoint)(nil),                    // 98: controlplane.v1.MlCheckpoint
+	(*MlHealthCheck)(nil),                   // 99: controlplane.v1.MlHealthCheck
+	(*MlStepStage)(nil),                     // 100: controlplane.v1.MlStepStage
+	(*MlParam)(nil),                         // 101: controlplane.v1.MlParam
+	(*MlParallelism)(nil),                   // 102: controlplane.v1.MlParallelism
+	(*MlDatasetRef)(nil),                    // 103: controlplane.v1.MlDatasetRef
+	(*MlCodeRef)(nil),                       // 104: controlplane.v1.MlCodeRef
+	(*MlRunConfig)(nil),                     // 105: controlplane.v1.MlRunConfig
+	(*MlCostCell)(nil),                      // 106: controlplane.v1.MlCostCell
+	(*MlRunCost)(nil),                       // 107: controlplane.v1.MlRunCost
+	(*GetMlRunRequest)(nil),                 // 108: controlplane.v1.GetMlRunRequest
+	(*GetMlRunResponse)(nil),                // 109: controlplane.v1.GetMlRunResponse
+	(*MlHook)(nil),                          // 110: controlplane.v1.MlHook
+	(*MlHookTarget)(nil),                    // 111: controlplane.v1.MlHookTarget
+	(*MlInsight)(nil),                       // 112: controlplane.v1.MlInsight
+	(*MlLayerStat)(nil),                     // 113: controlplane.v1.MlLayerStat
+	(*MlTokenStats)(nil),                    // 114: controlplane.v1.MlTokenStats
+	(*MlLineageNode)(nil),                   // 115: controlplane.v1.MlLineageNode
+	(*MlLineageEdge)(nil),                   // 116: controlplane.v1.MlLineageEdge
+	(*GetMlLineageRequest)(nil),             // 117: controlplane.v1.GetMlLineageRequest
+	(*GetMlLineageResponse)(nil),            // 118: controlplane.v1.GetMlLineageResponse
+	(*ListMlEvalSuitesRequest)(nil),         // 119: controlplane.v1.ListMlEvalSuitesRequest
+	(*ListMlEvalSuitesResponse)(nil),        // 120: controlplane.v1.ListMlEvalSuitesResponse
+	(*MlEvalSuite)(nil),                     // 121: controlplane.v1.MlEvalSuite
+	(*MlEvalTask)(nil),                      // 122: controlplane.v1.MlEvalTask
+	(*MlEvalGate)(nil),                      // 123: controlplane.v1.MlEvalGate
+	(*GetMlEvalMatrixRequest)(nil),          // 124: controlplane.v1.GetMlEvalMatrixRequest
+	(*GetMlEvalMatrixResponse)(nil),         // 125: controlplane.v1.GetMlEvalMatrixResponse
+	(*MlEvalRow)(nil),                       // 126: controlplane.v1.MlEvalRow
+	(*MlEvalCell)(nil),                      // 127: controlplane.v1.MlEvalCell
+	(*ListMlEvalRunsRequest)(nil),           // 128: controlplane.v1.ListMlEvalRunsRequest
+	(*ListMlEvalRunsResponse)(nil),          // 129: controlplane.v1.ListMlEvalRunsResponse
+	(*MlEvalRun)(nil),                       // 130: controlplane.v1.MlEvalRun
+	(*MlEvalResult)(nil),                    // 131: controlplane.v1.MlEvalResult
+	(*MlEvalSliceResult)(nil),               // 132: controlplane.v1.MlEvalSliceResult
+	(*GetMlEvalRunRequest)(nil),             // 133: controlplane.v1.GetMlEvalRunRequest
+	(*GetMlEvalRunResponse)(nil),            // 134: controlplane.v1.GetMlEvalRunResponse
+	(*ListMlEvalSamplesRequest)(nil),        // 135: controlplane.v1.ListMlEvalSamplesRequest
+	(*ListMlEvalSamplesResponse)(nil),       // 136: controlplane.v1.ListMlEvalSamplesResponse
+	(*MlEvalSample)(nil),                    // 137: controlplane.v1.MlEvalSample
+	(*ListMlModelsRequest)(nil),             // 138: controlplane.v1.ListMlModelsRequest
+	(*ListMlModelsResponse)(nil),            // 139: controlplane.v1.ListMlModelsResponse
+	(*MlModel)(nil),                         // 140: controlplane.v1.MlModel
+	(*MlAlias)(nil),                         // 141: controlplane.v1.MlAlias
+	(*MlAliasMove)(nil),                     // 142: controlplane.v1.MlAliasMove
+	(*GetMlModelRequest)(nil),               // 143: controlplane.v1.GetMlModelRequest
+	(*GetMlModelResponse)(nil),              // 144: controlplane.v1.GetMlModelResponse
+	(*MlModelVersion)(nil),                  // 145: controlplane.v1.MlModelVersion
+	(*MlModelCard)(nil),                     // 146: controlplane.v1.MlModelCard
+	(*MlServingPlacement)(nil),              // 147: controlplane.v1.MlServingPlacement
+	(*MlGateCheck)(nil),                     // 148: controlplane.v1.MlGateCheck
+	(*MlPromotionGate)(nil),                 // 149: controlplane.v1.MlPromotionGate
+	(*GetMlModelVersionRequest)(nil),        // 150: controlplane.v1.GetMlModelVersionRequest
+	(*GetMlModelVersionResponse)(nil),       // 151: controlplane.v1.GetMlModelVersionResponse
+	(*MlModelFile)(nil),                     // 152: controlplane.v1.MlModelFile
+	(*MlServingPerf)(nil),                   // 153: controlplane.v1.MlServingPerf
+	(*MlPullPerf)(nil),                      // 154: controlplane.v1.MlPullPerf
+	(*ListMlInferenceServicesRequest)(nil),  // 155: controlplane.v1.ListMlInferenceServicesRequest
+	(*ListMlInferenceServicesResponse)(nil), // 156: controlplane.v1.ListMlInferenceServicesResponse
+	(*MlInferenceService)(nil),              // 157: controlplane.v1.MlInferenceService
+	(*GetMlInferenceServiceRequest)(nil),    // 158: controlplane.v1.GetMlInferenceServiceRequest
+	(*GetMlInferenceServiceResponse)(nil),   // 159: controlplane.v1.GetMlInferenceServiceResponse
+	(*MlSliDelta)(nil),                      // 160: controlplane.v1.MlSliDelta
+	(*MlRevision)(nil),                      // 161: controlplane.v1.MlRevision
+	(*MlReplica)(nil),                       // 162: controlplane.v1.MlReplica
+	(*MlServingCost)(nil),                   // 163: controlplane.v1.MlServingCost
+	(*MlChangesComparison)(nil),             // 164: controlplane.v1.MlChangesComparison
+	(*MlChangesArm)(nil),                    // 165: controlplane.v1.MlChangesArm
+	(*MlArmMetric)(nil),                     // 166: controlplane.v1.MlArmMetric
+	(*MlOnlineEval)(nil),                    // 167: controlplane.v1.MlOnlineEval
+	(*GetMlMachinesRequest)(nil),            // 168: controlplane.v1.GetMlMachinesRequest
+	(*GetMlMachinesResponse)(nil),           // 169: controlplane.v1.GetMlMachinesResponse
+	(*MlNodePool)(nil),                      // 170: controlplane.v1.MlNodePool
+	(*MlHealthFlag)(nil),                    // 171: controlplane.v1.MlHealthFlag
+	(*MlUtilizationPoint)(nil),              // 172: controlplane.v1.MlUtilizationPoint
+	(*MlStackComponent)(nil),                // 173: controlplane.v1.MlStackComponent
+	(*MlEvidence)(nil),                      // 174: controlplane.v1.MlEvidence
+	(*MlPodStartBreakdown)(nil),             // 175: controlplane.v1.MlPodStartBreakdown
+	(*MlStartStage)(nil),                    // 176: controlplane.v1.MlStartStage
+	(*MlMetricSeries)(nil),                  // 177: controlplane.v1.MlMetricSeries
+	(*MlMetricPoint)(nil),                   // 178: controlplane.v1.MlMetricPoint
+	nil,                                     // 179: controlplane.v1.MlEvent.AttributesEntry
+	nil,                                     // 180: controlplane.v1.MlRun.SummaryEntry
+	nil,                                     // 181: controlplane.v1.MlRun.ParamsEntry
+	nil,                                     // 182: controlplane.v1.MlPhase.SummaryEntry
+	nil,                                     // 183: controlplane.v1.MlCheckpoint.MetricsEntry
+	nil,                                     // 184: controlplane.v1.MlCheckpoint.EvalScoresEntry
+	nil,                                     // 185: controlplane.v1.MlModelVersion.EvalMetricsEntry
+	(*timestamppb.Timestamp)(nil),           // 186: google.protobuf.Timestamp
 }
 var file_services_ml_early_access_v1_ml_early_access_proto_depIdxs = []int32{
 	0,   // 0: controlplane.v1.MlSubject.kind:type_name -> controlplane.v1.MlSubjectKind
-	32,  // 1: controlplane.v1.MlCost.by_category:type_name -> controlplane.v1.MlCostSlice
+	30,  // 1: controlplane.v1.MlCost.by_category:type_name -> controlplane.v1.MlCostSlice
 	3,   // 2: controlplane.v1.MlCostSlice.category:type_name -> controlplane.v1.MlCostCategory
 	4,   // 3: controlplane.v1.MlSeries.axis:type_name -> controlplane.v1.MlAxis
 	5,   // 4: controlplane.v1.MlSeries.collection:type_name -> controlplane.v1.MlCollection
-	29,  // 5: controlplane.v1.MlSeries.subject:type_name -> controlplane.v1.MlSubject
-	208, // 6: controlplane.v1.MlEvent.at:type_name -> google.protobuf.Timestamp
-	208, // 7: controlplane.v1.MlEvent.end_at:type_name -> google.protobuf.Timestamp
+	27,  // 5: controlplane.v1.MlSeries.subject:type_name -> controlplane.v1.MlSubject
+	186, // 6: controlplane.v1.MlEvent.at:type_name -> google.protobuf.Timestamp
+	186, // 7: controlplane.v1.MlEvent.end_at:type_name -> google.protobuf.Timestamp
 	6,   // 8: controlplane.v1.MlEvent.kind:type_name -> controlplane.v1.MlEventKind
 	1,   // 9: controlplane.v1.MlEvent.severity:type_name -> controlplane.v1.MlSeverity
-	29,  // 10: controlplane.v1.MlEvent.subject:type_name -> controlplane.v1.MlSubject
-	29,  // 11: controlplane.v1.MlEvent.related:type_name -> controlplane.v1.MlSubject
-	199, // 12: controlplane.v1.MlEvent.attributes:type_name -> controlplane.v1.MlEvent.AttributesEntry
-	208, // 13: controlplane.v1.MlTimeSpan.start:type_name -> google.protobuf.Timestamp
-	208, // 14: controlplane.v1.MlTimeSpan.end:type_name -> google.protobuf.Timestamp
-	37,  // 15: controlplane.v1.MlPodStart.stages:type_name -> controlplane.v1.MlPodStartStage
-	29,  // 16: controlplane.v1.MlPodStartWaterfall.workload:type_name -> controlplane.v1.MlSubject
-	208, // 17: controlplane.v1.MlPodStartWaterfall.created_at:type_name -> google.protobuf.Timestamp
-	39,  // 18: controlplane.v1.MlPodStartWaterfall.stages:type_name -> controlplane.v1.MlWaterfallStage
-	42,  // 19: controlplane.v1.GetMlFleetResponse.summary:type_name -> controlplane.v1.MlFleetSummary
-	43,  // 20: controlplane.v1.GetMlFleetResponse.clusters:type_name -> controlplane.v1.MlCluster
-	44,  // 21: controlplane.v1.GetMlFleetResponse.pools:type_name -> controlplane.v1.MlPool
-	45,  // 22: controlplane.v1.GetMlFleetResponse.top_idle:type_name -> controlplane.v1.MlIdleAllocation
-	46,  // 23: controlplane.v1.GetMlFleetResponse.unhealthy:type_name -> controlplane.v1.MlHealthItem
-	208, // 24: controlplane.v1.GetMlFleetResponse.observed_at:type_name -> google.protobuf.Timestamp
-	31,  // 25: controlplane.v1.MlFleetSummary.cost_24h:type_name -> controlplane.v1.MlCost
-	208, // 26: controlplane.v1.MlCluster.last_seen_at:type_name -> google.protobuf.Timestamp
+	27,  // 10: controlplane.v1.MlEvent.subject:type_name -> controlplane.v1.MlSubject
+	27,  // 11: controlplane.v1.MlEvent.related:type_name -> controlplane.v1.MlSubject
+	179, // 12: controlplane.v1.MlEvent.attributes:type_name -> controlplane.v1.MlEvent.AttributesEntry
+	186, // 13: controlplane.v1.MlTimeSpan.start:type_name -> google.protobuf.Timestamp
+	186, // 14: controlplane.v1.MlTimeSpan.end:type_name -> google.protobuf.Timestamp
+	35,  // 15: controlplane.v1.MlPodStart.stages:type_name -> controlplane.v1.MlPodStartStage
+	27,  // 16: controlplane.v1.MlPodStartWaterfall.workload:type_name -> controlplane.v1.MlSubject
+	186, // 17: controlplane.v1.MlPodStartWaterfall.created_at:type_name -> google.protobuf.Timestamp
+	37,  // 18: controlplane.v1.MlPodStartWaterfall.stages:type_name -> controlplane.v1.MlWaterfallStage
+	40,  // 19: controlplane.v1.GetMlFleetResponse.summary:type_name -> controlplane.v1.MlFleetSummary
+	41,  // 20: controlplane.v1.GetMlFleetResponse.clusters:type_name -> controlplane.v1.MlCluster
+	42,  // 21: controlplane.v1.GetMlFleetResponse.pools:type_name -> controlplane.v1.MlPool
+	43,  // 22: controlplane.v1.GetMlFleetResponse.top_idle:type_name -> controlplane.v1.MlIdleAllocation
+	44,  // 23: controlplane.v1.GetMlFleetResponse.unhealthy:type_name -> controlplane.v1.MlHealthItem
+	186, // 24: controlplane.v1.GetMlFleetResponse.observed_at:type_name -> google.protobuf.Timestamp
+	29,  // 25: controlplane.v1.MlFleetSummary.cost_24h:type_name -> controlplane.v1.MlCost
+	186, // 26: controlplane.v1.MlCluster.last_seen_at:type_name -> google.protobuf.Timestamp
 	2,   // 27: controlplane.v1.MlCluster.health:type_name -> controlplane.v1.MlHealth
 	7,   // 28: controlplane.v1.MlPool.capacity_type:type_name -> controlplane.v1.MlCapacityType
-	29,  // 29: controlplane.v1.MlIdleAllocation.workload:type_name -> controlplane.v1.MlSubject
-	208, // 30: controlplane.v1.MlIdleAllocation.last_active_at:type_name -> google.protobuf.Timestamp
-	29,  // 31: controlplane.v1.MlHealthItem.subject:type_name -> controlplane.v1.MlSubject
+	27,  // 29: controlplane.v1.MlIdleAllocation.workload:type_name -> controlplane.v1.MlSubject
+	186, // 30: controlplane.v1.MlIdleAllocation.last_active_at:type_name -> google.protobuf.Timestamp
+	27,  // 31: controlplane.v1.MlHealthItem.subject:type_name -> controlplane.v1.MlSubject
 	2,   // 32: controlplane.v1.MlHealthItem.health:type_name -> controlplane.v1.MlHealth
-	44,  // 33: controlplane.v1.GetMlPoolResponse.pool:type_name -> controlplane.v1.MlPool
-	51,  // 34: controlplane.v1.GetMlPoolResponse.nodes:type_name -> controlplane.v1.MlNode
-	49,  // 35: controlplane.v1.GetMlPoolResponse.skew:type_name -> controlplane.v1.MlVersionSkew
-	50,  // 36: controlplane.v1.GetMlPoolResponse.throttle_reasons:type_name -> controlplane.v1.MlShare
-	50,  // 37: controlplane.v1.GetMlPoolResponse.allocation_by_namespace:type_name -> controlplane.v1.MlShare
-	2,   // 38: controlplane.v1.MlNode.health:type_name -> controlplane.v1.MlHealth
-	208, // 39: controlplane.v1.MlNode.booted_at:type_name -> google.protobuf.Timestamp
-	54,  // 40: controlplane.v1.MlNode.devices:type_name -> controlplane.v1.MlDevice
-	52,  // 41: controlplane.v1.MlNode.conditions:type_name -> controlplane.v1.MlNodeCondition
-	208, // 42: controlplane.v1.MlNodeCondition.since:type_name -> google.protobuf.Timestamp
-	8,   // 43: controlplane.v1.MlFieldValue.group:type_name -> controlplane.v1.MlFieldGroup
-	5,   // 44: controlplane.v1.MlFieldValue.collection:type_name -> controlplane.v1.MlCollection
-	2,   // 45: controlplane.v1.MlDevice.health:type_name -> controlplane.v1.MlHealth
-	29,  // 46: controlplane.v1.MlDevice.allocated_to:type_name -> controlplane.v1.MlSubject
-	53,  // 47: controlplane.v1.MlDevice.fields:type_name -> controlplane.v1.MlFieldValue
-	55,  // 48: controlplane.v1.MlDevice.score_inputs:type_name -> controlplane.v1.MlHealthScoreInput
-	51,  // 49: controlplane.v1.GetMlNodeResponse.node:type_name -> controlplane.v1.MlNode
-	58,  // 50: controlplane.v1.GetMlNodeResponse.workloads:type_name -> controlplane.v1.MlNodeWorkload
-	59,  // 51: controlplane.v1.GetMlNodeResponse.nvlink:type_name -> controlplane.v1.MlNvlinkPair
-	60,  // 52: controlplane.v1.GetMlNodeResponse.ib_ports:type_name -> controlplane.v1.MlIbPort
-	61,  // 53: controlplane.v1.GetMlNodeResponse.host:type_name -> controlplane.v1.MlHostResources
-	62,  // 54: controlplane.v1.GetMlNodeResponse.diagnostics:type_name -> controlplane.v1.MlDiagResult
-	63,  // 55: controlplane.v1.GetMlNodeResponse.incarnations:type_name -> controlplane.v1.MlIncarnation
-	29,  // 56: controlplane.v1.MlNodeWorkload.subject:type_name -> controlplane.v1.MlSubject
-	208, // 57: controlplane.v1.MlNodeWorkload.start:type_name -> google.protobuf.Timestamp
-	208, // 58: controlplane.v1.MlNodeWorkload.end:type_name -> google.protobuf.Timestamp
-	53,  // 59: controlplane.v1.MlHostResources.fields:type_name -> controlplane.v1.MlFieldValue
-	208, // 60: controlplane.v1.MlDiagResult.at:type_name -> google.protobuf.Timestamp
-	208, // 61: controlplane.v1.MlIncarnation.from:type_name -> google.protobuf.Timestamp
-	208, // 62: controlplane.v1.MlIncarnation.to:type_name -> google.protobuf.Timestamp
-	54,  // 63: controlplane.v1.GetMlDeviceResponse.device:type_name -> controlplane.v1.MlDevice
-	58,  // 64: controlplane.v1.GetMlDeviceResponse.workloads:type_name -> controlplane.v1.MlNodeWorkload
-	66,  // 65: controlplane.v1.GetMlDeviceResponse.placements:type_name -> controlplane.v1.MlDevicePlacement
-	208, // 66: controlplane.v1.MlDevicePlacement.from:type_name -> google.protobuf.Timestamp
-	208, // 67: controlplane.v1.MlDevicePlacement.to:type_name -> google.protobuf.Timestamp
-	69,  // 68: controlplane.v1.GetMlStackResponse.clusters:type_name -> controlplane.v1.MlClusterSetup
-	43,  // 69: controlplane.v1.MlClusterSetup.cluster:type_name -> controlplane.v1.MlCluster
-	70,  // 70: controlplane.v1.MlClusterSetup.coverage:type_name -> controlplane.v1.MlCoverageItem
-	71,  // 71: controlplane.v1.MlClusterSetup.inventory:type_name -> controlplane.v1.MlInventory
-	208, // 72: controlplane.v1.MlClusterSetup.discovered_at:type_name -> google.protobuf.Timestamp
-	9,   // 73: controlplane.v1.MlCoverageItem.state:type_name -> controlplane.v1.MlComponentState
-	50,  // 74: controlplane.v1.MlInventory.products:type_name -> controlplane.v1.MlShare
-	72,  // 75: controlplane.v1.MlInventory.crds:type_name -> controlplane.v1.MlCrd
-	75,  // 76: controlplane.v1.GetMlQueuesResponse.summary:type_name -> controlplane.v1.MlQueuesSummary
-	76,  // 77: controlplane.v1.GetMlQueuesResponse.queues:type_name -> controlplane.v1.MlClusterQueue
-	78,  // 78: controlplane.v1.GetMlQueuesResponse.pending:type_name -> controlplane.v1.MlPendingWorkload
-	79,  // 79: controlplane.v1.GetMlQueuesResponse.preemptions:type_name -> controlplane.v1.MlPreemption
-	36,  // 80: controlplane.v1.GetMlQueuesResponse.pod_start:type_name -> controlplane.v1.MlPodStart
-	38,  // 81: controlplane.v1.GetMlQueuesResponse.pod_start_examples:type_name -> controlplane.v1.MlPodStartWaterfall
-	77,  // 82: controlplane.v1.MlClusterQueue.flavors:type_name -> controlplane.v1.MlFlavorQuota
-	208, // 83: controlplane.v1.MlPendingWorkload.created_at:type_name -> google.protobuf.Timestamp
-	10,  // 84: controlplane.v1.MlPendingWorkload.reason:type_name -> controlplane.v1.MlPendingReason
-	29,  // 85: controlplane.v1.MlPendingWorkload.subject:type_name -> controlplane.v1.MlSubject
-	208, // 86: controlplane.v1.MlPreemption.at:type_name -> google.protobuf.Timestamp
-	29,  // 87: controlplane.v1.MlPreemption.preemptor:type_name -> controlplane.v1.MlSubject
-	29,  // 88: controlplane.v1.MlPreemption.preempted:type_name -> controlplane.v1.MlSubject
-	86,  // 89: controlplane.v1.ListMlFindingsResponse.findings:type_name -> controlplane.v1.MlFinding
-	12,  // 90: controlplane.v1.MlImpact.unit:type_name -> controlplane.v1.MlImpactUnit
-	13,  // 91: controlplane.v1.MlFix.kind:type_name -> controlplane.v1.MlFixKind
-	85,  // 92: controlplane.v1.MlEvidenceTable.rows:type_name -> controlplane.v1.MlEvidenceRow
-	29,  // 93: controlplane.v1.MlEvidenceRow.subject:type_name -> controlplane.v1.MlSubject
-	11,  // 94: controlplane.v1.MlFinding.category:type_name -> controlplane.v1.MlFindingCategory
-	1,   // 95: controlplane.v1.MlFinding.severity:type_name -> controlplane.v1.MlSeverity
-	82,  // 96: controlplane.v1.MlFinding.impact:type_name -> controlplane.v1.MlImpact
-	29,  // 97: controlplane.v1.MlFinding.subjects:type_name -> controlplane.v1.MlSubject
-	14,  // 98: controlplane.v1.MlFinding.state:type_name -> controlplane.v1.MlFindingState
-	208, // 99: controlplane.v1.MlFinding.first_seen_at:type_name -> google.protobuf.Timestamp
-	208, // 100: controlplane.v1.MlFinding.last_seen_at:type_name -> google.protobuf.Timestamp
-	33,  // 101: controlplane.v1.MlFinding.evidence_series:type_name -> controlplane.v1.MlSeries
-	84,  // 102: controlplane.v1.MlFinding.evidence_table:type_name -> controlplane.v1.MlEvidenceTable
-	30,  // 103: controlplane.v1.MlFinding.evidence_facts:type_name -> controlplane.v1.MlFact
-	34,  // 104: controlplane.v1.MlFinding.evidence_events:type_name -> controlplane.v1.MlEvent
-	83,  // 105: controlplane.v1.MlFinding.fix:type_name -> controlplane.v1.MlFix
-	208, // 106: controlplane.v1.MlFinding.snoozed_until:type_name -> google.protobuf.Timestamp
-	36,  // 107: controlplane.v1.MlFinding.pod_start:type_name -> controlplane.v1.MlPodStart
-	89,  // 108: controlplane.v1.ListMlExperimentsResponse.experiments:type_name -> controlplane.v1.MlExperiment
-	208, // 109: controlplane.v1.MlExperiment.last_activity_at:type_name -> google.protobuf.Timestamp
-	31,  // 110: controlplane.v1.MlExperiment.cost:type_name -> controlplane.v1.MlCost
-	92,  // 111: controlplane.v1.ListMlRunsResponse.runs:type_name -> controlplane.v1.MlRun
-	15,  // 112: controlplane.v1.MlRun.state:type_name -> controlplane.v1.MlRunState
-	16,  // 113: controlplane.v1.MlRun.badges:type_name -> controlplane.v1.MlRunBadge
-	208, // 114: controlplane.v1.MlRun.created_at:type_name -> google.protobuf.Timestamp
-	208, // 115: controlplane.v1.MlRun.started_at:type_name -> google.protobuf.Timestamp
-	208, // 116: controlplane.v1.MlRun.ended_at:type_name -> google.protobuf.Timestamp
-	31,  // 117: controlplane.v1.MlRun.cost:type_name -> controlplane.v1.MlCost
-	200, // 118: controlplane.v1.MlRun.summary:type_name -> controlplane.v1.MlRun.SummaryEntry
-	201, // 119: controlplane.v1.MlRun.params:type_name -> controlplane.v1.MlRun.ParamsEntry
-	33,  // 120: controlplane.v1.MlRun.objective:type_name -> controlplane.v1.MlSeries
-	93,  // 121: controlplane.v1.MlRun.phases:type_name -> controlplane.v1.MlPhase
-	17,  // 122: controlplane.v1.MlPhase.kind:type_name -> controlplane.v1.MlPhaseKind
-	18,  // 123: controlplane.v1.MlPhase.state:type_name -> controlplane.v1.MlPhaseState
-	208, // 124: controlplane.v1.MlPhase.started_at:type_name -> google.protobuf.Timestamp
-	208, // 125: controlplane.v1.MlPhase.ended_at:type_name -> google.protobuf.Timestamp
-	29,  // 126: controlplane.v1.MlPhase.input:type_name -> controlplane.v1.MlSubject
-	95,  // 127: controlplane.v1.MlPhase.attempts:type_name -> controlplane.v1.MlAttempt
-	94,  // 128: controlplane.v1.MlPhase.segments:type_name -> controlplane.v1.MlSegment
-	31,  // 129: controlplane.v1.MlPhase.cost:type_name -> controlplane.v1.MlCost
-	202, // 130: controlplane.v1.MlPhase.summary:type_name -> controlplane.v1.MlPhase.SummaryEntry
-	18,  // 131: controlplane.v1.MlAttempt.state:type_name -> controlplane.v1.MlPhaseState
-	19,  // 132: controlplane.v1.MlAttempt.end_reason:type_name -> controlplane.v1.MlAttemptEndReason
-	208, // 133: controlplane.v1.MlAttempt.queued_at:type_name -> google.protobuf.Timestamp
-	208, // 134: controlplane.v1.MlAttempt.admitted_at:type_name -> google.protobuf.Timestamp
-	208, // 135: controlplane.v1.MlAttempt.running_at:type_name -> google.protobuf.Timestamp
-	208, // 136: controlplane.v1.MlAttempt.ended_at:type_name -> google.protobuf.Timestamp
-	35,  // 137: controlplane.v1.MlAttempt.spans:type_name -> controlplane.v1.MlTimeSpan
-	36,  // 138: controlplane.v1.MlAttempt.pod_start:type_name -> controlplane.v1.MlPodStart
-	31,  // 139: controlplane.v1.MlAttempt.cost:type_name -> controlplane.v1.MlCost
-	99,  // 140: controlplane.v1.MlAttempt.ranks:type_name -> controlplane.v1.MlRank
-	98,  // 141: controlplane.v1.MlAttempt.workload:type_name -> controlplane.v1.MlKueueWorkload
-	96,  // 142: controlplane.v1.MlAttempt.recovery:type_name -> controlplane.v1.MlRecovery
-	97,  // 143: controlplane.v1.MlRecovery.stages:type_name -> controlplane.v1.MlRecoveryStage
-	208, // 144: controlplane.v1.MlKueueWorkload.created_at:type_name -> google.protobuf.Timestamp
-	208, // 145: controlplane.v1.MlKueueWorkload.quota_reserved_at:type_name -> google.protobuf.Timestamp
-	208, // 146: controlplane.v1.MlKueueWorkload.admitted_at:type_name -> google.protobuf.Timestamp
-	208, // 147: controlplane.v1.MlKueueWorkload.evicted_at:type_name -> google.protobuf.Timestamp
-	203, // 148: controlplane.v1.MlCheckpoint.metrics:type_name -> controlplane.v1.MlCheckpoint.MetricsEntry
-	204, // 149: controlplane.v1.MlCheckpoint.eval_scores:type_name -> controlplane.v1.MlCheckpoint.EvalScoresEntry
-	20,  // 150: controlplane.v1.MlCheckpoint.status:type_name -> controlplane.v1.MlCheckpointStatus
-	208, // 151: controlplane.v1.MlCheckpoint.saved_at:type_name -> google.protobuf.Timestamp
-	29,  // 152: controlplane.v1.MlHealthCheck.subject:type_name -> controlplane.v1.MlSubject
-	21,  // 153: controlplane.v1.MlParam.source:type_name -> controlplane.v1.MlParamSource
-	103, // 154: controlplane.v1.MlRunConfig.params:type_name -> controlplane.v1.MlParam
-	104, // 155: controlplane.v1.MlRunConfig.parallelism:type_name -> controlplane.v1.MlParallelism
-	30,  // 156: controlplane.v1.MlRunConfig.environment:type_name -> controlplane.v1.MlFact
-	30,  // 157: controlplane.v1.MlRunConfig.hardware:type_name -> controlplane.v1.MlFact
-	105, // 158: controlplane.v1.MlRunConfig.datasets:type_name -> controlplane.v1.MlDatasetRef
-	106, // 159: controlplane.v1.MlRunConfig.code:type_name -> controlplane.v1.MlCodeRef
-	3,   // 160: controlplane.v1.MlCostCell.category:type_name -> controlplane.v1.MlCostCategory
-	108, // 161: controlplane.v1.MlRunCost.cells:type_name -> controlplane.v1.MlCostCell
-	92,  // 162: controlplane.v1.GetMlRunResponse.run:type_name -> controlplane.v1.MlRun
-	100, // 163: controlplane.v1.GetMlRunResponse.checkpoints:type_name -> controlplane.v1.MlCheckpoint
-	101, // 164: controlplane.v1.GetMlRunResponse.health:type_name -> controlplane.v1.MlHealthCheck
-	102, // 165: controlplane.v1.GetMlRunResponse.step_breakdown:type_name -> controlplane.v1.MlStepStage
-	107, // 166: controlplane.v1.GetMlRunResponse.config:type_name -> controlplane.v1.MlRunConfig
-	109, // 167: controlplane.v1.GetMlRunResponse.cost:type_name -> controlplane.v1.MlRunCost
-	30,  // 168: controlplane.v1.GetMlRunResponse.key_numbers:type_name -> controlplane.v1.MlFact
-	89,  // 169: controlplane.v1.GetMlRunResponse.experiment:type_name -> controlplane.v1.MlExperiment
-	114, // 170: controlplane.v1.GetMlRunResponse.insights:type_name -> controlplane.v1.MlInsight
-	115, // 171: controlplane.v1.GetMlRunResponse.layer_stats:type_name -> controlplane.v1.MlLayerStat
-	116, // 172: controlplane.v1.GetMlRunResponse.tokens:type_name -> controlplane.v1.MlTokenStats
-	112, // 173: controlplane.v1.GetMlRunResponse.hooks:type_name -> controlplane.v1.MlHook
-	30,  // 174: controlplane.v1.GetMlRunResponse.spares:type_name -> controlplane.v1.MlFact
-	208, // 175: controlplane.v1.MlHook.last_emitted_at:type_name -> google.protobuf.Timestamp
-	113, // 176: controlplane.v1.MlHook.targets:type_name -> controlplane.v1.MlHookTarget
-	208, // 177: controlplane.v1.MlHookTarget.last_run_at:type_name -> google.protobuf.Timestamp
-	1,   // 178: controlplane.v1.MlInsight.severity:type_name -> controlplane.v1.MlSeverity
-	50,  // 179: controlplane.v1.MlTokenStats.by_source:type_name -> controlplane.v1.MlShare
-	29,  // 180: controlplane.v1.QueryMlSeriesRequest.subject:type_name -> controlplane.v1.MlSubject
-	4,   // 181: controlplane.v1.QueryMlSeriesRequest.axis:type_name -> controlplane.v1.MlAxis
-	208, // 182: controlplane.v1.QueryMlSeriesRequest.from:type_name -> google.protobuf.Timestamp
-	208, // 183: controlplane.v1.QueryMlSeriesRequest.to:type_name -> google.protobuf.Timestamp
-	33,  // 184: controlplane.v1.QueryMlSeriesResponse.series:type_name -> controlplane.v1.MlSeries
-	29,  // 185: controlplane.v1.ListMlEventsRequest.subject:type_name -> controlplane.v1.MlSubject
-	208, // 186: controlplane.v1.ListMlEventsRequest.from:type_name -> google.protobuf.Timestamp
-	208, // 187: controlplane.v1.ListMlEventsRequest.to:type_name -> google.protobuf.Timestamp
-	6,   // 188: controlplane.v1.ListMlEventsRequest.kinds:type_name -> controlplane.v1.MlEventKind
-	34,  // 189: controlplane.v1.ListMlEventsResponse.events:type_name -> controlplane.v1.MlEvent
-	29,  // 190: controlplane.v1.ListMlLogsRequest.subject:type_name -> controlplane.v1.MlSubject
-	208, // 191: controlplane.v1.ListMlLogsRequest.from:type_name -> google.protobuf.Timestamp
-	208, // 192: controlplane.v1.ListMlLogsRequest.to:type_name -> google.protobuf.Timestamp
-	123, // 193: controlplane.v1.ListMlLogsResponse.lines:type_name -> controlplane.v1.MlLogLine
-	208, // 194: controlplane.v1.MlLogLine.time:type_name -> google.protobuf.Timestamp
-	29,  // 195: controlplane.v1.ListMlTracesRequest.subject:type_name -> controlplane.v1.MlSubject
-	22,  // 196: controlplane.v1.ListMlTracesRequest.kind:type_name -> controlplane.v1.MlTraceKind
-	126, // 197: controlplane.v1.ListMlTracesResponse.traces:type_name -> controlplane.v1.MlTraceSummary
-	22,  // 198: controlplane.v1.MlTraceSummary.kind:type_name -> controlplane.v1.MlTraceKind
-	208, // 199: controlplane.v1.MlTraceSummary.start:type_name -> google.protobuf.Timestamp
-	29,  // 200: controlplane.v1.MlTraceSummary.subject:type_name -> controlplane.v1.MlSubject
-	205, // 201: controlplane.v1.MlTraceSummary.attributes:type_name -> controlplane.v1.MlTraceSummary.AttributesEntry
-	126, // 202: controlplane.v1.GetMlTraceResponse.summary:type_name -> controlplane.v1.MlTraceSummary
-	129, // 203: controlplane.v1.GetMlTraceResponse.spans:type_name -> controlplane.v1.MlSpan
-	208, // 204: controlplane.v1.MlSpan.start:type_name -> google.protobuf.Timestamp
-	23,  // 205: controlplane.v1.MlSpan.status:type_name -> controlplane.v1.MlSpanStatus
-	206, // 206: controlplane.v1.MlSpan.attributes:type_name -> controlplane.v1.MlSpan.AttributesEntry
-	130, // 207: controlplane.v1.MlSpan.events:type_name -> controlplane.v1.MlSpanEvent
-	208, // 208: controlplane.v1.MlSpanEvent.time:type_name -> google.protobuf.Timestamp
-	207, // 209: controlplane.v1.MlSpanEvent.attributes:type_name -> controlplane.v1.MlSpanEvent.AttributesEntry
-	29,  // 210: controlplane.v1.ListMlProfilesRequest.subject:type_name -> controlplane.v1.MlSubject
-	133, // 211: controlplane.v1.ListMlProfilesResponse.profiles:type_name -> controlplane.v1.MlProfile
-	24,  // 212: controlplane.v1.MlProfile.kind:type_name -> controlplane.v1.MlProfileKind
-	29,  // 213: controlplane.v1.MlProfile.subject:type_name -> controlplane.v1.MlSubject
-	208, // 214: controlplane.v1.MlProfile.captured_at:type_name -> google.protobuf.Timestamp
-	134, // 215: controlplane.v1.MlProfile.summary:type_name -> controlplane.v1.MlProfileSummary
-	136, // 216: controlplane.v1.MlProfile.collectives:type_name -> controlplane.v1.MlCollectiveState
-	135, // 217: controlplane.v1.MlProfileSummary.top_kernels:type_name -> controlplane.v1.MlKernel
-	30,  // 218: controlplane.v1.MlProfileSummary.notes:type_name -> controlplane.v1.MlFact
-	133, // 219: controlplane.v1.GetMlProfileResponse.profile:type_name -> controlplane.v1.MlProfile
-	29,  // 220: controlplane.v1.MlLineageNode.subject:type_name -> controlplane.v1.MlSubject
-	25,  // 221: controlplane.v1.MlLineageEdge.kind:type_name -> controlplane.v1.MlLineageEdgeKind
-	29,  // 222: controlplane.v1.GetMlLineageRequest.subject:type_name -> controlplane.v1.MlSubject
-	139, // 223: controlplane.v1.GetMlLineageResponse.nodes:type_name -> controlplane.v1.MlLineageNode
-	140, // 224: controlplane.v1.GetMlLineageResponse.edges:type_name -> controlplane.v1.MlLineageEdge
-	145, // 225: controlplane.v1.ListMlEvalSuitesResponse.suites:type_name -> controlplane.v1.MlEvalSuite
-	146, // 226: controlplane.v1.MlEvalSuite.tasks:type_name -> controlplane.v1.MlEvalTask
-	147, // 227: controlplane.v1.MlEvalSuite.gates:type_name -> controlplane.v1.MlEvalGate
-	145, // 228: controlplane.v1.GetMlEvalMatrixResponse.suite:type_name -> controlplane.v1.MlEvalSuite
-	150, // 229: controlplane.v1.GetMlEvalMatrixResponse.rows:type_name -> controlplane.v1.MlEvalRow
-	151, // 230: controlplane.v1.GetMlEvalMatrixResponse.cells:type_name -> controlplane.v1.MlEvalCell
-	29,  // 231: controlplane.v1.MlEvalRow.subject:type_name -> controlplane.v1.MlSubject
-	208, // 232: controlplane.v1.MlEvalRow.evaluated_at:type_name -> google.protobuf.Timestamp
-	154, // 233: controlplane.v1.ListMlEvalRunsResponse.eval_runs:type_name -> controlplane.v1.MlEvalRun
-	29,  // 234: controlplane.v1.MlEvalRun.subject:type_name -> controlplane.v1.MlSubject
-	208, // 235: controlplane.v1.MlEvalRun.started_at:type_name -> google.protobuf.Timestamp
-	208, // 236: controlplane.v1.MlEvalRun.ended_at:type_name -> google.protobuf.Timestamp
-	31,  // 237: controlplane.v1.MlEvalRun.cost:type_name -> controlplane.v1.MlCost
-	29,  // 238: controlplane.v1.MlEvalRun.phase:type_name -> controlplane.v1.MlSubject
-	155, // 239: controlplane.v1.MlEvalRun.results:type_name -> controlplane.v1.MlEvalResult
-	30,  // 240: controlplane.v1.MlEvalRun.config:type_name -> controlplane.v1.MlFact
-	156, // 241: controlplane.v1.MlEvalResult.slices:type_name -> controlplane.v1.MlEvalSliceResult
-	154, // 242: controlplane.v1.GetMlEvalRunResponse.eval_run:type_name -> controlplane.v1.MlEvalRun
-	161, // 243: controlplane.v1.ListMlEvalSamplesResponse.samples:type_name -> controlplane.v1.MlEvalSample
-	164, // 244: controlplane.v1.ListMlModelsResponse.models:type_name -> controlplane.v1.MlModel
-	165, // 245: controlplane.v1.MlModel.aliases:type_name -> controlplane.v1.MlAlias
-	208, // 246: controlplane.v1.MlModel.updated_at:type_name -> google.protobuf.Timestamp
-	208, // 247: controlplane.v1.MlAlias.moved_at:type_name -> google.protobuf.Timestamp
-	208, // 248: controlplane.v1.MlAliasMove.at:type_name -> google.protobuf.Timestamp
-	164, // 249: controlplane.v1.GetMlModelResponse.model:type_name -> controlplane.v1.MlModel
-	169, // 250: controlplane.v1.GetMlModelResponse.versions:type_name -> controlplane.v1.MlModelVersion
-	166, // 251: controlplane.v1.GetMlModelResponse.alias_history:type_name -> controlplane.v1.MlAliasMove
-	173, // 252: controlplane.v1.GetMlModelResponse.promotion:type_name -> controlplane.v1.MlPromotionGate
-	208, // 253: controlplane.v1.MlModelVersion.created_at:type_name -> google.protobuf.Timestamp
-	26,  // 254: controlplane.v1.MlModelVersion.source:type_name -> controlplane.v1.MlVersionSource
-	170, // 255: controlplane.v1.MlModelVersion.card:type_name -> controlplane.v1.MlModelCard
-	171, // 256: controlplane.v1.MlModelVersion.serving:type_name -> controlplane.v1.MlServingPlacement
-	29,  // 257: controlplane.v1.MlGateCheck.evidence:type_name -> controlplane.v1.MlSubject
-	172, // 258: controlplane.v1.MlPromotionGate.checks:type_name -> controlplane.v1.MlGateCheck
-	169, // 259: controlplane.v1.GetMlModelVersionResponse.version:type_name -> controlplane.v1.MlModelVersion
-	176, // 260: controlplane.v1.GetMlModelVersionResponse.files:type_name -> controlplane.v1.MlModelFile
-	172, // 261: controlplane.v1.GetMlModelVersionResponse.gate:type_name -> controlplane.v1.MlGateCheck
-	177, // 262: controlplane.v1.GetMlModelVersionResponse.perf:type_name -> controlplane.v1.MlServingPerf
-	178, // 263: controlplane.v1.GetMlModelVersionResponse.pulls:type_name -> controlplane.v1.MlPullPerf
-	166, // 264: controlplane.v1.GetMlModelVersionResponse.alias_history:type_name -> controlplane.v1.MlAliasMove
-	181, // 265: controlplane.v1.ListMlInferenceServicesResponse.services:type_name -> controlplane.v1.MlInferenceService
-	31,  // 266: controlplane.v1.MlInferenceService.cost:type_name -> controlplane.v1.MlCost
-	27,  // 267: controlplane.v1.MlInferenceService.verdict:type_name -> controlplane.v1.MlReleaseVerdict
-	33,  // 268: controlplane.v1.MlInferenceService.rps_series:type_name -> controlplane.v1.MlSeries
-	181, // 269: controlplane.v1.GetMlInferenceServiceResponse.service:type_name -> controlplane.v1.MlInferenceService
-	185, // 270: controlplane.v1.GetMlInferenceServiceResponse.revisions:type_name -> controlplane.v1.MlRevision
-	186, // 271: controlplane.v1.GetMlInferenceServiceResponse.replicas:type_name -> controlplane.v1.MlReplica
-	36,  // 272: controlplane.v1.GetMlInferenceServiceResponse.cold_start:type_name -> controlplane.v1.MlPodStart
-	38,  // 273: controlplane.v1.GetMlInferenceServiceResponse.cold_start_replicas:type_name -> controlplane.v1.MlPodStartWaterfall
-	50,  // 274: controlplane.v1.GetMlInferenceServiceResponse.finish_reasons:type_name -> controlplane.v1.MlShare
-	50,  // 275: controlplane.v1.GetMlInferenceServiceResponse.adapters:type_name -> controlplane.v1.MlShare
-	187, // 276: controlplane.v1.GetMlInferenceServiceResponse.serving_cost:type_name -> controlplane.v1.MlServingCost
-	188, // 277: controlplane.v1.GetMlInferenceServiceResponse.comparison:type_name -> controlplane.v1.MlChangesComparison
-	191, // 278: controlplane.v1.GetMlInferenceServiceResponse.online_evals:type_name -> controlplane.v1.MlOnlineEval
-	30,  // 279: controlplane.v1.GetMlInferenceServiceResponse.config:type_name -> controlplane.v1.MlFact
-	30,  // 280: controlplane.v1.MlRevision.config:type_name -> controlplane.v1.MlFact
-	208, // 281: controlplane.v1.MlRevision.started_at:type_name -> google.protobuf.Timestamp
-	208, // 282: controlplane.v1.MlRevision.ended_at:type_name -> google.protobuf.Timestamp
-	27,  // 283: controlplane.v1.MlRevision.verdict:type_name -> controlplane.v1.MlReleaseVerdict
-	184, // 284: controlplane.v1.MlRevision.deltas:type_name -> controlplane.v1.MlSliDelta
-	208, // 285: controlplane.v1.MlReplica.started_at:type_name -> google.protobuf.Timestamp
-	208, // 286: controlplane.v1.MlChangesComparison.started_at:type_name -> google.protobuf.Timestamp
-	189, // 287: controlplane.v1.MlChangesComparison.arms:type_name -> controlplane.v1.MlChangesArm
-	190, // 288: controlplane.v1.MlChangesArm.metrics:type_name -> controlplane.v1.MlArmMetric
-	29,  // 289: controlplane.v1.QueryMlHistogramsRequest.subject:type_name -> controlplane.v1.MlSubject
-	208, // 290: controlplane.v1.QueryMlHistogramsRequest.from:type_name -> google.protobuf.Timestamp
-	208, // 291: controlplane.v1.QueryMlHistogramsRequest.to:type_name -> google.protobuf.Timestamp
-	194, // 292: controlplane.v1.QueryMlHistogramsResponse.histograms:type_name -> controlplane.v1.MlHistogram
-	195, // 293: controlplane.v1.MlHistogram.buckets:type_name -> controlplane.v1.MlHistogramBucket
-	195, // 294: controlplane.v1.MlHistogram.compare_buckets:type_name -> controlplane.v1.MlHistogramBucket
-	5,   // 295: controlplane.v1.MlHistogram.collection:type_name -> controlplane.v1.MlCollection
-	29,  // 296: controlplane.v1.ListMlAlertsRequest.subject:type_name -> controlplane.v1.MlSubject
-	198, // 297: controlplane.v1.ListMlAlertsResponse.alerts:type_name -> controlplane.v1.MlAlertRule
-	1,   // 298: controlplane.v1.MlAlertRule.severity:type_name -> controlplane.v1.MlSeverity
-	28,  // 299: controlplane.v1.MlAlertRule.state:type_name -> controlplane.v1.MlAlertState
-	29,  // 300: controlplane.v1.MlAlertRule.subject:type_name -> controlplane.v1.MlSubject
-	208, // 301: controlplane.v1.MlAlertRule.last_fired_at:type_name -> google.protobuf.Timestamp
-	40,  // 302: controlplane.v1.MlEarlyAccessService.GetMlFleet:input_type -> controlplane.v1.GetMlFleetRequest
-	47,  // 303: controlplane.v1.MlEarlyAccessService.GetMlPool:input_type -> controlplane.v1.GetMlPoolRequest
-	56,  // 304: controlplane.v1.MlEarlyAccessService.GetMlNode:input_type -> controlplane.v1.GetMlNodeRequest
-	64,  // 305: controlplane.v1.MlEarlyAccessService.GetMlDevice:input_type -> controlplane.v1.GetMlDeviceRequest
-	67,  // 306: controlplane.v1.MlEarlyAccessService.GetMlStack:input_type -> controlplane.v1.GetMlStackRequest
-	73,  // 307: controlplane.v1.MlEarlyAccessService.GetMlQueues:input_type -> controlplane.v1.GetMlQueuesRequest
-	80,  // 308: controlplane.v1.MlEarlyAccessService.ListMlFindings:input_type -> controlplane.v1.ListMlFindingsRequest
-	87,  // 309: controlplane.v1.MlEarlyAccessService.ListMlExperiments:input_type -> controlplane.v1.ListMlExperimentsRequest
-	90,  // 310: controlplane.v1.MlEarlyAccessService.ListMlRuns:input_type -> controlplane.v1.ListMlRunsRequest
-	110, // 311: controlplane.v1.MlEarlyAccessService.GetMlRun:input_type -> controlplane.v1.GetMlRunRequest
-	117, // 312: controlplane.v1.MlEarlyAccessService.QueryMlSeries:input_type -> controlplane.v1.QueryMlSeriesRequest
-	119, // 313: controlplane.v1.MlEarlyAccessService.ListMlEvents:input_type -> controlplane.v1.ListMlEventsRequest
-	121, // 314: controlplane.v1.MlEarlyAccessService.ListMlLogs:input_type -> controlplane.v1.ListMlLogsRequest
-	124, // 315: controlplane.v1.MlEarlyAccessService.ListMlTraces:input_type -> controlplane.v1.ListMlTracesRequest
-	127, // 316: controlplane.v1.MlEarlyAccessService.GetMlTrace:input_type -> controlplane.v1.GetMlTraceRequest
-	131, // 317: controlplane.v1.MlEarlyAccessService.ListMlProfiles:input_type -> controlplane.v1.ListMlProfilesRequest
-	137, // 318: controlplane.v1.MlEarlyAccessService.GetMlProfile:input_type -> controlplane.v1.GetMlProfileRequest
-	141, // 319: controlplane.v1.MlEarlyAccessService.GetMlLineage:input_type -> controlplane.v1.GetMlLineageRequest
-	192, // 320: controlplane.v1.MlEarlyAccessService.QueryMlHistograms:input_type -> controlplane.v1.QueryMlHistogramsRequest
-	196, // 321: controlplane.v1.MlEarlyAccessService.ListMlAlerts:input_type -> controlplane.v1.ListMlAlertsRequest
-	143, // 322: controlplane.v1.MlEarlyAccessService.ListMlEvalSuites:input_type -> controlplane.v1.ListMlEvalSuitesRequest
-	148, // 323: controlplane.v1.MlEarlyAccessService.GetMlEvalMatrix:input_type -> controlplane.v1.GetMlEvalMatrixRequest
-	152, // 324: controlplane.v1.MlEarlyAccessService.ListMlEvalRuns:input_type -> controlplane.v1.ListMlEvalRunsRequest
-	157, // 325: controlplane.v1.MlEarlyAccessService.GetMlEvalRun:input_type -> controlplane.v1.GetMlEvalRunRequest
-	159, // 326: controlplane.v1.MlEarlyAccessService.ListMlEvalSamples:input_type -> controlplane.v1.ListMlEvalSamplesRequest
-	162, // 327: controlplane.v1.MlEarlyAccessService.ListMlModels:input_type -> controlplane.v1.ListMlModelsRequest
-	167, // 328: controlplane.v1.MlEarlyAccessService.GetMlModel:input_type -> controlplane.v1.GetMlModelRequest
-	174, // 329: controlplane.v1.MlEarlyAccessService.GetMlModelVersion:input_type -> controlplane.v1.GetMlModelVersionRequest
-	179, // 330: controlplane.v1.MlEarlyAccessService.ListMlInferenceServices:input_type -> controlplane.v1.ListMlInferenceServicesRequest
-	182, // 331: controlplane.v1.MlEarlyAccessService.GetMlInferenceService:input_type -> controlplane.v1.GetMlInferenceServiceRequest
-	41,  // 332: controlplane.v1.MlEarlyAccessService.GetMlFleet:output_type -> controlplane.v1.GetMlFleetResponse
-	48,  // 333: controlplane.v1.MlEarlyAccessService.GetMlPool:output_type -> controlplane.v1.GetMlPoolResponse
-	57,  // 334: controlplane.v1.MlEarlyAccessService.GetMlNode:output_type -> controlplane.v1.GetMlNodeResponse
-	65,  // 335: controlplane.v1.MlEarlyAccessService.GetMlDevice:output_type -> controlplane.v1.GetMlDeviceResponse
-	68,  // 336: controlplane.v1.MlEarlyAccessService.GetMlStack:output_type -> controlplane.v1.GetMlStackResponse
-	74,  // 337: controlplane.v1.MlEarlyAccessService.GetMlQueues:output_type -> controlplane.v1.GetMlQueuesResponse
-	81,  // 338: controlplane.v1.MlEarlyAccessService.ListMlFindings:output_type -> controlplane.v1.ListMlFindingsResponse
-	88,  // 339: controlplane.v1.MlEarlyAccessService.ListMlExperiments:output_type -> controlplane.v1.ListMlExperimentsResponse
-	91,  // 340: controlplane.v1.MlEarlyAccessService.ListMlRuns:output_type -> controlplane.v1.ListMlRunsResponse
-	111, // 341: controlplane.v1.MlEarlyAccessService.GetMlRun:output_type -> controlplane.v1.GetMlRunResponse
-	118, // 342: controlplane.v1.MlEarlyAccessService.QueryMlSeries:output_type -> controlplane.v1.QueryMlSeriesResponse
-	120, // 343: controlplane.v1.MlEarlyAccessService.ListMlEvents:output_type -> controlplane.v1.ListMlEventsResponse
-	122, // 344: controlplane.v1.MlEarlyAccessService.ListMlLogs:output_type -> controlplane.v1.ListMlLogsResponse
-	125, // 345: controlplane.v1.MlEarlyAccessService.ListMlTraces:output_type -> controlplane.v1.ListMlTracesResponse
-	128, // 346: controlplane.v1.MlEarlyAccessService.GetMlTrace:output_type -> controlplane.v1.GetMlTraceResponse
-	132, // 347: controlplane.v1.MlEarlyAccessService.ListMlProfiles:output_type -> controlplane.v1.ListMlProfilesResponse
-	138, // 348: controlplane.v1.MlEarlyAccessService.GetMlProfile:output_type -> controlplane.v1.GetMlProfileResponse
-	142, // 349: controlplane.v1.MlEarlyAccessService.GetMlLineage:output_type -> controlplane.v1.GetMlLineageResponse
-	193, // 350: controlplane.v1.MlEarlyAccessService.QueryMlHistograms:output_type -> controlplane.v1.QueryMlHistogramsResponse
-	197, // 351: controlplane.v1.MlEarlyAccessService.ListMlAlerts:output_type -> controlplane.v1.ListMlAlertsResponse
-	144, // 352: controlplane.v1.MlEarlyAccessService.ListMlEvalSuites:output_type -> controlplane.v1.ListMlEvalSuitesResponse
-	149, // 353: controlplane.v1.MlEarlyAccessService.GetMlEvalMatrix:output_type -> controlplane.v1.GetMlEvalMatrixResponse
-	153, // 354: controlplane.v1.MlEarlyAccessService.ListMlEvalRuns:output_type -> controlplane.v1.ListMlEvalRunsResponse
-	158, // 355: controlplane.v1.MlEarlyAccessService.GetMlEvalRun:output_type -> controlplane.v1.GetMlEvalRunResponse
-	160, // 356: controlplane.v1.MlEarlyAccessService.ListMlEvalSamples:output_type -> controlplane.v1.ListMlEvalSamplesResponse
-	163, // 357: controlplane.v1.MlEarlyAccessService.ListMlModels:output_type -> controlplane.v1.ListMlModelsResponse
-	168, // 358: controlplane.v1.MlEarlyAccessService.GetMlModel:output_type -> controlplane.v1.GetMlModelResponse
-	175, // 359: controlplane.v1.MlEarlyAccessService.GetMlModelVersion:output_type -> controlplane.v1.GetMlModelVersionResponse
-	180, // 360: controlplane.v1.MlEarlyAccessService.ListMlInferenceServices:output_type -> controlplane.v1.ListMlInferenceServicesResponse
-	183, // 361: controlplane.v1.MlEarlyAccessService.GetMlInferenceService:output_type -> controlplane.v1.GetMlInferenceServiceResponse
-	332, // [332:362] is the sub-list for method output_type
-	302, // [302:332] is the sub-list for method input_type
-	302, // [302:302] is the sub-list for extension type_name
-	302, // [302:302] is the sub-list for extension extendee
-	0,   // [0:302] is the sub-list for field type_name
+	42,  // 33: controlplane.v1.GetMlPoolResponse.pool:type_name -> controlplane.v1.MlPool
+	49,  // 34: controlplane.v1.GetMlPoolResponse.nodes:type_name -> controlplane.v1.MlNode
+	47,  // 35: controlplane.v1.GetMlPoolResponse.skew:type_name -> controlplane.v1.MlVersionSkew
+	48,  // 36: controlplane.v1.GetMlPoolResponse.throttle_reasons:type_name -> controlplane.v1.MlShare
+	48,  // 37: controlplane.v1.GetMlPoolResponse.allocation_by_namespace:type_name -> controlplane.v1.MlShare
+	2,   // 38: controlplane.v1.MlNode.health_state:type_name -> controlplane.v1.MlHealth
+	186, // 39: controlplane.v1.MlNode.booted_at:type_name -> google.protobuf.Timestamp
+	52,  // 40: controlplane.v1.MlNode.devices:type_name -> controlplane.v1.MlDevice
+	50,  // 41: controlplane.v1.MlNode.conditions:type_name -> controlplane.v1.MlNodeCondition
+	26,  // 42: controlplane.v1.MlNode.health:type_name -> controlplane.v1.MlNodeHealth
+	171, // 43: controlplane.v1.MlNode.flags:type_name -> controlplane.v1.MlHealthFlag
+	186, // 44: controlplane.v1.MlNodeCondition.since:type_name -> google.protobuf.Timestamp
+	8,   // 45: controlplane.v1.MlFieldValue.group:type_name -> controlplane.v1.MlFieldGroup
+	5,   // 46: controlplane.v1.MlFieldValue.collection:type_name -> controlplane.v1.MlCollection
+	2,   // 47: controlplane.v1.MlDevice.health:type_name -> controlplane.v1.MlHealth
+	27,  // 48: controlplane.v1.MlDevice.allocated_to:type_name -> controlplane.v1.MlSubject
+	51,  // 49: controlplane.v1.MlDevice.fields:type_name -> controlplane.v1.MlFieldValue
+	53,  // 50: controlplane.v1.MlDevice.score_inputs:type_name -> controlplane.v1.MlHealthScoreInput
+	49,  // 51: controlplane.v1.GetMlNodeResponse.node:type_name -> controlplane.v1.MlNode
+	56,  // 52: controlplane.v1.GetMlNodeResponse.workloads:type_name -> controlplane.v1.MlNodeWorkload
+	57,  // 53: controlplane.v1.GetMlNodeResponse.nvlink:type_name -> controlplane.v1.MlNvlinkPair
+	58,  // 54: controlplane.v1.GetMlNodeResponse.ib_ports:type_name -> controlplane.v1.MlIbPort
+	59,  // 55: controlplane.v1.GetMlNodeResponse.host:type_name -> controlplane.v1.MlHostResources
+	60,  // 56: controlplane.v1.GetMlNodeResponse.diagnostics:type_name -> controlplane.v1.MlDiagResult
+	61,  // 57: controlplane.v1.GetMlNodeResponse.incarnations:type_name -> controlplane.v1.MlIncarnation
+	27,  // 58: controlplane.v1.MlNodeWorkload.subject:type_name -> controlplane.v1.MlSubject
+	186, // 59: controlplane.v1.MlNodeWorkload.start:type_name -> google.protobuf.Timestamp
+	186, // 60: controlplane.v1.MlNodeWorkload.end:type_name -> google.protobuf.Timestamp
+	51,  // 61: controlplane.v1.MlHostResources.fields:type_name -> controlplane.v1.MlFieldValue
+	186, // 62: controlplane.v1.MlDiagResult.at:type_name -> google.protobuf.Timestamp
+	186, // 63: controlplane.v1.MlIncarnation.from:type_name -> google.protobuf.Timestamp
+	186, // 64: controlplane.v1.MlIncarnation.to:type_name -> google.protobuf.Timestamp
+	52,  // 65: controlplane.v1.GetMlDeviceResponse.device:type_name -> controlplane.v1.MlDevice
+	56,  // 66: controlplane.v1.GetMlDeviceResponse.workloads:type_name -> controlplane.v1.MlNodeWorkload
+	64,  // 67: controlplane.v1.GetMlDeviceResponse.placements:type_name -> controlplane.v1.MlDevicePlacement
+	186, // 68: controlplane.v1.MlDevicePlacement.from:type_name -> google.protobuf.Timestamp
+	186, // 69: controlplane.v1.MlDevicePlacement.to:type_name -> google.protobuf.Timestamp
+	67,  // 70: controlplane.v1.GetMlStackResponse.clusters:type_name -> controlplane.v1.MlClusterSetup
+	173, // 71: controlplane.v1.GetMlStackResponse.components:type_name -> controlplane.v1.MlStackComponent
+	41,  // 72: controlplane.v1.MlClusterSetup.cluster:type_name -> controlplane.v1.MlCluster
+	68,  // 73: controlplane.v1.MlClusterSetup.coverage:type_name -> controlplane.v1.MlCoverageItem
+	69,  // 74: controlplane.v1.MlClusterSetup.inventory:type_name -> controlplane.v1.MlInventory
+	186, // 75: controlplane.v1.MlClusterSetup.discovered_at:type_name -> google.protobuf.Timestamp
+	9,   // 76: controlplane.v1.MlCoverageItem.state:type_name -> controlplane.v1.MlComponentState
+	48,  // 77: controlplane.v1.MlInventory.products:type_name -> controlplane.v1.MlShare
+	70,  // 78: controlplane.v1.MlInventory.crds:type_name -> controlplane.v1.MlCrd
+	73,  // 79: controlplane.v1.GetMlQueuesResponse.summary:type_name -> controlplane.v1.MlQueuesSummary
+	74,  // 80: controlplane.v1.GetMlQueuesResponse.queues:type_name -> controlplane.v1.MlClusterQueue
+	76,  // 81: controlplane.v1.GetMlQueuesResponse.pending:type_name -> controlplane.v1.MlPendingWorkload
+	77,  // 82: controlplane.v1.GetMlQueuesResponse.preemptions:type_name -> controlplane.v1.MlPreemption
+	34,  // 83: controlplane.v1.GetMlQueuesResponse.pod_start:type_name -> controlplane.v1.MlPodStart
+	36,  // 84: controlplane.v1.GetMlQueuesResponse.pod_start_examples:type_name -> controlplane.v1.MlPodStartWaterfall
+	75,  // 85: controlplane.v1.MlClusterQueue.flavors:type_name -> controlplane.v1.MlFlavorQuota
+	186, // 86: controlplane.v1.MlPendingWorkload.created_at:type_name -> google.protobuf.Timestamp
+	10,  // 87: controlplane.v1.MlPendingWorkload.reason:type_name -> controlplane.v1.MlPendingReason
+	27,  // 88: controlplane.v1.MlPendingWorkload.subject:type_name -> controlplane.v1.MlSubject
+	186, // 89: controlplane.v1.MlPreemption.at:type_name -> google.protobuf.Timestamp
+	27,  // 90: controlplane.v1.MlPreemption.preemptor:type_name -> controlplane.v1.MlSubject
+	27,  // 91: controlplane.v1.MlPreemption.preempted:type_name -> controlplane.v1.MlSubject
+	84,  // 92: controlplane.v1.ListMlFindingsResponse.findings:type_name -> controlplane.v1.MlFinding
+	12,  // 93: controlplane.v1.MlImpact.unit:type_name -> controlplane.v1.MlImpactUnit
+	13,  // 94: controlplane.v1.MlFix.kind:type_name -> controlplane.v1.MlFixKind
+	83,  // 95: controlplane.v1.MlEvidenceTable.rows:type_name -> controlplane.v1.MlEvidenceRow
+	27,  // 96: controlplane.v1.MlEvidenceRow.subject:type_name -> controlplane.v1.MlSubject
+	11,  // 97: controlplane.v1.MlFinding.category:type_name -> controlplane.v1.MlFindingCategory
+	15,  // 98: controlplane.v1.MlFinding.severity:type_name -> controlplane.v1.MlFindingSeverity
+	80,  // 99: controlplane.v1.MlFinding.impact:type_name -> controlplane.v1.MlImpact
+	27,  // 100: controlplane.v1.MlFinding.subjects:type_name -> controlplane.v1.MlSubject
+	14,  // 101: controlplane.v1.MlFinding.state:type_name -> controlplane.v1.MlFindingState
+	186, // 102: controlplane.v1.MlFinding.first_seen_at:type_name -> google.protobuf.Timestamp
+	186, // 103: controlplane.v1.MlFinding.last_seen_at:type_name -> google.protobuf.Timestamp
+	31,  // 104: controlplane.v1.MlFinding.evidence_series:type_name -> controlplane.v1.MlSeries
+	82,  // 105: controlplane.v1.MlFinding.evidence_table:type_name -> controlplane.v1.MlEvidenceTable
+	28,  // 106: controlplane.v1.MlFinding.evidence_facts:type_name -> controlplane.v1.MlFact
+	32,  // 107: controlplane.v1.MlFinding.evidence_events:type_name -> controlplane.v1.MlEvent
+	81,  // 108: controlplane.v1.MlFinding.fix:type_name -> controlplane.v1.MlFix
+	186, // 109: controlplane.v1.MlFinding.snoozed_until:type_name -> google.protobuf.Timestamp
+	34,  // 110: controlplane.v1.MlFinding.start_breakdown:type_name -> controlplane.v1.MlPodStart
+	174, // 111: controlplane.v1.MlFinding.evidence:type_name -> controlplane.v1.MlEvidence
+	175, // 112: controlplane.v1.MlFinding.pod_start:type_name -> controlplane.v1.MlPodStartBreakdown
+	87,  // 113: controlplane.v1.ListMlExperimentsResponse.experiments:type_name -> controlplane.v1.MlExperiment
+	186, // 114: controlplane.v1.MlExperiment.last_activity_at:type_name -> google.protobuf.Timestamp
+	29,  // 115: controlplane.v1.MlExperiment.cost:type_name -> controlplane.v1.MlCost
+	90,  // 116: controlplane.v1.ListMlRunsResponse.runs:type_name -> controlplane.v1.MlRun
+	16,  // 117: controlplane.v1.MlRun.state:type_name -> controlplane.v1.MlRunState
+	17,  // 118: controlplane.v1.MlRun.badges:type_name -> controlplane.v1.MlRunBadge
+	186, // 119: controlplane.v1.MlRun.created_at:type_name -> google.protobuf.Timestamp
+	186, // 120: controlplane.v1.MlRun.started_at:type_name -> google.protobuf.Timestamp
+	186, // 121: controlplane.v1.MlRun.ended_at:type_name -> google.protobuf.Timestamp
+	29,  // 122: controlplane.v1.MlRun.cost:type_name -> controlplane.v1.MlCost
+	180, // 123: controlplane.v1.MlRun.summary:type_name -> controlplane.v1.MlRun.SummaryEntry
+	181, // 124: controlplane.v1.MlRun.params:type_name -> controlplane.v1.MlRun.ParamsEntry
+	31,  // 125: controlplane.v1.MlRun.objective:type_name -> controlplane.v1.MlSeries
+	91,  // 126: controlplane.v1.MlRun.phases:type_name -> controlplane.v1.MlPhase
+	186, // 127: controlplane.v1.MlRun.finished_at:type_name -> google.protobuf.Timestamp
+	177, // 128: controlplane.v1.MlRun.metrics:type_name -> controlplane.v1.MlMetricSeries
+	18,  // 129: controlplane.v1.MlPhase.kind:type_name -> controlplane.v1.MlPhaseKind
+	19,  // 130: controlplane.v1.MlPhase.state:type_name -> controlplane.v1.MlPhaseState
+	186, // 131: controlplane.v1.MlPhase.started_at:type_name -> google.protobuf.Timestamp
+	186, // 132: controlplane.v1.MlPhase.ended_at:type_name -> google.protobuf.Timestamp
+	27,  // 133: controlplane.v1.MlPhase.input:type_name -> controlplane.v1.MlSubject
+	93,  // 134: controlplane.v1.MlPhase.attempts:type_name -> controlplane.v1.MlAttempt
+	92,  // 135: controlplane.v1.MlPhase.segments:type_name -> controlplane.v1.MlSegment
+	29,  // 136: controlplane.v1.MlPhase.cost:type_name -> controlplane.v1.MlCost
+	182, // 137: controlplane.v1.MlPhase.summary:type_name -> controlplane.v1.MlPhase.SummaryEntry
+	19,  // 138: controlplane.v1.MlAttempt.state:type_name -> controlplane.v1.MlPhaseState
+	20,  // 139: controlplane.v1.MlAttempt.end_reason:type_name -> controlplane.v1.MlAttemptEndReason
+	186, // 140: controlplane.v1.MlAttempt.queued_at:type_name -> google.protobuf.Timestamp
+	186, // 141: controlplane.v1.MlAttempt.admitted_at:type_name -> google.protobuf.Timestamp
+	186, // 142: controlplane.v1.MlAttempt.running_at:type_name -> google.protobuf.Timestamp
+	186, // 143: controlplane.v1.MlAttempt.ended_at:type_name -> google.protobuf.Timestamp
+	33,  // 144: controlplane.v1.MlAttempt.spans:type_name -> controlplane.v1.MlTimeSpan
+	34,  // 145: controlplane.v1.MlAttempt.pod_start:type_name -> controlplane.v1.MlPodStart
+	29,  // 146: controlplane.v1.MlAttempt.cost:type_name -> controlplane.v1.MlCost
+	97,  // 147: controlplane.v1.MlAttempt.ranks:type_name -> controlplane.v1.MlRank
+	96,  // 148: controlplane.v1.MlAttempt.workload:type_name -> controlplane.v1.MlKueueWorkload
+	94,  // 149: controlplane.v1.MlAttempt.recovery:type_name -> controlplane.v1.MlRecovery
+	95,  // 150: controlplane.v1.MlRecovery.stages:type_name -> controlplane.v1.MlRecoveryStage
+	186, // 151: controlplane.v1.MlKueueWorkload.created_at:type_name -> google.protobuf.Timestamp
+	186, // 152: controlplane.v1.MlKueueWorkload.quota_reserved_at:type_name -> google.protobuf.Timestamp
+	186, // 153: controlplane.v1.MlKueueWorkload.admitted_at:type_name -> google.protobuf.Timestamp
+	186, // 154: controlplane.v1.MlKueueWorkload.evicted_at:type_name -> google.protobuf.Timestamp
+	183, // 155: controlplane.v1.MlCheckpoint.metrics:type_name -> controlplane.v1.MlCheckpoint.MetricsEntry
+	184, // 156: controlplane.v1.MlCheckpoint.eval_scores:type_name -> controlplane.v1.MlCheckpoint.EvalScoresEntry
+	21,  // 157: controlplane.v1.MlCheckpoint.status:type_name -> controlplane.v1.MlCheckpointStatus
+	186, // 158: controlplane.v1.MlCheckpoint.saved_at:type_name -> google.protobuf.Timestamp
+	27,  // 159: controlplane.v1.MlHealthCheck.subject:type_name -> controlplane.v1.MlSubject
+	22,  // 160: controlplane.v1.MlParam.source:type_name -> controlplane.v1.MlParamSource
+	101, // 161: controlplane.v1.MlRunConfig.params:type_name -> controlplane.v1.MlParam
+	102, // 162: controlplane.v1.MlRunConfig.parallelism:type_name -> controlplane.v1.MlParallelism
+	28,  // 163: controlplane.v1.MlRunConfig.environment:type_name -> controlplane.v1.MlFact
+	28,  // 164: controlplane.v1.MlRunConfig.hardware:type_name -> controlplane.v1.MlFact
+	103, // 165: controlplane.v1.MlRunConfig.datasets:type_name -> controlplane.v1.MlDatasetRef
+	104, // 166: controlplane.v1.MlRunConfig.code:type_name -> controlplane.v1.MlCodeRef
+	3,   // 167: controlplane.v1.MlCostCell.category:type_name -> controlplane.v1.MlCostCategory
+	106, // 168: controlplane.v1.MlRunCost.cells:type_name -> controlplane.v1.MlCostCell
+	90,  // 169: controlplane.v1.GetMlRunResponse.run:type_name -> controlplane.v1.MlRun
+	98,  // 170: controlplane.v1.GetMlRunResponse.checkpoints:type_name -> controlplane.v1.MlCheckpoint
+	99,  // 171: controlplane.v1.GetMlRunResponse.health:type_name -> controlplane.v1.MlHealthCheck
+	100, // 172: controlplane.v1.GetMlRunResponse.step_breakdown:type_name -> controlplane.v1.MlStepStage
+	105, // 173: controlplane.v1.GetMlRunResponse.config:type_name -> controlplane.v1.MlRunConfig
+	107, // 174: controlplane.v1.GetMlRunResponse.cost:type_name -> controlplane.v1.MlRunCost
+	28,  // 175: controlplane.v1.GetMlRunResponse.key_numbers:type_name -> controlplane.v1.MlFact
+	87,  // 176: controlplane.v1.GetMlRunResponse.experiment:type_name -> controlplane.v1.MlExperiment
+	112, // 177: controlplane.v1.GetMlRunResponse.insights:type_name -> controlplane.v1.MlInsight
+	113, // 178: controlplane.v1.GetMlRunResponse.layer_stats:type_name -> controlplane.v1.MlLayerStat
+	114, // 179: controlplane.v1.GetMlRunResponse.tokens:type_name -> controlplane.v1.MlTokenStats
+	110, // 180: controlplane.v1.GetMlRunResponse.hooks:type_name -> controlplane.v1.MlHook
+	28,  // 181: controlplane.v1.GetMlRunResponse.spares:type_name -> controlplane.v1.MlFact
+	186, // 182: controlplane.v1.MlHook.last_emitted_at:type_name -> google.protobuf.Timestamp
+	111, // 183: controlplane.v1.MlHook.targets:type_name -> controlplane.v1.MlHookTarget
+	186, // 184: controlplane.v1.MlHookTarget.last_run_at:type_name -> google.protobuf.Timestamp
+	1,   // 185: controlplane.v1.MlInsight.severity:type_name -> controlplane.v1.MlSeverity
+	48,  // 186: controlplane.v1.MlTokenStats.by_source:type_name -> controlplane.v1.MlShare
+	27,  // 187: controlplane.v1.MlLineageNode.subject:type_name -> controlplane.v1.MlSubject
+	23,  // 188: controlplane.v1.MlLineageEdge.kind:type_name -> controlplane.v1.MlLineageEdgeKind
+	27,  // 189: controlplane.v1.GetMlLineageRequest.subject:type_name -> controlplane.v1.MlSubject
+	115, // 190: controlplane.v1.GetMlLineageResponse.nodes:type_name -> controlplane.v1.MlLineageNode
+	116, // 191: controlplane.v1.GetMlLineageResponse.edges:type_name -> controlplane.v1.MlLineageEdge
+	121, // 192: controlplane.v1.ListMlEvalSuitesResponse.suites:type_name -> controlplane.v1.MlEvalSuite
+	122, // 193: controlplane.v1.MlEvalSuite.tasks:type_name -> controlplane.v1.MlEvalTask
+	123, // 194: controlplane.v1.MlEvalSuite.gates:type_name -> controlplane.v1.MlEvalGate
+	121, // 195: controlplane.v1.GetMlEvalMatrixResponse.suite:type_name -> controlplane.v1.MlEvalSuite
+	126, // 196: controlplane.v1.GetMlEvalMatrixResponse.rows:type_name -> controlplane.v1.MlEvalRow
+	127, // 197: controlplane.v1.GetMlEvalMatrixResponse.cells:type_name -> controlplane.v1.MlEvalCell
+	27,  // 198: controlplane.v1.MlEvalRow.subject:type_name -> controlplane.v1.MlSubject
+	186, // 199: controlplane.v1.MlEvalRow.evaluated_at:type_name -> google.protobuf.Timestamp
+	130, // 200: controlplane.v1.ListMlEvalRunsResponse.eval_runs:type_name -> controlplane.v1.MlEvalRun
+	27,  // 201: controlplane.v1.MlEvalRun.subject:type_name -> controlplane.v1.MlSubject
+	186, // 202: controlplane.v1.MlEvalRun.started_at:type_name -> google.protobuf.Timestamp
+	186, // 203: controlplane.v1.MlEvalRun.ended_at:type_name -> google.protobuf.Timestamp
+	29,  // 204: controlplane.v1.MlEvalRun.cost:type_name -> controlplane.v1.MlCost
+	27,  // 205: controlplane.v1.MlEvalRun.phase:type_name -> controlplane.v1.MlSubject
+	131, // 206: controlplane.v1.MlEvalRun.results:type_name -> controlplane.v1.MlEvalResult
+	28,  // 207: controlplane.v1.MlEvalRun.config:type_name -> controlplane.v1.MlFact
+	132, // 208: controlplane.v1.MlEvalResult.slices:type_name -> controlplane.v1.MlEvalSliceResult
+	130, // 209: controlplane.v1.GetMlEvalRunResponse.eval_run:type_name -> controlplane.v1.MlEvalRun
+	137, // 210: controlplane.v1.ListMlEvalSamplesResponse.samples:type_name -> controlplane.v1.MlEvalSample
+	140, // 211: controlplane.v1.ListMlModelsResponse.models:type_name -> controlplane.v1.MlModel
+	141, // 212: controlplane.v1.MlModel.aliases:type_name -> controlplane.v1.MlAlias
+	186, // 213: controlplane.v1.MlModel.updated_at:type_name -> google.protobuf.Timestamp
+	145, // 214: controlplane.v1.MlModel.versions:type_name -> controlplane.v1.MlModelVersion
+	186, // 215: controlplane.v1.MlAlias.moved_at:type_name -> google.protobuf.Timestamp
+	186, // 216: controlplane.v1.MlAliasMove.at:type_name -> google.protobuf.Timestamp
+	140, // 217: controlplane.v1.GetMlModelResponse.model:type_name -> controlplane.v1.MlModel
+	145, // 218: controlplane.v1.GetMlModelResponse.versions:type_name -> controlplane.v1.MlModelVersion
+	142, // 219: controlplane.v1.GetMlModelResponse.alias_history:type_name -> controlplane.v1.MlAliasMove
+	149, // 220: controlplane.v1.GetMlModelResponse.promotion:type_name -> controlplane.v1.MlPromotionGate
+	186, // 221: controlplane.v1.MlModelVersion.created_at:type_name -> google.protobuf.Timestamp
+	24,  // 222: controlplane.v1.MlModelVersion.source:type_name -> controlplane.v1.MlVersionSource
+	146, // 223: controlplane.v1.MlModelVersion.card:type_name -> controlplane.v1.MlModelCard
+	147, // 224: controlplane.v1.MlModelVersion.serving:type_name -> controlplane.v1.MlServingPlacement
+	185, // 225: controlplane.v1.MlModelVersion.eval_metrics:type_name -> controlplane.v1.MlModelVersion.EvalMetricsEntry
+	27,  // 226: controlplane.v1.MlGateCheck.evidence:type_name -> controlplane.v1.MlSubject
+	148, // 227: controlplane.v1.MlPromotionGate.checks:type_name -> controlplane.v1.MlGateCheck
+	145, // 228: controlplane.v1.GetMlModelVersionResponse.version:type_name -> controlplane.v1.MlModelVersion
+	152, // 229: controlplane.v1.GetMlModelVersionResponse.files:type_name -> controlplane.v1.MlModelFile
+	148, // 230: controlplane.v1.GetMlModelVersionResponse.gate:type_name -> controlplane.v1.MlGateCheck
+	153, // 231: controlplane.v1.GetMlModelVersionResponse.perf:type_name -> controlplane.v1.MlServingPerf
+	154, // 232: controlplane.v1.GetMlModelVersionResponse.pulls:type_name -> controlplane.v1.MlPullPerf
+	142, // 233: controlplane.v1.GetMlModelVersionResponse.alias_history:type_name -> controlplane.v1.MlAliasMove
+	157, // 234: controlplane.v1.ListMlInferenceServicesResponse.services:type_name -> controlplane.v1.MlInferenceService
+	29,  // 235: controlplane.v1.MlInferenceService.cost:type_name -> controlplane.v1.MlCost
+	25,  // 236: controlplane.v1.MlInferenceService.verdict:type_name -> controlplane.v1.MlReleaseVerdict
+	31,  // 237: controlplane.v1.MlInferenceService.rps_series:type_name -> controlplane.v1.MlSeries
+	175, // 238: controlplane.v1.MlInferenceService.cold_start:type_name -> controlplane.v1.MlPodStartBreakdown
+	25,  // 239: controlplane.v1.MlInferenceService.release_verdict:type_name -> controlplane.v1.MlReleaseVerdict
+	186, // 240: controlplane.v1.MlInferenceService.release_checked_at:type_name -> google.protobuf.Timestamp
+	157, // 241: controlplane.v1.GetMlInferenceServiceResponse.service:type_name -> controlplane.v1.MlInferenceService
+	161, // 242: controlplane.v1.GetMlInferenceServiceResponse.revisions:type_name -> controlplane.v1.MlRevision
+	162, // 243: controlplane.v1.GetMlInferenceServiceResponse.replicas:type_name -> controlplane.v1.MlReplica
+	34,  // 244: controlplane.v1.GetMlInferenceServiceResponse.cold_start:type_name -> controlplane.v1.MlPodStart
+	36,  // 245: controlplane.v1.GetMlInferenceServiceResponse.cold_start_replicas:type_name -> controlplane.v1.MlPodStartWaterfall
+	48,  // 246: controlplane.v1.GetMlInferenceServiceResponse.finish_reasons:type_name -> controlplane.v1.MlShare
+	48,  // 247: controlplane.v1.GetMlInferenceServiceResponse.adapters:type_name -> controlplane.v1.MlShare
+	163, // 248: controlplane.v1.GetMlInferenceServiceResponse.serving_cost:type_name -> controlplane.v1.MlServingCost
+	164, // 249: controlplane.v1.GetMlInferenceServiceResponse.comparison:type_name -> controlplane.v1.MlChangesComparison
+	167, // 250: controlplane.v1.GetMlInferenceServiceResponse.online_evals:type_name -> controlplane.v1.MlOnlineEval
+	28,  // 251: controlplane.v1.GetMlInferenceServiceResponse.config:type_name -> controlplane.v1.MlFact
+	28,  // 252: controlplane.v1.MlRevision.config:type_name -> controlplane.v1.MlFact
+	186, // 253: controlplane.v1.MlRevision.started_at:type_name -> google.protobuf.Timestamp
+	186, // 254: controlplane.v1.MlRevision.ended_at:type_name -> google.protobuf.Timestamp
+	25,  // 255: controlplane.v1.MlRevision.verdict:type_name -> controlplane.v1.MlReleaseVerdict
+	160, // 256: controlplane.v1.MlRevision.deltas:type_name -> controlplane.v1.MlSliDelta
+	186, // 257: controlplane.v1.MlReplica.started_at:type_name -> google.protobuf.Timestamp
+	186, // 258: controlplane.v1.MlChangesComparison.started_at:type_name -> google.protobuf.Timestamp
+	165, // 259: controlplane.v1.MlChangesComparison.arms:type_name -> controlplane.v1.MlChangesArm
+	166, // 260: controlplane.v1.MlChangesArm.metrics:type_name -> controlplane.v1.MlArmMetric
+	41,  // 261: controlplane.v1.GetMlMachinesResponse.clusters:type_name -> controlplane.v1.MlCluster
+	170, // 262: controlplane.v1.GetMlMachinesResponse.pools:type_name -> controlplane.v1.MlNodePool
+	186, // 263: controlplane.v1.GetMlMachinesResponse.observed_at:type_name -> google.protobuf.Timestamp
+	49,  // 264: controlplane.v1.MlNodePool.nodes:type_name -> controlplane.v1.MlNode
+	172, // 265: controlplane.v1.MlNodePool.utilization:type_name -> controlplane.v1.MlUtilizationPoint
+	186, // 266: controlplane.v1.MlHealthFlag.first_seen_at:type_name -> google.protobuf.Timestamp
+	186, // 267: controlplane.v1.MlHealthFlag.last_seen_at:type_name -> google.protobuf.Timestamp
+	186, // 268: controlplane.v1.MlUtilizationPoint.time:type_name -> google.protobuf.Timestamp
+	9,   // 269: controlplane.v1.MlStackComponent.state:type_name -> controlplane.v1.MlComponentState
+	176, // 270: controlplane.v1.MlPodStartBreakdown.stages:type_name -> controlplane.v1.MlStartStage
+	178, // 271: controlplane.v1.MlMetricSeries.points:type_name -> controlplane.v1.MlMetricPoint
+	186, // 272: controlplane.v1.MlMetricPoint.time:type_name -> google.protobuf.Timestamp
+	38,  // 273: controlplane.v1.MlEarlyAccessService.GetMlFleet:input_type -> controlplane.v1.GetMlFleetRequest
+	45,  // 274: controlplane.v1.MlEarlyAccessService.GetMlPool:input_type -> controlplane.v1.GetMlPoolRequest
+	54,  // 275: controlplane.v1.MlEarlyAccessService.GetMlNode:input_type -> controlplane.v1.GetMlNodeRequest
+	62,  // 276: controlplane.v1.MlEarlyAccessService.GetMlDevice:input_type -> controlplane.v1.GetMlDeviceRequest
+	168, // 277: controlplane.v1.MlEarlyAccessService.GetMlMachines:input_type -> controlplane.v1.GetMlMachinesRequest
+	65,  // 278: controlplane.v1.MlEarlyAccessService.GetMlStack:input_type -> controlplane.v1.GetMlStackRequest
+	71,  // 279: controlplane.v1.MlEarlyAccessService.GetMlQueues:input_type -> controlplane.v1.GetMlQueuesRequest
+	78,  // 280: controlplane.v1.MlEarlyAccessService.ListMlFindings:input_type -> controlplane.v1.ListMlFindingsRequest
+	85,  // 281: controlplane.v1.MlEarlyAccessService.ListMlExperiments:input_type -> controlplane.v1.ListMlExperimentsRequest
+	88,  // 282: controlplane.v1.MlEarlyAccessService.ListMlRuns:input_type -> controlplane.v1.ListMlRunsRequest
+	108, // 283: controlplane.v1.MlEarlyAccessService.GetMlRun:input_type -> controlplane.v1.GetMlRunRequest
+	117, // 284: controlplane.v1.MlEarlyAccessService.GetMlLineage:input_type -> controlplane.v1.GetMlLineageRequest
+	119, // 285: controlplane.v1.MlEarlyAccessService.ListMlEvalSuites:input_type -> controlplane.v1.ListMlEvalSuitesRequest
+	124, // 286: controlplane.v1.MlEarlyAccessService.GetMlEvalMatrix:input_type -> controlplane.v1.GetMlEvalMatrixRequest
+	128, // 287: controlplane.v1.MlEarlyAccessService.ListMlEvalRuns:input_type -> controlplane.v1.ListMlEvalRunsRequest
+	133, // 288: controlplane.v1.MlEarlyAccessService.GetMlEvalRun:input_type -> controlplane.v1.GetMlEvalRunRequest
+	135, // 289: controlplane.v1.MlEarlyAccessService.ListMlEvalSamples:input_type -> controlplane.v1.ListMlEvalSamplesRequest
+	138, // 290: controlplane.v1.MlEarlyAccessService.ListMlModels:input_type -> controlplane.v1.ListMlModelsRequest
+	143, // 291: controlplane.v1.MlEarlyAccessService.GetMlModel:input_type -> controlplane.v1.GetMlModelRequest
+	150, // 292: controlplane.v1.MlEarlyAccessService.GetMlModelVersion:input_type -> controlplane.v1.GetMlModelVersionRequest
+	155, // 293: controlplane.v1.MlEarlyAccessService.ListMlInferenceServices:input_type -> controlplane.v1.ListMlInferenceServicesRequest
+	158, // 294: controlplane.v1.MlEarlyAccessService.GetMlInferenceService:input_type -> controlplane.v1.GetMlInferenceServiceRequest
+	39,  // 295: controlplane.v1.MlEarlyAccessService.GetMlFleet:output_type -> controlplane.v1.GetMlFleetResponse
+	46,  // 296: controlplane.v1.MlEarlyAccessService.GetMlPool:output_type -> controlplane.v1.GetMlPoolResponse
+	55,  // 297: controlplane.v1.MlEarlyAccessService.GetMlNode:output_type -> controlplane.v1.GetMlNodeResponse
+	63,  // 298: controlplane.v1.MlEarlyAccessService.GetMlDevice:output_type -> controlplane.v1.GetMlDeviceResponse
+	169, // 299: controlplane.v1.MlEarlyAccessService.GetMlMachines:output_type -> controlplane.v1.GetMlMachinesResponse
+	66,  // 300: controlplane.v1.MlEarlyAccessService.GetMlStack:output_type -> controlplane.v1.GetMlStackResponse
+	72,  // 301: controlplane.v1.MlEarlyAccessService.GetMlQueues:output_type -> controlplane.v1.GetMlQueuesResponse
+	79,  // 302: controlplane.v1.MlEarlyAccessService.ListMlFindings:output_type -> controlplane.v1.ListMlFindingsResponse
+	86,  // 303: controlplane.v1.MlEarlyAccessService.ListMlExperiments:output_type -> controlplane.v1.ListMlExperimentsResponse
+	89,  // 304: controlplane.v1.MlEarlyAccessService.ListMlRuns:output_type -> controlplane.v1.ListMlRunsResponse
+	109, // 305: controlplane.v1.MlEarlyAccessService.GetMlRun:output_type -> controlplane.v1.GetMlRunResponse
+	118, // 306: controlplane.v1.MlEarlyAccessService.GetMlLineage:output_type -> controlplane.v1.GetMlLineageResponse
+	120, // 307: controlplane.v1.MlEarlyAccessService.ListMlEvalSuites:output_type -> controlplane.v1.ListMlEvalSuitesResponse
+	125, // 308: controlplane.v1.MlEarlyAccessService.GetMlEvalMatrix:output_type -> controlplane.v1.GetMlEvalMatrixResponse
+	129, // 309: controlplane.v1.MlEarlyAccessService.ListMlEvalRuns:output_type -> controlplane.v1.ListMlEvalRunsResponse
+	134, // 310: controlplane.v1.MlEarlyAccessService.GetMlEvalRun:output_type -> controlplane.v1.GetMlEvalRunResponse
+	136, // 311: controlplane.v1.MlEarlyAccessService.ListMlEvalSamples:output_type -> controlplane.v1.ListMlEvalSamplesResponse
+	139, // 312: controlplane.v1.MlEarlyAccessService.ListMlModels:output_type -> controlplane.v1.ListMlModelsResponse
+	144, // 313: controlplane.v1.MlEarlyAccessService.GetMlModel:output_type -> controlplane.v1.GetMlModelResponse
+	151, // 314: controlplane.v1.MlEarlyAccessService.GetMlModelVersion:output_type -> controlplane.v1.GetMlModelVersionResponse
+	156, // 315: controlplane.v1.MlEarlyAccessService.ListMlInferenceServices:output_type -> controlplane.v1.ListMlInferenceServicesResponse
+	159, // 316: controlplane.v1.MlEarlyAccessService.GetMlInferenceService:output_type -> controlplane.v1.GetMlInferenceServiceResponse
+	295, // [295:317] is the sub-list for method output_type
+	273, // [273:295] is the sub-list for method input_type
+	273, // [273:273] is the sub-list for extension type_name
+	273, // [273:273] is the sub-list for extension extendee
+	0,   // [0:273] is the sub-list for field type_name
 }
 
 func init() { file_services_ml_early_access_v1_ml_early_access_proto_init() }
@@ -20488,24 +18957,20 @@ func file_services_ml_early_access_v1_ml_early_access_proto_init() {
 	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[58].OneofWrappers = []any{}
 	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[61].OneofWrappers = []any{}
 	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[63].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[88].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[90].OneofWrappers = []any{}
 	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[92].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[95].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[114].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[119].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[123].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[130].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[133].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[150].OneofWrappers = []any{}
-	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[163].OneofWrappers = []any{}
+	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[97].OneofWrappers = []any{}
+	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[101].OneofWrappers = []any{}
+	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[108].OneofWrappers = []any{}
+	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[111].OneofWrappers = []any{}
+	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[128].OneofWrappers = []any{}
+	file_services_ml_early_access_v1_ml_early_access_proto_msgTypes[141].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_ml_early_access_v1_ml_early_access_proto_rawDesc), len(file_services_ml_early_access_v1_ml_early_access_proto_rawDesc)),
-			NumEnums:      29,
-			NumMessages:   179,
+			NumEnums:      27,
+			NumMessages:   159,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
