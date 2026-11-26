@@ -245,7 +245,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	}
 	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivityWithDeps(handlers.ExecuteToolsDeps{Store: repoRows, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
 	v2.RegisterActivity(registry, handlers.NewInvokeToolActivityWithDeps(handlers.ExecuteToolsDeps{Store: repoRows, Rows: workspaceRows, ToolExecutor: deps.ToolExecutor, ToolCalls: toolCalls, Preemption: mailboxStore.preempt}).WithRunFunding(runFunding).WithToolUsage(deps.ToolUsage).WithWorktreeReviver(reviver).WithConfigProvider(deps.ConfigProvider).WithDaemonRouter(deps.DaemonRouter).WithChatProjects(chatProjects))
-	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver))
+	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections).WithLedger(deps.WriteLedger).WithHostedExecutor(deps.HostedActions).WithSecretResolver(deps.SecretResolver).WithServerActions(deps.ServerActions))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES

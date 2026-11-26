@@ -30,7 +30,7 @@ func TestReconcileRecordsAStrandedStartTemporalNeverSaw(t *testing.T) {
 	before := anomalyCount(anomalyStrandedStartFailed)
 
 	asked := time.Now()
-	reconciled, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
+	reconciled, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
 	assert.Equal(t, []string{"chat-stranded"}, repo.markedStartFailed)
@@ -52,7 +52,7 @@ func TestReconcileMarksAStrandedStartActiveWhenTemporalHasTheRun(t *testing.T) {
 	}}
 	before := anomalyCount(anomalyStrandedStartRepaired)
 
-	_, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
+	_, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
 	assert.Empty(t, repo.markedStartFailed)
@@ -68,7 +68,7 @@ func TestReconcileLeavesAStrandedStartAloneWhenTemporalCannotBeAsked(t *testing.
 		"chat-unknown": {err: errors.New("connection refused")},
 	}}
 
-	_, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
+	_, errs := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: DefaultConfig(), Mailbox: repo, Orphans: repo}).ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
 	assert.Empty(t, repo.markedStartFailed)

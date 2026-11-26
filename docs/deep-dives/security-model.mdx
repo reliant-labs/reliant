@@ -222,32 +222,14 @@ Find the secret-scanning hook in a new API project:
 
 ## Guides
 
-<CardGroup cols={2}>
-  <Card title="Find endpoints missing auth checks" icon="shield-user" href="/guides/forge/find-endpoints-missing-auth-checks">
-    Read the unscoped-auth audit, fix each RPC or acknowledge it with a reason.
-  </Card>
-  <Card title="Scope rows to their owner" icon="users" href="/guides/forge/scope-rows-to-owner">
-    Declare a `forge:owner` column and filter every query by the caller.
-  </Card>
-  <Card title="Add sign-in with passkeys" icon="key" href="/guides/forge/add-sign-in-passkeys">
-    Passkeys, magic links or social login, and the RPCs and pages that stay public.
-  </Card>
-  <Card title="Let agents query production data" icon="database" href="/guides/forge/let-agents-query-production-data">
-    Read-only, audited queries through a role that can't see secret columns.
-  </Card>
-  <Card title="Manage production secrets" icon="lock" href="/guides/hosting/manage-production-secrets">
-    Set write-only secrets per environment and verify them without reading them.
-  </Card>
-  <Card title="Call an API without exposing the key" icon="plug" href="/guides/workflows/call-api-without-exposing-key">
-    Use a stored secret in a workflow's HTTP request header.
-  </Card>
-  <Card title="Sandbox agent commands" icon="shield-half" href="/guides/machines/sandbox-agent-commands-credentials-none">
-    Run commands that read untrusted text with `credentials: none`.
-  </Card>
-  <Card title="Scan dependencies for vulnerabilities" icon="bug" href="/guides/forge/scan-dependencies-vulnerabilities">
-    Go, npm and container scans with reviewed exemptions that expire.
-  </Card>
-</CardGroup>
+- [Find endpoints missing auth checks](/guides/forge/find-endpoints-missing-auth-checks): read the unscoped-auth audit, fix each RPC or acknowledge it with a reason
+- [Scope rows to their owner](/guides/forge/scope-rows-to-owner): declare a `forge:owner` column and filter every query by the caller
+- [Add sign-in with passkeys](/guides/forge/add-sign-in-passkeys): passkeys, magic links or social login, and the RPCs and pages that stay public
+- [Let agents query production data](/guides/forge/let-agents-query-production-data): read-only, audited queries through a role that can't see secret columns
+- [Manage production secrets](/guides/hosting/manage-production-secrets): set write-only secrets per environment and verify them without reading them
+- [Call an API without exposing the key](/guides/workflows/call-api-without-exposing-key): use a stored secret in a workflow's HTTP request header
+- [Sandbox agent commands](/guides/machines/sandbox-agent-commands-credentials-none): run commands that read untrusted text with `credentials: none`
+- [Scan dependencies for vulnerabilities](/guides/forge/scan-dependencies-vulnerabilities): Go, npm and container scans with reviewed exemptions that expire
 
 ## Reference
 

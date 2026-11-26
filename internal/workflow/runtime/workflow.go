@@ -510,6 +510,9 @@ type ChildWorkflowTracker struct {
 	// own attempts (run_outcome.go). A continue-as-new successor keeps it
 	// through its execution context's telemetry.
 	runID string
+	// reviewExecutions counts this execution's runs of each review node, by
+	// where it ran (reviewSession): the ordinal in its session's thread id.
+	reviewExecutions map[string]int
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -2510,7 +2513,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				// Derive child context for the inline workflow (before launching so it's available for tracking)
 				var childExecCtx *ExecutionContext
 				inlineExecutor = inlineExecutor.WithInvocationContract(contract)
-				childExecCtx = execCtx.ForChild(step.Node.GetId(), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, true)
+				childExecCtx = workflowNodeContext(ctx, childTracker, execCtx, step.Node, step.Node.GetId(), model.NodeThreadMode(evalResult), contract.WorkflowIdentity, true)
 
 				// Create child thread and optionally save inject message
 				// For non-inherit modes, this creates the thread with proper fork metadata

@@ -19,6 +19,6 @@ func TestWorkflowServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: rowreads.WithRepo(repo), Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: f.Membership}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: rowreads.WithRepo(repo), Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: f.Membership}))
 	viewertest.RunService(t, f, svc, "reliant.v1.WorkflowService", nil)
 }

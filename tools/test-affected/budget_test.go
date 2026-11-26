@@ -154,8 +154,8 @@ func TestRunnerCaptureRecordsTheGoAndWebSteps(t *testing.T) {
 	byName := map[string][]string{}
 	for _, s := range steps {
 		byName[s.name] = s.argv
-		if s.name == "web" && !slices.Contains(s.env, "FORGE_TEST_COVERAGE=off") {
-			t.Errorf("the merge tier records the web step's results without coverage: env %q", s.env)
+		if (s.name == "web" || s.name == "go") && !slices.Contains(s.env, "FORGE_TEST_COVERAGE=off") {
+			t.Errorf("the merge tier records the %s step's results without coverage: env %q", s.name, s.env)
 		}
 	}
 	want := []string{script, "go", captureLaneGo, "-buildvcs=false", "-short", "-timeout", "5m", "./internal/leaf"}
@@ -173,5 +173,16 @@ func TestRunnerCaptureRecordsTheGoAndWebSteps(t *testing.T) {
 	s := r.goSteps(pl)
 	if want := []string{script, "--raw", "go", captureLaneGo}; !slices.Equal(s[0].argv[:4], want) || s[0].budget == nil {
 		t.Errorf("a budget reads the captured lane's raw -json stream: %q", s[0].argv)
+	}
+	if !slices.Contains(s[0].env, "FORGE_TEST_COVERAGE=off") {
+		t.Errorf("the budgeted go step records results without coverage too: env %q", s[0].env)
+	}
+	full := r.goSteps(&Plan{Go: GoPlan{Full: true}})
+	if len(full) != 1 || !slices.Contains(full[0].env, "FORGE_TEST_COVERAGE=off") {
+		t.Errorf("a FULL go lane records results without coverage too: %+v", full)
+	}
+	plain := (&runner{root: "/repo", out: io.Discard, errOut: io.Discard}).goSteps(pl)
+	if slices.Contains(plain[0].env, "FORGE_TEST_COVERAGE=off") {
+		t.Errorf("an unrecorded go step sets no coverage switch: env %q", plain[0].env)
 	}
 }

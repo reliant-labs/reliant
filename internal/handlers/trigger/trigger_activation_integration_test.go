@@ -115,7 +115,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	defer server.Close()
 
 	backend := triggers.NewBackend(temporalClient.ScheduleClient(), temporalClient, triggers.NewStores(repo), taskQueue)
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend,
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: rowreads.WithRepo(repo), Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: backend, Fires: backend,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 	})))
 

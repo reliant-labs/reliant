@@ -409,7 +409,7 @@ func TestMachineConnected_DeliversTheMessageQueuedForAFailedMachineOnce(t *testi
 
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
-	delivery := queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal})
+	delivery := queueddelivery.New(queueddelivery.Deps{Store: store.NewChatExtStore(f.repo.ORM()), Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal})
 
 	assert.Equal(t, 1, delivery.MachineConnected(f.ctx, "test-user"))
 	assert.Equal(t, 0, delivery.MachineConnected(f.ctx, "test-user"), "a second connect finds nothing queued")

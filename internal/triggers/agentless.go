@@ -27,7 +27,7 @@ func workflowRunsAgent(wf *reliantv1.Workflow, depth int) bool {
 	}
 	for _, n := range wf.GetNodes() {
 		switch model.NodeType(n) {
-		case model.NodeTypeCallLLM, model.NodeTypeWorkflow, model.NodeTypeCompact, model.NodeTypeRouter:
+		case model.NodeTypeCallLLM, model.NodeTypeWorkflow, model.NodeTypeReview, model.NodeTypeCompact, model.NodeTypeRouter:
 			return true
 		case model.NodeTypeLoop:
 			la := model.GetLoopArgs(n)
