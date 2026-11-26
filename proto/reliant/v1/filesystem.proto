@@ -519,8 +519,8 @@ message ListMachineDirectoryRequest {
   optional string chat_id = 3;
   // The directory to list: absolute; "~" or "~/..." for the machine's home
   // directory; relative to the workspace root (".." is the folder the
-  // workspace is in); empty for the home directory.
-  string path = 4;
+  // workspace is in); unset or empty for the home directory.
+  optional string path = 4;
 }
 
 message ListMachineDirectoryResponse {

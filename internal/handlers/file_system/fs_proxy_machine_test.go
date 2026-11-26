@@ -69,7 +69,7 @@ func (r *machineDirRouter) SendDaemonCommand(_ context.Context, _ string, comman
 
 func listMachine(t *testing.T, svc *Service, projectID, path string) (*reliantv1.ListMachineDirectoryResponse, error) {
 	t.Helper()
-	resp, err := svc.ListMachineDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListMachineDirectoryRequest{ProjectId: projectID, Path: path}))
+	resp, err := svc.ListMachineDirectory(fsProxyContext(), connect.NewRequest(&reliantv1.ListMachineDirectoryRequest{ProjectId: projectID, Path: &path}))
 	if err != nil {
 		return nil, err
 	}

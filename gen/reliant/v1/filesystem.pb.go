@@ -2711,8 +2711,8 @@ type ListMachineDirectoryRequest struct {
 	ChatId     *string `protobuf:"bytes,3,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	// The directory to list: absolute; "~" or "~/..." for the machine's home
 	// directory; relative to the workspace root (".." is the folder the
-	// workspace is in); empty for the home directory.
-	Path          string `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	// workspace is in); unset or empty for the home directory.
+	Path          *string `protobuf:"bytes,4,opt,name=path,proto3,oneof" json:"path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2769,8 +2769,8 @@ func (x *ListMachineDirectoryRequest) GetChatId() string {
 }
 
 func (x *ListMachineDirectoryRequest) GetPath() string {
-	if x != nil {
-		return x.Path
+	if x != nil && x.Path != nil {
+		return *x.Path
 	}
 	return ""
 }
@@ -3224,17 +3224,18 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\acontent\x18\x01 \x01(\fR\acontent\x12!\n" +
 	"\fcontent_type\x18\x02 \x01(\tR\vcontentType\x12\x1a\n" +
 	"\bfilename\x18\x03 \x01(\tR\bfilename\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04size\"\xb0\x01\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\"\xbe\x01\n" +
 	"\x1bListMachineDirectoryRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
 	"\vworktree_id\x18\x02 \x01(\tH\x00R\n" +
 	"worktreeId\x88\x01\x01\x12\x1c\n" +
-	"\achat_id\x18\x03 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x12\n" +
-	"\x04path\x18\x04 \x01(\tR\x04pathB\x0e\n" +
+	"\achat_id\x18\x03 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x17\n" +
+	"\x04path\x18\x04 \x01(\tH\x02R\x04path\x88\x01\x01B\x0e\n" +
 	"\f_worktree_idB\n" +
 	"\n" +
-	"\b_chat_id\"\xcf\x01\n" +
+	"\b_chat_idB\a\n" +
+	"\x05_path\"\xcf\x01\n" +
 	"\x1cListMachineDirectoryResponse\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12;\n" +
 	"\aentries\x18\x02 \x03(\v2!.reliant.v1.MachineDirectoryEntryR\aentries\x12\x19\n" +

@@ -65,7 +65,7 @@ func (s *Service) ListMachineDirectory(
 		} `json:"entries"`
 		ViewerGuarded bool `json:"viewer_guarded"`
 	}
-	cmdReq := map[string]any{"path": machinePath(scope.basePath, req.Msg.Path), "viewer_root": scope.basePath}
+	cmdReq := map[string]any{"path": machinePath(scope.basePath, req.Msg.GetPath()), "viewer_root": scope.basePath}
 	if err := s.sendCommand(ctx, userID, scope.target, listMachineDirCommand, cmdReq, &resp, machineListTimeoutMs); err != nil {
 		return nil, machineListError(err)
 	}

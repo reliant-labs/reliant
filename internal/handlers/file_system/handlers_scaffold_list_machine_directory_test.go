@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
@@ -31,18 +32,18 @@ func TestListMachineDirectory_Generated(t *testing.T) {
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListMachineDirectoryRequest, pb.ListMachineDirectoryResponse]{
 		{
 			Name:    "anonymous caller is unauthenticated",
-			Req:     connect.NewRequest(&pb.ListMachineDirectoryRequest{ProjectId: "p-1", Path: "/tmp"}),
+			Req:     connect.NewRequest(&pb.ListMachineDirectoryRequest{ProjectId: "p-1", Path: proto.String("/tmp")}),
 			WantErr: connect.CodeUnauthenticated,
 		},
 		{
 			Name:    "project_id is required",
-			Req:     connect.NewRequest(&pb.ListMachineDirectoryRequest{Path: "/tmp"}),
+			Req:     connect.NewRequest(&pb.ListMachineDirectoryRequest{Path: proto.String("/tmp")}),
 			Ctx:     file_system.AuthedContext(t),
 			WantErr: connect.CodeInvalidArgument,
 		},
 		{
 			Name:    "unknown project is not found",
-			Req:     connect.NewRequest(&pb.ListMachineDirectoryRequest{ProjectId: "p-missing", Path: "/tmp"}),
+			Req:     connect.NewRequest(&pb.ListMachineDirectoryRequest{ProjectId: "p-missing", Path: proto.String("/tmp")}),
 			Ctx:     file_system.AuthedContext(t),
 			WantErr: connect.CodeNotFound,
 		},
