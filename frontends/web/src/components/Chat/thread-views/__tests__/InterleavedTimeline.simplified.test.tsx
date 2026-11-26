@@ -607,3 +607,85 @@ describe("InterleavedTimeline simplified thread", () => {
     expect(scrollToIndex).toHaveBeenCalledWith(Number(proseRow?.getAttribute("data-timeline-index")), expect.anything());
   });
 });
+
+// The last message of a finished thread keeps copy, branch and the time, on
+// screen, whatever row the turn's work leaves after it.
+describe("InterleavedTimeline: the last answer's actions", () => {
+  const spawnCompleted = (seq: number) => ({
+    ...assistant(seq, [text(0, 'spawn "research" completed')]),
+    role: MessageRole.SYSTEM,
+    displayStyle: DisplayStyle.INFO,
+  });
+
+  /** The actions row under message `id`, asserted to hold copy, branch and the time. */
+  const actionsUnder = (id: string) => {
+    const row = within(screen.getByTestId(`message-${id}`)).getByRole("button", { name: "Copy message" }).closest(".message-actions");
+    if (!(row instanceof HTMLElement)) throw new Error(`no actions row under ${id}`);
+    expect(within(row).getByRole("button", { name: "Branch from message" })).toBeInTheDocument();
+    expect(row.querySelector("time")).not.toBeNull();
+    return row;
+  };
+
+  for (const mode of ["simplified", "detailed"] as const) {
+    describe(`${mode} thread`, () => {
+      beforeEach(() => settings.store.set("appearance.chatThreadMode", mode));
+
+      it("shows them under the final answer", () => {
+        renderTimeline(finishedTurn(), { surface: "desktop" });
+        expect(actionsUnder("m4")).not.toHaveClass("opacity-0");
+        // One actions row per exchange: the answer took the prompt's.
+        expect(screen.getAllByRole("button", { name: "Copy message" })).toHaveLength(1);
+      });
+
+      it("keeps them under the final answer when a routine notice follows it", () => {
+        renderTimeline([...finishedTurn(), spawnCompleted(5)], { surface: "desktop" });
+        expect(actionsUnder("m4")).not.toHaveClass("opacity-0");
+      });
+
+      it("hands the on-screen actions to the next turn's answer", () => {
+        renderTimeline([...finishedTurn(), user(5, "And the other one?"), assistant(6, [text(0, "Also fixed.")])], {
+          surface: "desktop",
+        });
+        expect(actionsUnder("m4")).toHaveClass("opacity-0", "group-hover:opacity-100");
+        expect(actionsUnder("m6")).not.toHaveClass("opacity-0");
+      });
+
+      it("never shows them under the answer of a turn still running", () => {
+        renderTimeline(
+          [...finishedTurn().slice(0, 3), assistant(4, [text(0, "Fixed: the race")], StreamingState.STREAMING)],
+          { surface: "desktop", isStreaming: true },
+        );
+        expect(within(screen.getByTestId("message-m4")).queryByRole("button", { name: "Copy message" })).toBeNull();
+      });
+    });
+  }
+
+  it("keeps them under an answer whose message ends in a tool run (simplified)", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([user(1, "Ship it"), assistant(2, [text(0, "Shipped."), tool(1, "bash", "call-push")])], {
+      surface: "desktop",
+    });
+    expect(rowSequence()).toEqual(["Ship it", expect.stringMatching(/^Shipped\./), "fold"]);
+    expect(actionsUnder("m2")).not.toHaveClass("opacity-0");
+  });
+
+  it("puts no actions under narration while its run is still live (simplified)", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline(
+      [
+        user(1, "Run the suite"),
+        assistant(2, [text(0, "Starting."), tool(1, "bash", "call-bash")]),
+        assistant(3, [tool(0, "bash", "call-bash-2")], StreamingState.STREAMING),
+      ],
+      { surface: "desktop", isStreaming: true },
+    );
+    expect(fold()).toHaveAttribute("data-live", "true");
+    expect(within(screen.getByTestId("message-m2")).queryByRole("button", { name: "Copy message" })).toBeNull();
+  });
+
+  it("gives the final answer its actions button on the phone", () => {
+    settings.store.set("appearance.chatThreadMode", "simplified");
+    renderTimeline([...finishedTurn(), spawnCompleted(5)], { surface: "mobile" });
+    expect(within(screen.getByTestId("message-m4")).getByRole("button", { name: "Message actions" })).toBeInTheDocument();
+  });
+});
