@@ -2007,6 +2007,19 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
 }
 
+// CopyChatPlansToThread copies every plan of sourceChatID, with its tasks,
+// onto targetThreadID as pending, in one statement, and returns how many
+// plans and tasks it wrote (store.CopyChatPlansToThread).
+func (r *Repo) CopyChatPlansToThread(ctx context.Context, sourceChatID, targetThreadID string) (plans, tasks int, err error) {
+	if sourceChatID == "" {
+		return 0, 0, fmt.Errorf("source chat ID cannot be empty")
+	}
+	if targetThreadID == "" {
+		return 0, 0, fmt.Errorf("target thread ID cannot be empty")
+	}
+	return store.CopyChatPlansToThread(ctx, r.ORM(), sourceChatID, targetThreadID, int32(PlanStatusPending), int32(TaskStatusPending))
+}
+
 // ==================== Tasks ====================
 
 func (r *Repo) CreateTask(ctx context.Context, task *Task) error {

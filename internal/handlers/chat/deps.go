@@ -124,10 +124,11 @@ type Repository interface {
 	ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error)
 
 	// Plans and their tasks.
-	CreatePlan(ctx context.Context, plan *db.Plan) error
-	CreateTask(ctx context.Context, task *db.Task) error
 	ListPlansByChatID(ctx context.Context, chatID string) ([]*db.Plan, error)
-	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
+	// CopyChatPlansToThread copies every plan of a chat, with its tasks, onto
+	// one thread as pending, in one statement (a branch inherits its source
+	// chat's plans).
+	CopyChatPlansToThread(ctx context.Context, sourceChatID, targetThreadID string) (plans, tasks int, err error)
 
 	// Step executions the workflow view renders.
 	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error)

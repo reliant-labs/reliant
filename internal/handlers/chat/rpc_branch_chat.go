@@ -306,7 +306,31 @@ func (s *Service) BranchChat(
 	// (no Temporal/network calls), so it can all join one transaction: any
 	// failure leaves no orphan chat, no thread-less chat, no half-copied
 	// plan, and no announcement for a chat that doesn't exist.
-	if err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
+	//
+	// READ COMMITTED, because the transaction's invariant is atomicity, not a
+	// serializable read of the source chat, and everything it writes is held
+	// correct by a lock or a single statement:
+	//   - every row it inserts is new (fresh ids for the chat, its workflow,
+	//     thread, context window, plans, tasks and note), so no two writers
+	//     race for one;
+	//   - the rows it shares with the live source chat are counters and
+	//     admission rows whose protocol is a row lock: creating the chat and
+	//     its workflow locks the worktree row FOR NO KEY UPDATE and bumps its
+	//     activity_generation (the source chat's worktree, as a rule), and
+	//     the chat_created update bumps the user's update_stream_counters
+	//     row, which every update the worker emits for this user bumps too;
+	//   - each read of the source (its selection, projects, plans and tasks)
+	//     is one statement, so it copies one snapshot.
+	// Under SERIALIZABLE a branch of a chat the worker was writing to failed
+	// on every attempt: a shared row bumped after the snapshot failed with
+	// 40001 "could not serialize access due to concurrent update", and the
+	// per-plan task reads (each a full scan of tasks, so a predicate lock on
+	// all of it) with "read/write dependencies"; seven attempts outlasted
+	// the client's deadline (prod trace 82a3f94880658230b94f738a9c7c066f).
+	// READ COMMITTED waits for the row lock and goes on. The attempt budget
+	// absorbs what it can still raise: a deadlock, or a 23505.
+	branchTx := orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)
+	if err := s.deps.Repo.RunTx(ctx, branchTx, func(txCtx context.Context) error {
 		if err := s.deps.Repo.CreateChat(txCtx, branchChat); err != nil {
 			return fmt.Errorf("failed to create branch: %w", err)
 		}
@@ -334,9 +358,19 @@ func (s *Service) BranchChat(
 			}
 		}
 
-		// Copy plan and tasks from source chat to branched thread
-		if err := s.copyPlanAndTasks(txCtx, sourceChatID, branchWorkflowID); err != nil {
+		// Copy the source chat's plans and tasks to the branched thread, as
+		// pending, in one statement however many there are.
+		plans, tasks, err := s.deps.Repo.CopyChatPlansToThread(txCtx, sourceChatID, branchWorkflowID)
+		if err != nil {
 			return fmt.Errorf("failed to copy plan to branched chat: %w", err)
+		}
+		if plans > 0 {
+			logging.DebugContext(ctx, "Copied plans and tasks to branched chat",
+				"sourceChatID", sourceChatID,
+				"planCount", plans,
+				"taskCount", tasks,
+				"targetThreadID", branchWorkflowID,
+			)
 		}
 
 		// NOTE: branch_snapshot is no longer created here.
@@ -459,92 +493,6 @@ func workspaceBranchNote(targetWorktree *db.Worktree, workspaceContext *reliantv
 		}
 	}
 	return messageContent
-}
-
-// copyPlanAndTasks copies the plan and tasks from a source chat to a target thread.
-// This preserves the task hierarchy by mapping old task IDs to new ones.
-// Task statuses are reset to "pending" in the new thread.
-func (s *Service) copyPlanAndTasks(ctx context.Context, sourceChatID, targetThreadID string) error {
-	// Get plans from the source chat
-	plans, err := s.deps.Repo.ListPlansByChatID(ctx, sourceChatID)
-	if err != nil {
-		return fmt.Errorf("failed to list plans: %w", err)
-	}
-
-	if len(plans) == 0 {
-		// No plan to copy
-		return nil
-	}
-
-	// Copy each plan (typically there's just one)
-	for _, sourcePlan := range plans {
-		newPlanID := uuid.New().String()
-
-		// Create the new plan with reset status
-		newPlan := &db.Plan{
-			ID:          newPlanID,
-			ThreadID:    targetThreadID,
-			Title:       sourcePlan.Title,
-			Description: sourcePlan.Description,
-			Status:      int32(db.PlanStatusPending), // Reset to pending
-			Complexity:  sourcePlan.Complexity,
-		}
-
-		if err := s.deps.Repo.CreatePlan(ctx, newPlan); err != nil {
-			return fmt.Errorf("failed to create plan: %w", err)
-		}
-
-		// Get all tasks for this plan
-		tasks, err := s.deps.Repo.ListTasksByPlan(ctx, sourcePlan.ID)
-		if err != nil {
-			return fmt.Errorf("failed to list tasks: %w", err)
-		}
-
-		// Map old task IDs to new task IDs for parent reference resolution
-		taskIDMap := make(map[string]string)
-
-		// First pass: create all tasks with new IDs (without parent references)
-		for _, sourceTask := range tasks {
-			newTaskID := uuid.New().String()
-			taskIDMap[sourceTask.ID] = newTaskID
-		}
-
-		// Second pass: create tasks with proper parent references
-		for _, sourceTask := range tasks {
-			newTaskID := taskIDMap[sourceTask.ID]
-
-			// Map parent task ID if present
-			var newParentTaskID *string
-			if sourceTask.ParentTaskID != nil {
-				if mappedID, ok := taskIDMap[*sourceTask.ParentTaskID]; ok {
-					newParentTaskID = &mappedID
-				}
-			}
-
-			newTask := &db.Task{
-				ID:           newTaskID,
-				PlanID:       newPlanID,
-				ParentTaskID: newParentTaskID,
-				Title:        sourceTask.Title,
-				Description:  sourceTask.Description,
-				Status:       int32(db.TaskStatusPending), // Reset to pending
-				Position:     sourceTask.Position,
-			}
-
-			if err := s.deps.Repo.CreateTask(ctx, newTask); err != nil {
-				return fmt.Errorf("failed to create task: %w", err)
-			}
-		}
-
-		logging.DebugContext(ctx, "Copied plan and tasks to branched chat",
-			"sourcePlanID", sourcePlan.ID,
-			"newPlanID", newPlanID,
-			"taskCount", len(tasks),
-			"targetThreadID", targetThreadID,
-		)
-	}
-
-	return nil
 }
 
 // orphanedToolCallInfo holds information about an orphaned tool call for branch repair

@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=b27b60a984b2d7e4bff0228994efd25a96994f8d44a48748339437b037b4e021
+// forge:hash=f0eedc2be63084aaeb77527f900bc850ad868b171ceb9658a9fc4533b26b631c
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -267,10 +267,8 @@ type MockRepository struct {
 	GetToolCallFunc                                          func(context.Context, string) (*db.ToolCall, error)
 	ListContentBlocksByIDsFunc                               func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	ListMessagesByIDsFunc                                    func(context.Context, []string) ([]*db.Message, error)
-	CreatePlanFunc                                           func(context.Context, *db.Plan) error
-	CreateTaskFunc                                           func(context.Context, *db.Task) error
 	ListPlansByChatIDFunc                                    func(context.Context, string) ([]*db.Plan, error)
-	ListTasksByPlanFunc                                      func(context.Context, string) ([]*db.Task, error)
+	CopyChatPlansToThreadFunc                                func(context.Context, string, string) (int, int, error)
 	GetStepExecutionsForChatFunc                             func(context.Context, string) ([]*db.ChatStepExecution, error)
 	GetBasicStepExecutionsForChatFunc                        func(context.Context, string) ([]*db.ChatStepExecution, error)
 	ListStepExecutionRecordsForChatFunc                      func(context.Context, string, string, int) ([]*db.StepExecution, error)
@@ -642,24 +640,6 @@ func (m *MockRepository) ListMessagesByIDs(ctx context.Context, ids []string) ([
 	return nil, contractkit.MockNotSet("MockRepository", "ListMessagesByIDs")
 }
 
-// CreatePlan records the call and delegates to CreatePlanFunc when set.
-func (m *MockRepository) CreatePlan(ctx context.Context, plan *db.Plan) error {
-	m.Recorder.Record("CreatePlan", ctx, plan)
-	if m.CreatePlanFunc != nil {
-		return m.CreatePlanFunc(ctx, plan)
-	}
-	return contractkit.MockNotSet("MockRepository", "CreatePlan")
-}
-
-// CreateTask records the call and delegates to CreateTaskFunc when set.
-func (m *MockRepository) CreateTask(ctx context.Context, task *db.Task) error {
-	m.Recorder.Record("CreateTask", ctx, task)
-	if m.CreateTaskFunc != nil {
-		return m.CreateTaskFunc(ctx, task)
-	}
-	return contractkit.MockNotSet("MockRepository", "CreateTask")
-}
-
 // ListPlansByChatID records the call and delegates to ListPlansByChatIDFunc when set.
 func (m *MockRepository) ListPlansByChatID(ctx context.Context, chatID string) ([]*db.Plan, error) {
 	m.Recorder.Record("ListPlansByChatID", ctx, chatID)
@@ -669,13 +649,13 @@ func (m *MockRepository) ListPlansByChatID(ctx context.Context, chatID string) (
 	return nil, contractkit.MockNotSet("MockRepository", "ListPlansByChatID")
 }
 
-// ListTasksByPlan records the call and delegates to ListTasksByPlanFunc when set.
-func (m *MockRepository) ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error) {
-	m.Recorder.Record("ListTasksByPlan", ctx, planID)
-	if m.ListTasksByPlanFunc != nil {
-		return m.ListTasksByPlanFunc(ctx, planID)
+// CopyChatPlansToThread records the call and delegates to CopyChatPlansToThreadFunc when set.
+func (m *MockRepository) CopyChatPlansToThread(ctx context.Context, sourceChatID string, targetThreadID string) (int, int, error) {
+	m.Recorder.Record("CopyChatPlansToThread", ctx, sourceChatID, targetThreadID)
+	if m.CopyChatPlansToThreadFunc != nil {
+		return m.CopyChatPlansToThreadFunc(ctx, sourceChatID, targetThreadID)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListTasksByPlan")
+	return 0, 0, contractkit.MockNotSet("MockRepository", "CopyChatPlansToThread")
 }
 
 // GetStepExecutionsForChat records the call and delegates to GetStepExecutionsForChatFunc when set.
