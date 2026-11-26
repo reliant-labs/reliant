@@ -116,6 +116,7 @@ RELIANT_ORGS_PROVIDER_WORKSPACE_SEATS_ENABLED kind=bool flag="" default="" requi
 RELIANT_PAYLOAD_BLOB_GC_HORIZON kind=google.protobuf.Duration flag="" default="720h" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_PIPELINE_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_PR_RECORD_REPOSITORIES kind=repeated string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_RECONCILER_STALL_WATCHDOG kind=string flag="" default="off" required=false optional=false sensitive=false allowed=[off report enforce] aliases=[]
 RELIANT_SDK_GO_UPGRADE_COMMAND kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_SDK_GO_UPGRADE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_SDK_TS_UPGRADE_COMMAND kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
