@@ -9,14 +9,9 @@
 --
 -- Write your migration SQL below:
 
--- The rows of one end tenant: the foreign key to end_tenants, and the per-tenant
--- reads and the deletion cascade that follow (R6-8). Partial, so it holds only
--- stamped rows and costs nothing while no tenant exists.
---
--- CONCURRENTLY cannot run in a transaction block, so this is the only
--- statement in the file. A build that fails leaves an INVALID index that IF
--- NOT EXISTS then skips: drop it with DROP INDEX CONCURRENTLY
--- chats_end_tenant_idx and re-run.
+-- One end tenant's chats: the referencing-side index of the composite foreign key
+-- and the per-tenant reads. Partial, so it costs nothing while no tenant
+-- exists. A lone CONCURRENTLY statement runs outside a transaction.
 CREATE INDEX CONCURRENTLY IF NOT EXISTS chats_end_tenant_idx
     ON public.chats (end_tenant_id)
     WHERE end_tenant_id IS NOT NULL;

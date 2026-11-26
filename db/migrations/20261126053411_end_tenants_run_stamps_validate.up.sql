@@ -38,7 +38,3 @@ ALTER TABLE triggers VALIDATE CONSTRAINT triggers_end_tenant_no_machine_check;
 ALTER TABLE workflows VALIDATE CONSTRAINT workflows_end_tenant_fk;
 ALTER TABLE workflows VALIDATE CONSTRAINT workflows_end_tenant_hsp_check;
 ALTER TABLE workflows VALIDATE CONSTRAINT workflows_end_tenant_has_org_check;
-ALTER TABLE connection_events VALIDATE CONSTRAINT connection_events_end_tenant_id_not_blank;
-ALTER TABLE integration_writes VALIDATE CONSTRAINT integration_writes_org_id_not_blank;
-ALTER TABLE integration_writes VALIDATE CONSTRAINT integration_writes_end_tenant_id_not_blank;
-ALTER TABLE llm_call_usage VALIDATE CONSTRAINT llm_call_usage_end_tenant_id_not_blank;

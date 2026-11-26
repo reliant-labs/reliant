@@ -14,9 +14,12 @@
 -- tenants"). Tenant work is owned by the org's host service principal, a user
 -- whose id carries the reserved prefix hsp_ (control-plane reserves it at every
 -- door), and every row it owns is stamped with end_tenant_id. This file adds
--- the entity, the stamp columns and the constraints that make a wrong stamp
--- unrepresentable. No release reads or writes any of it yet: nothing here
--- changes behaviour.
+-- the entity, the stamp columns, and the constraints and triggers that keep a
+-- stamp consistent: on chats and triggers the stamp is fixed once the row
+-- exists, and a run's stamp always equals its chat's, on insert and on every
+-- update that could move it (the only gap left is a chat deleted and
+-- re-created under the same id, since workflows.chat_id has no foreign key).
+-- No release reads or writes any of it yet: nothing here changes behaviour.
 --
 -- Rows written before this release, and by the previous release during a
 -- rolling deploy, have end_tenant_id NULL. Every constraint below admits NULL
@@ -27,7 +30,7 @@
 --   - the owner column carries hsp_ exactly when the row is stamped
 --     (chats.user_id, triggers.user_id, workflows.owner_user_id; the
 --     workflows CHECK says nothing for a NULL owner, so the chat's stamp,
---     copied by the trigger below, is what counts there);
+--     copied and then held equal by the trigger below, is what counts there);
 --   - a stamped row has an org_id (a composite FK is not checked when any of
 --     its columns is NULL, MATCH SIMPLE, so without this a stamped row with a
 --     NULL org would skip the FK);
@@ -38,6 +41,18 @@
 --     until per-run isolation is proven (design OQ4). workflows has no
 --     no_machine column; its run's machine is its chat's, which this CHECK
 --     covers;
+--   - chats and triggers: end_tenant_id never changes once the row exists, and
+--     is never set on a row that was written without one. Any UPDATE that
+--     changes it raises (check_violation, constraint
+--     end_tenant_id_immutable), including NULL -> value: a row's tenancy is
+--     decided at creation, and the design names no flow that adopts an
+--     existing row into a tenant (fail closed until one is designed);
+--   - workflows: end_tenant_id equals its chat's at all times and is fixed
+--     once the run exists. The trigger fills it on insert and raises on any
+--     insert or update of chat_id or end_tenant_id that leaves them different,
+--     NULL against a value either way (check_violation, constraint
+--     workflows_end_tenant_matches_chat), or that changes an existing run's
+--     stamp, even to its new chat's (constraint workflows_end_tenant_immutable);
 --   - chats: a service principal's chat has NULL visibility, so org viewers
 --     (who see visibility='org' rows) never read a tenant's chat.
 --
@@ -48,13 +63,13 @@
 -- deploy retries it. The indexes on chats, workflows and triggers follow in
 -- files of their own (CONCURRENTLY).
 --
--- connection_events, integration_writes and llm_call_usage are audit and
--- billing rows that outlive a tenant, so their end_tenant_id is a plain label
--- with no foreign key.
+-- The audit and billing tables' end_tenant_id columns are in the next pair of
+-- migrations (end_tenants_audit_stamps), so this file's locks cover only
+-- chats, triggers and workflows.
 --
 -- Rollback: none needed. The previous release never names these columns,
--- the trigger only fills a NULL, and dropping them is a later forward
--- migration, once no release reads them.
+-- and none of the triggers fires for an UPDATE that does not name them.
+-- Dropping them is a later forward migration, once no release reads them.
 SET LOCAL lock_timeout = '5s';
 
 -- A host org's end tenant. The (id, host_org_id) key exists for the composite
@@ -117,47 +132,59 @@ ALTER TABLE workflows
         CHECK (owner_user_id IS NULL OR starts_with(owner_user_id, 'hsp_') = (end_tenant_id IS NOT NULL)) NOT VALID,
     ADD CONSTRAINT workflows_end_tenant_has_org_check
         CHECK (end_tenant_id IS NULL OR org_id IS NOT NULL) NOT VALID;
-COMMENT ON COLUMN workflows.end_tenant_id IS 'The end tenant the run belongs to: its chat''s, filled on insert (workflows_inherit_chat_end_tenant). NULL: not tenant work.';
+COMMENT ON COLUMN workflows.end_tenant_id IS 'The end tenant the run belongs to: its chat''s, held equal to its chat''s by workflows_inherit_chat_end_tenant. NULL: not tenant work.';
 
--- A run inherits its chat's end tenant, as it inherits its chat's org
--- (workflows_inherit_chat_org). Triggers fire in name order, so this one runs
--- first; it does not depend on the org, and every CHECK and FK above runs
--- after both. A writer that names a stamp must name its chat's: an explicit
--- stamp that disagrees raises, whether the chat has another stamp or none.
+-- A run's end tenant is its chat's, always. On insert the trigger fills it from
+-- the chat (as workflows_inherit_chat_org fills the org); on any insert or
+-- update of chat_id or end_tenant_id it raises if the two differ, in either
+-- direction: a stamp the chat lacks, a stamp the chat has and the run lacks,
+-- or two different stamps. An existing run's stamp never changes, so a run
+-- cannot be moved to another tenant's chat even by naming that chat's stamp
+-- too. Triggers fire in name order, so this one runs
+-- before workflows_inherit_chat_org; it does not read the org, and every CHECK
+-- and FK above runs after both. The chat's own stamp cannot change under a run
+-- (chats_end_tenant_immutable below), so the two stay equal.
+--
+-- Callers classify the refusal by the constraint name
+-- workflows_end_tenant_matches_chat (orm.ConstraintName): it is raised by this
+-- function, so it is not a catalog constraint and has no generated constant.
 CREATE OR REPLACE FUNCTION workflows_inherit_chat_end_tenant() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
  chat_end_tenant text;
 BEGIN
  SELECT c.end_tenant_id INTO chat_end_tenant FROM chats c WHERE c.id = NEW.chat_id;
- IF NEW.end_tenant_id IS NULL THEN
+ IF TG_OP = 'INSERT' AND NEW.end_tenant_id IS NULL THEN
    NEW.end_tenant_id := chat_end_tenant;
  ELSIF NEW.end_tenant_id IS DISTINCT FROM chat_end_tenant THEN
    RAISE EXCEPTION 'workflows.end_tenant_id % disagrees with chat % end_tenant_id %',
-     NEW.end_tenant_id, NEW.chat_id, COALESCE(chat_end_tenant, '<none>')
-     USING ERRCODE = 'check_violation', CONSTRAINT = 'workflows_end_tenant_matches_chat';
+     COALESCE(NEW.end_tenant_id, '<none>'), NEW.chat_id, COALESCE(chat_end_tenant, '<none>')
+     USING ERRCODE = 'check_violation', TABLE = 'workflows', CONSTRAINT = 'workflows_end_tenant_matches_chat';
+ ELSIF TG_OP = 'UPDATE' AND NEW.end_tenant_id IS DISTINCT FROM OLD.end_tenant_id THEN
+   RAISE EXCEPTION 'workflows.end_tenant_id is fixed at creation (% -> %)',
+     COALESCE(OLD.end_tenant_id, '<none>'), COALESCE(NEW.end_tenant_id, '<none>')
+     USING ERRCODE = 'check_violation', TABLE = 'workflows', CONSTRAINT = 'workflows_end_tenant_immutable';
  END IF;
  RETURN NEW;
 END $$;
 
-CREATE TRIGGER workflows_inherit_chat_end_tenant BEFORE INSERT ON workflows
+CREATE TRIGGER workflows_inherit_chat_end_tenant BEFORE INSERT OR UPDATE OF chat_id, end_tenant_id ON workflows
  FOR EACH ROW EXECUTE FUNCTION workflows_inherit_chat_end_tenant();
 
--- Audit, write-ledger and usage rows: a label naming the tenant the row was
--- written for, kept after the tenant is gone. No foreign key.
-ALTER TABLE connection_events
-    ADD COLUMN end_tenant_id text,
-    ADD CONSTRAINT connection_events_end_tenant_id_not_blank CHECK (end_tenant_id <> '') NOT VALID;
-COMMENT ON COLUMN connection_events.end_tenant_id IS 'The end tenant the connection use was for. NULL: not tenant work.';
+-- A chat's or trigger's end tenant is fixed once the row exists. The trigger
+-- names the table in the constraint it reports (chats_end_tenant_immutable,
+-- triggers_end_tenant_immutable), for callers classifying the refusal.
+CREATE OR REPLACE FUNCTION end_tenant_id_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+ RAISE EXCEPTION '%.end_tenant_id is fixed at creation (% -> %)',
+   TG_TABLE_NAME, COALESCE(OLD.end_tenant_id, '<none>'), COALESCE(NEW.end_tenant_id, '<none>')
+   USING ERRCODE = 'check_violation', TABLE = TG_TABLE_NAME, CONSTRAINT = TG_TABLE_NAME || '_end_tenant_immutable';
+END $$;
 
-ALTER TABLE integration_writes
-    ADD COLUMN org_id text,
-    ADD COLUMN end_tenant_id text,
-    ADD CONSTRAINT integration_writes_org_id_not_blank CHECK (org_id <> '') NOT VALID,
-    ADD CONSTRAINT integration_writes_end_tenant_id_not_blank CHECK (end_tenant_id <> '') NOT VALID;
-COMMENT ON COLUMN integration_writes.org_id IS 'The organization the write was made in. NULL: written before this column.';
-COMMENT ON COLUMN integration_writes.end_tenant_id IS 'The end tenant the write was for. NULL: not tenant work.';
+CREATE TRIGGER chats_end_tenant_immutable BEFORE UPDATE OF end_tenant_id ON chats
+ FOR EACH ROW WHEN (OLD.end_tenant_id IS DISTINCT FROM NEW.end_tenant_id)
+ EXECUTE FUNCTION end_tenant_id_immutable();
 
-ALTER TABLE llm_call_usage
-    ADD COLUMN end_tenant_id text,
-    ADD CONSTRAINT llm_call_usage_end_tenant_id_not_blank CHECK (end_tenant_id <> '') NOT VALID;
-COMMENT ON COLUMN llm_call_usage.end_tenant_id IS 'The end tenant the model call was made for, to roll usage up per tenant. NULL: not tenant work.';
+CREATE TRIGGER triggers_end_tenant_immutable BEFORE UPDATE OF end_tenant_id ON triggers
+ FOR EACH ROW WHEN (OLD.end_tenant_id IS DISTINCT FROM NEW.end_tenant_id)
+ EXECUTE FUNCTION end_tenant_id_immutable();
+

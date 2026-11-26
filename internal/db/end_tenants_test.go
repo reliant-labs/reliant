@@ -159,6 +159,72 @@ func TestEndTenantStampConstraints(t *testing.T) {
 		refused(err, "workflows_end_tenant_matches_chat", "explicit stamp on a chat that has none")
 	})
 
+	t.Run("a stamp cannot be moved after the fact", func(t *testing.T) {
+		const hspA2 = "hsp_01HZZZZZZZZZZZZZZZZZZZZZ2A"
+		mustExec(`INSERT INTO end_tenants (id, host_org_id, external_ref) VALUES ('et-a2', $1, 'cust-2')`, hostA)
+		require.NoError(t, insertChat("c-mv-a", hspA, hostA, tenA, true, ""))
+		require.NoError(t, insertChat("c-mv-a2", hspA2, hostA, "et-a2", true, ""))
+		require.NoError(t, insertChat("c-mv-person", "person-1", hostA, "", false, ""))
+		require.NoError(t, insertRun("w-mv", "c-mv-a", hspA, "", ""))
+		require.NoError(t, insertRun("w-mv-null-owner", "c-mv-a", "", "", ""))
+
+		// 1. Re-stamping a chat after its runs exist (same host, other tenant).
+		_, err := raw.Exec(`UPDATE chats SET end_tenant_id = 'et-a2', user_id = $2 WHERE id = $1`, "c-mv-a", hspA2)
+		refused(err, "chats_end_tenant_immutable", "a chat's stamp cannot move to another tenant")
+		// ... nor be cleared, nor set on a chat written without one.
+		_, err = raw.Exec(`UPDATE chats SET end_tenant_id = NULL, user_id = 'person-1' WHERE id = 'c-mv-a'`)
+		refused(err, "chats_end_tenant_immutable", "a chat's stamp cannot be cleared")
+		_, err = raw.Exec(`UPDATE chats SET end_tenant_id = $1, user_id = $2, no_machine = true WHERE id = 'c-mv-person'`, tenA, hspA)
+		refused(err, "chats_end_tenant_immutable", "an unstamped chat cannot be adopted into a tenant")
+
+		// 2. NULLing a run's stamp when its owner is NULL and its chat is stamped.
+		_, err = raw.Exec(`UPDATE workflows SET end_tenant_id = NULL WHERE id = 'w-mv-null-owner'`)
+		refused(err, "workflows_end_tenant_matches_chat", "a run in a stamped chat cannot lose its stamp")
+
+		// 3. Moving a run to another tenant's chat (same host).
+		_, err = raw.Exec(`UPDATE workflows SET chat_id = 'c-mv-a2' WHERE id = 'w-mv'`)
+		refused(err, "workflows_end_tenant_matches_chat", "a run cannot move to another tenant's chat")
+		_, err = raw.Exec(`UPDATE workflows SET chat_id = 'c-mv-a2', end_tenant_id = 'et-a2' WHERE id = 'w-mv-null-owner'`)
+		refused(err, "workflows_end_tenant_immutable", "a run cannot move to another tenant's chat even with that chat's stamp")
+
+		// 4. Moving a run to an unstamped chat, and a stamp onto an unstamped chat's run.
+		_, err = raw.Exec(`UPDATE workflows SET chat_id = 'c-mv-person' WHERE id = 'w-mv-null-owner'`)
+		refused(err, "workflows_end_tenant_matches_chat", "a stamped run cannot move to an unstamped chat")
+		require.NoError(t, insertRun("w-mv-person", "c-mv-person", "", "", ""))
+		_, err = raw.Exec(`UPDATE workflows SET end_tenant_id = $1, org_id = $2 WHERE id = 'w-mv-person'`, tenA, hostA)
+		refused(err, "workflows_end_tenant_matches_chat", "an unstamped chat's run cannot be stamped")
+
+		// Nothing moved, and writes that do not touch the stamp still work.
+		var tenant string
+		require.NoError(t, raw.QueryRow(`SELECT end_tenant_id FROM chats WHERE id = 'c-mv-a'`).Scan(&tenant))
+		assert.Equal(t, tenA, tenant)
+		_, err = raw.Exec(`UPDATE chats SET title = 'renamed' WHERE id = 'c-mv-a'`)
+		require.NoError(t, err)
+		_, err = raw.Exec(`UPDATE chats SET end_tenant_id = $1 WHERE id = 'c-mv-a'`, tenA)
+		require.NoError(t, err, "writing the same stamp is not a change")
+		_, err = raw.Exec(`UPDATE workflows SET chat_id = 'c-mv-a', end_tenant_id = $1 WHERE id = 'w-mv'`, tenA)
+		require.NoError(t, err, "a run re-pointed at the same stamp is fine")
+		_, err = raw.Exec(`UPDATE workflows SET outcome = 'done' WHERE id = 'w-mv'`)
+		require.NoError(t, err)
+	})
+
+	t.Run("a trigger's stamp is fixed at creation", func(t *testing.T) {
+		const hspA2 = "hsp_01HZZZZZZZZZZZZZZZZZZZZZ2A"
+		mustExec(`INSERT INTO end_tenants (id, host_org_id, external_ref) VALUES ('et-a3', $1, 'cust-3') ON CONFLICT DO NOTHING`, hostA)
+		require.NoError(t, insertTrigger("t-fix", hspA2, hostA, "et-a3", true))
+		require.NoError(t, insertTrigger("t-fix-person", "person-1", hostA, "", true))
+
+		_, err := raw.Exec(`UPDATE triggers SET end_tenant_id = $1 WHERE id = 't-fix'`, tenA)
+		refused(err, "triggers_end_tenant_immutable", "a trigger's stamp cannot move to another tenant")
+		_, err = raw.Exec(`UPDATE triggers SET end_tenant_id = NULL, user_id = 'person-1' WHERE id = 't-fix'`)
+		refused(err, "triggers_end_tenant_immutable", "a trigger's stamp cannot be cleared")
+		_, err = raw.Exec(`UPDATE triggers SET end_tenant_id = $1, user_id = $2 WHERE id = 't-fix-person'`, tenA, hspA)
+		refused(err, "triggers_end_tenant_immutable", "an unstamped trigger cannot be adopted into a tenant")
+
+		_, err = raw.Exec(`UPDATE triggers SET name = 'renamed', end_tenant_id = 'et-a3' WHERE id = 't-fix'`)
+		require.NoError(t, err, "writing the same stamp is not a change")
+	})
+
 	t.Run("every constraint is validated", func(t *testing.T) {
 		var unvalidated int
 		require.NoError(t, raw.QueryRow(
