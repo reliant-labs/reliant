@@ -1,13 +1,16 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 // Copyright (c) 2025 Reliant Labs
 
 /**
  * React Query hooks for the observability area.
  *
- * Keys carry the time PRESET, never resolved timestamps: the window is resolved
- * inside the query function, at fetch time. So a refetch (Refresh, live tail,
- * the overview's minute poll) re-reads "the last hour" as of now, and two
- * components asking for the same preset share one request.
+ * Keys carry the time PRESET, never resolved timestamps. The ObservabilityService
+ * reads on its generated hooks send the preset itself (a RelativeWindow the
+ * server resolves against its own clock), so their request and key stay put;
+ * the hand-written ones resolve the window inside the query function, at fetch
+ * time. Either way a refetch (Refresh, live tail, the overview's minute poll)
+ * re-reads "the last hour" as of now, and two components asking for the same
+ * preset share one request.
  *
  * Paged queries pin the window their FIRST page resolved and pass it to every
  * later page with the cursor — page two of "the last hour" must be the same
@@ -18,7 +21,46 @@ import { useEffect } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
-import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
+
+import { QueryScopeSchema, type GetMetricResponse, type GetTraceResponse } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import {
+  observabilityServiceKeys,
+  observabilityServiceQueries,
+  useGetFlamegraph,
+  useGetMetric,
+  useGetReleaseHealth,
+  useGetServiceOverview,
+  useGetServiceSignals,
+  useGetTrace,
+  useGetWorkload,
+  useListAttributeValues,
+  useListMetricExemplars,
+  useListMetrics,
+  useListWorkloads,
+} from "@/hooks/controlplane/observability-service-hooks_gen";
+import {
+  attributeValuesRequest,
+  flamegraphRequest,
+  relativeWindow,
+  serviceOverviewRequest,
+  serviceSignalsRequest,
+  toAttributeValues,
+  toFlamegraph,
+  toServiceOverview,
+  toServiceSignals,
+  toTrace,
+  toWorkloadDetail,
+  toWorkloads,
+  traceRequest,
+  wireScope,
+  workloadRequest,
+  workloadsRequest,
+} from "@/services/controlPlane/observability/api";
+import { mapReleaseHealth, releaseHealthRequest } from "@/services/controlPlane/observability/deliveryApi";
+import { metricCatalogRequest, metricExemplarsRequest, metricRequest, toMetricCatalog, toMetricDetail, toMetricExemplars } from "@/services/controlPlane/observability/metricsApi";
+import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
+import { useObservabilityApi, type ObservabilityContextApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
@@ -42,7 +84,7 @@ import type {
   UpdateIssueCommentRequest,
   UpdateIssueStatusRequest,
 } from "@/services/controlPlane/observability/issuesTypes";
-import type { GetMetricRequest, ListMetricExemplarsRequest, MetricKind } from "@/services/controlPlane/observability/metricsTypes";
+import type { GetMetricRequest, ListMetricExemplarsRequest } from "@/services/controlPlane/observability/metricsTypes";
 import type {
   ObsScope,
   ListTracesResult,
@@ -54,7 +96,7 @@ import type {
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
 import { rangeMs, readRange, resolveWindow, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
-import { keepPreviousInOrgSegment, useRouteOrgIdOverride } from "@/lib/orgScope";
+import { keepPreviousInOrg, useRouteOrgIdOverride } from "@/lib/orgScope";
 
 // Presentation never changes QueryPanel's computation: two dashboard tiles
 // with different ids/titles/layout but the same query share one in-flight read.
@@ -64,42 +106,79 @@ function panelRequestKey(panel: Panel) {
 }
 
 /**
- * Every key starts with the whole scope — org, project, environments and
- * attribute filters — so Refresh (invalidate `all(scope)`) re-reads exactly
- * what is on screen, and two scopes never share an answer.
+ * The hand-written reads' keys. Every key starts with the whole scope — org,
+ * project, environments and attribute filters — so Refresh (invalidateObsScope)
+ * re-reads exactly what is on screen, and two scopes never share an answer.
+ * ObservabilityService's reads on generated hooks are keyed by their request
+ * (observabilityServiceKeys), which carries the same scope.
  */
 export const obsKeys = {
   org: () => ["observability", "org"] as const,
   all: (scope: ObsScope | null) =>
     ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? [], scope?.platformScope ?? false] as const,
-  overview: (scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) =>
-    [...obsKeys.all(scope), "overview", range, services, groupBy] as const,
   logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
   traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
-  trace: (scope: ObsScope | null, traceId: string, range: RangePreset = "7d") => [...obsKeys.all(scope), "trace", traceId, range] as const,
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
     [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset] as const,
   metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
-  flamegraph: (scope: ObsScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
-  serviceSignals: (scope: ObsScope | null, range: RangePreset) => [...obsKeys.all(scope), "service-signals", range] as const,
-  attributeValues: (scope: ObsScope | null, range: RangePreset, key: string, prefix: string, signal: string) =>
-    [...obsKeys.all(scope), "attribute-values", range, key, prefix, signal] as const,
-  workloads: (scope: ObsScope | null, range: RangePreset, services: string[]) =>
-    [...obsKeys.all(scope), "workloads", range, services] as const,
-  workload: (scope: ObsScope | null, range: RangePreset, workload: string, container: string) =>
-    [...obsKeys.all(scope), "workload", range, workload, container] as const,
   usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
 };
+
+/** What names a scope in a QueryScope's protojson: everything but the window and the services filter. */
+function scopeIdentity(scope: Record<string, unknown> | undefined): string | undefined {
+  return scope ? hashKey([scope.orgId, scope.projectId, scope.envIds, scope.filters, scope.platformScope]) : undefined;
+}
+
+/** The scope a generated read's key names: its request (protojson, the key's last entry) carries a QueryScope. */
+function keyScope(key: QueryKey | undefined): string | undefined {
+  const request = key?.[key.length - 1];
+  return request && typeof request === "object" ? scopeIdentity((request as { scope?: Record<string, unknown> }).scope) : undefined;
+}
+
+function scopeOf(scope: ObsScope): string | undefined {
+  return scopeIdentity(requestKey(QueryScopeSchema, wireScope(scope, { startMs: 0, endMs: 0 })) as Record<string, unknown>);
+}
 
 /**
  * A read's placeholder while a new key loads: the previous answer when it was
  * for the same scope (a new range keeps the last rows on screen instead of a
  * blank table), and nothing when the scope changed (another project's or
- * environment's rows must never stand in for this one's).
+ * environment's rows must never stand in for this one's). For the generated
+ * reads, whose key is their request: the scope is read from it.
  */
 export function sameScopePlaceholder<T>(scope: ObsScope | null, previous: T | undefined, previousKey: QueryKey | undefined): T | undefined {
-  const prefix = obsKeys.all(scope);
-  return previousKey && hashKey(previousKey.slice(0, prefix.length)) === hashKey(prefix) ? previous : undefined;
+  if (!scope || !previousKey) return undefined;
+  const named = keyScope(previousKey);
+  return named !== undefined && named === scopeOf(scope) ? previous : undefined;
+}
+
+/**
+ * Refresh: every observability read of `scope` re-reads — the hand-written
+ * ones under obsKeys.all(scope), and ObservabilityService's generated ones
+ * whose request names this scope.
+ */
+export function invalidateObsScope(client: QueryClient, scope: ObsScope | null): Promise<void> {
+  const named = scope ? scopeOf(scope) : undefined;
+  return Promise.all([
+    client.invalidateQueries({ queryKey: obsKeys.all(scope) }),
+    named === undefined ? undefined : client.invalidateQueries({ queryKey: observabilityServiceKeys.all, predicate: (query) => keyScope(query.queryKey) === named }),
+  ]).then(() => undefined);
+}
+
+/**
+ * The call options of every read on a generated hook: the read marked, at the
+ * moment it starts, as a poll, a prefetch or a person's read, for the
+ * control-plane transport's read stage (obsInterceptors.ts). The runtime calls
+ * it synchronously inside the query function, where runAsPoll's mark holds.
+ */
+const obsRead = () => obsCall();
+
+/** The request of a read that is disabled because there is no scope yet: it is never sent. */
+const NO_SCOPE: ObsScope = { orgId: "", envIds: [], filters: [] };
+
+/** A preset as the window the server resolves, capped at what `read` keeps (readRange). */
+function lastOf(range: RangePreset, read?: RangeRead) {
+  return relativeWindow(rangeMs(read ? readRange(range, read) : range));
 }
 
 // ── Quota-aware reads and polls ──────────────────────────────────────────────
@@ -162,17 +241,16 @@ export function useObservabilityOrg() {
 // ── Overview ─────────────────────────────────────────────────────────────────
 
 export function useServiceOverview(scope: ObsScope | null, range: RangePreset, services: string[] = [], groupBy: string[] = []) {
-  const api = useObservabilityApi();
-  const queryKey = obsKeys.overview(scope, range, services, groupBy);
-  const query = useQuery({
-    queryKey,
-    queryFn: ({ signal }) => api.getServiceOverview({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), services, groupBy }, { signal }),
+  const request = serviceOverviewRequest({ ...(scope ?? NO_SCOPE), window: lastOf(range, "overview"), services, groupBy });
+  const query = useGetServiceOverview(request, {
+    select: toServiceOverview,
     enabled: !!scope,
     staleTime: 30_000,
     placeholderData: (previous, previousQuery) => sameScopePlaceholder(scope, previous, previousQuery?.queryKey),
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
-  usePolled(queryKey, 60_000, !!scope);
+  usePolled(observabilityServiceKeys.getServiceOverview(request), 60_000, !!scope);
   return query;
 }
 
@@ -317,13 +395,14 @@ export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
  * fetch, so revisit/focus/Refresh must be able to fetch again. No polling.
  */
 export function useTrace(scope: ObsScope | null, traceId: string | null, range: RangePreset = "7d") {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.trace(scope, traceId ?? "", range),
-    queryFn: ({ signal }) => api.getTrace({ ...(scope as ObsScope), traceId: traceId as string, window: resolveWindow(readRange(range, "traces")) }, { signal }),
+  const id = traceId ?? "";
+  const select = useCallback((res: GetTraceResponse) => toTrace(res, id), [id]);
+  return useGetTrace(traceRequest({ ...(scope ?? NO_SCOPE), traceId: id, window: lastOf(range, "traces") }), {
+    select,
     enabled: !!scope && !!traceId,
     staleTime: 15_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
@@ -396,7 +475,7 @@ export function usePanelQuery(
  * environment's database, so a scope over several environments, or none, is
  * refused here with the reason, as the server would refuse it.
  */
-function queryPostgresPanel(api: ObservabilityApi, scope: ObsScope, window: TimeWindow, panel: Panel, signal: AbortSignal) {
+function queryPostgresPanel(api: ObservabilityContextApi, scope: ObsScope, window: TimeWindow, panel: Panel, signal: AbortSignal) {
   if (scope.envIds.length !== 1) {
     throw new ConnectError("a postgres panel reads one environment's database: choose one environment", Code.InvalidArgument);
   }
@@ -431,20 +510,19 @@ export interface FlamegraphFilters {
 }
 
 export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.flamegraph(scope, filters),
-    queryFn: ({ signal }) =>
-      api.getFlamegraph({
-        ...(scope as ObsScope),
-        window: resolveWindow(filters.range),
-        service: filters.service,
-        profileType: filters.profileType,
-        traceId: filters.traceId,
-      }, { signal }),
+  const request = flamegraphRequest({
+    ...(scope ?? NO_SCOPE),
+    window: lastOf(filters.range),
+    service: filters.service,
+    profileType: filters.profileType,
+    traceId: filters.traceId,
+  });
+  return useGetFlamegraph(request, {
+    select: toFlamegraph,
     enabled: !!scope && !!filters.service && !!filters.profileType,
     staleTime: 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
@@ -459,14 +537,13 @@ export function useFlamegraph(scope: ObsScope | null, filters: FlamegraphFilters
  * RPC): the caller treats an error as "unknown" and offers every view.
  */
 export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
-  const api = useObservabilityApi();
   const unfiltered = scope && scope.filters.length ? { ...scope, filters: [] } : scope;
-  return useQuery({
-    queryKey: obsKeys.serviceSignals(unfiltered, range),
-    queryFn: ({ signal }) => api.getServiceSignals({ ...(unfiltered as ObsScope), window: resolveWindow(readRange(range, "overview")) }, { signal }),
+  return useGetServiceSignals(serviceSignalsRequest({ ...(unfiltered ?? NO_SCOPE), window: lastOf(range, "overview") }), {
+    select: toServiceSignals,
     enabled: !!unfiltered,
     staleTime: 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
@@ -503,35 +580,28 @@ export function useAttributeValues(
   prefix: string,
   signal?: "traces" | "logs" | "metrics"
 ) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.attributeValues(scope, range, key, prefix, signal ?? ""),
-    queryFn: ({ signal: abortSignal }) =>
-      // Value lookups are capped at 7 days server-side.
-      api.listAttributeValues({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), key, prefix, signal }, { signal: abortSignal }),
+  // Value lookups are capped at 7 days server-side.
+  return useListAttributeValues(attributeValuesRequest({ ...(scope ?? NO_SCOPE), window: lastOf(range, "overview"), key, prefix, signal }), {
+    select: toAttributeValues,
     enabled: !!scope && !!key,
     staleTime: 60_000,
     // The previous prefix's values, but never another org's (lib/orgScope).
-    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
+    placeholderData: keepPreviousInOrg(scope?.orgId ?? null),
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
 // ── Metrics explorer ─────────────────────────────────────────────────────────
 
 /**
- * The metrics explorer's keys. Every one starts with `metricKeys.all(scope)`, which
- * itself starts with the whole scope, so Refresh (invalidate `obsKeys.all(scope)`)
- * re-reads them too, and one scope never shares an answer with another.
+ * The metrics explorer's hand-written keys (its explain read). They start with
+ * the whole scope, so Refresh (invalidateObsScope) re-reads them too, and one
+ * scope never shares an answer with another. The catalog, a metric's detail
+ * and its exemplars are generated reads, keyed by their request.
  */
 export const metricKeys = {
   all: (scope: ObsScope | null) => obsKeys.metrics(scope),
-  catalog: (scope: ObsScope | null, range: RangePreset, name: string, limit: number) =>
-    [...metricKeys.all(scope), "catalog", range, name, limit] as const,
-  detail: (scope: ObsScope | null, range: RangePreset, name: string, kind: MetricKind | "") =>
-    [...metricKeys.all(scope), "detail", range, name, kind] as const,
-  exemplars: (scope: ObsScope | null, range: RangePreset, request: ExemplarsQuery) =>
-    [...metricKeys.all(scope), "exemplars", range, request] as const,
 };
 
 /**
@@ -566,30 +636,28 @@ function catalogRange(range: RangePreset): RangePreset {
  * server caches the answer a minute; the client keeps it as long.
  */
 export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, name = "", limit = 0) {
-  const api = useObservabilityApi();
-  const window = catalogRange(range);
-  return useQuery({
-    queryKey: metricKeys.catalog(scope, window, name, limit),
-    queryFn: ({ signal }) => api.listMetricCatalog({ ...(scope as ObsScope), window: resolveWindow(window), name, limit }, { signal }),
+  return useListMetrics(metricCatalogRequest({ ...(scope ?? NO_SCOPE), window: lastOf(catalogRange(range)), name, limit }), {
+    select: toMetricCatalog,
     enabled: !!scope,
     staleTime: 60_000,
-    placeholderData: keepPreviousInOrgSegment(scope?.orgId ?? null),
+    placeholderData: keepPreviousInOrg(scope?.orgId ?? null),
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
 /** One metric's detail: attributes with cardinality, export interval and suggested breakdowns. */
 export function useMetric(scope: ObsScope | null, range: RangePreset, name: string | undefined, kind?: GetMetricRequest["kind"]) {
-  const api = useObservabilityApi();
-  const window = catalogRange(range);
-  return useQuery({
-    queryKey: metricKeys.detail(scope, window, name ?? "", kind ?? ""),
-    queryFn: ({ signal }) => api.getMetric({ ...(scope as ObsScope), window: resolveWindow(window), name: name as string, kind }, { signal }),
+  const metric = name ?? "";
+  const select = useCallback((res: GetMetricResponse) => toMetricDetail(res, metric), [metric]);
+  return useGetMetric(metricRequest({ ...(scope ?? NO_SCOPE), window: lastOf(catalogRange(range)), name: metric, kind }), {
+    select,
     enabled: !!scope && !!name,
     staleTime: 60_000,
     // NotFound is the answer "no data for this metric in this window": a state to show, not a fault to retry.
     retry: (failureCount, error) => !(error instanceof ConnectError && error.code === Code.NotFound) && obsRetry(failureCount, error),
     retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
@@ -598,42 +666,38 @@ export type ExemplarsQuery = ListMetricExemplarsRequest;
 
 /** Exemplars of one metric (a sampled observation and its trace), stored traces first. Maximum range 7 days. */
 export function useMetricExemplars(scope: ObsScope | null, range: RangePreset, request: ExemplarsQuery | null, options: { enabled?: boolean } = {}) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: metricKeys.exemplars(scope, range, request ?? ({ name: "" } as ExemplarsQuery)),
-    queryFn: ({ signal }) => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), ...(request as ExemplarsQuery) }, { signal }),
+  return useListMetricExemplars(metricExemplarsRequest({ ...(scope ?? NO_SCOPE), window: lastOf(range, "overview"), ...(request ?? { name: "" }) }), {
+    select: toMetricExemplars,
     enabled: !!scope && !!request?.name && (options.enabled ?? true),
     staleTime: 60_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
 // ── Workloads (customer metadata) ────────────────────────────────────────────
 
 export function useWorkloads(scope: ObsScope | null, range: RangePreset, services: string[] = []) {
-  const api = useObservabilityApi();
-  const queryKey = obsKeys.workloads(scope, range, services);
-  const query = useQuery({
-    queryKey,
-    queryFn: ({ signal }) => api.listWorkloads({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), services }, { signal }),
+  const request = workloadsRequest({ ...(scope ?? NO_SCOPE), window: lastOf(range, "overview"), services });
+  const query = useListWorkloads(request, {
+    select: toWorkloads,
     enabled: !!scope,
     staleTime: 30_000,
     placeholderData: (previous, previousQuery) => sameScopePlaceholder(scope, previous, previousQuery?.queryKey),
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
-  usePolled(queryKey, 60_000, !!scope);
+  usePolled(observabilityServiceKeys.listWorkloads(request), 60_000, !!scope);
   return query;
 }
 
 export function useWorkload(scope: ObsScope | null, range: RangePreset, workload: string | undefined, container?: string) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.workload(scope, range, workload ?? "", container ?? ""),
-    queryFn: ({ signal }) =>
-      api.getWorkload({ ...(scope as ObsScope), window: resolveWindow(readRange(range, "overview")), workload: workload as string, container }, { signal }),
+  return useGetWorkload(workloadRequest({ ...(scope ?? NO_SCOPE), window: lastOf(range, "overview"), workload: workload ?? "", container }), {
+    select: toWorkloadDetail,
     enabled: !!scope && !!workload,
     staleTime: 30_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
 }
 
@@ -721,7 +785,7 @@ export function useNotifications(orgId: string | null) {
  * Every alerting write: it runs, then re-reads everything alerting shows for
  * the org (a silence changes what fires; a receiver changes what routes).
  */
-export function useAlertingMutation<TArgs, TResult>(orgId: string | null, run: (api: ObservabilityApi, orgId: string, args: TArgs) => Promise<TResult>) {
+export function useAlertingMutation<TArgs, TResult>(orgId: string | null, run: (api: ObservabilityContextApi, orgId: string, args: TArgs) => Promise<TResult>) {
   const api = useObservabilityApi();
   const queryClient = useQueryClient();
   return useMutation({
@@ -779,23 +843,23 @@ export function useDoraMetrics(scope: DeliveryScope | null, days: number, failur
 }
 
 /**
- * The server's verdict on one promotion (GetReleaseHealth). Under the delivery
- * keys, so the panel's Refresh re-reads it with the ledger. The verdict of a
- * promotion whose after window is still open changes as traffic arrives, so
- * it is re-read every minute until the server says the window is complete.
+ * The server's verdict on one promotion (GetReleaseHealth). A generated read,
+ * keyed by its request; the panel's Refresh re-reads every one with the
+ * ledger. The verdict of a promotion whose after window is still open changes
+ * as traffic arrives, so it is re-read every minute until the server says the
+ * window is complete.
  */
 export function useReleaseHealth(scope: DeliveryScope | null, promotionId: string, windowMs: number) {
-  const api = useObservabilityApi();
-  const queryKey = [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const;
+  const request = releaseHealthRequest({ ...(scope ?? NO_SCOPE), promotionId, windowMs });
   const enabled = !!scope && !!promotionId;
-  const query = useQuery({
-    queryKey,
-    queryFn: ({ signal }) => api.getReleaseHealth({ ...(scope as DeliveryScope), promotionId, windowMs }, { signal }),
+  const query = useGetReleaseHealth(request, {
+    select: mapReleaseHealth,
     enabled,
     staleTime: 30_000,
     retry: releaseHealthRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
   });
-  usePolled(queryKey, query.data && !query.data.afterComplete ? 60_000 : false, enabled);
+  usePolled(observabilityServiceKeys.getReleaseHealth(request), query.data && !query.data.afterComplete ? 60_000 : false, enabled);
   return query;
 }
 
@@ -811,19 +875,17 @@ export function useReleaseHealths(
   items: readonly { envId: string; promotionId: string }[],
   windowMs: number
 ): Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }> {
-  const api = useObservabilityApi();
   const results = useQueries({
-    queries: items.map(({ envId, promotionId }) => {
-      const scope: DeliveryScope = { orgId: orgId ?? "", projectId, envIds: [envId] };
-      return {
-        queryKey: [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const,
-        queryFn: ({ signal }: { signal: AbortSignal }) => api.getReleaseHealth({ ...scope, promotionId, windowMs }, { signal }),
+    queries: items.map(({ envId, promotionId }) =>
+      observabilityServiceQueries.getReleaseHealth(releaseHealthRequest({ orgId: orgId ?? "", projectId, envIds: [envId], promotionId, windowMs }), {
+        select: mapReleaseHealth,
         enabled: !!orgId && !!promotionId,
         staleTime: 30_000,
         retry: releaseHealthRetry,
         retryDelay: obsRetryDelay,
-      };
-    }),
+        callOptions: obsRead,
+      })
+    ),
   });
   const byEnv = new Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }>();
   items.forEach(({ envId }, index) => {
@@ -844,20 +906,18 @@ export function useCurrentReleaseHealths(
   envIds: readonly string[],
   windowMs: number
 ): Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }> {
-  const api = useObservabilityApi();
   const results = useQueries({
-    queries: envIds.map((envId) => {
-      const one: DeliveryScope = { orgId: scope?.orgId ?? "", projectId: scope?.projectId, envIds: [envId] };
-      return {
-        queryKey: [...deliveryKeys.all(one), "health", "current", windowMs] as const,
-        queryFn: ({ signal }: { signal: AbortSignal }) => api.getReleaseHealth({ ...one, windowMs }, { signal }),
+    queries: envIds.map((envId) =>
+      observabilityServiceQueries.getReleaseHealth(releaseHealthRequest({ orgId: scope?.orgId ?? "", projectId: scope?.projectId, envIds: [envId], windowMs }), {
+        select: mapReleaseHealth,
         enabled: !!scope?.orgId,
         staleTime: 30_000,
-        refetchInterval: (query: { state: { data?: ReleaseHealth } }) => (query.state.data && !query.state.data.afterComplete ? 60_000 : false),
+        refetchInterval: (query) => (query.state.data && !query.state.data.afterComplete ? 60_000 : false),
         retry: releaseHealthRetry,
         retryDelay: obsRetryDelay,
-      };
-    }),
+        callOptions: obsRead,
+      })
+    ),
   });
   const byEnv = new Map<string, { data?: ReleaseHealth; isLoading: boolean; error: unknown }>();
   envIds.forEach((envId, index) => {

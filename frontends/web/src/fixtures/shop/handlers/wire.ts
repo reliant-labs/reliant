@@ -10,6 +10,8 @@
 import { create } from "@bufbuild/protobuf";
 import { DurationSchema, TimestampSchema, type Duration, type Timestamp } from "@bufbuild/protobuf/wkt";
 
+import { demoNow } from "../shopStory";
+
 /** Epoch ms → Timestamp, keeping the sub-millisecond part (api.ts's msOf reads it back). */
 export function ts(ms: number): Timestamp {
   const seconds = Math.floor(ms / 1000);
@@ -40,8 +42,21 @@ export const int64 = (n: number | null | undefined): bigint => BigInt(Math.round
 /** A model double that may be null (a gap) → the wire's NaN, which the client reads back as null. */
 export const dbl = (n: number | null | undefined): number => (n === null || n === undefined ? Number.NaN : n);
 
-/** A TimeRange back into a window, or undefined when the request names none. */
-export function windowOf(range: { start?: Timestamp; end?: Timestamp } | undefined): { startMs: number; endMs: number } | undefined {
+/**
+ * A TimeRange back into a window, or undefined when the request names none. A
+ * `relative` one (RelativeWindow) is resolved as control-plane resolves it,
+ * against the clock it answers at: `now`, the pack's (shopStory.ts demoNow) by
+ * default, never the wall clock.
+ */
+export function windowOf(
+  range: { start?: Timestamp; end?: Timestamp; relative?: { last?: Duration; endsAgo?: Duration } } | undefined,
+  now: number = demoNow(),
+): { startMs: number; endMs: number } | undefined {
+  const last = msOfDuration(range?.relative?.last);
+  if (last) {
+    const endMs = now - (msOfDuration(range?.relative?.endsAgo) ?? 0);
+    return { startMs: endMs - last, endMs };
+  }
   return range?.start && range.end ? { startMs: msOf(range.start), endMs: msOf(range.end) } : undefined;
 }
 
