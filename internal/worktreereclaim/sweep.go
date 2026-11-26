@@ -672,7 +672,7 @@ func (r *Reclaimer) evaluateDeepWith(ctx context.Context, e *SweepEntry, opts Sw
 		e.hold(ReasonRecentlyActive, fmt.Sprintf("a file changed %s ago", idle.Round(time.Minute)))
 		return
 	}
-	stamp := verdictStamp(e, sc.Newest)
+	stamp := verdictStamp(ctx, e, sc.Newest)
 	if c, ok := cache.get(e, stamp, now); ok {
 		r.applyVerdict(ctx, e, opts, idle, c, sc.Newest, cache)
 		return

@@ -2,6 +2,8 @@
 package worktreereclaim
 
 import (
+	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -30,9 +32,9 @@ import (
 // ignored data, too large, hidden index flags); a verdict that would let it
 // go (auto-safe) is never cached, and reclaimEntry judges every checkout
 // again from scratch under its locks before it captures anything, so a stale
-// entry can only delay a reclaim, never cause one. What the stamp cannot see
-// is a remote that moved (a push from elsewhere, a merge into the base): the
-// TTL bounds how long that goes unnoticed.
+// entry can only delay a reclaim, never cause one. Ref and effective config
+// changes invalidate the stamp too; the TTL bounds changes only visible on
+// the network (such as a merge not yet fetched).
 
 const (
 	verdictsFile = "verdicts.json"
@@ -168,10 +170,10 @@ func cacheable(r HeldReason) bool {
 	return false
 }
 
-// verdictStamp names the state a verdict is about: HEAD, branch, the index
-// and reflog files' size and time, and the newest file time of the walk. ""
-// when any of it cannot be read, which caches nothing.
-func verdictStamp(e *SweepEntry, newest time.Time) string {
+// verdictStamp names the state a verdict is about: HEAD, branch, index,
+// reflog, newest file time, refs (including packed and per-worktree refs),
+// pseudo-refs and effective git configuration. A failed read caches nothing.
+func verdictStamp(ctx context.Context, e *SweepEntry, newest time.Time) string {
 	admin := adminDir(e.Path)
 	if admin == "" {
 		return ""
@@ -192,9 +194,27 @@ func verdictStamp(e *SweepEntry, newest time.Time) string {
 			return ""
 		}
 	}
-	// A detached or branch HEAD file names a ref; what the ref points at is
-	// the commit, which is what the classification is about.
-	return stamp + "|" + e.Head
+	// Ask git rather than walking refs/: packed refs and alternate ref
+	// backends must invalidate exactly as loose refs do. This enumerates tips,
+	// not reachability (the expensive classification this cache avoids).
+	refs, err := git(ctx, e.Path, nil, "for-each-ref", "--format=%(refname) %(objectname) %(symref)")
+	if err != nil {
+		return ""
+	}
+	config, err := git(ctx, e.Path, nil, "config", "--null", "--list", "--includes")
+	if err != nil {
+		return ""
+	}
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%q|%q", refs, config)
+	for _, name := range []string{"ORIG_HEAD", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD", "REBASE_HEAD"} {
+		b, err := os.ReadFile(filepath.Join(admin, name))
+		if err != nil && !os.IsNotExist(err) {
+			return ""
+		}
+		_, _ = fmt.Fprintf(h, "|%s:%q", name, b)
+	}
+	return fmt.Sprintf("%s|%s|%x", stamp, e.Head, h.Sum(nil))
 }
 
 // sweepWorkerCount is how many worktrees a pass inspects at once: four, or
