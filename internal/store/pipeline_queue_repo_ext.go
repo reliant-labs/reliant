@@ -349,13 +349,20 @@ func MarkQueueBatchLanded(ctx context.Context, db orm.Context, id, landedSHA str
 	if landedSHA == "" {
 		return nil, errors.New("mark queue batch landed: a sha is required")
 	}
-	out, err := scanQueueBatch(ctx, db.Bun().NewRaw(`UPDATE queue_batches SET state = ?, landed_sha = ?, updated_at = now()
-		WHERE id = ? AND state = ? RETURNING `+queueBatchColumns, core.QueueBatchLanded, landedSHA, id, core.QueueBatchPassed))
+	// One statement, so the check and the move are atomic: a batch lands only
+	// once it holds at least one entry and every entry it holds has landed
+	// (review B1 on #3805). Otherwise its remaining entries would sit in a
+	// landed batch, out of every later pick.
+	out, err := scanQueueBatch(ctx, db.Bun().NewRaw(`UPDATE queue_batches b SET state = ?, landed_sha = ?, updated_at = now()
+		WHERE b.id = ? AND b.state = ?
+		  AND EXISTS (SELECT 1 FROM queue_entries e WHERE e.batch_id = b.id)
+		  AND NOT EXISTS (SELECT 1 FROM queue_entries e WHERE e.batch_id = b.id AND e.state <> ?)
+		RETURNING `+queueBatchColumns, core.QueueBatchLanded, landedSHA, id, core.QueueBatchPassed, core.QueueEntryLanded))
 	if err != nil {
 		return nil, fmt.Errorf("mark batch %s landed: %w", id, err)
 	}
 	if out == nil {
-		return nil, fmt.Errorf("batch %s is not passed: %w", id, core.ErrPipelineVersionConflict)
+		return nil, fmt.Errorf("batch %s is not passed, holds no entry, or holds an entry that has not landed: %w", id, core.ErrPipelineVersionConflict)
 	}
 	return out, nil
 }

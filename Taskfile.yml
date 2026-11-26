@@ -361,7 +361,7 @@ tasks:
     desc: "Go SDK module tests (sdk/go), the full tier: no -short, no workspace"
     dir: sdk/go
     cmds:
-      - env GOWORK=off go test {{.GOTESTRACE}} -count=1 -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+      - env GOWORK=off go test {{.GOTESTRACE}} -timeout 10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
   test:
     # Everything after `--` REPLACES the default `./...`, so it takes both
@@ -384,9 +384,9 @@ tasks:
     # coverage under .forge/tests/runs/), the web tests as lane `frontend`
     # (scripts/test-capture.sh); `forge test report` summarises them. The
     # verdict is the tests' own; FORGE_TESTS=off records nothing.
-    desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
+    desc: Run Go unit tests (-race, cached) and the web and electron tests (excludes integration + e2e)
     cmds:
-      - '{{.SLOT}} ./scripts/test-capture.sh go unit {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - '{{.SLOT}} ./scripts/test-capture.sh go unit {{.GOTESTRACE}} -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
       - task: test:sdk:full
         if: '[ -z "{{.CLI_ARGS}}" ]'
       - task: test:web
@@ -404,7 +404,7 @@ tasks:
         pkgs="{{.CLI_ARGS}}"
         [ -n "$pkgs" ] || pkgs=$(./scripts/integration-packages.sh | tr '\n' ' ')
         if [ -z "$pkgs" ]; then echo "test:integration: no integration-tagged test files; nothing to run"; exit 0; fi
-        {{.SLOT}} ./scripts/test-capture.sh go integration {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m $pkgs
+        {{.SLOT}} ./scripts/test-capture.sh go integration {{.GOTESTRACE}} -tags=integration -timeout=10m $pkgs
 
   test:e2e:
     # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an

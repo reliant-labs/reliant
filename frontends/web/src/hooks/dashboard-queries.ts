@@ -14,7 +14,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useObservabilityApi, type ObservabilityContextApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardIndex, DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 import { obsRetry } from "@/services/controlPlane/observability/errors";
 import { clientBuiltinDocument, isClientBuiltin, withClientBuiltins } from "@/services/controlPlane/observability/clientBuiltins";
@@ -108,7 +108,7 @@ export function useDashboardVersions(orgId: string | null, ref: DashboardRef | n
 }
 
 /** Every dashboard write: it runs, then re-reads everything about the org's dashboards. */
-export function useDashboardMutation<TArgs, TResult>(orgId: string | null, run: (api: ObservabilityApi, orgId: string, args: TArgs) => Promise<TResult>) {
+export function useDashboardMutation<TArgs, TResult>(orgId: string | null, run: (api: ObservabilityContextApi, orgId: string, args: TArgs) => Promise<TResult>) {
   const api = useObservabilityApi();
   const queryClient = useQueryClient();
   return useMutation({
