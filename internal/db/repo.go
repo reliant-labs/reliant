@@ -153,6 +153,11 @@ type Repo struct {
 	// first use (pinnedCatalogs).
 	pinnedOnce sync.Once
 	pinned     *pinnedCatalogCache
+	// catalogColumnsCache is the live catalog columns this Repo has read,
+	// each checked against its row's version on every read; built on first
+	// use (catalogColumns).
+	catalogColumnsOnce  sync.Once
+	catalogColumnsCache *catalogColumnCache
 }
 
 // backoffBeforeRetry sleeps calculateBackoff(attempt) before RunTx retries.
