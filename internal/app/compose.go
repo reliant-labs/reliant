@@ -708,6 +708,8 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 		ConnectionVault: g.CredentialsConnectionvault(),
 		DB:              g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
 		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
