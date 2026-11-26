@@ -171,6 +171,9 @@ func TestLLMUsageTablesHoldNoContent(t *testing.T) {
 			// Whether the insights rollups count the row (agent-analytics.md §3.1),
 			// and the org that paid for it, an opaque id.
 			"insights_folded": "boolean", "funding_org_id": "text",
+			// The end tenant the call was made for (GTM-R6), an opaque id,
+			// to roll usage up per tenant.
+			"end_tenant_id": "text",
 		},
 		"llm_call_usage_daily": {
 			"user_id": "text", "org_id": "text", "provider": "text", "model": "text", "auth_mode": "text", "purpose": "text",
