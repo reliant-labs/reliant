@@ -239,14 +239,13 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   "controlplane.v1.LLMGatewayService",
   "cp",
   // Every DaemonService read on its generated keys: a machine's detail,
-  // preview template and port-access rules.
+  // preview template, port-access rules and the machine → org map
+  // (hooks/useMachineOrgs.ts).
   "controlplane.v1.DaemonService",
   // ObservabilityService's reads on generated hooks: the overview, traces,
   // profiles, signals, filter values, metrics, workloads, release health and
   // each frontend's replay switch, every one scoped by its request's org.
   "controlplane.v1.ObservabilityService",
-  // The machine → org map (services/controlPlane/machineOrgs.ts).
-  "controlPlane",
   "orgs-members",
   // The org's policy document, the caller's usage against it, its denials.
   "controlplane.v1.OrgPolicyService",

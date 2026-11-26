@@ -15,10 +15,8 @@ import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 
 const listMyOrganizations = vi.fn();
 const listMachineOrgs = vi.fn();
-vi.mock("@/services/controlPlane/machineOrgs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/controlPlane/machineOrgs")>()),
-  listMachineOrgs: () => listMachineOrgs(),
-}));
+/** Whether each ListDaemons call spanned every org (its acrossAllOrgs context value). */
+const acrossAll: boolean[] = [];
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
 import { machineOrgId, machinesInOrg } from "../useMachineOrgs";
@@ -27,8 +25,27 @@ import { MachinePicker } from "@/components/Chat/MachinePicker";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { myOrgsHandlers } from "@/test/orgsTransport";
+import { acrossAllOrgsKey } from "@/api/orgInterceptor";
+import type { Transport } from "@connectrpc/connect";
 
-beforeEach(() => setTransport(mockTransport(myOrgsHandlers({ listMyOrganizations: () => listMyOrganizations() }))));
+// The machine → org map is the control plane's ListDaemons, answered from MAP-shaped fakes.
+beforeEach(() => {
+  acrossAll.length = 0;
+  const base = mockTransport({
+    ...myOrgsHandlers({ listMyOrganizations: () => listMyOrganizations() }),
+    "DaemonService.ListDaemons": async () => ({
+      daemons: [...((await listMachineOrgs()) as Map<string, string>)].map(([id, orgId]) => ({ id, orgId })),
+    }),
+  });
+  const transport: Transport = {
+    ...base,
+    unary: (method, signal, timeoutMs, header, input, contextValues) => {
+      if (method.name === "ListDaemons") acrossAll.push(contextValues?.get(acrossAllOrgsKey) ?? false);
+      return base.unary(method, signal, timeoutMs, header, input, contextValues);
+    },
+  };
+  setTransport(transport);
+});
 afterEach(() => setTransport(null));
 
 const org = (id: string, name: string, isDefault = false) => ({ id, name, slug: id, role: "owner", isOwner: true, isDefault });
@@ -80,6 +97,8 @@ describe("MachineSelect with orgs", () => {
       <MachineSelect machines={["m-acme", "m-globex", "m-legacy"].map(machine)} value="m-globex" onChange={() => {}} />,
     );
     await waitFor(() => expect(options()).toEqual(["globex-box · online · Globex"]));
+    // The map names no org: it lists every org's machines.
+    expect(acrossAll).toEqual([true]);
   });
 
   it("changes nothing for a person with one org, and asks the control plane nothing", async () => {
