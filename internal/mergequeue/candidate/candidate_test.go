@@ -3,6 +3,7 @@ package candidate_test
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -333,5 +334,34 @@ func TestGeneratedOnlyRule(t *testing.T) {
 	ok, off, err = candidate.GeneratedOnly(t.Context(), f.wk, tree(src), tree(base), genGlobs)
 	if err != nil || ok || !slices.Equal(off, []string{"src/a.txt"}) {
 		t.Fatalf("source diff: ok=%v off=%v err=%v", ok, off, err)
+	}
+}
+
+// Review B1 on #3794: the regen command works in a standalone copy with a
+// private repository, never a linked worktree of the queue's repository, so
+// whatever it does to git cannot reach the refs, objects or config the batch is
+// built from.
+func TestRegenCannotTouchTheQueueRepository(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	one, two := generatedConflict(f)
+	regen := "sh regen.sh" +
+		" && test -d .git && ! test -e .git/commondir && ! test -s .git/objects/info/alternates" +
+		" && git update-ref refs/heads/evil HEAD" +
+		" && git config core.hooksPath /nowhere"
+	cand, ej := f.build(f.wk, []candidate.Entry{one, two}, candidate.Config{BatchID: "b-iso", Generated: genGlobs, Regen: regen})
+	if len(ej) != 0 || len(cand.Regenerated) != 1 {
+		t.Fatalf("ejections %+v, regenerated %+v: the regen did not run in an isolated copy", ej, cand.Regenerated)
+	}
+	dir := f.wk.Dir()
+	if _, err := os.Stat(filepath.Join(dir, "refs", "heads", "evil")); err == nil {
+		t.Fatal("the regen command created a ref in the queue's repository")
+	}
+	cfg, err := os.ReadFile(filepath.Join(dir, "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(cfg), "/nowhere") {
+		t.Fatal("the regen command rewrote the queue repository's config")
 	}
 }
