@@ -7,7 +7,7 @@ keywords: ["stop hosted environment", "suspend environment", "forge env stop", "
 
 A staging or demo environment you use a few hours a week doesn't need to run the rest of the time. `reliant forge env stop` suspends a hosted environment: its workloads stop running and stop costing compute, and the environment keeps its URL, its release and its database's data. `reliant forge env start` brings it back on the same release, with nothing to rebuild or redeploy.
 
-Hosting has no autoscaling and never stops an idle environment for you. Stopping is something you do by hand, and [Stopping and deleting an environment](/hosting/overview#stopping-and-deleting-an-environment) compares it with `env delete`.
+Hosting never stops an idle environment for you. Stopping is something you do by hand, and [Stopping and deleting an environment](/hosting/overview#stopping-and-deleting-an-environment) compares it with `env delete`.
 
 ## Before you begin
 
@@ -110,17 +110,7 @@ Hosting has no autoscaling and never stops an idle environment for you. Stopping
 
 ## Next steps
 
-<CardGroup cols={2}>
-  <Card title="Preview environments" icon="git-pull-request" href="/hosting/preview-environments">
-    Environments per pull request that expire on their own.
-  </Card>
-  <Card title="Detect configuration drift" icon="git-compare" href="/guides/hosting/detect-config-drift">
-    Check that what runs is what you declared.
-  </Card>
-  <Card title="Inside Reliant hosting" icon="server" href="/deep-dives/inside-reliant-hosting">
-    How the platform runs, suspends and meters an environment.
-  </Card>
-  <Card title="env stop reference" icon="terminal" href="/reference/cli#reliant-forge-env-stop">
-    Every flag of `env stop`, `env start` and `env delete`.
-  </Card>
-</CardGroup>
+- [Preview environments](/hosting/preview-environments): environments per pull request that expire on their own
+- [Detect configuration drift](/guides/hosting/detect-config-drift): check that what runs is what you declared
+- [Inside Reliant hosting](/deep-dives/inside-reliant-hosting): how the platform runs, suspends and meters an environment
+- [env stop reference](/reference/cli#reliant-forge-env-stop): every flag of `env stop`, `env start` and `env delete`

@@ -68,6 +68,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/prrecords"
 	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/stopnudge"
@@ -623,7 +624,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
-		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
@@ -789,12 +790,18 @@ type TemporalWorkerDeps struct {
 	Router           *WorkerDaemonRouter
 	ConfigProvider   *reliantconfig.StoredConfigProvider
 	Launcher         *launch.Launcher
-	Credentials      *WorkerIntegrationCredentials
-	WriteLedger      writeledger.Service
-	Pollers          *webhook.Registry
-	ControlPlane     *configv1.ControlPlaneConfig
-	Network          *configv1.NetworkConfig
-	Recorder         *AccountRecorder
+	// Runs stops the run a trigger firing supersedes under
+	// concurrency.cancel_running, the way a user's stop does.
+	Runs         *runs.Service
+	Credentials  *WorkerIntegrationCredentials
+	WriteLedger  writeledger.Service
+	Pollers      *webhook.Registry
+	ControlPlane *configv1.ControlPlaneConfig
+	Network      *configv1.NetworkConfig
+	// Pipeline is ServerProcessConfig.pipeline: its enabled switch turns the
+	// Reliant server actions (uses: reliant/...) on for this worker.
+	Pipeline *configv1.PipelineConfig
+	Recorder *AccountRecorder
 	// WorkflowTaskSlots and WorkflowTaskPollers are WorkerConfig's
 	// RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS and
 	// RELIANT_WORKER_WORKFLOW_TASK_POLLERS (0: workersetup's default).
@@ -949,6 +956,19 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 	return nil, &handlers.HostedDisabledError{Reason: d.reason}
 }
 
+// WorkerServerActions is the worker's Reliant server actions, as
+// NewTemporalWorker hands them to workersetup: on only when the pipeline
+// switch is, with the handlers this worker binds (none yet: each pipeline
+// task binds its own here). The dispatcher's resolver is workersetup's, over
+// the worker's database.
+func WorkerServerActions(pipeline *configv1.PipelineConfig) serveraction.Config {
+	enabled := pipeline.GetEnabled()
+	if enabled {
+		slog.Default().Info("Reliant server actions are ON (pipeline.enabled)")
+	}
+	return serveraction.Config{Enabled: enabled}
+}
+
 // NewTemporalWorker is the Temporal worker on the shared task queue
 // (workersetup.Worker: its Drain releases in-flight activities, its Ready is
 // "polling"). A scheduled trigger fire launches through the same launcher
@@ -985,11 +1005,13 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		MCPBinder:              toolexec.NewDaemonMCPContextBinder(d.Router),
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
+		TriggerRunCanceller:    triggerRunCanceller(d.Runs),
 		Membership:             d.Membership,
 		Policies:               d.Policies,
 		IntegrationCredentials: creds,
 		HostedActions:          hostedActions,
 		SecretResolver:         secretResolver,
+		ServerActions:          WorkerServerActions(d.Pipeline),
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
@@ -1002,6 +1024,15 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		return nil, fmt.Errorf("failed to create worker: %w", err)
 	}
 	return worker, nil
+}
+
+// triggerRunCanceller is the run service as the trigger firers' canceller,
+// or nil (no canceller, rather than a nil *runs.Service inside an interface).
+func triggerRunCanceller(r *runs.Service) triggers.RunCanceller {
+	if r == nil {
+		return nil
+	}
+	return r
 }
 
 // WorkflowEventRelayDeps is the outbox and the workflows it dispatches to.

@@ -14,6 +14,7 @@ import (
 // from a start in flight (PENDING, not), so each write is conditional on the
 // row the overlap guard and a retry of the start race over.
 func TestWorkflowStartFailedStampLifecycle(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	seedChat(t, env, "chat-s")

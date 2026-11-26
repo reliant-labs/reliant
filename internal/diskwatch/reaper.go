@@ -649,13 +649,19 @@ func logGoCacheTrims(ctx context.Context, trigger string, start time.Time, forge
 			"size", FormatBytes(t.EstimatedBytes), "budget", FormatBytes(t.BudgetBytes),
 			"inside_floor", FormatBytes(t.YoungBytes), "removed", t.Removed, "freed", FormatBytes(t.FreedBytes),
 			"shards", fmt.Sprintf("%d/%d", t.ShardsCovered, t.ShardsTotal),
-			"floor", liveBuildFloor, "forge", forge,
+			"floor", liveBuildFloor, "min_floor", minLiveBuildFloor, "forge", forge,
 		}
 		if !t.Cutoff.IsZero() {
 			fields = append(fields, "cutoff", t.Cutoff.UTC().Format(time.RFC3339), "cutoff_age", start.Sub(t.Cutoff).Round(time.Second))
 		}
 		if floorViolated(start, t.Cutoff) {
 			logging.ErrorContext(ctx, "[diskwatch] Go cache trim reached inside the live-build floor; running builds may fail with \"could not import … no such file\"", append(fields, "floor_violated", true)...)
+			continue
+		}
+		if insideRestFloor(start, t.Cutoff) {
+			// forge's size rule, past the 2h floor toward its minimum: the
+			// disk was filling faster than the at-rest floor could free.
+			logging.WarnContext(ctx, "[diskwatch] Go cache trim reached past the 2h floor toward the minimum floor to keep the cache within budget; slow the fill or raise go_cache_gib", append(fields, "inside_rest_floor", true)...)
 			continue
 		}
 		if t.Finished {

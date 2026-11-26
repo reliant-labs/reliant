@@ -71,7 +71,6 @@ var userScopedReads = map[string]string{
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
-	"ListUnlaunchedTriggerEvents": readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
 	"ListAttentionIncidents":       readCallersFilter,
@@ -83,7 +82,6 @@ var userScopedReads = map[string]string{
 	"FiringsSinceLastSuccess":   readParentAuthorized,
 	"GetPresetBySlugAndProject": readParentAuthorized,
 	"ListPresetsByTag":          readParentAuthorized,
-	"ListTriggerRegistrations":  readParentAuthorized,
 	"ListUserPresetsByProject":  readParentAuthorized,
 	"ListWorktrees":             readParentAuthorized,
 	// The caller's own connection, metadata only (the ciphertext is internal/credentials/connectionvault's
@@ -106,10 +104,7 @@ var userScopedReads = map[string]string{
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 
-	"ListCapacityWakeTargets":    readBackground,
-	"ListChatsPausedForMachine":  readBackground,
-	"ListChatsQueuedForMachine":  readBackground,
-	"ListChatsWaitingForMachine": readBackground,
+	"ListCapacityWakeTargets": readBackground,
 }
 
 var (

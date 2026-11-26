@@ -8,7 +8,7 @@
  * event of JSON per ReplayEvent (uncompressed; rumApi decodes either).
  *
  * A relative window (the generated reads' "the last hour") is resolved against
- * `now`, the pack's clock by default, and the list answers the absolute range
+ * `clock`, the pack's by default, and the list answers the absolute range
  * it read (effective_time_range), which a client sends back to page it.
  */
 
@@ -21,7 +21,7 @@ import type { RumScope, SessionSummary, TimelineKind } from "@/services/controlP
 import { createShopApi } from "../model/shopApi";
 import { demoNow } from "../shopStory";
 import { completed } from "./defaults";
-import { ts, windowOf, int64 } from "./wire";
+import { ts, windowOf, int64, type PackClock } from "./wire";
 
 const WIRE_KIND: Record<TimelineKind, WireKind> = {
   navigation: WireKind.NAVIGATION,
@@ -47,10 +47,10 @@ const wireSummary = (s: SessionSummary) => ({
 
 const utf8 = new TextEncoder();
 
-export function rumHandlers(fixtures: ObservabilityApi = createShopApi(), { now = demoNow }: { now?: () => number } = {}): MockHandlers {
+export function rumHandlers(fixtures: ObservabilityApi = createShopApi(), { clock = demoNow }: { clock?: PackClock } = {}): MockHandlers {
   return completed(RumService, mockService(RumService, {
     listSessions: async (req) => {
-      const window = windowOf(req.scope?.timeRange, now()) ?? { startMs: 0, endMs: 0 };
+      const window = windowOf(req.scope?.timeRange, clock) ?? { startMs: 0, endMs: 0 };
       const res = await fixtures.listSessions({
         ...modelScope(req.scope),
         window,

@@ -147,7 +147,7 @@ describe("the shop pack's RumService handler", () => {
     const now = Date.UTC(2026, 10, 10, 15, 0, 0);
     const windows: { startMs: number; endMs: number }[] = [];
     const api = createFixtureApi();
-    const handlers = rumHandlers({ ...api, listSessions: async (req) => (windows.push(req.window), { sessions: [], nextPageToken: "" }) }, { now: () => now });
+    const handlers = rumHandlers({ ...api, listSessions: async (req) => (windows.push(req.window), { sessions: [], nextPageToken: "" }) }, { clock: () => now });
     const request = create(ListSessionsRequestSchema, { scope: { orgId: "org", envIds: [], services: [], timeRange: wireTimeRange(relativeWindow(6 * HOUR)) } });
     const res = (await handlers[`${RumService.typeName}/ListSessions`]!(request)) as { effectiveTimeRange?: { start?: { seconds: bigint }; end?: { seconds: bigint } } };
     expect(windows).toEqual([{ startMs: now - 6 * HOUR, endMs: now }]);

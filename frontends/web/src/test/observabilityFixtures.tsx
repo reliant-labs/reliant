@@ -10,8 +10,9 @@
  * The wire half is the shop fixture pack's handlers (fixtures/shop/handlers/
  * observability.ts) over the fake: each decodes the request into the model,
  * asks the fake, and encodes its answer, so the hook's real request builder
- * and `select` mapper run. A relative window resolves against the wall clock
- * (`Date.now()`), as the fakes' data is laid out around it.
+ * and `select` mapper run. A relative window resolves against one fixed
+ * instant per scope: the clock when the scope is made (a test that fakes
+ * Date.now before rendering gets its own instant), never re-read per call.
  *
  * The test's QueryClient becomes a TransportScope bound to that transport. A
  * QueryClient binds one transport for good, so the transport reads the
@@ -26,29 +27,27 @@ import { useMemo, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Transport } from "@connectrpc/connect";
 
-import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 import { observabilityHandlers } from "@/fixtures/shop/handlers/observability";
+import type { PackClock } from "@/fixtures/shop/handlers/wire";
 import { transport as appTransport } from "@/lib/connect";
 import { createTransportScope, TransportScopeProvider, type TransportScope } from "@/lib/transportScope";
-import { mockTransport } from "@/lib/test-utils";
+import { mockTransport, type MockHandlers } from "@/lib/test-utils";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
-/** The services whose reads run on generated hooks or a scope's client: their handlers answer from the fake. */
-const WIRE_SERVICES = new Set([ObservabilityService.typeName, RumService.typeName]);
-
 /**
- * The fake's ObservabilityService reads on the wire; a relative window
- * resolves against `now`. Every other rpc (a project list, a deploy read, the
- * other observability services, still read through the context) goes to the
+ * The fake on the wire: every procedure the observability handlers serve
+ * (ObservabilityService's, and the other observability services' the shop
+ * pack answers: alerting, delivery, issues, rum, dashboards, user, billing)
+ * goes to them, over the fake; a relative window resolves against `clock`.
+ * A procedure they do not serve (a project list, a deploy read) goes to the
  * app's transport, as it would outside this scope, so a test's
- * setTransport(...) still answers it.
+ * setTransport(...) answers it.
  */
-export function observabilityFixtureTransport(api: () => ObservabilityApi, now: () => number = Date.now): Transport {
+export function observabilityFixtureTransport(api: () => ObservabilityApi, clock: PackClock): Transport {
   const pick = (method: { parent: { typeName: string }; name: string }): Transport => {
-    if (!WIRE_SERVICES.has(method.parent.typeName)) return appTransport;
-    const handlers = observabilityHandlers(api(), { now }) as Parameters<typeof mockTransport>[0];
-    return handlers && `${method.parent.typeName}/${method.name}` in handlers ? mockTransport(handlers) : appTransport;
+    // Typed per rpc; the mock transport hands each the decoded request message of its own rpc.
+    const handlers = observabilityHandlers(api(), { clock }) as unknown as MockHandlers;
+    return `${method.parent.typeName}/${method.name}` in handlers ? mockTransport(handlers) : appTransport;
   };
   return {
     unary: (method, ...rest) => pick(method).unary(method, ...rest),
@@ -62,7 +61,9 @@ function fixtureScope(client: QueryClient, api: ObservabilityApi): TransportScop
   let entry = scopes.get(client);
   if (!entry) {
     const holder = { api } as { scope: TransportScope; api: ObservabilityApi };
-    holder.scope = createTransportScope({ id: "observability-fixtures", transport: observabilityFixtureTransport(() => holder.api), queryClient: client });
+    // One instant for the scope's life: the fakes lay their data out around the clock the test runs at.
+    const at = Date.now();
+    holder.scope = createTransportScope({ id: "observability-fixtures", transport: observabilityFixtureTransport(() => holder.api, at), queryClient: client });
     scopes.set(client, holder);
     entry = holder;
   }

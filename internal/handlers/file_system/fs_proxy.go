@@ -264,7 +264,7 @@ func (s *Service) resolveForView(ctx context.Context, userID string, scope works
 		HomeDir string `json:"home_dir"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.target, "skills.get_home_dir", map[string]any{}, &resp, 10000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "skills.get_home_dir", map[string]any{}, &resp, homeDirTimeoutMs); err != nil {
 		return "", err
 	}
 	if resp.HomeDir == "" || !ospath.IsAbs(resp.HomeDir) {
@@ -295,10 +295,19 @@ func homeRelative(p string) (string, bool) {
 // viewer_root and would return ~/.ssh/id_rsa like any other file, so a reply
 // without the mark is never shown: FailedPrecondition, naming the fix.
 func requireViewerGuard(guarded bool) error {
+	return requireViewerGuardTo(guarded, viewFilesAction)
+}
+
+// viewFilesAction is what an outdated daemon stops the viewer rpcs doing.
+const viewFilesAction = "view files"
+
+// requireViewerGuardTo is requireViewerGuard for a read that serves something
+// other than the viewer, named by action ("download files").
+func requireViewerGuardTo(guarded bool, action string) error {
 	if guarded {
 		return nil
 	}
-	return svcerr.FailedPrecondition("this machine's daemon is outdated: update it to view files")
+	return svcerr.FailedPrecondition("this machine's daemon is outdated: update it to " + action)
 }
 
 // validateWorkspacePath is the single place this package applies the shared
@@ -434,9 +443,15 @@ type fsProxyPreviewInfo struct {
 // previewInfo asks the machine holding resolvedPath to stat and classify it.
 // requestedPath is the client's path, used only in the log line.
 func (s *Service) previewInfo(ctx context.Context, userID string, scope workspaceScope, resolvedPath, requestedPath string) (*fsProxyPreviewInfo, error) {
+	return s.previewInfoTo(ctx, userID, scope, resolvedPath, requestedPath, viewFilesAction)
+}
+
+// previewInfoTo is previewInfo for a read that serves action (see
+// requireViewerGuardTo).
+func (s *Service) previewInfoTo(ctx context.Context, userID string, scope workspaceScope, resolvedPath, requestedPath, action string) (*fsProxyPreviewInfo, error) {
 	var info fsProxyPreviewInfo
 	cmdReq := map[string]any{"path": resolvedPath, "viewer_root": scope.basePath}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.preview_info", cmdReq, &info, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.preview_info", cmdReq, &info, previewInfoTimeoutMs); err != nil {
 		// Requesting preview info for a directory is a client-input condition
 		// (e.g. the UI asking for a tree folder), not a server failure. Return
 		// a typed FailedPrecondition so it stays out of ERROR logs (and issues).
@@ -448,7 +463,7 @@ func (s *Service) previewInfo(ctx context.Context, userID string, scope workspac
 		}
 		return nil, err
 	}
-	if err := requireViewerGuard(info.ViewerGuarded); err != nil {
+	if err := requireViewerGuardTo(info.ViewerGuarded, action); err != nil {
 		return nil, err
 	}
 	return &info, nil
