@@ -165,7 +165,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 		retryable   []error
 	)
 	for _, trigger := range candidates {
-		if trigger.Kind != runevents.TriggerKind || !trigger.Enabled || trigger.UserID != ev.UserID {
+		if !candidate(trigger, ev) {
 			continue
 		}
 		// A retry of a dispatch that already launched this firing resumes
@@ -251,7 +251,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 // event for it on every run event, so the owner sees why it never fires.
 func MayReach(candidates []*core.Trigger, ev *core.RunEvent) bool {
 	for _, trigger := range candidates {
-		if trigger.Kind != runevents.TriggerKind || !trigger.Enabled || trigger.UserID != ev.UserID {
+		if !candidate(trigger, ev) {
 			continue
 		}
 		spec, err := SpecOf(trigger)
@@ -260,6 +260,12 @@ func MayReach(candidates []*core.Trigger, ev *core.RunEvent) bool {
 		}
 	}
 	return false
+}
+
+// candidate reports whether trigger is one Dispatch matches ev against: an
+// enabled workflow_event trigger of ev's own owner.
+func candidate(trigger *core.Trigger, ev *core.RunEvent) bool {
+	return trigger.Kind == runevents.TriggerKind && trigger.Enabled && trigger.UserID == ev.UserID
 }
 
 // traced runs one trigger's firing for ev as a trigger.fire span
