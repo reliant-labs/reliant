@@ -62,11 +62,6 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces?: string[]; except?
     // before that redirect lands is touched, one run in a few.
     maybe: ['shell-daemonless-home (desktop)'],
   },
-  // reliant#3458.
-  'reliant.v1.SettingsService/BatchUpsertSettings': {
-    why: 'ColorSchemeSelector saves the colour scheme every time the appearance page opens (settingsSync.setSetting, not setSettingIfChanged; reliant#3458)',
-    surfaces: ['settings-appearance'],
-  },
   'reliant.v1.ChatService/DismissChat': {
     why: 'opening a chat from the sidebar dismisses its unread state',
     surfaces: ['chat-short'],

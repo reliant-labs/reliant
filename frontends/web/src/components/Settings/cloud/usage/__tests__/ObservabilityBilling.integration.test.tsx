@@ -2,24 +2,29 @@ import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { UsageView } from "@/components/Forge/Observability/UsageView";
-import { ObservabilityBillingApiContext } from "@/hooks/observability-billing-queries";
 import { GetObservabilityUsageResponseSchema, GetObservabilityLimitsResponseSchema, GetObservabilityStorageResponseSchema, ListObservabilityUsageResponseSchema } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
 
 const legacy = vi.hoisted(() => vi.fn(() => ({ isLoading: false, data: null, error: new Error("Legacy read failed"), refetch: vi.fn() })));
 vi.mock("@/hooks/observability-queries", () => ({ useObservabilityUsage: legacy }));
-vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => ({ listOrgLimitChanges: async () => ({ changes: [], nextPageToken: "" }) }) }));
-// The collection policy reads DeployService.ListEnvironments through its generated hook, on the app transport.
-beforeEach(() => setTransport(mockTransport({ "DeployService.ListEnvironments": { response: { environments: [] } } })));
+// Every read runs on its generated hook, on the app transport: the billing reads, the limit
+// history (BillingService.ListOrgLimitChanges) and the collection policy (DeployService.ListEnvironments).
 afterEach(() => setTransport(null));
 function renderUsage(failure?: Code, exempt = false) {
-  const get = vi.fn(async () => { if (failure) throw new ConnectError("billing read", failure); return create(GetObservabilityUsageResponseSchema, { usedBytes: 20n * 1073741824n, allowanceBytes: 10n * 1073741824n, chargedCents: 250n, unchargedBytes: 1073741824n, spendCapCents: 5000n, rateCentsPerGb: "25", state: 1, exempt }); });
-  const api = { getObservabilityUsage: get, getObservabilityLimits: async () => create(GetObservabilityLimitsResponseSchema), getObservabilityStorage: async () => create(GetObservabilityStorageResponseSchema), listObservabilityUsage: async () => create(ListObservabilityUsageResponseSchema), updateObservabilityLimits: vi.fn() };
+  const get = vi.fn(async (_req: unknown) => { if (failure) throw new ConnectError("billing read", failure); return create(GetObservabilityUsageResponseSchema, { usedBytes: 20n * 1073741824n, allowanceBytes: 10n * 1073741824n, chargedCents: 250n, unchargedBytes: 1073741824n, spendCapCents: 5000n, rateCentsPerGb: "25", state: 1, exempt }); });
+  setTransport(mockTransport({
+    "ObservabilityBillingService.GetObservabilityUsage": get,
+    "ObservabilityBillingService.GetObservabilityLimits": async () => create(GetObservabilityLimitsResponseSchema),
+    "ObservabilityBillingService.GetObservabilityStorage": async () => create(GetObservabilityStorageResponseSchema),
+    "ObservabilityBillingService.ListObservabilityUsage": async () => create(ListObservabilityUsageResponseSchema),
+    "BillingService.ListOrgLimitChanges": { response: { changes: [], nextPageToken: "" } },
+    "DeployService.ListEnvironments": { response: { environments: [] } },
+  }));
   const cache = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  render(<QueryClientProvider client={cache}><ObservabilityBillingApiContext.Provider value={api}><UsageView orgId="org-a" /></ObservabilityBillingApiContext.Provider></QueryClientProvider>);
+  render(<QueryClientProvider client={cache}><UsageView orgId="org-a" /></QueryClientProvider>);
   return get;
 }
 describe("shared billing view", () => {
@@ -28,7 +33,7 @@ describe("shared billing view", () => {
     expect(await screen.findByTestId("obs-billing-charged")).toHaveTextContent("$2.50 of $50.00");
     expect(screen.getByTestId("obs-billing-uncharged")).toHaveTextContent("1 GB");
     expect(await screen.findByText(/No stored-now snapshot available/)).toBeInTheDocument();
-    expect(get).toHaveBeenCalledWith({ orgId: "org-a" });
+    expect(get).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-a" }));
     expect(legacy).not.toHaveBeenCalled();
     expect(screen.queryByTestId("obs-billing-estimated")).not.toBeInTheDocument();
   });

@@ -517,8 +517,12 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 				// Build child execution context
 				var childExecCtx *ExecutionContext
 				if iterExecContext != nil {
-					childExecCtx = iterExecContext.ForChild(
-						step.Node.GetId(),
+					childExecCtx = workflowNodeContext(
+						gCtx,
+						e.childTracker,
+						iterExecContext,
+						step.Node,
+						joinNodePath(e.nodePath(), step.Node.GetId()),
 						model.NodeThreadMode(evalResult),
 						contract.WorkflowIdentity,
 						model.NodeThreadMemo(evalResult),

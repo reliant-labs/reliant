@@ -30,7 +30,7 @@ func terminatedRunClient(reason string) *mockReconcilerTemporalClient {
 
 func TestReconciler_RunTerminatedByOthers_ContinuesTheUnansweredMessageOnce(t *testing.T) {
 	repo := newTerminationRepo(terminatedChatWorkflow())
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: terminatedRunClient("terminated by operator: replay wedge"), Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: terminatedRunClient("terminated by operator: replay wedge"), Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 	delivery := &fakeQueuedDelivery{start: true}
 	reconciler.SetQueuedDelivery(delivery)
 
@@ -64,7 +64,7 @@ func TestReconciler_RunTerminatedByOthers_ContinuesTheUnansweredMessageOnce(t *t
 // happened and how to continue, as before.
 func TestReconciler_RunTerminatedWithNothingOwed_AsksForTheNextMessage(t *testing.T) {
 	repo := newTerminationRepo(terminatedChatWorkflow())
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: terminatedRunClient("terminated"), Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: terminatedRunClient("terminated"), Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 	delivery := &fakeQueuedDelivery{start: false}
 	reconciler.SetQueuedDelivery(delivery)
 
@@ -84,7 +84,7 @@ func TestReconciler_PausedRunEndedSilently_IsNotContinued(t *testing.T) {
 	wf := terminatedChatWorkflow()
 	wf.Status = db.Paused()
 	repo := newTerminationRepo(wf)
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: terminatedRunClient("terminated"), Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: terminatedRunClient("terminated"), Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 	delivery := &fakeQueuedDelivery{start: true}
 	reconciler.SetQueuedDelivery(delivery)
 
@@ -102,7 +102,7 @@ func TestReconciler_PausedRunEndedSilently_IsNotContinued(t *testing.T) {
 // pass's 30s budget: a run started on an expired context is no run at all.
 func TestReconciler_ContinueAfterEnd_HasItsOwnDeadline(t *testing.T) {
 	repo := newTerminationRepo(terminatedChatWorkflow())
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: terminatedRunClient("terminated"), Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: terminatedRunClient("terminated"), Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 	delivery := &fakeQueuedDelivery{start: true}
 	reconciler.SetQueuedDelivery(delivery)
 
@@ -123,7 +123,7 @@ func TestReconciler_AutoContinue_IsBoundedPerChat(t *testing.T) {
 	delivery := &fakeQueuedDelivery{start: true}
 	tempClient := terminatedRunClient("terminated")
 	repo := newTerminationRepo()
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Questions: newTerminationRepo(), Temporal: tempClient, Config: DefaultConfig(), Workflows: repo, Daemons: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Questions: newTerminationRepo(), Temporal: tempClient, Config: DefaultConfig(), Workflows: repo, Daemons: repo})
 	reconciler.SetQueuedDelivery(delivery)
 
 	var summaries []any

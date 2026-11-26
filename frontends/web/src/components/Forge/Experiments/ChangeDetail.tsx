@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * One change: what the release declares for it, who gets it, the preview
+ * One change: what the release declares for it, whether its revision
+ * reached the environment's apps (ChangeDelivery), who gets it, the preview
  * list, its results and its history, and the kill switch.
  *
  * ── EVERY WRITE, ONE PATH (`write`) ─────────────────────────────────────────
@@ -42,6 +43,7 @@ import { FIELD } from "../controlStyles";
 import { BetaTag } from "./BetaTag";
 import { ChangeHistory } from "./ChangeHistory";
 import { ChangeResults } from "./ChangeResults";
+import { ChangeDelivery } from "./ChangeDelivery";
 import { ageOf, changedFields, deliveryPhrase, MODE_LABELS, type WhoGetsIt as Who } from "./changeModel";
 import type { NewChangeEnv } from "./NewChangeDialog";
 import { PreviewEditor } from "./PreviewEditor";
@@ -223,6 +225,7 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
         </Card>
       )}
 
+      <ChangeDelivery change={change} envName={envName} />
       <WhoGetsIt change={change} initialWho={initialWho} busy={busy} onWrite={onWrite} />
       <PreviewEditor change={change} busy={busy} onWrite={onWrite} />
       <ChangeResults change={change} />

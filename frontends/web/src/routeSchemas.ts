@@ -657,6 +657,9 @@ export const forgeResolveSearchSchema = z.object({
 export const CONSOLE_CHECKOUT_PARAM = "project";
 export const forgeConsoleCheckoutSearchSchema = z.object({
   project: z.union([z.string(), z.number().transform(String)]).optional().catch(undefined),
+  // Several projects in the shell: the in-page project filter every page across them shares
+  // (Console/severalProjects.tsx useOnlyFilter), on every console page.
+  only: z.string().optional().catch(undefined),
 });
 
 /**

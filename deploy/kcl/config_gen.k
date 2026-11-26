@@ -1595,8 +1595,15 @@ schema ServerProcessConfigClientVersions:
     # Refuse reliant.v1 calls (SystemService exempt) that carry no Reliant-Client header: HTTP 404 for browser-origin calls, FailedPrecondition upgrade_required for the rest
     refuse_unidentified: bool = False
 
+# forge:section schema ServerProcessConfigPipeline
+# forge:hash=d76a1d86774fa5003dd935898d975f7214d5acbf2b9b4ae92f92172161880e83
+# ServerProcessConfigPipeline is the pipeline block (PipelineConfig) — author its values in config.k as `pipeline.<field> = ...`.
+schema ServerProcessConfigPipeline:
+    # Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them
+    enabled: bool = False
+
 # forge:section schema ServerProcessConfig
-# forge:hash=614c18572d2f924b654cfd1351804396d241aae091a9e21c4999b33cc1356746
+# forge:hash=2a85aadde860e7c38ce1de949ab1de6d1f2ad4d66d4118c2c17ed44b8f9ae1d1
 schema ServerProcessConfig:
     # Data directory for logs and certs
     data_dir: str = "./data"
@@ -1626,6 +1633,8 @@ schema ServerProcessConfig:
     org_policy_enforcement: ServerProcessConfigOrgPolicyEnforcement = ServerProcessConfigOrgPolicyEnforcement {}
     # client_versions config block (ClientVersionPolicy). Set its fields as `client_versions.<field> = ...`.
     client_versions: ServerProcessConfigClientVersions = ServerProcessConfigClientVersions {}
+    # pipeline config block (PipelineConfig). Set its fields as `pipeline.<field> = ...`.
+    pipeline: ServerProcessConfigPipeline = ServerProcessConfigPipeline {}
 
     check:
         data_dir != "", "data_dir = \"\" cannot reach the process: an empty DATA_DIR counts as unset, so it would load the default \"./data\" — set a value, or pass --data-dir= in the workload's args to make it empty"
@@ -1833,6 +1842,10 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         "RELIANT_CLIENT_VERSION_ENFORCE" = "true" if c.client_versions.enforce else "false"
         "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED" = "true" if c.client_versions.enforce_legacy_unidentified else "false"
         "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED" = "true" if c.client_versions.refuse_unidentified else "false"
+
+        # forge:section serverProcessConfigEnvMap values pipeline
+        # forge:hash=5c89bfa1b8721707c20667f38e4688778c8a40aff69dd3408ea896474ba96378
+        "RELIANT_PIPELINE_ENABLED" = "true" if c.pipeline.enabled else "false"
 
         # forge:section serverProcessConfigEnvMap values (end)
         # forge:hash=6e40ebe66a4bd1160f079d94eae59be0c27a98446b351e00c478d59941a3fc6d
@@ -2669,6 +2682,10 @@ ROOTS: {str: Root} = {
             "RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES",
             "RELIANT_ORGS_POLICY_ENFORCEMENT_MCP",
             "RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS",
+
+            # forge:section root worker env pipeline
+            # forge:hash=27b08e9cee28d1479b57db4d6024cdfbb3be3797490236cbe08a4927cea191bb
+            "RELIANT_PIPELINE_ENABLED",
 
             # forge:section root worker env (root) #3
             # forge:hash=70d220a87f5a1a77143da462766d214493a2c6a59bee71c9f8c96ba9896ae6b8
