@@ -251,6 +251,8 @@ Approval gates are deliberately different. `Gates.Pending` reports them, so your
 
 The firing is asynchronous. `Fire` returns once it is accepted, with a `FireWorkflowID` that identifies this firing, and no run exists yet. `Triggers.Events` lists a trigger's firings, newest first, and the one with your `FireWorkflowID` says what happened: it launched a run, was skipped, or failed.
 
+An automation that activates a declared webhook, integration or workflow-event trigger also takes inputs for this one firing and an idempotency key: `Fire(ctx, id, reliant.WithFireInputs(map[string]any{"action_id": id}), reliant.WithFireIdempotencyKey("approve-"+id))`. Each input must be one the workflow declares and the activation does not already set; the server refuses anything else with `ErrInvalidArgument`. A repeat of a key already used on that trigger starts nothing and returns the first call's `EventID` and `ChatID`, whatever inputs the repeat carries. A schedule trigger refuses both.
+
 ```go
 fired, err := c.Triggers.Fire(ctx, "nightly-report") // an id or a name
 if err != nil {

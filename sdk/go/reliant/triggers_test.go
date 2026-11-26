@@ -232,3 +232,83 @@ func TestFireThenFollowTheRunItLaunched(t *testing.T) {
 		t.Fatalf("result = %+v, err = %v", res, err)
 	}
 }
+
+func TestTriggersFireWithInputsAndIdempotencyKey(t *testing.T) {
+	var got *reliantv1.FireTriggerRequest
+	f := &fake{
+		getTrigger: func(*reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error) {
+			return &reliantv1.GetTriggerResponse{Trigger: &reliantv1.Trigger{Id: "t-1"}}, nil
+		},
+		fireTrigger: func(r *reliantv1.FireTriggerRequest) (*reliantv1.FireTriggerResponse, error) {
+			got = r
+			return &reliantv1.FireTriggerResponse{FireWorkflowId: "fire-1", EventId: "ev-1", ChatId: "chat-1"}, nil
+		},
+	}
+	c, _ := f.start(t)
+	res, err := c.Triggers.Fire(context.Background(), "t-1",
+		WithFireInputs(map[string]any{"action_id": "act-1", "count": 3, "tags": []any{"a"}}),
+		WithFireIdempotencyKey("approve-act-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.GetId() != "t-1" || got.GetIdempotencyKey() != "approve-act-1" {
+		t.Fatalf("request %v", got)
+	}
+	if got.GetInputs()["action_id"].GetStringValue() != "act-1" || got.GetInputs()["count"].GetNumberValue() != 3 ||
+		len(got.GetInputs()["tags"].GetListValue().GetValues()) != 1 {
+		t.Fatalf("inputs %v", got.GetInputs())
+	}
+	if res.EventID != "ev-1" || res.ChatID != "chat-1" || res.FireWorkflowID != "fire-1" || res.TriggerID != "t-1" {
+		t.Fatalf("result %+v", res)
+	}
+}
+
+// With no options the request is what it always was: no inputs, no key.
+func TestTriggersFireWithoutOptionsSendsNoInputsOrKey(t *testing.T) {
+	var got *reliantv1.FireTriggerRequest
+	f := &fake{
+		getTrigger: func(*reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error) {
+			return &reliantv1.GetTriggerResponse{Trigger: &reliantv1.Trigger{Id: "t-1"}}, nil
+		},
+		fireTrigger: func(r *reliantv1.FireTriggerRequest) (*reliantv1.FireTriggerResponse, error) {
+			got = r
+			return &reliantv1.FireTriggerResponse{FireWorkflowId: "fire-1"}, nil
+		},
+	}
+	c, _ := f.start(t)
+	res, err := c.Triggers.Fire(context.Background(), "t-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Inputs != nil || got.IdempotencyKey != nil {
+		t.Fatalf("request %v", got)
+	}
+	if res.EventID != "" || res.ChatID != "" {
+		t.Fatalf("result %+v", res)
+	}
+}
+
+func TestTriggersFireRefusesAValueThatIsNotJSONShaped(t *testing.T) {
+	f := &fake{}
+	c, _ := f.start(t)
+	_, err := c.Triggers.Fire(context.Background(), "t-1", WithFireInputs(map[string]any{"bad": make(chan int)}))
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestTriggersFireSurfacesAnUndeclaredInputRefusal(t *testing.T) {
+	f := &fake{
+		getTrigger: func(*reliantv1.GetTriggerRequest) (*reliantv1.GetTriggerResponse, error) {
+			return &reliantv1.GetTriggerResponse{Trigger: &reliantv1.Trigger{Id: "t-1"}}, nil
+		},
+		fireTrigger: func(*reliantv1.FireTriggerRequest) (*reliantv1.FireTriggerResponse, error) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("inputs: \"x\" is not an input of this workflow"))
+		},
+	}
+	c, _ := f.start(t)
+	_, err := c.Triggers.Fire(context.Background(), "t-1", WithFireInputs(map[string]any{"x": 1}))
+	if !errors.Is(err, ErrInvalidArgument) {
+		t.Fatalf("got %v", err)
+	}
+}
