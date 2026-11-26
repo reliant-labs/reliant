@@ -29,10 +29,13 @@ const GTM Feature = "gtm"
 type Gate interface {
 	// Allowed reports whether userID is a live member of orgID
 	// (authz.OrgMemberDenial is nil) AND orgID is entitled to f. Any error
-	// comes with false.
+	// comes with false. Callers should set a deadline on ctx; a check that
+	// runs out of time is "no".
 	Allowed(ctx context.Context, f Feature, userID, orgID string) (bool, error)
 	// AllowedForUser reports whether userID is a live member of SOME org
-	// entitled to f. Only for callers with no org (CatalogService.ListTools).
+	// entitled to f, by the same check as Allowed. Only for callers with no
+	// org (CatalogService.ListTools). Callers should set a deadline on ctx; a
+	// check that runs out of time is "no".
 	AllowedForUser(ctx context.Context, f Feature, userID string) (bool, error)
 }
 
