@@ -206,6 +206,13 @@ actions:
       type: object
       additionalProperties: false
       required: [subject]
+      anyOf:
+        - required: [text]
+          properties:
+            text: { minLength: 1 }
+        - required: [html]
+          properties:
+            html: { minLength: 1 }
       properties:
         to:
           type: array
