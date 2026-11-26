@@ -1057,6 +1057,7 @@ func (e *StepExecutor) startAction(
 
 	// Build structured input: pass the proto Node directly for proper protojson roundtrip
 	rtx := e.buildRuntimeContext(node)
+	rtx.ServerActionFrom = e.serverActionFrom(evalResult)
 	rtx.AssistantMessageID = preallocatedMessageID
 	rtx.CutOffMessageID = e.takeCutOffTurn(node.GetId())
 	rtx.SaveMessage = e.saveMessageRequest(node)
