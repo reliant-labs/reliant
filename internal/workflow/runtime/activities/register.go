@@ -317,6 +317,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewPreflightDaemonCheckActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(deps.Repo, workspaceRows, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewMachinePreflightActivity(deps.Repo, workspaceRows, deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Updates: chatRefetcher(updates), Runs: runRecords, Workflows: workflowRuns, Attention: attention, RunEvents: runEvents, Pauser: pauser}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: deps.Repo, Mailbox: mailboxStore.resolver}))
