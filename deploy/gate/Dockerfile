@@ -46,10 +46,17 @@
 # once with a stable tag that the daemon config names:
 #   tag=$(date -u +%Y%m%d)-$(git rev-parse --short HEAD)
 #   docker build -t reliant-gate:$tag -t reliant-gate:current deploy/gate
-# Smoke test (as the gate runs it):
+# Smoke test, run the way a gate runs it: a read-only root and a fresh volume
+# at /gate. Without that volume, /gate is part of the read-only root, and kcl,
+# go and pnpm cannot write their caches.
+#   docker volume create gate-smoke
 #   docker run --rm --read-only --tmpfs /tmp --cap-drop ALL \
-#     --security-opt no-new-privileges reliant-gate:current \
-#     sh -c 'go version && task --version && pnpm --version'
+#     --security-opt no-new-privileges --mount source=gate-smoke,target=/gate \
+#     reliant-gate:current sh -c 'go version && task --version && pnpm --version'
+#   docker volume rm gate-smoke
+#
+# The runc backend copies the tree in with `docker cp -a`, so it is owned by
+# the gate user, not by the uid that fetched it on the host.
 #
 # Known gaps (pipeline redesign §3.3): there is no docker engine here, so a
 # test that needs one skips with "skip: docker unavailable (gate)", or fails
@@ -142,7 +149,11 @@ RUN useradd --uid "${GATE_UID}" --user-group --home-dir /gate/home --no-create-h
   && for d in /opt/ms-playwright/*/; do ln -s "$d" "/gate/cache/ms-playwright/$(basename "$d")"; done \
   && chown -R gate:gate /gate
 
+# GOTOOLCHAIN=auto, where the golang image sets local: if a repo's go.mod
+# moves its toolchain past this image's go, the gate downloads the new one
+# (checked against the checksum database) into GOMODCACHE, and does not fail.
 ENV HOME=/gate/home \
+    GOTOOLCHAIN=auto \
     GOCACHE=/gate/cache/go-build \
     GOMODCACHE=/gate/cache/go-mod \
     GOPATH=/gate/cache/gopath \

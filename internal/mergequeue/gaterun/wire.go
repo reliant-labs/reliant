@@ -125,6 +125,16 @@ type StartRequest struct {
 	// AllowNotIsolated lets the member fall back to runc. The Dispatcher
 	// sets it only for a shadow gate of a repository in shadow mode.
 	AllowNotIsolated bool `json:"allow_not_isolated,omitempty"`
+	// WarmCache gives the gate the repository's warm cache volume
+	// (Spec.CacheVolume). Off by default. It takes effect only together with
+	// AllowNotIsolated, and only when the gate runs on the not-isolated runc
+	// backend. The Dispatcher sets it only for a repository that set
+	// gate.allow_unisolated in its pipeline.yaml. A shared cache lets one
+	// gate's code poison a later gate's build, and the opt-in is the
+	// repository accepting that until sysbox gate machines exist. A dedicated
+	// sysbox gate machine, with a nested engine and isolation per gate, closes
+	// this gap and the no-docker gap together.
+	WarmCache bool `json:"warm_cache,omitempty"`
 	// MaxConcurrent is how many gates the member runs at once (the pool's
 	// max_runs_per_member); 0 is 1.
 	MaxConcurrent int `json:"max_concurrent,omitempty"`
@@ -222,11 +232,47 @@ const (
 	EnvVulnDB   = "RELIANT_GATE_VULNDB"
 )
 
+// EnvDockerSkips is the skip log of the stage that is running. The stage
+// script sets it to a file named for the stage and the run. A test that
+// cannot get the docker engine it needs appends one line to the file and
+// skips with [DockerSkipMessage]. The count of those lines becomes
+// StageResult.SkippedDockerTests, so a skipped container test is counted in
+// the verdict and never passes silently. The path holds the run id, so Go's
+// test cache never replays a skip that it did not record (the cache keys on
+// the values of the variables a test reads).
+//
+// Gates have no docker engine: runc gates run with no nested engine, and
+// the GitHub merge queue on cicd has none either (its runner users are not
+// in the docker group). A dedicated sysbox gate machine, with a nested engine
+// per gate, closes this gap.
+const EnvDockerSkips = "RELIANT_GATE_DOCKER_SKIPS"
+
+// DockerSkipMessage is how a container test reports a skip in a gate.
+const DockerSkipMessage = "skip: docker unavailable (gate)"
+
 // reservedEnv are the names gate.env may not set.
 var reservedEnv = map[string]bool{
 	"HOME": true, "TMPDIR": true, "DOCKER_HOST": true,
 	"RELIANT_GATE": true, "RELIANT_RUN_ID": true, EnvGateRoot: true, EnvVulnDB: true,
-	"RELIANT_GATE_STAGE": true, "RELIANT_GATE_ARTIFACTS": true,
+	"RELIANT_GATE_STAGE": true, "RELIANT_GATE_ARTIFACTS": true, EnvDockerSkips: true,
+}
+
+// CacheVolumeName is repo's warm cache volume: "reliant-gate-cache-" and
+// repo ("owner/name") lowercased with '/' as '-'. repo must be a valid
+// StartRequest repo.
+func CacheVolumeName(repo string) string {
+	b := make([]byte, 0, len(repo))
+	for _, c := range []byte(repo) {
+		switch {
+		case c >= 'A' && c <= 'Z':
+			b = append(b, c+'a'-'A')
+		case c == '/':
+			b = append(b, '-')
+		default:
+			b = append(b, c)
+		}
+	}
+	return "reliant-gate-cache-" + string(b)
 }
 
 var envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)

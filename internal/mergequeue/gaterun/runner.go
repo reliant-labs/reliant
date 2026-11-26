@@ -148,7 +148,7 @@ func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResul
 	limits.Wall = req.Timeout()
 	res, err := b.Run(ctx, Spec{
 		RunID: req.GateID, Image: r.Image, Command: []string{"/bin/sh", "-c", Script(plan)},
-		SourceDir: src, Env: env, VulnDBDir: r.VulnDBDir, Limits: limits,
+		SourceDir: src, Env: env, VulnDBDir: r.VulnDBDir, CacheVolume: cacheVolume(b, req), Limits: limits,
 		Stdout: r.Log, Stderr: r.Log,
 	})
 	if err != nil {
@@ -166,6 +166,17 @@ func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResul
 		return unproven(ReasonResultInvalid, err)
 	}
 	return out(assemble(req.GateID, b.Isolation(), plan, res, o))
+}
+
+// cacheVolume is the warm cache volume req's gate gets in b: the
+// repository's, only when the request asks for it and allows a not-isolated
+// gate, and only when b is not isolated. Otherwise it is "" (see
+// StartRequest.WarmCache).
+func cacheVolume(b Backend, req StartRequest) string {
+	if !req.WarmCache || !req.AllowNotIsolated || b.Isolation().Isolated() {
+		return ""
+	}
+	return CacheVolumeName(req.Repo)
 }
 
 // Jobs is a daemon's gates by id: CommandStart starts one in the background

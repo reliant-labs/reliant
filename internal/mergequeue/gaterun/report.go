@@ -137,6 +137,8 @@ type resultDoc struct {
 		ExitCode int              `json:"exit_code"`
 		Seconds  int64            `json:"seconds"`
 		Note     string           `json:"note"`
+		// DockerSkips is the line count of the stage's EnvDockerSkips log.
+		DockerSkips int `json:"docker_skips"`
 	} `json:"stages"`
 }
 
@@ -190,6 +192,12 @@ func parseStages(plan []PlanStage, b []byte) ([]StageResult, int, error) {
 			r.Summary = ""
 			if s.Note == "forge_vuln_gate_missing" {
 				r.Summary = "forge vuln gate is not in the gate image"
+			}
+			// A count from inside the boundary is data: it can only add a
+			// note, never change a verdict.
+			r.SkippedDockerTests = max(s.DockerSkips, 0)
+			if r.SkippedDockerTests > 0 && r.Summary == "" {
+				r.Summary = fmt.Sprintf("%d container test(s) skipped: docker unavailable (gate)", r.SkippedDockerTests)
 			}
 		}
 		if s.State == StageOff || s.State == StageUnavailable || s.State == StageSkipped {
@@ -345,6 +353,9 @@ func assemble(gateID string, iso Isolation, plan []PlanStage, res Result, o outp
 	}
 	g.Class = stagesClass(stages)
 	g.Stages = stageMap(stages)
+	for _, st := range stages {
+		g.SkippedDockerTests += st.SkippedDockerTests
+	}
 	for _, st := range stages {
 		if st.Verdict == StageFail || st.Verdict == StageUnproven {
 			g.ReasonCode = ReasonStage

@@ -27,14 +27,15 @@ out="$root/out"
 art="$root/artifacts"
 logs="$root/logs"
 scan="$root/scan"
-mkdir -p "$out/logs" "$out/scan" "$logs" "$scan" "$art" "$HOME" "$TMPDIR" || exit 2
+skips="$root/skips"
+mkdir -p "$out/logs" "$out/scan" "$logs" "$scan" "$skips" "$art" "$HOME" "$TMPDIR" || exit 2
 export RELIANT_GATE_ARTIFACTS="$art"
 stages=""
 stop=0
 overall=0
 emit() {
 	if [ -n "$stages" ]; then stages="$stages,"; fi
-	stages="$stages{\"name\":\"$1\",\"state\":\"$2\",\"exit_code\":$3,\"seconds\":$4,\"note\":\"$5\"}"
+	stages="$stages{\"name\":\"$1\",\"state\":\"$2\",\"exit_code\":$3,\"seconds\":$4,\"note\":\"$5\",\"docker_skips\":${6:-0}}"
 }
 judge() {
 	t1=$(date +%s)
@@ -43,16 +44,21 @@ judge() {
 	2) st=unproven; stop=1; overall=2 ;;
 	*) st=fail; stop=1; overall=1 ;;
 	esac
-	emit "$1" "$st" "$2" "$((t1 - $3))" "$4"
+	emit "$1" "$st" "$2" "$((t1 - $3))" "$4" "${5:-0}"
 }
 run_cmd() {
 	if [ "$stop" = 1 ]; then emit "$1" skipped -1 0 ""; return 0; fi
 	echo "reliant-gate: stage $1"
 	t0=$(date +%s)
-	(cd "$root/src" && RELIANT_GATE_STAGE="$1" exec /bin/sh -c "$2") >"$logs/$1.log" 2>&1 </dev/null
+	skiplog="$skips/$1.${RELIANT_RUN_ID:-run}"
+	rm -f "$skiplog"
+	(cd "$root/src" && RELIANT_GATE_STAGE="$1" RELIANT_GATE_DOCKER_SKIPS="$skiplog" exec /bin/sh -c "$2") >"$logs/$1.log" 2>&1 </dev/null
 	code=$?
 	tail -c LOGTAIL "$logs/$1.log" >"$out/logs/$1.log" 2>/dev/null
-	judge "$1" "$code" "$t0" ""
+	nskip=$(grep -c '' "$skiplog" 2>/dev/null) || nskip=0
+	case "$nskip" in ''|*[!0-9]*) nskip=0 ;; esac
+	if [ "$nskip" -gt 0 ]; then echo "reliant-gate: stage $1: $nskip container test(s) skipped: docker unavailable (gate)"; fi
+	judge "$1" "$code" "$t0" "" "$nskip"
 }
 run_scan() {
 	if [ "$stop" = 1 ]; then emit sbom_scan skipped -1 0 ""; return 0; fi

@@ -24,6 +24,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/gatetest"
 )
 
 // The conformance table is what every Backend must pass on a machine that can
@@ -638,7 +640,7 @@ func TestSysboxConformance(t *testing.T) {
 	b := NewSysbox(SysboxConfig{ProbeImage: probe, DiskSlotsDir: os.Getenv("RELIANT_GATE_TEST_DISK_SLOTS")})
 	ctx := context.Background()
 	if a := b.Detect(ctx); !a.Available {
-		t.Skipf("sysbox backend unavailable on this machine: %s", a.Reason)
+		gatetest.DockerUnavailable(t, "sysbox backend unavailable on this machine: %s", a.Reason)
 	}
 	r, err := b.Preflight(ctx)
 	if err != nil {
@@ -718,7 +720,7 @@ func (l leakyBackend) Run(ctx context.Context, spec Spec) (Result, error) {
 // ip and the docker CLI.
 func TestDenialCasesCatchALeakyBoundary(t *testing.T) {
 	if err := exec.Command("docker", "version").Run(); err != nil {
-		t.Skipf("no container engine here: %v", err)
+		gatetest.DockerUnavailable(t, "no container engine here: %v", err)
 	}
 	image := os.Getenv("RELIANT_GATE_TEST_LEAKY_IMAGE")
 	if image == "" {
