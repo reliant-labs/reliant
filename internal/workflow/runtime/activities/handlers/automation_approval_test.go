@@ -26,3 +26,16 @@ func TestAutomationApprovalRefusalNamesTheReason(t *testing.T) {
 	require.Equal(t, "Activation could not be validated for approval: the calling chat could not be resolved. Nothing changed.", out.Refusal)
 	require.NotContains(t, out.Refusal, "secret-value")
 }
+
+// A send_gtm_email refusal names the email send, never the email.
+func TestAutomationApprovalRefusalNamesTheGtmEmailSend(t *testing.T) {
+	a := NewAutomationApprovalActivity(tools.NewToolsFactory(nil))
+	out, err := a.Execute(context.Background(), types.AutomationApprovalInput{
+		ChatID: "chat", Thread: "thread", ToolCallID: "call",
+		ToolName:  toolSendGtmEmail,
+		ToolInput: `{"item_id":"item-1","expected_revision":3}`,
+	})
+	require.NoError(t, err)
+	require.Empty(t, out.Hash)
+	require.Equal(t, "GTM email send could not be validated for approval: this tool does not support activation approval. Nothing changed.", out.Refusal)
+}
