@@ -352,6 +352,21 @@ message DaemonConfig {
     flag: "auto-update"
     description: "Install new signed releases of reliant at quiet moments, restarting in place (a self-owned install only; off by default)"
   }];
+  // The image a merge-queue gate runs in on this machine
+  // (internal/mergequeue/gaterun): the repository's toolchain, plus forge for
+  // the sbom_scan stage. Empty: this machine refuses every gate. Only a
+  // machine in a gate pool (labelled pool=gate) is ever sent one.
+  string gate_image = 33 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_GATE_IMAGE"
+    description: "Image merge-queue gates run in on this machine (empty: refuse gates)"
+  }];
+  // The grype database directory (forge's layout, `forge vuln db pull`)
+  // mounted read-only into each gate for its sbom_scan stage. Empty: no
+  // database, so a scan is unscanned and the gate unproven.
+  string gate_vuln_db_dir = 34 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_GATE_VULN_DB_DIR"
+    description: "Grype database directory mounted read-only into merge-queue gates (empty: scans are unproven)"
+  }];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.
