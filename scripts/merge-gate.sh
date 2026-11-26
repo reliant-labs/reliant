@@ -155,6 +155,15 @@ done
 # golangci (changed) job beside the gate runs the changed packages' linters.
 skip_vet=0; { [ "$skip_lint" = 1 ] || [ "$queue" = 1 ]; } && skip_vet=1
 [ "$queue" = 1 ] && skip_golangci=1
+# GO_TEST_VET (Taskfile.yml): where the vet phase runs, it vets every package
+# the test phase tests (go.build + go.packages, test files included; ./... on
+# a full lane), so the test phase's go test skips its own vet subset of the
+# same analyzers. Where vet is the release gate's (the queue, --skip-lint),
+# go test's vet is the only vet this tier runs, and stays on. The flag is not
+# in Go's test-result cache key: either way the results are task
+# test:short's. An exported GO_TEST_VET (empty included) wins.
+test_vet=""; [ "$skip_vet" = 1 ] || test_vet=-vet=off
+test_vet=${GO_TEST_VET-$test_vet}
 
 export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath" GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}"
 # A gate must not rewrite the clone's git config (forge's merge driver).
@@ -597,7 +606,7 @@ if [ "$fail" = 0 ]; then
   { phase build build_check; rc=$?
     phase testbuild env GOMAXPROCS="$quarter" scripts/test-build.sh -p "$quarter" --exclude "$L/tested.txt" || rc=1
     exit "$rc"; } & pids+=($!)
-  phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
+  phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" GO_TEST_VET="$test_vet" \
     go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" -capture & pids+=($!)
   if [ "$typecheck" = true ]; then
     phase typecheck scripts/web-typecheck.sh & pids+=($!)
