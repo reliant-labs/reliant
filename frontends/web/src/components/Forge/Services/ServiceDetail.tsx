@@ -27,7 +27,6 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { ArrowRight, ScrollText, Waypoints } from "lucide-react";
 
-import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
@@ -40,9 +39,9 @@ import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observab
 import { useForgeConsole } from "../Console/consoleContext";
 import { Header, Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
-import { UPlotChart, type ChartSeries } from "../Observability/charts/UPlotChart";
+import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { unionTimestamps, alignTo } from "../Observability/Dashboards/seriesModel";
-import { formatBytes, formatCores, formatCount, formatDuration, formatPercent, type ValueUnit } from "../Observability/format";
+import { formatBytes, formatCores, formatCount, formatDuration, formatPercent } from "../Observability/format";
 import { ratioSeries, redPanel, seriesValues } from "../Observability/Home/homeModel";
 import { useExploreHref } from "../Observability/Metrics/pivots";
 import { shortVersion } from "../Releases/releaseModel";
@@ -52,7 +51,7 @@ import type { StripEnv } from "../Workloads/workloadModel";
 import { useWorkloadUsage } from "../LiveState/useAppLiveState";
 import { useServicesData, type ServicesSearch } from "./useServicesData";
 import { RecentDeploys } from "./RecentDeploys";
-import { Section } from "./serviceParts";
+import { MetricCard, MetricLine, Section } from "./serviceParts";
 import { containerFigures, customMetrics, databasesOf, metricPanel, sitesOf } from "./servicesModel";
 import { SiteDetail } from "./SiteDetail";
 
@@ -198,54 +197,7 @@ function IconLink({ href, icon, children }: { href: string; icon: ReactNode; chi
   );
 }
 
-// ── Charts: one headline number and one chart per card ─────────────────────
-
-export function MetricCard({
-  title,
-  figure,
-  detail,
-  tone,
-  loading,
-  empty,
-  testId,
-  children,
-}: {
-  title: string;
-  figure: ReactNode;
-  detail?: ReactNode;
-  tone?: "warning";
-  loading?: boolean;
-  empty?: string | null;
-  testId: string;
-  children: ReactNode;
-}) {
-  return (
-    <Card padding="none" className="min-w-0" data-testid={testId}>
-      <div className="px-4 pt-3">
-        <h3 className="text-ui font-medium text-ink-muted">{title}</h3>
-        {loading ? (
-          <div className="mt-1 h-7 w-20 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
-        ) : (
-          <div className={cn("mt-0.5 text-2xl font-semibold tabular-nums", tone === "warning" ? "text-warning-ink" : "text-ink")}>{figure}</div>
-        )}
-        {detail && <div className="truncate text-meta text-ink-muted">{detail}</div>}
-      </div>
-      <div className="px-2 pb-2 pt-2">
-        {loading ? (
-          <div className="h-[110px] animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />
-        ) : empty ? (
-          <div className="flex h-[110px] items-center justify-center px-6 text-center text-meta text-ink-muted">{empty}</div>
-        ) : (
-          children
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function Line({ timestamps, values, unit, label, tone }: { timestamps: number[]; values: (number | null)[]; unit: ValueUnit; label: string; tone?: ChartSeries["tone"] }) {
-  return <UPlotChart height={110} timestamps={timestamps} series={[{ label, values, tone }]} unit={unit} label={label} legend={false} />;
-}
+// ── Charts: one headline number and one chart per card (serviceParts) ────────
 
 export function RedCharts({
   scope,
@@ -306,10 +258,10 @@ export function RedCharts({
         </MetricCard>
       )}
       <MetricCard title="Requests" figure={totalRequests === null ? "—" : formatCount(totalRequests)} detail={window} loading={totals.isLoading} empty={noTraffic} testId="service-chart-requests">
-        <Line timestamps={timestamps} values={requests} unit="count" label={`Requests to ${name}`} />
+        <MetricLine timestamps={timestamps} values={requests} unit="count" label={`Requests to ${name}`} />
       </MetricCard>
       <MetricCard title="Latency (p95)" figure={p95Now === null ? "—" : formatDuration(p95Now)} detail={window} loading={totals.isLoading} empty={noTraffic} testId="service-chart-latency">
-        <Line timestamps={timestamps} values={p95} unit="ms" label={`p95 latency of ${name}`} />
+        <MetricLine timestamps={timestamps} values={p95} unit="ms" label={`p95 latency of ${name}`} />
       </MetricCard>
       <MetricCard
         title="Errors"
@@ -320,13 +272,13 @@ export function RedCharts({
         empty={noTraffic}
         testId="service-chart-errors"
       >
-        <Line timestamps={timestamps} values={ratioSeries(errors, requests)} unit="percent" label={`Error rate of ${name}`} tone="destructive" />
+        <MetricLine timestamps={timestamps} values={ratioSeries(errors, requests)} unit="percent" label={`Error rate of ${name}`} tone="destructive" />
       </MetricCard>
       <MetricCard title="CPU" figure={cpuNow === null ? "—" : formatCores(cpuNow)} detail="now, all containers" loading={loadingUsage} empty={!cpu || cpu.timestamps.length < 2 ? "No CPU samples in the window." : null} testId="service-chart-cpu">
-        {cpu && <Line timestamps={cpu.timestamps} values={cpu.values} unit="cores" label={`CPU of ${name}`} />}
+        {cpu && <MetricLine timestamps={cpu.timestamps} values={cpu.values} unit="cores" label={`CPU of ${name}`} />}
       </MetricCard>
       <MetricCard title="Memory" figure={memNow === null ? "—" : formatBytes(memNow)} detail="now, all containers" loading={loadingUsage} empty={!memory || memory.timestamps.length < 2 ? "No memory samples in the window." : null} testId="service-chart-memory">
-        {memory && <Line timestamps={memory.timestamps} values={memory.values} unit="bytes" label={`Memory of ${name}`} />}
+        {memory && <MetricLine timestamps={memory.timestamps} values={memory.values} unit="bytes" label={`Memory of ${name}`} />}
       </MetricCard>
     </div>
   );

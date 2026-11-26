@@ -3,8 +3,10 @@
 /**
  * A static site's page, one test per section: the header (environment, URL,
  * release, what is wrong), the Site insights card, the deploys (only this
- * site's) and the domains. The reads are stubbed at their hooks; the model
- * under them is siteModel.test.ts's.
+ * site's), the domains, and the hosting sections (traffic, usage and free
+ * tier, configuration). The reads are stubbed at their hooks; the models
+ * under them are siteModel.test.ts's and staticSiteModel.test.ts's. The
+ * hosting answers are the shop pack's (fixtures/shop/handlers/staticSite.ts).
  */
 
 import type React from "react";
@@ -48,7 +50,29 @@ vi.mock("@/hooks/observability-queries", async (importOriginal) => ({
   usePanelQuery: () => ({ data: { columns: ["views"], rows: [{ group: { service: "shop-web" }, values: [1234] }] }, isLoading: false }),
 }));
 
+vi.mock("../../Observability/charts/UPlotChart", () => ({ UPlotChart: ({ label }: { label: string }) => <figure data-testid="chart" aria-label={label} /> }));
+
+const { shopStaticSite, shopStaticSiteTraffic } = await import("@/fixtures/shop/handlers/staticSite");
+const { trafficView } = await import("../staticSiteModel");
+type StaticSiteAnswer = ReturnType<typeof shopStaticSite>;
+type TrafficAnswer = ReturnType<typeof shopStaticSiteTraffic>;
+const hosting: { site: StaticSiteAnswer | undefined; traffic: TrafficAnswer | undefined; error: unknown; targets: unknown[]; ranges: unknown[] } = { site: undefined, traffic: undefined, error: null, targets: [], ranges: [] };
+vi.mock("../useStaticSite", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../useStaticSite")>()),
+  useStaticSite: (target: unknown) => {
+    hosting.targets.push(target);
+    return { data: hosting.site, isLoading: false, error: hosting.error };
+  },
+  useStaticSiteTraffic: (_target: unknown, range: unknown) => {
+    hosting.ranges.push(range);
+    return { data: hosting.traffic ? trafficView(hosting.traffic) : undefined, isLoading: false, error: hosting.error };
+  },
+}));
+
 const { SiteDetail, FIRST_AUDIT_PENDING } = await import("../SiteDetail");
+const { StaticSiteHosting, StaticSiteNotFoundMode, StaticSiteTrafficRange } = await import("@/gen/controlplane/services/static_site/v1/static_site_pb");
+const { ConnectError, Code } = await import("@connectrpc/connect");
+const { resetDemoNowForTests } = await import("@/fixtures/shop/shopStory");
 const { ForgeConsoleContext } = await import("@/components/Forge/Console/consoleContextValue");
 const { consolePath, withSearch } = await import("@/components/Forge/Console/paths");
 type ForgeConsole = NonNullable<React.ContextType<typeof ForgeConsoleContext>>;
@@ -105,7 +129,20 @@ function renderSite(entries: { envName: string; deployment: ForgeHostedWorkload 
   );
 }
 
+const GIB = 2n ** 30n;
+
+/** The shop pack's answers for prod's storefront (its traffic over `range`). */
+function shopHosting(range = StaticSiteTrafficRange.LAST_7_DAYS) {
+  resetDemoNowForTests(Date.UTC(2026, 10, 26, 12, 0));
+  hosting.site = shopStaticSite({ environmentId: "env-prod", frontend: "shop-web" } as never);
+  hosting.traffic = shopStaticSiteTraffic({ environmentId: "env-prod", frontend: "shop-web", range } as never);
+}
+
 beforeEach(() => {
+  shopHosting();
+  hosting.error = null;
+  hosting.targets.length = 0;
+  hosting.ranges.length = 0;
   promotions.data = [];
   orgDomains.domains = [];
   speed.score = 87;
@@ -194,5 +231,98 @@ describe("SiteDetail", () => {
   it("Domains: none yet says where visitors reach it", () => {
     renderSite([{ envName: "prod", deployment: deployment() }], "prod");
     expect(screen.getByTestId("site-domains")).toHaveTextContent("No custom domain serves shop-web in prod. Visitors reach it at shop-web.reliant.app.");
+  });
+
+  it("hosting: traffic, usage and free tier, then configuration, after the domains, for the site in its environment", () => {
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    const order = ["site-domains", "site-traffic", "site-usage", "site-configuration"].map((id) => screen.getByTestId(id));
+    for (let i = 1; i < order.length; i += 1) expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(hosting.targets[0]).toEqual({ envId: "env-prod", frontend: "shop-web" });
+  });
+
+  it("Traffic: requests, the hit ratio (with how it is counted), bandwidth and error rates; the range picker re-reads", async () => {
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    const traffic = screen.getByTestId("site-traffic");
+    expect(within(traffic).getByTestId("site-traffic-requests")).toHaveTextContent(/^Requests(39|4\d)(\.\d)?k/);
+    expect(within(traffic).getByTestId("site-traffic-hit-ratio")).toHaveTextContent("93%");
+    expect(within(traffic).getByTestId("site-traffic-hit-ratio-note")).toHaveAccessibleName("How the hit ratio is counted");
+    expect(within(traffic).getByTestId("site-traffic-errors")).toHaveTextContent("4xx");
+    expect(within(traffic).queryByTestId("site-traffic-history")).toBeNull();
+    expect(hosting.ranges.at(-1)).toBe("7d");
+    await userEvent.click(within(screen.getByTestId("site-traffic-range")).getByRole("button", { name: "30d" }));
+    expect(hosting.ranges.at(-1)).toBe("30d");
+  });
+
+  it("Traffic: a range the free plan's history clamps says so, with the way to more", () => {
+    shopHosting(StaticSiteTrafficRange.LAST_30_DAYS);
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    const note = screen.getByTestId("site-traffic-history");
+    expect(note).toHaveTextContent("Your plan keeps 7 days of traffic history");
+    expect(within(note).getByTestId("site-traffic-upgrade")).toHaveAttribute("href", "/settings/billing?tab=hosting");
+  });
+
+  it("Traffic: an older control plane says when the metrics arrive", () => {
+    hosting.traffic = undefined;
+    hosting.error = new ConnectError("unimplemented", Code.Unimplemented);
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    expect(screen.getByTestId("site-traffic-unavailable")).toHaveTextContent("Traffic metrics arrive with the next control-plane release.");
+  });
+
+  it("Usage: under the free caps, no billing link", () => {
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    const usage = screen.getByTestId("site-usage");
+    expect(within(usage).getByTestId("site-usage-site-storage")).toHaveTextContent("180 MiB of 1 GiB");
+    expect(within(usage).getByTestId("site-usage-org-transfer")).toHaveTextContent("2.1 GiB of 10 GiB");
+    expect(within(usage).getByTestId("site-usage-org-transfer")).toHaveTextContent("This site: 1.9 GiB.");
+    expect(within(usage).getByTestId("site-usage-site-storage")).toHaveAttribute("data-state", "under");
+    expect(within(usage).queryByTestId("site-usage-cap")).toBeNull();
+  });
+
+  it("Usage: near a cap warns; over it links billing", () => {
+    hosting.site!.usage!.orgTransferBytes = 9n * GIB;
+    const near = renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    expect(screen.getByTestId("site-usage-org-transfer")).toHaveAttribute("data-state", "near");
+    expect(screen.getByTestId("site-usage-cap")).toHaveTextContent("Close to the free allowance.");
+    expect(screen.queryByTestId("site-usage-billing")).toBeNull();
+    near.unmount();
+
+    hosting.site!.usage!.orgTransferBytes = 11n * GIB;
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    expect(screen.getByTestId("site-usage-org-transfer")).toHaveAttribute("data-state", "over");
+    expect(screen.getByTestId("site-usage-cap")).toHaveTextContent("Over the free allowance.");
+    expect(screen.getByTestId("site-usage-billing")).toHaveAttribute("href", "/settings/billing?tab=hosting");
+  });
+
+  it("Usage: paid hosting shows the figures with no free cap", () => {
+    hosting.site!.usage = { ...hosting.site!.usage!, hosting: StaticSiteHosting.PAID, siteStorageLimitBytes: 0n, orgStorageLimitBytes: 0n, orgTransferLimitBytes: 0n };
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    const usage = screen.getByTestId("site-usage");
+    expect(usage).toHaveTextContent("no free caps");
+    expect(within(usage).queryAllByRole("progressbar")).toHaveLength(0);
+    expect(usage).not.toHaveTextContent("of 1 GiB");
+  });
+
+  it("Configuration: runtime config (public), base path, asset directory, a real 404.html, and the rule counts", () => {
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    const config = screen.getByTestId("site-configuration");
+    expect(within(config).getByTestId("site-config-runtime")).toHaveTextContent("API_URLURL of api");
+    expect(within(config).getByTestId("site-config-runtime")).toHaveTextContent("SITE_NAME= Shop");
+    expect(within(config).getByTestId("site-config-runtime")).toHaveTextContent("config.js is served to every visitor");
+    expect(within(config).getByTestId("site-config-base-path")).toHaveTextContent("/ (the root)");
+    expect(within(config).getByTestId("site-config-asset-dir")).toHaveTextContent("assets");
+    expect(within(config).getByTestId("site-config-not-found")).toHaveTextContent("404.html: real 404s");
+    expect(within(config).getByTestId("site-config-headers")).toHaveTextContent("3 rules");
+    expect(within(config).getByTestId("site-config-redirects")).toHaveTextContent("2 rules");
+  });
+
+  it("Configuration: a build without 404.html explains the SPA fallback", () => {
+    hosting.site!.configuration!.notFoundMode = StaticSiteNotFoundMode.SPA_FALLBACK;
+    hosting.site!.configuration!.headersRules = undefined;
+    renderSite([{ envName: "prod", deployment: PROD }], "prod");
+    const notFound = screen.getByTestId("site-config-not-found");
+    expect(notFound).toHaveTextContent("SPA fallback: unknown paths serve index.html with 200");
+    expect(notFound).toHaveTextContent("A missing asset is still a 404.");
+    expect(notFound).not.toHaveTextContent("404.html: real 404s");
+    expect(screen.getByTestId("site-config-headers")).toHaveTextContent("Not read");
   });
 });

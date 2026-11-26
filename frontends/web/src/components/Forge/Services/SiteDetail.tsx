@@ -14,10 +14,13 @@
  *                  (RecentDeploys, filtered to its `sites/<name>/` artifact).
  *   domains        its custom domains: state, where their DNS points, and
  *                  where to add one.
+ *   traffic, usage and free tier, configuration
+ *                  the site's hosting (SiteHosting.tsx, R3): its CDN traffic,
+ *                  its usage against the free allowance, and how the platform
+ *                  serves it, from control-plane's StaticSiteService.
  *
- * Every fact but the deploys, the score and the domains' setup lines is
- * GetStatus's (servicesModel.siteEnvs). Traffic, usage and free tier, and
- * configuration follow the domains, in that order (R3).
+ * Every fact but the deploys, the score, the domains' setup lines and the
+ * hosting sections is GetStatus's (servicesModel.siteEnvs).
  */
 
 import { useMemo, type ReactNode } from "react";
@@ -45,6 +48,7 @@ import { runStateOf } from "../runStateVocabulary";
 import { DriftTag } from "../Workloads/workloadParts";
 import { RecentDeploys } from "./RecentDeploys";
 import { Section } from "./serviceParts";
+import { SiteConfiguration, SiteTraffic, SiteUsage } from "./SiteHosting";
 import { defaultSiteEnv, siteArtifactPrefix, siteDomainRows, siteEnvs, type SiteEnv } from "./servicesModel";
 
 export interface SiteDetailProps {
@@ -72,7 +76,9 @@ export function SiteDetail({ name, entries, envs }: SiteDetailProps) {
         </Section>
       )}
       <SiteDomains name={name} site={site} />
-      {/* R3: Traffic, then Usage and free tier, then Configuration (design D4). */}
+      <SiteTraffic name={name} site={site} />
+      <SiteUsage name={name} site={site} />
+      <SiteConfiguration name={name} site={site} />
       <p className="pt-2 text-ui text-ink-muted">
         Visitors, page views and browser errors are on{" "}
         <Link href={href({ kind: "obs-view", view: "sessions" }, { env: site.envName })} className="no-color text-primary-ink hover:underline">
