@@ -7,7 +7,10 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -469,8 +472,9 @@ func TestWindowCapsBeforeTheControlPlane(t *testing.T) {
 // Service passes through, so a caller can classify it.
 func TestSentinelsWrapTheDomain(t *testing.T) {
 	for _, err := range []error{ErrNoOrg, ErrInvalidName, ErrIdentifierProperty, ErrDuplicateStep, ErrWindowTooLong} {
-		if !errors.Is(err, gtm.ErrInvalidArgument) {
-			t.Errorf("%v is not gtm.ErrInvalidArgument", err)
+		var ve *gtm.ValidationError
+		if !errors.Is(err, gtm.ErrInvalidArgument) || !errors.As(err, &ve) || ve.Field == "" || ve.Reason == "" {
+			t.Errorf("%v is not a *gtm.ValidationError (gtm.ErrInvalidArgument) with a field and reason", err)
 		}
 	}
 	for _, err := range []error{ErrCredentialRefused, ErrNotSetUp, ErrQuotaExhausted, ErrTimedOut, ErrQueryRefused, ErrBadResponse} {
@@ -625,4 +629,135 @@ func TestObservabilityClientURL(t *testing.T) {
 
 func TestServiceContract(t *testing.T) {
 	var _ gtm.Analytics = New(Deps{})
+}
+
+func TestCheckRedirect(t *testing.T) {
+	req := func(u string) *http.Request {
+		r, err := http.NewRequest(http.MethodPost, u, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	origin := []*http.Request{req("https://cp.example.test/controlplane.v1.ObservabilityService/QueryPanel")}
+	for u, ok := range map[string]bool{
+		"https://cp.example.test/moved/QueryPanel":    true,
+		"http://cp.example.test/moved/QueryPanel":     false,
+		"https://evil.example.test/QueryPanel":        false,
+		"https://cp.example.test:8443/QueryPanel":     false,
+		"https://sub.cp.example.test/QueryPanel":      false,
+		"ftp://cp.example.test/QueryPanel":            false,
+		"https://user@cp.example.test/QueryPanel":     true, // same host; userinfo is not a host change
+		"https://cp.example.test/?next=http://x.test": true,
+	} {
+		err := checkRedirect(req(u), origin)
+		if ok != (err == nil) {
+			t.Errorf("redirect to %s: err = %v, want allowed %v", u, err, ok)
+		}
+	}
+	via := make([]*http.Request, maxRedirects)
+	for i := range via {
+		via[i] = origin[0]
+	}
+	if err := checkRedirect(req("https://cp.example.test/again"), via); !errors.Is(err, ErrUnsafeRedirect) {
+		t.Errorf("after %d redirects: err = %v", maxRedirects, err)
+	}
+}
+
+// TestRedirectsOffTheControlPlaneAreRefused runs the client against a TLS
+// control plane that redirects: to plain http, or to another host, the
+// request never arrives (and the token with it); on the same host it does.
+func TestRedirectsOffTheControlPlaneAreRefused(t *testing.T) {
+	var plainHits, otherHits, movedHits atomic.Int32
+	plain := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { plainHits.Add(1) }))
+	defer plain.Close()
+	other := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { otherHits.Add(1) }))
+	defer other.Close()
+	var target string
+	cp := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/moved/") {
+			movedHits.Add(1)
+			http.Error(w, "gone", http.StatusInternalServerError)
+			return
+		}
+		http.Redirect(w, r, target+"/moved"+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer cp.Close()
+	plainURL := strings.Replace(cp.URL, "https://", "http://", 1)
+
+	for name, tc := range map[string]struct {
+		to   string
+		hits *atomic.Int32
+		ok   bool
+	}{
+		"downgrade to http":       {to: plain.URL, hits: &plainHits},
+		"same port over http":     {to: plainURL, hits: &movedHits},
+		"another host":            {to: other.URL, hits: &otherHits},
+		"the same host and https": {to: cp.URL, hits: &movedHits, ok: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			target = tc.to
+			before := tc.hits.Load()
+			c, err := NewObservabilityClientWith(cp.Client(), cp.URL)
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := connect.NewRequest(&obsv1.QueryPanelRequest{})
+			req.Header().Set("Authorization", "Bearer "+testToken)
+			_, err = c.QueryPanel(context.Background(), req)
+			if err == nil {
+				t.Fatal("no error")
+			}
+			arrived := tc.hits.Load() - before
+			if tc.ok != (arrived == 1) {
+				t.Fatalf("request arrived %d times at the redirect target (err %v), want followed %v", arrived, err, tc.ok)
+			}
+			if !tc.ok && !strings.Contains(err.Error(), ErrUnsafeRedirect.Error()) {
+				t.Errorf("err = %v, want the redirect refused", err)
+			}
+		})
+	}
+	if cp.Client().CheckRedirect != nil {
+		t.Error("NewObservabilityClientWith changed the caller's http.Client")
+	}
+}
+
+// TestFixedErrorMessages pins every error this package returns to its text:
+// none is built from a cause, so none can carry one (the gtm.Analytics
+// contract: only fixed text in an error wrapping ErrAnalyticsFailed or
+// ErrInvalidArgument).
+func TestFixedErrorMessages(t *testing.T) {
+	const failed = "the product analytics query failed"
+	for err, want := range map[error]string{
+		ErrNoOrg:                   "org: no org to read product analytics for",
+		ErrInvalidName:             "name: an event or property name is not allowed",
+		ErrIdentifierProperty:      "property: property_breakdown cannot group by an identifier property",
+		ErrDuplicateStep:           "events: a funnel's steps must be distinct events",
+		ErrWindowTooLong:           "window: event_counts, event_trend and property_breakdown read at most 30 days",
+		ErrCredentialRefused:       failed + ": the control plane refused the analytics credential",
+		ErrNotSetUp:                failed + ": the org's product analytics is not set up",
+		ErrQuotaExhausted:          failed + ": the org's analytics query limit was reached; try again later",
+		ErrTimedOut:                failed + ": the query timed out",
+		ErrQueryRefused:            failed + ": the control plane refused the query",
+		ErrBadResponse:             failed + ": the control plane's answer was not understood",
+		ErrInsecureControlPlaneURL: "analytics: the control-plane URL must be https (http only to a loopback host)",
+		ErrUnsafeRedirect:          "analytics: refused a control-plane redirect off https or to another host",
+		gtm.ErrAnalyticsFailed:     failed,
+	} {
+		if got := err.Error(); got != want {
+			t.Errorf("error text = %q, want %q", got, want)
+		}
+	}
+	// And what Query returns for a failure is one of them, whatever the
+	// cause said.
+	for _, cause := range []error{
+		connect.NewError(connect.CodeInvalidArgument, errors.New("sql: near 'UserId' at ch-0.internal")),
+		connect.NewError(connect.CodeInternal, errors.New("dsn=clickhouse://u:pw@ch-0.internal")),
+		errors.New("dial tcp 10.0.0.7:443"),
+	} {
+		_, err := newTestClient(&fakeCP{err: cause}, testToken, &bytes.Buffer{}).Query(context.Background(), tenantZero, sqlQueries["event_counts"])
+		if err != ErrQueryRefused && err != gtm.ErrAnalyticsFailed {
+			t.Errorf("cause %v: err = %v, want a fixed sentinel", cause, err)
+		}
+	}
 }

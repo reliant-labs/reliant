@@ -41,10 +41,16 @@ const chDatabase = "gtm_analytics_test"
 //	page_viewed       30 events, users u0..u9; even hours env-prod, odd env-dev;
 //	                  route /a (u0..u4, 15 events), /b (u5..u7, 9), /c (u8, u9, 6)
 //	signup_completed   8 events, users u0..u3
+//	                  and route /m on 2026-11-06, env-prod: users ua, ub and
+//	                  8 anonymous events (10; under k: anonymous counts no one)
+//	signup_completed   8 events, users u0..u3
 //	rare_event         5 events, users u0, u1 (under k)
 //	anon_event         6 events, no user (under k)
+//	mixed_event       24 events, env-prod: users ua, ub and 20 anonymous (under k)
 //
-// and one page_viewed after the window.
+// and one page_viewed after the window. Counting the empty UserId as a user
+// would show route /m and mixed_event (3 "users" each); the tests say they
+// stay hidden.
 const chSeed = `
 DROP DATABASE IF EXISTS ` + chDatabase + `;
 CREATE DATABASE ` + chDatabase + `;
@@ -73,6 +79,14 @@ FROM numbers(5);
 INSERT INTO ` + chDatabase + `.product_events (Timestamp, ServiceName, EnvId, SessionId, UserId, EventName, Props, Client, VisitorId)
 SELECT toDateTime64('2026-11-05 00:00:00', 9, 'UTC') + toIntervalHour(number), 'web', 'env-prod', 's', '', 'anon_event', map(), 'web', 'v'
 FROM numbers(6);
+INSERT INTO ` + chDatabase + `.product_events (Timestamp, ServiceName, EnvId, SessionId, UserId, EventName, Props, Client, VisitorId)
+SELECT toDateTime64('2026-11-06 00:00:00', 9, 'UTC') + toIntervalHour(number), 'web', 'env-prod', 's',
+  if(number < 2, ['ua', 'ub'][number + 1], ''), 'page_viewed', map('route', '/m'), 'web', 'v'
+FROM numbers(10);
+INSERT INTO ` + chDatabase + `.product_events (Timestamp, ServiceName, EnvId, SessionId, UserId, EventName, Props, Client, VisitorId)
+SELECT toDateTime64('2026-11-07 00:00:00', 9, 'UTC') + toIntervalMinute(number), 'web', 'env-prod', 's',
+  if(number < 4, ['ua', 'ub'][number % 2 + 1], ''), 'mixed_event', map(), 'web', 'v'
+FROM numbers(24);
 INSERT INTO ` + chDatabase + `.product_events (Timestamp, ServiceName, EnvId, SessionId, UserId, EventName, Props, Client, VisitorId)
 VALUES (toDateTime64('2026-12-01 00:00:00', 9, 'UTC'), 'web', 'env-prod', 's', 'u0', 'page_viewed', map('route', '/a'), 'web', 'v');
 `
@@ -207,21 +221,23 @@ func TestClickHouseTemplates(t *testing.T) {
 		truncated bool
 	}{
 		{name: "event_counts", q: sqlQueries["event_counts"],
-			rows: "page_viewed|||30\nsignup_completed|||8\n", hidden: 2},
+			rows: "page_viewed|||40\nsignup_completed|||8\n", hidden: 3},
 		{name: "event_counts env-prod", q: sqlQueries["event_counts"], envs: []string{"env-prod"},
-			rows: "page_viewed|||15\n", hidden: 3},
+			rows: "page_viewed|||25\n", hidden: 4},
 		{name: "event_counts limit 1", q: with(sqlQueries["event_counts"], func(q *gtm.AnalyticsQuery) { q.Limit = 1 }),
-			rows: "page_viewed|||30\n", hidden: 2, truncated: true},
+			rows: "page_viewed|||40\n", hidden: 3, truncated: true},
 		{name: "event_counts_filtered", q: sqlQueries["event_counts_filtered"],
 			rows: "signup_completed|||8\n"},
-		{name: "event_counts all hidden", q: with(sqlQueries["event_counts"], func(q *gtm.AnalyticsQuery) { q.Events = []string{"rare_event", "anon_event"} }),
-			rows: "", hidden: 2},
+		{name: "event_counts all hidden", q: with(sqlQueries["event_counts"], func(q *gtm.AnalyticsQuery) { q.Events = []string{"rare_event", "anon_event", "mixed_event"} }),
+			rows: "", hidden: 3},
+		{name: "two users and anonymous traffic stay hidden", q: with(sqlQueries["event_counts"], func(q *gtm.AnalyticsQuery) { q.Events = []string{"mixed_event"} }),
+			rows: "", hidden: 1},
 		{name: "event_trend", q: sqlQueries["event_trend"],
-			rows: "page_viewed||2026-11-01|24\npage_viewed||2026-11-02|6\n"},
+			rows: "page_viewed||2026-11-01|24\npage_viewed||2026-11-02|6\npage_viewed||2026-11-06|10\n"},
 		{name: "event_trend limit 1 keeps the newest day", q: with(sqlQueries["event_trend"], func(q *gtm.AnalyticsQuery) { q.Limit = 1 }),
-			rows: "page_viewed||2026-11-02|6\n", truncated: true},
+			rows: "page_viewed||2026-11-06|10\n", truncated: true},
 		{name: "property_breakdown", q: sqlQueries["property_breakdown"],
-			rows: "page_viewed|/a||15\npage_viewed|/b||9\n", hidden: 1},
+			rows: "page_viewed|/a||15\npage_viewed|/b||9\n", hidden: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := validate(tenantZero, tc.q); err != nil {

@@ -91,6 +91,13 @@ func TestIdentifierProperty(t *testing.T) {
 		// More of the same shapes.
 		"plan_id", "planids", "user-agent", "userAgent", "MAC", "mac_address", "sessionuuid", "access_token", "refresh-token",
 		"password", "credit_card", "cardNumber", "birthDate", "date_of_birth", "screenName", "username", "ttclid", "wbraid",
+		// Second review of #3843.
+		"ipv4", "ipv6", "client_ipv4", "mobile", "mobile_number", "cell", "cell_phone", "contact", "contact_email", "recipient",
+		"sender", "credential", "otp", "otp_code", "pin", "signature", "serial", "serial_number", "accountnumber",
+		"account_number", "referral_code", "invite_code", "inviteCode", "location", "lat", "lng", "geo.lat", "latitude",
+		"geolocation",
+		// Near the allowed category names, still refused.
+		"user_name", "plan_owner_name", "session_token", "auth_token", "card_number", "user_email", "org_id", "iphone_serial",
 	} {
 		if !identifierProperty(p) {
 			t.Errorf("identifierProperty(%q) = false, want true (words %v)", p, words(p))
@@ -100,6 +107,11 @@ func TestIdentifierProperty(t *testing.T) {
 		"route", "plan", "paid", "android", "valid", "browser", "country", "referrer", "utm_source", "status", "variant",
 		"HTTPStatus", "flag", "is_valid", "prepaid", "android_version", "device_type", "client", "account_type", "theme",
 		"locale", "os", "region", "utm_campaign", "tier", "billing.interval", "hybrid_mode", "grid",
+		// The explicit category names (camelCase is the same name).
+		"plan_name", "os_name", "browser_name", "feature_name", "experiment_name", "flag_key", "feature_key",
+		"input_tokens", "output_tokens", "token_count", "auth_method", "auth_provider", "cookie_consent", "user_role",
+		"user_type", "session_count", "card_type", "org_plan", "iphone", "planName", "inputTokens", "UserRole",
+		"pinned", "cellular_generation",
 	} {
 		if identifierProperty(p) {
 			t.Errorf("identifierProperty(%q) = true, want false (words %v)", p, words(p))

@@ -17,7 +17,8 @@ import (
 // an integer. Every column a template returns is an aggregate or the
 // dimension it groups by (an event name, a day, a property value); none is a
 // user, session, visitor or any other identifier. UserId is read in exactly
-// one place, uniq(UserId), for the k-anonymity threshold.
+// one expression, peopleExpr's uniqIf(UserId, UserId != ''), for the
+// k-anonymity threshold.
 
 // scope is the window and the environments: forge's product-analytics
 // {scope}. The control plane binds {env_ids} to the environments the
@@ -28,13 +29,16 @@ const scope = "Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(
 
 // MinGroupPeople is the k of event_counts' and property_breakdown's
 // k-anonymity: a group (an event, a property value) is returned only when at
-// least this many distinct users are in it. The rest are counted in
-// AnalyticsResult.HiddenGroups, never listed.
+// least this many distinct signed-in users are in it. The rest are counted
+// in AnalyticsResult.HiddenGroups, never listed.
 const MinGroupPeople = 3
 
-// peopleExpr is the one place a template reads UserId: the number of
-// distinct users in a group, compared with MinGroupPeople and never returned.
-const peopleExpr = "uniq(UserId) AS people"
+// peopleExpr is the one expression a template reads UserId in: the number of
+// distinct signed-in users in a group, compared with MinGroupPeople (for the
+// groups shown and the groups hidden alike) and never returned. Anonymous
+// events (an empty UserId) count no one, so two users and any amount of
+// anonymous traffic stay hidden.
+const peopleExpr = "uniqIf(UserId, UserId != '') AS people"
 
 // Result columns. countColumn, groupsColumn and hiddenColumn are numeric
 // (the response's columns and values); the rest come back in each row's

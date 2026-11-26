@@ -35,6 +35,7 @@ var identifierWords = map[string]bool{
 	"birthday": true, "birthdate": true, "card": true, "pan": true, "cvv": true, "iban": true, "bic": true,
 	"jwt": true, "xff": true, "adid": true, "aaid": true, "gaid": true, "idfa": true, "idfv": true,
 	"imei": true, "imsi": true, "iccid": true, "ua": true,
+	"cell": true, "otp": true, "pin": true, "location": true, "lat": true, "lng": true, "lon": true,
 }
 
 // identifierStems match anywhere in a word or in the whole name run
@@ -46,6 +47,19 @@ var identifierStems = []string{
 	"username", "fullname", "firstname", "lastname", "surname", "givenname", "familyname", "nickname",
 	"creditcard", "cardnumber", "mobilenumber", "birth", "passport", "gclid", "fbclid", "msclkid", "dclid",
 	"ttclid", "wbraid", "gbraid", "idfa", "imei", "jwt", "anonymous", "deviceid", "clientid", "customerid", "accountid",
+	"ipv4", "ipv6", "mobile", "contact", "recipient", "sender", "credential", "signature", "serial", "accountnumber",
+	"referralcode", "invitecode", "latitude", "longitude", "geolocation",
+}
+
+// categoryProperties are names the rules above would refuse that are
+// categories, not identifiers: a plan's name, a token count, an auth method.
+// The list is explicit and small, matched on the name's words joined by _
+// ("planName" is plan_name); it never loosens the rules for anything else.
+var categoryProperties = map[string]bool{
+	"plan_name": true, "os_name": true, "browser_name": true, "feature_name": true, "experiment_name": true,
+	"flag_key": true, "feature_key": true, "input_tokens": true, "output_tokens": true, "token_count": true,
+	"auth_method": true, "auth_provider": true, "cookie_consent": true, "user_role": true, "user_type": true,
+	"session_count": true, "card_type": true, "org_plan": true, "iphone": true,
 }
 
 // idWords are the words that end in "id" without naming an identifier.
@@ -62,9 +76,12 @@ var idWords = []string{
 // identifier. Each of its words (split on _ . : - and on camelCase) and the
 // whole name run together are tried: a word in identifierWords, a stem of
 // identifierStems anywhere, or an "id"/"ids" ending that is not an idWords
-// word.
+// word. A name in categoryProperties is not an identifier.
 func identifierProperty(p string) bool {
 	ws := words(p)
+	if categoryProperties[strings.Join(ws, "_")] {
+		return false
+	}
 	candidates := append(ws, strings.Join(ws, ""))
 	for _, w := range candidates {
 		if identifierWords[w] || idEnding(w) {

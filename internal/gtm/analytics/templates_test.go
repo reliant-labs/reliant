@@ -75,8 +75,9 @@ var identifierish = regexp.MustCompile(`(?i)(^id$|id$|ids$|_id|uuid|visitor|sess
 // TestNoTemplateMentionsAnIdentifier: no template selects, groups by, or
 // otherwise names a user, session, visitor or any other identifier column.
 // The exceptions: EnvId inside the environment-scope predicate, which only
-// narrows rows, and UserId inside the one uniq(UserId) the k-anonymity
-// threshold counts. Neither is ever returned.
+// narrows rows, and UserId (twice) inside the one
+// uniqIf(UserId, UserId != ”) the k-anonymity threshold counts. Neither is
+// ever returned.
 func TestNoTemplateMentionsAnIdentifier(t *testing.T) {
 	literal := regexp.MustCompile(`'(?:[^'\\]|\\.)*'`)
 	word := regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
@@ -86,8 +87,12 @@ func TestNoTemplateMentionsAnIdentifier(t *testing.T) {
 			t.Fatalf("%s: the scope predicate should appear once:\n%s", name, sql)
 		}
 		kAnon := q.Template != gtm.AnalyticsEventTrend
-		if want := map[bool]int{true: 1, false: 0}[kAnon]; strings.Count(sql, peopleExpr) != want || strings.Count(sql, "UserId") != want {
-			t.Fatalf("%s: UserId should appear only as %q, %d time(s):\n%s", name, peopleExpr, want, sql)
+		if peopleExpr != "uniqIf(UserId, UserId != '') AS people" {
+			t.Fatalf("the threshold must count signed-in users only, uniqIf(UserId, UserId != ''): %q", peopleExpr)
+		}
+		exprs := map[bool]int{true: 1, false: 0}[kAnon]
+		if strings.Count(sql, peopleExpr) != exprs || strings.Count(sql, "UserId") != 2*exprs {
+			t.Fatalf("%s: UserId should appear only inside %q, %d time(s):\n%s", name, peopleExpr, exprs, sql)
 		}
 		rest := strings.Replace(strings.Replace(sql, scope, "", 1), peopleExpr, "", 1)
 		rest = literal.ReplaceAllString(rest, "''")
@@ -98,7 +103,7 @@ func TestNoTemplateMentionsAnIdentifier(t *testing.T) {
 		}
 		for _, banned := range []string{"UserId", "user_id", "SessionId", "DayVisitor", "VisitorId", "OrgId", "TraceId", "SpanId", "EnvId"} {
 			if strings.Contains(rest, banned) {
-				t.Errorf("%s: mentions %s outside the scope predicate and uniq(UserId):\n%s", name, banned, sql)
+				t.Errorf("%s: mentions %s outside the scope predicate and the people count:\n%s", name, banned, sql)
 			}
 		}
 		if kAnon {

@@ -17,7 +17,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/observe"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	obsv1 "github.com/reliant-labs/reliant/gen/controlplane/services/observability/v1"
@@ -25,22 +24,24 @@ import (
 	"github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// Errors. The validation errors are InvalidArgument; every control-plane
-// failure is, or wraps, gtm.ErrAnalyticsFailed with a fixed message. None
-// carries the control plane's own error text, which is logged instead.
+// Errors. The validation errors are *gtm.ValidationError (so
+// gtm.ErrInvalidArgument), which ReadProductAnalytics passes through to the
+// caller; every control-plane failure is, or wraps, gtm.ErrAnalyticsFailed.
+// Each has fixed text (the gtm.Analytics contract): none carries the control
+// plane's own error, which is logged instead.
 var (
 	// ErrNoOrg is a query with no org to scope it to.
-	ErrNoOrg = svcerr.InvalidArgument("no org to read product analytics for")
+	ErrNoOrg error = &gtm.ValidationError{Field: "org", Reason: "no org to read product analytics for"}
 	// ErrInvalidName is an event or property name outside the allowed
 	// characters.
-	ErrInvalidName = svcerr.InvalidArgument("an event or property name is not allowed")
+	ErrInvalidName error = &gtm.ValidationError{Field: "name", Reason: "an event or property name is not allowed"}
 	// ErrIdentifierProperty is a property_breakdown over a property that
 	// names an identifier (a user, session, email, ...).
-	ErrIdentifierProperty = svcerr.InvalidArgument("property_breakdown cannot group by an identifier property")
+	ErrIdentifierProperty error = &gtm.ValidationError{Field: "property", Reason: "property_breakdown cannot group by an identifier property"}
 	// ErrDuplicateStep is a funnel naming an event twice.
-	ErrDuplicateStep = svcerr.InvalidArgument("a funnel's steps must be distinct events")
+	ErrDuplicateStep error = &gtm.ValidationError{Field: "events", Reason: "a funnel's steps must be distinct events"}
 	// ErrWindowTooLong is a sql template over more than MaxSQLWindow.
-	ErrWindowTooLong = svcerr.InvalidArgument("event_counts, event_trend and property_breakdown read at most 30 days")
+	ErrWindowTooLong error = &gtm.ValidationError{Field: "window", Reason: "event_counts, event_trend and property_breakdown read at most 30 days"}
 
 	// ErrCredentialRefused is the control plane refusing the analytics
 	// token (Unauthenticated or PermissionDenied).
@@ -113,13 +114,38 @@ func NewObservabilityClient(baseURL string) (ObservabilityClient, error) {
 	return NewObservabilityClientWith(observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second}), baseURL)
 }
 
-// NewObservabilityClientWith is NewObservabilityClient over httpClient.
+// NewObservabilityClientWith is NewObservabilityClient over a copy of
+// httpClient that follows no redirect off https or to another host
+// (checkRedirect).
 func NewObservabilityClientWith(httpClient *http.Client, baseURL string) (ObservabilityClient, error) {
 	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if err := checkControlPlaneURL(base); err != nil {
 		return nil, err
 	}
-	return controlplanev1connect.NewObservabilityServiceClient(httpClient, base), nil
+	hc := *httpClient
+	hc.CheckRedirect = checkRedirect
+	return controlplanev1connect.NewObservabilityServiceClient(&hc, base), nil
+}
+
+// ErrUnsafeRedirect is a control-plane redirect the client refuses to follow.
+var ErrUnsafeRedirect = errors.New("analytics: refused a control-plane redirect off https or to another host")
+
+// maxRedirects is as many redirects as net/http's default policy follows.
+const maxRedirects = 10
+
+// checkRedirect is the client's redirect policy: a redirect may stay on the
+// original request's scheme and host only. It refuses one from https to
+// anything else, and one to any other host (or port), so the bearer token
+// is never sent in the clear or to a server the URL did not name.
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return ErrUnsafeRedirect
+	}
+	orig := via[0].URL
+	if req.URL.Scheme != orig.Scheme || req.URL.Host != orig.Host {
+		return ErrUnsafeRedirect
+	}
+	return nil
 }
 
 // checkControlPlaneURL refuses a base URL that is not https, except http to
