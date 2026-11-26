@@ -73,11 +73,23 @@ export function onControlPlane<O extends { queryFn?: unknown }>(options: O): O {
   return {
     ...options,
     queryFn: (context: { client: QueryClient }) => {
-      if (!CONTROL_PLANE_API_URL && transportOf(context.client) === undefined) throw new ConnectError("no control plane is configured", Code.Unimplemented);
+      refuseWithoutControlPlane(context.client);
       return queryFn(context);
     },
   };
 }
+
+/**
+ * onControlPlane's refusal, for an imperative caller to make before it reads
+ * on `client` (`client.fetchQuery(testsServiceQueries.…)`): Unimplemented when
+ * the read would reach the app's transport and this deployment has no control plane.
+ */
+export function refuseWithoutControlPlane(client: QueryClient): void {
+  if (!CONTROL_PLANE_API_URL && transportOf(client) === undefined) throw new ConnectError("no control plane is configured", Code.Unimplemented);
+}
+
+/** A paged request as an infinite read takes it: the page token is the read's page param, never its key. */
+const firstPage = <R extends { pageToken: string }>({ pageToken: _first, ...req }: R): Omit<R, "pageToken"> => req;
 
 /** A read in `org`: refused without a control plane, and failing with the org's error while it failed to resolve. */
 const inOrg = <O extends { queryFn?: unknown }>(options: O, org: OrgScope): O => withOrgFailure(onControlPlane(options), org);
@@ -107,10 +119,9 @@ export function useTestSummary(project: string, { branch, environmentId }: { bra
 /** Recorded runs matching `filters`, newest first, paged by the server's token. `null` filters: nothing is fetched. */
 export function useTestRuns(project: string, filters: TestRunFilters | null) {
   const org = useOrgScope();
-  const { pageToken: _first, ...req } = runsRequest({ orgId: org.orgId, project, filters: filters ?? {}, pageSize: TESTS_PAGE_SIZE });
   return useInfiniteQuery(
     inOrg(
-      testsServiceQueries.listTestRunsInfinite(req, {
+      testsServiceQueries.listTestRunsInfinite(firstPage(runsRequest({ orgId: org.orgId, project, filters: filters ?? {}, pageSize: TESTS_PAGE_SIZE })), {
         enabled: !!project && !!filters && orgQueryEnabled(org),
         // Only an answer read in this org: every request names it (generated key).
         placeholderData: keepPreviousInOrg(org.orgId),
@@ -197,10 +208,9 @@ export function useReleaseTests(project: string, version: string) {
 /** Tests that are, or were, flaky, highest flake rate first. `null` filters: nothing is fetched. */
 export function useFlakyTests(project: string, filters: FlakyFilters | null) {
   const org = useOrgScope();
-  const { pageToken: _first, ...req } = flakyRequest({ orgId: org.orgId, project, filters: filters ?? {}, pageSize: TESTS_PAGE_SIZE });
   return useInfiniteQuery(
     inOrg(
-      testsServiceQueries.listFlakyTestsInfinite(req, {
+      testsServiceQueries.listFlakyTestsInfinite(firstPage(flakyRequest({ orgId: org.orgId, project, filters: filters ?? {}, pageSize: TESTS_PAGE_SIZE })), {
         enabled: !!project && !!filters && orgQueryEnabled(org),
         // Only an answer read in this org: every request names it (generated key).
         placeholderData: keepPreviousInOrg(org.orgId),

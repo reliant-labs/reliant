@@ -28,7 +28,7 @@ import { Bot, Sparkles } from "lucide-react";
 import Button from "@/components/forge-ui/button";
 import Tooltip from "@/components/forge-ui/tooltip";
 import { testsServiceQueries } from "@/hooks/controlplane/tests-service-hooks_gen";
-import { onControlPlane } from "@/hooks/test-queries";
+import { refuseWithoutControlPlane } from "@/hooks/test-queries";
 import { useProject } from "@/hooks/project-queries";
 import { useOrgScope, whenOrgScopeReady } from "@/lib/orgScope";
 import { toast } from "@/lib/toast-manager";
@@ -99,13 +99,15 @@ export function useFixFlakyTest({ project, projectId, flake, defaultBranch }: { 
     // Never read unscoped: wait for the org (the button can be pressed before it resolves).
     const { orgId } = org.ready ? org : await whenOrgScopeReady();
     const testId = flake.test.id;
+    // Refused without a control plane, as the pages' reads are (onControlPlane).
+    refuseWithoutControlPlane(client);
     // The same generated reads (and so cache entries) as the pages' hooks; fetchQuery answers the message, mapped here.
-    const detail = testDetailOf(await client.fetchQuery(onControlPlane(testsServiceQueries.getTest(testRequest({ orgId, project, testId }), { staleTime: LIVE_MS }))));
+    const detail = testDetailOf(await client.fetchQuery(testsServiceQueries.getTest(testRequest({ orgId, project, testId }), { staleTime: LIVE_MS })));
     // The default branch the flake gate measures from: the summary's (cached when Flaky tests read it). Without it, the prompt says "<default branch>".
     const branch =
       defaultBranch ??
       (await client
-        .fetchQuery(onControlPlane(testsServiceQueries.getTestSummary(summaryRequest({ orgId, project }), { staleTime: LIVE_MS })))
+        .fetchQuery(testsServiceQueries.getTestSummary(summaryRequest({ orgId, project }), { staleTime: LIVE_MS }))
         .then((summary) => summary.branch || undefined)
         .catch(() => undefined));
     return flakyTestSubject(detail.flake ?? flake, detail, branch);
@@ -215,13 +217,15 @@ export function RaiseCoverageButton({
     // Never read unscoped: wait for the org (the button can be pressed before it resolves).
     const { orgId } = org.ready ? org : await whenOrgScopeReady();
     const query = { target, path: pkg };
-    const tree = coverageTreeOf(await client.fetchQuery(onControlPlane(testsServiceQueries.getCoverage(coverageRequest({ orgId, project, ...query }), { staleTime: SETTLED_MS }))));
+    // Refused without a control plane, as the pages' reads are (onControlPlane).
+    refuseWithoutControlPlane(client);
+    const tree = coverageTreeOf(await client.fetchQuery(testsServiceQueries.getCoverage(coverageRequest({ orgId, project, ...query }), { staleTime: SETTLED_MS })));
     const paths = filesToRead(tree).slice(0, MAX_UNCOVERED_FILES);
     // Read in parallel, each started here, after the org is known (not in a callback of its own).
     const reads: Promise<FileCoverage>[] = [];
     for (const path of paths) {
       reads.push(
-        client.fetchQuery(onControlPlane(testsServiceQueries.getFileCoverage(fileCoverageRequest({ orgId, project, target, path }), { staleTime: SETTLED_MS }))).then(fileCoverageOf)
+        client.fetchQuery(testsServiceQueries.getFileCoverage(fileCoverageRequest({ orgId, project, target, path }), { staleTime: SETTLED_MS })).then(fileCoverageOf)
       );
     }
     const files = await Promise.all(reads);
