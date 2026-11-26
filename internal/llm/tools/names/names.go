@@ -206,6 +206,7 @@ var AllToolNames = []string{
 	"slack__conversations_replies",
 	"twilio__message_send", "twilio__message_get", "twilio__message_list", "twilio__phone_number_list",
 	"sentry__project_list", "sentry__issue_list", "sentry__issue_get", "sentry__event_get", "sentry__issue_update",
+	"growth__inbox_status", "growth__agent_run_list", "growth__agent_run_create",
 	// Scenarios
 	ToolListScenarios, ToolViewScenario, ToolEditScenario, ToolWriteScenario, ToolDeleteScenario, ToolRunScenario,
 }
