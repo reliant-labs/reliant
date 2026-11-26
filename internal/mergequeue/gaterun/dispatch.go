@@ -168,9 +168,10 @@ func startRequest(repo GateRepo, req GateRequest) (StartRequest, error) {
 	s := StartRequest{
 		GateID: GateID(req.BatchID, req.Attempt), Repo: repo.Repository, Ref: req.CandidateRef, SHA: req.CandidateSHA,
 		Stages: plan, Env: env, TimeoutMs: timeout.Milliseconds(),
-		// Not isolated is allowed only when both say shadow: the caller's
-		// request, and the repository's mode as stored.
-		AllowNotIsolated: req.Shadow && repo.Mode == core.PipelineRepoModeShadow,
+		// Not isolated is allowed when both say shadow (the caller's
+		// request, and the repository's mode as stored), or when the
+		// repository opted in to unisolated gates.
+		AllowNotIsolated: (req.Shadow && repo.Mode == core.PipelineRepoModeShadow) || req.AllowUnisolated,
 	}
 	if err := s.Validate(); err != nil {
 		return StartRequest{}, err

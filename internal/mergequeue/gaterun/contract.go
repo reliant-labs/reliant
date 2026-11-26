@@ -51,4 +51,10 @@ type GateRequest struct {
 	// batch never lands. Only a shadow gate of a repository whose stored
 	// mode is shadow may run on the not-isolated runc backend.
 	Shadow bool
+	// AllowUnisolated is the repository's opt-in (pipeline.yaml
+	// gate.allow_unisolated, owner decision 2026-11-26) to gate a landing
+	// batch on runc until isolated gate machines exist. The caller marks
+	// such a batch's verdict unisolated_accepted, which is the only way a
+	// runc batch may land.
+	AllowUnisolated bool
 }
