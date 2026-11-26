@@ -23,13 +23,15 @@ func TestPGStore(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
 
-	cb := &store.GtmCampaign{OrgID: orgB, Name: "B", Status: string(CampaignDraft), Revision: 1, CreatedAt: now, UpdatedAt: now}
+	sb := &store.GtmStrategy{OrgID: orgB, Name: "B", Status: string(StrategyDraft), Revision: 1, CreatedBy: "u", UpdatedBy: "u", CreatedAt: now, UpdatedAt: now}
+	require.NoError(t, st.CreateStrategy(ctx, sb))
+	cb := &store.GtmCampaign{OrgID: orgB, Name: "B", Status: string(CampaignDraft), StrategyID: sb.ID, Revision: 1, CreatedAt: now, UpdatedAt: now}
 	require.NoError(t, st.CreateCampaign(ctx, cb))
 	require.NotEmpty(t, cb.ID)
 
 	t.Run("a link to another org's campaign is a LinkError", func(t *testing.T) {
 		err := st.CreateItem(ctx, &store.GtmItem{
-			OrgID: orgA, CampaignID: &cb.ID, Kind: string(ItemBlogPost), Title: "x",
+			OrgID: orgA, CampaignID: &cb.ID, Format: string(FormatLongPost), Title: "x",
 			Status: string(ItemDraft), Revision: 1, CreatedAt: now, UpdatedAt: now,
 		})
 		var link *LinkError
@@ -41,7 +43,7 @@ func TestPGStore(t *testing.T) {
 
 	t.Run("a CHECK violation is a ValidationError naming it", func(t *testing.T) {
 		err := st.CreateItem(ctx, &store.GtmItem{
-			OrgID: orgA, Kind: string(ItemEmail), Title: "x",
+			OrgID: orgA, Format: string(FormatEmail), Title: "x",
 			Status: string(ItemSent), Revision: 1, CreatedAt: now, UpdatedAt: now,
 		})
 		var ve *ValidationError
@@ -86,7 +88,7 @@ func TestPGStore(t *testing.T) {
 
 	t.Run("a send hold is taken only when empty and released only by its hash, on an approved row, at its revision", func(t *testing.T) {
 		row := &store.GtmItem{
-			OrgID: orgA, Kind: string(ItemEmail), Title: "Mail", Status: string(ItemApproved),
+			OrgID: orgA, Format: string(FormatEmail), Title: "Mail", Status: string(ItemApproved),
 			EmailTo: []string{"a@example.com"}, EmailSubject: "S", Revision: 1, CreatedAt: now, UpdatedAt: now,
 		}
 		require.NoError(t, st.CreateItem(ctx, row))
@@ -119,7 +121,7 @@ func TestPGStore(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, int32(2), got.Revision, "a plain release does not")
 
-		draft := &store.GtmItem{OrgID: orgA, Kind: string(ItemEmail), Title: "D", Status: string(ItemDraft), Revision: 1, CreatedAt: now, UpdatedAt: now}
+		draft := &store.GtmItem{OrgID: orgA, Format: string(FormatEmail), Title: "D", Status: string(ItemDraft), Revision: 1, CreatedAt: now, UpdatedAt: now}
 		require.NoError(t, st.CreateItem(ctx, draft))
 		require.ErrorIs(t, st.HoldItemSend(ctx, orgA, draft.ID, 1, "h", now), ErrRevisionConflict, "only an approved row is held")
 	})
@@ -127,7 +129,7 @@ func TestPGStore(t *testing.T) {
 	t.Run("an email is never scheduled or published, at the table too", func(t *testing.T) {
 		for _, st2 := range []ItemStatus{ItemScheduled, ItemPublished} {
 			err := st.CreateItem(ctx, &store.GtmItem{
-				OrgID: orgA, Kind: string(ItemEmail), Title: "x", Status: string(st2), ScheduledAt: &now,
+				OrgID: orgA, Format: string(FormatEmail), Title: "x", Status: string(st2), ScheduledAt: &now,
 				Revision: 1, CreatedAt: now, UpdatedAt: now,
 			})
 			var ve *ValidationError
@@ -138,7 +140,10 @@ func TestPGStore(t *testing.T) {
 	t.Run("the service end to end", func(t *testing.T) {
 		em := &MockEmail{SendFunc: sendsAs("gmail-pg")}
 		svc := New(Deps{Store: st, Gate: allowGate(orgA), Email: em})
-		c, err := svc.CreateCampaign(ctx, person, CreateCampaignInput{Name: "Launch"})
+		strat, err := svc.CreateStrategy(ctx, person, CreateStrategyInput{Name: "Grow", PeriodStart: "2026-12-01", PeriodEnd: "2027-01-31"})
+		require.NoError(t, err)
+		assert.Equal(t, "2027-01-31", strat.PeriodEnd, "a DATE round-trips")
+		c, err := svc.CreateCampaign(ctx, person, CreateCampaignInput{Name: "Launch", StrategyID: strat.ID})
 		require.NoError(t, err)
 		idea, err := svc.CreateIdea(ctx, agent, CreateIdeaInput{
 			Kind: IdeaKindContent, Title: "Post", CampaignID: c.ID,
@@ -149,12 +154,12 @@ func TestPGStore(t *testing.T) {
 		assert.True(t, idea.Evidence[0].ObservedAt.Equal(now))
 
 		when := now.Add(48 * time.Hour)
-		_, err = svc.CreateItem(ctx, agent, CreateItemInput{Kind: ItemBlogPost, Title: "later", CampaignID: c.ID})
+		_, err = svc.CreateItem(ctx, agent, CreateItemInput{Format: FormatLongPost, Title: "later", CampaignID: c.ID})
 		require.NoError(t, err)
-		_, err = svc.CreateItem(ctx, agent, CreateItemInput{Kind: ItemBlogPost, Title: "dated", CampaignID: c.ID, ScheduledAt: &when})
+		_, err = svc.CreateItem(ctx, agent, CreateItemInput{Format: FormatLongPost, Title: "dated", CampaignID: c.ID, ScheduledAt: &when})
 		require.NoError(t, err)
 		mail, err := svc.CreateItem(ctx, agent, CreateItemInput{
-			Kind: ItemEmail, Title: "Mail", BodyMD: "Hi", IdeaID: idea.ID,
+			Format: FormatEmail, Title: "Mail", BodyMD: "Hi", IdeaID: idea.ID,
 			EmailTo: []string{"a@example.com"}, EmailSubject: "News",
 		})
 		require.NoError(t, err)

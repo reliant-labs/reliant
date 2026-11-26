@@ -11,12 +11,11 @@ import (
 )
 
 var (
-	itemKinds    = []ItemKind{ItemBlogPost, ItemSocialPost, ItemEmail, ItemLaunch, ItemOther}
+	itemFormats  = []ItemFormat{FormatShortPost, FormatLongPost, FormatEmail, FormatColdOutreach, FormatVideo, FormatMediaPitch, FormatAd, FormatOther}
 	itemStatuses = []ItemStatus{ItemDraft, ItemReview, ItemApproved, ItemScheduled, ItemSent, ItemPublished, ItemPaused}
 )
 
 const (
-	maxChannelLen      = 100
 	maxEmailSubjectLen = 500
 	maxApprovalHashLen = 200
 	maxGmailIDLen      = 200
@@ -35,8 +34,8 @@ func (s *service) ListItems(ctx context.Context, actor Actor, in ListItemsInput)
 	if err != nil {
 		return ListItemsResult{}, err
 	}
-	if in.Kind != "" && !slices.Contains(itemKinds, in.Kind) {
-		return ListItemsResult{}, invalid("kind", "unknown kind")
+	if in.Format != "" && !slices.Contains(itemFormats, in.Format) {
+		return ListItemsResult{}, invalid("format", "unknown format")
 	}
 	if in.Status != "" && !slices.Contains(itemStatuses, in.Status) {
 		return ListItemsResult{}, invalid("status", "unknown status")
@@ -46,7 +45,7 @@ func (s *service) ListItems(ctx context.Context, actor Actor, in ListItemsInput)
 		return ListItemsResult{}, invalid("scheduled_to", "must be after scheduled_from")
 	}
 	rows, err := s.store.ListItems(ctx, ItemFilter{
-		OrgID: actor.OrgID, CampaignID: in.CampaignID, Kind: in.Kind, Status: in.Status,
+		OrgID: actor.OrgID, CampaignID: in.CampaignID, ChannelID: in.ChannelID, Format: in.Format, Status: in.Status,
 		ScheduledFrom: from, ScheduledTo: to, Limit: limit, Offset: offset,
 	})
 	if err != nil {
@@ -77,8 +76,8 @@ func (s *service) CreateItem(ctx context.Context, actor Actor, in CreateItemInpu
 	if err := s.admit(ctx, actor); err != nil {
 		return Item{}, err
 	}
-	if !slices.Contains(itemKinds, in.Kind) {
-		return Item{}, invalid("kind", "required")
+	if !slices.Contains(itemFormats, in.Format) {
+		return Item{}, invalid("format", "required")
 	}
 	status := in.Status
 	switch status {
@@ -91,10 +90,9 @@ func (s *service) CreateItem(ctx context.Context, actor Actor, in CreateItemInpu
 	if err := firstErr(
 		checkLen("title", in.Title, 1, MaxTitleLen),
 		checkLen("body_md", in.BodyMD, 0, MaxBodyLen),
-		checkLen("channel", in.Channel, 0, maxChannelLen),
 		checkLen("email_subject", in.EmailSubject, 0, maxEmailSubjectLen),
 		checkRecipients(in.EmailTo),
-		checkEmailFields(in.Kind, in.EmailTo, in.EmailSubject),
+		checkEmailFields(in.Format, in.EmailTo, in.EmailSubject),
 	); err != nil {
 		return Item{}, err
 	}
@@ -104,6 +102,7 @@ func (s *service) CreateItem(ctx context.Context, actor Actor, in CreateItemInpu
 		if err := firstErr(
 			s.checkCampaignLink(ctx, actor.OrgID, in.CampaignID),
 			s.checkIdeaLink(ctx, actor.OrgID, in.IdeaID),
+			s.checkChannelLink(ctx, actor.OrgID, in.ChannelID),
 		); err != nil {
 			return err
 		}
@@ -111,8 +110,8 @@ func (s *service) CreateItem(ctx context.Context, actor Actor, in CreateItemInpu
 			OrgID:        actor.OrgID,
 			CampaignID:   strPtrOrNil(in.CampaignID),
 			IdeaID:       strPtrOrNil(in.IdeaID),
-			Kind:         string(in.Kind),
-			Channel:      in.Channel,
+			Format:       string(in.Format),
+			ChannelID:    strPtrOrNil(in.ChannelID),
 			Title:        in.Title,
 			BodyMd:       in.BodyMD,
 			Status:       string(status),
@@ -166,6 +165,9 @@ func (s *service) UpdateItem(ctx context.Context, actor Actor, in UpdateItemInpu
 		if !actor.Person() && !agentEditable(cur) {
 			return personOnly("change an item that is " + statusWord(cur))
 		}
+		if in.PublishedURL != nil && !actor.Person() {
+			return personOnly("record where an item was published")
+		}
 		before := itemContent(row)
 		if err := s.applyItemUpdate(ctx, actor.OrgID, row, in); err != nil {
 			return err
@@ -178,15 +180,18 @@ func (s *service) UpdateItem(ctx context.Context, actor Actor, in UpdateItemInpu
 			row.Status = string(ItemReview)
 		}
 		if in.Status != nil && *in.Status != from {
-			if err := checkTransition(actor.Person(), ItemKind(row.Kind), from, *in.Status); err != nil {
+			if err := checkTransition(actor.Person(), ItemFormat(row.Format), from, *in.Status); err != nil {
 				return err
 			}
 			row.Status = string(*in.Status)
 		}
-		if ItemKind(row.Kind) == ItemEmail && (ItemStatus(row.Status) == ItemScheduled || ItemStatus(row.Status) == ItemPublished) {
+		if ItemFormat(row.Format).EmailType() && (ItemStatus(row.Status) == ItemScheduled || ItemStatus(row.Status) == ItemPublished) {
 			return &TransitionError{From: cur, To: ItemStatus(row.Status), Reason: "an email is never scheduled or published; it stays APPROVED until it is sent"}
 		}
-		if err := checkEmailFields(ItemKind(row.Kind), row.EmailTo, row.EmailSubject); err != nil {
+		if err := checkEmailFields(ItemFormat(row.Format), row.EmailTo, row.EmailSubject); err != nil {
+			return err
+		}
+		if err := s.checkPublishedURL(ctx, actor.OrgID, row, cur); err != nil {
 			return err
 		}
 		if ItemStatus(row.Status) == ItemScheduled && row.ScheduledAt == nil {
@@ -205,8 +210,8 @@ func (s *service) UpdateItem(ctx context.Context, actor Actor, in UpdateItemInpu
 }
 
 func checkItemUpdate(in UpdateItemInput) error {
-	if in.Kind != nil && !slices.Contains(itemKinds, *in.Kind) {
-		return invalid("kind", "unknown kind")
+	if in.Format != nil && !slices.Contains(itemFormats, *in.Format) {
+		return invalid("format", "unknown format")
 	}
 	if in.Status != nil {
 		if !slices.Contains(itemStatuses, *in.Status) {
@@ -223,8 +228,8 @@ func checkItemUpdate(in UpdateItemInput) error {
 	if in.BodyMD != nil {
 		checks = append(checks, checkLen("body_md", *in.BodyMD, 0, MaxBodyLen))
 	}
-	if in.Channel != nil {
-		checks = append(checks, checkLen("channel", *in.Channel, 0, maxChannelLen))
+	if in.PublishedURL != nil && *in.PublishedURL != "" {
+		checks = append(checks, checkURL("published_url", *in.PublishedURL))
 	}
 	if in.EmailSubject != nil {
 		checks = append(checks, checkLen("email_subject", *in.EmailSubject, 0, maxEmailSubjectLen))
@@ -235,14 +240,19 @@ func checkItemUpdate(in UpdateItemInput) error {
 	return firstErr(checks...)
 }
 
-// itemContent is what an approval approves: the words and where they go.
-// Links and the date are not content.
+// itemContent is what an approval approves: title, body_md, format,
+// channel_id, email_to and email_subject. Links to a campaign or an idea,
+// the date and published_url are not content.
 func itemContent(r *store.GtmItem) string {
-	return strings.Join([]string{r.Kind, r.Title, r.BodyMd, r.Channel, r.EmailSubject, strings.Join(r.EmailTo, "\x00")}, "\x01")
+	return strings.Join([]string{r.Format, r.Title, r.BodyMd, deref(r.ChannelID), r.EmailSubject, strings.Join(r.EmailTo, "\x00")}, "\x01")
 }
 
-func statusWord(st ItemStatus) string {
-	return strings.ToLower(strings.TrimPrefix(string(st), "GTM_ITEM_STATUS_"))
+func statusWord(st ItemStatus) string { return statusName(string(st), "GTM_ITEM_STATUS_") }
+
+// statusName is an enum value name in words: "GTM_ITEM_STATUS_APPROVED" is
+// "approved".
+func statusName(v, prefix string) string {
+	return strings.ToLower(strings.ReplaceAll(strings.TrimPrefix(v, prefix), "_", " "))
 }
 
 // checkTransition is the item lifecycle. An agent moves between DRAFT and
@@ -255,12 +265,12 @@ func statusWord(st ItemStatus) string {
 // A move no one may make is a *TransitionError (FailedPrecondition); one only
 // a person may make, asked by an agent, is a *PersonOnlyError
 // (PermissionDenied).
-func checkTransition(person bool, kind ItemKind, from, to ItemStatus) error {
+func checkTransition(person bool, format ItemFormat, from, to ItemStatus) error {
 	draftish := from == ItemDraft || from == ItemReview
 	if draftish && (to == ItemDraft || to == ItemReview) {
 		return nil
 	}
-	email := kind == ItemEmail
+	email := format.EmailType()
 	var personMay bool
 	switch {
 	case to == ItemApproved && draftish:
@@ -290,8 +300,8 @@ func checkTransition(person bool, kind ItemKind, from, to ItemStatus) error {
 }
 
 func (s *service) applyItemUpdate(ctx context.Context, orgID string, row *store.GtmItem, in UpdateItemInput) error {
-	if in.Kind != nil {
-		row.Kind = string(*in.Kind)
+	if in.Format != nil {
+		row.Format = string(*in.Format)
 	}
 	if in.Title != nil {
 		row.Title = *in.Title
@@ -299,8 +309,14 @@ func (s *service) applyItemUpdate(ctx context.Context, orgID string, row *store.
 	if in.BodyMD != nil {
 		row.BodyMd = *in.BodyMD
 	}
-	if in.Channel != nil {
-		row.Channel = *in.Channel
+	if in.ChannelID != nil {
+		if err := s.checkChannelLink(ctx, orgID, *in.ChannelID); err != nil {
+			return err
+		}
+		row.ChannelID = strPtrOrNil(*in.ChannelID)
+	}
+	if in.PublishedURL != nil {
+		row.PublishedURL = strPtrOrNil(*in.PublishedURL)
 	}
 	if in.CampaignID != nil {
 		if err := s.checkCampaignLink(ctx, orgID, *in.CampaignID); err != nil {
@@ -330,9 +346,28 @@ func (s *service) applyItemUpdate(ctx context.Context, orgID string, row *store.
 }
 
 // checkEmailFields keeps recipients and a subject on emails only.
-func checkEmailFields(kind ItemKind, to []string, subject string) error {
-	if kind != ItemEmail && (len(to) > 0 || subject != "") {
-		return invalid("email_to", "only an email item has recipients and a subject")
+func checkEmailFields(format ItemFormat, to []string, subject string) error {
+	if !format.EmailType() && (len(to) > 0 || subject != "") {
+		return invalid("email_to", "only an email-type item has recipients and a subject")
+	}
+	return nil
+}
+
+// checkPublishedURL is the PUBLISHED rule for a MANUAL channel: an item
+// marked PUBLISHED there carries the URL a person recorded, set in the same
+// UpdateItem or before; one whose URL is cleared while PUBLISHED is refused
+// alike.
+func (s *service) checkPublishedURL(ctx context.Context, orgID string, row *store.GtmItem, from ItemStatus) error {
+	if ItemStatus(row.Status) != ItemPublished || deref(row.PublishedURL) != "" || row.ChannelID == nil {
+		return nil
+	}
+	ch, err := s.store.GetChannel(ctx, orgID, *row.ChannelID)
+	if err != nil {
+		return s.notFound(ctx, err, "channel", *row.ChannelID)
+	}
+	if ChannelMode(ch.Mode) == ChannelManual {
+		return &TransitionError{From: from, To: ItemPublished,
+			Reason: "an item on a manual channel needs its published URL: record where it went out"}
 	}
 	return nil
 }

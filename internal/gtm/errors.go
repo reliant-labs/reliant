@@ -27,9 +27,11 @@ var (
 	// (PermissionDenied). *PersonOnlyError names the action.
 	ErrPersonOnly = svcerr.PermissionDenied("only a person can do this")
 
-	// ErrLinkNotFound is a link to a campaign or idea the org does not have
-	// (InvalidArgument). *LinkError names the field.
-	ErrLinkNotFound = svcerr.InvalidArgument("linked row not found")
+	// ErrLinkNotFound is a link to a strategy, campaign, channel, idea or
+	// item the org does not have (NotFound, as the GtmService contract
+	// says). *LinkError names the field. It is only ever returned to an
+	// entitled caller: a refused one never gets past the gate.
+	ErrLinkNotFound = svcerr.NotFound("linked row")
 
 	// ErrNotApproved is a send, or a send record, for an item that is not an
 	// APPROVED email (FailedPrecondition).
@@ -93,6 +95,54 @@ var (
 	// ErrEmailUnavailable is SendItemEmail in a process with no email client
 	// (Unavailable).
 	ErrEmailUnavailable = svcerr.Unavailable("email is not configured")
+
+	// ErrChannelExists is a channel key the org already holds
+	// (AlreadyExists).
+	ErrChannelExists = svcerr.AlreadyExists("a channel with this key already exists")
+
+	// ErrChannelNotSendable is a send of an item whose channel is not an
+	// ACTIVE, INTEGRATED gmail channel (FailedPrecondition).
+	ErrChannelNotSendable = svcerr.FailedPrecondition("the item's channel cannot send email: it must be an active, integrated gmail channel")
+
+	// ErrAssetsUnavailable is a byte-touching asset call in a process with
+	// no asset store (Unavailable): assets fail closed.
+	ErrAssetsUnavailable = svcerr.Unavailable("asset storage is not configured")
+
+	// ErrAttachmentsUnavailable is AttachFromAttachment in a process with no
+	// attachment reader (Unavailable).
+	ErrAttachmentsUnavailable = svcerr.Unavailable("chat attachments are not available here")
+
+	// ErrAssetTooLarge is an asset over its size limit (ResourceExhausted).
+	ErrAssetTooLarge = svcerr.ResourceExhausted("the file is too large")
+
+	// ErrAssetQuota is an upload past the org's asset quota
+	// (ResourceExhausted).
+	ErrAssetQuota = svcerr.ResourceExhausted("the org's asset storage is full")
+
+	// ErrAssetRejected is uploaded bytes that failed a check: size, type or
+	// read (InvalidArgument). *AssetRejectedError says which; the object and
+	// the row are gone.
+	ErrAssetRejected = svcerr.InvalidArgument("the file was rejected")
+
+	// ErrAssetNotPending is a confirm of an asset that is not PENDING
+	// (FailedPrecondition).
+	ErrAssetNotPending = svcerr.FailedPrecondition("the asset is not waiting for its upload")
+
+	// ErrAssetNotUploaded is a confirm before the bytes were PUT
+	// (FailedPrecondition); the asset stays PENDING.
+	ErrAssetNotUploaded = svcerr.FailedPrecondition("the file has not been uploaded yet")
+
+	// ErrAssetNotReady is a download of an asset that is not READY
+	// (FailedPrecondition).
+	ErrAssetNotReady = svcerr.FailedPrecondition("the asset is not ready")
+
+	// ErrAssetStorageFailed is an asset store failure (Unavailable); the
+	// store's error is logged, never returned.
+	ErrAssetStorageFailed = svcerr.Unavailable("asset storage failed")
+
+	// ErrObjectNotFound is what an AssetStore's Open returns for a missing
+	// object.
+	ErrObjectNotFound = svcerr.NotFound("object")
 )
 
 // RevisionConflictError is a write that named a revision the row has moved
@@ -186,6 +236,19 @@ func (e *TransitionError) Error() string {
 
 // Unwrap returns ErrInvalidTransition.
 func (e *TransitionError) Unwrap() error { return ErrInvalidTransition }
+
+// AssetRejectedError is uploaded bytes that failed a check. It is
+// ErrAssetRejected.
+type AssetRejectedError struct {
+	// Reason says which check, in words a person can act on.
+	Reason string
+}
+
+// Error implements error.
+func (e *AssetRejectedError) Error() string { return "the file was rejected: " + e.Reason }
+
+// Unwrap returns ErrAssetRejected.
+func (e *AssetRejectedError) Unwrap() error { return ErrAssetRejected }
 
 // PersonOnlyError is an agent doing what only a person may. It is
 // ErrPersonOnly.

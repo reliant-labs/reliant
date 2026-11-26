@@ -52,6 +52,9 @@ type fixture struct {
 	store     *fakeStore
 	email     *MockEmail
 	analytics *MockAnalytics
+	blobs     *fakeBlobs
+	files     *fakeAttachments
+	conns     *MockConnections
 	// now is the service's clock; advance moves it.
 	now time.Time
 }
@@ -71,13 +74,21 @@ func newFixture(t *testing.T) *fixture {
 		analytics: &MockAnalytics{QueryFunc: func(_ context.Context, _ string, q AnalyticsQuery) (AnalyticsResult, error) {
 			return AnalyticsResult{Template: q.Template, From: q.From, To: q.To}, nil
 		}},
+		blobs: newFakeBlobs(),
+		files: &fakeAttachments{files: map[string]fakeFile{}},
+		conns: &MockConnections{StateFunc: func(context.Context, Actor, string, string) (ConnectionState, error) {
+			return ConnectionConnected, nil
+		}},
 	}
 	f.svc = New(Deps{
-		Store:     f.store,
-		Gate:      allowGate(orgA, orgB),
-		Clock:     &MockClock{NowFunc: func() time.Time { return f.now }},
-		Analytics: f.analytics,
-		Email:     f.email,
+		Store:       f.store,
+		Gate:        allowGate(orgA, orgB),
+		Clock:       &MockClock{NowFunc: func() time.Time { return f.now }},
+		Analytics:   f.analytics,
+		Email:       f.email,
+		Connections: f.conns,
+		Assets:      f.blobs,
+		Attachments: f.files,
 	})
 	return f
 }
@@ -97,7 +108,7 @@ func (f *fixture) emailItem(t *testing.T, status ItemStatus) Item {
 	t.Helper()
 	ctx := context.Background()
 	it, err := f.svc.CreateItem(ctx, person, CreateItemInput{
-		Kind: ItemEmail, Title: "Launch mail", BodyMD: "Hello", EmailTo: []string{"a@example.com"}, EmailSubject: "News",
+		Format: FormatEmail, Title: "Launch mail", BodyMD: "Hello", EmailTo: []string{"a@example.com"}, EmailSubject: "News",
 	})
 	require.NoError(t, err)
 	if status != ItemDraft {
@@ -141,7 +152,7 @@ func TestEveryMethodIsNotFoundWhenTheGateRefuses(t *testing.T) {
 		"ListItems": func(s Service, a Actor) error { _, err := s.ListItems(ctx(), a, ListItemsInput{}); return err },
 		"GetItem":   func(s Service, a Actor) error { _, err := s.GetItem(ctx(), a, GetItemInput{ID: "x"}); return err },
 		"CreateItem": func(s Service, a Actor) error {
-			_, err := s.CreateItem(ctx(), a, CreateItemInput{Kind: ItemBlogPost, Title: "t"})
+			_, err := s.CreateItem(ctx(), a, CreateItemInput{Format: FormatLongPost, Title: "t"})
 			return err
 		},
 		"UpdateItem": func(s Service, a Actor) error {
@@ -246,7 +257,7 @@ func TestOrgsAreIsolated(t *testing.T) {
 func TestCrossOrgLinksAreRefused(t *testing.T) {
 	f := newFixture(t)
 	other := Actor{UserID: "u-b", OrgID: orgB, Kind: ActorPerson}
-	c, err := f.svc.CreateCampaign(ctx(), other, CreateCampaignInput{Name: "B's"})
+	c, err := f.svc.CreateCampaign(ctx(), other, CreateCampaignInput{Name: "B's", StrategyID: f.strategy(t, other)})
 	require.NoError(t, err)
 	bIdea, err := f.svc.CreateIdea(ctx(), other, CreateIdeaInput{Kind: IdeaKindGTM, Title: "B's idea"})
 	require.NoError(t, err)
@@ -255,13 +266,13 @@ func TestCrossOrgLinksAreRefused(t *testing.T) {
 	_, err = f.svc.CreateIdea(ctx(), person, CreateIdeaInput{Kind: IdeaKindGTM, Title: "t", CampaignID: c.ID})
 	require.ErrorAs(t, err, &link)
 	assert.Equal(t, "campaign_id", link.Field)
-	assert.ErrorIs(t, err, svcerr.ErrInvalidArgument)
+	assert.ErrorIs(t, err, svcerr.ErrNotFound, "a link to another org's row is NotFound")
 
-	_, err = f.svc.CreateItem(ctx(), person, CreateItemInput{Kind: ItemBlogPost, Title: "t", IdeaID: bIdea.ID})
+	_, err = f.svc.CreateItem(ctx(), person, CreateItemInput{Format: FormatLongPost, Title: "t", IdeaID: bIdea.ID})
 	require.ErrorAs(t, err, &link)
 	assert.Equal(t, "idea_id", link.Field)
 
-	it, err := f.svc.CreateItem(ctx(), person, CreateItemInput{Kind: ItemBlogPost, Title: "t"})
+	it, err := f.svc.CreateItem(ctx(), person, CreateItemInput{Format: FormatLongPost, Title: "t"})
 	require.NoError(t, err)
 	_, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, CampaignID: &c.ID})
 	require.ErrorAs(t, err, &link)
@@ -273,7 +284,7 @@ func TestCrossOrgLinksAreRefused(t *testing.T) {
 			CreateItemFunc:  func(context.Context, *store.GtmItem) error { return &LinkError{Field: "campaign_id"} },
 		}
 		svc := New(Deps{Store: st, Gate: allowGate(orgA)})
-		_, err := svc.CreateItem(ctx(), person, CreateItemInput{Kind: ItemBlogPost, Title: "t", CampaignID: "c"})
+		_, err := svc.CreateItem(ctx(), person, CreateItemInput{Format: FormatLongPost, Title: "t", CampaignID: "c"})
 		require.ErrorIs(t, err, ErrLinkNotFound)
 	})
 }
@@ -384,7 +395,7 @@ func TestAgentLimits(t *testing.T) {
 		f := newFixture(t)
 		when := t0.Add(48 * time.Hour)
 		for _, st := range []ItemStatus{ItemApproved, ItemScheduled, ItemPublished, ItemPaused} {
-			it := f.itemAt(t, ItemBlogPost, st)
+			it := f.itemAt(t, FormatLongPost, st)
 			for name, in := range map[string]UpdateItemInput{
 				"content":    {BodyMD: ptr("sneaky")},
 				"date":       {ScheduledAt: &when},
@@ -397,7 +408,7 @@ func TestAgentLimits(t *testing.T) {
 				require.ErrorIs(t, err, ErrPersonOnly, "%s: %s", st, name)
 			}
 		}
-		it := f.itemAt(t, ItemBlogPost, ItemReview)
+		it := f.itemAt(t, FormatLongPost, ItemReview)
 		got, err := f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, ScheduledAt: &when, BodyMD: ptr("v2")})
 		require.NoError(t, err)
 		assert.Equal(t, ItemReview, got.Status, "a date never publishes")
@@ -409,7 +420,7 @@ func TestAgentLimits(t *testing.T) {
 	})
 	t.Run("an agent's item starts DRAFT", func(t *testing.T) {
 		f := newFixture(t)
-		it, err := f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemSocialPost, Title: "t"})
+		it, err := f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatShortPost, Title: "t"})
 		require.NoError(t, err)
 		assert.Equal(t, ItemDraft, it.Status)
 	})
@@ -657,11 +668,11 @@ func TestListsPageAndFilter(t *testing.T) {
 
 	t.Run("the calendar is a scheduled range", func(t *testing.T) {
 		in, out := t0.Add(24*time.Hour), t0.Add(30*24*time.Hour)
-		_, err := f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemSocialPost, Title: "in", ScheduledAt: &in})
+		_, err := f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatShortPost, Title: "in", ScheduledAt: &in})
 		require.NoError(t, err)
-		_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemSocialPost, Title: "out", ScheduledAt: &out})
+		_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatShortPost, Title: "out", ScheduledAt: &out})
 		require.NoError(t, err)
-		_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemSocialPost, Title: "undated"})
+		_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatShortPost, Title: "undated"})
 		require.NoError(t, err)
 		from, to := t0, t0.Add(7*24*time.Hour)
 		res, err := f.svc.ListItems(ctx(), person, ListItemsInput{ScheduledFrom: &from, ScheduledTo: &to})
@@ -673,14 +684,14 @@ func TestListsPageAndFilter(t *testing.T) {
 
 func TestCampaignDetail(t *testing.T) {
 	f := newFixture(t)
-	c, err := f.svc.CreateCampaign(ctx(), agent, CreateCampaignInput{Name: "Q1 launch", Goal: "100 signups"})
+	c, err := f.svc.CreateCampaign(ctx(), agent, CreateCampaignInput{Name: "Q1 launch", Goal: "100 signups", StrategyID: f.strategy(t, agent)})
 	require.NoError(t, err)
 	assert.Equal(t, CampaignDraft, c.Status)
 	_, err = f.svc.CreateIdea(ctx(), agent, CreateIdeaInput{Kind: IdeaKindGTM, Title: "Launch post", CampaignID: c.ID})
 	require.NoError(t, err)
-	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemBlogPost, Title: "Post", CampaignID: c.ID})
+	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatLongPost, Title: "Post", CampaignID: c.ID})
 	require.NoError(t, err)
-	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemBlogPost, Title: "Unlinked"})
+	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatLongPost, Title: "Unlinked"})
 	require.NoError(t, err)
 
 	d, err := f.svc.GetCampaign(ctx(), person, GetCampaignInput{ID: c.ID})
@@ -699,23 +710,45 @@ func TestCampaignDetail(t *testing.T) {
 
 func TestItemValidation(t *testing.T) {
 	f := newFixture(t)
-	_, err := f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemBlogPost, Title: "t", EmailTo: []string{"a@example.com"}})
+	_, err := f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatLongPost, Title: "t", EmailTo: []string{"a@example.com"}})
 	require.ErrorIs(t, err, ErrInvalidArgument, "only an email has recipients")
-	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemEmail, Title: "t", EmailTo: []string{"Bob <b@example.com>"}})
+	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatEmail, Title: "t", EmailTo: []string{"Bob <b@example.com>"}})
 	require.ErrorIs(t, err, ErrInvalidArgument, "bare addresses only")
-	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Kind: ItemEmail, Title: "  "})
+	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatEmail, Title: "  "})
 	require.ErrorIs(t, err, ErrInvalidArgument)
 
-	it := f.itemAt(t, ItemBlogPost, ItemApproved)
+	it := f.itemAt(t, FormatLongPost, ItemApproved)
 	_, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemScheduled)})
 	require.ErrorIs(t, err, ErrInvalidArgument, "a scheduled item needs a date")
 }
 
-// itemAt makes an item of kind and walks it, as a person, to status.
-func (f *fixture) itemAt(t *testing.T, kind ItemKind, status ItemStatus) Item {
+// strategy makes a DRAFT strategy for a's org and returns its id.
+func (f *fixture) strategy(t *testing.T, a Actor) string {
 	t.Helper()
-	in := CreateItemInput{Kind: kind, Title: "Item", BodyMD: "Body"}
-	if kind == ItemEmail {
+	st, err := f.svc.CreateStrategy(ctx(), a, CreateStrategyInput{Name: "Grow"})
+	require.NoError(t, err)
+	return st.ID
+}
+
+// channel returns the org's (seeded) channel key.
+func (f *fixture) channel(t *testing.T, key string) Channel {
+	t.Helper()
+	res, err := f.svc.ListChannels(ctx(), person, ListChannelsInput{})
+	require.NoError(t, err)
+	for _, ch := range res.Channels {
+		if ch.Key == key {
+			return ch
+		}
+	}
+	t.Fatalf("no channel %q", key)
+	return Channel{}
+}
+
+// itemAt makes an item of kind and walks it, as a person, to status.
+func (f *fixture) itemAt(t *testing.T, format ItemFormat, status ItemStatus) Item {
+	t.Helper()
+	in := CreateItemInput{Format: format, Title: "Item", BodyMD: "Body"}
+	if format.EmailType() {
 		in.EmailTo, in.EmailSubject = []string{"a@example.com"}, "Subject"
 	}
 	if status == ItemScheduled {
@@ -742,8 +775,8 @@ func (f *fixture) itemAt(t *testing.T, kind ItemKind, status ItemStatus) Item {
 
 func TestItemLifecycle(t *testing.T) {
 	all := []ItemStatus{ItemDraft, ItemReview, ItemApproved, ItemScheduled, ItemPublished, ItemPaused}
-	allowed := func(kind ItemKind, from, to ItemStatus) bool {
-		email := kind == ItemEmail
+	allowed := func(format ItemFormat, from, to ItemStatus) bool {
+		email := format.EmailType()
 		switch {
 		case (from == ItemDraft || from == ItemReview) && (to == ItemDraft || to == ItemReview || to == ItemApproved):
 			return true
@@ -758,9 +791,9 @@ func TestItemLifecycle(t *testing.T) {
 		}
 		return false
 	}
-	for _, kind := range []ItemKind{ItemBlogPost, ItemEmail} {
+	for _, kind := range []ItemFormat{FormatLongPost, FormatEmail, FormatColdOutreach} {
 		for _, from := range all {
-			if kind == ItemEmail && (from == ItemScheduled || from == ItemPublished) {
+			if kind.EmailType() && (from == ItemScheduled || from == ItemPublished) {
 				continue // an email never gets there
 			}
 			for _, to := range all {
@@ -792,28 +825,28 @@ func TestItemLifecycle(t *testing.T) {
 	t.Run("a content edit drops an approved or scheduled item to REVIEW", func(t *testing.T) {
 		f := newFixture(t)
 		for _, st := range []ItemStatus{ItemApproved, ItemScheduled} {
-			it := f.itemAt(t, ItemBlogPost, st)
+			it := f.itemAt(t, FormatLongPost, st)
 			got, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Title: ptr("New title")})
 			require.NoError(t, err)
 			assert.Equal(t, ItemReview, got.Status, st)
 
-			it = f.itemAt(t, ItemBlogPost, st)
+			it = f.itemAt(t, FormatLongPost, st)
 			got, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, BodyMD: ptr("New"), Status: ptr(ItemApproved)})
 			require.NoError(t, err, "edit and re-approve in one call")
 			assert.Equal(t, ItemApproved, got.Status)
 		}
-		it := f.itemAt(t, ItemBlogPost, ItemApproved)
-		got, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Title: ptr(it.Title), Channel: ptr(it.Channel)})
+		it := f.itemAt(t, FormatLongPost, ItemApproved)
+		got, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Title: ptr(it.Title), ChannelID: ptr(it.ChannelID)})
 		require.NoError(t, err)
 		assert.Equal(t, ItemApproved, got.Status, "the same content is no change")
-		email := f.itemAt(t, ItemEmail, ItemApproved)
+		email := f.itemAt(t, FormatEmail, ItemApproved)
 		got, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: email.ID, ExpectedRevision: email.Revision, EmailTo: &[]string{"b@example.com"}})
 		require.NoError(t, err)
 		assert.Equal(t, ItemReview, got.Status, "recipients are content")
 	})
 	t.Run("a person dates an approved email and it stays APPROVED", func(t *testing.T) {
 		f := newFixture(t)
-		it := f.itemAt(t, ItemEmail, ItemApproved)
+		it := f.itemAt(t, FormatEmail, ItemApproved)
 		when := t0.Add(72 * time.Hour)
 		got, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, ScheduledAt: &when})
 		require.NoError(t, err)
@@ -822,15 +855,15 @@ func TestItemLifecycle(t *testing.T) {
 	})
 	t.Run("an email cannot become SCHEDULED or PUBLISHED by changing kind", func(t *testing.T) {
 		f := newFixture(t)
-		it := f.itemAt(t, ItemBlogPost, ItemPublished)
+		it := f.itemAt(t, FormatLongPost, ItemPublished)
 		_, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{
-			ID: it.ID, ExpectedRevision: it.Revision, Kind: ptr(ItemEmail),
+			ID: it.ID, ExpectedRevision: it.Revision, Format: ptr(FormatEmail),
 		})
 		require.ErrorIs(t, err, ErrInvalidTransition)
 	})
 	t.Run("an agent asking for a move no one may make is FailedPrecondition", func(t *testing.T) {
 		f := newFixture(t)
-		it := f.itemAt(t, ItemBlogPost, ItemDraft)
+		it := f.itemAt(t, FormatLongPost, ItemDraft)
 		for _, to := range []ItemStatus{ItemScheduled, ItemPublished} {
 			_, err := f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(to)})
 			require.ErrorIs(t, err, ErrInvalidTransition, to)
@@ -844,7 +877,7 @@ func TestItemLifecycle(t *testing.T) {
 	})
 	t.Run("a person does everything an agent may on DRAFT and REVIEW items", func(t *testing.T) {
 		f := newFixture(t)
-		it := f.itemAt(t, ItemSocialPost, ItemDraft)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
 		when := t0.Add(5 * time.Hour)
 		got, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemReview), BodyMD: ptr("v2"), ScheduledAt: &when})
 		require.NoError(t, err)
@@ -857,7 +890,7 @@ func TestItemLifecycle(t *testing.T) {
 	})
 	t.Run("only a date never drops an item to REVIEW", func(t *testing.T) {
 		f := newFixture(t)
-		for _, it := range []Item{f.itemAt(t, ItemBlogPost, ItemApproved), f.itemAt(t, ItemBlogPost, ItemScheduled), f.itemAt(t, ItemEmail, ItemApproved)} {
+		for _, it := range []Item{f.itemAt(t, FormatLongPost, ItemApproved), f.itemAt(t, FormatLongPost, ItemScheduled), f.itemAt(t, FormatEmail, ItemApproved)} {
 			when := t0.Add(9 * time.Hour)
 			got, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, ScheduledAt: &when})
 			require.NoError(t, err)
@@ -867,10 +900,10 @@ func TestItemLifecycle(t *testing.T) {
 		for name, in := range map[string]UpdateItemInput{
 			"title":   {Title: ptr("new")},
 			"body":    {BodyMD: ptr("new")},
-			"kind":    {Kind: ptr(ItemOther)},
-			"channel": {Channel: ptr("new")},
+			"format":  {Format: ptr(FormatOther)},
+			"channel": {ChannelID: ptr(f.channel(t, "blog").ID)},
 		} {
-			it := f.itemAt(t, ItemBlogPost, ItemScheduled)
+			it := f.itemAt(t, FormatLongPost, ItemScheduled)
 			in.ID, in.ExpectedRevision = it.ID, it.Revision
 			got, err := f.svc.UpdateItem(ctx(), person, in)
 			require.NoError(t, err)
@@ -880,7 +913,7 @@ func TestItemLifecycle(t *testing.T) {
 			"email_to":      {EmailTo: &[]string{"z@example.com"}},
 			"email_subject": {EmailSubject: ptr("new")},
 		} {
-			it := f.itemAt(t, ItemEmail, ItemApproved)
+			it := f.itemAt(t, FormatEmail, ItemApproved)
 			in.ID, in.ExpectedRevision = it.ID, it.Revision
 			got, err := f.svc.UpdateItem(ctx(), person, in)
 			require.NoError(t, err)
@@ -889,7 +922,7 @@ func TestItemLifecycle(t *testing.T) {
 	})
 	t.Run("clearing a scheduled item's date is a refused transition, not a CHECK", func(t *testing.T) {
 		f := newFixture(t)
-		it := f.itemAt(t, ItemBlogPost, ItemScheduled)
+		it := f.itemAt(t, FormatLongPost, ItemScheduled)
 		_, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, ClearScheduledAt: true})
 		var te *TransitionError
 		require.ErrorAs(t, err, &te)
@@ -911,11 +944,11 @@ func TestItemLifecycle(t *testing.T) {
 	t.Run("an item is created DRAFT or REVIEW", func(t *testing.T) {
 		f := newFixture(t)
 		for _, a := range []Actor{person, agent} {
-			it, err := f.svc.CreateItem(ctx(), a, CreateItemInput{Kind: ItemBlogPost, Title: "t", Status: ItemReview})
+			it, err := f.svc.CreateItem(ctx(), a, CreateItemInput{Format: FormatLongPost, Title: "t", Status: ItemReview})
 			require.NoError(t, err)
 			assert.Equal(t, ItemReview, it.Status)
 			for _, st := range []ItemStatus{ItemApproved, ItemScheduled, ItemPublished, ItemPaused, ItemSent} {
-				_, err := f.svc.CreateItem(ctx(), a, CreateItemInput{Kind: ItemBlogPost, Title: "t", Status: st})
+				_, err := f.svc.CreateItem(ctx(), a, CreateItemInput{Format: FormatLongPost, Title: "t", Status: st})
 				require.ErrorIs(t, err, ErrInvalidArgument, st)
 			}
 		}
@@ -981,7 +1014,7 @@ func TestApprovalHash(t *testing.T) {
 		assert.NotEqual(t, h, ApprovalHash(other), name)
 	}
 	ignored := base
-	ignored.Title, ignored.Channel, ignored.CampaignID = "x", "y", "z"
+	ignored.Title, ignored.ChannelID, ignored.CampaignID, ignored.PublishedURL = "x", "y", "z", "https://example.com"
 	assert.Equal(t, h, ApprovalHash(ignored), "only what the card shows is bound")
 }
 
@@ -1010,7 +1043,7 @@ func TestSendItemEmail(t *testing.T) {
 		review := f.emailItem(t, ItemReview)
 		_, err := f.svc.SendItemEmail(ctx(), agent, f.send(review))
 		require.ErrorIs(t, err, ErrNotApproved)
-		post := f.itemAt(t, ItemBlogPost, ItemApproved)
+		post := f.itemAt(t, FormatLongPost, ItemApproved)
 		_, err = f.svc.SendItemEmail(ctx(), agent, f.send(post))
 		require.ErrorIs(t, err, ErrNotApproved, "only an email is sent")
 		approved := f.emailItem(t, ItemApproved)
@@ -1332,6 +1365,7 @@ func TestGetCampaignCapsItsLists(t *testing.T) {
 					ideaLimit = f.Limit
 					return nil, nil
 				},
+				CampaignItemCountsFunc: func(context.Context, string, string) ([]ItemCount, error) { return nil, nil },
 				ListItemsFunc: func(_ context.Context, f ItemFilter) ([]*store.GtmItem, error) {
 					itemLimit = f.Limit
 					rows := make([]*store.GtmItem, 0, n)

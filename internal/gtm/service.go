@@ -24,6 +24,10 @@ type service struct {
 	clock     Clock
 	analytics Analytics
 	email     Email
+	// connections, assets and attachments are the r2 collaborators.
+	connections Connections
+	assets      AssetStore
+	attachments Attachments
 	// log is where causes withheld from the caller go.
 	log *slog.Logger
 	// sendTimeout bounds one Email.Send (EmailSendTimeout; tests shorten it).
@@ -43,6 +47,9 @@ func New(deps Deps) Service {
 		clock:       clock,
 		analytics:   deps.Analytics,
 		email:       deps.Email,
+		connections: deps.Connections,
+		assets:      deps.Assets,
+		attachments: deps.Attachments,
 		log:         slog.Default(),
 		sendTimeout: EmailSendTimeout,
 	}

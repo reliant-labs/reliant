@@ -35,12 +35,24 @@ var (
 	campaignUpdateCols = []string{
 		store.GtmCampaignFieldName, store.GtmCampaignFieldGoal, store.GtmCampaignFieldPeriodStart,
 		store.GtmCampaignFieldPeriodEnd, store.GtmCampaignFieldStatus, store.GtmCampaignFieldRevision,
+		store.GtmCampaignFieldStrategyID, store.GtmCampaignFieldPlannedChannelIds, store.GtmCampaignFieldPlannedFormats,
 	}
 	itemUpdateCols = []string{
-		store.GtmItemFieldCampaignID, store.GtmItemFieldIdeaID, store.GtmItemFieldKind, store.GtmItemFieldChannel,
+		store.GtmItemFieldCampaignID, store.GtmItemFieldIdeaID, store.GtmItemFieldFormat, store.GtmItemFieldChannelID,
 		store.GtmItemFieldTitle, store.GtmItemFieldBodyMd, store.GtmItemFieldStatus, store.GtmItemFieldScheduledAt,
 		store.GtmItemFieldEmailTo, store.GtmItemFieldEmailSubject, store.GtmItemFieldGmailMessageID,
 		store.GtmItemFieldSentAt, store.GtmItemFieldSentBy, store.GtmItemFieldApprovalHash, store.GtmItemFieldRevision,
+		store.GtmItemFieldPublishedURL,
+	}
+	strategyUpdateCols = []string{
+		store.GtmStrategyFieldName, store.GtmStrategyFieldGoalMd, store.GtmStrategyFieldTargetMetric,
+		store.GtmStrategyFieldPeriodStart, store.GtmStrategyFieldPeriodEnd, store.GtmStrategyFieldStatus,
+		store.GtmStrategyFieldCategory, store.GtmStrategyFieldUpdatedBy, store.GtmStrategyFieldRevision,
+	}
+	channelUpdateCols = []string{
+		store.GtmChannelFieldKey, store.GtmChannelFieldName, store.GtmChannelFieldMode, store.GtmChannelFieldIntegrationKind,
+		store.GtmChannelFieldConnectionID, store.GtmChannelFieldManualInstructionsMd, store.GtmChannelFieldStatus,
+		store.GtmChannelFieldRevision,
 	}
 	positioningUpdateCols = []string{
 		store.GtmPositioningFieldPositioningMd, store.GtmPositioningFieldAudiences,
@@ -99,6 +111,9 @@ func (p pgStore) ListCampaigns(ctx context.Context, f CampaignFilter) ([]*store.
 	if f.Status != "" {
 		opts = append(opts, orm.WhereEq(store.GtmCampaignFieldStatus, string(f.Status)))
 	}
+	if f.StrategyID != "" {
+		opts = append(opts, orm.WhereEq(store.GtmCampaignFieldStrategyID, f.StrategyID))
+	}
 	opts = append(opts, newestFirst, pageOpts(f.Limit, f.Offset))
 	rows, err := store.ListGtmCampaign(ctx, p.db, opts...)
 	if err != nil {
@@ -128,9 +143,10 @@ func (p pgStore) UpdateCampaign(ctx context.Context, row *store.GtmCampaign, exp
 func (p pgStore) ListItems(ctx context.Context, f ItemFilter) ([]*store.GtmItem, error) {
 	opts := []orm.QueryOption{orm.WhereEq(store.GtmItemFieldOrgID, f.OrgID)}
 	opts = append(opts, linkFilter(store.GtmItemFieldCampaignID, f.CampaignID)...)
-	if f.Kind != "" {
-		opts = append(opts, orm.WhereEq(store.GtmItemFieldKind, string(f.Kind)))
+	if f.Format != "" {
+		opts = append(opts, orm.WhereEq(store.GtmItemFieldFormat, string(f.Format)))
 	}
+	opts = append(opts, linkFilter(store.GtmItemFieldChannelID, f.ChannelID)...)
 	if f.Status != "" {
 		opts = append(opts, orm.WhereEq(store.GtmItemFieldStatus, string(f.Status)))
 	}
@@ -329,10 +345,18 @@ func classify(err error, op string) error {
 		return nil
 	}
 	switch name := orm.ConstraintName(err); name {
-	case store.GtmIdeaConstraintCampaignSameOrgFkey, store.GtmItemConstraintCampaignSameOrgFkey:
+	case store.GtmIdeaConstraintCampaignSameOrgFkey, store.GtmItemConstraintCampaignSameOrgFkey, store.GtmAssetConstraintCampaignSameOrgFkey:
 		return &LinkError{Field: "campaign_id"}
 	case store.GtmItemConstraintIdeaSameOrgFkey:
 		return &LinkError{Field: "idea_id"}
+	case store.GtmItemConstraintChannelSameOrgFkey:
+		return &LinkError{Field: "channel_id"}
+	case store.GtmCampaignConstraintStrategySameOrgFkey:
+		return &LinkError{Field: "strategy_id"}
+	case store.GtmAssetConstraintItemSameOrgFkey:
+		return &LinkError{Field: "item_id"}
+	case store.GtmChannelConstraintOrgIDKeyKey:
+		return ErrChannelExists
 	case store.GtmClaimConstraintOrgIDTextNormKey:
 		return ErrClaimExists
 	default:
