@@ -1,14 +1,11 @@
 // Copyright (c) 2026 Reliant Labs
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import Badge from "@/components/forge-ui/badge";
 import Combobox, { type ComboboxOption } from "@/components/forge-ui/combobox";
 import Input from "@/components/forge-ui/input";
 import ToggleSwitch from "@/components/forge-ui/toggle_switch";
-import { obsKeys } from "@/hooks/observability-queries";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
+import { useServiceGraph, useServiceGraphCatalog } from "@/hooks/observability-queries";
 import type { RPCCatalog } from "@/services/controlPlane/observability/graphTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -51,11 +48,11 @@ function filterOptions(catalog: RPCCatalog | undefined, scopedCatalog: RPCCatalo
 export function GraphView({ scope, range, search, navigate, subject }: {
   scope: ObsScope; range: RangePreset; search: ObsSearch; navigate: ObsNavigate; subject: string;
 }) {
-  const api = useObservabilityApi();
   const { environments } = useObsAskContext();
   const envNames = useMemo(() => new Map(environments.map((e) => [e.id, e.name])), [environments]);
-  // A window stays frozen while selecting nodes/methods. The panel remounts
-  // this boundary on explicit Refresh, advancing relative time to now.
+  // A window stays frozen while selecting nodes/methods, absolute so the graph
+  // and its catalog describe one instant. The panel remounts this boundary on
+  // explicit Refresh, advancing relative time to now.
   const [window] = useState(() => resolveWindow(range));
   const [showUnresolved, setShowUnresolved] = useState(false);
   const [exactDraft, setExactDraft] = useState("");
@@ -65,17 +62,10 @@ export function GraphView({ scope, range, search, navigate, subject }: {
   const processService = search.service ?? "";
   // Runtime service.name does not prove a declared process identity. Do not
   // query/display a wider catalog when that restriction cannot be honored.
-  const catalogKey = [...obsKeys.all(scope), "graph-catalog", window] as const;
-  const everything = useQuery({ queryKey: [...catalogKey, ""],
-    queryFn: ({ signal }) => api.getServiceGraphCatalog({ ...scope, window, rpcService: "" }, { signal }),
-    enabled: !processService, staleTime: Infinity, retry: obsRetry, retryDelay: obsRetryDelay });
-  const scoped = useQuery({ queryKey: [...catalogKey, service],
-    queryFn: ({ signal }) => api.getServiceGraphCatalog({ ...scope, window, rpcService: service }, { signal }),
-    enabled: !processService && !!service, staleTime: Infinity, retry: obsRetry, retryDelay: obsRetryDelay });
+  const everything = useServiceGraphCatalog(scope, window, { rpcService: "" }, { enabled: !processService, staleTime: Infinity });
+  const scoped = useServiceGraphCatalog(scope, window, { rpcService: service }, { enabled: !processService && !!service, staleTime: Infinity });
   const catalog = service ? scoped : everything;
-  const exactCatalog = useQuery({ queryKey: [...catalogKey, "exact", service, rpcId],
-    queryFn: ({ signal }) => api.getServiceGraphCatalog({ ...scope, window, rpcService: service, rpcIds: [rpcId] }, { signal }),
-    enabled: !!rpcId && !processService, staleTime: Infinity, retry: obsRetry, retryDelay: obsRetryDelay });
+  const exactCatalog = useServiceGraphCatalog(scope, window, { rpcService: service, rpcIds: [rpcId] }, { enabled: !!rpcId && !processService, staleTime: Infinity });
   // React Query intentionally retains data after a failed refetch. Catalog
   // metadata is permissioned: never present retained data as currently verified.
   const catalogError = everything.error || catalog.error || exactCatalog.error;
@@ -87,9 +77,9 @@ export function GraphView({ scope, range, search, navigate, subject }: {
     methods: [...catalogData.methods.filter((m) => m.id !== rpcId), ...(selectedData?.methods ?? [])],
     declaredCatalogs: selectedData?.declaredCatalogs ?? catalogData.declaredCatalogs,
   } : selectedData;
-  const graph = useQuery({ queryKey: [...obsKeys.all(scope), "graph", window, rpcId, service, processService, !!search.internal, !!search.declared],
-    queryFn: ({ signal }) => api.getServiceGraph({ ...scope, window, rpcIds: rpcId ? [rpcId] : [], rpcService: service, services: processService ? [processService] : [], includeInternal: !!search.internal, includeDeclared: !!search.declared && !processService }, { signal }),
-    enabled: !explorer, staleTime: Infinity, retry: obsRetry, retryDelay: obsRetryDelay });
+  const graph = useServiceGraph(scope, window,
+    { rpcIds: rpcId ? [rpcId] : [], rpcService: service, services: processService ? [processService] : [], includeInternal: !!search.internal, includeDeclared: !!search.declared && !processService },
+    { enabled: !explorer, staleTime: Infinity });
   const { services, methods } = useMemo(() => filterOptions(optionsData, scopedOptionsData, service, rpcId), [optionsData, scopedOptionsData, service, rpcId]);
   const notes = useMemo(() => catalogNotes(displayedCatalog, envNames), [displayedCatalog, envNames]);
   const filters = useMemo(() => ({ rpcId, errorsOnly: search.errors, declared: !!search.declared && !processService, internal: search.internal, showUnresolved }),

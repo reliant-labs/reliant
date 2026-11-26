@@ -216,13 +216,19 @@ export function ObservabilityApiProvider({ api, children }: { api: Observability
 
 /**
  * The ObservabilityService reads the views make through its generated hooks
- * (hooks/controlplane/observability-service-hooks_gen.ts), which call the
+ * (hooks/controlplane/observability-service-hooks_gen.ts; the paged logs and
+ * traces reads over its client, as scopedClient resolves it), which call the
  * QueryClient's transport: a TransportScope's, else the app's. The context does
  * not hand them out. They stay on ObservabilityApi only as the model-level
  * contract the shop fixture pack and test fakes implement; its wire handlers
  * (fixtures/shop/handlers/observability.ts) serve them to the hooks.
  */
 export type GeneratedObservabilityReads =
+  | "searchLogs"
+  | "listTraces"
+  | "queryPanel"
+  | "getServiceGraph"
+  | "getServiceGraphCatalog"
   | "getServiceOverview"
   | "getTrace"
   | "getFlamegraph"

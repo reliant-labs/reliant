@@ -140,7 +140,7 @@ describe("picking a metric", () => {
     expect(screen.getByTestId("metrics-query-A-agg")).toHaveValue("rate");
     expect(await screen.findByTestId("metric-detail", {}, SLOW)).toHaveAttribute("data-metric", "orders.created");
     expect(await screen.findByTestId("metric-attributes", {}, SLOW)).toHaveTextContent("user.id");
-    await waitFor(() => expect(lastPanel(onCall).series).toEqual([{ label: "A", agg: "rate", field: "orders.created", metricType: "sum" }]), SLOW);
+    await waitFor(() => expect(lastPanel(onCall).series).toEqual([{ label: "A", agg: "rate", field: "orders.created", metricType: "sum", quantile: 0, where: [] }]), SLOW);
   });
 
   it("defaults a histogram to p95, and draws its exemplars", async () => {
@@ -239,7 +239,7 @@ describe("the builder", () => {
     expect([...grid.querySelectorAll("[data-value]")].map((el) => el.getAttribute("data-value"))).toEqual(["ok", "error", "timeout"]);
     await user.click(within(grid).getAllByTestId("metrics-breakdown-filter")[1]!);
     expect(screen.queryByTestId("metrics-breakdown")).not.toBeInTheDocument();
-    await waitFor(() => expect(lastPanel(onCall).where).toEqual([{ field: "metric.attr.status", op: "eq", value: "error" }]), SLOW);
+    await waitFor(() => expect(lastPanel(onCall).where).toEqual([{ field: "metric.attr.status", op: "eq", value: "error", values: [] }]), SLOW);
   });
 });
 

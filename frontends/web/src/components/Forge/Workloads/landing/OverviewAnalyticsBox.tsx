@@ -34,7 +34,7 @@ const WEEK_MS = 7 * 24 * 3600 * 1000;
 
 export function OverviewAnalyticsBox({ scope, analyticsHref, eventsHref }: { scope: ObsScope | null; analyticsHref: string; eventsHref: string }) {
   const totals = usePanelQuery(scope, RANGE, ANALYTICS_TOTALS_PANEL, []);
-  const previous = usePanelQuery(scope, RANGE, ANALYTICS_TOTALS_PANEL, [], [], { offsetKey: "period:7d", offsetMs: () => WEEK_MS });
+  const previous = usePanelQuery(scope, RANGE, ANALYTICS_TOTALS_PANEL, [], [], { offset: { endsAgoMs: WEEK_MS } });
   const daily = usePanelQuery(scope, RANGE, ANALYTICS_DAILY_PANEL, []);
   const events = usePanelQuery(scope, RANGE, EVENTS_PANEL, []);
 

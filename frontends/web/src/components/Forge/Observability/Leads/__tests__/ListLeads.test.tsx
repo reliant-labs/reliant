@@ -52,7 +52,7 @@ const issue = (over: Partial<Issue>): Issue =>
   }) as Issue;
 
 const trace = (over: Partial<TraceSummary>): TraceSummary =>
-  ({ traceId: "t1", rootOperation: "GET /", rootService: "api", startMs: NOW, durationMs: 120, rootDurationMs: 120, spanCount: 3, errorCount: 0, services: ["api"], ...over }) as TraceSummary;
+  ({ traceId: "t1", rootOperation: "GET /", rootService: "api", startMs: NOW, durationMs: 120, rootDurationMs: 120, spanCount: 3, errorCount: 0, services: ["api"], backendBuilds: [], ...over }) as TraceSummary;
 
 const session = (over: Partial<SessionSummary>): SessionSummary =>
   ({ sessionId: "s1", service: "web", serviceVersion: "", release: "", envId: "env-prod", envName: "prod", userId: "", entryPath: "/", startedMs: NOW - 60_000, endedMs: NOW, pageViews: 1, interactions: 1, errors: 0, hasReplay: false, ...over }) as SessionSummary;

@@ -12,24 +12,29 @@ import { useCallback, useEffect } from "react";
  * re-reads "the last hour" as of now, and two components asking for the same
  * preset share one request.
  *
- * Paged queries pin the window their FIRST page resolved and pass it to every
+ * Paged queries pin the window their FIRST page was read over (the server
+ * echoes the window it resolved, effective_time_range) and pass it to every
  * later page with the cursor — page two of "the last hour" must be the same
  * hour as page one (the server's page token is only valid with the same
  * request), or rows slip between pages as time moves.
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
-import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
 
 import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
+import { scopedClient } from "@reliantlabs/forge-web-runtime/transport-scope";
 
-import { QueryScopeSchema, type GetMetricResponse, type GetTraceResponse } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { ObservabilityService, QueryScopeSchema, type GetMetricResponse, type GetTraceResponse, type QueryPanelResponse } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import {
   observabilityServiceKeys,
   observabilityServiceQueries,
   useGetFlamegraph,
   useGetMetric,
   useGetReleaseHealth,
+  useGetServiceGraph,
+  useGetServiceGraphCatalog,
   useGetServiceOverview,
   useGetServiceSignals,
   useGetTrace,
@@ -39,14 +44,23 @@ import {
   useListMetrics,
   useListWorkloads,
 } from "@/hooks/controlplane/observability-service-hooks_gen";
+import { connectClient } from "@/lib/connect";
 import {
   attributeValuesRequest,
+  effectiveWindowOf,
   flamegraphRequest,
+  listTracesRequest,
+  panelHeaders,
+  queryPanelRequest,
   relativeWindow,
+  searchLogsRequest,
   serviceOverviewRequest,
   serviceSignalsRequest,
   toAttributeValues,
   toFlamegraph,
+  toListTraces,
+  toPanelResult,
+  toSearchLogs,
   toServiceOverview,
   toServiceSignals,
   toTrace,
@@ -54,9 +68,13 @@ import {
   toWorkloads,
   traceRequest,
   wireScope,
+  wireTimeRange,
   workloadRequest,
   workloadsRequest,
+  type ObsWindow,
 } from "@/services/controlPlane/observability/api";
+import { serviceGraphCatalogRequest, serviceGraphRequest, toServiceGraph, toServiceGraphCatalog } from "@/services/controlPlane/observability/graphApi";
+import type { CatalogRequest, GraphRequest } from "@/services/controlPlane/observability/graphTypes";
 import { mapReleaseHealth, releaseHealthRequest } from "@/services/controlPlane/observability/deliveryApi";
 import { metricCatalogRequest, metricExemplarsRequest, metricRequest, toMetricCatalog, toMetricDetail, toMetricExemplars } from "@/services/controlPlane/observability/metricsApi";
 import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
@@ -89,6 +107,7 @@ import type {
   ObsScope,
   ListTracesResult,
   Panel,
+  PanelResult,
   SearchLogsResult,
   Severity,
   TimeWindow,
@@ -116,11 +135,9 @@ export const obsKeys = {
   org: () => ["observability", "org"] as const,
   all: (scope: ObsScope | null) =>
     ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? [], scope?.platformScope ?? false] as const,
-  logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
-  traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
-  panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
-    [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset] as const,
-  metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
+  /** A postgres panel's read (AppDatabaseService); a telemetry panel's is the generated QueryPanel read's (panelQueryKey). */
+  panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset?: PanelOffset) =>
+    [...obsKeys.all(scope), "panel", range, panelRequestKey(panel), services, groupBy, offset ?? null] as const,
   usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
 };
 
@@ -129,10 +146,14 @@ function scopeIdentity(scope: Record<string, unknown> | undefined): string | und
   return scope ? hashKey([scope.orgId, scope.projectId, scope.envIds, scope.filters, scope.platformScope]) : undefined;
 }
 
-/** The scope a generated read's key names: its request (protojson, the key's last entry) carries a QueryScope. */
+/**
+ * The scope a generated read's key names: its request (protojson) carries a
+ * QueryScope. The request is the key's last object: a paged read's key ends
+ * with "infinite" after it.
+ */
 function keyScope(key: QueryKey | undefined): string | undefined {
-  const request = key?.[key.length - 1];
-  return request && typeof request === "object" ? scopeIdentity((request as { scope?: Record<string, unknown> }).scope) : undefined;
+  const request = key ? [...key].reverse().find((part) => !!part && typeof part === "object") : undefined;
+  return request ? scopeIdentity((request as { scope?: Record<string, unknown> }).scope) : undefined;
 }
 
 function scopeOf(scope: ObsScope): string | undefined {
@@ -180,6 +201,19 @@ const NO_SCOPE: ObsScope = { orgId: "", envIds: [], filters: [] };
 function lastOf(range: RangePreset, read?: RangeRead) {
   return relativeWindow(rangeMs(read ? readRange(range, read) : range));
 }
+
+/** A relative window as resolved here, now: `lastMs` long, ending `endsAgoMs` before now. */
+function windowAsOfNow(lastMs: number, endsAgoMs = 0): TimeWindow {
+  const endMs = Date.now() - endsAgoMs;
+  return { startMs: endMs - lastMs, endMs };
+}
+
+/**
+ * The control-plane ObservabilityService client of a hand-written query (the
+ * paged reads): its QueryClient's TransportScope's, else the app's, as the
+ * generated hooks resolve theirs.
+ */
+const observabilityClient = scopedClient(ObservabilityService, connectClient(ObservabilityService));
 
 // ── Quota-aware reads and polls ──────────────────────────────────────────────
 //
@@ -269,25 +303,50 @@ export const LOG_PAGE_SIZE = 200;
 /** Live tail re-reads the newest page this often. */
 export const LIVE_TAIL_MS = 5_000;
 
+/**
+ * A later page's request: the first page's, asked over the window the server
+ * resolved for the first page (absolute, so the page token stays valid), with
+ * the cursor.
+ */
+function pageRequest<R extends { scope?: object; pageToken?: string }>(first: R, page: PageParam | null): R {
+  return page ? { ...first, scope: { ...first.scope, timeRange: wireTimeRange(page.window) }, pageToken: page.cursor } : first;
+}
+
+/**
+ * The window the first page was read over: the server's (effective_time_range),
+ * else, from a server that names none, the preset as of the answer.
+ */
+function firstPageWindow(res: { effectiveTimeRange?: { start?: Timestamp; end?: Timestamp } }, page: PageParam | null, lastMs: number): TimeWindow {
+  return page?.window ?? effectiveWindowOf(res) ?? windowAsOfNow(lastMs);
+}
+
+/**
+ * The logs, newest first, a page at a time. Hand-written over the generated
+ * client rather than useSearchLogsInfinite: a generated paged read sends the
+ * first page's request again with only the page token changed, and a later
+ * page must also carry the first page's resolved window (the first sends the
+ * relative preset). Keyed like the generated read of the first page, so
+ * ObservabilityService's invalidations reach it.
+ */
 export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live: boolean) {
-  const api = useObservabilityApi();
-  const queryKey = obsKeys.logs(scope, filters);
+  const window = lastOf(filters.range, "logs");
+  const request = searchLogsRequest({
+    ...(scope ?? NO_SCOPE),
+    window,
+    query: filters.query,
+    services: filters.services,
+    severities: filters.severities,
+    traceId: filters.traceId,
+    spanId: filters.spanId,
+    limit: LOG_PAGE_SIZE,
+  });
+  const queryKey = observabilityServiceKeys.searchLogsInfinite(request);
   const query = useInfiniteQuery({
     queryKey,
-    queryFn: async ({ pageParam, signal }): Promise<SearchLogsResult & { window: TimeWindow }> => {
-      const window = pageParam?.window ?? resolveWindow(readRange(filters.range, "logs"));
-      const result = await api.searchLogs({
-        ...(scope as ObsScope),
-        window,
-        query: filters.query,
-        services: filters.services,
-        severities: filters.severities,
-        traceId: filters.traceId,
-        spanId: filters.spanId,
-        limit: LOG_PAGE_SIZE,
-        cursor: pageParam?.cursor,
-      }, { signal });
-      return { ...result, window };
+    queryFn: async (context): Promise<SearchLogsResult & { window: TimeWindow }> => {
+      const page = context.pageParam;
+      const res = await observabilityClient(context).searchLogs(pageRequest(request, page), obsCall({ signal: context.signal }));
+      return { ...toSearchLogs(res, page?.cursor), window: firstPageWindow(res, page, window.lastMs) };
     },
     initialPageParam: null as PageParam | null,
     getNextPageParam: (last) => (last.nextCursor ? { cursor: last.nextCursor, window: last.window } : undefined),
@@ -354,31 +413,33 @@ export function assertTraceFiltersApplied(filters: TraceFilters, traces: TraceSu
   ignored(filters.backendVersion, (t) => t.backendBuilds.map((b) => b.version), "backend version");
 }
 
+/** The traces, a page at a time; hand-written over the generated client, as useSearchLogs is and for its reason. */
 export function useListTraces(scope: ObsScope | null, filters: TraceFilters) {
-  const api = useObservabilityApi();
+  const window = lastOf(filters.range, "traces");
+  const request = listTracesRequest({
+    ...(scope ?? NO_SCOPE),
+    window,
+    rootSpanName: filters.rootSpanName,
+    services: filters.services,
+    errorsOnly: filters.errorsOnly,
+    minDurationMs: filters.minDurationMs,
+    groupBy: filters.groupBy,
+    userId: filters.userId,
+    sessionId: filters.sessionId,
+    browser: filters.browser,
+    os: filters.os,
+    frontendVersion: filters.frontendVersion,
+    backendVersion: filters.backendVersion,
+    limit: TRACE_PAGE_SIZE,
+  });
   return useInfiniteQuery({
-    queryKey: obsKeys.traces(scope, filters),
-    queryFn: async ({ pageParam, signal }): Promise<ListTracesResult & { window: TimeWindow }> => {
-      const window = pageParam?.window ?? resolveWindow(readRange(filters.range, "traces"));
-      const result = await api.listTraces({
-        ...(scope as ObsScope),
-        window,
-        rootSpanName: filters.rootSpanName,
-        services: filters.services,
-        errorsOnly: filters.errorsOnly,
-        minDurationMs: filters.minDurationMs,
-        groupBy: filters.groupBy,
-        userId: filters.userId,
-        sessionId: filters.sessionId,
-        browser: filters.browser,
-        os: filters.os,
-        frontendVersion: filters.frontendVersion,
-        backendVersion: filters.backendVersion,
-        limit: TRACE_PAGE_SIZE,
-        cursor: pageParam?.cursor,
-      }, { signal });
+    queryKey: observabilityServiceKeys.listTracesInfinite(request),
+    queryFn: async (context): Promise<ListTracesResult & { window: TimeWindow }> => {
+      const page = context.pageParam;
+      const res = await observabilityClient(context).listTraces(pageRequest(request, page), obsCall({ signal: context.signal }));
+      const result = toListTraces(res);
       assertTraceFiltersApplied(filters, result.traces, filters.services.length > 0 || (scope?.filters.length ?? 0) > 0);
-      return { ...result, window };
+      return { ...result, window: firstPageWindow(res, page, window.lastMs) };
     },
     initialPageParam: null as PageParam | null,
     getNextPageParam: (last) => (last.nextCursor ? { cursor: last.nextCursor, window: last.window } : undefined),
@@ -406,26 +467,98 @@ export function useTrace(scope: ObsScope | null, traceId: string | null, range: 
   });
 }
 
+// ── Service graph ────────────────────────────────────────────────────────────
+
+/** How a graph or catalog read is cached: the views differ (the graph page's frozen snapshot, the overview's minute). */
+export interface GraphReadOptions {
+  enabled?: boolean;
+  staleTime: number;
+}
+
+/**
+ * The RPC catalog over `window`: every method the scope served or declares,
+ * narrowed to `filter`. A view that pairs it with the graph (GraphView) passes
+ * both the same absolute window, so they describe one instant.
+ */
+export function useServiceGraphCatalog(scope: ObsScope | null, window: ObsWindow, filter: Pick<CatalogRequest, "rpcService" | "rpcIds">, options: GraphReadOptions) {
+  return useGetServiceGraphCatalog(serviceGraphCatalogRequest({ ...(scope ?? NO_SCOPE), window, ...filter }), {
+    select: toServiceGraphCatalog,
+    enabled: !!scope && (options.enabled ?? true),
+    staleTime: options.staleTime,
+    retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
+  });
+}
+
+/** The service graph over `window`: its nodes and edges, narrowed to `filter`. */
+export function useServiceGraph(scope: ObsScope | null, window: ObsWindow, filter: Omit<GraphRequest, keyof ObsScope | "window">, options: GraphReadOptions) {
+  return useGetServiceGraph(serviceGraphRequest({ ...(scope ?? NO_SCOPE), window, ...filter }), {
+    select: toServiceGraph,
+    enabled: !!scope && (options.enabled ?? true),
+    staleTime: options.staleTime,
+    retry: obsRetry, retryDelay: obsRetryDelay,
+    callOptions: obsRead,
+  });
+}
+
 // ── Metrics and dashboards ───────────────────────────────────────────────────
 
 /**
- * How a panel query is run beyond its scope and window.
- *
- * `offset` shifts the window back in time — the comparison of a dashboard's
- * "previous period" (the preset's own length) or "previous release" (the time
- * since the scoped environment's current release was promoted). It is a
- * function so it is resolved at fetch time, like the window, and keyed by
- * `offsetKey` so a preset stays one cache entry rather than one per
- * millisecond.
+ * Where a comparison read's window sits. `endsAgoMs`: that long before now,
+ * the dashboard's "previous period" (the preset's own length back), which the
+ * server resolves against its clock, so the request and key stay put.
+ * `endsAtMs`: ending at that instant, "previous release" (the moment the
+ * scoped environment's current release was promoted), fixed, so absolute bounds.
  */
+export type PanelOffset = { endsAgoMs: number } | { endsAtMs: number };
+
+/** How a panel query is run beyond its scope and window. */
 export interface PanelQueryOptions {
-  offsetKey?: string;
-  offsetMs?: () => number;
+  /** A comparison: the window shifted back in time. */
+  offset?: PanelOffset;
   /** Auto-refresh: re-read the panel this often (ms). */
   refetchInterval?: number | false;
   enabled?: boolean;
   /** The dashboard the panel belongs to: labels the read in control-plane's query_log (Forge-Panel). */
   dashboardId?: string;
+}
+
+/** The window of a panel read over `range` (capped at what `read` keeps), shifted back by `offset`. */
+export function panelWindow(range: RangePreset, read: RangeRead | undefined, offset?: PanelOffset): ObsWindow {
+  const lastMs = rangeMs(read ? readRange(range, read) : range);
+  if (offset && "endsAtMs" in offset) return { startMs: offset.endsAtMs - lastMs, endMs: offset.endsAtMs };
+  return relativeWindow(lastMs, offset?.endsAgoMs ?? 0);
+}
+
+/** A window as bounds: a relative one resolved here, as of now. */
+export function boundsOf(window: ObsWindow): TimeWindow {
+  return "lastMs" in window ? windowAsOfNow(window.lastMs, window.endsAgoMs) : window;
+}
+
+/**
+ * The `select` of a QueryPanel read over `window`: the answer, with the
+ * window it covers. QueryPanel's response names none, so a relative window
+ * is resolved when the answer is mapped (when it arrives), which is when the
+ * server resolved it, give or take the round trip.
+ */
+export function usePanelSelect(window: ObsWindow) {
+  const id = hashKey([window]);
+  // By value: a new object naming the same window is the same select.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useCallback((res: QueryPanelResponse) => toPanelResult(res, boundsOf(window)), [id]);
+}
+
+/**
+ * The cache key of usePanelQuery's read: the generated QueryPanel read's
+ * (its request), or, for a postgres panel, the hand-written one's.
+ */
+export function panelQueryKey(scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[] = [], offset?: PanelOffset): QueryKey {
+  if (panel.kind === "postgres") return obsKeys.panel(scope, range, panel, services, groupBy, offset);
+  return observabilityServiceKeys.queryPanel(panelRequest(scope, range, panel, services, groupBy, offset));
+}
+
+function panelRequest(scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset?: PanelOffset) {
+  return queryPanelRequest({ ...(scope ?? NO_SCOPE), window: panelWindow(range, panelRead(panel), offset), panel, services, stepSeconds: 0, groupBy });
 }
 
 /**
@@ -449,24 +582,31 @@ export function usePanelQuery(
   options: PanelQueryOptions = {}
 ) {
   const api = useObservabilityApi();
-  const queryKey = obsKeys.panel(scope, range, panel, services, groupBy, options.offsetKey ?? "");
+  const window = panelWindow(range, panelRead(panel), options.offset);
   const enabled = !!scope && panelRunsQuery(panel.kind) && (options.enabled ?? true);
-  const query = useQuery({
-    queryKey,
-    queryFn: ({ signal }) => {
-      const offset = options.offsetMs?.() ?? 0;
-      const window = resolveWindow(readRange(range, panelRead(panel)), Date.now() - offset);
-      // A postgres panel reads the environment's own database (AppDatabaseService), not ClickHouse: the telemetry quota does not apply to it.
-      if (panel.kind === "postgres") return queryPostgresPanel(api, scope as ObsScope, window, panel, signal);
-      return api.queryPanel({ ...(scope as ObsScope), window, panel, services, stepSeconds: 0, groupBy, dashboardId: options.dashboardId }, { signal });
-    },
-    enabled,
+  // A postgres panel reads the environment's own database (AppDatabaseService), not ClickHouse: the telemetry quota does not apply to it.
+  const postgres = panel.kind === "postgres";
+  const request = panelRequest(scope, range, panel, services, groupBy, options.offset);
+  const select = usePanelSelect(window);
+  // One query either way, so a panel is one cache entry: QueryPanel's generated read, or the postgres read.
+  const telemetryRead = observabilityServiceQueries.queryPanel(request, {
+    select,
     staleTime: 30_000,
     retry: obsRetry,
     retryDelay: obsRetryDelay,
+    callOptions: () => obsCall({ headers: panelHeaders(options.dashboardId, panel.id) }),
   });
+  const databaseRead = {
+    queryKey: obsKeys.panel(scope, range, panel, services, groupBy, options.offset),
+    queryFn: ({ signal }: { signal: AbortSignal }) => queryPostgresPanel(api, scope as ObsScope, boundsOf(window), panel, signal),
+    staleTime: 30_000,
+    retry: obsRetry,
+    retryDelay: obsRetryDelay,
+  };
+  const read = (postgres ? databaseRead : telemetryRead) as UseQueryOptions<unknown, Error, PanelResult, QueryKey>;
+  const query = useQuery({ ...read, enabled });
   // Nor does the quota slow or stop a postgres panel's refresh.
-  usePolled(queryKey, options.refetchInterval ?? false, enabled, panel.kind !== "postgres");
+  usePolled(read.queryKey, options.refetchInterval ?? false, enabled, !postgres);
   return query;
 }
 
@@ -593,16 +733,6 @@ export function useAttributeValues(
 }
 
 // ── Metrics explorer ─────────────────────────────────────────────────────────
-
-/**
- * The metrics explorer's hand-written keys (its explain read). They start with
- * the whole scope, so Refresh (invalidateObsScope) re-reads them too, and one
- * scope never shares an answer with another. The catalog, a metric's detail
- * and its exemplars are generated reads, keyed by their request.
- */
-export const metricKeys = {
-  all: (scope: ObsScope | null) => obsKeys.metrics(scope),
-};
 
 /**
  * What a panel reads, for its longest window (forge obsquery Panel.MaxRange):

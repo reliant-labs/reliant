@@ -212,8 +212,8 @@ describe("other views share the budget", () => {
       { wrapper }
     );
     const other = [
-      result.current.api.searchLogs({ ...SCOPE, window: WINDOW, services: [], query: "", severities: [], limit: 50 } as never),
-      result.current.api.getServiceGraph({ ...SCOPE, window: WINDOW } as never),
+      searchLogs({ ...SCOPE, window: WINDOW, services: [], query: "", severities: [], limit: 50 } as never),
+      getServiceGraph({ ...SCOPE, window: WINDOW } as never),
     ];
     const usage = result.current.api.getObservabilityUsage("org");
     await advance(0);

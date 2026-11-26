@@ -33,7 +33,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { hashKey, useQueryClient } from "@tanstack/react-query";
 import { Plus, Trash2, X } from "lucide-react";
 
-import { obsKeys, usePanelQuery } from "@/hooks/observability-queries";
+import { panelQueryKey, usePanelQuery } from "@/hooks/observability-queries";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import type { ObsScope, Panel, PanelDisplay, Predicate, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
 import type { ObsEnvironment } from "../obsPlace";
@@ -139,14 +139,14 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
   // A changed request whose answer is still cached (A, then B, then A again) is marked stale first, so switching to it fetches
   // instead of showing the old rows; an uncached one fetches once, on the switch.
   const queryClient = useQueryClient();
-  const sameRequest = (a: Panel, b: Panel) => hashKey(obsKeys.panel(scope, range, a, services, [])) === hashKey(obsKeys.panel(scope, range, b, services, []));
+  const sameRequest = (a: Panel, b: Panel) => hashKey(panelQueryKey(scope, range, a, services)) === hashKey(panelQueryKey(scope, range, b, services));
   const run: StatementRun = {
     onRun: () => {
       if (ranCurrent && previewable && sameRequest(ranCurrent, draft)) {
         void preview.refetch();
         return;
       }
-      void queryClient.invalidateQueries({ queryKey: obsKeys.panel(scope, range, draft, services, []), exact: true, refetchType: "none" });
+      void queryClient.invalidateQueries({ queryKey: panelQueryKey(scope, range, draft, services), exact: true, refetchType: "none" });
       setRan(draft);
     },
     canRun: problems.length === 0,

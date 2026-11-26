@@ -10,9 +10,11 @@ import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { BinaryWriter } from "@bufbuild/protobuf/wire";
-import { Code, ConnectError } from "@connectrpc/connect";
+import { Code, ConnectError, createRouterTransport } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import { type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
@@ -24,7 +26,7 @@ import { QUOTA_REASON } from "@/services/controlPlane/observability/quota";
 import { usePanelQuery } from "../observability-queries";
 
 const SCOPE: ObsScope = { orgId: "org", envIds: [], filters: [] };
-const EMPTY: PanelResult = { kind: "number", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] } as unknown as PanelResult;
+const EMPTY: PanelResult = { kind: "number", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [], seriesMeta: [], seriesTotal: 0, warnings: [], compiledSql: [] } as unknown as PanelResult;
 
 const panel = (id: string): Panel => ({ id, title: id, kind: "number", signal: "traces", series: [{ label: id, agg: "count" }] });
 
@@ -39,7 +41,6 @@ function busy(retryAfterSeconds?: number) {
 
 interface Call {
   id: string;
-  signal: AbortSignal | undefined;
   resolve: () => void;
   reject: (error: unknown) => void;
 }
@@ -51,14 +52,13 @@ function controlledApi() {
   let peak = 0;
   const api = {
     currentOrgId: async () => "org",
-    queryPanel: (req: { panel: Panel }, options?: { signal?: AbortSignal }) =>
+    queryPanel: (req: { panel: Panel }) =>
       new Promise<PanelResult>((resolve, reject) => {
         live++;
         peak = Math.max(peak, live);
         const done = () => void live--;
         calls.push({
           id: req.panel.id,
-          signal: options?.signal,
           resolve: () => {
             done();
             resolve(EMPTY);
@@ -71,6 +71,32 @@ function controlledApi() {
       }),
   } as unknown as ObservabilityApi;
   return { api, calls, peak: () => peak };
+}
+
+/**
+ * control-plane on the wire, for what only the wire shows: the signal each
+ * QueryPanel call arrives with. Its reads never answer.
+ */
+function wireSetup() {
+  const signals: AbortSignal[] = [];
+  const transport = createRouterTransport((router) =>
+    router.service(ObservabilityService, {
+      queryPanel: (_req, ctx) => {
+        signals.push(ctx.signal);
+        return new Promise<never>(() => {});
+      },
+    })
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+  const scope = createTransportScope({ id: "panel-query-wire", transport, queryClient: client });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>
+      <TransportScopeProvider scope={scope}>
+        <ObsQuotaProvider>{children}</ObsQuotaProvider>
+      </TransportScopeProvider>
+    </QueryClientProvider>
+  );
+  return { signals, wrapper };
 }
 
 function setup(api: ObservabilityApi) {
@@ -140,26 +166,25 @@ describe("usePanelQuery", () => {
   });
 
   it("aborts its read when the panel goes away", async () => {
-    const { api, calls } = controlledApi();
-    const { wrapper } = setup(api);
+    const { signals, wrapper } = wireSetup();
     const { unmount } = renderHook(() => usePanelQuery(SCOPE, "1h", panel("a"), []), { wrapper });
     await flush();
+    expect(signals).toHaveLength(1);
     unmount();
     await flush();
-    expect(calls[0]!.signal?.aborted).toBe(true);
+    expect(signals[0]!.aborted).toBe(true);
   });
 
   it("cancels the read of the old range when the range changes, then reads the new one", async () => {
-    const { api, calls } = controlledApi();
-    const { wrapper } = setup(api);
+    const { signals, wrapper } = wireSetup();
     const { rerender } = renderHook(({ range }) => usePanelQuery(SCOPE, range, panel("p"), []), { wrapper, initialProps: { range: "1h" as "1h" | "24h" } });
     await flush();
-    expect(calls).toHaveLength(1);
+    expect(signals).toHaveLength(1);
     rerender({ range: "24h" });
     await flush();
-    expect(calls[0]!.signal?.aborted).toBe(true);
-    expect(calls).toHaveLength(2);
-    expect(calls[1]!.signal?.aborted).toBe(false);
+    expect(signals[0]!.aborted).toBe(true);
+    expect(signals).toHaveLength(2);
+    expect(signals[1]!.aborted).toBe(false);
   });
 });
 
@@ -184,7 +209,7 @@ describe("usePanelQuery when the server is at its cap", () => {
 
     calls[1]!.resolve();
     await flush();
-    expect(result.current.data).toEqual(EMPTY);
+    expect(result.current.data).toMatchObject({ kind: "number", rows: [], series: [] });
     expect(result.current.error).toBeNull();
   });
 
@@ -206,7 +231,7 @@ describe("usePanelQuery when the server is at its cap", () => {
     expect(calls).toHaveLength(REFUSALS + 1);
     calls[REFUSALS]!.resolve();
     await flush();
-    expect(result.current.data).toEqual(EMPTY);
+    expect(result.current.data).toMatchObject({ kind: "number", rows: [], series: [] });
     expect(result.current.isError).toBe(false);
   });
 
