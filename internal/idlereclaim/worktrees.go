@@ -60,7 +60,7 @@ func (r *Reclaimer) worktreePass(ctx context.Context, dryRun bool) []Entry {
 // node_modules, which the report leaves out.
 func (r *Reclaimer) worktreeCheckout(ctx context.Context, checkout string, dryRun bool) (Entry, bool) {
 	now := r.now()
-	quiet := r.floors().WorktreeNodeModulesIdle
+	quiet := r.Config.WorktreeNodeModulesIdle
 	used := latest(shallowActivity(checkout), lastOf(r.WorktreeUse, checkout))
 	if now.Sub(used) < quiet {
 		return Entry{}, false
@@ -170,10 +170,9 @@ func linkedCheckouts(root string) []string {
 }
 
 // shallowActivity is the cheap part of a checkout's last use: its own
-// directory's time and its git dir's HEAD and reflog (not the index, which
-// every `git status` a UI polls rewrites), for a linked worktree (its admin
-// dir) or a repository (its .git). It lets a pass skip an active checkout
-// without walking it.
+// directory's time and its admin dir's HEAD and reflog (not the index, which
+// every `git status` a UI polls rewrites). It lets a pass skip
+// an active checkout without walking it.
 func shallowActivity(checkout string) time.Time {
 	var newest time.Time
 	bump := func(p string) {
@@ -182,15 +181,9 @@ func shallowActivity(checkout string) time.Time {
 		}
 	}
 	bump(checkout)
-	gitDir := adminDir(checkout)
-	if gitDir == "" {
-		if info, err := os.Lstat(filepath.Join(checkout, ".git")); err == nil && info.IsDir() {
-			gitDir = filepath.Join(checkout, ".git")
-		}
-	}
-	if gitDir != "" {
-		bump(filepath.Join(gitDir, "HEAD"))
-		bump(filepath.Join(gitDir, "logs", "HEAD"))
+	if admin := adminDir(checkout); admin != "" {
+		bump(filepath.Join(admin, "HEAD"))
+		bump(filepath.Join(admin, "logs", "HEAD"))
 	}
 	return newest
 }

@@ -609,7 +609,7 @@ func reclaimItem(m *worktreesweep.MachineStorage, name string) *reliantv1.InboxI
 	}
 	return &reliantv1.InboxItem{
 		Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_WORKTREE_RECLAIM,
-		ItemId:       reclaimItemID(m.DaemonID, undecided, reclaimEpisode(m)),
+		ItemId:       reclaimItemID(m.DaemonID, undecided),
 		WaitingSince: time.UnixMilli(since).UTC().Format(time.RFC3339Nano),
 		Payload:      &reliantv1.InboxItem_WorktreeReclaim{WorktreeReclaim: payload},
 	}
@@ -620,34 +620,14 @@ func reclaimItem(m *worktreesweep.MachineStorage, name string) *reliantv1.InboxI
 // fingerprints>. The same undecided set is one item however often the
 // machine reports it, so a dismissal holds for it; a new proposal, or a
 // worktree whose state changed, is a new set and a new item.
-//
-// While the machine's disk is under pressure, or its disk guard is acting,
-// the episode's start is part of the id too: a dismissed set is asked about
-// again once per episode in which the machine is running out of space, when
-// what it holds is what would free it. Before, one dismissal hid the
-// proposals for good while their state held still: on 2026-11-26 a build
-// machine at 93% reported 127 proposals (45 GB) that no Inbox showed.
-func reclaimItemID(daemonID string, undecided []*reliantv1.WorktreeReclaimProposal, episodeMs int64) string {
+func reclaimItemID(daemonID string, undecided []*reliantv1.WorktreeReclaimProposal) string {
 	keys := make([]string, 0, len(undecided))
 	for _, p := range undecided {
 		keys = append(keys, p.Key+"\x00"+p.Fingerprint)
 	}
 	sort.Strings(keys)
-	joined := strings.Join(keys, "\n")
-	if episodeMs > 0 {
-		joined += "\nepisode:" + strconv.FormatInt(episodeMs, 10)
-	}
-	sum := sha256.Sum256([]byte(joined))
+	sum := sha256.Sum256([]byte(strings.Join(keys, "\n")))
 	return inboxWorktreeReclaimPrefix + daemonID + ":" + hex.EncodeToString(sum[:8])
-}
-
-// reclaimEpisode is the start of the machine's current low-disk episode: its
-// pressure episode, else its disk guard's, else 0 (the disk is fine).
-func reclaimEpisode(m *worktreesweep.MachineStorage) int64 {
-	if since := m.Disk.GetPressureSinceMs(); since > 0 {
-		return since
-	}
-	return m.Disk.GetGuardSinceMs()
 }
 
 const storageViewTTL = 60 * time.Second
