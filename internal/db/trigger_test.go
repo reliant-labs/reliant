@@ -457,7 +457,7 @@ func TestUpdateTriggerEventOutcome(t *testing.T) {
 
 	chatID := "chat-outcome"
 	createActivityTestChat(t, repo, chatID)
-	if err := store.UpdateTriggerEventOutcome(ctx, repo.ORM(), event.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
+	if err := repo.UpdateTriggerEventOutcome(ctx, event.ID, core.TriggerEventLaunched, "", &chatID); err != nil {
 		t.Fatalf("UpdateTriggerEventOutcome(launched): %v", err)
 	}
 
@@ -472,7 +472,7 @@ func TestUpdateTriggerEventOutcome(t *testing.T) {
 		t.Errorf("ChatID: got %v, want %q", got.ChatID, chatID)
 	}
 
-	if err := store.UpdateTriggerEventOutcome(ctx, repo.ORM(), event.ID, core.TriggerEventFailed, "workflow not found", nil); err != nil {
+	if err := repo.UpdateTriggerEventOutcome(ctx, event.ID, core.TriggerEventFailed, "workflow not found", nil); err != nil {
 		t.Fatalf("UpdateTriggerEventOutcome(failed): %v", err)
 	}
 	got, err = repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, "fire-key-outcome")
@@ -486,7 +486,7 @@ func TestUpdateTriggerEventOutcome(t *testing.T) {
 		t.Errorf("ChatID: got %v, want nil after a nil chatID write", *got.ChatID)
 	}
 
-	if err := store.UpdateTriggerEventOutcome(ctx, repo.ORM(), "ev-nope", core.TriggerEventFailed, "x", nil); !errors.Is(err, core.ErrTriggerEventNotFound) {
+	if err := repo.UpdateTriggerEventOutcome(ctx, "ev-nope", core.TriggerEventFailed, "x", nil); !errors.Is(err, core.ErrTriggerEventNotFound) {
 		t.Errorf("UpdateTriggerEventOutcome on missing row: got %v, want ErrTriggerEventNotFound", err)
 	}
 }
