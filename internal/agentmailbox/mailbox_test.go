@@ -65,7 +65,7 @@ func TestMailbox_AnnouncesEveryEnqueueThatWrote(t *testing.T) {
 	chatID, parentThreadID, childThreadID := seedThreads(t, repo, ctx)
 	now := time.Now().UTC()
 	ams := store.NewAgentMessageExtStore(repo.ORM())
-	mb := New(Deps{Store: ams, Announcer: repo})
+	mb := New(Deps{Store: ams, Announcer: repo.UpdateWriter()})
 
 	require.Equal(t, 0, refetches(t, repo, ctx, chatID))
 

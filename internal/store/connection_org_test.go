@@ -20,6 +20,7 @@ import (
 // admin's whose user_id it carries for attribution, and the owner-scoped reads
 // find it only under its own org (control-plane docs/design/org-sharing.md §7).
 func TestOrgConnectionsAreScopedToTheirOrg(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const admin = storetest.SeedUserID
@@ -93,6 +94,7 @@ func TestOrgConnectionsAreScopedToTheirOrg(t *testing.T) {
 // whatever the creating admin has personally, and its names are unique within
 // the org: two admins cannot name two of its Slack connections alike.
 func TestOrgConnectionDefaultsAndNamesAreTheOrgs(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	insert := func(c *core.Connection) error {
@@ -140,6 +142,7 @@ func TestOrgConnectionDefaultsAndNamesAreTheOrgs(t *testing.T) {
 // or through a connection of the trigger's own org; never through another
 // org's, and never an org connection for a trigger with no org.
 func TestIntegrationRoutingThroughOrgConnections(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	// A fixed instant well before the access row's refreshed_at (now()), so
@@ -206,6 +209,7 @@ func TestIntegrationRoutingThroughOrgConnections(t *testing.T) {
 // or two that race, is refused by the index. Another org, another
 // integration, a deleted row and a personal row never conflict.
 func TestOrgConnectionIndexesHoldTheInvariants(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	insert := func(id, org, integration, name string, isDefault, deleted bool) error {
@@ -269,6 +273,7 @@ func TestOrgConnectionIndexesHoldTheInvariants(t *testing.T) {
 // refused by it, while another user, another integration, a deleted row and an
 // org row of the same creator never conflict.
 func TestConnectionUserNameIndexHoldsPersonalNamesAlone(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	// IF EXISTS: the migration that drops it for real makes this a no-op.

@@ -7,7 +7,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
-	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
 // Source is where a ref resolved.
@@ -148,7 +147,7 @@ func BuiltinYAML(name string) ([]byte, error) {
 }
 
 func parsed(ref Ref, source Source, path string, data []byte) (*Resolved, error) {
-	wf, err := wfyaml.ParseWorkflow(data)
+	wf, err := parses.parse(data)
 	if err != nil {
 		where := ref.Raw
 		if path != "" {

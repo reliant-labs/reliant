@@ -40,7 +40,7 @@ func TestReconciler_RecordsCarryTheChatOwnerAndRunIDs(t *testing.T) {
 	repo.chats["chat-1"] = &db.Chat{ID: "chat-1", UserID: "user-77"}
 
 	// Temporal has no record of the workflow: the repair logs at ERROR.
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{}}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{}}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 	wf := runningWorkflow()
 	result := reconciler.ReconcileWorkflow(context.Background(), wf)
 	require.NoError(t, result.Error)
@@ -65,7 +65,7 @@ func TestReconciler_RecordsCarryTheChatOwnerAndRunIDs(t *testing.T) {
 func TestReconciler_UnknownChatOwnerStillStampsTheChat(t *testing.T) {
 	logs := captureScopedLogs(t)
 	repo := newMockRepo() // no chats: GetChat answers not-found
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{}}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{}}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 	result := reconciler.ReconcileWorkflow(context.Background(), runningWorkflow())
 	require.NoError(t, result.Error)
 

@@ -76,9 +76,20 @@ type Deps struct {
 	// Chats reads a chat's owner, activity, main thread and run, with no
 	// owner check. store.ChatsWithActivityExtStore satisfies it.
 	Chats Chats
+	// ToolCalls lists the stranded spawns and backgrounded processes the
+	// sweeps repair. store.ToolCallExtStore satisfies it.
+	ToolCalls ToolCallLists
 	// RunEvents records a repaired run's terminal event, inside the repair's
 	// transaction (runevents.NewStore).
 	RunEvents runevents.Store
+}
+
+// ToolCallLists lists the tool-call rows the stranded-spawn and
+// backgrounded-process sweeps act on.
+type ToolCallLists interface {
+	ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error)
+	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*db.StrandedBackgroundSpawn, error)
+	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error)
 }
 
 // Chats reads a chat with its computed state.
@@ -122,11 +133,7 @@ type ReconcilerStore interface {
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
 	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 
-	// Stranded spawns, backgrounded processes and the tool-call rows they
-	// close.
-	ListStrandedSpawnToolCalls(ctx context.Context) ([]*db.ToolCall, error)
-	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*db.StrandedBackgroundSpawn, error)
-	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*db.BackgroundedProcessCall, error)
+	// The tool-call rows stranded spawns and backgrounded processes close.
 	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
 
