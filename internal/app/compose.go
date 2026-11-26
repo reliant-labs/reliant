@@ -708,6 +708,8 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 		ConnectionVault: g.CredentialsConnectionvault(),
 		DB:              g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
 		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
 	})
 }
 
@@ -1013,6 +1015,8 @@ func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 		Router:     g.APIDaemonRouter(),
 		DB:         g.Database(),
 		Activity:   g.DaemonStatePublisher(),
+		Reconciler: g.ServerProcessConfig.GetReconciler(),
+		Runs:       g.RunLifecycle(),
 	})
 }
 

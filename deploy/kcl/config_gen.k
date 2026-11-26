@@ -695,7 +695,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=4be5cf857d4f32a35c78fd3f27f82862de8d40f7977a63619b8050a0b23b05d8
+# forge:hash=6d4fd713af47daea4e150cdae6922036300cf986952562bd1b30bb1081e78ec5
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -755,6 +755,10 @@ schema DaemonConfig:
     labels: str = ""
     # Install new signed releases of reliant at quiet moments, restarting in place (a self-owned install only; off by default)
     auto_update: bool = False
+    # Image merge-queue gates run in on this machine (empty: refuse gates)
+    gate_image: str = ""
+    # Grype database directory mounted read-only into merge-queue gates (empty: scans are unproven)
+    gate_vuln_db_dir: str = ""
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonConfigInstance = DaemonConfigInstance {}
 
@@ -814,7 +818,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=2408933b35dc915dfb6f50b70dbb9c72852c4e6fca18129611777a763c89a9d2
+        # forge:hash=7665cbbf86f3436baf7d8b512626d9fa29f59b4bfd75c25f04e053f580cd8225
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -844,6 +848,8 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT" = str(c.egress_host_max_concurrent)
         "RELIANT_DAEMON_LABELS" = c.labels
         "RELIANT_DAEMON_AUTO_UPDATE" = "true" if c.auto_update else "false"
+        "RELIANT_DAEMON_GATE_IMAGE" = c.gate_image
+        "RELIANT_DAEMON_GATE_VULN_DB_DIR" = c.gate_vuln_db_dir
 
         # forge:section daemonConfigEnvMap values (end)
         # forge:hash=06d93ea6019c14e6397469374bab99b5c2725f7353c6e9a894aa0b0ce1f5d421
@@ -1602,8 +1608,18 @@ schema ServerProcessConfigPipeline:
     # Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them
     enabled: bool = False
 
+# forge:section schema ServerProcessConfigReconciler
+# forge:hash=e7bfa70a2e0f7539d0ee0de18a45da2ad480e8698bc4b7e555fc2dc058a2b41d
+# ServerProcessConfigReconciler is the reconciler block (ReconcilerConfig) — author its values in config.k as `reconciler.<field> = ...`.
+schema ServerProcessConfigReconciler:
+    # Workflow reconciler stall watchdog: off (no work), report (log, count and record stalled runs) or enforce (also stop them)
+    stall_watchdog: str = "off"
+
+    check:
+        stall_watchdog != "", "stall_watchdog = \"\" cannot reach the process: an empty RELIANT_RECONCILER_STALL_WATCHDOG counts as unset, so it would load the default \"off\" — set a value, or change its default in the proto"
+
 # forge:section schema ServerProcessConfig
-# forge:hash=2a85aadde860e7c38ce1de949ab1de6d1f2ad4d66d4118c2c17ed44b8f9ae1d1
+# forge:hash=8a0a8e3ac4a7b600c452e4933eca1d47d4ae9208eb5b4233b8796efcb281a271
 schema ServerProcessConfig:
     # Data directory for logs and certs
     data_dir: str = "./data"
@@ -1635,6 +1651,8 @@ schema ServerProcessConfig:
     client_versions: ServerProcessConfigClientVersions = ServerProcessConfigClientVersions {}
     # pipeline config block (PipelineConfig). Set its fields as `pipeline.<field> = ...`.
     pipeline: ServerProcessConfigPipeline = ServerProcessConfigPipeline {}
+    # reconciler config block (ReconcilerConfig). Set its fields as `reconciler.<field> = ...`.
+    reconciler: ServerProcessConfigReconciler = ServerProcessConfigReconciler {}
 
     check:
         data_dir != "", "data_dir = \"\" cannot reach the process: an empty DATA_DIR counts as unset, so it would load the default \"./data\" — set a value, or pass --data-dir= in the workload's args to make it empty"
@@ -1846,6 +1864,10 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         # forge:section serverProcessConfigEnvMap values pipeline
         # forge:hash=5c89bfa1b8721707c20667f38e4688778c8a40aff69dd3408ea896474ba96378
         "RELIANT_PIPELINE_ENABLED" = "true" if c.pipeline.enabled else "false"
+
+        # forge:section serverProcessConfigEnvMap values reconciler
+        # forge:hash=60e60ef61f114e977ffdcd6e05ca15e52e835e4dd1f9627665b5aa867b27f5e2
+        "RELIANT_RECONCILER_STALL_WATCHDOG" = c.reconciler.stall_watchdog
 
         # forge:section serverProcessConfigEnvMap values (end)
         # forge:hash=6e40ebe66a4bd1160f079d94eae59be0c27a98446b351e00c478d59941a3fc6d
@@ -2362,6 +2384,10 @@ ROOTS: {str: Root} = {
             "RELIANT_CLIENT_VERSION_ENFORCE",
             "RELIANT_CLIENT_VERSION_ENFORCE_LEGACY_UNIDENTIFIED",
             "RELIANT_CLIENT_VERSION_REFUSE_UNIDENTIFIED",
+
+            # forge:section root api env reconciler
+            # forge:hash=61e1f0cf7fe0f4ecadd5042d5200121cc2fd39886496cc144a3210dea72032f5
+            "RELIANT_RECONCILER_STALL_WATCHDOG",
 
             # forge:section root api env (end)
             # forge:hash=7cce70f80c7f09e7d6d0f6dadef2f51be26ee5e885d6331fc33ef3bad4a54a1a
