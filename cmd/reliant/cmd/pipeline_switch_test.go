@@ -221,7 +221,7 @@ func TestPipelineSwitchIsOffByDefault(t *testing.T) {
 
 // assertAPIPipelineService follows a loaded ServerProcessConfig to the
 // PipelineService the API server mounts, built as compose.go's newPipeline
-// builds it (the pipeline block of the process's ServerProcessConfig): off,
+// builds it (the pipeline.enabled switch of the process's ServerProcessConfig): off,
 // every rpc is FailedPrecondition naming the switch before anything is read;
 // on, a call gets past the switch (here to the caller check, as the call
 // carries no user).
@@ -230,7 +230,7 @@ func assertAPIPipelineService(t *testing.T, process *config.ServerProcessConfig,
 	store := &pipelineSwitchStore{}
 	svc, err := pipeline.New(pipeline.Deps{
 		Logger: testkit.DiscardLogger(), Config: &config.Config{},
-		Pipeline: process.GetPipeline(), Store: store,
+		PipelineEnabled: process.GetPipeline().GetEnabled(), Store: store,
 	})
 	require.NoError(t, err)
 	_, err = svc.GetPipelineState(context.Background(), connect.NewRequest(&reliantv1.GetPipelineStateRequest{RepoId: "r-1"}))
