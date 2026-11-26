@@ -1251,6 +1251,42 @@ func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 		viewerRoot = basePath
 	}
 
+	// Resolve the workspace independently of caller confinement: ResolveDir is
+	// a no-op for unconfined callers. Lazy expansion is a new tree request, so
+	// its root must pass the same boundary as links discovered during a walk.
+	viewerRoot, err = filepath.EvalSymlinks(viewerRoot)
+	if err != nil {
+		return nil, err
+	}
+	viewerRoot, err = filepath.Abs(viewerRoot)
+	if err != nil {
+		return nil, err
+	}
+	checkTreeDir := func(path string) error {
+		if _, err := daemonpolicy.ResolveDir(ctx, path); err != nil {
+			return err
+		}
+		if err := daemonpolicy.DenyViewerRead(path, viewerRoot); err != nil {
+			return err
+		}
+		target, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			return err
+		}
+		target, err = filepath.Abs(target)
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(viewerRoot, target)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return fmt.Errorf("tree directory outside workspace: %w", os.ErrPermission)
+		}
+		return nil
+	}
+	if err := checkTreeDir(basePath); err != nil {
+		return nil, err
+	}
+
 	// Serve from a live, bounded filesystem walk (VS Code style) rather than
 	// the git index: this reads filesystem truth, so manually-removed files
 	// (rm, not `git rm`) disappear and every node reports its real size. A
@@ -1267,14 +1303,10 @@ func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 		ShowHidden: req.ShowHidden,
 		Depth:      req.Depth,
 		Deadline:   treeWalkDeadline(ctx, time.Now()),
-		// A symlinked directory is expandable only where expanding it would
-		// be allowed: inside a confined caller's root, and not a credential
-		// store.
+		// Discovery and lazy expansion enforce the same workspace boundary,
+		// even for unconfined callers, as well as the credential guard.
 		DenyDir: func(path string) bool {
-			if _, err := daemonpolicy.ResolveDir(ctx, path); err != nil {
-				return true
-			}
-			return daemonpolicy.DenyViewerRead(path, viewerRoot) != nil
+			return checkTreeDir(path) != nil
 		},
 	})
 	if err != nil {

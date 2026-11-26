@@ -151,6 +151,58 @@ func TestHandleFSGetTree_EveryFolderOpens(t *testing.T) {
 	}
 }
 
+func TestHandleFSGetTree_WorkspaceBoundaryUnconfined(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "workspace")
+	outside := filepath.Join(parent, "workspace-other")
+	writeFileT(t, filepath.Join(root, "inside", "child.txt"), "inside")
+	writeFileT(t, filepath.Join(outside, "private.txt"), "outside")
+	symlinkT(t, outside, filepath.Join(root, "escape"))
+	symlinkT(t, "inside", filepath.Join(root, "allowed"))
+	alias := filepath.Join(parent, "workspace-alias")
+	symlinkT(t, root, alias)
+
+	call := func(path, viewerRoot string) ([]byte, error) {
+		t.Helper()
+		payload, err := json.Marshal(fsGetTreeRequest{Path: path, ViewerRoot: viewerRoot, Depth: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return handleFSGetTree(context.Background(), payload)
+	}
+	for _, viewerRoot := range []string{root, alias} {
+		out, err := call(root, viewerRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var resp fsGetTreeResponse
+		if err := json.Unmarshal(out, &resp); err != nil {
+			t.Fatal(err)
+		}
+		n := findNode(resp.Nodes, "escape")
+		if n == nil || n.SymlinkStatus != "denied" || expandable(n) {
+			t.Fatalf("out-of-workspace link must be denied: %+v", n)
+		}
+		for _, path := range []string{filepath.Join(root, "escape"), outside} {
+			if _, err := call(path, viewerRoot); !errors.Is(err, os.ErrPermission) {
+				t.Errorf("listing %s: %v, want permission denied", path, err)
+			}
+		}
+		for _, path := range []string{filepath.Join(root, "allowed"), filepath.Join(root, "inside")} {
+			out, err := call(path, viewerRoot)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(out, &resp); err != nil {
+				t.Fatal(err)
+			}
+			if findNode(resp.Nodes, "child.txt") == nil {
+				t.Errorf("in-workspace expansion %s missing child", path)
+			}
+		}
+	}
+}
+
 // The directory picker (fs.list_dir) enters a symlinked directory: it is
 // listed as a directory, a dangling link as a file.
 func TestHandleFSListDir_SymlinkedDirIsADirectory(t *testing.T) {
