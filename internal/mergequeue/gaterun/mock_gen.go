@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockDispatcher
-// forge:hash=e6b63b9b363345504fdfa9fbd6d8586b25955d1271bedf2542c2ae8fd4feff34
+// forge:hash=d059911422780d7bf96b64725a92e8f25099eee5710ee2ce28c7be47a9abcf47
 
 // MockDispatcher is a test mock for the Dispatcher interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDispatcher.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDispatcher.<Method>Func not set" error.
 type MockDispatcher struct {
 	contractkit.Recorder
 	DispatchFunc func(context.Context, GateRequest) (GateResult, error)
@@ -34,6 +35,26 @@ func (m *MockDispatcher) Dispatch(ctx context.Context, req GateRequest) (GateRes
 		return m.DispatchFunc(ctx, req)
 	}
 	return GateResult{}, contractkit.MockNotSet("MockDispatcher", "Dispatch")
+}
+
+// MockDispatcherDispatchCall is one recorded call of MockDispatcher.Dispatch, one
+// field per parameter.
+type MockDispatcherDispatchCall struct {
+	Ctx context.Context
+	Req GateRequest
+}
+
+// DispatchCalls returns every recorded Dispatch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Dispatch").
+func (m *MockDispatcher) DispatchCalls() []MockDispatcherDispatchCall {
+	var out []MockDispatcherDispatchCall
+	for _, c := range m.Recorder.Calls("Dispatch") {
+		var r MockDispatcherDispatchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(GateRequest)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

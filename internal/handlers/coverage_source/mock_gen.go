@@ -19,14 +19,15 @@ import (
 )
 
 // forge:section MockProjects
-// forge:hash=7e489c0e26b7f2e73719f2b012558f3e48e4c0bd9ca5a008856d4e8b02327583
+// forge:hash=c6a3962a680395cba280146b5848c9a8c9780eec425e2692cd5e1501bde12cdf
 
 // MockProjects is a test mock for the Projects interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProjects.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProjects.<Method>Func not set" error.
 type MockProjects struct {
 	contractkit.Recorder
 	ListProjectsFunc             func(context.Context, db.ProjectFilters) ([]*db.Project, error)
@@ -51,18 +52,61 @@ func (m *MockProjects) ListReposHoldingForgeApp(ctx context.Context, name string
 	return nil, contractkit.MockNotSet("MockProjects", "ListReposHoldingForgeApp")
 }
 
+// MockProjectsListProjectsCall is one recorded call of MockProjects.ListProjects, one
+// field per parameter.
+type MockProjectsListProjectsCall struct {
+	Ctx     context.Context
+	Filters db.ProjectFilters
+}
+
+// ListProjectsCalls returns every recorded ListProjects call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjects").
+func (m *MockProjects) ListProjectsCalls() []MockProjectsListProjectsCall {
+	var out []MockProjectsListProjectsCall
+	for _, c := range m.Recorder.Calls("ListProjects") {
+		var r MockProjectsListProjectsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Filters, _ = c.Args[1].(db.ProjectFilters)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProjectsListReposHoldingForgeAppCall is one recorded call of MockProjects.ListReposHoldingForgeApp, one
+// field per parameter.
+type MockProjectsListReposHoldingForgeAppCall struct {
+	Ctx        context.Context
+	Name       string
+	ProjectIDs []string
+}
+
+// ListReposHoldingForgeAppCalls returns every recorded ListReposHoldingForgeApp call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListReposHoldingForgeApp").
+func (m *MockProjects) ListReposHoldingForgeAppCalls() []MockProjectsListReposHoldingForgeAppCall {
+	var out []MockProjectsListReposHoldingForgeAppCall
+	for _, c := range m.Recorder.Calls("ListReposHoldingForgeApp") {
+		var r MockProjectsListReposHoldingForgeAppCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Name, _ = c.Args[1].(string)
+		r.ProjectIDs, _ = c.Args[2].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Projects = (*MockProjects)(nil)
 
 // forge:section MockOrgResolver
-// forge:hash=7821159465f850a96059a41aaed663add72cb17826729fd7910ac713fc0366b2
+// forge:hash=2f2d610998beb1d1987985cc70aa0c812bd108e6563d2c3ae27eb82e5288229c
 
 // MockOrgResolver is a test mock for the OrgResolver interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockOrgResolver.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOrgResolver.<Method>Func not set" error.
 type MockOrgResolver struct {
 	contractkit.Recorder
 	DefaultOrgFunc func(context.Context, string) (string, error)
@@ -87,18 +131,63 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 	return nil, contractkit.MockNotSet("MockOrgResolver", "ListScope")
 }
 
+// MockOrgResolverDefaultOrgCall is one recorded call of MockOrgResolver.DefaultOrg, one
+// field per parameter.
+type MockOrgResolverDefaultOrgCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// DefaultOrgCalls returns every recorded DefaultOrg call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DefaultOrg").
+func (m *MockOrgResolver) DefaultOrgCalls() []MockOrgResolverDefaultOrgCall {
+	var out []MockOrgResolverDefaultOrgCall
+	for _, c := range m.Recorder.Calls("DefaultOrg") {
+		var r MockOrgResolverDefaultOrgCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOrgResolverListScopeCall is one recorded call of MockOrgResolver.ListScope, one
+// field per parameter.
+type MockOrgResolverListScopeCall struct {
+	Ctx       context.Context
+	UserID    string
+	Requested string
+	Stamp     orgs.Backfill
+}
+
+// ListScopeCalls returns every recorded ListScope call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListScope").
+func (m *MockOrgResolver) ListScopeCalls() []MockOrgResolverListScopeCall {
+	var out []MockOrgResolverListScopeCall
+	for _, c := range m.Recorder.Calls("ListScope") {
+		var r MockOrgResolverListScopeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Requested, _ = c.Args[2].(string)
+		r.Stamp, _ = c.Args[3].(orgs.Backfill)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
 // forge:section MockReports
-// forge:hash=ab308a094d40ab0859c10eae7a4a9b22cef83019c8d07ef6501ac201c78abf06
+// forge:hash=edeb90f1a8659db5f92fe569b66a9b642c86a12041c237fd3d4acd1bb2e2cc54
 
 // MockReports is a test mock for the Reports interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockReports.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockReports.<Method>Func not set" error.
 type MockReports struct {
 	contractkit.Recorder
 	HasCoverageBlobFunc func(context.Context, string, string, string, string) (controlplane.CoverageBlob, error)
@@ -113,18 +202,45 @@ func (m *MockReports) HasCoverageBlob(ctx context.Context, token string, orgID s
 	return *new(controlplane.CoverageBlob), contractkit.MockNotSet("MockReports", "HasCoverageBlob")
 }
 
+// MockReportsHasCoverageBlobCall is one recorded call of MockReports.HasCoverageBlob, one
+// field per parameter.
+type MockReportsHasCoverageBlobCall struct {
+	Ctx     context.Context
+	Token   string
+	OrgID   string
+	Project string
+	BlobID  string
+}
+
+// HasCoverageBlobCalls returns every recorded HasCoverageBlob call, oldest first, with
+// its arguments typed. It reads the same log as Calls("HasCoverageBlob").
+func (m *MockReports) HasCoverageBlobCalls() []MockReportsHasCoverageBlobCall {
+	var out []MockReportsHasCoverageBlobCall
+	for _, c := range m.Recorder.Calls("HasCoverageBlob") {
+		var r MockReportsHasCoverageBlobCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Token, _ = c.Args[1].(string)
+		r.OrgID, _ = c.Args[2].(string)
+		r.Project, _ = c.Args[3].(string)
+		r.BlobID, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Reports = (*MockReports)(nil)
 
 // forge:section MockBlobs
-// forge:hash=94bfcc8c3dc31e15ced0f223f274f5708016ba7a4bfd0beedc7277de35f6fb03
+// forge:hash=69e3c524c2a6a37dc8aaa1e8d921374c1cb1f781ec81078cfaeae6909659d38f
 
 // MockBlobs is a test mock for the Blobs interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockBlobs.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockBlobs.<Method>Func not set" error.
 type MockBlobs struct {
 	contractkit.Recorder
 	ReadFunc func(context.Context, string, string, string, string) ([]byte, error)
@@ -137,6 +253,32 @@ func (m *MockBlobs) Read(ctx context.Context, userID string, owner string, repo 
 		return m.ReadFunc(ctx, userID, owner, repo, blobID)
 	}
 	return nil, contractkit.MockNotSet("MockBlobs", "Read")
+}
+
+// MockBlobsReadCall is one recorded call of MockBlobs.Read, one
+// field per parameter.
+type MockBlobsReadCall struct {
+	Ctx    context.Context
+	UserID string
+	Owner  string
+	Repo   string
+	BlobID string
+}
+
+// ReadCalls returns every recorded Read call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Read").
+func (m *MockBlobs) ReadCalls() []MockBlobsReadCall {
+	var out []MockBlobsReadCall
+	for _, c := range m.Recorder.Calls("Read") {
+		var r MockBlobsReadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Owner, _ = c.Args[2].(string)
+		r.Repo, _ = c.Args[3].(string)
+		r.BlobID, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

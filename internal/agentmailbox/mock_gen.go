@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockStore
-// forge:hash=92bbfc8a10585419be8921691b291d57725bb4b2bfafc85d83bfdbce15bb116d
+// forge:hash=304e1a0a6ceb17349bda0320c11073fcfbb6fc386d30a23169b6d42e26dfbca0
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	EnqueueAgentMessageFunc         func(context.Context, *db.AgentMessage) error
@@ -68,18 +69,99 @@ func (m *MockStore) EnqueueSpawnReport(ctx context.Context, msg *db.AgentMessage
 	return *new(db.SpawnReportOutcome), contractkit.MockNotSet("MockStore", "EnqueueSpawnReport")
 }
 
+// MockStoreEnqueueAgentMessageCall is one recorded call of MockStore.EnqueueAgentMessage, one
+// field per parameter.
+type MockStoreEnqueueAgentMessageCall struct {
+	Ctx context.Context
+	Msg *db.AgentMessage
+}
+
+// EnqueueAgentMessageCalls returns every recorded EnqueueAgentMessage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EnqueueAgentMessage").
+func (m *MockStore) EnqueueAgentMessageCalls() []MockStoreEnqueueAgentMessageCall {
+	var out []MockStoreEnqueueAgentMessageCall
+	for _, c := range m.Recorder.Calls("EnqueueAgentMessage") {
+		var r MockStoreEnqueueAgentMessageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Msg, _ = c.Args[1].(*db.AgentMessage)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreEnqueueAgentMessageOnceCall is one recorded call of MockStore.EnqueueAgentMessageOnce, one
+// field per parameter.
+type MockStoreEnqueueAgentMessageOnceCall struct {
+	Ctx context.Context
+	Msg *db.AgentMessage
+}
+
+// EnqueueAgentMessageOnceCalls returns every recorded EnqueueAgentMessageOnce call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EnqueueAgentMessageOnce").
+func (m *MockStore) EnqueueAgentMessageOnceCalls() []MockStoreEnqueueAgentMessageOnceCall {
+	var out []MockStoreEnqueueAgentMessageOnceCall
+	for _, c := range m.Recorder.Calls("EnqueueAgentMessageOnce") {
+		var r MockStoreEnqueueAgentMessageOnceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Msg, _ = c.Args[1].(*db.AgentMessage)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreEnqueueAgentMessageIfAbsentCall is one recorded call of MockStore.EnqueueAgentMessageIfAbsent, one
+// field per parameter.
+type MockStoreEnqueueAgentMessageIfAbsentCall struct {
+	Ctx context.Context
+	Msg *db.AgentMessage
+}
+
+// EnqueueAgentMessageIfAbsentCalls returns every recorded EnqueueAgentMessageIfAbsent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EnqueueAgentMessageIfAbsent").
+func (m *MockStore) EnqueueAgentMessageIfAbsentCalls() []MockStoreEnqueueAgentMessageIfAbsentCall {
+	var out []MockStoreEnqueueAgentMessageIfAbsentCall
+	for _, c := range m.Recorder.Calls("EnqueueAgentMessageIfAbsent") {
+		var r MockStoreEnqueueAgentMessageIfAbsentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Msg, _ = c.Args[1].(*db.AgentMessage)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreEnqueueSpawnReportCall is one recorded call of MockStore.EnqueueSpawnReport, one
+// field per parameter.
+type MockStoreEnqueueSpawnReportCall struct {
+	Ctx context.Context
+	Msg *db.AgentMessage
+}
+
+// EnqueueSpawnReportCalls returns every recorded EnqueueSpawnReport call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EnqueueSpawnReport").
+func (m *MockStore) EnqueueSpawnReportCalls() []MockStoreEnqueueSpawnReportCall {
+	var out []MockStoreEnqueueSpawnReportCall
+	for _, c := range m.Recorder.Calls("EnqueueSpawnReport") {
+		var r MockStoreEnqueueSpawnReportCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Msg, _ = c.Args[1].(*db.AgentMessage)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockAnnouncer
-// forge:hash=71527f508d74cb89d25a66951862613ebb73fbe71eb7eda1728bd6b3080445d6
+// forge:hash=6b4dbf171479caaab32cc639e27e6f8bcd3eaa1b17f536c3612b0d43058009c7
 
 // MockAnnouncer is a test mock for the Announcer interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAnnouncer.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAnnouncer.<Method>Func not set" error.
 type MockAnnouncer struct {
 	contractkit.Recorder
 	EmitChatRefetchFunc func(context.Context, string, db.RefetchType) error
@@ -92,6 +174,28 @@ func (m *MockAnnouncer) EmitChatRefetch(ctx context.Context, chatID string, refe
 		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
 	}
 	return contractkit.MockNotSet("MockAnnouncer", "EmitChatRefetch")
+}
+
+// MockAnnouncerEmitChatRefetchCall is one recorded call of MockAnnouncer.EmitChatRefetch, one
+// field per parameter.
+type MockAnnouncerEmitChatRefetchCall struct {
+	Ctx         context.Context
+	ChatID      string
+	RefetchType db.RefetchType
+}
+
+// EmitChatRefetchCalls returns every recorded EmitChatRefetch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EmitChatRefetch").
+func (m *MockAnnouncer) EmitChatRefetchCalls() []MockAnnouncerEmitChatRefetchCall {
+	var out []MockAnnouncerEmitChatRefetchCall
+	for _, c := range m.Recorder.Calls("EmitChatRefetch") {
+		var r MockAnnouncerEmitChatRefetchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.RefetchType, _ = c.Args[2].(db.RefetchType)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockStore
-// forge:hash=0b6f57bcbf19d0df2c6ffaa89fb1740ed06b14c9f9b2ff354da66fa55503f0c1
+// forge:hash=7f5bf664749bdd17c6da84f81479daab9e6604b78a8d32ba7952247fa5d3f5af
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	GetChatSelectionFunc    func(context.Context, string) (*Selection, error)
@@ -56,18 +57,85 @@ func (m *MockStore) CopyChatSelection(ctx context.Context, fromChatID string, to
 	return contractkit.MockNotSet("MockStore", "CopyChatSelection")
 }
 
+// MockStoreGetChatSelectionCall is one recorded call of MockStore.GetChatSelection, one
+// field per parameter.
+type MockStoreGetChatSelectionCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// GetChatSelectionCalls returns every recorded GetChatSelection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChatSelection").
+func (m *MockStore) GetChatSelectionCalls() []MockStoreGetChatSelectionCall {
+	var out []MockStoreGetChatSelectionCall
+	for _, c := range m.Recorder.Calls("GetChatSelection") {
+		var r MockStoreGetChatSelectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreMutateChatSelectionCall is one recorded call of MockStore.MutateChatSelection, one
+// field per parameter.
+type MockStoreMutateChatSelectionCall struct {
+	Ctx    context.Context
+	ChatID string
+	Mutate func(current *Selection) (*Selection, error)
+}
+
+// MutateChatSelectionCalls returns every recorded MutateChatSelection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MutateChatSelection").
+func (m *MockStore) MutateChatSelectionCalls() []MockStoreMutateChatSelectionCall {
+	var out []MockStoreMutateChatSelectionCall
+	for _, c := range m.Recorder.Calls("MutateChatSelection") {
+		var r MockStoreMutateChatSelectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Mutate, _ = c.Args[2].(func(current *Selection) (*Selection, error))
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCopyChatSelectionCall is one recorded call of MockStore.CopyChatSelection, one
+// field per parameter.
+type MockStoreCopyChatSelectionCall struct {
+	Ctx        context.Context
+	FromChatID string
+	ToChatID   string
+	UserID     string
+}
+
+// CopyChatSelectionCalls returns every recorded CopyChatSelection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CopyChatSelection").
+func (m *MockStore) CopyChatSelectionCalls() []MockStoreCopyChatSelectionCall {
+	var out []MockStoreCopyChatSelectionCall
+	for _, c := range m.Recorder.Calls("CopyChatSelection") {
+		var r MockStoreCopyChatSelectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.FromChatID, _ = c.Args[1].(string)
+		r.ToChatID, _ = c.Args[2].(string)
+		r.UserID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockService
-// forge:hash=f1739e2d3cf08418d43a690934e8f4a6ba705f9abaf04db4532227237b9c40f0
+// forge:hash=dbd77d1302cd7898bcb90a64a7fa66629d135e97e2951e7fa26c4281d93e15e3
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	GetFunc       func(context.Context, string) (*Selection, error)
@@ -110,6 +178,106 @@ func (m *MockService) Copy(ctx context.Context, fromChatID string, toChatID stri
 		return m.CopyFunc(ctx, fromChatID, toChatID, userID)
 	}
 	return contractkit.MockNotSet("MockService", "Copy")
+}
+
+// MockServiceGetCall is one recorded call of MockService.Get, one
+// field per parameter.
+type MockServiceGetCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// GetCalls returns every recorded Get call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Get").
+func (m *MockService) GetCalls() []MockServiceGetCall {
+	var out []MockServiceGetCall
+	for _, c := range m.Recorder.Calls("Get") {
+		var r MockServiceGetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceMergeCall is one recorded call of MockService.Merge, one
+// field per parameter.
+type MockServiceMergeCall struct {
+	Ctx             context.Context
+	ChatID          string
+	UserID          string
+	WorkflowName    string
+	Patch           map[string]any
+	ExpectedVersion int64
+}
+
+// MergeCalls returns every recorded Merge call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Merge").
+func (m *MockService) MergeCalls() []MockServiceMergeCall {
+	var out []MockServiceMergeCall
+	for _, c := range m.Recorder.Calls("Merge") {
+		var r MockServiceMergeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.WorkflowName, _ = c.Args[3].(string)
+		r.Patch, _ = c.Args[4].(map[string]any)
+		r.ExpectedVersion, _ = c.Args[5].(int64)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetPolicyCall is one recorded call of MockService.SetPolicy, one
+// field per parameter.
+type MockServiceSetPolicyCall struct {
+	Ctx             context.Context
+	ChatID          string
+	UserID          string
+	WorkflowName    string
+	Policy          ProviderPolicy
+	ExpectedVersion int64
+}
+
+// SetPolicyCalls returns every recorded SetPolicy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetPolicy").
+func (m *MockService) SetPolicyCalls() []MockServiceSetPolicyCall {
+	var out []MockServiceSetPolicyCall
+	for _, c := range m.Recorder.Calls("SetPolicy") {
+		var r MockServiceSetPolicyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.WorkflowName, _ = c.Args[3].(string)
+		r.Policy, _ = c.Args[4].(ProviderPolicy)
+		r.ExpectedVersion, _ = c.Args[5].(int64)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCopyCall is one recorded call of MockService.Copy, one
+// field per parameter.
+type MockServiceCopyCall struct {
+	Ctx        context.Context
+	FromChatID string
+	ToChatID   string
+	UserID     string
+}
+
+// CopyCalls returns every recorded Copy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Copy").
+func (m *MockService) CopyCalls() []MockServiceCopyCall {
+	var out []MockServiceCopyCall
+	for _, c := range m.Recorder.Calls("Copy") {
+		var r MockServiceCopyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.FromChatID, _ = c.Args[1].(string)
+		r.ToChatID, _ = c.Args[2].(string)
+		r.UserID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
