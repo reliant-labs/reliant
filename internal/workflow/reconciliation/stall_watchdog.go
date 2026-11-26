@@ -239,7 +239,7 @@ func (r *Reconciler) watchStall(ctx context.Context, wf *db.Workflow, state *Tem
 		return false
 	}
 	// A fleet that is down stalls everything for a known reason: hold.
-	for _, kind := range []string{"workflow", "activity"} {
+	for _, kind := range []string{pollerTaskWorkflow, pollerTaskActivity} {
 		if active, pollErr := r.pollersActive(ctx, pollers, kind); pollErr != nil || !active {
 			return false
 		}

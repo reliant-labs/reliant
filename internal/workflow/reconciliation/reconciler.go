@@ -334,6 +334,12 @@ const (
 // wedge; the attempt count only decides when to go and read it.
 const DefaultWedgeAttemptThreshold = 2
 
+// The task types pollersActive gates on: workflow and activity pollers.
+const (
+	pollerTaskWorkflow = "workflow"
+	pollerTaskActivity = "activity"
+)
+
 // wedgeObservationTaskType is the debounce identity used for wedged workflow
 // tasks, distinct from the "workflow"/"activity" stuck-in-Scheduled classes.
 const wedgeObservationTaskType = "wedged-workflow-task"

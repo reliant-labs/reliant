@@ -83,7 +83,6 @@ type stallHarness struct {
 	runs      *fakeTerminator
 	records   *fakeStallRecorder
 	wf        *db.Workflow
-	resp      *mockDescribeResponse
 	now       time.Time
 }
 
