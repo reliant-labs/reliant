@@ -84,12 +84,15 @@ func validateToolsConfigBindings(wf *reliantv1.Workflow, result *Result) {
 				continue
 			}
 
-			if _, known := toolcatalog.Lookup(toolName); !known {
+			unknownTool := func() {
 				result.AddErrorWithSuggestion(
 					CategoryToolBinding, path, toolName,
 					fmt.Sprintf("no tool named %q exists; tools_config.tools is keyed by tool name", toolName),
 					didYouMeanTool(toolName),
 				)
+			}
+			if _, known := toolcatalog.Lookup(toolName); !known {
+				unknownTool()
 				continue
 			}
 
@@ -98,6 +101,17 @@ func validateToolsConfigBindings(wf *reliantv1.Workflow, result *Result) {
 				paramNames = append(paramNames, paramName)
 			}
 			sort.Strings(paramNames)
+
+			// A feature-gated tool validates by its exact name with real
+			// parameters, so an entitled owner's workflow stays valid. A bad
+			// binding on one is reported exactly as a binding on a tool that
+			// does not exist: naming its parameters would describe it.
+			if _, gated := toolcatalog.FeatureGated(toolName); gated && slices.ContainsFunc(paramNames, func(paramName string) bool {
+				return !toolcatalog.IsBindable(toolName, paramName)
+			}) {
+				unknownTool()
+				continue
+			}
 
 			for _, paramName := range paramNames {
 				if toolcatalog.IsBindable(toolName, paramName) {

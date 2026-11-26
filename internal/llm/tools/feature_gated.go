@@ -98,6 +98,12 @@ func (c *Capabilities) notEntitled(name string) bool {
 	return gated && !c.entitledTo(f)
 }
 
+// HidesTool reports whether name is a feature-gated tool this set does not
+// entitle, so that to its caller the tool does not exist. A nil set (a batch
+// that predates capability sets, or a path that carries none) entitles
+// nothing, so it hides every gated tool.
+func (c *Capabilities) HidesTool(name string) bool { return c.notEntitled(name) }
+
 // entitledFeatureNames is the sorted names of the features in, true only.
 func entitledFeatureNames(in map[string]bool) []string {
 	var names []string

@@ -219,12 +219,15 @@ type CallLLMActivity struct {
 	// entitled to in the run's org, and so which feature-gated tools exist
 	// for the turn; nil entitles nothing.
 	gate featuregate.Gate
+	// entitlements keeps the gate's answers briefly (entitledFeatures).
+	entitlements *entitlementCache
 }
 
 // WithFeatureGate wires the gate that decides which feature-gated tools the
-// run's owner may be offered (entitledFeatures).
+// run's owner may be offered (entitledFeatures), with a fresh answer cache.
 func (a *CallLLMActivity) WithFeatureGate(g featuregate.Gate) *CallLLMActivity {
 	a.gate = g
+	a.entitlements = newEntitlementCache(nil)
 	return a
 }
 
@@ -2877,7 +2880,7 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 	// A feature-gated tool exists only for an owner entitled to its feature
 	// in the run's org: ask which of the features this declaration reaches.
 	// The resolver excludes the rest as if they did not exist.
-	entitled := entitledFeatures(ctx, a.gate, chat, access)
+	entitled := entitledFeatures(ctx, a.gate, a.entitlements, chat, access)
 
 	// Whether this thread has sub-agents — its own, or inherited by branching
 	// — decides which spawn management tools it is offered. Read from the

@@ -204,3 +204,23 @@ func TestFeatureGated_CatalogAgrees(t *testing.T) {
 	_, gated := toolcatalog.FeatureGated(gatedTool)
 	assert.False(t, gated, "the hook is undone when its test ends")
 }
+
+// Guards on the shipped gated map: a gated tool has no surface the capability
+// set does not govern. None is node-exposed (an invoke_tool node would run it
+// with no turn's entitlement), and every one is server-placed, so no machine
+// requirement or no-machine refusal ever names it.
+func TestFeatureGatedTools_HaveNoUngovernedSurface(t *testing.T) {
+	registry := registryIndex()
+	for name := range FeatureGatedTools() {
+		_, registered := registry[name]
+		assert.True(t, registered, "gated tool %q is not in the registry", name)
+		assert.False(t, IsNodeExposedTool(name), "gated tool %q is node-exposed", name)
+		for _, exposure := range NodeExposedTools() {
+			assert.NotEqual(t, name, exposure.Tool, "gated tool %q is node-exposed", name)
+		}
+		placement, err := PlacementOf(name)
+		require.NoError(t, err, name)
+		assert.Equal(t, PlacementServer, placement, "gated tool %q is not server-placed", name)
+		assert.False(t, NeedsMachine(name), "gated tool %q needs a machine", name)
+	}
+}
