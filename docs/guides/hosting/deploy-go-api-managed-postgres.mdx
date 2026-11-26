@@ -175,7 +175,6 @@ The environment declares the database, and the platform fills `DATABASE_URL` in 
 ## What this does not do
 
 - It does not roll back. You recover by deploying an earlier release, and migrations run before every rollout, so keep them backward-compatible: [Safe migrations](/deep-dives/safe-migrations).
-- It does not autoscale. The API runs one replica.
 - It does not decide who may call what. Access checks are handler code you write.
 - Backups need the platform's backup storage to be ready: [Managed Postgres](/hosting/managed-postgres#backups-and-point-in-time-restore).
 

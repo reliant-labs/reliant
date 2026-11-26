@@ -18,6 +18,7 @@ import (
 // The rejected org keys of the orgs asked about, and only those: a key that
 // works, another org's, and a person's own rejected key are not listed.
 func TestListRejectedOrgKeysIn(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	reject := func(id string) {
@@ -57,6 +58,7 @@ func TestListRejectedOrgKeysIn(t *testing.T) {
 // valid (a CONCURRENTLY build that failed leaves an invalid one), indexes
 // org_id, and covers exactly the org rows that need attention.
 func TestRejectedOrgKeysIndex(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	var (
 		valid     bool
@@ -82,6 +84,7 @@ func TestRejectedOrgKeysIndex(t *testing.T) {
 // the one the next sweep claims; a claimed mark is not claimed again within
 // its lease, but is at once when the key is marked anew.
 func TestClaimDueOrgKeyNotices_IsFairToANewerMark(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	for i := 1; i <= 120; i++ {
@@ -116,6 +119,7 @@ func TestClaimDueOrgKeyNotices_IsFairToANewerMark(t *testing.T) {
 // mark changes nothing, and a new mark (after a rotation) is listed again.
 // Working keys and a person's own rejected key are never listed.
 func TestUnstartedOrgKeyNotices(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	mark := func(id string, at time.Time) {
@@ -159,6 +163,7 @@ func TestUnstartedOrgKeyNotices(t *testing.T) {
 // next sweep claims; and a claimed pause comes round again once its lease
 // passes, behind the never-claimed.
 func TestClaimDuePauseNotices_IsFairToANewerPause(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	f.exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active) VALUES ('p-f', 'owner', 'p', '/tmp/p', now(), now(), now()) ON CONFLICT DO NOTHING`)
@@ -202,6 +207,7 @@ func TestClaimDuePauseNotices_IsFairToANewerPause(t *testing.T) {
 // or another reason's pause, lists nothing); and an owner's org triggers that
 // may spend their own accounts (any, or unstamped).
 func TestTriggerNoticeQueries(t *testing.T) {
+	t.Parallel()
 	f := newCredFixture(t)
 	ctx := context.Background()
 	f.exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active) VALUES ('p-n', 'owner', 'p', '/tmp/p', now(), now(), now()) ON CONFLICT DO NOTHING`)

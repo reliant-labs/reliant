@@ -52260,6 +52260,11 @@
             {
               "name": "max_running_per_key",
               "kind": "uint32"
+            },
+            {
+              "name": "cancel_running",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowConcurrencyCancelRunning"
             }
           ],
           "reliant.v1.WorkflowEventSource": [
@@ -52616,6 +52621,12 @@
             "TRIGGER_OVERLAP_POLICY_SKIP",
             "TRIGGER_OVERLAP_POLICY_ALLOW"
           ],
+          "reliant.v1.WorkflowConcurrencyCancelRunning": [
+            "WORKFLOW_CONCURRENCY_CANCEL_RUNNING_UNSPECIFIED",
+            "WORKFLOW_CONCURRENCY_CANCEL_RUNNING_NEVER",
+            "WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT",
+            "WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_HEAD"
+          ],
           "reliant.v1.WorkflowConcurrencyWaiting": [
             "WORKFLOW_CONCURRENCY_WAITING_UNSPECIFIED",
             "WORKFLOW_CONCURRENCY_WAITING_FIFO",
@@ -52644,6 +52655,12 @@
             1,
             2
           ],
+          "reliant.v1.WorkflowConcurrencyCancelRunning": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.WorkflowConcurrencyWaiting": [
             0,
             1,
@@ -52667,6 +52684,10 @@
           "reliant.v1.TriggerOverlapPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "TriggerOverlapPolicy"
+          },
+          "reliant.v1.WorkflowConcurrencyCancelRunning": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowConcurrencyCancelRunning"
           },
           "reliant.v1.WorkflowConcurrencyWaiting": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -59453,6 +59474,17 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Registrations",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Registrations",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Repository",
       "methods": [],
@@ -62481,6 +62513,17 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Triggers",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.Triggers",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

@@ -2745,9 +2745,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
-	if id == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
 	return store.GetTrigger(ctx, r.ORM(), id)
 }
 
@@ -2756,13 +2753,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
-}
-
-func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.RemoveTrigger(ctx, r.ORM(), id)
 }
 
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
@@ -2849,42 +2839,12 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
-// GetLatestTriggerEvent returns the trigger's latest firing, optionally
-// filtered by outcome, and (nil, nil) when it has never fired.
-func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
-	if triggerID == "" {
-		return nil, fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.GetLatestTriggerEvent(ctx, r.ORM(), triggerID, outcome)
-}
-
-func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
-}
-
-func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
-	if id == "" {
-		return nil, core.ErrTriggerNotFound
-	}
-	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
-}
-
 // ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
 //
 // Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
 // ledger through launch.Deps.TriggerEvents.
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
-}
-
-func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
 }
 
 // ==================== Step Executions ====================

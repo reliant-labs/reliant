@@ -24,6 +24,8 @@ type Deps struct {
 	// Repo stores the caller's workflow drafts and reads the projects,
 	// project-synced workflows and visibility settings a listing merges.
 	Repo Repository
+	// Triggers removes the automations that ran a deleted workflow.
+	Triggers Triggers
 	// ProjectRows reads a project by id; the handler decides access on it.
 	ProjectRows ProjectReader
 	// Projects reads a project the caller may write (owner and org decided
@@ -63,6 +65,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Repo == nil {
 		return fmt.Errorf("workflow: Deps.Repo is required")
+	}
+	if d.Triggers == nil {
+		return fmt.Errorf("workflow: Deps.Triggers is required")
 	}
 	if d.ProjectRows == nil {
 		return fmt.Errorf("workflow: Deps.ProjectRows is required")
