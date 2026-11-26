@@ -5,9 +5,9 @@
  * state: findings, SBOMs, a report, and charge.go's source under its hits,
  * never an empty or "not available" state.
  *
- * The pages run as the demo runs them: no API provider, so their default
- * clients (controlPlaneVulnerabilityApi, controlPlaneTestApi,
- * fetchCoverageSource) read the shop pack over its transport.
+ * The pages run as the demo runs them: no API provider and no scope, so
+ * their reads (the generated VulnerabilityService hooks, controlPlaneTestApi,
+ * fetchCoverageSource) read the shop pack over the app's transport.
  */
 
 import type { ReactNode } from "react";
@@ -24,7 +24,6 @@ import { TestsCoverageView } from "@/components/Forge/Tests/TestsCoveragePage";
 import { TestsOverviewView } from "@/components/Forge/Tests/TestsOverviewPage";
 import { setTransport } from "@/lib/connect";
 import { renderWithTransport } from "@/lib/test-utils";
-import { controlPlaneVulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 
 import { createShopTransport } from "..";
 import { SHOP_ADVISORIES } from "../model/security";
@@ -51,7 +50,7 @@ beforeAll(() => {
 afterAll(() => resetDemoNowForTests());
 
 describe("the demo's Security pages", () => {
-  // securityTestUtils renders with an API; the real client's is the one the demo's pages default to.
+  // null: securityTestUtils renders with no fixture scope, so the pages read the app's transport, the shop pack.
   let restore = () => undefined as void;
   beforeAll(() => {
     restore = setTransport(transport);
@@ -59,7 +58,7 @@ describe("the demo's Security pages", () => {
   afterAll(() => restore());
 
   it("lists shop's findings across its environments", async () => {
-    renderVulnerabilities(controlPlaneVulnerabilityApi);
+    renderVulnerabilities(null);
     const list = await screen.findByTestId("vuln-list");
     expect(list).toHaveTextContent("golang.org/x/net");
     expect(list).toHaveTextContent("path-to-regexp");
@@ -68,7 +67,7 @@ describe("the demo's Security pages", () => {
   });
 
   it("shows every running release's SBOMs, the storefront's from its lockfile", async () => {
-    renderWith(controlPlaneVulnerabilityApi, <SbomsView scope={{ project: "shop", environmentId: undefined }} releaseHref={(v) => `/releases/${v}`} />);
+    renderWith(null, <SbomsView scope={{ project: "shop", environmentId: undefined }} releaseHref={(v) => `/releases/${v}`} />);
     expect(await screen.findByTestId("sboms-release-v1.8.3")).toHaveTextContent("4 of 4 with an SBOM, 4 scanned");
     expect(await screen.findByTestId("sboms-release-v1.8.4")).toHaveTextContent("lockfile");
   });
@@ -76,7 +75,7 @@ describe("the demo's Security pages", () => {
   it("opens an advisory with its history, exemptions and gate verdicts", async () => {
     const exempt = SHOP_ADVISORIES.find((a) => a.exempt)!.advisory.id;
     renderWith(
-      controlPlaneVulnerabilityApi,
+      null,
       <VulnerabilityView project="shop" advisoryId={exempt} backHref="/forge/p/shop/security/vulnerabilities" releaseHref={(v) => `/forge/p/shop/releases/${v}`} />
     );
     expect(await screen.findByTestId("vuln-exemptions")).toHaveTextContent("SSH server");

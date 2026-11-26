@@ -9,14 +9,15 @@
  * nothing happens after the page load. The coverage view's source is
  * answered from the bundle, never fetched.
  *
- * Every answer is asked the way the pages ask it: through their real clients
- * (controlPlaneVulnerabilityApi, controlPlaneTestApi, fetchCoverageSource)
- * over the shop pack's transport, read-only guard included.
+ * Every answer is asked the way the pages ask it: through their real reads
+ * (the generated VulnerabilityService queries over wire.ts, controlPlaneTestApi,
+ * fetchCoverageSource) over the shop pack's transport, read-only guard included.
  */
 
 import type { DescMethod } from "@bufbuild/protobuf";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createClient, type Transport } from "@connectrpc/connect";
+import { QueryClient } from "@tanstack/react-query";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
@@ -24,9 +25,11 @@ import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
 import { VulnerabilityService } from "@/gen/controlplane/services/vulnerability/v1/vulnerability_pb";
 import { CoverageSourceService } from "@/gen/reliant/v1/coverage_source_pb";
+import { vulnerabilityServiceQueries } from "@/hooks/controlplane/vulnerability-service-hooks_gen";
 import { setTransport } from "@/lib/connect";
 import { controlPlaneTestApi } from "@/services/controlPlane/tests/TestApiContext";
-import { controlPlaneVulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
+import type { DetailRequest, ListRequest, ReleaseRequest, SummaryRequest } from "@/services/controlPlane/vulnerabilities/types";
+import { detailOf, detailRequest, findingPageOf, listRequest, releaseOf, releaseRequest, summaryOf, summaryRequest } from "@/services/controlPlane/vulnerabilities/wire";
 import { fetchCoverageSource, gitBlobId, sourceLineCount, verifySource } from "@/services/coverageSource/coverageSource";
 
 import { createShopTransport } from "..";
@@ -57,6 +60,20 @@ function times(value: unknown, out: { path: string; ms: number }[] = [], path = 
   return out;
 }
 
+/**
+ * The Security pages' reads as their hooks make them (hooks/vulnerability-queries.ts):
+ * the generated query's fetch over wire.ts's request, mapped as the hook's
+ * `select` maps it. Their QueryClient is bound to no scope, so they read the
+ * app's transport: `setTransport`'s below.
+ */
+const vulnQueries = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+const vulnReads = {
+  getVulnerabilitySummary: async (r: SummaryRequest) => summaryOf(await vulnQueries.fetchQuery(vulnerabilityServiceQueries.getVulnerabilitySummary(summaryRequest(r)))),
+  listVulnerabilities: async (r: ListRequest) => findingPageOf(await vulnQueries.fetchQuery(vulnerabilityServiceQueries.listVulnerabilities(listRequest(r)))),
+  getVulnerability: async (r: DetailRequest) => detailOf(await vulnQueries.fetchQuery(vulnerabilityServiceQueries.getVulnerability(detailRequest(r)))),
+  getReleaseVulnerabilities: async (r: ReleaseRequest) => releaseOf(await vulnQueries.fetchQuery(vulnerabilityServiceQueries.getReleaseVulnerabilities(releaseRequest(r)))),
+};
+
 /** The shop pack's transport, as the demo serves it; every client in this file reaches it. */
 let transport: Transport;
 /** Every "pkg.Service/Method" the clients asked the transport for. */
@@ -84,7 +101,7 @@ afterAll(() => {
 });
 
 describe("the demo's Security answers", () => {
-  const api = () => controlPlaneVulnerabilityApi;
+  const api = () => vulnReads;
 
   it("scans what each environment runs: shopStory's release, every artifact with an SBOM, dev included", async () => {
     const summary = await api().getVulnerabilitySummary(req);
@@ -322,10 +339,10 @@ describe("the demo's coverage source", () => {
 describe("the demo transport's Security and Tests RPCs", () => {
   /** Each client method the pages call, asked once over the transport with a request it answers. */
   const calls: Record<string, () => Promise<unknown>> = {
-    getVulnerabilitySummary: () => controlPlaneVulnerabilityApi.getVulnerabilitySummary(req),
-    listVulnerabilities: () => controlPlaneVulnerabilityApi.listVulnerabilities({ ...req, filters: {} }),
-    getVulnerability: () => controlPlaneVulnerabilityApi.getVulnerability({ ...req, advisoryId: SHOP_ADVISORIES[0]!.advisory.id }),
-    getReleaseVulnerabilities: () => controlPlaneVulnerabilityApi.getReleaseVulnerabilities({ ...req, version: VERSIONS[0]! }),
+    getVulnerabilitySummary: () => vulnReads.getVulnerabilitySummary(req),
+    listVulnerabilities: () => vulnReads.listVulnerabilities({ ...req, filters: {} }),
+    getVulnerability: () => vulnReads.getVulnerability({ ...req, advisoryId: SHOP_ADVISORIES[0]!.advisory.id }),
+    getReleaseVulnerabilities: () => vulnReads.getReleaseVulnerabilities({ ...req, version: VERSIONS[0]! }),
     getTestSummary: () => controlPlaneTestApi.getTestSummary(req),
     listTestRuns: () => controlPlaneTestApi.listTestRuns({ ...req, filters: {} }),
     getTestRun: async () => controlPlaneTestApi.getTestRun({ ...req, runId: (await controlPlaneTestApi.listTestRuns({ ...req, filters: {} })).runs[0]!.runId }),
@@ -338,8 +355,10 @@ describe("the demo transport's Security and Tests RPCs", () => {
   };
 
   it("serves every read the Security and Tests pages' clients make, and nothing else of theirs", () => {
-    // A client method added without a handler fails here, not as a "Sample data isn't available" page.
-    expect(Object.keys(controlPlaneVulnerabilityApi).sort()).toEqual(Object.keys(SECURITY_RPCS).sort());
+    // A read added without a handler fails here, not as a "Sample data isn't available" page:
+    // every generated VulnerabilityService read (its paged variants are the same rpcs) has one.
+    const generatedReads = Object.keys(vulnerabilityServiceQueries).filter((name) => !name.endsWith("Infinite"));
+    expect(generatedReads.sort()).toEqual(Object.keys(SECURITY_RPCS).sort());
     expect(Object.keys(controlPlaneTestApi).sort()).toEqual(Object.keys(TESTS_RPCS).sort());
     expect(Object.keys(calls).sort()).toEqual([...Object.keys(SECURITY_RPCS), ...Object.keys(TESTS_RPCS), "fetchCoverageSource"].sort());
   });

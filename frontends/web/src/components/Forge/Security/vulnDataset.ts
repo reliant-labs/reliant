@@ -52,7 +52,7 @@ import type {
 } from "@/services/controlPlane/vulnerabilities/types";
 import { SEVERITY_ORDER } from "@/services/controlPlane/vulnerabilities/types";
 
-// ── The rules every fixture VulnerabilityApi shares ─────────────────────────
+// ── The rules every fixture VulnerabilityService shares ─────────────────────
 
 export const SEVERITY_RANK: Record<Severity, number> = { unknown: 1, negligible: 2, low: 3, medium: 4, high: 5, critical: 6 };
 

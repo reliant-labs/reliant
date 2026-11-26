@@ -6,9 +6,9 @@
  * each renders the shop pack's data under a scope over `createShopTransport()`,
  * while the module transport records every call and refuses it.
  *
- * The family is these pages' reads (the TestApi, VulnerabilityApi,
- * StorageBrowserApi and IdentityApi defaults, and the coverage source
- * fetch): none may reach the module transport. Reads outside the family
+ * The family is these pages' reads (the TestApi, StorageBrowserApi and
+ * IdentityApi defaults, the generated VulnerabilityService hooks, and the
+ * coverage source fetch): none may reach the module transport. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
  * page makes in any scope (the person's org list, their own user) are
@@ -53,9 +53,10 @@ import type { LiveEnv } from "@/services/forge/live";
 import { controlPlaneIdentityApi, identityApiOf } from "@/services/controlPlane/identity/IdentityApiContext";
 import { controlPlaneStorageBrowserApi, storageBrowserApiOf } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
 import { controlPlaneTestApi, testApiOf } from "@/services/controlPlane/tests/TestApiContext";
-import { controlPlaneVulnerabilityApi, vulnerabilityApiOf } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import { coverageSourceFetchOf } from "@/services/coverageSource/CoverageSourceContext";
 import { fetchCoverageSource } from "@/services/coverageSource/coverageSource";
+
+import { vulnerabilityServiceQueries } from "@/hooks/controlplane/vulnerability-service-hooks_gen";
 
 import { createShopTransport } from "..";
 import { SHOP_CHARGE_PATH } from "../model/tests";
@@ -201,14 +202,12 @@ describe("the console's data and identity pages in a TransportScope", () => {
 describe("the scoped context defaults", () => {
   it("are the app's constants on the app's transport, and one api per scope transport", () => {
     expect(testApiOf(appTransport)).toBe(controlPlaneTestApi);
-    expect(vulnerabilityApiOf(appTransport)).toBe(controlPlaneVulnerabilityApi);
     expect(storageBrowserApiOf(appTransport)).toBe(controlPlaneStorageBrowserApi);
     expect(identityApiOf(appTransport)).toBe(controlPlaneIdentityApi);
     expect(coverageSourceFetchOf(appTransport)).toBe(fetchCoverageSource);
     const shop = createShopTransport();
     for (const [of, app] of [
       [testApiOf, controlPlaneTestApi],
-      [vulnerabilityApiOf, controlPlaneVulnerabilityApi],
       [storageBrowserApiOf, controlPlaneStorageBrowserApi],
       [identityApiOf, controlPlaneIdentityApi],
     ] as const) {
@@ -219,5 +218,20 @@ describe("the scoped context defaults", () => {
     }
     expect(coverageSourceFetchOf(shop)).toBe(coverageSourceFetchOf(shop));
     expect(coverageSourceFetchOf(shop)).not.toBe(fetchCoverageSource);
+  });
+});
+
+describe("the generated VulnerabilityService reads", () => {
+  it("go to a scope's transport on its QueryClient, and to the app's on any other", async () => {
+    const read = () => vulnerabilityServiceQueries.getVulnerabilitySummary({ project: "shop" }, { retry: false });
+    const scope = createTransportScope({ id: "sample", transport: scoped, readOnly: true });
+    await scope.queryClient.fetchQuery(read());
+    expect(scoped.calls).toEqual(["controlplane.v1.VulnerabilityService/GetVulnerabilitySummary"]);
+    expect(familyCalls(live.calls)).toEqual([]);
+
+    // The app's QueryClient is bound to no scope: the same read reaches the module transport (here, refused).
+    await expect(appQueryClient.fetchQuery(read())).rejects.toThrow("reached the module transport");
+    expect(familyCalls(live.calls)).toEqual(["controlplane.v1.VulnerabilityService/GetVulnerabilitySummary"]);
+    expect(scoped.calls).toHaveLength(1);
   });
 });
