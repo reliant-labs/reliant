@@ -34,5 +34,5 @@
 // (gitport, ghport) and the regen [Runner] it is handed. Nothing calls it yet;
 // the queue's scheduler (M7) will.
 //
-//forge:not-a-component: built per batch by the merge queue's scheduler (M7) over the ports it is handed, never by the server's composition root
+//forge:exclude-contract: a stateless function (Build) over the ports it is handed; its seams are those ports and the Runner interface, not a service of its own
 package candidate
