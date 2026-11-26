@@ -21,7 +21,8 @@ import {
   type MetricInfo as WireMetricInfo,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
-import { obsClient } from "./obsClient";
+import { getControlPlaneClient } from "../client";
+import { obsCall } from "./obsInterceptors";
 import { kindOfWire, msOf, wireScope } from "./api";
 import type {
   GetMetricRequest,
@@ -39,7 +40,7 @@ import { catalogGroup } from "./metricsTypes";
 import type { ObsScope, TimeWindow } from "./types";
 
 function client(transport?: Transport) {
-  return obsClient(ObservabilityService, transport);
+  return getControlPlaneClient(ObservabilityService, transport);
 }
 
 const WIRE_KIND: Partial<Record<MetricKind, WireMetricType>> = {
@@ -102,7 +103,7 @@ export async function listMetricCatalog(req: ObsScope & { window: TimeWindow } &
     scope: wireScope(req, req.window),
     nameContains: req.name || undefined,
     limit: req.limit ?? 0,
-  }, options);
+  }, obsCall(options));
   return { metrics: res.metrics.map(mapMetricInfo), truncated: res.truncated };
 }
 
@@ -112,7 +113,7 @@ export async function getMetric(req: ObsScope & { window: TimeWindow } & GetMetr
     scope: wireScope(req, req.window),
     metricName: req.name,
     metricType: req.kind ? WIRE_KIND[req.kind] : undefined,
-  }, options);
+  }, obsCall(options));
   return {
     info: mapMetricInfo(res.info ?? ({ name: req.name } as WireMetricInfo)),
     intervalSeconds: res.intervalSeconds,
@@ -134,6 +135,6 @@ export async function listMetricExemplars(req: ObsScope & { window: TimeWindow }
     timeRange: range,
     minValue: req.minValue,
     limit: req.limit ?? 0,
-  }, options);
+  }, obsCall(options));
   return res.exemplars.map(mapExemplar);
 }

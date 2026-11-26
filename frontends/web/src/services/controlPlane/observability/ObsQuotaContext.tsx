@@ -2,7 +2,9 @@
 
 /**
  * The org's query-quota state for the observability console, provided once
- * (ForgeLayout) and read by the hooks, the banner and the "as of" badges.
+ * (ForgeLayout) and read by the hooks, the banner and the "as of" badges. The
+ * state itself is the page's one store (quotaStore.ts `obsQuotaStore()`), the
+ * same one the control-plane transport's quota guard reads.
  *
  * The provider does three things and nothing else:
  *
@@ -21,19 +23,19 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { ObsPollRegistry } from "./pollRegistry";
 import { quotaOf } from "./quota";
-import { ObsQuotaStore, type ObsQuotaState } from "./quotaStore";
+import { obsQuotaStore, type ObsQuotaState, type ObsQuotaStore } from "./quotaStore";
 
 export interface ObsQuota {
   store: ObsQuotaStore;
   polls: ObsPollRegistry;
 }
 
-function createObsQuota(now?: () => number): ObsQuota {
-  const store = new ObsQuotaStore(now);
+function createObsQuota(): ObsQuota {
+  const store = obsQuotaStore();
   return { store, polls: new ObsPollRegistry(store) };
 }
 
-/** Isolated by query client even in a preview/test that doesn't mount the provider. */
+/** A poll registry per query client even in a preview/test that doesn't mount the provider. */
 const fallbackQuotas = new WeakMap<QueryClient, ObsQuota>();
 const ObsQuotaContext = createContext<ObsQuota | null>(null);
 
@@ -48,10 +50,11 @@ export function ObsQuotaProvider({
   children: ReactNode;
   /** Jitter source in [0, 1); tests pin it. */
   random?: () => number;
+  /** The clock the resume timer reads; tests pin it. */
   now?: () => number;
 }) {
   const client = useQueryClient();
-  const quota = useMemo(() => createObsQuota(now), [now]);
+  const quota = useMemo(() => createObsQuota(), []);
   const { store } = quota;
 
   useEffect(

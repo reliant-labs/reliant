@@ -56,7 +56,11 @@ var traceHeaders = []string{"traceparent", "tracestate", "baggage"}
 // X-Reliant-Attribution (api/signupAttribution.ts) carries first-touch signup
 // attribution to the control plane, which creates the account; transport.ts
 // installs its interceptor on control-plane transports only.
-var controlPlaneOnlyRequestHeaders = []string{"Forge-Via", "X-Reliant-Attribution"}
+//
+// Forge-Poll (observability/quotaStore.ts POLL_HEADER) marks a console poll of
+// a ClickHouse read; obsInterceptors.ts sets it, and transport.ts runs that
+// stage on control-plane transports only.
+var controlPlaneOnlyRequestHeaders = []string{"Forge-Via", "X-Reliant-Attribution", "Forge-Poll"}
 
 var (
 	// req.header.set("x-foo", …) / header.append(NAME, …) — the Connect
@@ -67,6 +71,8 @@ var (
 	responseHeaderGetRe = regexp.MustCompile(`\b(?:metadata|trailer|responseHeader)\.get\(\s*([^)]+?)\s*\)`)
 	stringLiteralRe     = regexp.MustCompile("^(?:\"([^\"]*)\"|'([^']*)'|`([^`$]*)`)$")
 	identifierRe        = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*$`)
+	// import { A, B as C } from "./module" — named imports from a relative path.
+	importRe = regexp.MustCompile(`import\s+(?:type\s+)?\{([^}]*)\}\s*from\s*["'](\.{1,2}/[^"']+)["']`)
 )
 
 func TestCORSAllowsEveryWebClientRequestHeader(t *testing.T) {
@@ -181,10 +187,13 @@ func scanWebHeaderNames(t *testing.T, webSrc string, pattern *regexp.Regexp, dyn
 			where := rel + ":" + lineOf(text, m[0])
 			names, ok := resolveHeaderName(text, expr)
 			if !ok {
+				names, ok = resolveImportedHeaderName(t, path, text, expr)
+			}
+			if !ok {
 				names, ok = dynamic[rel+":"+expr]
 			}
 			if !ok {
-				t.Errorf("%s: cannot resolve header name %q. Use a string literal or a same-file string const, "+
+				t.Errorf("%s: cannot resolve header name %q. Use a string literal, a same-file string const or one imported by a relative path, "+
 					"or list the expression in dynamicRequestHeaders with the headers it can produce", where, expr)
 				continue
 			}
@@ -225,6 +234,45 @@ func resolveHeaderName(fileText, expr string) ([]string, bool) {
 		`\s*(?::\s*string\s*)?=\s*(?:"([^"]*)"|'([^']*)')`)
 	if m := decl.FindStringSubmatch(fileText); m != nil {
 		return []string{m[1] + m[2]}, true
+	}
+	return nil, false
+}
+
+// resolveImportedHeaderName reads expr as an identifier imported by name from
+// a relative module (`import { POLL_HEADER } from "./quotaStore"`, also
+// `X as expr`) and bound to a string literal there. The module is read with
+// os.ReadFile, so Go's test cache sees it too.
+func resolveImportedHeaderName(t *testing.T, path, fileText, expr string) ([]string, bool) {
+	t.Helper()
+	if !identifierRe.MatchString(expr) {
+		return nil, false
+	}
+	for _, m := range importRe.FindAllStringSubmatch(fileText, -1) {
+		for _, spec := range strings.Split(m[1], ",") {
+			fields := strings.Fields(strings.TrimPrefix(strings.TrimSpace(spec), "type "))
+			var exported, local string
+			switch {
+			case len(fields) == 1:
+				exported, local = fields[0], fields[0]
+			case len(fields) == 3 && fields[1] == "as":
+				exported, local = fields[0], fields[2]
+			default:
+				continue
+			}
+			if local != expr {
+				continue
+			}
+			base := filepath.Join(filepath.Dir(path), filepath.FromSlash(m[2]))
+			for _, candidate := range []string{base + ".ts", base + ".tsx", filepath.Join(base, "index.ts")} {
+				src, err := os.ReadFile(candidate)
+				if err != nil {
+					continue
+				}
+				if names, ok := resolveHeaderName(string(src), exported); ok {
+					return names, true
+				}
+			}
+		}
 	}
 	return nil, false
 }

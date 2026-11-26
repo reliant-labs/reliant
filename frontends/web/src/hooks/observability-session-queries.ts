@@ -19,7 +19,6 @@ import { keepPreviousInOrgSegment } from "@/lib/orgScope";
 import { FilterUnsupportedError, obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
 import type { FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { useObsReadApi } from "./observability-queries";
 import type { RumScope, SessionList, SessionSummary, Timeline } from "@/services/controlPlane/observability/rumTypes";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
 
@@ -69,7 +68,7 @@ function assertSessionFiltersApplied(filters: SessionFilters, result: SessionLis
 
 /** One page of the scope's sessions. The previous page stays on screen while the next one loads. */
 export function useSessions(scope: RumScope | null, filters: SessionFilters) {
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   return useQuery({
     queryKey: sessionKeys.list(scope, filters),
     queryFn: async ({ signal }): Promise<SessionList> => {
@@ -103,7 +102,7 @@ export function useSessions(scope: RumScope | null, filters: SessionFilters) {
 
 /** One session's summary. */
 export function useSession(scope: RumScope | null, sessionId: string | undefined) {
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   return useQuery({
     queryKey: sessionKeys.detail(scope, sessionId ?? ""),
     queryFn: ({ signal }) => api.getSession({ ...(scope as RumScope), sessionId: sessionId as string }, { signal }),
@@ -115,7 +114,7 @@ export function useSession(scope: RumScope | null, sessionId: string | undefined
 
 /** One session's timeline, oldest first, a page at a time. */
 export function useSessionTimeline(scope: RumScope | null, sessionId: string | undefined) {
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   return useInfiniteQuery({
     queryKey: sessionKeys.timeline(scope, sessionId ?? ""),
     queryFn: ({ pageParam, signal }): Promise<Timeline> =>
@@ -174,7 +173,7 @@ export interface ReplayEvidencePages {
  * into the bundle). One window for every page, as the token requires.
  */
 export function useReplayEvidence(scope: RumScope | null, envIds: readonly string[], enabled = true) {
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   return useQuery({
     queryKey: sessionKeys.replayEvidence(scope, envIds),
     queryFn: async ({ signal }): Promise<ReplayEvidencePages> => {
