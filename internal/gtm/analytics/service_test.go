@@ -37,8 +37,8 @@ var agent = gtm.Actor{UserID: "user-1", OrgID: tenantZero, Kind: gtm.ActorAgent}
 func TestFixedErrorsSurviveTheService(t *testing.T) {
 	q := gtm.AnalyticsQuery{Template: gtm.AnalyticsEventCounts}
 	for _, want := range []error{
-		ErrNoOrg, ErrInvalidName, ErrIdentifierProperty, ErrDuplicateStep, ErrWindowTooLong,
-		ErrCredentialRefused, ErrNotSetUp, ErrQuotaExhausted, ErrTimedOut, ErrQueryRefused, ErrBadResponse,
+		errNoOrg, errInvalidName, errIdentifierProperty, errDuplicateStep, errWindowTooLong,
+		errCredentialRefused, errNotSetUp, errQuotaExhausted, errTimedOut, errQueryRefused, errBadResponse,
 		gtm.ErrAnalyticsFailed, gtm.ErrAnalyticsUnavailable,
 	} {
 		t.Run(want.Error(), func(t *testing.T) {
@@ -69,8 +69,8 @@ func TestRealClientErrorsSurviveTheService(t *testing.T) {
 		q    gtm.AnalyticsQuery
 		want error
 	}{
-		"identifier property":        {gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"page_viewed"}, Property: "customerid"}, ErrIdentifierProperty},
-		"identifier property, camel": {gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"page_viewed"}, Property: "contactEmail"}, ErrIdentifierProperty},
+		"identifier property":        {gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"page_viewed"}, Property: "customerid"}, errIdentifierProperty},
+		"identifier property, camel": {gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"page_viewed"}, Property: "contactEmail"}, errIdentifierProperty},
 	} {
 		t.Run(name, func(t *testing.T) {
 			cp := &fakeCP{}

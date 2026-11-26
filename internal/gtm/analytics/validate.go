@@ -47,19 +47,55 @@ var identifierStems = []string{
 	"username", "fullname", "firstname", "lastname", "surname", "givenname", "familyname", "nickname",
 	"creditcard", "cardnumber", "mobilenumber", "birth", "passport", "gclid", "fbclid", "msclkid", "dclid",
 	"ttclid", "wbraid", "gbraid", "idfa", "imei", "jwt", "anonymous", "deviceid", "clientid", "customerid", "accountid",
-	"ipv4", "ipv6", "mobile", "contact", "recipient", "sender", "credential", "signature", "serial", "accountnumber",
+	"ipv4", "ipv6", "contact", "recipient", "sender", "credential", "signature", "serial", "accountnumber",
 	"referralcode", "invitecode", "latitude", "longitude", "geolocation",
 }
 
+// identifierNames are whole property names that name an identifier though
+// their words, in other names, do not: "mobile" alone is a number, while
+// is_mobile, mobile_os and mobile_app are categories.
+var identifierNames = map[string]bool{"mobile": true}
+
 // categoryProperties are names the rules above would refuse that are
 // categories, not identifiers: a plan's name, a token count, an auth method.
-// The list is explicit and small, matched on the name's words joined by _
-// ("planName" is plan_name); it never loosens the rules for anything else.
-var categoryProperties = map[string]bool{
-	"plan_name": true, "os_name": true, "browser_name": true, "feature_name": true, "experiment_name": true,
-	"flag_key": true, "feature_key": true, "input_tokens": true, "output_tokens": true, "token_count": true,
-	"auth_method": true, "auth_provider": true, "cookie_consent": true, "user_role": true, "user_type": true,
-	"session_count": true, "card_type": true, "org_plan": true, "iphone": true,
+// The list is explicit and small, and it never loosens the rules for
+// anything else. A name matches with its words run together, lowercased
+// (plan_name, planName and PlanName are planname; iPhone is iphone), and a
+// trailing s is a plural of the same name (plan_names).
+var categoryProperties = compactSet(
+	"plan_name", "os_name", "browser_name", "feature_name", "experiment_name",
+	"flag_key", "feature_key", "input_tokens", "output_tokens", "token_count",
+	"auth_method", "auth_provider", "cookie_consent", "user_role", "user_type",
+	"session_count", "card_type", "org_plan", "iphone",
+	"contact_form_variant", "sender_domain", "location_type",
+)
+
+// compactSet is names as a set of compact names (compactName).
+func compactSet(names ...string) map[string]bool {
+	set := make(map[string]bool, len(names))
+	for _, n := range names {
+		set[compactName(n)] = true
+	}
+	return set
+}
+
+// compactName is p's letters and digits, lowercased: the separators and
+// case that tell plan_name from planName or iPhone from iphone are dropped.
+func compactName(p string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(p) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// categoryProperty reports whether p is one of categoryProperties, or its
+// plural.
+func categoryProperty(p string) bool {
+	c := compactName(p)
+	return categoryProperties[c] || categoryProperties[strings.TrimSuffix(c, "s")]
 }
 
 // idWords are the words that end in "id" without naming an identifier.
@@ -78,9 +114,12 @@ var idWords = []string{
 // identifierStems anywhere, or an "id"/"ids" ending that is not an idWords
 // word. A name in categoryProperties is not an identifier.
 func identifierProperty(p string) bool {
-	ws := words(p)
-	if categoryProperties[strings.Join(ws, "_")] {
+	if categoryProperty(p) {
 		return false
+	}
+	ws := words(p)
+	if identifierNames[strings.Join(ws, "_")] {
+		return true
 	}
 	candidates := append(ws, strings.Join(ws, ""))
 	for _, w := range candidates {
@@ -146,32 +185,32 @@ func words(s string) []string {
 // property), then the domain's (gtm.AnalyticsQuery.Validate).
 func validate(orgID string, q gtm.AnalyticsQuery) error {
 	if strings.TrimSpace(orgID) == "" {
-		return ErrNoOrg
+		return errNoOrg
 	}
 	for _, e := range q.Events {
 		if !validName(e) {
-			return ErrInvalidName
+			return errInvalidName
 		}
 	}
 	switch q.Template {
 	case gtm.AnalyticsPropertyBreakdown:
 		if !validName(q.Property) {
-			return ErrInvalidName
+			return errInvalidName
 		}
 		if identifierProperty(q.Property) {
-			return ErrIdentifierProperty
+			return errIdentifierProperty
 		}
 	case gtm.AnalyticsFunnel:
 		seen := make(map[string]bool, len(q.Events))
 		for _, e := range q.Events {
 			if seen[e] {
-				return ErrDuplicateStep
+				return errDuplicateStep
 			}
 			seen[e] = true
 		}
 	}
 	if q.Template != gtm.AnalyticsFunnel && q.To.Sub(q.From) > MaxSQLWindow {
-		return ErrWindowTooLong
+		return errWindowTooLong
 	}
 	// This package's own rules come first, so their fixed errors are what a
 	// caller sees; the domain's rules then cover the rest.

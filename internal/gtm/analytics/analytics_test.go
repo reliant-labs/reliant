@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -155,7 +157,7 @@ func TestOrgIsThePassedOrg(t *testing.T) {
 			t.Errorf("scope org = %q, want %q", got, org)
 		}
 	}
-	if _, err := c.Query(context.Background(), "", sqlQueries["event_counts"]); !errors.Is(err, ErrNoOrg) {
+	if _, err := c.Query(context.Background(), "", sqlQueries["event_counts"]); !errors.Is(err, errNoOrg) {
 		t.Errorf("no org: err = %v", err)
 	}
 }
@@ -229,7 +231,7 @@ func TestFunnelBadResponses(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			cp := &fakeCP{resp: &obsv1.QueryPanelResponse{FunnelSteps: steps}}
 			_, err := newTestClient(cp, testToken, &bytes.Buffer{}).Query(context.Background(), tenantZero, q)
-			if !errors.Is(err, ErrBadResponse) || !errors.Is(err, gtm.ErrAnalyticsFailed) {
+			if !errors.Is(err, errBadResponse) || !errors.Is(err, gtm.ErrAnalyticsFailed) {
 				t.Fatalf("err = %v", err)
 			}
 		})
@@ -274,7 +276,7 @@ func TestSQLResults(t *testing.T) {
 	})
 	t.Run("event_trend bad day", func(t *testing.T) {
 		cp := &fakeCP{resp: trendRows(1, map[string]string{dayColumn: "yesterday", eventColumn: "page_viewed"})}
-		if _, err := newTestClient(cp, testToken, &bytes.Buffer{}).Query(context.Background(), tenantZero, sqlQueries["event_trend"]); !errors.Is(err, ErrBadResponse) {
+		if _, err := newTestClient(cp, testToken, &bytes.Buffer{}).Query(context.Background(), tenantZero, sqlQueries["event_trend"]); !errors.Is(err, errBadResponse) {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -307,7 +309,7 @@ func TestSQLResults(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			resp := kRows(1, 0, ev("x"))
 			mangle(resp)
-			if _, err := newTestClient(&fakeCP{resp: resp}, testToken, &bytes.Buffer{}).Query(context.Background(), tenantZero, sqlQueries["event_counts"]); !errors.Is(err, ErrBadResponse) {
+			if _, err := newTestClient(&fakeCP{resp: resp}, testToken, &bytes.Buffer{}).Query(context.Background(), tenantZero, sqlQueries["event_counts"]); !errors.Is(err, errBadResponse) {
 				t.Fatalf("err = %v", err)
 			}
 		})
@@ -356,9 +358,11 @@ func TestValuesShapedLikeIdentifiersAreRedacted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := []string{res.Rows[0].Value, res.Rows[1].Value, res.Rows[2].Value}
-	if strings.Join(got, ",") != "/pricing,"+Redacted+","+Redacted {
-		t.Fatalf("values = %v", got)
+	// The two redacted groups fold into one row with their counts summed
+	// (99 + 98), sorted with the rest.
+	want := []gtm.AnalyticsRow{{Event: "page_viewed", Value: Redacted, Count: 197}, {Event: "page_viewed", Value: "/pricing", Count: 100}}
+	if len(res.Rows) != 2 || res.Rows[0] != want[0] || res.Rows[1] != want[1] {
+		t.Fatalf("rows = %+v", res.Rows)
 	}
 	// Event names event_counts reads from the data go through it too.
 	resp = kRows(2, 0, ev("page_viewed"), ev("123e4567-e89b-12d3-a456-426614174000"))
@@ -366,7 +370,7 @@ func TestValuesShapedLikeIdentifiersAreRedacted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Rows[0].Event != "page_viewed" || res.Rows[1].Event != Redacted {
+	if len(res.Rows) != 2 || res.Rows[0].Event != "page_viewed" || res.Rows[1].Event != Redacted {
 		t.Fatalf("rows = %+v", res.Rows)
 	}
 }
@@ -452,7 +456,7 @@ func TestWindowCapsBeforeTheControlPlane(t *testing.T) {
 		q    gtm.AnalyticsQuery
 		want error
 	}{
-		"sql over 30 days":    {gtm.AnalyticsQuery{Template: gtm.AnalyticsEventCounts, From: to.Add(-30*day - time.Second), To: to, Limit: 5}, ErrWindowTooLong},
+		"sql over 30 days":    {gtm.AnalyticsQuery{Template: gtm.AnalyticsEventCounts, From: to.Add(-30*day - time.Second), To: to, Limit: 5}, errWindowTooLong},
 		"funnel over 90 days": {gtm.AnalyticsQuery{Template: gtm.AnalyticsFunnel, Events: []string{"a", "b"}, From: to.Add(-90*day - time.Second), To: to, Limit: 5}, gtm.ErrInvalidArgument},
 		"backwards":           {gtm.AnalyticsQuery{Template: gtm.AnalyticsEventCounts, From: to, To: from, Limit: 5}, gtm.ErrInvalidArgument},
 	} {
@@ -471,13 +475,13 @@ func TestWindowCapsBeforeTheControlPlane(t *testing.T) {
 // TestSentinelsWrapTheDomain: each fixed error is the domain sentinel the
 // Service passes through, so a caller can classify it.
 func TestSentinelsWrapTheDomain(t *testing.T) {
-	for _, err := range []error{ErrNoOrg, ErrInvalidName, ErrIdentifierProperty, ErrDuplicateStep, ErrWindowTooLong} {
+	for _, err := range []error{errNoOrg, errInvalidName, errIdentifierProperty, errDuplicateStep, errWindowTooLong} {
 		var ve *gtm.ValidationError
 		if !errors.Is(err, gtm.ErrInvalidArgument) || !errors.As(err, &ve) || ve.Field == "" || ve.Reason == "" {
 			t.Errorf("%v is not a *gtm.ValidationError (gtm.ErrInvalidArgument) with a field and reason", err)
 		}
 	}
-	for _, err := range []error{ErrCredentialRefused, ErrNotSetUp, ErrQuotaExhausted, ErrTimedOut, ErrQueryRefused, ErrBadResponse} {
+	for _, err := range []error{errCredentialRefused, errNotSetUp, errQuotaExhausted, errTimedOut, errQueryRefused, errBadResponse} {
 		if !errors.Is(err, gtm.ErrAnalyticsFailed) {
 			t.Errorf("%v is not gtm.ErrAnalyticsFailed", err)
 		}
@@ -530,7 +534,7 @@ func TestTokenIsNeverLoggedOrReturned(t *testing.T) {
 		var log bytes.Buffer
 		resp := &obsv1.QueryPanelResponse{Columns: []string{countColumn, groupsColumn, hiddenColumn}}
 		_, err := newTestClient(&fakeCP{resp: resp}, testToken, &log).Query(context.Background(), tenantZero, q)
-		if !errors.Is(err, ErrBadResponse) {
+		if !errors.Is(err, errBadResponse) {
 			t.Fatalf("err = %v", err)
 		}
 		assertNoToken(t, log.String(), err)
@@ -546,13 +550,13 @@ func TestTokenIsNeverLoggedOrReturned(t *testing.T) {
 func TestControlPlaneErrorsAreFixedMessages(t *testing.T) {
 	const secret = "clickhouse r_55949942 at ch-0.internal:9440: SELECT UserId FROM product_events"
 	for code, want := range map[connect.Code]error{
-		connect.CodeUnauthenticated:    ErrCredentialRefused,
-		connect.CodePermissionDenied:   ErrCredentialRefused,
-		connect.CodeFailedPrecondition: ErrNotSetUp,
-		connect.CodeResourceExhausted:  ErrQuotaExhausted,
-		connect.CodeDeadlineExceeded:   ErrTimedOut,
-		connect.CodeInvalidArgument:    ErrQueryRefused,
-		connect.CodeNotFound:           ErrQueryRefused,
+		connect.CodeUnauthenticated:    errCredentialRefused,
+		connect.CodePermissionDenied:   errCredentialRefused,
+		connect.CodeFailedPrecondition: errNotSetUp,
+		connect.CodeResourceExhausted:  errQuotaExhausted,
+		connect.CodeDeadlineExceeded:   errTimedOut,
+		connect.CodeInvalidArgument:    errQueryRefused,
+		connect.CodeNotFound:           errQueryRefused,
 		connect.CodeInternal:           gtm.ErrAnalyticsFailed,
 		connect.CodeUnavailable:        gtm.ErrAnalyticsFailed,
 		connect.CodeUnknown:            gtm.ErrAnalyticsFailed,
@@ -621,8 +625,8 @@ func TestObservabilityClientURL(t *testing.T) {
 		"ftp://cp.example.test", "ws://localhost", "https://", "https://user:pw@cp.example.test", "//cp.example.test",
 		"http://0.0.0.0:8080",
 	} {
-		if _, err := NewObservabilityClient(u); !errors.Is(err, ErrInsecureControlPlaneURL) {
-			t.Errorf("%q: err = %v, want ErrInsecureControlPlaneURL", u, err)
+		if _, err := NewObservabilityClient(u); !errors.Is(err, errInsecureControlPlaneURL) {
+			t.Errorf("%q: err = %v, want errInsecureControlPlaneURL", u, err)
 		}
 	}
 }
@@ -659,7 +663,7 @@ func TestCheckRedirect(t *testing.T) {
 	for i := range via {
 		via[i] = origin[0]
 	}
-	if err := checkRedirect(req("https://cp.example.test/again"), via); !errors.Is(err, ErrUnsafeRedirect) {
+	if err := checkRedirect(req("https://cp.example.test/again"), via); !errors.Is(err, errUnsafeRedirect) {
 		t.Errorf("after %d redirects: err = %v", maxRedirects, err)
 	}
 }
@@ -712,7 +716,7 @@ func TestRedirectsOffTheControlPlaneAreRefused(t *testing.T) {
 			if tc.ok != (arrived == 1) {
 				t.Fatalf("request arrived %d times at the redirect target (err %v), want followed %v", arrived, err, tc.ok)
 			}
-			if !tc.ok && !strings.Contains(err.Error(), ErrUnsafeRedirect.Error()) {
+			if !tc.ok && !strings.Contains(err.Error(), errUnsafeRedirect.Error()) {
 				t.Errorf("err = %v, want the redirect refused", err)
 			}
 		})
@@ -729,19 +733,19 @@ func TestRedirectsOffTheControlPlaneAreRefused(t *testing.T) {
 func TestFixedErrorMessages(t *testing.T) {
 	const failed = "the product analytics query failed"
 	for err, want := range map[error]string{
-		ErrNoOrg:                   "org: no org to read product analytics for",
-		ErrInvalidName:             "name: an event or property name is not allowed",
-		ErrIdentifierProperty:      "property: property_breakdown cannot group by an identifier property",
-		ErrDuplicateStep:           "events: a funnel's steps must be distinct events",
-		ErrWindowTooLong:           "window: event_counts, event_trend and property_breakdown read at most 30 days",
-		ErrCredentialRefused:       failed + ": the control plane refused the analytics credential",
-		ErrNotSetUp:                failed + ": the org's product analytics is not set up",
-		ErrQuotaExhausted:          failed + ": the org's analytics query limit was reached; try again later",
-		ErrTimedOut:                failed + ": the query timed out",
-		ErrQueryRefused:            failed + ": the control plane refused the query",
-		ErrBadResponse:             failed + ": the control plane's answer was not understood",
-		ErrInsecureControlPlaneURL: "analytics: the control-plane URL must be https (http only to a loopback host)",
-		ErrUnsafeRedirect:          "analytics: refused a control-plane redirect off https or to another host",
+		errNoOrg:                   "org: no org to read product analytics for",
+		errInvalidName:             "name: an event or property name is not allowed",
+		errIdentifierProperty:      "property: property_breakdown cannot group by an identifier property",
+		errDuplicateStep:           "events: a funnel's steps must be distinct events",
+		errWindowTooLong:           "window: event_counts, event_trend and property_breakdown read at most 30 days",
+		errCredentialRefused:       failed + ": the control plane refused the analytics credential",
+		errNotSetUp:                failed + ": the org's product analytics is not set up",
+		errQuotaExhausted:          failed + ": the org's analytics query limit was reached; try again later",
+		errTimedOut:                failed + ": the query timed out",
+		errQueryRefused:            failed + ": the control plane refused the query",
+		errBadResponse:             failed + ": the control plane's answer was not understood",
+		errInsecureControlPlaneURL: "analytics: the control-plane URL must be https (http only to a loopback host)",
+		errUnsafeRedirect:          "analytics: refused a control-plane redirect off https or to another host",
 		gtm.ErrAnalyticsFailed:     failed,
 	} {
 		if got := err.Error(); got != want {
@@ -756,8 +760,55 @@ func TestFixedErrorMessages(t *testing.T) {
 		errors.New("dial tcp 10.0.0.7:443"),
 	} {
 		_, err := newTestClient(&fakeCP{err: cause}, testToken, &bytes.Buffer{}).Query(context.Background(), tenantZero, sqlQueries["event_counts"])
-		if err != ErrQueryRefused && err != gtm.ErrAnalyticsFailed {
+		if err != errQueryRefused && err != gtm.ErrAnalyticsFailed {
 			t.Errorf("cause %v: err = %v, want a fixed sentinel", cause, err)
 		}
+	}
+}
+
+func TestRedactedTrendRowsFoldPerDay(t *testing.T) {
+	day := func(d, e string) map[string]string { return map[string]string{dayColumn: d, eventColumn: e} }
+	resp := trendRows(4,
+		day("2026-11-03", "jane@example.com"), day("2026-11-03", "bob@example.com"),
+		day("2026-11-04", "jane@example.com"), day("2026-11-03", "page_viewed"))
+	res, err := newTestClient(&fakeCP{resp: resp}, testToken, nil).Query(context.Background(), tenantZero, sqlQueries["event_trend"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rowsLine(res.Rows); got != "2026-11-03 (redacted) 199|2026-11-03 page_viewed 97|2026-11-04 (redacted) 98" {
+		t.Fatalf("rows = %s", got)
+	}
+}
+
+func rowsLine(rows []gtm.AnalyticsRow) string {
+	var parts []string
+	for _, r := range rows {
+		parts = append(parts, r.Day.Format("2006-01-02")+" "+r.Event+" "+strconv.FormatInt(r.Count, 10))
+	}
+	return strings.Join(parts, "|")
+}
+
+// TestSentinelsCannotBeChanged: an importer reaches the errors only through
+// the accessors, which return comparable values errors.Is matches, and the
+// *gtm.ValidationError errors.As hands out is a copy.
+func TestSentinelsCannotBeChanged(t *testing.T) {
+	for _, f := range []func() error{
+		ErrNoOrg, ErrInvalidName, ErrIdentifierProperty, ErrDuplicateStep, ErrWindowTooLong,
+		ErrCredentialRefused, ErrNotSetUp, ErrQuotaExhausted, ErrTimedOut, ErrQueryRefused, ErrBadResponse,
+		ErrInsecureControlPlaneURL, ErrUnsafeRedirect,
+	} {
+		a, b := f(), f()
+		if a != b || !errors.Is(fmt.Errorf("wrapped: %w", a), b) {
+			t.Errorf("%v: accessor values do not compare equal", a)
+		}
+	}
+	before := ErrWindowTooLong().Error()
+	var ve *gtm.ValidationError
+	if !errors.As(ErrWindowTooLong(), &ve) {
+		t.Fatal("not a *gtm.ValidationError")
+	}
+	ve.Reason = "changed"
+	if got := ErrWindowTooLong().Error(); got != before {
+		t.Fatalf("the sentinel changed through errors.As: %q", got)
 	}
 }

@@ -24,43 +24,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// Errors. The validation errors are *gtm.ValidationError (so
-// gtm.ErrInvalidArgument), which ReadProductAnalytics passes through to the
-// caller; every control-plane failure is, or wraps, gtm.ErrAnalyticsFailed.
-// Each has fixed text (the gtm.Analytics contract): none carries the control
-// plane's own error, which is logged instead.
-var (
-	// ErrNoOrg is a query with no org to scope it to.
-	ErrNoOrg error = &gtm.ValidationError{Field: "org", Reason: "no org to read product analytics for"}
-	// ErrInvalidName is an event or property name outside the allowed
-	// characters.
-	ErrInvalidName error = &gtm.ValidationError{Field: "name", Reason: "an event or property name is not allowed"}
-	// ErrIdentifierProperty is a property_breakdown over a property that
-	// names an identifier (a user, session, email, ...).
-	ErrIdentifierProperty error = &gtm.ValidationError{Field: "property", Reason: "property_breakdown cannot group by an identifier property"}
-	// ErrDuplicateStep is a funnel naming an event twice.
-	ErrDuplicateStep error = &gtm.ValidationError{Field: "events", Reason: "a funnel's steps must be distinct events"}
-	// ErrWindowTooLong is a sql template over more than MaxSQLWindow.
-	ErrWindowTooLong error = &gtm.ValidationError{Field: "window", Reason: "event_counts, event_trend and property_breakdown read at most 30 days"}
-
-	// ErrCredentialRefused is the control plane refusing the analytics
-	// token (Unauthenticated or PermissionDenied).
-	ErrCredentialRefused = fmt.Errorf("%w: the control plane refused the analytics credential", gtm.ErrAnalyticsFailed)
-	// ErrNotSetUp is an org whose observability is not set up
-	// (FailedPrecondition).
-	ErrNotSetUp = fmt.Errorf("%w: the org's product analytics is not set up", gtm.ErrAnalyticsFailed)
-	// ErrQuotaExhausted is the org's hourly query quota or a query limit
-	// (ResourceExhausted).
-	ErrQuotaExhausted = fmt.Errorf("%w: the org's analytics query limit was reached; try again later", gtm.ErrAnalyticsFailed)
-	// ErrTimedOut is a query that ran out of time (DeadlineExceeded).
-	ErrTimedOut = fmt.Errorf("%w: the query timed out", gtm.ErrAnalyticsFailed)
-	// ErrQueryRefused is the control plane refusing the query itself
-	// (InvalidArgument, NotFound).
-	ErrQueryRefused = fmt.Errorf("%w: the control plane refused the query", gtm.ErrAnalyticsFailed)
-	// ErrBadResponse is an answer this package cannot read.
-	ErrBadResponse = fmt.Errorf("%w: the control plane's answer was not understood", gtm.ErrAnalyticsFailed)
-)
-
 // ObservabilityClient is the one ObservabilityService rpc this package
 // calls. controlplanev1connect.ObservabilityServiceClient satisfies it.
 type ObservabilityClient interface {
@@ -101,15 +64,11 @@ func newClient(d Deps) *client {
 	return &client{cp: d.CP, token: d.Token, log: log}
 }
 
-// ErrInsecureControlPlaneURL is a control-plane URL the analytics token
-// would cross in the clear: anything but https, or http to a loopback host.
-var ErrInsecureControlPlaneURL = errors.New("analytics: the control-plane URL must be https (http only to a loopback host)")
-
 // NewObservabilityClient is the control plane's ObservabilityService at
 // baseURL (ControlPlaneConfig.url), over an instrumented HTTP client. The
 // bearer token rides on every request, so baseURL must be https, or http to
 // a loopback host (a local control plane); anything else is
-// ErrInsecureControlPlaneURL.
+// errInsecureControlPlaneURL.
 func NewObservabilityClient(baseURL string) (ObservabilityClient, error) {
 	return NewObservabilityClientWith(observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second}), baseURL)
 }
@@ -127,9 +86,6 @@ func NewObservabilityClientWith(httpClient *http.Client, baseURL string) (Observ
 	return controlplanev1connect.NewObservabilityServiceClient(&hc, base), nil
 }
 
-// ErrUnsafeRedirect is a control-plane redirect the client refuses to follow.
-var ErrUnsafeRedirect = errors.New("analytics: refused a control-plane redirect off https or to another host")
-
 // maxRedirects is as many redirects as net/http's default policy follows.
 const maxRedirects = 10
 
@@ -139,11 +95,11 @@ const maxRedirects = 10
 // is never sent in the clear or to a server the URL did not name.
 func checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= maxRedirects {
-		return ErrUnsafeRedirect
+		return errUnsafeRedirect
 	}
 	orig := via[0].URL
 	if req.URL.Scheme != orig.Scheme || req.URL.Host != orig.Host {
-		return ErrUnsafeRedirect
+		return errUnsafeRedirect
 	}
 	return nil
 }
@@ -153,7 +109,7 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 func checkControlPlaneURL(base string) error {
 	u, err := url.Parse(base)
 	if err != nil || u.Host == "" || u.User != nil {
-		return ErrInsecureControlPlaneURL
+		return errInsecureControlPlaneURL
 	}
 	switch u.Scheme {
 	case "https":
@@ -167,7 +123,7 @@ func checkControlPlaneURL(base string) error {
 			return nil
 		}
 	}
-	return ErrInsecureControlPlaneURL
+	return errInsecureControlPlaneURL
 }
 
 // Query runs q over orgID's product events.
@@ -198,7 +154,7 @@ func (c *client) Query(ctx context.Context, orgID string, q gtm.AnalyticsQuery) 
 	if err != nil {
 		c.log.WarnContext(ctx, "gtm analytics: QueryPanel answer not understood",
 			"template", string(q.Template), "error", err)
-		return gtm.AnalyticsResult{}, ErrBadResponse
+		return gtm.AnalyticsResult{}, errBadResponse
 	}
 	return res, nil
 }
@@ -246,15 +202,15 @@ func funnelWindow(d time.Duration) string {
 func mapCPError(err error) error {
 	switch connect.CodeOf(err) {
 	case connect.CodeUnauthenticated, connect.CodePermissionDenied:
-		return ErrCredentialRefused
+		return errCredentialRefused
 	case connect.CodeFailedPrecondition:
-		return ErrNotSetUp
+		return errNotSetUp
 	case connect.CodeResourceExhausted:
-		return ErrQuotaExhausted
+		return errQuotaExhausted
 	case connect.CodeDeadlineExceeded:
-		return ErrTimedOut
+		return errTimedOut
 	case connect.CodeInvalidArgument, connect.CodeNotFound:
-		return ErrQueryRefused
+		return errQueryRefused
 	}
 	return gtm.ErrAnalyticsFailed
 }
@@ -343,26 +299,7 @@ func decode(q gtm.AnalyticsQuery, resp *obsv1.QueryPanelResponse) (gtm.Analytics
 	if kAnon && summaries != 1 {
 		return gtm.AnalyticsResult{}, fmt.Errorf("sql: %d summary rows", summaries)
 	}
-	// A union's rows come back in no set order: put them in the template's.
-	if q.Template == gtm.AnalyticsEventTrend {
-		// The statement took the newest days under its LIMIT; the answer
-		// reads oldest first.
-		sort.SliceStable(res.Rows, func(i, j int) bool {
-			a, b := res.Rows[i], res.Rows[j]
-			if !a.Day.Equal(b.Day) {
-				return a.Day.Before(b.Day)
-			}
-			return a.Event < b.Event
-		})
-	} else {
-		sort.SliceStable(res.Rows, func(i, j int) bool {
-			a, b := res.Rows[i], res.Rows[j]
-			if a.Count != b.Count {
-				return a.Count > b.Count
-			}
-			return a.Event+"\x00"+a.Value < b.Event+"\x00"+b.Value
-		})
-	}
+	sortRows(q.Template, res.Rows)
 	if len(res.Rows) > q.Limit {
 		if q.Template == gtm.AnalyticsEventTrend {
 			res.Rows = res.Rows[len(res.Rows)-q.Limit:]
@@ -374,5 +311,54 @@ func decode(q gtm.AnalyticsQuery, resp *obsv1.QueryPanelResponse) (gtm.Analytics
 	if total > int64(len(res.Rows)) {
 		res.Truncated = true
 	}
+	// Redacted groups fold into one Redacted row (per day, for a trend),
+	// their counts summed: listing them apart would say how many distinct
+	// identifier-shaped values there are and how often each was seen, which
+	// is what redaction hides, while the folded row keeps the totals true.
+	res.Rows = foldRedacted(res.Rows)
+	sortRows(q.Template, res.Rows)
 	return res, nil
+}
+
+// sortRows puts rows in the template's order: a trend oldest day first, the
+// rest heaviest first. A union's rows come back in no set order.
+func sortRows(t gtm.AnalyticsTemplate, rows []gtm.AnalyticsRow) {
+	if t == gtm.AnalyticsEventTrend {
+		sort.SliceStable(rows, func(i, j int) bool {
+			a, b := rows[i], rows[j]
+			if !a.Day.Equal(b.Day) {
+				return a.Day.Before(b.Day)
+			}
+			return a.Event < b.Event
+		})
+		return
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if a.Count != b.Count {
+			return a.Count > b.Count
+		}
+		return a.Event+"\x00"+a.Value < b.Event+"\x00"+b.Value
+	})
+}
+
+// foldRedacted merges the rows that are the same once redacted (Event,
+// Value and Day all equal), summing their counts.
+func foldRedacted(rows []gtm.AnalyticsRow) []gtm.AnalyticsRow {
+	type key struct {
+		event, value string
+		day          time.Time
+	}
+	out := rows[:0:0]
+	at := make(map[key]int, len(rows))
+	for _, r := range rows {
+		k := key{r.Event, r.Value, r.Day}
+		if i, ok := at[k]; ok {
+			out[i].Count += r.Count
+			continue
+		}
+		at[k] = len(out)
+		out = append(out, r)
+	}
+	return out
 }

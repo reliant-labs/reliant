@@ -98,6 +98,7 @@ func TestIdentifierProperty(t *testing.T) {
 		"geolocation",
 		// Near the allowed category names, still refused.
 		"user_name", "plan_owner_name", "session_token", "auth_token", "card_number", "user_email", "org_id", "iphone_serial",
+		"mobileNumber", "Mobile", "contact_form_email", "sender_email", "location_id", "user_names",
 	} {
 		if !identifierProperty(p) {
 			t.Errorf("identifierProperty(%q) = false, want true (words %v)", p, words(p))
@@ -112,6 +113,9 @@ func TestIdentifierProperty(t *testing.T) {
 		"input_tokens", "output_tokens", "token_count", "auth_method", "auth_provider", "cookie_consent", "user_role",
 		"user_type", "session_count", "card_type", "org_plan", "iphone", "planName", "inputTokens", "UserRole",
 		"pinned", "cellular_generation",
+		// Third review of #3843: mobile only as a whole name; more category names.
+		"is_mobile", "mobile_os", "mobile_app", "isMobile", "contact_form_variant", "sender_domain", "location_type",
+		"iPhone", "IPHONE", "plan_names", "planNames", "feature_names",
 	} {
 		if identifierProperty(p) {
 			t.Errorf("identifierProperty(%q) = true, want false (words %v)", p, words(p))
@@ -154,8 +158,8 @@ func TestValidate(t *testing.T) {
 		isArg bool  // a gtm.ValidationError (gtm.ErrInvalidArgument)
 	}{
 		{name: "ok", org: tenantZero, q: ok},
-		{name: "no org", org: "", q: ok, want: ErrNoOrg},
-		{name: "blank org", org: "  ", q: ok, want: ErrNoOrg},
+		{name: "no org", org: "", q: ok, want: errNoOrg},
+		{name: "blank org", org: "  ", q: ok, want: errNoOrg},
 		{name: "unknown template", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.Template = "raw_sql" }), isArg: true},
 		{name: "bad event", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.Events = []string{"x'y"} }), isArg: true},
 		{name: "zero window", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.From, q.To = time.Time{}, time.Time{} }), isArg: true},
@@ -163,15 +167,15 @@ func TestValidate(t *testing.T) {
 		{name: "limit over cap", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.Limit = gtm.MaxAnalyticsRows + 1 }), isArg: true},
 		{name: "limit at cap", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.Limit = gtm.MaxAnalyticsRows })},
 		{name: "sql 30 days", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.From = q.To.Add(-30 * day) })},
-		{name: "sql 31 days", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.From = q.To.Add(-31 * day) }), want: ErrWindowTooLong},
-		{name: "trend 31 days", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsEventTrend, Events: []string{"a"}, From: to.Add(-31 * day), To: to, Limit: 10}, want: ErrWindowTooLong},
-		{name: "breakdown 31 days", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"a"}, Property: "route", From: to.Add(-31 * day), To: to, Limit: 10}, want: ErrWindowTooLong},
+		{name: "sql 31 days", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.From = q.To.Add(-31 * day) }), want: errWindowTooLong},
+		{name: "trend 31 days", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsEventTrend, Events: []string{"a"}, From: to.Add(-31 * day), To: to, Limit: 10}, want: errWindowTooLong},
+		{name: "breakdown 31 days", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"a"}, Property: "route", From: to.Add(-31 * day), To: to, Limit: 10}, want: errWindowTooLong},
 		{name: "funnel 90 days", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsFunnel, Events: []string{"a", "b"}, From: to.Add(-90 * day), To: to, Limit: 10}},
 		{name: "funnel 91 days", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsFunnel, Events: []string{"a", "b"}, From: to.Add(-91 * day), To: to, Limit: 10}, isArg: true},
-		{name: "funnel duplicate step", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsFunnel, Events: []string{"a", "b", "a"}, From: from, To: to, Limit: 10}, want: ErrDuplicateStep},
+		{name: "funnel duplicate step", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsFunnel, Events: []string{"a", "b", "a"}, From: from, To: to, Limit: 10}, want: errDuplicateStep},
 		{name: "funnel one step", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsFunnel, Events: []string{"a"}, From: from, To: to, Limit: 10}, isArg: true},
 		{name: "trend 11 events", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsEventTrend, Events: strings.Split("a b c d e f g h i j k", " "), From: from, To: to, Limit: 10}, isArg: true},
-		{name: "breakdown identifier property", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"a"}, Property: "userId", From: from, To: to, Limit: 10}, want: ErrIdentifierProperty},
+		{name: "breakdown identifier property", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"a"}, Property: "userId", From: from, To: to, Limit: 10}, want: errIdentifierProperty},
 		{name: "breakdown bad property", org: tenantZero, q: gtm.AnalyticsQuery{Template: gtm.AnalyticsPropertyBreakdown, Events: []string{"a"}, Property: "Props['x']", From: from, To: to, Limit: 10}, isArg: true},
 		{name: "property on counts", org: tenantZero, q: with(func(q *gtm.AnalyticsQuery) { q.Property = "route" }), isArg: true},
 	} {
