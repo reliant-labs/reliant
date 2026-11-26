@@ -1,4 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
+
+//go:build integration
+
 package gate
 
 import (
@@ -15,12 +18,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
-
-	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // The conformance table is what every Backend must pass on a machine that can
@@ -31,17 +34,29 @@ import (
 //
 // Every denial case has something real to be denied. Before any gate runs,
 // the harness plants on the host (hostFixture): a credential file holding a
-// secret, a variable only this process's environment holds, HTTP listeners
-// on every host address and on loopback, and a private-range peer (a
-// container on the host engine's own bridge) — and checks the host itself
-// reaches each, so a denial means the boundary held, not that nothing was
-// there. The positive controls (the nested engine runs a container, public
-// egress works) keep the boundary from passing by breaking the gate.
+// secret, a host process whose initial environment alone holds a canary (the
+// target of the host-/proc case, checked from the host to be readable
+// there), a second canary in the environment the backend's engine client
+// runs with (what a daemon's variable leaking into the gate would carry),
+// HTTP listeners on every host address and on loopback, and a private-range
+// peer (a container on the host engine's own bridge) — and checks the host
+// itself reaches each, so a denial means the boundary held, not that nothing
+// was there. The positive controls (the nested engine runs a container,
+// public egress works) keep the boundary from passing by breaking the gate.
+//
+// The fixture never changes this test process's environment, so the cases
+// run in parallel.
+//
+// These tests need a container engine (and sysbox, for the real backend), so
+// they are integration-tagged: `task test:integration --
+// ./internal/credsandbox/gate/` (go test -tags integration), whose package
+// budget is 10 minutes, where the unit lane's 300s does not hold a loaded
+// engine's container starts. Each skips, naming what is missing, elsewhere.
 //
 // TestDenialCasesCatchALeakyBoundary runs the denial cases against a
 // deliberately leaky backend (plain runc with the host's PID namespace,
-// engine socket and credential directory), and each must fail there: the
-// table detects the leaks it exists for.
+// engine socket and credential directory, and a bare --env), and each must
+// fail there: the table detects the leaks it exists for.
 type conformanceCase struct {
 	name string
 	// denial marks a boundary case: against a leaky boundary it must fail.
@@ -86,10 +101,10 @@ fetch='for u in $URLS; do wget -q -T 3 -O - --header "Metadata-Flavor: Google" "
 sh -c "$fetch"
 docker run --rm -e URLS="$URLS" "$GATE_T_NESTED" sh -c "$fetch" 2>&1
 true`
-	// canary prints the canary's line from each environ file given, and
-	// nothing else of it: a leaky boundary must not copy the host's real
-	// environments into test logs.
-	const canary = `canary() { for e in "$@"; do tr '\0' '\n' <"$e" 2>/dev/null | grep "^$GATE_T_CANARY_NAME="; done; true; }
+	// canary NAME FILE... prints the line of variable NAME from each environ
+	// file given, and nothing else of it: a leaky boundary must not copy the
+	// host's real environments into test logs.
+	const canary = `canary() { n=$1; shift; for e in "$@"; do tr '\0' '\n' <"$e" 2>/dev/null | grep "^$n="; done; true; }
 `
 	return []conformanceCase{
 		{name: "exit 0 passes", script: "exit 0", check: wantClass(ClassPass)},
@@ -151,12 +166,12 @@ true`,
 		{
 			name:   "the host's /proc is invisible",
 			denial: true,
-			script: canary + `canary "/proc/$GATE_T_HOSTPID/environ" /proc/[0-9]*/environ`,
+			script: canary + `canary "$GATE_T_CANARY_NAME" "/proc/$GATE_T_HOSTPID/environ" /proc/[0-9]*/environ`,
 			check: func(f *hostFixture, res Result, out string) error {
 				if err := ran(res, out); err != nil {
 					return err
 				}
-				return lacks(out, f.canary)
+				return lacks(out, f.hostCanary)
 			},
 		},
 		{
@@ -168,7 +183,7 @@ cat "/host$GATE_T_CRED"
 tr "\0" "\n" <"/host/proc/$GATE_T_HOSTPID/environ" | grep "^$GATE_T_CANARY_NAME="
 true' 2>&1`,
 			check: func(f *hostFixture, res Result, out string) error {
-				if err := lacks(out, f.secret, f.canary); err != nil {
+				if err := lacks(out, f.secret, f.hostCanary); err != nil {
 					return err
 				}
 				if !strings.Contains(out, "nested-saw-the-gate-root") {
@@ -225,7 +240,7 @@ echo "default-v6: $(ip -6 route show default 2>/dev/null | grep -c default)"`,
 		{
 			name:   "no variable from the daemon",
 			denial: true,
-			script: canary + `env; canary /proc/1/environ`,
+			script: canary + `env; canary "$GATE_T_DAEMON_CANARY_NAME" /proc/1/environ`,
 			check: func(f *hostFixture, res Result, out string) error {
 				if err := ran(res, out); err != nil {
 					return err
@@ -233,7 +248,7 @@ echo "default-v6: $(ip -6 route show default 2>/dev/null | grep -c default)"`,
 				if !strings.Contains(out, "RELIANT_GATE=1") {
 					return fmt.Errorf("RELIANT_GATE=1 is missing:\n%s", out)
 				}
-				return lacks(out, f.canary)
+				return lacks(out, f.daemonCanary)
 			},
 		},
 		{
@@ -252,14 +267,20 @@ echo "default-v6: $(ip -6 route show default 2>/dev/null | grep -c default)"`,
 
 // hostFixture is what the harness plants on the host for the denial cases.
 type hostFixture struct {
-	secret   string // in the planted credential file, and served by every host listener and the peer
-	canary   string // a value of this process's environment, and nowhere else
-	credPath string
-	hostURLs []string // host listeners the host itself reaches: loopback and every address
-	hostPort int      // the all-addresses listener's port, for the gate's own gateway
-	peerURL  string   // the private-range peer
-	nested   string   // the image the nested engine runs
-	public   string
+	secret string // in the planted credential file, and served by every host listener and the peer
+	// hostCanary is in the initial environment of the host process
+	// canaryPID, and nowhere else.
+	hostCanary string
+	canaryPID  int
+	// daemonCanary is in the environment the backend's engine client runs
+	// with (engineEnv), and nowhere else: never in this process's.
+	daemonCanary string
+	credPath     string
+	hostURLs     []string // host listeners the host itself reaches: loopback and every address
+	hostPort     int      // the all-addresses listener's port, for the gate's own gateway
+	peerURL      string   // the private-range peer
+	nested       string   // the image the nested engine runs
+	public       string
 
 	noPeer, noPublic string // why the peer or public egress is not available here
 }
@@ -268,18 +289,73 @@ func (f *hostFixture) env() map[string]string {
 	return map[string]string{
 		"GATE_T_CRED":      f.credPath,
 		"GATE_T_HOSTHOME":  os.Getenv("HOME"),
-		"GATE_T_HOSTPID":   strconv.Itoa(os.Getpid()),
+		"GATE_T_HOSTPID":   strconv.Itoa(f.canaryPID),
 		"GATE_T_HOST_URLS": strings.Join(f.hostURLs, " "),
 		"GATE_T_HOST_PORT": strconv.Itoa(f.hostPort),
 		"GATE_T_PEER":      f.peerURL,
 		"GATE_T_NESTED":    f.nested,
 		"GATE_T_PUBLIC":    f.public,
-		// The canary's name, never its value.
-		"GATE_T_CANARY_NAME": conformanceCanaryVar,
+		// The canaries' names, never their values.
+		"GATE_T_CANARY_NAME":        hostCanaryVar,
+		"GATE_T_DAEMON_CANARY_NAME": daemonCanaryVar,
 	}
 }
 
-const conformanceCanaryVar = "RELIANT_GATE_CONFORMANCE_CANARY"
+const (
+	hostCanaryVar   = "RELIANT_GATE_HOST_CANARY"
+	daemonCanaryVar = "RELIANT_GATE_DAEMON_CANARY"
+)
+
+// engineEnv is the environment a backend's engine client runs with: this
+// process's, plus the daemon canary.
+func (f *hostFixture) engineEnv() []string {
+	return append(os.Environ(), daemonCanaryVar+"="+f.daemonCanary)
+}
+
+// engineClient writes a docker CLI wrapper that runs docker with engineEnv's
+// canary, for a backend configured by the CLI it runs (SysboxConfig.Docker).
+func (f *hostFixture) engineClient(t *testing.T, docker string) string {
+	t.Helper()
+	bin, err := exec.LookPath(docker)
+	if err != nil {
+		t.Fatalf("finding the docker CLI: %v", err)
+	}
+	p := filepath.Join(t.TempDir(), "docker")
+	script := "#!/bin/sh\n" + daemonCanaryVar + "='" + f.daemonCanary + "'\nexport " + daemonCanaryVar + "\nexec '" + bin + "' \"$@\"\n"
+	if err := os.WriteFile(p, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+// startHostCanary starts a host process whose initial environment holds a
+// fresh canary, and checks from the host that its /proc environ shows it
+// (os.Setenv would not: /proc/<pid>/environ is the environment a process
+// started with).
+func startHostCanary(t *testing.T) (pid int, canary string) {
+	t.Helper()
+	canary = randomToken("reliant-host-canary-")
+	cmd := exec.Command("sleep", "3600")
+	cmd.Env = []string{hostCanaryVar + "=" + canary, "PATH=/usr/bin:/bin"}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("starting the host canary process: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+	})
+	// Start returns once the exec began; the kernel sets the new environ up
+	// just after, so it may read empty for an instant.
+	var err error
+	if !pollUntil(5*time.Second, func() bool {
+		var environ []byte
+		environ, err = os.ReadFile(fmt.Sprintf("/proc/%d/environ", cmd.Process.Pid))
+		return err == nil && bytes.Contains(environ, []byte(hostCanaryVar+"="+canary+"\x00"))
+	}) {
+		t.Fatalf("positive control: the host cannot read the canary in /proc/%d/environ (%v)", cmd.Process.Pid, err)
+	}
+	return cmd.Process.Pid, canary
+}
 
 func randomToken(prefix string) string {
 	var b [8]byte
@@ -291,10 +367,10 @@ func randomToken(prefix string) string {
 func plantHost(t *testing.T) *hostFixture {
 	t.Helper()
 	f := &hostFixture{
-		secret: randomToken("reliant-planted-secret-"),
-		canary: randomToken("reliant-daemon-canary-"),
-		nested: os.Getenv("RELIANT_GATE_TEST_NESTED_IMAGE"),
-		public: os.Getenv("RELIANT_GATE_TEST_PUBLIC_URL"),
+		secret:       randomToken("reliant-planted-secret-"),
+		daemonCanary: randomToken("reliant-daemon-canary-"),
+		nested:       os.Getenv("RELIANT_GATE_TEST_NESTED_IMAGE"),
+		public:       os.Getenv("RELIANT_GATE_TEST_PUBLIC_URL"),
 	}
 	if f.nested == "" {
 		f.nested = "busybox:1.36"
@@ -302,7 +378,7 @@ func plantHost(t *testing.T) *hostFixture {
 	if f.public == "" {
 		f.public = "https://www.google.com/generate_204"
 	}
-	t.Setenv(conformanceCanaryVar, f.canary)
+	f.canaryPID, f.hostCanary = startHostCanary(t)
 
 	dir := t.TempDir()
 	f.credPath = filepath.Join(dir, "credentials")
@@ -395,15 +471,32 @@ func plantPeer(t *testing.T, f *hostFixture, hostReaches func(string) bool) stri
 			continue
 		}
 		u := "http://" + ip + ":8080/"
-		for range 20 {
-			if hostReaches(u) {
-				f.peerURL = u
-				return ""
-			}
-			time.Sleep(250 * time.Millisecond)
+		// Readiness: httpd answers once it is up, within the deadline.
+		if pollUntil(5*time.Second, func() bool { return hostReaches(u) }) {
+			f.peerURL = u
+			return ""
 		}
 	}
 	return fmt.Sprintf("the host does not reach the private-range peer at %q", strings.TrimSpace(string(ipOut)))
+}
+
+// pollUntil reports whether ok became true within d, checking it every
+// 100ms.
+func pollUntil(d time.Duration, ok func() bool) bool {
+	deadline := time.NewTimer(d)
+	defer deadline.Stop()
+	tick := time.NewTicker(100 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if ok() {
+			return true
+		}
+		select {
+		case <-deadline.C:
+			return ok()
+		case <-tick.C:
+		}
+	}
 }
 
 func conformanceLimits() Limits {
@@ -459,12 +552,14 @@ func conformanceTree(t *testing.T) string {
 // conformanceParallel bounds how many cases run at once: each is a gate.
 const conformanceParallel = 4
 
-// runConformance runs the whole table against b: every case must hold.
-func runConformance(t *testing.T, b Backend, image string, allow []netip.Prefix) {
-	f := plantHost(t)
+// runCases runs each case against b as a parallel subtest,
+// conformanceParallel at a time, and hands what the case found wrong (nil
+// for nothing) to judge. Nothing on the way here changes the process's
+// environment, which Go forbids beneath a parallel test.
+func runCases(t *testing.T, b Backend, f *hostFixture, image string, allow []netip.Prefix, cases []conformanceCase, judge func(t *testing.T, failure error)) {
 	src := conformanceTree(t)
 	sem := make(chan struct{}, conformanceParallel)
-	for _, c := range conformanceCases() {
+	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			sem <- struct{}{}
@@ -475,11 +570,21 @@ func runConformance(t *testing.T, b Backend, image string, allow []netip.Prefix)
 				t.Fatal(err)
 			case skip != "":
 				t.Skip(skip)
-			case failure != nil:
-				t.Error(failure)
+			default:
+				judge(t, failure)
 			}
 		})
 	}
+}
+
+// runConformance runs the whole table against b, whose engine client runs
+// with f.engineEnv(): every case must hold.
+func runConformance(t *testing.T, b Backend, f *hostFixture, image string, allow []netip.Prefix) {
+	runCases(t, b, f, image, allow, conformanceCases(), func(t *testing.T, failure error) {
+		if failure != nil {
+			t.Error(failure)
+		}
+	})
 }
 
 // TestSysboxConformance runs the conformance table against real sysbox. It
@@ -493,7 +598,6 @@ func runConformance(t *testing.T, b Backend, image string, allow []netip.Prefix)
 // nested containers and the private-range peer. Elsewhere it skips, naming
 // what is missing.
 func TestSysboxConformance(t *testing.T) {
-	testkit.Slow(t, "starts sysbox containers, each running a nested dockerd")
 	image := os.Getenv("RELIANT_GATE_TEST_IMAGE")
 	if image == "" {
 		image = "docker:27-dind"
@@ -514,17 +618,25 @@ func TestSysboxConformance(t *testing.T) {
 	if err := r.Ready(); err != nil {
 		t.Skipf("this machine is not prepared for gates (run gate-check): %v", err)
 	}
-	runConformance(t, b, image, r.EgressAllow)
+	f := plantHost(t)
+	// The gates run through a CLI holding the daemon canary, as a daemon's
+	// own environment would.
+	run := NewSysbox(SysboxConfig{ProbeImage: probe, DiskSlotsDir: os.Getenv("RELIANT_GATE_TEST_DISK_SLOTS"), Docker: f.engineClient(t, "docker")})
+	runConformance(t, run, f, image, r.EgressAllow)
 }
 
 // leakyBackend is a deliberately broken boundary: a plain runc container in
 // the host's network and PID namespaces (able to read other processes'
 // environments), with the host's engine socket, the credential file's
-// directory and this process's canary variable. It is everything cp#3631's review found a gate must not
-// have, and the denial cases must catch each of it.
+// directory, and a bare --env copying the daemon canary from its engine
+// client's environment. It never hands the container the host canary: the
+// host-/proc case must find that through the shared PID namespace alone. It
+// is everything cp#3631's review found a gate must not have, and the denial
+// cases must catch each of it.
 type leakyBackend struct {
 	image   string
 	credDir string
+	env     []string // the engine client's environment
 }
 
 func (l leakyBackend) Name() string                              { return "leaky" }
@@ -549,13 +661,14 @@ func (l leakyBackend) Run(ctx context.Context, spec Spec) (Result, error) {
 		"-v", "/var/run/docker.sock:/var/run/docker.sock",
 		"-v", l.credDir + ":" + l.credDir + ":ro",
 		"-v", spec.SourceDir + ":" + TreeDir + ":ro",
-		"-w", TreeDir, "-e", conformanceCanaryVar, "-e", "RELIANT_GATE=1", "-e", "HOME=" + HomeDir}
+		"-w", TreeDir, "-e", daemonCanaryVar, "-e", "RELIANT_GATE=1", "-e", "HOME=" + HomeDir}
 	for k, v := range spec.Env {
 		args = append(args, "-e", k+"="+v)
 	}
 	args = append(args, "--entrypoint", spec.Command[0], l.image)
 	args = append(args, spec.Command[1:]...)
 	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Env = l.env
 	cmd.Stdout, cmd.Stderr = spec.Stdout, spec.Stderr
 	err := cmd.Run()
 	var ee *exec.ExitError
@@ -575,7 +688,6 @@ func (l leakyBackend) Run(ctx context.Context, spec Spec) (Result, error) {
 // not. RELIANT_GATE_TEST_LEAKY_IMAGE (default docker:27-cli) needs sh, wget,
 // ip and the docker CLI.
 func TestDenialCasesCatchALeakyBoundary(t *testing.T) {
-	testkit.Slow(t, "runs containers on the host engine for every denial case")
 	if err := exec.Command("docker", "version").Run(); err != nil {
 		t.Skipf("no container engine here: %v", err)
 	}
@@ -584,29 +696,104 @@ func TestDenialCasesCatchALeakyBoundary(t *testing.T) {
 		image = "docker:27-cli"
 	}
 	f := plantHost(t)
-	b := leakyBackend{image: image, credDir: filepath.Dir(f.credPath)}
-	src := conformanceTree(t)
-	sem := make(chan struct{}, conformanceParallel)
+	b := leakyBackend{image: image, credDir: filepath.Dir(f.credPath), env: f.engineEnv()}
+	var denials []conformanceCase
 	for _, c := range conformanceCases() {
-		if !c.denial {
-			continue
+		if c.denial {
+			denials = append(denials, c)
 		}
-		t.Run(c.name, func(t *testing.T) {
-			t.Parallel()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			failure, skip, err := runCase(b, f, image, nil, src, c)
-			switch {
-			case err != nil:
-				t.Fatal(err)
-			case skip != "":
-				t.Skip(skip)
-			case failure == nil:
-				t.Error("the case passed against a leaky boundary: it does not detect the leak")
-			default:
-				t.Logf("caught: %v", firstLine(failure.Error()))
-			}
+	}
+	runCases(t, b, f, image, nil, denials, func(t *testing.T, failure error) {
+		if failure == nil {
+			t.Error("the case passed against a leaky boundary: it does not detect the leak")
+			return
+		}
+		t.Logf("caught: %v", firstLine(failure.Error()))
+	})
+}
+
+// stubBackend records the gates it runs and reports each passed. Its Runs
+// wait until two are running at once (or a deadline passes), so a run of the
+// table shows whether its cases really ran in parallel.
+type stubBackend struct {
+	mu      sync.Mutex
+	ran     map[string]bool // run ids
+	active  int
+	peak    int
+	overlap chan struct{} // closed once two Runs overlap
+}
+
+func (s *stubBackend) Name() string                              { return "stub" }
+func (s *stubBackend) Detect(context.Context) Availability       { return Availability{Available: true} }
+func (s *stubBackend) Preflight(context.Context) (Report, error) { return Report{}, nil }
+func (s *stubBackend) Teardown(context.Context, string) error    { return nil }
+func (s *stubBackend) CopyOut(context.Context, string, string, io.Writer, int64) error {
+	return errors.New("not supported")
+}
+
+func (s *stubBackend) Run(_ context.Context, spec Spec) (Result, error) {
+	s.mu.Lock()
+	s.ran[spec.RunID] = true
+	s.active++
+	if s.active > s.peak {
+		s.peak = s.active
+		if s.peak == 2 {
+			close(s.overlap)
+		}
+	}
+	s.mu.Unlock()
+	select {
+	case <-s.overlap:
+	case <-time.After(10 * time.Second):
+	}
+	s.mu.Lock()
+	s.active--
+	s.mu.Unlock()
+	return Result{Class: ClassPass}, nil
+}
+
+// The table's cases run as parallel subtests under the planted fixture,
+// which therefore must not have changed the process's environment (Go
+// panics on t.Parallel beneath t.Setenv). A stub backend reaches the loop
+// every backend's run goes through, with no engine needed beyond the peer's.
+func TestConformanceCasesRunInParallel(t *testing.T) {
+	f := plantHost(t)
+	b := &stubBackend{ran: map[string]bool{}, overlap: make(chan struct{})}
+	cases := conformanceCases()
+	var judged sync.Map
+	t.Run("table", func(t *testing.T) {
+		runCases(t, b, f, "stub-image", nil, cases, func(t *testing.T, _ error) {
+			judged.Store(t.Name(), true)
 		})
+	})
+	n := 0
+	judged.Range(func(any, any) bool { n++; return true })
+	runnable := 0
+	for _, c := range cases {
+		if c.needs == nil || c.needs(f) == "" {
+			runnable++
+		}
+	}
+	if n != runnable || len(b.ran) != runnable {
+		t.Errorf("%d cases judged and %d gates run, want %d each", n, len(b.ran), runnable)
+	}
+	if b.peak < 2 {
+		t.Errorf("at most %d case ran at once: the table did not run in parallel", b.peak)
+	}
+	if b.peak > conformanceParallel {
+		t.Errorf("%d cases ran at once, more than conformanceParallel (%d)", b.peak, conformanceParallel)
+	}
+}
+
+// The host canary is in its process's initial environment, which is what
+// /proc shows, and never in this process's.
+func TestHostCanaryIsInItsInitialEnviron(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("/proc/<pid>/environ is Linux's")
+	}
+	pid, canary := startHostCanary(t) // fails unless /proc/<pid>/environ holds it
+	if pid == os.Getpid() || strings.Contains(strings.Join(os.Environ(), "\n"), canary) {
+		t.Errorf("the host canary is in this process (pid %d)", pid)
 	}
 }
 
