@@ -69,7 +69,11 @@ func TestContract(t *testing.T) {
 	// `(Service, error)` shape matches the canonical service.go scaffold, so
 	// a dep-validation or eager-init failure is reported right here instead
 	// of surfacing as a nil dereference inside a case.
-	svc, err := messagewrite.New(messagewrite.Deps{})
+	svc, err := messagewrite.New(messagewrite.Deps{
+		Tx: &messagewrite.MockTx{}, Order: &messagewrite.MockOrder{}, Messages: &messagewrite.MockMessages{},
+		Windows: &messagewrite.MockWindows{}, Threads: &messagewrite.MockThreads{}, Workflows: &messagewrite.MockWorkflows{},
+		Blocks: &messagewrite.MockBlocks{}, Attachments: &messagewrite.MockAttachments{}, Updates: &messagewrite.MockUpdates{},
+	})
 	if err != nil {
 		t.Fatalf("messagewrite.New: %v", err)
 	}
