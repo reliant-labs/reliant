@@ -28,9 +28,10 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // GtmRevisionConflict detail carrying the current revision.
 //
 // Only a person may accept or reject an idea, approve an item, or verify a
-// claim; an agent proposes ideas, drafts and schedules items (a date only) and
-// proposes claims. Nothing here publishes or sends: there is no publish rpc,
-// and an item becomes SENT only through the approved email path.
+// claim; an agent proposes ideas, drafts items (and dates them while they are
+// DRAFT or REVIEW) and proposes claims. The item lifecycle is on GtmItemStatus,
+// the claim rules on UpsertClaim. Nothing here publishes or sends: there is no
+// publish rpc, and an item becomes SENT only through the approved email path.
 service GtmService {
   // GetGtmAccess reports whether GTM is enabled for the org. It is the one
   // rpc an org without access gets an answer from (enabled = false); the web
@@ -122,7 +123,9 @@ service GtmService {
     };
   }
 
-  // GetCampaign returns one campaign with the ideas and items linked to it.
+  // GetCampaign returns one campaign with the ideas and items linked to it,
+  // at most 200 of each (truncated says when either list was cut; ListIdeas
+  // and ListItems with campaign_id page through all of them).
   rpc GetCampaign(GetCampaignRequest) returns (GetCampaignResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
@@ -183,7 +186,8 @@ service GtmService {
     };
   }
 
-  // CreateItem adds a DRAFT item.
+  // CreateItem adds an item, DRAFT or REVIEW (unset: DRAFT). No other status
+  // is created: an item reaches APPROVED only through a person's UpdateItem.
   rpc CreateItem(CreateItemRequest) returns (CreateItemResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -200,8 +204,17 @@ service GtmService {
   }
 
   // UpdateItem edits an item, its schedule or its status. Unset fields are
-  // left alone. APPROVED is a person's decision; SENT is never set here (only
-  // the approved email path writes it), and a SENT item is not edited.
+  // left alone. Who may make which change is the lifecycle on GtmItemStatus;
+  // a change it does not allow is PermissionDenied (an agent) or
+  // FailedPrecondition (a transition no one may make). In short:
+  //
+  //   - An agent edits content and sets or clears scheduled_at only on a
+  //     DRAFT or REVIEW item, moves status only between DRAFT and REVIEW, and
+  //     never touches an item in any other status.
+  //   - A content edit by a person on an APPROVED or SCHEDULED item returns
+  //     it to REVIEW (it must be approved again).
+  //   - SENT is never set here: only the approved email path writes it, and a
+  //     SENT item is not edited.
   rpc UpdateItem(UpdateItemRequest) returns (UpdateItemResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -255,10 +268,17 @@ service GtmService {
 
   // UpsertClaim adds an UNVERIFIED claim (id empty) or changes one (id set,
   // with expected_revision). A claim's text and category are fixed at
-  // creation: they are what a verification vouches for. Setting status
-  // VERIFIED is a person's act and needs the evidence (source_url and
-  // source_kind; a COMPARISON needs a PRIMARY_THIRD_PARTY source); the
-  // verifier and time are the caller's and now.
+  // creation: they are what a verification vouches for. A create whose text
+  // normalizes (text_norm) to a claim the org already holds is AlreadyExists.
+  //
+  // Who may do what:
+  //   - Setting status VERIFIED is a person's act and needs the evidence
+  //     (source_url and source_kind; a COMPARISON needs a PRIMARY_THIRD_PARTY
+  //     source); the verifier and time are the caller's and now.
+  //   - An agent creates UNVERIFIED claims and edits UNVERIFIED claims only.
+  //     It never changes a VERIFIED or RETIRED claim in any field (status,
+  //     source_url, source_kind, expires_or_recheck_at, notes):
+  //     PermissionDenied.
   rpc UpsertClaim(UpsertClaimRequest) returns (UpsertClaimResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -341,7 +361,28 @@ enum GtmItemKind {
   GTM_ITEM_KIND_OTHER = 5;
 }
 
-// GtmItemStatus is an item's lifecycle.
+// GtmItemStatus is an item's lifecycle. These transitions are the only ones;
+// the service refuses every other.
+//
+// An AGENT:
+//   - creates an item as DRAFT or REVIEW, and moves it only DRAFT <-> REVIEW;
+//   - edits its content and sets or clears scheduled_at only while it is
+//     DRAFT or REVIEW;
+//   - never touches an item in any other status.
+//
+// A PERSON:
+//   - DRAFT or REVIEW -> APPROVED;
+//   - APPROVED -> SCHEDULED, for an item that is not an EMAIL;
+//   - any status (but SENT) -> PAUSED, and PAUSED -> DRAFT;
+//   - APPROVED or SCHEDULED -> PUBLISHED, for an item that is not an EMAIL: a
+//     manual "it went out" marker, since publishing happens outside GTM;
+//   - a content edit of an APPROVED or SCHEDULED item returns it to REVIEW.
+//
+// The EMAIL SEND PATH alone writes SENT: from APPROVED, for an EMAIL item.
+//
+// An EMAIL never uses SCHEDULED or PUBLISHED (the table refuses both): a
+// person may date an APPROVED email (scheduled_at) and it stays APPROVED until
+// the send path sends it.
 enum GtmItemStatus {
   GTM_ITEM_STATUS_UNSPECIFIED = 0;
   GTM_ITEM_STATUS_DRAFT = 1;
@@ -349,12 +390,15 @@ enum GtmItemStatus {
   GTM_ITEM_STATUS_REVIEW = 2;
   // A person approved it.
   GTM_ITEM_STATUS_APPROVED = 3;
-  // It has a date (scheduled_at). Scheduling publishes nothing.
+  // A person put an approved non-email item on the calendar (scheduled_at is
+  // set). Scheduling publishes nothing.
   GTM_ITEM_STATUS_SCHEDULED = 4;
-  // The approved email was sent (written only by the email path).
+  // The approved email was sent (written only by the email send path).
   GTM_ITEM_STATUS_SENT = 5;
-  // Published outside GTM (by the owner's own workflow or by hand).
+  // A person marked a non-email item as gone out; publishing itself happens
+  // outside GTM (the owner's own workflow, or by hand).
   GTM_ITEM_STATUS_PUBLISHED = 6;
+  // A person paused it; it goes back to DRAFT to resume.
   GTM_ITEM_STATUS_PAUSED = 7;
 }
 
@@ -538,7 +582,7 @@ message GtmClaimFinding {
   // Which rule found it: number, price, duration, percent, size, multiplier,
   // free, no_account, license, superlative, competitor, absolute.
   string mention_kind = 2;
-  // The words in the text, e.g. "$8.34/mo".
+  // The words in the text, e.g. "$5/mo".
   string mention = 3;
   // The sentence it appears in.
   string context = 4;
@@ -696,6 +740,8 @@ message GetCampaignResponse {
   // The items linked to it: scheduled ones soonest first, then the rest
   // newest first.
   repeated GtmItem items = 3;
+  // ideas and items each hold at most 200 rows; true when either was cut.
+  bool truncated = 4;
 }
 
 message CreateCampaignRequest {
@@ -747,6 +793,11 @@ message UpdateCampaignResponse {
 // ---------------------------------------------------------------------------
 
 message ListItemsRequest {
+  option (buf.validate.message).cel = {
+    id: "scheduled_range_order"
+    message: "scheduled_to must be after scheduled_from"
+    expression: "!has(this.scheduled_from) || !has(this.scheduled_to) || this.scheduled_to > this.scheduled_from"
+  };
   string org_id = 1 [(buf.validate.field).required = true];
   optional string campaign_id = 2;
   optional GtmItemKind kind = 3;
@@ -796,6 +847,13 @@ message CreateItemRequest {
   // EMAIL only.
   repeated string email_to = 9;
   string email_subject = 10;
+  // DRAFT or REVIEW; unset: DRAFT.
+  optional GtmItemStatus status = 11 [(buf.validate.field).enum = {
+    in: [
+      1,
+      2
+    ]
+  }];
 }
 
 message CreateItemResponse {
@@ -831,8 +889,7 @@ message UpdateItemRequest {
   // Set: replaces the recipients.
   GtmEmailRecipients email_to = 12;
   optional string email_subject = 13;
-  // DRAFT, REVIEW, APPROVED (a person only), SCHEDULED, PUBLISHED or PAUSED;
-  // never SENT.
+  // The status to move to, along the lifecycle on GtmItemStatus. Never SENT.
   optional GtmItemStatus status = 14 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
@@ -891,9 +948,14 @@ message ListClaimsResponse {
 }
 
 message UpsertClaimRequest {
+  option (buf.validate.message).cel = {
+    id: "upsert_claim_shape"
+    message: "a create (id empty) needs text and category; a change (id set) needs expected_revision > 0"
+    expression: "this.id == '' ? (has(this.text) && has(this.category)) : this.expected_revision > 0"
+  };
   string org_id = 1 [(buf.validate.field).required = true];
   // Empty: create a claim (text and category required). Set: change that
-  // claim (expected_revision required; text and category must be unset or
+  // claim (expected_revision > 0 required; text and category must be unset or
   // equal to the stored ones).
   string id = 2;
   int32 expected_revision = 3 [(buf.validate.field).int32.gte = 0];

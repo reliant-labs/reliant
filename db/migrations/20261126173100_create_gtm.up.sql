@@ -53,6 +53,7 @@ CREATE TABLE gtm_campaigns (
     CONSTRAINT gtm_campaigns_org_id_id_key UNIQUE (org_id, id)
 );
 CREATE INDEX gtm_campaigns_org_id_created_at_idx ON gtm_campaigns (org_id, created_at DESC);
+CREATE INDEX gtm_campaigns_org_id_status_idx ON gtm_campaigns (org_id, status);
 
 -- An idea: something to build, a go-to-market move, or content to write,
 -- with the evidence behind it. An agent proposes; a person accepts or rejects.
@@ -124,11 +125,18 @@ CREATE TABLE gtm_items (
     CONSTRAINT gtm_items_sent_has_record CHECK (
         status <> 'GTM_ITEM_STATUS_SENT'
         OR (gmail_message_id <> '' AND sent_at IS NOT NULL AND sent_by <> '' AND approval_hash <> '')),
-    CONSTRAINT gtm_items_scheduled_has_date CHECK (status <> 'GTM_ITEM_STATUS_SCHEDULED' OR scheduled_at IS NOT NULL)
+    CONSTRAINT gtm_items_scheduled_has_date CHECK (status <> 'GTM_ITEM_STATUS_SCHEDULED' OR scheduled_at IS NOT NULL),
+    -- An email is dated while APPROVED and goes out as SENT; it is never
+    -- SCHEDULED or PUBLISHED (GtmItemStatus).
+    CONSTRAINT gtm_items_email_never_scheduled CHECK (NOT (kind = 'GTM_ITEM_KIND_EMAIL' AND status = 'GTM_ITEM_STATUS_SCHEDULED')),
+    CONSTRAINT gtm_items_email_never_published CHECK (NOT (kind = 'GTM_ITEM_KIND_EMAIL' AND status = 'GTM_ITEM_STATUS_PUBLISHED'))
 );
+-- Third-party recipient addresses: kept from the read-only role (forge db query).
+COMMENT ON COLUMN gtm_items.email_to IS 'forge:secret';
 COMMENT ON COLUMN gtm_items.approval_hash IS 'forge:readable SHA-256 of the approved item id, revision, recipients, subject and body; a content hash, not a credential';
 CREATE INDEX gtm_items_org_id_scheduled_at_idx ON gtm_items (org_id, scheduled_at) WHERE scheduled_at IS NOT NULL;
 CREATE INDEX gtm_items_org_id_created_at_idx ON gtm_items (org_id, created_at DESC);
+CREATE INDEX gtm_items_org_id_status_idx ON gtm_items (org_id, status);
 CREATE INDEX gtm_items_org_id_campaign_id_idx ON gtm_items (org_id, campaign_id) WHERE campaign_id IS NOT NULL;
 CREATE INDEX gtm_items_org_id_idea_id_idx ON gtm_items (org_id, idea_id) WHERE idea_id IS NOT NULL;
 
