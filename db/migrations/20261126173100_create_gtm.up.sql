@@ -30,10 +30,10 @@
 -- transaction that creates them, rather than CONCURRENTLY in files of their
 -- own.
 --
--- Post-deploy verification (prod): the nine tables exist and are empty:
+-- Post-deploy verification (prod): the eleven tables exist and are empty:
 --   reliant forge db query prod --database reliant --confirm-env prod \
 --     --reason "verify gtm tables" \
---     "SELECT (SELECT count(*) FROM gtm_ideas), (SELECT count(*) FROM gtm_campaigns), (SELECT count(*) FROM gtm_items), (SELECT count(*) FROM gtm_positioning), (SELECT count(*) FROM gtm_claims), (SELECT count(*) FROM gtm_strategies), (SELECT count(*) FROM gtm_channels), (SELECT count(*) FROM gtm_assets), (SELECT count(*) FROM gtm_strategy_library)"
+--     "SELECT (SELECT count(*) FROM gtm_ideas), (SELECT count(*) FROM gtm_campaigns), (SELECT count(*) FROM gtm_items), (SELECT count(*) FROM gtm_positioning), (SELECT count(*) FROM gtm_claims), (SELECT count(*) FROM gtm_strategies), (SELECT count(*) FROM gtm_channels), (SELECT count(*) FROM gtm_assets), (SELECT count(*) FROM gtm_strategy_library), (SELECT count(*) FROM gtm_library_imports), (SELECT count(*) FROM gtm_library_prune_requests)"
 --
 -- Rollback: none needed. The previous release never names these tables; they
 -- stay in place, unread.
@@ -121,6 +121,58 @@ CREATE TABLE gtm_strategy_library (
 CREATE INDEX gtm_strategy_library_org_id_category_idx ON gtm_strategy_library (org_id, category);
 CREATE INDEX gtm_strategy_library_org_id_depth_idx ON gtm_strategy_library (org_id, depth);
 
+-- A prune an import over an access token staged: a token never deletes, so
+-- the keys it would remove wait here for a person to confirm (only keys still
+-- present and not imported again since are removed) or cancel. A PENDING
+-- request older than 7 days is EXPIRED and can no longer be confirmed.
+CREATE TABLE gtm_library_prune_requests (
+    id TEXT PRIMARY KEY CHECK (id <> ''),
+    org_id TEXT NOT NULL CHECK (org_id <> ''),
+    requested_by TEXT NOT NULL CHECK (requested_by <> ''),
+    credential_kind TEXT NOT NULL CHECK (credential_kind IN ('GTM_CREDENTIAL_KIND_PERSON', 'GTM_CREDENTIAL_KIND_TOKEN')),
+    source_revision TEXT NOT NULL CHECK (source_revision <> ''),
+    -- Nothing to remove stages no request.
+    remove_keys TEXT[] NOT NULL CHECK (cardinality(remove_keys) > 0),
+    status TEXT NOT NULL DEFAULT 'GTM_PRUNE_REQUEST_STATUS_PENDING'
+        CHECK (status IN ('GTM_PRUNE_REQUEST_STATUS_PENDING', 'GTM_PRUNE_REQUEST_STATUS_CONFIRMED', 'GTM_PRUNE_REQUEST_STATUS_CANCELLED', 'GTM_PRUNE_REQUEST_STATUS_EXPIRED')),
+    decided_by TEXT CHECK (decided_by IS NULL OR decided_by <> ''),
+    decided_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- A person decides a CONFIRMED or CANCELLED request; PENDING and EXPIRED
+    -- ones carry no decision.
+    CONSTRAINT gtm_library_prune_requests_decision CHECK (
+        (status IN ('GTM_PRUNE_REQUEST_STATUS_CONFIRMED', 'GTM_PRUNE_REQUEST_STATUS_CANCELLED'))
+        = (decided_by IS NOT NULL AND decided_at IS NOT NULL)),
+    CONSTRAINT gtm_library_prune_requests_decided_together CHECK ((decided_by IS NULL) = (decided_at IS NULL)),
+    -- The target of gtm_library_imports' same-org request link.
+    CONSTRAINT gtm_library_prune_requests_org_id_id_key UNIQUE (org_id, id)
+);
+CREATE INDEX gtm_library_prune_requests_org_id_status_idx ON gtm_library_prune_requests (org_id, status, created_at DESC);
+CREATE INDEX gtm_library_prune_requests_org_id_created_at_idx ON gtm_library_prune_requests (org_id, created_at DESC);
+
+-- The audit of the library: one row per ImportStrategyLibrary call, who made
+-- it through which class of credential, and what it changed. Written once.
+CREATE TABLE gtm_library_imports (
+    id TEXT PRIMARY KEY CHECK (id <> ''),
+    org_id TEXT NOT NULL CHECK (org_id <> ''),
+    actor_user_id TEXT NOT NULL CHECK (actor_user_id <> ''),
+    credential_kind TEXT NOT NULL CHECK (credential_kind IN ('GTM_CREDENTIAL_KIND_PERSON', 'GTM_CREDENTIAL_KIND_TOKEN')),
+    source_revision TEXT NOT NULL CHECK (source_revision <> ''),
+    created INTEGER NOT NULL DEFAULT 0 CHECK (created >= 0),
+    updated INTEGER NOT NULL DEFAULT 0 CHECK (updated >= 0),
+    unchanged INTEGER NOT NULL DEFAULT 0 CHECK (unchanged >= 0),
+    pruned INTEGER NOT NULL DEFAULT 0 CHECK (pruned >= 0),
+    prune_request_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- A token only upserts: it never removes, and only a token's prune is
+    -- staged as a request.
+    CONSTRAINT gtm_library_imports_token_never_prunes CHECK (credential_kind <> 'GTM_CREDENTIAL_KIND_TOKEN' OR pruned = 0),
+    CONSTRAINT gtm_library_imports_request_is_token CHECK (prune_request_id IS NULL OR credential_kind = 'GTM_CREDENTIAL_KIND_TOKEN'),
+    CONSTRAINT gtm_library_imports_prune_request_same_org_fkey FOREIGN KEY (org_id, prune_request_id)
+        REFERENCES gtm_library_prune_requests (org_id, id) ON DELETE SET NULL (prune_request_id)
+);
+CREATE INDEX gtm_library_imports_org_id_created_at_idx ON gtm_library_imports (org_id, created_at DESC);
+
 -- A channel: where items go out. INTEGRATED through a Reliant integration
 -- (integration_kind, e.g. gmail; connection_id empty means the acting user's
 -- default connection), or MANUAL (a person posts by hand and records the URL).
@@ -138,12 +190,17 @@ CREATE TABLE gtm_channels (
     integration_kind TEXT CONSTRAINT gtm_channels_integration_kind_not_empty CHECK (integration_kind IS NULL OR integration_kind <> ''),
     connection_id TEXT CONSTRAINT gtm_channels_connection_id_not_empty CHECK (connection_id IS NULL OR connection_id <> ''),
     manual_instructions_md TEXT NOT NULL DEFAULT '',
-    -- The kinds of channel it is (slugs), matched against a library entry's
-    -- channel_types. An array element cannot carry a regex CHECK in a plain
-    -- constraint, so the service checks the slug shape; empty strings are
-    -- refused here.
+    -- The kinds of channel it is (slugs, ^[a-z0-9-]{1,32}$ each), matched
+    -- against a library entry's channel_types. A CHECK cannot loop over the
+    -- elements, so the slug CHECK runs over the space-joined array, and the
+    -- split-back count catches an element that holds a space itself ("a b"
+    -- would join as two slugs). An empty or NULL element joins to nothing
+    -- visible, so those are refused separately.
     channel_types TEXT[] NOT NULL DEFAULT '{}'
-        CONSTRAINT gtm_channels_channel_types_not_empty CHECK (NOT ('' = ANY (channel_types))),
+        CONSTRAINT gtm_channels_channel_types_slugs CHECK (
+            array_to_string(channel_types, ' ') ~ '^([a-z0-9-]{1,32}( |$))*$'
+            AND cardinality(string_to_array(array_to_string(channel_types, ' '), ' ')) = cardinality(channel_types))
+        CONSTRAINT gtm_channels_channel_types_not_empty CHECK (NOT ('' = ANY (channel_types)) AND array_position(channel_types, NULL) IS NULL),
     status TEXT NOT NULL DEFAULT 'GTM_CHANNEL_STATUS_ACTIVE'
         CHECK (status IN ('GTM_CHANNEL_STATUS_ACTIVE', 'GTM_CHANNEL_STATUS_PAUSED', 'GTM_CHANNEL_STATUS_ARCHIVED')),
     revision INTEGER NOT NULL DEFAULT 1 CHECK (revision > 0),
@@ -296,7 +353,9 @@ CREATE INDEX gtm_items_org_id_channel_id_idx ON gtm_items (org_id, channel_id) W
 
 -- An asset: a file attached to an item and/or a campaign. Metadata only;
 -- the bytes are in the org's bucket under object_key, always
--- gtm/<org_id>/<id> (so the key names its tenant). PENDING from the upload
+-- gtm/<org_id>/<id> (so the key names its tenant). Uploads land on the
+-- staging key <object_key>.upload and the server copies them to object_key
+-- at confirm, so no client ever writes a final key. PENDING from the upload
 -- URL until ConfirmAssetUpload checked the bytes, then READY; the size and
 -- type limits are the service's.
 CREATE TABLE gtm_assets (
