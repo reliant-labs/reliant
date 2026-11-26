@@ -31,7 +31,7 @@ func TestSavedWorkflowVisibility_OwnerReadsIt(t *testing.T) {
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
 	drafts := workflowdraftstest.New(t, repo)
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: drafts, Projects: projectaccesstest.For(repo), Orgs: f.Membership}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: drafts, Projects: projectaccesstest.For(repo), Orgs: f.Membership}))
 
 	org := viewertest.OrgID
 	created, err := svc.CreateWorkflowDraft(f.Owner, connect.NewRequest(&reliantv1.CreateWorkflowDraftRequest{
@@ -111,7 +111,7 @@ func TestBuiltinWorkflowVisibility_Unspecified(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: f.Membership}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Orgs: f.Membership}))
 
 	resp, err := svc.GetWorkflow(f.Owner, connect.NewRequest(&reliantv1.GetWorkflowRequest{ProjectId: f.ProjectID, Name: "builtin://agent"}))
 	require.NoError(t, err)
