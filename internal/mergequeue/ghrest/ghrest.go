@@ -1,29 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
 
-// Package ghrest is the merge queue's [ghport.Client] over GitHub's REST API.
-//
-// forge:outbound-io
-//
-// It speaks plain HTTP+JSON to api.github.com (or a GitHub Enterprise base
-// URL), with a token it asks for per call and per repository, and maps every
-// response onto ghport's typed errors, so the queue never sees an HTTP status:
-//
-//   - 404 is [ghport.ErrNotFound];
-//   - a merge's 409 is [ghport.HeadMismatchError] (the actual head re-read);
-//   - a merge's 405 re-reads the PR: merged is [ghport.AlreadyMergedError],
-//     closed or conflicting or blocked is [ghport.NotMergeableError];
-//   - 403/429 with the rate-limit headers (or GitHub's secondary-limit text)
-//     is [ghport.RateLimitError], with the reset time GitHub gave;
-//   - 5xx and transport failures are [ghport.TransientError];
-//   - a ref create's 422 "already exists" is [ghport.ErrAlreadyExists], a ref
-//     update's 422 "not a fast forward" is [ghport.ErrNotFastForward], any
-//     other 422 a [ghport.ValidationError];
-//   - anything else (401, a 403 that is not a rate limit) is an [*APIError].
-//
-// No response body is ever echoed into an error beyond GitHub's short
-// `message` field, and the token never is.
-//
-//forge:exclude-contract: an outbound adapter that implements ghport.Client, the queue's port; its contract is that interface
 package ghrest
 
 import (
@@ -51,52 +27,32 @@ const DefaultBaseURL = "https://api.github.com"
 // apiVersion is the REST API version every request pins.
 const apiVersion = "2022-11-28"
 
-// TokenFunc returns the token to call GitHub with for one repository. It is
-// asked on every call, so a source that caches and renews (an installation
-// token lives an hour) stays the one place that knows when it expires.
-type TokenFunc func(ctx context.Context, repo ghport.Repo) (string, error)
+// userAgent names the queue to GitHub.
+const userAgent = "reliant-merge-queue"
 
-// Options configure a [Client].
-type Options struct {
-	// BaseURL defaults to DefaultBaseURL.
-	BaseURL string
-	// Token is required.
-	Token TokenFunc
-	// HTTPClient defaults to a traced client with a 30s timeout.
-	HTTPClient *http.Client
-	// UserAgent defaults to "reliant-merge-queue".
-	UserAgent string
-}
-
-// Client is a [ghport.Client] over GitHub's REST API. It is safe for
-// concurrent use.
+// Client is the [Service] over GitHub's REST API. It is safe for concurrent
+// use.
 type Client struct {
 	base  string
 	token TokenFunc
 	http  *http.Client
-	ua    string
 }
 
-var _ ghport.Client = (*Client)(nil)
+var (
+	_ Service       = (*Client)(nil)
+	_ ghport.Client = (Service)(nil)
+)
 
-// New returns a client. It fails only when no token source is given.
-func New(o Options) (*Client, error) {
-	if o.Token == nil {
-		return nil, errors.New("ghrest: a token source is required")
-	}
-	base := strings.TrimRight(strings.TrimSpace(o.BaseURL), "/")
-	if base == "" {
-		base = DefaultBaseURL
-	}
-	hc := o.HTTPClient
+// New returns the adapter. A nil Deps.Token fails every call: a client that
+// cannot authenticate never reaches GitHub.
+//
+// forge:constructor
+func New(deps Deps) Service {
+	hc := deps.HTTPClient
 	if hc == nil {
 		hc = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second})
 	}
-	ua := o.UserAgent
-	if ua == "" {
-		ua = "reliant-merge-queue"
-	}
-	return &Client{base: base, token: o.Token, http: hc, ua: ua}, nil
+	return &Client{base: DefaultBaseURL, token: deps.Token, http: hc}
 }
 
 // APIError is a GitHub answer none of ghport's typed errors describes: a 401,
@@ -593,6 +549,9 @@ func (c *Client) do(ctx context.Context, repo ghport.Repo, method, endpoint stri
 // send performs one request and maps a non-2xx answer. It returns the body
 // and the Link header.
 func (c *Client) send(ctx context.Context, repo ghport.Repo, method, target string, in any, what string) ([]byte, string, error) {
+	if c.token == nil {
+		return nil, "", errors.New("ghrest: no token source configured")
+	}
 	token, err := c.token(ctx, repo)
 	if err != nil {
 		return nil, "", fmt.Errorf("ghrest: token for %s: %w", repo, err)
@@ -611,7 +570,7 @@ func (c *Client) send(ctx context.Context, repo ghport.Repo, method, target stri
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", apiVersion)
-	req.Header.Set("User-Agent", c.ua)
+	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Authorization", "Bearer "+token)
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
