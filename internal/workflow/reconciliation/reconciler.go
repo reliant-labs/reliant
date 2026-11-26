@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -182,12 +183,14 @@ type Reconciler struct {
 
 	// The stall watchdog (stall_watchdog.go): its mode, idle ceiling, the
 	// run lifecycle it stops a stalled execution through, where it records
-	// what it found, and its in-memory streaks (same rationale as
+	// what it found, the converter that decodes a run's start input (for the
+	// run id it records under), and its in-memory streaks (same rationale as
 	// progressObservations). clock is time.Now outside tests.
 	stallMode         StallWatchdogMode
 	stallMaxIdle      time.Duration
 	runs              RunTerminator
 	observations      StallRecorder
+	dataConverter     converter.DataConverter
 	clock             func() time.Time
 	stallMu           sync.Mutex
 	stallObservations map[string]*stallObservation
@@ -566,11 +569,16 @@ func New(deps Deps) *Reconciler {
 	if stallMaxIdle <= 0 {
 		stallMaxIdle = DefaultStallMaxIdle
 	}
+	dataConverter := deps.DataConverter
+	if dataConverter == nil {
+		dataConverter = rtemporal.NewFlexibleDataConverter()
+	}
 	return &Reconciler{
 		stallMode:               stallMode,
 		stallMaxIdle:            stallMaxIdle,
 		runs:                    deps.Runs,
 		observations:            deps.Observations,
+		dataConverter:           dataConverter,
 		clock:                   time.Now,
 		stallObservations:       make(map[string]*stallObservation),
 		repo:                    repo,

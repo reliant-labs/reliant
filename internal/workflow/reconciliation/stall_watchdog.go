@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	wfobserve "github.com/reliant-labs/reliant/internal/workflow/observe"
+	wfruntime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 // The stall watchdog is the server's answer to a run that stays RUNNING with
@@ -53,7 +55,8 @@ import (
 //   - off: nothing above runs; not a query, not a map entry.
 //   - report: one WARN, one reliant_reconciler_anomalies_total{class=
 //     "stall_watchdog_detected"} and one durable record (node_observations,
-//     source "reconciler") per stalled streak. Nothing changes.
+//     source "reconciler", under the run id the run's own observations
+//     carry: stallTelemetryRunID) per stalled streak. Nothing changes.
 //   - enforce: the execution is stopped through the run lifecycle
 //     (runs.Service.TerminateExecution): a cooperative cancel, so its
 //     finally: releases its leases and slots, addressed to the exact
@@ -168,6 +171,9 @@ type stallObservation struct {
 	// timeouts caches what the history said about pending activities
 	// (history does not change while the streak holds).
 	timeouts map[string]activityTimeouts
+	// startInput is the execution's start input, when that same history
+	// read saw it: stallTelemetryRunID then needs no read of its own.
+	startInput *commonpb.Payloads
 	// done: this streak was reported (report) or settled (enforce).
 	done bool
 }
@@ -351,14 +357,14 @@ func (r *Reconciler) inFlightBound(ctx context.Context, wf *db.Workflow, state *
 		}
 	}
 	if missing && obs.timeouts == nil {
-		timeouts, err := r.pendingActivityTimeouts(ctx, wf.ID, obs.runID)
+		timeouts, startInput, err := r.pendingActivityTimeouts(ctx, wf.ID, obs.runID)
 		if err != nil {
 			logging.WarnContext(ctx, "[Reconciler] Stall watchdog could not read the run's history for its in-flight timeouts - holding",
 				"workflowID", wf.ID, "error", err)
 			return bound, false
 		}
 		r.stallMu.Lock()
-		obs.timeouts = timeouts
+		obs.timeouts, obs.startInput = timeouts, startInput
 		r.stallMu.Unlock()
 	}
 	for _, pa := range state.PendingActivities {
@@ -405,17 +411,22 @@ func activityDeadline(pa PendingActivity, t activityTimeouts) (time.Time, bool) 
 }
 
 // pendingActivityTimeouts reads the run's history once for each scheduled
-// activity's timeouts, by activity id.
-func (r *Reconciler) pendingActivityTimeouts(ctx context.Context, workflowID, runID string) (map[string]activityTimeouts, error) {
+// activity's timeouts, by activity id, and the execution's start input on
+// the way (nil when the history did not begin with the start event).
+func (r *Reconciler) pendingActivityTimeouts(ctx context.Context, workflowID, runID string) (map[string]activityTimeouts, *commonpb.Payloads, error) {
 	out := make(map[string]activityTimeouts)
+	var startInput *commonpb.Payloads
 	iter := r.tempClient.GetWorkflowHistory(ctx, workflowID, runID, false, enums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for n := 0; iter.HasNext(); n++ {
 		if n >= stallHistoryScanLimit {
-			return nil, fmt.Errorf("history of %s is longer than %d events", workflowID, stallHistoryScanLimit)
+			return nil, nil, fmt.Errorf("history of %s is longer than %d events", workflowID, stallHistoryScanLimit)
 		}
 		ev, err := iter.Next()
 		if err != nil {
-			return nil, fmt.Errorf("read history of %s: %w", workflowID, err)
+			return nil, nil, fmt.Errorf("read history of %s: %w", workflowID, err)
+		}
+		if a := ev.GetWorkflowExecutionStartedEventAttributes(); n == 0 && a != nil {
+			startInput = a.GetInput()
 		}
 		if a := ev.GetActivityTaskScheduledEventAttributes(); a != nil {
 			out[a.GetActivityId()] = activityTimeouts{
@@ -424,7 +435,43 @@ func (r *Reconciler) pendingActivityTimeouts(ctx context.Context, workflowID, ru
 			}
 		}
 	}
-	return out, nil
+	return out, startInput, nil
+}
+
+// stallTelemetryRunID is the run id the execution the streak watched records
+// its node observations under (node_observations.run_id, forge.ai.run.id):
+// the root run's, which outlasts the Temporal run id across continue-as-new
+// and a restart from a checkpoint (internal/workflow/runtime/run_telemetry.go).
+// The run cap of stored observations counts by it, so the watchdog's record
+// is attributed to, and counted against, the run it is about, and never
+// against another execution of the same workflow.
+//
+// The execution's start event holds the input it was started with, and
+// runtime.RootRunID applies to it the rule the run itself applied.
+func (r *Reconciler) stallTelemetryRunID(ctx context.Context, wf *db.Workflow, obs *stallObservation) (string, error) {
+	r.stallMu.Lock()
+	payloads := obs.startInput
+	r.stallMu.Unlock()
+	if payloads == nil {
+		iter := r.tempClient.GetWorkflowHistory(ctx, wf.ID, obs.runID, false, enums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		if !iter.HasNext() {
+			return "", fmt.Errorf("history of %s run %s is empty", wf.ID, obs.runID)
+		}
+		ev, err := iter.Next()
+		if err != nil {
+			return "", fmt.Errorf("read the start of %s run %s: %w", wf.ID, obs.runID, err)
+		}
+		started := ev.GetWorkflowExecutionStartedEventAttributes()
+		if started == nil {
+			return "", fmt.Errorf("history of %s run %s begins with %s, not the start event", wf.ID, obs.runID, ev.GetEventType())
+		}
+		payloads = started.GetInput()
+	}
+	var input wfruntime.WorkflowInput
+	if err := r.dataConverter.FromPayloads(payloads, &input); err != nil {
+		return "", fmt.Errorf("decode the start input of %s run %s: %w", wf.ID, obs.runID, err)
+	}
+	return wfruntime.RootRunID(input, obs.runID), nil
 }
 
 // stallParked names what legitimately parks the run ("" when nothing does):
@@ -458,6 +505,15 @@ func (r *Reconciler) recordStall(ctx context.Context, wf *db.Workflow, obs *stal
 	if r.observations == nil {
 		return
 	}
+	// A run id that cannot be learned is left empty, never guessed: the
+	// store then counts the row under its workflow, its documented arm for
+	// a writer that names no run.
+	runID, err := r.stallTelemetryRunID(ctx, wf, obs)
+	if err != nil {
+		logging.WarnContext(ctx, "[Reconciler] Stall watchdog could not learn the run id of a stalled run; its record names none",
+			"workflowID", wf.ID, "temporalRunID", obs.runID, "error", err)
+		runID = ""
+	}
 	attrs, _ := json.Marshal(map[string]any{
 		"reliant.stall.outcome":           outcome,
 		"reliant.stall.mode":              string(r.stallMode),
@@ -469,11 +525,11 @@ func (r *Reconciler) recordStall(ctx context.Context, wf *db.Workflow, obs *stal
 		"reliant.workflow.name":           wf.WorkflowName,
 	})
 	events, _ := json.Marshal([]map[string]any{{"name": "reliant.reconciler.stall_" + outcome, "attributes": map[string]any{}}})
-	_, err := r.observations.RecordNodeObservation(ctx, &db.NodeObservation{
+	_, err = r.observations.RecordNodeObservation(ctx, &db.NodeObservation{
 		ID:         uuid.New().String(),
 		ChatID:     wf.ChatID,
 		WorkflowID: wf.ID,
-		RunID:      wf.ID,
+		RunID:      runID,
 		StepID:     stallRecordStepID,
 		NodePath:   fmt.Sprintf("%s@%d/%s", obs.runID, obs.historyLength, outcome),
 		Attempt:    1,

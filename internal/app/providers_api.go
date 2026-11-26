@@ -1456,8 +1456,9 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
 		Daemons:   store.NewDaemonExtStore(d.DB.ORM()),
 		// The stall watchdog's (stall_watchdog.go); inert while it is off.
-		Runs:         terminator,
-		Observations: d.DB,
+		Runs:          terminator,
+		Observations:  d.DB,
+		DataConverter: d.Temporal.DataConverter,
 	})
 	r.SetResetGuard(d.ResetGuard)
 	r.SetApprovals(approvalSweepStore{reads: store.NewApprovalExtStore(d.DB.ORM()), closer: approvalclose.NewFromRepo(d.DB)})

@@ -24,6 +24,12 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/storetest"
+	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
+	wfobserve "github.com/reliant-labs/reliant/internal/workflow/observe"
+	wfruntime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // fakeTerminator records the executions the watchdog stops, and answers
@@ -94,6 +100,13 @@ const (
 
 func newStallHarness(t *testing.T, mode StallWatchdogMode) *stallHarness {
 	t.Helper()
+	return newStallHarnessRecordingTo(t, mode, nil)
+}
+
+// newStallHarnessRecordingTo is newStallHarness whose records go to rec (nil:
+// the harness's fakeStallRecorder).
+func newStallHarnessRecordingTo(t *testing.T, mode StallWatchdogMode, rec StallRecorder) *stallHarness {
+	t.Helper()
 	repo := newMockRepo()
 	running := int(reliantv1.ChatActivity_CHAT_ACTIVITY_RUNNING)
 	repo.chats[stallChat] = &db.Chat{ID: stallChat, UserID: "u-1", Activity: &running}
@@ -110,14 +123,51 @@ func newStallHarness(t *testing.T, mode StallWatchdogMode) *stallHarness {
 	}
 	cfg := DefaultConfig()
 	cfg.StallWatchdog = mode
+	if rec == nil {
+		rec = h.records
+	}
 	h.r = New(Deps{
 		Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo,
 		Questions: h.questions, Temporal: tc, Config: cfg, Mailbox: repo, Orphans: repo,
-		Runs: h.runs, Observations: h.records,
+		Runs: h.runs, Observations: rec,
 	})
 	h.r.clock = func() time.Time { return h.now }
 	h.describe(stallRun, 42)
+	h.started(t, stallRun, freshInput())
 	return h
+}
+
+// freshInput is the start input of a fresh run of the workflow: no resume,
+// nothing carried.
+func freshInput() wfruntime.WorkflowInput {
+	return wfruntime.WorkflowInput{ChatID: stallChat, WorkflowName: "pr-fix", ExecContext: &wfruntime.ExecutionContext{Thread: "main"}}
+}
+
+// startedEvent is the start event of an execution started with input,
+// encoded as the Temporal client encodes it.
+func startedEvent(t *testing.T, input wfruntime.WorkflowInput) *historypb.HistoryEvent {
+	t.Helper()
+	payloads, err := rtemporal.NewFlexibleDataConverter().ToPayloads(input)
+	require.NoError(t, err)
+	return &historypb.HistoryEvent{
+		EventId:   1,
+		EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{Input: payloads},
+		},
+	}
+}
+
+// started sets the history of execution runID: its start event, for input,
+// then the events given.
+func (h *stallHarness) started(t *testing.T, runID string, input wfruntime.WorkflowInput, then ...*historypb.HistoryEvent) {
+	t.Helper()
+	h.temporal.mu.Lock()
+	defer h.temporal.mu.Unlock()
+	if h.temporal.historyByRun == nil {
+		h.temporal.historyByRun = map[string][]*historypb.HistoryEvent{}
+	}
+	h.temporal.historyByRun[runID] = append([]*historypb.HistoryEvent{startedEvent(t, input)}, then...)
 }
 
 // describe sets what Temporal reports for the run: running, at historyLength
@@ -211,6 +261,7 @@ func TestStallWatchdog_ReportRecordsAndChangesNothing(t *testing.T) {
 	assert.Equal(t, db.NodeObservationSourceReconciler, row.Source)
 	assert.Equal(t, stallRecordStepID, row.StepID)
 	assert.Equal(t, stallWF, row.WorkflowID)
+	assert.Equal(t, stallRun, row.RunID, "a fresh run's id is its Temporal run id, as its node observations carry")
 	assert.Equal(t, stallChat, row.ChatID)
 	var attrs map[string]any
 	require.NoError(t, json.Unmarshal([]byte(row.Attributes), &attrs))
@@ -376,14 +427,14 @@ func TestStallWatchdog_InFlightNodeTimeoutRaisesTheThreshold(t *testing.T) {
 				LastStartedTime: timestamppb.New(started),
 			}
 			if tc.fromHistory {
-				h.temporal.historyEvents = []*historypb.HistoryEvent{{
+				h.started(t, stallRun, freshInput(), &historypb.HistoryEvent{
 					EventType: enums.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 					Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 						ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 							ActivityId: "7", StartToCloseTimeout: durationpb.New(3 * time.Hour),
 						},
 					},
-				}}
+				})
 			} else {
 				pa.ActivityOptions = &activitypb.ActivityOptions{StartToCloseTimeout: durationpb.New(3 * time.Hour)}
 			}
@@ -396,11 +447,11 @@ func TestStallWatchdog_InFlightNodeTimeoutRaisesTheThreshold(t *testing.T) {
 
 			h.now = started.Add(3*time.Hour + StallNodeGrace + time.Minute)
 			assert.True(t, h.pass(t).StallTerminated, "past the node's timeout + grace")
-			if tc.fromHistory {
-				assert.Equal(t, 1, h.temporal.getWorkflowHistoryCnt, "the history is read once per streak")
-			} else {
-				assert.Zero(t, h.temporal.getWorkflowHistoryCnt)
-			}
+			// Once per streak: for the timeouts and the run id together, or,
+			// with the timeouts described, for the run id alone.
+			assert.Equal(t, 1, h.temporal.getWorkflowHistoryCnt, "the history is read once per streak")
+			require.Len(t, h.records.rows, 1)
+			assert.Equal(t, stallRun, h.records.rows[0].RunID)
 		})
 	}
 }
@@ -451,4 +502,121 @@ func TestStallWatchdog_TimerParkedRunMakesProgress(t *testing.T) {
 	}
 	assert.Empty(t, h.runs.calls)
 	assert.Empty(t, h.records.rows)
+}
+
+// The record counts under the run id the stalled execution's own node
+// observations carry (node_observations.run_id, forge.ai.run.id), never the
+// workflow id: the root run's, kept across continue-as-new and a restart
+// from a checkpoint, so each execution of one workflow is attributed to the
+// run it belongs to.
+func TestStallWatchdog_RecordIsUnderTheRunsOwnRunID(t *testing.T) {
+	carried := &types.RunTelemetry{WorkflowName: "pr-fix", RunID: "run-1"}
+	for _, tc := range []struct {
+		name, temporalRun string
+		input             wfruntime.WorkflowInput
+		want              string
+	}{
+		{"a fresh run", "run-1", freshInput(), "run-1"},
+		{"its continue-as-new successor", "run-2", wfruntime.WorkflowInput{
+			ChatID: stallChat, WorkflowName: "pr-fix", Resume: &wfruntime.ResumeInput{NodeID: "fix"},
+			ExecContext: &wfruntime.ExecutionContext{Thread: "main", Telemetry: carried},
+		}, "run-1"},
+		{"a restart from a checkpoint", "run-3", wfruntime.WorkflowInput{
+			ChatID: stallChat, WorkflowName: "pr-fix", Resume: &wfruntime.ResumeInput{NodeID: "fix", RunID: "run-root"},
+			ExecContext: &wfruntime.ExecutionContext{Thread: "main"},
+		}, "run-root"},
+		{"a restart from a checkpoint that recorded none", "run-5", wfruntime.WorkflowInput{
+			ChatID: stallChat, WorkflowName: "pr-fix", Resume: &wfruntime.ResumeInput{},
+			ExecContext: &wfruntime.ExecutionContext{Thread: "main"},
+		}, "run-5"},
+		{"a later fresh run of the same workflow", "run-4", wfruntime.WorkflowInput{
+			ChatID: stallChat, WorkflowName: "pr-fix",
+			ExecContext: &wfruntime.ExecutionContext{Thread: "main", Telemetry: carried},
+		}, "run-4"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, wfruntime.RootRunID(tc.input, tc.temporalRun), "the rule the run applies")
+			h := newStallHarness(t, StallWatchdogReport)
+			h.describe(tc.temporalRun, 42)
+			h.started(t, tc.temporalRun, tc.input)
+			h.stallAfter(t, 3*time.Hour)
+			require.Len(t, h.records.rows, 1)
+			row := h.records.rows[0]
+			assert.Equal(t, tc.want, row.RunID)
+			assert.NotEqual(t, stallWF, row.RunID, "never the workflow id")
+			assert.Equal(t, stallWF, row.WorkflowID)
+			assert.Contains(t, row.Attributes, `"reliant.stall.temporal_run_id":"`+tc.temporalRun+`"`)
+		})
+	}
+}
+
+// A run id that cannot be learned is not guessed: the record names no run,
+// which the store counts under the workflow.
+func TestStallWatchdog_RecordNamesNoRunWhenTheStartCannotBeRead(t *testing.T) {
+	h := newStallHarness(t, StallWatchdogReport)
+	h.temporal.mu.Lock()
+	h.temporal.historyByRun[stallRun] = nil
+	h.temporal.mu.Unlock()
+	h.stallAfter(t, 3*time.Hour)
+	require.Len(t, h.records.rows, 1)
+	assert.Empty(t, h.records.rows[0].RunID)
+}
+
+// Against the real store: the record shares the cap of the run it is about,
+// and executions of the same workflow that are other runs do not share it.
+func TestStallWatchdog_RecordSharesItsRunsObservationCap(t *testing.T) {
+	env, ctx := storetest.New(t), context.Background()
+	at := time.Date(2026, 11, 26, 9, 0, 0, 0, time.UTC)
+	require.NoError(t, store.CreateChat(ctx, env.ORM, &store.Chat{
+		ID: stallChat, Title: stallChat, ProjectID: storetest.SeedProjectID, UserID: storetest.SeedUserID,
+		CreatedAt: at, UpdatedAt: at, LastActive: at,
+	}))
+	seed := func(runID string, n int) {
+		t.Helper()
+		_, err := env.SQL.ExecContext(ctx, `INSERT INTO node_observations (id, chat_id, workflow_id, run_id, step_id, node_path, source)
+			SELECT $3 || '-' || g, $1, $2, $3, 'fix', $3 || '/fix-' || g, 'workflow' FROM generate_series(1, $4) g`,
+			stallChat, stallWF, runID, n)
+		require.NoError(t, err)
+	}
+	count := func(where string, args ...any) int {
+		t.Helper()
+		var n int
+		require.NoError(t, env.SQL.QueryRowContext(ctx, `SELECT count(*) FROM node_observations WHERE `+where, args...).Scan(&n))
+		return n
+	}
+	h := newStallHarnessRecordingTo(t, StallWatchdogReport, env.Repo)
+
+	// A restart from a checkpoint of run-root: the record joins run-root's
+	// own observations.
+	seed("run-root", 1)
+	h.describe("run-3", 42)
+	h.started(t, "run-3", wfruntime.WorkflowInput{
+		ChatID: stallChat, WorkflowName: "pr-fix", Resume: &wfruntime.ResumeInput{NodeID: "fix", RunID: "run-root"},
+		ExecContext: &wfruntime.ExecutionContext{Thread: "main"},
+	})
+	h.stallAfter(t, 3*time.Hour)
+	assert.Equal(t, 1, count(`source = 'reconciler' AND run_id = 'run-root'`))
+	assert.Equal(t, 2, count(`run_id = 'run-root'`))
+
+	// run-1 holds its cap. Its continue-as-new successor stalls: the
+	// record counts against run-1's cap, so it is not stored.
+	seed("run-1", wfobserve.MaxRowsPerRun)
+	h.describe("run-2", 7)
+	h.started(t, "run-2", wfruntime.WorkflowInput{
+		ChatID: stallChat, WorkflowName: "pr-fix", Resume: &wfruntime.ResumeInput{NodeID: "fix"},
+		ExecContext: &wfruntime.ExecutionContext{Thread: "main", Telemetry: &types.RunTelemetry{RunID: "run-1"}},
+	})
+	h.now = h.now.Add(time.Minute)
+	h.stallAfter(t, 3*time.Hour)
+	assert.Equal(t, wfobserve.MaxRowsPerRun, count(`run_id = 'run-1'`))
+	assert.Zero(t, count(`source = 'reconciler' AND attributes->>'reliant.stall.temporal_run_id' = 'run-2'`))
+
+	// A later fresh run of the same workflow is a run of its own, with a cap
+	// of its own: its record is stored.
+	h.describe("run-4", 3)
+	h.started(t, "run-4", freshInput())
+	h.now = h.now.Add(time.Minute)
+	h.stallAfter(t, 3*time.Hour)
+	assert.Equal(t, 1, count(`source = 'reconciler' AND run_id = 'run-4'`))
+	assert.Zero(t, count(`source = 'reconciler' AND run_id = $1`, stallWF), "no record is counted under the workflow id")
 }

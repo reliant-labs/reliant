@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -88,6 +89,12 @@ type Deps struct {
 	// Observations is where the stall watchdog records each stalled run
 	// (node_observations, source "reconciler"). nil: logs and metrics only.
 	Observations StallRecorder
+	// DataConverter decodes a run's start input, from which the stall
+	// watchdog learns the run id its record counts under: the Temporal
+	// client's own converter, claim-check store included. nil: a converter
+	// with no store, which decodes every input below the claim-check
+	// threshold and fails (the record then names no run) on one above it.
+	DataConverter converter.DataConverter
 }
 
 // RunTerminator stops exactly one execution of a chat's run through the run
