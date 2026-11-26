@@ -415,7 +415,12 @@ actions:
           items:
             type: array
             maxItems: 1000
-            items: { type: [string, number, boolean, "null"] }
+            items:
+              anyOf:
+                - { type: string }
+                - { type: number }
+                - { type: boolean }
+                - { type: "null" }
           title: Values
           description: The cells as a list of rows, each row a list of strings, numbers, booleans or nulls.
           examples: [[["Name", "Qty"], ["Widget", 3]]]

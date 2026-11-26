@@ -39,11 +39,12 @@ const (
 )
 
 type recorded struct {
-	Method string
-	Path   string // decoded
-	Query  url.Values
-	Header http.Header
-	Body   map[string]any
+	Method      string
+	Path        string // decoded
+	EscapedPath string
+	Query       url.Values
+	Header      http.Header
+	Body        map[string]any
 }
 
 type fakeSheets struct {
@@ -63,7 +64,7 @@ func newFake(t *testing.T) *fakeSheets {
 
 func (f *fakeSheets) serve(w http.ResponseWriter, r *http.Request) {
 	raw, _ := io.ReadAll(r.Body)
-	rec := recorded{Method: r.Method, Path: r.URL.Path, Query: r.URL.Query(), Header: r.Header.Clone()}
+	rec := recorded{Method: r.Method, Path: r.URL.Path, EscapedPath: r.URL.EscapedPath(), Query: r.URL.Query(), Header: r.Header.Clone()}
 	if len(raw) > 0 {
 		require.NoError(f.t, json.Unmarshal(raw, &rec.Body), "request body must be JSON: %s", raw)
 	}
@@ -247,6 +248,37 @@ func TestValuesGetEscapesTheRangeIntoThePath(t *testing.T) {
 
 	assert.Equal(t, "'Q4 pipeline'!A1:C2", res.Data["range"], "the range Google resolved")
 	assert.Equal(t, []any{[]any{"Name", "Qty", "Price"}, []any{"Widget", "3"}}, res.Data["values"], "rows keep their own lengths")
+}
+
+// Path expressions are escaped by the shared runner, not by the manifest.
+// Check the wire path: URL.Path is decoded and would hide this protection.
+func TestRangesCannotChangeRouting(t *testing.T) {
+	const a1 = "'Sheet1/../../other?#&ranges=evil%2F'!A1:B2"
+	for action, suffix := range map[string]string{
+		"values.get": "", "values.update": "", "values.append": ":append", "values.clear": ":clear",
+	} {
+		t.Run(action, func(t *testing.T) {
+			f := newFake(t)
+			f.reply = func(w http.ResponseWriter, _ recorded) { writeJSON(w, map[string]any{}) }
+			params := map[string]any{"spreadsheet_id": sid, "range": a1}
+			if action == "values.update" || action == "values.append" {
+				params["values"] = []any{[]any{"x"}}
+			}
+			f.ok(action, params)
+			req := f.only()
+			assert.Equal(t, prefix+"/spreadsheets/"+sid+"/values/"+url.PathEscape(a1)+suffix, req.EscapedPath)
+			assert.NotContains(t, req.Query, "ranges")
+		})
+	}
+	t.Run("values.batch_get", func(t *testing.T) {
+		f := newFake(t)
+		f.reply = func(w http.ResponseWriter, _ recorded) { writeJSON(w, map[string]any{}) }
+		f.ok("values.batch_get", map[string]any{"spreadsheet_id": sid, "ranges": []any{a1, "Sheet2!A1"}})
+		req := f.only()
+		assert.Equal(t, prefix+"/spreadsheets/"+sid+"/values:batchGet", req.EscapedPath)
+		assert.Equal(t, []string{a1, "Sheet2!A1"}, req.Query["ranges"])
+		assert.NotContains(t, req.Query, "evil")
+	})
 }
 
 func TestValuesGetOfAnEmptyRange(t *testing.T) {

@@ -791,7 +791,14 @@ var generatedToolParams = map[string]ToolParams{
 		Unbindable: map[string]string{},
 	},
 	"google_sheets__values_append": {
-		Bindable:   map[string]struct{}{},
+		Bindable: map[string]struct{}{
+			"connection":         {},
+			"insert_data_option": {},
+			"range":              {},
+			"spreadsheet_id":     {},
+			"value_input_option": {},
+			"values":             {},
+		},
 		Unbindable: map[string]string{},
 	},
 	"google_sheets__values_batch_get": {
@@ -823,7 +830,14 @@ var generatedToolParams = map[string]ToolParams{
 		Unbindable: map[string]string{},
 	},
 	"google_sheets__values_update": {
-		Bindable:   map[string]struct{}{},
+		Bindable: map[string]struct{}{
+			"connection":         {},
+			"major_dimension":    {},
+			"range":              {},
+			"spreadsheet_id":     {},
+			"value_input_option": {},
+			"values":             {},
+		},
 		Unbindable: map[string]string{},
 	},
 	"http__request": {
