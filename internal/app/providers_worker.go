@@ -79,6 +79,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/triggertools"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -1141,6 +1142,40 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 
 func (r *TriggerDeliveryRelay) Run(ctx context.Context) error {
 	return r.relay.Run(orgpolicy.WithResolver(authz.WithMembership(ctx, r.membership), r.policies))
+}
+
+// RecordDueScannerDeps is what the record_due due scan needs.
+type RecordDueScannerDeps struct {
+	DB       *db.Repo
+	Temporal *TemporalClient
+	// Pipeline is the pipeline.enabled switch: off, there is no scanner.
+	Pipeline   *configv1.PipelineConfig
+	Membership *orgs.Resolver
+	Policies   *orgpolicy.Resolver
+}
+
+// NewRecordDueScanner is the worker's due scan for record_due triggers
+// (recorddue): every worker runs one while pipeline.enabled is on, and the
+// scans split the due rows (SKIP LOCKED). Off, nil: no scanner runs and no
+// record_due trigger fires.
+//
+//forge:root-only worker
+func NewRecordDueScanner(d RecordDueScannerDeps) (recorddue.Service, error) {
+	if !d.Pipeline.GetEnabled() {
+		return nil, nil
+	}
+	repo := d.DB
+	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
+		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
+		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())})
+	var membership authz.Membership = authz.NoOrgs{}
+	if d.Membership != nil {
+		membership = d.Membership
+	}
+	policies := d.Policies
+	return recorddue.NewInstrumented(recorddue.Deps{Store: repo, Intake: intake, Scope: func(ctx context.Context) context.Context {
+		return orgpolicy.WithResolver(authz.WithMembership(ctx, membership), policies)
+	}}), nil
 }
 
 // WorkflowCheckSyncerDeps is the GitHub-writing checks configuration and the

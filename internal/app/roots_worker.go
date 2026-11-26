@@ -4,6 +4,7 @@ package app
 
 import (
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
@@ -59,6 +60,9 @@ type Worker struct {
 	TemporalWorker    *workersetup.Worker
 	Relay             *workflowevent.Relay
 	TriggerDeliveries *TriggerDeliveryRelay
+	// RecordDue fires record_due triggers from the due scan; nil while
+	// pipeline.enabled is off.
+	RecordDue recorddue.Service
 	// MergeQueue drives the Reliant merge queue of every enrolled
 	// repository this worker leads (internal/mergequeue); nil, and nothing
 	// runs, while pipeline.enabled is off. A background loop like Relay.

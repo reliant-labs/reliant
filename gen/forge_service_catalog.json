@@ -555,6 +555,7 @@
         "Projectaccess",
         "Projectpurge",
         "Providerbackoff",
+        "RecordDueScanner",
         "RecordOnlyChecks",
         "RemoteExecutor",
         "RepoUpdateFeed",
@@ -2349,6 +2350,12 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.RecordDueSource": [
+            {
+              "name": "table",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.RevokeTriggerOfferRequest": [
             {
               "name": "offer_id",
@@ -2522,6 +2529,12 @@
               "name": "workflow_event",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowEventSource",
+              "oneof": "source"
+            },
+            {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
               "oneof": "source"
             },
             {
@@ -3005,6 +3018,7 @@
           "reliant.v1.ListTriggerOffersResponse": "reliant/v1/automation_takeover.proto",
           "reliant.v1.OrphanedTrigger": "reliant/v1/automation_takeover.proto",
           "reliant.v1.OrphanedWorkflow": "reliant/v1/automation_takeover.proto",
+          "reliant.v1.RecordDueSource": "reliant/v1/trigger.proto",
           "reliant.v1.RevokeTriggerOfferRequest": "reliant/v1/automation_takeover.proto",
           "reliant.v1.RevokeTriggerOfferResponse": "reliant/v1/automation_takeover.proto",
           "reliant.v1.ScheduleSource": "reliant/v1/trigger.proto",
@@ -3057,7 +3071,8 @@
             "TRIGGER_EVENT_KIND_INTEGRATION",
             "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
             "TRIGGER_EVENT_KIND_MANUAL_RUN",
-            "TRIGGER_EVENT_KIND_CLI_RUN"
+            "TRIGGER_EVENT_KIND_CLI_RUN",
+            "TRIGGER_EVENT_KIND_RECORD_DUE"
           ],
           "reliant.v1.TriggerEventOutcome": [
             "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
@@ -3132,7 +3147,8 @@
             6,
             7,
             8,
-            9
+            9,
+            10
           ],
           "reliant.v1.TriggerEventOutcome": [
             0,
@@ -47602,6 +47618,12 @@
               "kind": "string"
             }
           ],
+          "reliant.v1.RecordDueSource": [
+            {
+              "name": "table",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ReplayCandidate": [
             {
               "name": "event",
@@ -47874,6 +47896,12 @@
               "oneof": "source"
             },
             {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
+              "oneof": "source"
+            },
+            {
               "name": "connection_id",
               "kind": "string",
               "optional": true
@@ -48061,6 +48089,12 @@
               "name": "workflow_event",
               "kind": "message",
               "type_name": "reliant.v1.WorkflowEventSource",
+              "oneof": "source"
+            },
+            {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
               "oneof": "source"
             },
             {
@@ -48513,6 +48547,7 @@
           "reliant.v1.ListTriggersResponse": "reliant/v1/trigger.proto",
           "reliant.v1.PreviewReplayRequest": "reliant/v1/trigger.proto",
           "reliant.v1.PreviewReplayResponse": "reliant/v1/trigger.proto",
+          "reliant.v1.RecordDueSource": "reliant/v1/trigger.proto",
           "reliant.v1.ReplayCandidate": "reliant/v1/trigger.proto",
           "reliant.v1.ReplayEvent": "reliant/v1/chat.proto",
           "reliant.v1.ResolveTriggerSendersRequest": "reliant/v1/trigger.proto",
@@ -48577,7 +48612,8 @@
             "TRIGGER_EVENT_KIND_INTEGRATION",
             "TRIGGER_EVENT_KIND_WORKFLOW_EVENT",
             "TRIGGER_EVENT_KIND_MANUAL_RUN",
-            "TRIGGER_EVENT_KIND_CLI_RUN"
+            "TRIGGER_EVENT_KIND_CLI_RUN",
+            "TRIGGER_EVENT_KIND_RECORD_DUE"
           ],
           "reliant.v1.TriggerEventOutcome": [
             "TRIGGER_EVENT_OUTCOME_UNSPECIFIED",
@@ -48662,7 +48698,8 @@
             6,
             7,
             8,
-            9
+            9,
+            10
           ],
           "reliant.v1.TriggerEventOutcome": [
             0,
@@ -51931,6 +51968,12 @@
               "repeated": true
             }
           ],
+          "reliant.v1.RecordDueSource": [
+            {
+              "name": "table",
+              "kind": "string"
+            }
+          ],
           "reliant.v1.ResponseTool": [
             {
               "name": "name",
@@ -53212,6 +53255,12 @@
               "kind": "message",
               "type_name": "reliant.v1.WorkflowEventSource",
               "oneof": "source"
+            },
+            {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
+              "oneof": "source"
             }
           ],
           "reliant.v1.WorkflowUI": [
@@ -53311,6 +53360,7 @@
           "reliant.v1.PresetsConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ProjectConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PropertySchema": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.RecordDueSource": "reliant/v1/trigger.proto",
           "reliant.v1.ResponseTool": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ReviewArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.RouterArgs": "reliant/v1/workflow_v2.proto",
@@ -58099,6 +58149,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewQueuedDelivery"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "RecordDueScanner",
+      "name": "RecordDueScanner",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/triggers/recorddue.Service",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewRecordDueScanner"
       },
       "methods": [],
       "implementation_candidates": []
