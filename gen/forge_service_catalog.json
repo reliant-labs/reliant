@@ -540,6 +540,7 @@
         "IntegrationsWriteledger",
         "LedgerRetention",
         "MachineController",
+        "MergeQueue",
         "NATSConn",
         "OrgMoves",
         "OrgPolicyResolver",
@@ -57570,6 +57571,18 @@
       "source": {
         "path": "internal/app/nodes_gateway.go",
         "symbol": "NewManagedReconciler"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "MergeQueue",
+      "name": "MergeQueue",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.MergeQueue",
+      "source": {
+        "path": "internal/app/providers_mergequeue.go",
+        "symbol": "NewMergeQueue"
       },
       "methods": [],
       "implementation_candidates": []

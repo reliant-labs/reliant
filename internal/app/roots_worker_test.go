@@ -22,6 +22,9 @@ func TestWorkerStopsTakingWorkFirst(t *testing.T) {
 		"temporal_worker",
 		"workflow_event_relay",
 		"trigger_delivery_relay",
+		// The merge queue is a loop like the relay (nil while
+		// pipeline.enabled is off).
+		"merge_queue",
 		// The check syncer is a loop like the relay; what it has not written
 		// yet stays due in the database for another worker's.
 		"workflow_check_syncer",

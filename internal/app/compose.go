@@ -714,6 +714,18 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 	})
 }
 
+func (g *Graph) newMergeQueue() (*MergeQueue, error) {
+	return NewMergeQueue(MergeQueueDeps{
+		DB:     g.Database(),
+		Router: g.WorkerDaemonRouter(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DataDir:      g.ServerProcessConfig.GetDataDir(),
+	})
+}
+
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
 		DB:       g.Database(),
