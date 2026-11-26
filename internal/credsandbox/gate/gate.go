@@ -236,6 +236,10 @@ var (
 	// neither the gate nor its image declared (a docker CLI config injecting
 	// proxies, say). The gate is not started.
 	ErrEnvInjected = errors.New("gate environment holds an undeclared variable")
+	// ErrUnboundedMount: the gate container has a mount outside its two
+	// sized volumes (an image-declared VOLUME becomes an anonymous volume no
+	// limit bounds). The gate is not started.
+	ErrUnboundedMount = errors.New("gate container has an unbounded mount")
 	// ErrDiskSlotQuarantined: Teardown could not confirm a gate's containers
 	// were removed, so its disk slot was neither wiped nor released. The slot
 	// stays out of use (a marker beside it says why) until a Teardown of the

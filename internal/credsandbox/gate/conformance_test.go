@@ -245,6 +245,26 @@ echo "default-v6: $(ip -6 route show default 2>/dev/null | grep -c default)"`,
 			},
 		},
 		{
+			// Review B1 on #3793: only the two sized volumes and the capped
+			// tmpfs mounts are writable; the root layer, which no disk limit
+			// bounds, is not.
+			name:   "nothing outside the bounded mounts is writable",
+			denial: true,
+			script: `for p in /usr /root /etc /opt /var/lib /srv; do
+	if (echo x >"$p/reliant-gate-write") 2>/dev/null; then echo "WROTE $p"; fi
+done
+echo done`,
+			check: func(_ *hostFixture, res Result, out string) error {
+				if err := ran(res, out); err != nil {
+					return err
+				}
+				if strings.Contains(out, "WROTE ") {
+					return fmt.Errorf("the gate wrote outside its bounded mounts:\n%s", out)
+				}
+				return nil
+			},
+		},
+		{
 			name:   "no variable from the daemon",
 			denial: true,
 			script: canary + `env; canary "$GATE_T_DAEMON_CANARY_NAME" /proc/1/environ`,

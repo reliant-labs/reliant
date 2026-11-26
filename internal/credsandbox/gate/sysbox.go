@@ -303,6 +303,13 @@ func createArgs(spec Spec, n names, env []string, cfg SysboxConfig) []string {
 		"--log-driver", "json-file", "--log-opt", "max-size=50m", "--log-opt", "max-file=2",
 		"--mount", "type=volume,src=" + n.work + ",dst=" + WorkMount,
 		"--mount", "type=volume,src=" + n.engine + ",dst=" + EngineDataRoot,
+		// Every other path is bounded too (review B1 on #3793): the root
+		// layer is read-only, and the few paths the image's own engine must
+		// write are size-capped tmpfs, which also count against --memory.
+		"--read-only",
+		"--tmpfs", "/run:rw,nosuid,nodev,size=" + strconv.FormatInt(RunTmpfsBytes, 10),
+		"--tmpfs", "/var/log:rw,nosuid,nodev,size=" + strconv.FormatInt(LogTmpfsBytes, 10),
+		"--tmpfs", "/tmp:rw,nosuid,nodev,size=" + strconv.FormatInt(TmpTmpfsBytes, 10),
 		"--workdir", WorkMount,
 		"--entrypoint", "/bin/sh",
 	}
@@ -349,6 +356,9 @@ func (s *Sysbox) Run(ctx context.Context, spec Spec) (Result, error) {
 	if err := s.verifyEnv(ctx, n.container, spec.Image, env); err != nil {
 		return Result{}, err
 	}
+	if err := s.verifyMounts(ctx, n.container); err != nil {
+		return Result{}, err
+	}
 	if err := s.copyIn(ctx, spec, n); err != nil {
 		return Result{}, err
 	}
@@ -358,6 +368,46 @@ func (s *Sysbox) Run(ctx context.Context, spec Spec) (Result, error) {
 func (s *Sysbox) createVolume(ctx context.Context, runID, name, role string, size int64) error {
 	_, err := s.output(ctx, nil, volumeCreateArgs(runID, name, role, size)...)
 	return err
+}
+
+// The size caps of the gate's tmpfs mounts. /run holds the nested engine's
+// sockets and pid files, /var/log its log, /tmp anything a tool insists on
+// writing there (the gate's own TMPDIR is on the work volume).
+const (
+	RunTmpfsBytes = 64 << 20
+	LogTmpfsBytes = 64 << 20
+	TmpTmpfsBytes = 1 << 30
+)
+
+// boundedMounts are the only mount destinations a gate container may have:
+// the two sized volumes. An image that declares another VOLUME gets an
+// anonymous, unbounded volume from the engine, so the gate is refused.
+var boundedMounts = map[string]bool{WorkMount: true, EngineDataRoot: true}
+
+// verifyMounts refuses a container with a mount outside the two sized
+// volumes (an image-declared VOLUME, say), since nothing bounds it.
+func (s *Sysbox) verifyMounts(ctx context.Context, container string) error {
+	out, err := s.output(ctx, nil, "container", "inspect", "--format", "{{json .Mounts}}", container)
+	if err != nil {
+		return err
+	}
+	var mounts []struct {
+		Type        string `json:"Type"`
+		Destination string `json:"Destination"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &mounts); err != nil {
+		return fmt.Errorf("reading the gate container's mounts: %w", err)
+	}
+	var extra []string
+	for _, m := range mounts {
+		if !boundedMounts[m.Destination] {
+			extra = append(extra, m.Destination)
+		}
+	}
+	if len(extra) > 0 {
+		return fmt.Errorf("%w: %s", ErrUnboundedMount, strings.Join(sortedStrings(extra), ", "))
+	}
+	return nil
 }
 
 // verifyEnv refuses a container whose environment holds a variable neither

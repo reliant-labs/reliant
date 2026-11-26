@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -28,8 +29,9 @@ type fakeDocker struct {
 	mu    sync.Mutex
 	calls [][]string
 
-	runtimes     string // docker info .Runtimes
-	v4, v6       string // the probe's dumps
+	runtimes     string              // docker info .Runtimes
+	mounts       []map[string]string // container inspect .Mounts; nil = the two sized volumes
+	v4, v6       string              // the probe's dumps
 	containerEnv []string
 	imageEnv     []string
 	state        containerState
@@ -104,6 +106,12 @@ func (f *fakeDocker) exec(ctx context.Context, stdin io.Reader, stdout, stderr i
 			fmt.Fprintln(stderr, "quota size requested but no quota support")
 			return errors.New("exit status 1")
 		}
+	case head == "container inspect" && strings.Contains(args[3], ".Mounts"):
+		mounts := f.mounts
+		if mounts == nil {
+			mounts = []map[string]string{{"Type": "volume", "Destination": WorkMount}, {"Type": "volume", "Destination": EngineDataRoot}}
+		}
+		_ = json.NewEncoder(stdout).Encode(mounts)
 	case head == "container inspect" && strings.Contains(args[3], "Config.Env"):
 		env := f.containerEnv
 		if env == nil {
@@ -346,7 +354,7 @@ func TestRunSequenceAndVerdicts(t *testing.T) {
 			}
 			verbs = append(verbs, v)
 		}
-		want := []string{"info", "info", "run", "network create", "volume create", "volume create", "create", "container inspect", "image inspect", "cp", "start --attach", "container inspect"}
+		want := []string{"info", "info", "run", "network create", "volume create", "volume create", "create", "container inspect", "image inspect", "container inspect", "cp", "start --attach", "container inspect"}
 		if !slices.Equal(verbs, want) {
 			t.Errorf("command sequence = %q, want %q", verbs, want)
 		}
@@ -522,6 +530,12 @@ func TestRunRefusesUnenforceableDiskLimit(t *testing.T) {
 }
 
 func slotsDir(t *testing.T, n int) string {
+	// Disk slots are Linux-only (disk_other.go refuses them); their tests
+	// skip elsewhere, and disk_other_test.go tests the refusal (review B2 on
+	// #3793).
+	if runtime.GOOS != "linux" {
+		t.Skip("disk slots need Linux")
+	}
 	dir := t.TempDir()
 	for i := range n {
 		if err := os.Mkdir(filepath.Join(dir, fmt.Sprintf("slot-%d", i)), 0o755); err != nil {
@@ -934,5 +948,52 @@ func TestBootstrapScript(t *testing.T) {
 		if !strings.Contains(s, want) {
 			t.Errorf("bootstrap lacks %q:\n%s", want, s)
 		}
+	}
+}
+
+// The root layer is read-only and every writable path is bounded (review B1
+// on #3793).
+func TestCreateArgsBoundEveryWritablePath(t *testing.T) {
+	spec := validSpec()
+	spec.Limits.DiskBytes = 10 << 30
+	env, err := GateEnv(spec.RunID, spec.Env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := createArgs(spec, namesFor(spec.RunID), env, SysboxConfig{EngineWait: time.Minute})
+	if !slices.Contains(args, "--read-only") {
+		t.Errorf("the gate's root layer is writable: %q", args)
+	}
+	var tmpfs []string
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--tmpfs" {
+			tmpfs = append(tmpfs, args[i+1])
+		}
+	}
+	if len(tmpfs) != 3 {
+		t.Fatalf("tmpfs mounts = %q, want /run, /var/log and /tmp", tmpfs)
+	}
+	for _, m := range tmpfs {
+		if !strings.Contains(m, ",size=") {
+			t.Errorf("tmpfs %q has no size cap", m)
+		}
+	}
+}
+
+// An image-declared VOLUME becomes an anonymous volume nothing bounds: the
+// gate is refused before it starts.
+func TestRunRefusesAnUnboundedMount(t *testing.T) {
+	f := newFake(t)
+	f.mounts = []map[string]string{
+		{"Type": "volume", "Destination": WorkMount},
+		{"Type": "volume", "Destination": EngineDataRoot},
+		{"Type": "volume", "Destination": "/data"},
+	}
+	_, err := f.backend(SysboxConfig{}).Run(context.Background(), testSpec(t))
+	if !errors.Is(err, ErrUnboundedMount) || !strings.Contains(err.Error(), "/data") {
+		t.Fatalf("Run = %v, want ErrUnboundedMount naming /data", err)
+	}
+	if f.ran("start", "--attach") {
+		t.Error("the gate started despite an unbounded mount")
 	}
 }
