@@ -28,7 +28,7 @@ func TestResumeWorkflow_KeepsTheStatusTheWokenRunWrote(t *testing.T) {
 			repo.updatedStatuses["wf-1"] = db.Completed() // the run finished
 		}
 	}
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	require.NoError(t, ps.ResumeWorkflow(context.Background(), "wf-1", "chat-1", nil))
 
@@ -39,7 +39,7 @@ func TestResumeWorkflow_KeepsTheStatusTheWokenRunWrote(t *testing.T) {
 // running at once — what a second send arriving next relies on.
 func TestResumeWorkflow_MarksAStillPausedRunRunning(t *testing.T) {
 	repo := newMockPauseRepo()
-	ps := NewPauseService(PauseServiceDeps{Temporal: &mockPauseTemporalClient{}, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: &mockPauseTemporalClient{}, Store: repo, Workflows: repo, Updates: repo})
 
 	require.NoError(t, ps.ResumeWorkflow(context.Background(), "wf-1", "chat-1", nil))
 
@@ -57,7 +57,7 @@ func TestResumeInterruptedWorkflow_KeepsTheStatusTheResetRunWrote(t *testing.T) 
 		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
 	}
 	tc.afterSignal = func(string) { repo.updatedStatuses["wf-1"] = db.Completed() }
-	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo})
+	ps := NewPauseService(PauseServiceDeps{Temporal: tc, Store: repo, Workflows: repo, Updates: repo})
 
 	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)
