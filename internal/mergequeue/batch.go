@@ -202,7 +202,7 @@ func (r *round) gate(ctx context.Context, b *built, attempt int, avoid []string,
 	if res.Class != GatePass && res.Class != GateFail {
 		res.Class = GateUnproven
 	}
-	if res.Class == GatePass && !res.Isolated() && !r.shadow {
+	if res.Class == GatePass && !res.Isolated() && !r.shadow && !r.cfg.Gate.AllowUnisolated {
 		res.Class, res.ReasonCode, res.Reason = GateUnproven, "not_isolated",
 			fmt.Sprintf("the gate passed on %q, outside an isolation boundary: it can never land", res.Isolation)
 	}
@@ -211,7 +211,8 @@ func (r *round) gate(ctx context.Context, b *built, attempt int, avoid []string,
 	if v.Class != "" {
 		v.Attempts = append(v.Attempts, GateAttempt{Attempt: attempt - 1, Class: v.Class, Machine: v.Machine, Isolation: v.Isolation, ReasonCode: v.ReasonCode, Reason: v.Reason})
 	}
-	v.Class, v.Landable, v.Isolation, v.Machine = res.Class, res.Landable(), res.Isolation, res.Machine
+	v.Class, v.Landable, v.Isolation, v.Machine = res.Class, r.landable(res), res.Isolation, res.Machine
+	v.UnisolatedAccepted = v.Landable && !res.Isolated()
 	v.ReasonCode, v.Reason, v.FailingTests, v.InfraMatches = res.ReasonCode, res.Reason, res.FailingTests, res.InfraMatches
 	if res.Class == GatePass && r.shadow {
 		v.WouldLand = r.landEntries(b)
@@ -261,6 +262,14 @@ func (r *round) gate(ctx context.Context, b *built, attempt int, avoid []string,
 		r.repo.QueueState = core.PipelineQueueRunning
 	}
 	return nil
+}
+
+// landable is the hard rule: a batch lands only on a pass produced inside an
+// isolation boundary, or, in a repository whose pipeline.yaml sets
+// gate.allow_unisolated, on any pass (owner, 2026-11-26: until isolated gate
+// machines exist), marked verdict_json.unisolated_accepted.
+func (r *round) landable(res GateResult) bool {
+	return res.Landable() || (res.Class == GatePass && r.cfg.Gate.AllowUnisolated)
 }
 
 // retryGate gates an unproven batch again, on another member.
@@ -317,7 +326,7 @@ func (r *round) finish(ctx context.Context, b *built) error {
 		})
 		return err
 	}
-	if !b.result.Landable() {
+	if !r.landable(b.result) {
 		return fmt.Errorf("batch %s passed but is not landable", b.batch.ID)
 	}
 	return r.land(ctx, b.batch, b.verdict)
