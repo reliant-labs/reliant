@@ -287,14 +287,14 @@ const ChatRow = memo(function ChatRow({
         <div className="min-w-0 flex-1">
           <span
             className={cn(
-              "block truncate text-sm",
+              "block truncate text-ui",
               chat.unread ? "font-semibold text-foreground" : "text-foreground",
             )}
           >
             {chat.title || "Untitled chat"}
           </span>
 
-          <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="mt-1 flex items-center gap-2 text-meta text-muted-foreground">
             {needsInput ? (
               <>
                 <span
@@ -380,7 +380,7 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: Grou
           )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <span className="truncate text-base font-semibold text-foreground">
+              <span className="truncate text-section font-semibold text-foreground">
                 {group.worktreeName}
               </span>
               {group.hasActivity && (
@@ -391,7 +391,7 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: Grou
               )}
             </div>
             {group.worktreeBranch && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1 text-meta text-muted-foreground">
                 <GitBranch className="h-2.5 w-2.5 shrink-0" />
                 <span className="truncate">{group.worktreeBranch}</span>
               </div>
@@ -399,7 +399,7 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: Grou
           </div>
           <span
             className={cn(
-              "shrink-0 rounded-full px-2 py-0.5 text-xs font-medium",
+              "shrink-0 rounded-full px-2 py-0.5 text-meta font-medium",
               group.hasActivity
                 ? "bg-destructive/10 text-destructive-ink"
                 : "bg-primary/10 text-primary-ink",
@@ -526,7 +526,7 @@ export function MobileChatList() {
             <button
               type="button"
               onClick={() => setCreatingWorkspace(true)}
-              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-primary-ink active:bg-primary/10"
+              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-ui font-medium text-primary-ink active:bg-primary/10"
             >
               <GitBranchPlus className="h-4 w-4" />
               {/* Across projects, say which one it is made in. */}
@@ -654,10 +654,10 @@ export function MobileChatList() {
               aria-hidden
               className="mx-auto mb-4 h-1 w-9 rounded-full bg-foreground/20"
             />
-            <p className="mb-1.5 text-base font-semibold text-foreground">
+            <p className="mb-1.5 text-section font-semibold text-foreground">
               Archive {confirmingArchive.worktreeName}?
             </p>
-            <p className="mb-5 text-sm text-muted-foreground">
+            <p className="mb-5 text-ui text-muted-foreground">
               {confirmingArchive.chats.length > 0
                 ? `${confirmingArchive.chats.length} chat${confirmingArchive.chats.length === 1 ? "" : "s"} in this workspace will be archived with it.`
                 : "This workspace will be archived."}
@@ -667,7 +667,7 @@ export function MobileChatList() {
                 type="button"
                 onClick={() => setConfirmingArchive(null)}
                 disabled={isArchiving}
-                className="flex min-h-[48px] flex-1 items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground active:bg-muted disabled:opacity-60"
+                className="flex min-h-[48px] flex-1 items-center justify-center rounded-lg border border-border text-ui font-medium text-foreground active:bg-muted disabled:opacity-60"
               >
                 Cancel
               </button>
@@ -675,7 +675,7 @@ export function MobileChatList() {
                 type="button"
                 onClick={() => void handleArchiveConfirmed()}
                 disabled={isArchiving}
-                className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-lg bg-destructive text-sm font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60"
+                className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-lg bg-destructive text-ui font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60"
               >
                 {isArchiving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {isArchiving ? "Archiving…" : "Archive"}
