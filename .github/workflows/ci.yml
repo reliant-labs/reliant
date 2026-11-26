@@ -503,12 +503,16 @@ jobs:
           echo "records=$(git rev-parse --path-format=absolute --git-common-dir)/release-gate" >> "$GITHUB_ENV"
           echo "artifact=$(echo "${{ matrix.label }}" | tr ' /' '--')" >> "$GITHUB_ENV"
       # The part record, pass or fail: `Release gate` assembles a red record
-      # from a red part, as the single job recorded a red run.
+      # from a red part, as the single job recorded a red run. With it, the
+      # part's Go cover profile (<part record>.cover.out), which assemble's
+      # coverage step unions across the parts.
       - if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: release-gate-part-${{ env.artifact }}
-          path: ${{ env.records }}/${{ github.sha }}.part-*.json
+          path: |
+            ${{ env.records }}/${{ github.sha }}.part-*.json
+            ${{ env.records }}/${{ github.sha }}.part-*.cover.out
           retention-days: 7
           if-no-files-found: ignore
       - if: failure()

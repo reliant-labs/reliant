@@ -1,0 +1,24 @@
+# coverage-floor.txt — the lowest total Go statement coverage the release gate
+# accepts: scripts/release-gate.sh step `coverage`, through
+# scripts/coverage-floor.sh check. Never the merge gate.
+#
+# WHAT IS MEASURED: the union of every Go cover profile of the release gate's
+# run (test-go's unit lane in every shard, integration, e2e): a block is
+# covered when any `go test` invocation hit it. Packages with no test files
+# count at 0%, as `go test -cover ./...` reports them.
+#
+# EXCLUDED from the denominator, as forge's coverage report counts generated
+# code on a line of its own (forge pkg/testreport.IsGenerated):
+#   - every file in a directory named gen/ or testdata/
+#   - *_gen.go (mock_gen.go included) and *.pb.go
+#
+# IT ONLY GOES UP. `task coverage:raise-floor` sets it to the newest release
+# gate record's number minus 0.5 points (headroom for run-to-run noise) and
+# refuses to lower it. Lowering takes
+#   scripts/coverage-floor.sh raise --to <percent> --lower --reason "<why>"
+# which records the reason at the end of this file; say it in the commit too.
+#
+# Set 2026-11-26 (owner decision: a floor that can only go up): 74.26% on
+# main 1a2bc96c0d (the release gate's go shards, GitHub Actions run
+# 45742721364, 139,904 of 188,391 statements), minus 0.5.
+73.76
