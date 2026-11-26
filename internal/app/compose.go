@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"time"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/chatprlinks"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/credentials/automationtokens"
@@ -2136,9 +2137,12 @@ func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 // pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
 func (g *Graph) newPipeline() (*pipeline.Service, error) {
 	return pipeline.New(pipeline.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Pipeline: g.ServerProcessConfig.GetPipeline(),
+		Logger: g.Log,
+		Config: g.Cfg,
+		// The switch alone: the API server reads no other pipeline setting,
+		// and naming the whole block would put the worker's secrets
+		// (github_queue_app_caller_secret) in the API root's reach.
+		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
 		Store:    g.Database(),
 		Now:      nil, // optional — no provider
 	})

@@ -1,9 +1,9 @@
 -- forge:backward-compatible — validates the widened kind CHECKs on existing rows; every existing row holds a kind the old checks allowed, which the new ones allow too, and nothing is written.
 
 -- Migration: record_due_trigger_kind_validate
--- Created: 2026-11-26T21:31:03Z
+-- Created: 2026-11-26T22:54:58Z
 --
--- Validates 20261126213047_record_due_trigger_kind's CHECKs in their own
+-- Validates 20261126225455_record_due_trigger_kind's CHECKs in their own
 -- transaction (SHARE UPDATE EXCLUSIVE: reads and writes continue).
 --
 -- Post-deploy verification (prod):

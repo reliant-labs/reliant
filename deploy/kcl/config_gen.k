@@ -2437,10 +2437,6 @@ ROOTS: {str: Root} = {
             "RELIANT_GITHUB_WEBHOOK_SECRET",
             "RELIANT_TEST_INTEGRATION_SECRET",
 
-            # forge:section root api secrets pipeline
-            # forge:hash=0e900364693545b506c14132378d969b84349b2e39377e48a0a0673636b48e83
-            "GITHUB_QUEUE_APP_CALLER_SECRET",
-
             # forge:section root api secrets (end)
             # forge:hash=51508a9c3d2d78952b193ba57b93e4722f3b40806cc9fe70a9e5e1a9d74571e5
         ]

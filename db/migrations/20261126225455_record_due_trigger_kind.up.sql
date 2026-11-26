@@ -1,7 +1,7 @@
 -- forge:backward-compatible — widens two CHECKs: every kind the previous release writes is still allowed, both new constraints are added NOT VALID so the swap holds its lock for the catalog change only, and the previous release reads a record_due trigger or event like any other kind it does not know (an automation, rendered generically).
 
 -- Migration: record_due_trigger_kind
--- Created: 2026-11-26T21:30:47Z
+-- Created: 2026-11-26T22:54:55Z
 --
 -- record_due is a new trigger source (pipeline build plan task M4): a
 -- workflow's declared trigger that fires when a record of a registered
@@ -9,7 +9,7 @@
 -- triggers row and its trigger_events rows carry the kind record_due, so
 -- both kind CHECKs admit it. Each is dropped and re-added in one statement
 -- (no instant without a check), NOT VALID, and validated by
--- 20261126213103_record_due_trigger_kind_validate under SHARE UPDATE
+-- 20261126225458_record_due_trigger_kind_validate under SHARE UPDATE
 -- EXCLUSIVE. lock_timeout bounds the wait behind a long transaction. Inert:
 -- nothing writes the kind until the pipeline ships behind `pipeline.enabled`.
 --
