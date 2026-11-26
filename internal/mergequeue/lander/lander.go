@@ -360,12 +360,24 @@ func landable(b *core.QueueBatch) error {
 		return fmt.Errorf("%w: no such batch", ErrNotLandable)
 	case b.State != core.QueueBatchPassed:
 		return fmt.Errorf("%w: batch %s is %s, not passed", ErrNotLandable, b.ID, b.State)
-	case b.IsolationBackend != core.QueueIsolationSysbox && b.IsolationBackend != core.QueueIsolationVM:
+	case b.IsolationBackend != core.QueueIsolationSysbox && b.IsolationBackend != core.QueueIsolationVM &&
+		(b.IsolationBackend != core.QueueIsolationRunc || !unisolatedAccepted(b)):
 		return fmt.Errorf("%w: batch %s was gated in %q, not an isolation boundary", ErrNotLandable, b.ID, b.IsolationBackend)
 	case b.Kind != core.QueueBatchNormal && b.Kind != core.QueueBatchBisect && b.Kind != core.QueueBatchRerun:
 		return fmt.Errorf("%w: batch %s is a %s batch", ErrNotLandable, b.ID, b.Kind)
 	}
 	return nil
+}
+
+// unisolatedAccepted reports the scheduler's mark on a runc batch whose
+// repository opted in with gate.allow_unisolated (owner, 2026-11-26: until
+// isolated gate machines exist). The database lets a runc batch land only
+// with it.
+func unisolatedAccepted(b *core.QueueBatch) bool {
+	var v struct {
+		UnisolatedAccepted bool `json:"unisolated_accepted"`
+	}
+	return json.Unmarshal(b.VerdictJSON, &v) == nil && v.UnisolatedAccepted
 }
 
 func (g *landing) head(e *core.QueueEntry) string {

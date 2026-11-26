@@ -3,6 +3,8 @@ package practions
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -25,12 +27,27 @@ func (s *Service) Close(ctx context.Context, req *serveraction.Request) (*server
 		return nil, serveraction.Errorf(serveraction.CodeInvalidArgument, "pr.close needs the evidence it cites")
 	}
 	w := s.writer(p)
+	sig := closeSignature(req.Params["evidence"])
 	if p.row.State != core.PRPipelineClosed {
 		pr, err := s.deps.GitHub.PullRequest(ctx, p.as, p.rec.Repository, p.rec.Number)
 		if err != nil {
 			return nil, &serveraction.Error{Code: serveraction.CodeUnavailable, Retryable: true, Message: fmt.Sprintf("could not read %s from GitHub", prName(p))}
 		}
 		if pr.State == "open" && !pr.Merged {
+			// A person reopened it after an earlier close for this
+			// evidence: their call stands.
+			if prior, err := s.closedBefore(ctx, p, sig); err != nil || prior {
+				if err != nil {
+					return nil, err
+				}
+				return &serveraction.Result{
+					Data:    map[string]any{"closed": false, "reopened_by_person": true, "shadow": p.shadow(), "writes": []any{}},
+					Content: prName(p) + " was reopened after a close for this evidence; it stays open",
+				}, nil
+			}
+			if err := s.recordClose(ctx, p, sig, evidence); err != nil {
+				return nil, err
+			}
 			if err := w.Comment(ctx, "Reliant is closing this pull request.\n\n"+evidence); err != nil {
 				return nil, &serveraction.Error{Code: serveraction.CodeUnavailable, Retryable: true, Message: "could not comment on " + prName(p)}
 			}
@@ -49,6 +66,62 @@ func (s *Service) Close(ctx context.Context, req *serveraction.Request) (*server
 		Data:    map[string]any{"closed": true, "shadow": p.shadow(), "writes": w.Writes()},
 		Content: "closed " + prName(p),
 	}, nil
+}
+
+// attemptClose is detail_json.kind of a close (stage close).
+const attemptClose = "close"
+
+// closeSignature names a close's evidence: its kind and the PR it cites
+// (superseded by #12), which stay the same while the facts around them
+// move (#12 merging), else the evidence's text.
+func closeSignature(evidence any) string {
+	ev := jsonValue(evidence)
+	if m, ok := ev.(map[string]any); ok {
+		if kind, _ := m["kind"].(string); kind != "" {
+			return fmt.Sprintf("%s:%v", kind, m["by"])
+		}
+	}
+	sum := sha256.Sum256([]byte(strings.TrimSpace(evidenceText(ev))))
+	return "text:" + hex.EncodeToString(sum[:8])
+}
+
+// closedBefore reports whether the pipeline closed this PR before for the
+// evidence sig, in another execution than this one: the PR is open again
+// only because a person reopened it.
+func (s *Service) closedBefore(ctx context.Context, p *prCall, sig string) (bool, error) {
+	closes, err := s.deps.Store.ListPipelineAttempts(ctx, core.PipelineAttemptSubjectPR, p.rec.ID, core.PipelineAttemptClose)
+	if err != nil {
+		return false, err
+	}
+	for _, a := range closes {
+		if a.Signature == sig && detailOf(a).ExecutionKey != p.req.Invocation.ExecutionKey {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// recordClose records this execution's close (once, however often it is
+// retried), before the close is made, so a reopen can be recognised.
+func (s *Service) recordClose(ctx context.Context, p *prCall, sig, evidence string) error {
+	key := p.req.Invocation.ExecutionKey
+	closes, err := s.deps.Store.ListPipelineAttempts(ctx, core.PipelineAttemptSubjectPR, p.rec.ID, core.PipelineAttemptClose)
+	if err != nil {
+		return err
+	}
+	if byExecution(closes, key) != nil {
+		return nil
+	}
+	detail := attemptDetail{Kind: attemptClose, ExecutionKey: key, Evidence: map[string]any{"text": evidence}}
+	a, err := s.deps.Store.NextPipelineAttempt(ctx, core.PipelineAttempt{
+		OrgID: p.repo.OrgID, ProjectID: p.repo.ProjectID, SubjectKind: core.PipelineAttemptSubjectPR, SubjectID: p.rec.ID,
+		HeadSHA: p.row.StateHeadSHA, Stage: core.PipelineAttemptClose, Signature: sig, RunID: p.as.RunID, DetailJSON: detail.raw(),
+	})
+	if err != nil {
+		return err
+	}
+	_, err = s.deps.Store.FinishPipelineAttempt(ctx, a.ID, core.PipelineAttemptSucceeded, nil)
+	return err
 }
 
 // evidenceText renders pr.close's evidence: text as it is, or pr.next's

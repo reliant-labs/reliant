@@ -457,9 +457,14 @@ func (s *Service) superseded(ctx context.Context, p *prCall, pr PullRequest) (de
 	for _, e := range evidence {
 		cited = append(cited, e.Detail)
 	}
-	return decision{Next: NextClose, Head: p.row.StateHeadSHA,
-		Evidence: map[string]any{"kind": string(got.Kind), "by": got.By, "facts": cited},
-		Reason:   fmt.Sprintf("%s by #%d: %s", got.Kind, got.By, strings.Join(cited, "; "))}, true, nil
+	ev := map[string]any{"kind": string(got.Kind), "by": got.By, "facts": cited}
+	// A person reopened it after the pipeline closed it for this
+	// evidence: never close it again for the same reason.
+	if reopened, err := s.closedBefore(ctx, p, closeSignature(ev)); err != nil || reopened {
+		return decision{}, false, err
+	}
+	return decision{Next: NextClose, Head: p.row.StateHeadSHA, Evidence: ev,
+		Reason: fmt.Sprintf("%s by #%d: %s", got.Kind, got.By, strings.Join(cited, "; "))}, true, nil
 }
 
 // idle answers none, and leaves the row waiting for nothing: in state, with

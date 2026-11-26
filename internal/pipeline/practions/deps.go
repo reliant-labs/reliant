@@ -28,6 +28,7 @@ type Store interface {
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 
 	GetPRPipeline(ctx context.Context, recordID string) (*core.PRPipeline, error)
+	ListOpenPRPipelines(ctx context.Context, repoID string) ([]*core.PRPipeline, error)
 	ResetPRPipelineForHead(ctx context.Context, recordID string, version int64, head string, next core.PRPipelineNext) (*core.PRPipeline, error)
 	TransitionPRPipeline(ctx context.Context, recordID string, version int64, to core.PRPipeline) (*core.PRPipeline, error)
 
@@ -153,6 +154,7 @@ func (s *Service) Handlers() map[string]serveraction.Handler {
 		serveraction.PRPushed:      serveraction.HandlerFunc(s.Pushed),
 		serveraction.PRClose:       serveraction.HandlerFunc(s.Close),
 		serveraction.PRNeedsPerson: serveraction.HandlerFunc(s.NeedsPerson),
+		serveraction.SweepPR:       serveraction.HandlerFunc(s.Sweep),
 	}
 }
 
