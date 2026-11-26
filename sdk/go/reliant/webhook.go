@@ -197,6 +197,13 @@ type WebhookDelivery struct {
 	// Duplicate is true when the delivery was recognised as a retry of one
 	// already received, and started nothing new.
 	Duplicate bool `json:"duplicate"`
+	// ChatID is the chat the run uses, known as soon as the event is accepted;
+	// a duplicate carries the first delivery's. Empty when the event launched
+	// nothing (skipped or failed) and against a server that predates it.
+	ChatID string `json:"chat_id,omitempty"`
+	// RunID is the run, when the server launched it within the request; empty
+	// otherwise, which is the usual case.
+	RunID string `json:"run_id,omitempty"`
 }
 
 // SendOption configures one delivery.

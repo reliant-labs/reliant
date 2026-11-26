@@ -153,7 +153,7 @@ func (h *HooksReceiver) recordHook(ctx context.Context, w http.ResponseWriter, t
 			if err != nil {
 				return err
 			}
-			writeHookAccepted(w, &triggers.AcceptResult{EventID: event.ID, Outcome: event.Outcome, Duplicate: true})
+			writeHookAccepted(w, &triggers.AcceptResult{EventID: event.ID, Outcome: event.Outcome, Duplicate: true, ChatID: triggers.RecordedEventChatID(event)})
 			return nil
 		}
 		if stored.FailureCode == core.TriggerDeliveryCallerNotified {

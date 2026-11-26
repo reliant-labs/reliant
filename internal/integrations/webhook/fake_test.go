@@ -67,6 +67,10 @@ type fakeIntake struct {
 	// stall is a trigger whose Accept waits until its context ends, as a
 	// recording stuck on a saturated database does.
 	stall string
+	// outcome is what Accept records; empty is pending. runID is the run an
+	// accept that launched synchronously reports.
+	outcome core.TriggerEventOutcome
+	runID   string
 }
 
 type acceptedEvent struct {
@@ -90,12 +94,21 @@ func (f *fakeIntake) Accept(ctx context.Context, trigger *core.Trigger, ev trigg
 		f.seen = map[string]bool{}
 	}
 	key := string(ev.Kind) + "|" + ev.DedupeKey
+	outcome := f.outcome
+	if outcome == "" {
+		outcome = core.TriggerEventPending
+	}
+	// Like the real intake: only an event that settled without a run has no chat.
+	chatID := ""
+	if outcome == core.TriggerEventPending {
+		chatID = triggers.EventChatID(ev.Kind, ev.DedupeKey)
+	}
 	if f.seen[key] {
-		return &triggers.AcceptResult{EventID: key, Outcome: core.TriggerEventPending, Duplicate: true}, nil
+		return &triggers.AcceptResult{EventID: key, Outcome: outcome, Duplicate: true, ChatID: chatID, RunID: f.runID}, nil
 	}
 	f.seen[key] = true
 	f.accepted = append(f.accepted, acceptedEvent{TriggerID: trigger.ID, Event: ev, Batch: opts.Batch})
-	return &triggers.AcceptResult{EventID: key, Outcome: core.TriggerEventPending}, nil
+	return &triggers.AcceptResult{EventID: key, Outcome: outcome, ChatID: chatID, RunID: f.runID}, nil
 }
 
 func (f *fakeIntake) triggerIDs() []string {

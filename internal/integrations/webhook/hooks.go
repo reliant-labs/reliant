@@ -152,8 +152,20 @@ func (h *HooksReceiver) serve(w http.ResponseWriter, r *http.Request) {
 	writeHookAccepted(w, res)
 }
 
+// writeHookAccepted answers an accepted delivery. chat_id is the chat the
+// event launches (the same on a duplicate as on the first delivery) and is
+// absent for an event that launched nothing; run_id is present only when the
+// launch completed within the request. Both belong to the caller's own event,
+// which it holds the trigger's credential to fire.
 func writeHookAccepted(w http.ResponseWriter, res *triggers.AcceptResult) {
-	writeHookJSON(w, map[string]any{"event_id": res.EventID, "outcome": res.Outcome, "duplicate": res.Duplicate})
+	body := map[string]any{"event_id": res.EventID, "outcome": res.Outcome, "duplicate": res.Duplicate}
+	if res.ChatID != "" {
+		body["chat_id"] = res.ChatID
+	}
+	if res.RunID != "" {
+		body["run_id"] = res.RunID
+	}
+	writeHookJSON(w, body)
 }
 
 func writeHookJSON(w http.ResponseWriter, body map[string]any) {

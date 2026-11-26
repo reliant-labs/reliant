@@ -318,3 +318,69 @@ func TestHooksOnlyAcceptsPOST(t *testing.T) {
 	env.handler.ServeHTTP(rec, req)
 	assert.Equal(t, http.StatusMethodNotAllowed, rec.Code)
 }
+
+func hookReply(t *testing.T, rec *httptest.ResponseRecorder) map[string]any {
+	t.Helper()
+	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+	var reply map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &reply))
+	return reply
+}
+
+// The reply names the chat the run will use, derived from the same dedupe key
+// the event is recorded under, and leaves run_id out when no launch happened
+// within the request. The existing fields are unchanged.
+func TestHooksReplyCarriesTheChatTheRunUses(t *testing.T) {
+	env := newHooksEnv(t, core.WebhookConfig{}, "")
+	reply := hookReply(t, env.post("/hooks/trig-1/"+hookToken, `{"a":1}`, map[string]string{"Idempotency-Key": "d1"}))
+
+	got := env.intake.all()
+	require.Len(t, got, 1)
+	assert.Equal(t, triggers.EventChatID(core.TriggerEventKindWebhook, got[0].Event.DedupeKey), reply["chat_id"])
+	assert.NotContains(t, reply, "run_id", "the receiver only starts the fire; no run exists yet")
+	assert.Equal(t, "pending", reply["outcome"])
+	assert.Equal(t, false, reply["duplicate"])
+	assert.NotEmpty(t, reply["event_id"])
+	assert.NotContains(t, env.post("/hooks/trig-1/"+hookToken, `{}`, nil).Body.String(), hookToken)
+}
+
+func TestHooksReplyCarriesRunIDWhenTheLaunchWasSynchronous(t *testing.T) {
+	env := newHooksEnv(t, core.WebhookConfig{}, "")
+	env.intake.runID = "run-42"
+	reply := hookReply(t, env.post("/hooks/trig-1/"+hookToken, `{}`, map[string]string{"Idempotency-Key": "d1"}))
+	assert.Equal(t, "run-42", reply["run_id"])
+	assert.NotEmpty(t, reply["chat_id"])
+}
+
+func TestHooksDuplicateDeliveryReturnsTheFirstChatID(t *testing.T) {
+	env := newHooksEnv(t, core.WebhookConfig{}, "")
+	headers := map[string]string{"Idempotency-Key": "same"}
+	first := hookReply(t, env.post("/hooks/trig-1/"+hookToken, `{"a":1}`, headers))
+	again := hookReply(t, env.post("/hooks/trig-1/"+hookToken, `{"a":2}`, headers))
+
+	assert.Equal(t, false, first["duplicate"])
+	assert.Equal(t, true, again["duplicate"])
+	assert.Equal(t, first["event_id"], again["event_id"])
+	require.NotEmpty(t, first["chat_id"])
+	assert.Equal(t, first["chat_id"], again["chat_id"])
+}
+
+func TestHooksReplyHasNoChatIDForAnEventThatLaunchedNothing(t *testing.T) {
+	for _, outcome := range []core.TriggerEventOutcome{core.TriggerEventSkipped, core.TriggerEventFailed} {
+		t.Run(string(outcome), func(t *testing.T) {
+			env := newHooksEnv(t, core.WebhookConfig{}, "")
+			env.intake.outcome = outcome
+			headers := map[string]string{"Idempotency-Key": "k"}
+			for _, rec := range []*httptest.ResponseRecorder{
+				env.post("/hooks/trig-1/"+hookToken, `{}`, headers),
+				env.post("/hooks/trig-1/"+hookToken, `{}`, headers),
+			} {
+				reply := hookReply(t, rec)
+				assert.Equal(t, string(outcome), reply["outcome"])
+				assert.NotContains(t, reply, "chat_id")
+				assert.NotContains(t, reply, "run_id")
+				assert.NotEmpty(t, reply["event_id"])
+			}
+		})
+	}
+}
