@@ -40,7 +40,7 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestNewReconciler(t *testing.T) {
-	reconciler := New(Deps{Store: nil, Questions: nil, Temporal: nil, Config: nil})
+	reconciler := New(Deps{Store: nil, RunEvents: nil, Questions: nil, Temporal: nil, Config: nil})
 	assert.NotNil(t, reconciler)
 	assert.Equal(t, 30*time.Second, reconciler.pollInterval)
 }
@@ -49,7 +49,7 @@ func TestNewReconcilerWithCustomConfig(t *testing.T) {
 	config := &ReconcilerConfig{
 		PollInterval: 10 * time.Second,
 	}
-	reconciler := New(Deps{Store: nil, Questions: nil, Temporal: nil, Config: config})
+	reconciler := New(Deps{Store: nil, RunEvents: nil, Questions: nil, Temporal: nil, Config: config})
 	assert.NotNil(t, reconciler)
 	assert.Equal(t, 10*time.Second, reconciler.pollInterval)
 }
