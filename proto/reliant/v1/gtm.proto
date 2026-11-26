@@ -564,7 +564,7 @@ message GtmRevisionConflict {
 // ---------------------------------------------------------------------------
 
 message GetGtmAccessRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
 }
 
 message GetGtmAccessResponse {
@@ -576,7 +576,7 @@ message GetGtmAccessResponse {
 // ---------------------------------------------------------------------------
 
 message ListIdeasRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   optional GtmIdeaKind kind = 2;
   optional GtmIdeaStatus status = 3;
   optional string campaign_id = 4;
@@ -596,8 +596,8 @@ message ListIdeasResponse {
 }
 
 message GetIdeaRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
-  string id = 2 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
 }
 
 message GetIdeaResponse {
@@ -605,7 +605,7 @@ message GetIdeaResponse {
 }
 
 message CreateIdeaRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   GtmIdeaKind kind = 2 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
@@ -627,8 +627,8 @@ message CreateIdeaResponse {
 }
 
 message UpdateIdeaRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
-  string id = 2 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
   // The revision the caller read.
   int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
   optional GtmIdeaKind kind = 4 [(buf.validate.field).enum = {
@@ -651,8 +651,8 @@ message UpdateIdeaResponse {
 }
 
 message SetIdeaStatusRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
-  string id = 2 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
   int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
   GtmIdeaStatus status = 4 [(buf.validate.field).enum = {
     defined_only: true
@@ -669,7 +669,7 @@ message SetIdeaStatusResponse {
 // ---------------------------------------------------------------------------
 
 message ListCampaignsRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   optional GtmCampaignStatus status = 2;
   // page_size is at most 200; 0 is 50.
   int32 page_size = 3 [(buf.validate.field).int32 = {
@@ -685,8 +685,8 @@ message ListCampaignsResponse {
 }
 
 message GetCampaignRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
-  string id = 2 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
 }
 
 message GetCampaignResponse {
@@ -699,7 +699,7 @@ message GetCampaignResponse {
 }
 
 message CreateCampaignRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   string name = 2 [(buf.validate.field).string = {
     min_len: 1
     max_len: 200
@@ -719,8 +719,8 @@ message CreateCampaignResponse {
 }
 
 message UpdateCampaignRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
-  string id = 2 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
   int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
   optional string name = 4 [(buf.validate.field).string = {
     min_len: 1
@@ -747,7 +747,7 @@ message UpdateCampaignResponse {
 // ---------------------------------------------------------------------------
 
 message ListItemsRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   optional string campaign_id = 2;
   optional GtmItemKind kind = 3;
   optional GtmItemStatus status = 4;
@@ -769,8 +769,8 @@ message ListItemsResponse {
 }
 
 message GetItemRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
-  string id = 2 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
 }
 
 message GetItemResponse {
@@ -778,7 +778,7 @@ message GetItemResponse {
 }
 
 message CreateItemRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   GtmItemKind kind = 2 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
@@ -809,8 +809,8 @@ message GtmEmailRecipients {
 }
 
 message UpdateItemRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
-  string id = 2 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
+  string id = 2 [(buf.validate.field).required = true];
   int32 expected_revision = 3 [(buf.validate.field).int32.gt = 0];
   optional GtmItemKind kind = 4 [(buf.validate.field).enum = {
     defined_only: true
@@ -848,7 +848,7 @@ message UpdateItemResponse {
 // ---------------------------------------------------------------------------
 
 message GetPositioningRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
 }
 
 message GetPositioningResponse {
@@ -856,7 +856,7 @@ message GetPositioningResponse {
 }
 
 message UpdatePositioningRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   // The revision the caller read; 0 when the org has none yet.
   int32 expected_revision = 2 [(buf.validate.field).int32.gte = 0];
   string positioning_md = 3;
@@ -872,7 +872,7 @@ message UpdatePositioningResponse {
 // ---------------------------------------------------------------------------
 
 message ListClaimsRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   optional GtmClaimStatus status = 2;
   optional GtmClaimCategory category = 3;
   // Matches claims whose text contains it (case-insensitive).
@@ -891,7 +891,7 @@ message ListClaimsResponse {
 }
 
 message UpsertClaimRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   // Empty: create a claim (text and category required). Set: change that
   // claim (expected_revision required; text and category must be unset or
   // equal to the stored ones).
@@ -926,7 +926,7 @@ message UpsertClaimResponse {
 }
 
 message CheckClaimsRequest {
-  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  string org_id = 1 [(buf.validate.field).required = true];
   // The text to check, markdown (an item's title and body).
   string text = 2 [(buf.validate.field).string.max_len = 200000];
 }
