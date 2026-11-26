@@ -190,7 +190,7 @@ func (s *Service) isLiveSubAgentOfRun(ctx context.Context, chat *db.Chat, thread
 		if *wf.ParentID == workflowID {
 			return true, nil
 		}
-		wf, err = s.deps.Repo.GetWorkflow(ctx, *wf.ParentID)
+		wf, err = s.deps.Workflows.LoadWorkflow(ctx, *wf.ParentID)
 	}
 	return false, nil
 }

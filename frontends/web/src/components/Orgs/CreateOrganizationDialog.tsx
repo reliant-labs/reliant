@@ -18,8 +18,9 @@ const MAX_NAME = 80;
  * to it at once (a view choice, like the switcher; the server-side default
  * moves only when the person had none).
  *
- * Then a next step in the same dialog: a new org hosts one static site free,
- * and anything more (a backend, a second site) waits on app hosting billing,
+ * Then a next step in the same dialog: free static hosting stays with the
+ * person's one free hosting org, so in a new org a backend or a static site
+ * waits on app hosting billing,
  * so the dialog offers it now rather than at the first queued deploy. It
  * never blocks: "Not now" closes, and the org exists either way. Inviting
  * people stays in Settings › Members (the closing toast says so).
@@ -81,7 +82,7 @@ export function CreateOrganizationDialog({ open, onClose }: { open: boolean; onC
         open={open}
         onClose={notNow}
         title={`Created ${created.name}`}
-        description="Next: set up app hosting billing, so this organization can host backends and more than the free static site."
+        description="Next: set up app hosting billing, so this organization can host backends and static sites. Free static hosting stays with your one free hosting organization."
         size="md"
         footer={
           <>

@@ -142,7 +142,7 @@ func TestResumePausedForMachine_UserPausedChatStaysPaused(t *testing.T) {
 	assert.False(t, ok)
 	assert.Zero(t, f.pause.resumeCount())
 	assert.Zero(t, f.systemNotes(t))
-	wf, err := f.repo.GetWorkflow(f.ctx, f.chatID)
+	wf, err := store.LoadWorkflow(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Paused(), wf.Status)
 }

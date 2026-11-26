@@ -1,8 +1,8 @@
 ---
 title: "Limits: what Reliant hosting does and does not do"
 sidebarTitle: "Limits"
-description: "Every limit in one place: the no-account claimable deploy (72 hours, one service, 125m CPU), the free static site (1 GiB), what needs billing, no autoscaling, no hosted cron, one region (us-central1), Next.js static export only, and telemetry retention."
-keywords: ["reliant hosting limits", "forge claimable limits", "free static site limits", "reliant hosting region", "autoscaling", "telemetry retention", "next.js static export"]
+description: "Every limit in one place: the no-account claimable deploy (72 hours, one service, 125m CPU), free static hosting (any number of sites in one organization per person, 1 GiB each, 10 GiB in total), what needs billing, no hosted cron, deploying a Next.js app, and telemetry retention."
+keywords: ["reliant hosting limits", "forge claimable limits", "free static site limits", "telemetry retention", "next.js static export"]
 ---
 
 This page gathers the limits of [Reliant hosting](/hosting/overview) and of a no-account `--claimable` deploy in one place, so you can decide before you build whether your app fits. Each section points at the page that explains the behavior in depth. If a number here disagrees with what a deploy prints, trust the deploy: the numbers come from the platform's own plan definitions, and `forge env deploy <env> --plan-only` and `forge env shape <env>` print the ones that apply to your environment.
@@ -37,18 +37,20 @@ The 72-hour clock starts with the first attempt, not the first success. `forge e
 
 ## The free plan
 
-An organization with no hosting billing can publish static sites for free, with these limits ([billing details](/hosting/overview#billing)):
+Each person's free hosting organization (one per person, see below) can publish static sites for free with no hosting billing, with these limits ([billing details](/hosting/overview#billing)):
 
 | Limit | Value |
 |---|---|
-| Static sites | **One per person**, counted across every environment of every organization that person owns without app hosting billing. Each environment's site counts, so with `staging` and `prod` both bound to hosting, one of them deploys free |
-| Storage | **1 GiB** per site. A release is kept three times (live, its archive, the previous release), so a release of about 340 MiB or less fits |
+| Organizations | **One per person**: one organization its founder owns, their personal organization by default, movable once every 30 days. Static sites in their other organizations without app hosting billing are queued |
+| Static sites | **No limit** on the number of sites in that organization. Each environment's site is a site of its own, so `staging` and `prod` both deploy free |
+| Storage | **1 GiB** per site and **10 GiB** in total across the organization's sites, retained releases included. A release is kept three times (live, its archive, the previous release), so a release of about 340 MiB or less fits a site |
 | Traffic | **10 GiB** per calendar month (UTC) for the organization. The owner is told at 80% and 100%, and past the limit the site answers `429` until the month rolls over |
 | Static headers | A site can add response headers with a `_headers` file, but not `Cache-Control`, `Set-Cookie`, `Strict-Transport-Security` or `Content-Type`: the platform owns those |
+| Static redirects | A `_redirects` file declares at most **1,000** rules, **2,048** characters per line and **64 KiB** per file. Statuses 301, 302, 307 and 308 only, with exact paths or a trailing `/*` and `:splat`. No rewrites (`200`), proxying or conditions. A line the platform cannot follow fails the deploy and is named in the error. An unclaimed site may redirect only within its own hostname |
 
 ## What needs billing
 
-Everything that runs a process or a database needs [app hosting billing](/hosting/overview#billing), a pay-as-you-go agreement an organization owner or admin authorizes under **Settings → Billing**. That covers any hosted service, worker, job or managed Postgres, and a second static site. Until billing is on, such a deploy is **queued, not refused**: forge builds and records the release, holds it, and exits with code **7**, printing a billing link. Nothing needs re-running once billing is on.
+Everything that runs a process or a database needs [app hosting billing](/hosting/overview#billing), a pay-as-you-go agreement an organization owner or admin authorizes under **Settings → Billing**. That covers any hosted service, worker, job or managed Postgres, and static sites in any organization other than your free hosting one. Until billing is on, such a deploy is **queued, not refused**: forge builds and records the release, holds it, and exits with code **7**, printing a billing link. Nothing needs re-running once billing is on.
 
 Hosted workloads are held to a fixed shape: 4 GiB of memory per vCPU, in 125m steps (125m with 512 MiB, 250m with 1 GiB, 500m with 2 GiB). One deploy may ask for at most 2,000m of CPU, 8 GiB of memory and 50 GiB of storage in total, summed over every workload and replica. A deploy over that is refused, not queued. [Inside Reliant hosting](/deep-dives/inside-reliant-hosting#capacity-shape-and-the-limits-block) explains why.
 
@@ -58,9 +60,7 @@ Observability has its own allowance: 10 GiB of ingestion per organization per mo
 
 | Not available | What to do instead |
 |---|---|
-| **Autoscaling.** A workload runs the `replicas` you declare and a database the `instances` you declare. Nothing scales on load | Set the replica count for your peak, or bind that workload to a cluster you operate |
 | **Hosted cron-kind workloads.** A `kind = "cron"` workload fails the render on hosted, because scheduled pods are not metered yet | A worker that runs its own schedule (`forge scaffold worker <name> --kind cron`) is an ordinary worker and does run hosted |
-| **More than one region.** Every hosted workload, database and site origin runs in GCP `us-central1`, with no region choice and no multi-region failover. Only the static CDN edge is global | Expect added latency for users far from the central US on anything the CDN cannot cache. To run elsewhere, bind a workload or database to a cluster you operate |
 | **Operators, CRDs and RBAC.** There is no Kubernetes API access on shared machines | Bind that workload to your own cluster and keep the rest hosted |
 | **Sidecars, volumes and pod-level overrides.** The platform builds the pod itself | Same |
 | **Outbound traffic other than TCP 80 and 443** to public addresses. SMTP, an external Postgres or Redis and any other port are unreachable from a hosted workload | Use a provider's HTTPS API, or run that workload on your own cluster |
@@ -69,7 +69,7 @@ Observability has its own allowance: 10 GiB of ingestion per organization per mo
 
 The full list, with the reason for each, is in [What hosting does not run](/hosting/overview#what-hosting-does-not-run) and [Inside Reliant hosting](/deep-dives/inside-reliant-hosting#limits-and-what-it-does-not-do).
 
-## Next.js: static export only
+## Deploying a Next.js app
 
 A hosted frontend is served as plain files from a CDN, so a Next.js app must build as a **static export** (`output: "export"`, into `out/`). That rules out anything that needs a server at request time: a dynamic `[slug]` route without `generateStaticParams()`, server actions, middleware, `cookies()` and `headers()`, a route handler that answers dynamically, and `next/image` without `unoptimized`. `forge lint --static-export` names each one with its file and line, and `npm run build` is the authority.
 
@@ -98,7 +98,7 @@ These are the numbers an app's operator usually asks about, and where a value is
 | Limit | Value |
 |---|---|
 | Build time | A build run by the platform's build service is stopped after **15 minutes** (900 seconds). `forge env deploy` builds on your machine by default, so this applies only to platform builds, and a claimable deploy refuses remote builds entirely |
-| Static release size | One release may be at most **5 GiB** as pushed on a paid plan (raised by support, with a platform ceiling of 20 GiB); the free tier's per-site guard is 1 GiB |
+| Static release size | One release may be at most **5 GiB** as pushed on a paid plan (raised by support, with a platform ceiling of 20 GiB); the free tier's per-site guard is 1 GiB, with 10 GiB stored across the organization's free sites |
 | Image pull | Hosted workloads pull only from Reliant's registry. forge copies a third-party image into it by digest when a release is cut |
 | Request timeout and request body size for a hosted service | **Not declared as a published limit.** Do not build on a particular value, and keep long work out of the request path |
 

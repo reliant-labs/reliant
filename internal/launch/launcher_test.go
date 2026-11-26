@@ -260,7 +260,7 @@ func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 		"a chat with no worktree named must bind to the project's main one, or the sidebar hides it")
 
 	// The chat row committed.
-	persisted, err := repo.GetChat(ctx, chatID)
+	persisted, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, launchTestUserID, persisted.UserID)
 	assert.Equal(t, "builtin://agent", *persisted.WorkflowName)
@@ -269,7 +269,7 @@ func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 
 	// Its root run is ACTIVE: Launch closes the pending window itself once
 	// Temporal has accepted the start.
-	rootRun, err := repo.GetWorkflow(ctx, result.WorkflowID)
+	rootRun, err := store.LoadWorkflow(ctx, repo.ORM(), result.WorkflowID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), rootRun.Status)
 	assert.Equal(t, chatID, rootRun.Thread, "root run: thread == workflow id")
@@ -339,7 +339,7 @@ func TestLaunchHonorsNewChatID(t *testing.T) {
 	assert.Contains(t, starter.startedIDs(), wantID,
 		"the Temporal workflow id must be the supplied chat id, or a retry cannot attach to it")
 
-	_, err = repo.GetChat(ctx, wantID)
+	_, err = store.GetChat(ctx, repo.ORM(), wantID)
 	require.NoError(t, err, "the chat must be persisted under the supplied id")
 }
 
@@ -598,7 +598,7 @@ func TestLaunchRecordsEventStartsWithUseExistingAndActivatesRoot(t *testing.T) {
 	call, _ := starter.rootRun(t)
 	assert.Equal(t, enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING, call.options.WorkflowIDConflictPolicy)
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 }
@@ -630,7 +630,7 @@ func TestLaunchStartsPendingBranchAndRefusesASecondStart(t *testing.T) {
 	assert.Equal(t, "continue on the branch", messageText(t, ctx, repo, messages[0].ID))
 	assert.Equal(t, result.EventID, eventsFor(t, ctx, repo, chatID).ID)
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 
@@ -665,10 +665,10 @@ func TestLaunchPendingSwitchesWorkflowAndRejectsForeignProject(t *testing.T) {
 		Params: mockModelParams(t), Messages: userSeed("hi"),
 	})
 	require.NoError(t, err)
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin://structured-agent", *chat.WorkflowName)
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "builtin://structured-agent", root.WorkflowName)
 }
@@ -691,7 +691,7 @@ func TestLaunchResumesAfterTemporalStartFailure(t *testing.T) {
 	_, err := launcher.Launch(ctx, ev, spec)
 	require.ErrorIs(t, err, ErrInternal)
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Pending(), root.Status, "a failed start leaves the chat pending, never half-active")
 
@@ -699,7 +699,7 @@ func TestLaunchResumesAfterTemporalStartFailure(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, chatID, result.Chat.ID)
 
-	root, err = repo.GetWorkflow(ctx, chatID)
+	root, err = store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 
@@ -846,7 +846,7 @@ func TestLaunchPinsSpecDaemonOnNewChat(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, "daemon-pinned", *chat.ActiveDaemonID)
@@ -866,7 +866,7 @@ func TestLaunchWithoutSpecDaemonLeavesChatUnpinned(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 	_, input := starter.rootRun(t)
@@ -885,7 +885,7 @@ func TestLaunchPinsSpecDaemonOnPendingChat(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, "daemon-pinned", *chat.ActiveDaemonID)
@@ -943,7 +943,7 @@ func TestConcurrentLaunchesOfTheSameEventConvergeOnOneChat(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, messages, 1, "the seed message must be saved exactly once")
 
-	root, err := repo.GetWorkflow(ctx, chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), root.Status)
 }
@@ -966,7 +966,7 @@ func TestLaunchGuardDeclinesWithoutWritingAnything(t *testing.T) {
 	require.ErrorAs(t, err, &declined)
 	assert.Equal(t, "previous run is running", declined.Reason)
 
-	_, err = repo.GetChat(ctx, chatID)
+	_, err = store.GetChat(ctx, repo.ORM(), chatID)
 	assert.Error(t, err, "a declined launch must not create the chat")
 	_, err = repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, ev.DedupeKey)
 	assert.ErrorIs(t, err, core.ErrTriggerEventNotFound, "a declined launch must not write an event row")

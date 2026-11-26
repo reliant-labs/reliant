@@ -73,6 +73,9 @@ var demoBuildInputs = []string{
 // CI's "forge generate is a no-op" job checks the whole tree regardless.
 var forgeInputs = []string{
 	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml",
+	// The Forge Changes declaration: forge generate writes its typed
+	// accessors (internal/changes/changes_gen.go, frontends/web/src/lib/changes_gen.ts).
+	"changes.yaml",
 	"proto/**", "db/**",
 	"**/contract.go", "**/doc.go", "internal/handlers/**",
 	// The composition root: forge reads compose.go and the providers into
@@ -307,6 +310,15 @@ var rules = []rule{
 		},
 		full:   []lane{laneForgeGen},
 		reason: "buf's generation configuration changed: the generated code must match it",
+	},
+	{
+		// changes.yaml (Forge Changes) reaches code only through the typed
+		// accessors forge generates from it, which the diff carries (or the
+		// forge-generate lane fails), exactly like buf's configuration above.
+		id:       "changes-declaration",
+		patterns: []string{"changes.yaml"},
+		full:     []lane{laneForgeGen},
+		reason:   "the Forge Changes declaration changed: its generated accessors must match it",
 	},
 	{
 		// The Taskfile is what the codegen lanes run: `task generate:forge`

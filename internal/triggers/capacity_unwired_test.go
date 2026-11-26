@@ -54,6 +54,16 @@ func (unwiredCapacity) TriggerCapacityStartFenced(context.Context, store.Trigger
 	return false, errCapacityUnwired
 }
 
+func (unwiredCapacity) ListTriggerCapacityKeyRuns(context.Context, store.TriggerCapacityScope, string, int64) ([]store.TriggerCapacityKeyRun, error) {
+	return nil, errCapacityUnwired
+}
+func (unwiredCapacity) MarkTriggerCapacityRunSuperseded(context.Context, string, string) (bool, error) {
+	return false, errCapacityUnwired
+}
+func (unwiredCapacity) SettleSupersededTriggerCapacityRun(context.Context, string) error {
+	return errCapacityUnwired
+}
+
 // Expiry is the one quiet method: a redrive pass over a fake with no capacity rows has nothing to expire.
 func (unwiredCapacity) ExpirePendingTriggerCapacityEvents(context.Context, time.Time, string, int) ([]*core.TriggerEvent, error) {
 	return nil, nil

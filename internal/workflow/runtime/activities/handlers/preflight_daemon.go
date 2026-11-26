@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatviews"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -106,6 +107,28 @@ func (a *PreflightDaemonCheckActivity) Category() schema.ActivityCategory {
 	return schema.CategoryUtility
 }
 
+// PreflightDaemonCheckFailedErrType is the Temporal error type of every
+// verdict PreflightDaemonCheck reaches itself (preflightVerdict). Each is
+// non-retryable.
+const PreflightDaemonCheckFailedErrType = "PreflightDaemonCheckFailed"
+
+// preflightVerdict marks a failure the check decided — the machine is gone,
+// its wake was refused, it never came up, or this worker cannot route to
+// daemons at all — as non-retryable.
+//
+// The workflow dispatches the check with a short retry ladder, so that one
+// lost heartbeat (a worker restarting mid-slice) does not fail the user's run
+// (obs 5a36f26f, "[Workflow Runtime] TimeoutError"). A verdict must not ride
+// that ladder: retried, it is the same error card three times, and terminal
+// has already queued the message for the machine. Every other failure — a
+// read of the chat or project that failed, a database that did not answer —
+// is left to classifyError, as every activity's is: a database outage stays
+// retryable, a missing row is terminal.
+func preflightVerdict(err error) error {
+	return temporal.NewApplicationErrorWithOptions(err.Error(), PreflightDaemonCheckFailedErrType,
+		temporal.ApplicationErrorOptions{NonRetryable: true, Cause: err})
+}
+
 func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
 	// Resolve the user ID from the chat
 	chat, err := chatviews.Of(a.repo).GetChat(ctx, input.ChatID)
@@ -141,7 +164,7 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 
 	router := remoteExec.DaemonRouter()
 	if router == nil {
-		return PreflightDaemonCheckOutput{}, fmt.Errorf("daemon router not configured")
+		return PreflightDaemonCheckOutput{}, preflightVerdict(errors.New("daemon router not configured"))
 	}
 
 	// Only an unattended run — one a stored trigger launched, of any kind — may
@@ -266,14 +289,14 @@ func (a *PreflightDaemonCheckActivity) sliceEnd(ctx, exitCtx context.Context, ro
 func (a *PreflightDaemonCheckActivity) terminal(ctx context.Context, chatID string, selector *toolexec.DaemonSelector, attended bool, cause error) (PreflightDaemonCheckOutput, error) {
 	a.setBlocked(ctx, chatID, false)
 	if !attended {
-		return PreflightDaemonCheckOutput{}, cause
+		return PreflightDaemonCheckOutput{}, preflightVerdict(cause)
 	}
 	if _, err := a.repo.QueueChatForMachine(ctx, chatID, queuedMachine(selector)); err != nil {
 		logging.ErrorContext(ctx, "[PreflightDaemonCheck] Failed to queue the message for the machine; the user will have to send it again",
 			"chatID", chatID, "error", err)
-		return PreflightDaemonCheckOutput{}, cause
+		return PreflightDaemonCheckOutput{}, preflightVerdict(cause)
 	}
-	return PreflightDaemonCheckOutput{}, keepClass(cause, fmt.Errorf("%s. %s", strings.TrimRight(cause.Error(), ". "), queuedForMachineNote))
+	return PreflightDaemonCheckOutput{}, preflightVerdict(keepClass(cause, fmt.Errorf("%s. %s", strings.TrimRight(cause.Error(), ". "), queuedForMachineNote)))
 }
 
 // keepClass gives the message terminal builds from cause cause's class when

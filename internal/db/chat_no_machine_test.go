@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,14 +28,14 @@ func TestUpdateChatActiveDaemon_PinningEndsNoMachineAndClearingNeverRestoresIt(t
 
 	daemonID := "daemon-nm-pin"
 	require.NoError(t, repo.UpdateChatActiveDaemon(ctx, "nm-pin", &daemonID))
-	chat, err := repo.GetChat(ctx, "nm-pin")
+	chat, err := store.GetChat(ctx, repo.ORM(), "nm-pin")
 	require.NoError(t, err)
 	assert.False(t, chat.NoMachine, "pinning a daemon puts the chat on a machine")
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, daemonID, *chat.ActiveDaemonID)
 
 	require.NoError(t, repo.UpdateChatActiveDaemon(ctx, "nm-pin", nil))
-	chat, err = repo.GetChat(ctx, "nm-pin")
+	chat, err = store.GetChat(ctx, repo.ORM(), "nm-pin")
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 	assert.False(t, chat.NoMachine, "a chat that has had a machine never becomes one without")
@@ -54,7 +55,7 @@ func TestUpdateChatActiveDaemon_ClearingLeavesNoMachineAlone(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NoError(t, repo.UpdateChatActiveDaemon(ctx, "nm-clear", nil))
-	chat, err := repo.GetChat(ctx, "nm-clear")
+	chat, err := store.GetChat(ctx, repo.ORM(), "nm-clear")
 	require.NoError(t, err)
 	assert.True(t, chat.NoMachine)
 }

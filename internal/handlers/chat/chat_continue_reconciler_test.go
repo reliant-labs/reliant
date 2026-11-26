@@ -111,7 +111,7 @@ func TestReconciler_RunEndedByOthers_StartsTheRunThatAnswersTheMessage_Once(t *t
 	runsStarted := f.temporal.runsStarted()
 	require.Len(t, runsStarted, 1, "the user's unanswered message gets its run without being sent again")
 	assert.NotNil(t, runsStarted[0].input.Resume, "it continues from the checkpoint")
-	wf, err := f.repo.GetWorkflow(f.ctx, f.chatID)
+	wf, err := store.LoadWorkflow(f.ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Active(), wf.Status)
 	assert.Contains(t, f.systemNotes(t), "Recovered from an internal error; continuing from your last message.")

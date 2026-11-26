@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
@@ -37,7 +38,7 @@ func TestInterruptedStream_CancelsItsInFlightToolCalls(t *testing.T) {
 	repo := f.h.Repo()
 	ctx := context.Background()
 
-	activityInstance := &CallLLMActivity{repo: repo}
+	activityInstance := &CallLLMActivity{repo: tools.WithChats(repo)}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	// The provider opens a tool call. Input is still empty at tool_use_start,
@@ -79,7 +80,7 @@ func TestInterruptedStream_DoesNotCancelCallsThatCompleted(t *testing.T) {
 	repo := f.h.Repo()
 	ctx := context.Background()
 
-	activityInstance := &CallLLMActivity{repo: repo}
+	activityInstance := &CallLLMActivity{repo: tools.WithChats(repo)}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	const finishedID = "toolu_finished_before_pause"
@@ -129,7 +130,7 @@ func TestInterruptedStream_RespectsAnAlreadyTerminalRow(t *testing.T) {
 	repo := f.h.Repo()
 	ctx := context.Background()
 
-	activityInstance := &CallLLMActivity{repo: repo}
+	activityInstance := &CallLLMActivity{repo: tools.WithChats(repo)}
 	state := &streamProcessingState{blockStates: NewBlockStreamState()}
 
 	const callID = "toolu_completed_in_the_race_window"

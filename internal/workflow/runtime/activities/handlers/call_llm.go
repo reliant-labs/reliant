@@ -514,7 +514,7 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	// driver can be resolved on workers that didn't see the originating gRPC
 	// request. The JWT travels through workflow inputs; see RuntimeContext.
 	if rtx.UserJWT != "" {
-		auth.SetUserJWT(chat.UserID, rtx.UserJWT)
+		auth.OfferUserJWT(chat.UserID, rtx.UserJWT)
 	}
 
 	// Deliver anything queued in this thread's mailbox BEFORE reading history,

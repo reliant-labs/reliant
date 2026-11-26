@@ -12,7 +12,9 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/chataccess"
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/questions"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -131,7 +133,7 @@ func ormOf(repo any) *orm.Client {
 func init() {
 	fixtureQuestionResolver = func(repo Repository) QuestionResolver {
 		if client := ormOf(repo); client != nil {
-			return questions.New(store.NewQuestionExtStore(client), activityOf(repo))
+			return questions.New(store.NewQuestionExtStore(client), activityOf(repo), updatesOf(repo))
 		}
 		return &MockQuestionResolver{}
 	}
@@ -147,4 +149,16 @@ func activityOf(repo any) questions.ChatActivity {
 		return a
 	}
 	return noActivity{}
+}
+
+type noUpdates struct{}
+
+func (noUpdates) EmitQuestionUpdate(context.Context, string, core.QuestionUpdate) error { return nil }
+
+// updatesOf is the repository's chat-update writer, or none.
+func updatesOf(repo any) questions.Updates {
+	if r, ok := repo.(interface{ UpdateWriter() chatupdates.Service }); ok {
+		return r.UpdateWriter()
+	}
+	return noUpdates{}
 }

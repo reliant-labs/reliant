@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // seedChatForRun creates the chat a run hangs off, and returns its id.
@@ -56,7 +58,7 @@ func TestWorkflowOwnerUserID_RoundTrips(t *testing.T) {
 		OwnerUserID:  &owner,
 	}))
 
-	got, err := repo.GetWorkflow(ctx, runID)
+	got, err := store.LoadWorkflow(ctx, repo.ORM(), runID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.NotNil(t, got.OwnerUserID, "the run lost its owner on the way through the store")
@@ -89,7 +91,7 @@ func TestWorkflowOwnerUserID_NilIsAllowed(t *testing.T) {
 		// OwnerUserID deliberately unset.
 	}))
 
-	got, err := repo.GetWorkflow(ctx, runID)
+	got, err := store.LoadWorkflow(ctx, repo.ORM(), runID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Nil(t, got.OwnerUserID, "an unset owner must read back as nil, not empty-string")

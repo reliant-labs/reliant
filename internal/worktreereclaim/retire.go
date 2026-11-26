@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -109,6 +110,75 @@ func (r *Reclaimer) lastOwnWrite(id string) (time.Time, bool) {
 	return time.Unix(0, ns), true
 }
 
+// ownMovePath records, per row, the workspace directory's mtime as this
+// reclaimer's own last `git worktree move` in or out of it left it:
+// <root>/.reclaim/<id>.moved.
+func (r *Reclaimer) ownMovePath(id string) string {
+	return filepath.Join(r.Root, ".reclaim", id+".moved")
+}
+
+// recordOwnMove notes the workspace directory's mtime right after this
+// reclaimer moved one of its checkouts out (parking) or back (a rollback).
+// A rollback is routine: one checkout parks, another fails a check, and the
+// first comes home. The two renames move the workspace directory's mtime past
+// the archive, and every later pass held the row as used after its archive,
+// for good, on that alone (2026-11-25: ~50 archived rows on one machine whose
+// checkouts were untouched since before their archive).
+//
+// What is recorded is the exact mtime, not a time to forgive changes before:
+// any later entry made or removed at the workspace root moves the mtime again,
+// so it still counts, and nothing in a checkout is ever discounted.
+func (r *Reclaimer) recordOwnMove(w Worktree) {
+	if r.Root == "" || w.ID == "" || w.Path == "" {
+		return
+	}
+	fi, err := os.Lstat(w.Path)
+	if err != nil {
+		return
+	}
+	p := r.ownMovePath(w.ID)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return
+	}
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, []byte(strconv.FormatInt(fi.ModTime().UnixNano(), 10)+"\n"+filepath.Clean(w.Path)), 0o600); err != nil {
+		return
+	}
+	_ = os.Rename(tmp, p)
+}
+
+// workspaceMtimeIsOwn reports whether w's workspace directory still has the
+// mtime this reclaimer's own last move left it with.
+func (r *Reclaimer) workspaceMtimeIsOwn(w Worktree) bool {
+	if r.Root == "" || w.ID == "" || w.Path == "" {
+		return false
+	}
+	b, err := os.ReadFile(r.ownMovePath(w.ID))
+	if err != nil {
+		return false
+	}
+	stamp, path, ok := strings.Cut(string(b), "\n")
+	if !ok || path != filepath.Clean(w.Path) {
+		return false
+	}
+	ns, err := strconv.ParseInt(stamp, 10, 64)
+	if err != nil {
+		return false
+	}
+	fi, err := os.Lstat(w.Path)
+	return err == nil && fi.ModTime().UnixNano() == ns
+}
+
+// useSince is idleSince for w's workspace, without the workspace directory's
+// own mtime while that is what this reclaimer's last move left (recordOwnMove).
+func (r *Reclaimer) useSince(ctx context.Context, w Worktree, checkouts []string) (time.Time, error) {
+	path := w.Path
+	if r.workspaceMtimeIsOwn(w) {
+		path = ""
+	}
+	return idleSince(ctx, path, checkouts)
+}
+
 // usedAfterArchive is the hold for a checkout something changed after its
 // row was archived: the archive decided on activity the server could see (the
 // chats and threads bound to the row), and this shows use it could not, such
@@ -157,6 +227,18 @@ type parkedCheckout struct {
 	gitState               retirementGitState
 }
 
+// admissionRefused is the hold detail for a refused admission lease: what was
+// refused, and the refusal itself (a process that cannot be inspected, work
+// running in the path, another clean-up's lease). Without the refusal every
+// cause read the same, and a short-lived blocker looked like work stuck in an
+// idle worktree for days.
+func admissionRefused(what string, err error) string {
+	if err == nil {
+		return what
+	}
+	return what + ": " + err.Error()
+}
+
 // retirementAdmission takes the runtime admission lease over the workspace and
 // its quarantine, and returns the check every retirement step re-runs: the
 // lease is still held, and no process uses either path. pin exempts the
@@ -169,7 +251,7 @@ func (r *Reclaimer) retirementAdmission(ctx context.Context, w Worktree) (check 
 	paths := []string{w.Path, r.quarantineRoot(w.ID)}
 	lease, err := r.Acquire(ctx, paths)
 	if err != nil || lease == nil {
-		res := held(w, ReasonInUse, "exclusive runtime admission unavailable")
+		res := held(w, ReasonInUse, admissionRefused("exclusive runtime admission unavailable", err))
 		return nil, nil, nil, &res
 	}
 	var inspectionFiles []*os.File
@@ -218,6 +300,13 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 	rollback := func(reason HeldReason, detail string) Result {
 		restoreCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
+		// Moving a checkout back changes the workspace directory's mtime:
+		// that is this reclaimer, not use after the archive.
+		defer func() {
+			if len(parked) > 0 {
+				r.recordOwnMove(w)
+			}
+		}()
 		for i := len(parked) - 1; i >= 0; i-- {
 			p := parked[i]
 			if _, err := os.Lstat(p.original); !os.IsNotExist(err) {
@@ -303,6 +392,9 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 		moved, identityErr := retirementMatchesPath(original, q)
 		original.close()
 		parked = append(parked, parkedCheckout{original: c, path: q, common: info.CommonDir})
+		// The move out changed the workspace directory's mtime, which a later
+		// pass must not read as use after the archive (recordOwnMove).
+		r.recordOwnMove(w)
 		if identityErr != nil || !moved {
 			return rollback(ReasonUnverified, "checkout changed while parking")
 		}
@@ -360,6 +452,7 @@ func (r *Reclaimer) retireWorkspace(ctx context.Context, w Worktree, checkouts [
 	}
 	_ = os.Remove(r.quarantineRoot(w.ID))
 	_ = os.Remove(r.ownWritePath(w.ID))
+	_ = os.Remove(r.ownMovePath(w.ID))
 	return Result{ID: w.ID, Outcome: OutcomeRemoved, Detail: fmt.Sprintf("retired %d complete checkout(s)", len(parked))}
 }
 
@@ -563,6 +656,7 @@ func (r *Reclaimer) resumeRetirement(ctx context.Context, w Worktree, parked []s
 	}
 	_ = removeEmptyDirs(emptyDirsUnder(w.Path))
 	_ = os.Remove(r.quarantineRoot(w.ID))
+	_ = os.Remove(r.ownMovePath(w.ID))
 	return Result{ID: w.ID, Outcome: OutcomeRemoved, Detail: fmt.Sprintf("resumed an interrupted retirement of %d checkout(s)", len(cos))}
 }
 

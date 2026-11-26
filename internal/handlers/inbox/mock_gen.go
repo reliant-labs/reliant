@@ -292,6 +292,32 @@ func (m *MockFirings) GetLatestTriggerEvent(ctx context.Context, triggerID strin
 // Compile-time check.
 var _ Firings = (*MockFirings)(nil)
 
+// forge:section MockRegistrations
+// forge:hash=9ac52d5a8f5a9818c1deb430c818e0f09bb1788482b6845abc9c74856d98ef45
+
+// MockRegistrations is a test mock for the Registrations interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRegistrations.<Method>Func not set" error.
+type MockRegistrations struct {
+	contractkit.Recorder
+	ListTriggerRegistrationsForUserFunc func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
+}
+
+// ListTriggerRegistrationsForUser records the call and delegates to ListTriggerRegistrationsForUserFunc when set.
+func (m *MockRegistrations) ListTriggerRegistrationsForUser(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
+	m.Recorder.Record("ListTriggerRegistrationsForUser", ctx, userID, triggerIDs)
+	if m.ListTriggerRegistrationsForUserFunc != nil {
+		return m.ListTriggerRegistrationsForUserFunc(ctx, userID, triggerIDs)
+	}
+	return nil, contractkit.MockNotSet("MockRegistrations", "ListTriggerRegistrationsForUser")
+}
+
+// Compile-time check.
+var _ Registrations = (*MockRegistrations)(nil)
+
 // forge:section MockNotices
 // forge:hash=caf7dae38ec664c3b5ca534caed62d6988c9650037a6d156af7a08dc172e025e
 
@@ -527,7 +553,7 @@ func (m *MockDaemonReader) GetDaemon(ctx context.Context, id string) (*db.Daemon
 var _ DaemonReader = (*MockDaemonReader)(nil)
 
 // forge:section MockRepository
-// forge:hash=f3bd672b678f72bd982287ace9b19398cdfc1bf2655ee7e947faf14570c9db50
+// forge:hash=c7b4ce6af384657884750ca8507f75445c32b197669464c467c69c4d594ce737
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -548,7 +574,6 @@ type MockRepository struct {
 	WorkflowSourceDiagnosticFunc       func(context.Context, string, string, string) (string, error)
 	AssignUnassignedOrgFunc            func(context.Context, string, string) error
 	ListTriggersFunc                   func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
-	ListTriggerRegistrationsFunc       func(context.Context, string, []string) (map[string]*core.TriggerRegistration, error)
 	ListDaemonsByUserIDFunc            func(context.Context, string) ([]*db.Daemon, error)
 }
 
@@ -649,15 +674,6 @@ func (m *MockRepository) ListTriggers(ctx context.Context, f core.TriggerFilters
 		return m.ListTriggersFunc(ctx, f)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListTriggers")
-}
-
-// ListTriggerRegistrations records the call and delegates to ListTriggerRegistrationsFunc when set.
-func (m *MockRepository) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
-	m.Recorder.Record("ListTriggerRegistrations", ctx, userID, triggerIDs)
-	if m.ListTriggerRegistrationsFunc != nil {
-		return m.ListTriggerRegistrationsFunc(ctx, userID, triggerIDs)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListTriggerRegistrations")
 }
 
 // ListDaemonsByUserID records the call and delegates to ListDaemonsByUserIDFunc when set.

@@ -6,8 +6,9 @@
  * view state; the stores follow it, and a pick only navigates).
  *
  * - **Fills an empty URL**, with a replace (not a step Back retraces): a bare
- *   chat list or search gets this tab's last scope (`?projects=`, else
- *   `all`), as the desktop's first bare home does (fillScope), and a bare
+ *   chat list or search gets the scope this surface last showed, else this
+ *   tab's scope as the page loaded (seededScope; `?projects=`, else `all`),
+ *   as the desktop's first bare home does (fillScope), and a bare
  *   `/m/new` names the project it opens on (`?project=`), so Back after a
  *   pick returns to it.
  * - **Publishes the URL's scope** as the shell's (shellScopeStore): the chat
@@ -29,8 +30,8 @@ import { mobileChatRouteOf } from "@/lib/chatRoute";
 import { orgFreePath } from "@/lib/paths/org";
 import { mobileChatsPath, mobileNewChatPath, mobileSearchPath } from "@/lib/paths";
 import type { SearchRecord } from "@/lib/urlState/searchParams";
-import { projectsParam, scopeDefault, scopeOfSearch } from "@/lib/urlState/shellScope";
-import { chatScopeOf, fillScope, oneProjectOf, publishShellScope } from "@/lib/urlState/shellScopeStore";
+import { projectsParam, scopeOfSearch, type ShellScope } from "@/lib/urlState/shellScope";
+import { chatScopeOf, fillScope, oneProjectOf, publishShellScope, seededScope } from "@/lib/urlState/shellScopeStore";
 import { useChatStore } from "@/store/chatStore";
 import { useProjectStore } from "@/store/projectStore";
 import { shellScopeSearch } from "../Layout/shellScopeNav";
@@ -58,10 +59,19 @@ export function MobileScopeSync() {
   const listedKey = isLoading ? null : projects.map((p) => p.id).join(",");
   const listed = useMemo(() => (listedKey === null ? undefined : new Set(listedKey.split(",").filter(Boolean))), [listedKey]);
 
-  // An empty URL is filled from what the page shows without it (a replace).
+  // The scope this surface last showed: what a later empty URL is filled from.
+  const shown = useRef<ShellScope | undefined>(undefined);
+
+  // An empty URL is filled from what the page shows without it (a replace):
+  // the scope this surface last showed, else the tab's default as it was when
+  // the page loaded (seededScope), never the live default. A phone's first
+  // frame can be the desktop shell's, whose nav publishes its one project
+  // there before the hand-off to `/m/*`; how long that frame lasts depends
+  // on the reads the hand-off waits for, so reading it raced them.
   useEffect(() => {
     if (SCOPED_SCREENS.has(path) && scopeKey === null) {
-      const filled = fillScope({ tabDefault: scopeDefault.get(), setting: [], listed, contextProjectId: null });
+      const tabDefault = shown.current ?? seededScope().scope;
+      const filled = fillScope({ tabDefault, setting: [], listed, contextProjectId: null });
       if (filled === "wait") return;
       const scope = shellScopeSearch(filled ?? { mode: "all" });
       void navigate({ to: pathname, search: ((prev: SearchRecord) => ({ ...prev, ...scope })) as never, replace: true });
@@ -79,6 +89,7 @@ export function MobileScopeSync() {
   // The URL's scope is the shell's, and this tab's default for an empty URL.
   useEffect(() => {
     const scope = scopeKey === null ? undefined : projectsParam.parse(scopeKey);
+    if (scope) shown.current = scope;
     publishShellScope(scope ? { scope, focus: null } : null);
   }, [scopeKey]);
   useEffect(() => () => publishShellScope(null), []);

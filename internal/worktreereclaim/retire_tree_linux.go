@@ -46,6 +46,11 @@ type retirementTree struct {
 	tracked     map[string]trackedKind
 	head        string
 	trackedRead bool
+	// source is the checkout's source checkout (sourceCheckout), which a
+	// never-listed file may be a copy of (sourceCovers), looked up when the
+	// inventory first meets one.
+	source     string
+	sourceRead bool
 }
 
 // maxRetirementEntries bounds one inventory. A checkout with its installs
@@ -57,6 +62,10 @@ const maxRetirementEntries = 500_000
 
 type retirementEntry struct {
 	stat unix.Stat_t
+	// covered: a never-listed file that does not hold the tree only because
+	// the source checkout holds a copy of it (sourceCovers). remove judges it
+	// again on the file it is about to unlink.
+	covered bool
 }
 
 func retirementOpen(dir int, name string, directory bool) (*os.File, error) {
@@ -96,6 +105,27 @@ func retirementSame(a, b unix.Stat_t) bool {
 }
 func retirementIdentity(a, b unix.Stat_t) bool {
 	return a.Dev == b.Dev && a.Ino == b.Ino && a.Mode == b.Mode
+}
+
+// retirementUnchanged reports whether an inventoried entry (was) is still the
+// same file with the same content (now): retirementSame, except that a file
+// that had other hard links when it was inventoried is not compared on its
+// link count or its ctime. Both belong to the inode, not to this name: every
+// link made or removed anywhere moves them. pnpm hard-links one store file
+// into every node_modules that installs it (one LICENSE file had 679 links on
+// one machine), and content-addressing gives one inode several names inside a
+// single tree, so the tree's own unlink of the first name "changed" the
+// second and every retirement of a checkout with an install stopped at its
+// first shared file (2026-11-25: 20 archive retirements on one machine
+// parked part-way on "entry changed at deletion boundary"). A write to the
+// content still
+// moves its size or mtime, which are compared. A file with one name keeps the
+// full comparison: nothing outside it can move its ctime.
+func retirementUnchanged(was, now unix.Stat_t) bool {
+	if was.Mode&unix.S_IFMT == unix.S_IFREG && was.Nlink > 1 {
+		return retirementIdentity(was, now) && was.Size == now.Size && was.Mtim == now.Mtim
+	}
+	return retirementSame(was, now)
 }
 
 // installRecord is what a package manager wrote into the node_modules it
@@ -394,6 +424,11 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 		if len(children) > maxStripWalk {
 			return errors.New("retirement directory budget exceeded")
 		}
+		// A never-listed directory is judged by what it holds (below); one
+		// that holds nothing is data to the classifier too.
+		if len(children) == 0 && rel != "" && !t.scratch && !inPackage && neverListed(rel) && !t.trackedPath(ctx, rel, st.Mode) {
+			return fmt.Errorf("protected descendant: %s", rel)
+		}
 		if t.installRoot(rel) {
 			r := readInstallRecord(dir)
 			rec = &r
@@ -418,8 +453,18 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 			if err := unix.Fstatat(int(dir.Fd()), name, &s, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 				return err
 			}
+			// A never-listed name holds the tree unless HEAD tracks it or
+			// the source checkout holds a copy of it, judged as the
+			// classifier judges it (sourceCovers): a regular file once it
+			// is open, below, and a directory by its contents, every one of
+			// which is never-listed too.
+			covered := false
 			if !t.scratch && !inPackage && neverListed(path) && !t.trackedPath(ctx, path, s.Mode) {
-				return fmt.Errorf("protected descendant: %s", path)
+				kind := s.Mode & unix.S_IFMT
+				if (kind != unix.S_IFREG && kind != unix.S_IFDIR) || t.sourceCheckout(ctx) == "" {
+					return fmt.Errorf("protected descendant: %s", path)
+				}
+				covered = kind == unix.S_IFREG
 			}
 			if s.Dev != st.Dev {
 				return errors.New("retirement crosses filesystem")
@@ -452,17 +497,20 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 				}
 				var opened unix.Stat_t
 				err = unix.Fstat(int(f.Fd()), &opened)
+				if err == nil && !retirementSame(s, opened) {
+					err = errors.New("file identity changed")
+				}
+				if err == nil && covered && !sourceCovers(t.source, t.path, path, f) {
+					err = fmt.Errorf("protected descendant: %s", path)
+				}
 				f.Close()
 				if err != nil {
 					return err
 				}
-				if !retirementSame(s, opened) {
-					return errors.New("file identity changed")
-				}
 				// A file with other links (pnpm hard-links its store into every
 				// node_modules) loses only this name: unlinkat never frees
 				// content another link still names.
-				entries[path] = retirementEntry{stat: s}
+				entries[path] = retirementEntry{stat: s, covered: covered}
 				if s.Nlink == 1 {
 					bytes += s.Size
 				}
@@ -503,7 +551,8 @@ func (t *retirementTree) inventory(ctx context.Context) (map[string]retirementEn
 // that has one (2026-11-07: 174 of 470 live worktrees on one machine, all of
 // control-plane's and reliant's, so no workspace that contains them could
 // ever be retired). Only HEAD's own paths are exempt: an ignored or
-// untracked file inside a tracked secrets/ is still a protected descendant.
+// untracked file inside a tracked secrets/ is still a protected descendant,
+// unless the source checkout holds a copy of it (sourceCovers).
 // The exemption is tied to the commit it was read from (validate), so a
 // HEAD that moves after inspection holds the tree. A checkout git cannot
 // read exempts nothing. A regenerable subtree never consults it.
@@ -523,6 +572,20 @@ func (t *retirementTree) trackedPath(ctx context.Context, rel string, mode uint3
 	default:
 		return false
 	}
+}
+
+// sourceCheckout is the source checkout of the checkout being inventoried,
+// read once; "" for a regenerable subtree, which is not a checkout, and when
+// there is none.
+func (t *retirementTree) sourceCheckout(ctx context.Context) string {
+	if t.subtree {
+		return ""
+	}
+	if !t.sourceRead {
+		t.sourceRead = true
+		t.source = sourceCheckout(ctx, t.path)
+	}
+	return t.source
 }
 
 // trackedKind is what HEAD's tree holds at a path, for trackedPath.
@@ -622,7 +685,7 @@ func (t *retirementTree) validate(ctx context.Context) error {
 		return errors.New("retirement contents changed")
 	}
 	for p, e := range t.entries {
-		if got, ok := entries[p]; !ok || !retirementSame(e.stat, got.stat) {
+		if got, ok := entries[p]; !ok || !retirementUnchanged(e.stat, got.stat) {
 			return fmt.Errorf("retirement entry changed: %s", p)
 		}
 	}
@@ -675,7 +738,7 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 		err = unix.Fstatat(int(dir.Fd()), base, &st, unix.AT_SYMLINK_NOFOLLOW)
 		isDir := e.stat.Mode&unix.S_IFMT == unix.S_IFDIR
 		isLink := e.stat.Mode&unix.S_IFMT == unix.S_IFLNK
-		if err == nil && ((isDir && !retirementIdentity(e.stat, st)) || (!isDir && !retirementSame(e.stat, st))) {
+		if err == nil && ((isDir && !retirementIdentity(e.stat, st)) || (!isDir && !retirementUnchanged(e.stat, st))) {
 			err = errors.New("entry changed at deletion boundary")
 		}
 		if err == nil && !isLink {
@@ -686,10 +749,15 @@ func (t *retirementTree) remove(ctx context.Context, check func() error) error {
 			} else {
 				var opened unix.Stat_t
 				err = unix.Fstat(int(f.Fd()), &opened)
-				f.Close()
 				if err == nil && !retirementIdentity(st, opened) {
 					err = errors.New("entry replaced while opening")
 				}
+				// The source's copy can change after validate: a file kept
+				// only for it is judged again as it is about to go.
+				if err == nil && e.covered && !sourceCovers(t.source, t.path, p, f) {
+					err = errors.New("source copy changed at deletion boundary")
+				}
+				f.Close()
 			}
 		}
 		if err == nil {

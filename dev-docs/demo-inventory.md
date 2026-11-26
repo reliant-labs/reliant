@@ -89,9 +89,9 @@ and the console's (`/forge/p/shop/…`), renders in the signed-in app's shell
   capabilities. It loads as its own lazy chunk (`Forge/Demo/DemoShellFrame.tsx`), so
   it stays out of the entry chunk.
 - **The nav** is the shell's one nav column (`Layout/sidebar/ShellNavColumn.tsx`) with
-  the demo's config, `Forge/Demo/demoNav.ts`: the app's own items
+  the demo's config, `Forge/Demo/demoNavConfig.ts`: the app's own items
   (`navConfig/items.tsx`) in the app's order, less the app's Inbox, Agents, Settings
-  and billing, plus Home and "How it was built". `demoNav.test.ts` pins it as a subset
+  and billing, plus Home and "How it was built". `demoNavConfig.test.ts` pins it as a subset
   of `hybridNav`, in order. The pages the demo does not serve (`DEMO_HIDDEN_PAGES`)
   are pruned from it (`navConfig/prune.ts`).
 - **The app-only parts** come in through seams the demo leaves empty: the nav body

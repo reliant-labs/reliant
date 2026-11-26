@@ -8,7 +8,9 @@
 //
 // 1. PAGES: loads `/`, the build story and every forge console page by URL. Problems:
 //    - a request to any origin but the site's own (the demo reaches no backend);
-//    - a 4xx/5xx response from the site itself (other than /_otel);
+//    - a 4xx/5xx response from the site itself (other than /_otel, and a 404
+//      for /config.js on a local preview: the host serves config.js at runtime,
+//      so `vite preview --mode demo` has none, and the demo runs on its defaults);
 //    - an uncaught page error, or a console error naming CORS;
 //    - `/` not landing on the Home (/forge/demo?section=home, sections/DemoHome.tsx),
 //      or the Home missing any of: its one hero heading; its "Open the console",
@@ -20,7 +22,7 @@
 //    - the build story (/forge/demo?section=built) showing no recorded build;
 //    - a page with no `[data-shell=demo]` root, or not in the app's shell (no
 //      `[data-testid=shell-nav]`: every page of the demo is a page of the app's
-//      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNav.ts);
+//      one shell, Layout/shell/AppShell.tsx, with the demo's nav, demoNavConfig.ts);
 //    - the sample image's preview (Storage, staging) not rendering, or its URL
 //      not same-origin or shaped like a presigned GCS/S3 link.
 //    Per page it also prints how often "Sample data isn't available" showed (an
@@ -31,7 +33,7 @@
 //    drawer, opened by the page header's toggle, `[data-testid=shell-nav-toggle]`).
 //    The nav is the shell's (`[data-testid=shell-nav]`), drawn from the
 //    signed-in app's own items in its order (Layout/sidebar/navConfig/hybrid.ts,
-//    Forge/Demo/demoNav.ts) plus the demo's own rows: Dashboards, Analytics,
+//    Forge/Demo/demoNavConfig.ts) plus the demo's own rows: Dashboards, Analytics,
 //    Deployments, Tests, Security and Configure are buttons that fold, and must
 //    hold their pages (navGroups below); Observability is a drill-in (navDrill):
 //    its row opens its Overview and its rows replace the nav under a "‹ Back"
@@ -58,7 +60,8 @@
 // DEMO_AUDITED_ENVS (default "prod"): the environments the demo audits.
 // DEMO_SMOKE_RUN_ID (default: the start time): the run id in the reason.
 //
-// CHROME: PLAYWRIGHT_CHROMIUM_EXECUTABLE (default /usr/bin/google-chrome).
+// CHROME: PLAYWRIGHT_CHROMIUM_EXECUTABLE (default /usr/bin/google-chrome when it
+// exists, else Playwright's own chromium).
 // SCREENSHOT_DIR=<dir> saves each page (pass 1) as <dir>/<path>.png.
 // SETTLE_MS: how long a page gets to render (default 4000; nav clicks get half).
 
@@ -68,6 +71,8 @@ import { chromium } from "playwright";
 
 const base = (process.argv[2] ?? "http://127.0.0.1:4173").replace(/\/$/, "");
 const origin = new URL(base).origin;
+/** A local preview (vite preview), where no host serves the runtime config.js. */
+const localPreview = ["127.0.0.1", "localhost", "[::1]"].includes(new URL(base).hostname);
 const project = process.env.DEMO_PROJECT ?? "shop";
 const home = `/forge/p/${project}`;
 const settle = Number(process.env.SETTLE_MS ?? 4000);
@@ -173,7 +178,9 @@ const navKey = (href) => {
 /** A nav item the nav pass clicks: a project page, or a demo page of its own. */
 const inScope = (key) => key.startsWith(home) || key.startsWith("/forge/demo?section=");
 
-const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? "/usr/bin/google-chrome", args: ["--no-sandbox"] });
+const systemChrome = "/usr/bin/google-chrome";
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? (fs.existsSync(systemChrome) ? systemChrome : undefined);
+const browser = await chromium.launch({ executablePath, args: ["--no-sandbox"] });
 const failures = [];
 
 /** A page that records every problem the PAGES pass fails on. */
@@ -192,7 +199,9 @@ async function openPage(viewport) {
   });
   page.on("response", (res) => {
     const url = new URL(res.url());
-    if (url.origin === origin && res.status() >= 400 && !url.pathname.startsWith("/_otel")) problems.push(`${res.status()} ${url.pathname}`);
+    if (url.origin !== origin || res.status() < 400 || url.pathname.startsWith("/_otel")) return;
+    if (localPreview && res.status() === 404 && url.pathname === "/config.js") return;
+    problems.push(`${res.status()} ${url.pathname}`);
   });
   page.on("pageerror", (err) => problems.push(`page error: ${err.message}`));
   page.on("console", (msg) => {
