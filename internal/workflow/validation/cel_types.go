@@ -4,7 +4,7 @@ package validation
 import (
 	"reflect"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 )
 

@@ -3,8 +3,8 @@ package wfcel
 import (
 	"errors"
 
-	"github.com/google/cel-go/cel"
-	celast "github.com/google/cel-go/common/ast"
+	"cel.dev/cel-go/cel"
+	celast "cel.dev/cel-go/common/ast"
 
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )

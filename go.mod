@@ -6,6 +6,7 @@ toolchain go1.27.4
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260825204119-511051f7f437.2
+	cel.dev/cel-go v0.33.4
 	cloud.google.com/go/auth v0.24.4
 	codeberg.org/readeck/go-readability/v2 v2.1.3
 	connectrpc.com/connect v1.21.1
@@ -21,7 +22,6 @@ require (
 	github.com/go-chi/cors v1.2.2
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
-	github.com/google/cel-go v0.31.0
 	github.com/google/go-cmp v0.7.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0
@@ -102,7 +102,6 @@ require (
 	buf.build/go/protoyaml v0.6.0 // indirect
 	buf.build/go/spdx v0.2.0 // indirect
 	buf.build/go/standard v0.1.0 // indirect
-	cel.dev/cel-go v0.33.4 // indirect
 	cel.dev/expr v0.26.0 // indirect
 	cloud.google.com/go v0.123.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.3.1 // indirect
@@ -233,6 +232,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.20.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/golang/mock v1.7.0-rc.1 // indirect
+	github.com/google/cel-go v0.31.0 // indirect
 	github.com/google/certificate-transparency-go v1.4.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/go-containerregistry v0.22.1 // indirect

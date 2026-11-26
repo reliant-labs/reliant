@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/core"

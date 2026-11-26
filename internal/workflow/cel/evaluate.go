@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/cel-go/common/types/ref"
+	"cel.dev/cel-go/common/types/ref"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/types/known/structpb"
 )

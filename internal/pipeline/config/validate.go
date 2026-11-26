@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"cel.dev/cel-go/cel"
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/google/cel-go/cel"
 )
 
 // Bounds the validator enforces. They are deliberately tight: each is a

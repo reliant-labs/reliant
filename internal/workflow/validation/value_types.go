@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"

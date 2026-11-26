@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/google/cel-go/cel"
+	"cel.dev/cel-go/cel"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 
