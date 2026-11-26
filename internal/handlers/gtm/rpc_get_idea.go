@@ -4,17 +4,24 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// GetIdea implements the GetIdea RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.GetIdea
+// GetIdea returns one idea of the org.
 func (s *Service) GetIdea(
 	ctx context.Context,
 	req *connect.Request[pb.GetIdeaRequest],
 ) (*connect.Response[pb.GetIdeaResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("GetIdea"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	idea, err := s.deps.Service.GetIdea(ctx, a, gtmsvc.GetIdeaInput{ID: m.GetId()})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.GetIdeaResponse{Idea: ideaOut(idea)}), nil
 }

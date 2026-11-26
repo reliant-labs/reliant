@@ -4,17 +4,33 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// ListIdeas implements the ListIdeas RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.ListIdeas
+// ListIdeas lists the org's ideas, newest first.
 func (s *Service) ListIdeas(
 	ctx context.Context,
 	req *connect.Request[pb.ListIdeasRequest],
 ) (*connect.Response[pb.ListIdeasResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("ListIdeas"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.deps.Service.ListIdeas(ctx, a, gtmsvc.ListIdeasInput{
+		Kind:       enumIn[gtmsvc.IdeaKind](m.GetKind()),
+		Status:     enumIn[gtmsvc.IdeaStatus](m.GetStatus()),
+		CampaignID: m.CampaignId,
+		PageSize:   int(m.GetPageSize()),
+		PageToken:  m.GetPageToken(),
+	})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.ListIdeasResponse{
+		Ideas:         ideasOut(res.Ideas),
+		NextPageToken: res.NextPageToken,
+	}), nil
 }

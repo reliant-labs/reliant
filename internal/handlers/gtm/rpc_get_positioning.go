@@ -4,17 +4,23 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
-// GetPositioning implements the GetPositioning RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.GetPositioning
+// GetPositioning returns the org's positioning; revision 0 when it has none.
 func (s *Service) GetPositioning(
 	ctx context.Context,
 	req *connect.Request[pb.GetPositioningRequest],
 ) (*connect.Response[pb.GetPositioningResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("GetPositioning"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	p, err := s.deps.Service.GetPositioning(ctx, a)
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.GetPositioningResponse{Positioning: positioningOut(p)}), nil
 }

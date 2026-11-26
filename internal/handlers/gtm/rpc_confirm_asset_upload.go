@@ -4,17 +4,25 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// ConfirmAssetUpload implements the ConfirmAssetUpload RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.ConfirmAssetUpload
+// ConfirmAssetUpload finishes an upload: the domain checks the bytes and
+// marks the asset READY.
 func (s *Service) ConfirmAssetUpload(
 	ctx context.Context,
 	req *connect.Request[pb.ConfirmAssetUploadRequest],
 ) (*connect.Response[pb.ConfirmAssetUploadResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("ConfirmAssetUpload"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	asset, err := s.deps.Service.ConfirmAssetUpload(ctx, a, gtmsvc.ConfirmAssetUploadInput{AssetID: m.GetAssetId()})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.ConfirmAssetUploadResponse{Asset: assetOut(asset)}), nil
 }

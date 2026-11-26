@@ -1,41 +1,53 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestGetChannel_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement GetChannel —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestGetChannel_Generated runs the canonical scaffold rows for GetChannel.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestGetChannel_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetChannelRequest, pb.GetChannelResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement GetChannel; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.GetChannelRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.GetChannelResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the channel",
+			Req:  connect.NewRequest(&pb.GetChannelRequest{OrgId: testOrg, Id: "ch1"}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetChannelFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.GetChannelInput) (gtmsvc.Channel, error) {
+					asPerson(t, a)
+					assert.Equal(t, "ch1", in.ID)
+					return gtmsvc.Channel{ID: "ch1", Mode: gtmsvc.ChannelManual, ManualInstructionsMD: "post it"}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.GetChannelResponse]) {
+				assert.Equal(t, "post it", resp.Msg.GetChannel().GetManualInstructionsMd())
+				assert.Equal(t, pb.GtmConnectionState_GTM_CONNECTION_STATE_UNSPECIFIED, resp.Msg.GetChannel().GetConnectionState())
+			},
+		},
+		{
+			Name: "a missing channel is NotFound",
+			Req:  connect.NewRequest(&pb.GetChannelRequest{OrgId: testOrg, Id: "ch1"}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetChannelFunc = func(context.Context, gtmsvc.Actor, gtmsvc.GetChannelInput) (gtmsvc.Channel, error) {
+					return gtmsvc.Channel{}, gtmsvc.ErrNotFound
+				}
+			},
+			WantErr: connect.CodeNotFound,
 		},
 	}, svc.GetChannel)
 }

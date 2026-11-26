@@ -4,17 +4,33 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// ListClaims implements the ListClaims RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.ListClaims
+// ListClaims lists the org's claims registry.
 func (s *Service) ListClaims(
 	ctx context.Context,
 	req *connect.Request[pb.ListClaimsRequest],
 ) (*connect.Response[pb.ListClaimsResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("ListClaims"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.deps.Service.ListClaims(ctx, a, gtmsvc.ListClaimsInput{
+		Status:    enumIn[gtmsvc.ClaimStatus](m.GetStatus()),
+		Category:  enumIn[gtmsvc.ClaimCategory](m.GetCategory()),
+		Search:    m.GetSearch(),
+		PageSize:  int(m.GetPageSize()),
+		PageToken: m.GetPageToken(),
+	})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.ListClaimsResponse{
+		Claims:        claimsOut(res.Claims),
+		NextPageToken: res.NextPageToken,
+	}), nil
 }

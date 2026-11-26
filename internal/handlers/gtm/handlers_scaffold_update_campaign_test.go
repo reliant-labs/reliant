@@ -1,41 +1,62 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestUpdateCampaign_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement UpdateCampaign —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestUpdateCampaign_Generated runs the canonical scaffold rows for UpdateCampaign.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestUpdateCampaign_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UpdateCampaignRequest, pb.UpdateCampaignResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement UpdateCampaign; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.UpdateCampaignRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.UpdateCampaignResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "set lists replace, unset ones are left alone, clear flags pass through",
+			Req: connect.NewRequest(&pb.UpdateCampaignRequest{
+				OrgId: testOrg, Id: "c1", ExpectedRevision: 1, ClearPeriodEnd: true,
+				PlannedChannelIds: &pb.GtmChannelIdList{},
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.UpdateCampaignFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.UpdateCampaignInput) (gtmsvc.Campaign, error) {
+					asPerson(t, a)
+					assert.True(t, in.ClearPeriodEnd)
+					assert.False(t, in.ClearPeriodStart)
+					if assert.NotNil(t, in.PlannedChannelIDs) {
+						assert.Empty(t, *in.PlannedChannelIDs)
+					}
+					assert.Nil(t, in.PlannedFormats)
+					assert.Nil(t, in.StrategyID)
+					assert.Nil(t, in.PeriodStart)
+					return gtmsvc.Campaign{ID: "c1", Revision: 2}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.UpdateCampaignResponse]) {
+				assert.Equal(t, int32(2), resp.Msg.GetCampaign().GetRevision())
+			},
+		},
+		{
+			Name: "a revision conflict is Aborted",
+			Req:  connect.NewRequest(&pb.UpdateCampaignRequest{OrgId: testOrg, Id: "c1", ExpectedRevision: 1}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.UpdateCampaignFunc = func(context.Context, gtmsvc.Actor, gtmsvc.UpdateCampaignInput) (gtmsvc.Campaign, error) {
+					return gtmsvc.Campaign{}, &gtmsvc.RevisionConflictError{ID: "c1", Expected: 1, Current: 2}
+				}
+			},
+			WantErr: connect.CodeAborted,
 		},
 	}, svc.UpdateCampaign)
 }

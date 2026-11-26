@@ -1,41 +1,60 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestListChannels_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement ListChannels —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestListChannels_Generated runs the canonical scaffold rows for ListChannels.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestListChannels_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListChannelsRequest, pb.ListChannelsResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement ListChannels; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.ListChannelsRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.ListChannelsResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the filter and the channels",
+			Req: connect.NewRequest(&pb.ListChannelsRequest{
+				OrgId: testOrg, Mode: pb.GtmChannelMode_GTM_CHANNEL_MODE_INTEGRATED.Enum(),
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ListChannelsFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.ListChannelsInput) (gtmsvc.ListChannelsResult, error) {
+					asPerson(t, a)
+					assert.Equal(t, gtmsvc.ListChannelsInput{Mode: gtmsvc.ChannelIntegrated}, in)
+					return gtmsvc.ListChannelsResult{Channels: []gtmsvc.Channel{{
+						ID: "ch1", Key: "email", Mode: gtmsvc.ChannelIntegrated, IntegrationKind: "gmail",
+						ConnectionState: gtmsvc.ConnectionConnected, Source: gtmsvc.ChannelSourceSeed, ChannelTypes: []string{"email"},
+					}}}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.ListChannelsResponse]) {
+				c := resp.Msg.GetChannels()[0]
+				assert.Equal(t, pb.GtmConnectionState_GTM_CONNECTION_STATE_CONNECTED, c.GetConnectionState())
+				assert.Equal(t, pb.GtmChannelSource_GTM_CHANNEL_SOURCE_SEED, c.GetSource())
+				assert.Equal(t, []string{"email"}, c.GetChannelTypes())
+			},
+		},
+		{
+			Name: "a refusal is NotFound",
+			Req:  connect.NewRequest(&pb.ListChannelsRequest{OrgId: testOrg}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ListChannelsFunc = func(context.Context, gtmsvc.Actor, gtmsvc.ListChannelsInput) (gtmsvc.ListChannelsResult, error) {
+					return gtmsvc.ListChannelsResult{}, gtmsvc.ErrNotFound
+				}
+			},
+			WantErr: connect.CodeNotFound,
 		},
 	}, svc.ListChannels)
 }

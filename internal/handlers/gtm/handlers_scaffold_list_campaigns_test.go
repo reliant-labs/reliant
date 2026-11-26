@@ -1,41 +1,59 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestListCampaigns_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement ListCampaigns —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestListCampaigns_Generated runs the canonical scaffold rows for ListCampaigns.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestListCampaigns_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListCampaignsRequest, pb.ListCampaignsResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement ListCampaigns; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.ListCampaignsRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.ListCampaignsResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the strategy filter and the campaigns",
+			Req:  connect.NewRequest(&pb.ListCampaignsRequest{OrgId: testOrg, StrategyId: proto.String("s1")}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ListCampaignsFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.ListCampaignsInput) (gtmsvc.ListCampaignsResult, error) {
+					asPerson(t, a)
+					assert.Equal(t, "s1", *in.StrategyID)
+					return gtmsvc.ListCampaignsResult{Campaigns: []gtmsvc.Campaign{{
+						ID: "c1", Status: gtmsvc.CampaignActive, PlannedChannelIDs: []string{"ch1"},
+					}}, NextPageToken: "n"}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.ListCampaignsResponse]) {
+				c := resp.Msg.GetCampaigns()[0]
+				assert.Equal(t, pb.GtmCampaignStatus_GTM_CAMPAIGN_STATUS_ACTIVE, c.GetStatus())
+				assert.Equal(t, []string{"ch1"}, c.GetPlannedChannelIds())
+				assert.Nil(t, c.GetPeriodStart())
+				assert.Equal(t, "n", resp.Msg.GetNextPageToken())
+			},
+		},
+		{
+			Name: "a refusal is NotFound",
+			Req:  connect.NewRequest(&pb.ListCampaignsRequest{OrgId: testOrg}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ListCampaignsFunc = func(context.Context, gtmsvc.Actor, gtmsvc.ListCampaignsInput) (gtmsvc.ListCampaignsResult, error) {
+					return gtmsvc.ListCampaignsResult{}, gtmsvc.ErrNotFound
+				}
+			},
+			WantErr: connect.CodeNotFound,
 		},
 	}, svc.ListCampaigns)
 }

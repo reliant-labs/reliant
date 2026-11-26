@@ -1,41 +1,60 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestCreateItem_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement CreateItem —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestCreateItem_Generated runs the canonical scaffold rows for CreateItem.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestCreateItem_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.CreateItemRequest, pb.CreateItemResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement CreateItem; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.CreateItemRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.CreateItemResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the request",
+			Req: connect.NewRequest(&pb.CreateItemRequest{
+				OrgId: testOrg, Format: pb.GtmItemFormat_GTM_ITEM_FORMAT_EMAIL, Title: "Hi", BodyMd: "b",
+				ChannelId: "ch1", EmailTo: []string{"a@b.c"}, EmailSubject: "s",
+				Status: pb.GtmItemStatus_GTM_ITEM_STATUS_REVIEW.Enum(),
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.CreateItemFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.CreateItemInput) (gtmsvc.Item, error) {
+					asPerson(t, a)
+					assert.Equal(t, gtmsvc.CreateItemInput{
+						Status: gtmsvc.ItemReview, Format: gtmsvc.FormatEmail, Title: "Hi", BodyMD: "b", ChannelID: "ch1",
+						EmailTo: []string{"a@b.c"}, EmailSubject: "s",
+					}, in)
+					return gtmsvc.Item{ID: "it1", Status: gtmsvc.ItemReview}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.CreateItemResponse]) {
+				assert.Equal(t, pb.GtmItemStatus_GTM_ITEM_STATUS_REVIEW, resp.Msg.GetItem().GetStatus())
+			},
+		},
+		{
+			Name: "a status other than DRAFT or REVIEW breaks the rules (InvalidArgument for an admitted caller)",
+			Req: connect.NewRequest(&pb.CreateItemRequest{
+				OrgId: testOrg, Format: pb.GtmItemFormat_GTM_ITEM_FORMAT_AD, Title: "x",
+				Status: pb.GtmItemStatus_GTM_ITEM_STATUS_APPROVED.Enum(),
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetAccessFunc = func(context.Context, gtmsvc.Actor) (gtmsvc.Access, error) { return gtmsvc.Access{Enabled: true}, nil }
+			},
+			WantErr: connect.CodeInvalidArgument,
 		},
 	}, svc.CreateItem)
 }
