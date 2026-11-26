@@ -92,6 +92,11 @@ type StageResult struct {
 	// LogTail is the end of the stage's output (at most logTailBytes). The
 	// whole log stays in the boundary and goes with its teardown.
 	LogTail string `json:"log_tail,omitempty"`
+	// SkippedDockerTests counts the container tests that skipped in this
+	// stage because the gate has no docker engine (EnvDockerSkips). Such a
+	// test reports a skip, never a pass, and this count is how the verdict
+	// shows it.
+	SkippedDockerTests int `json:"skipped_docker_tests,omitempty"`
 }
 
 // ScanReport is the sbom_scan stage's forge document (`forge vuln gate
@@ -138,7 +143,10 @@ type GateResult struct {
 	InfraMatches []string `json:"infra_matches,omitempty"`
 	// RepoResult is that file, raw: data only.
 	RepoResult json.RawMessage `json:"repo_result,omitempty"`
-	Duration   time.Duration   `json:"duration"`
+	// SkippedDockerTests is the sum of the stages' SkippedDockerTests: the
+	// container tests this gate did not run because it had no docker engine.
+	SkippedDockerTests int           `json:"skipped_docker_tests,omitempty"`
+	Duration           time.Duration `json:"duration"`
 }
 
 // StageList is Stages in the order the gate runs them.

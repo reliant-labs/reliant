@@ -193,3 +193,87 @@ func TestTeardownRemovesByLabel(t *testing.T) {
 		}
 	}
 }
+
+func TestTheWarmCacheVolumeIsMountedReadWriteAtTheCacheMount(t *testing.T) {
+	s := spec()
+	s.CacheVolume = "reliant-gate-cache-acme-widgets"
+	args := createArgs(s)
+	var mounts []string
+	for i, a := range args {
+		if a == "--mount" {
+			mounts = append(mounts, args[i+1])
+		}
+	}
+	want := []string{
+		"type=volume,source=reliant-gate-gate-b1-1-work,target=/gate",
+		"type=volume,source=reliant-gate-cache-acme-widgets,target=/gate/cache",
+		"type=bind,source=/var/lib/forge/vulndb,target=/vulndb,readonly",
+	}
+	if !slices.Equal(mounts, want) {
+		t.Fatalf("mounts %v, want %v", mounts, want)
+	}
+}
+
+func TestACacheVolumeOfAnotherShapeIsRefused(t *testing.T) {
+	for _, name := range []string{"reliant-gate-gate-b1-1-work", "/var/lib/docker", "reliant-gate-cache-", "reliant-gate-cache-a,readonly=false"} {
+		s := spec()
+		s.CacheVolume = name
+		if err := validate(s); !errors.Is(err, ErrInvalidSpec) {
+			t.Errorf("cache volume %q: %v, want refused", name, err)
+		}
+	}
+}
+
+func TestRunCreatesTheCacheVolumeOutsideTheGateAndLogsItsSize(t *testing.T) {
+	d := &fakeDocker{state: containerState{Status: "exited"}}
+	b := &Backend{run: func(ctx context.Context, in io.Reader, out, errw io.Writer, args ...string) (int, error) {
+		if strings.HasPrefix(strings.Join(args, " "), "system df -v") {
+			_, _ = io.WriteString(out, `[{"Name":"other","Size":"1GB"},{"Name":"reliant-gate-cache-acme-widgets","Size":"2.5GB"}]`)
+		}
+		return d.run(ctx, in, out, errw, args...)
+	}}
+	s := spec()
+	s.CacheVolume = "reliant-gate-cache-acme-widgets"
+	var log strings.Builder
+	s.Stdout = &log
+	if _, err := b.Run(context.Background(), s); err != nil {
+		t.Fatal(err)
+	}
+	var create []string
+	for _, c := range d.calls {
+		if len(c) > 2 && c[0] == "volume" && c[1] == "create" && c[len(c)-1] == s.CacheVolume {
+			create = c
+		}
+	}
+	if create == nil {
+		t.Fatalf("the cache volume was not created: %v", d.calls)
+	}
+	joined := strings.Join(create, " ")
+	if !strings.Contains(joined, "--label reliant.gate.cache=reliant-gate-cache-acme-widgets") {
+		t.Fatalf("cache volume not labelled for the janitor: %s", joined)
+	}
+	// Teardown removes what carries the run's label; the cache must not.
+	if strings.Contains(joined, LabelRunID) {
+		t.Fatalf("cache volume carries the run id, so Teardown would remove it: %s", joined)
+	}
+	if got := strings.Count(log.String(), "warm cache volume reliant-gate-cache-acme-widgets"); got != 2 {
+		t.Fatalf("logged the cache %d times, want before and after:\n%s", got, log.String())
+	}
+	if !strings.Contains(log.String(), "(2.5GB)") || !strings.Contains(log.String(), "is 2.5GB after the gate") {
+		t.Fatalf("cache size not logged:\n%s", log.String())
+	}
+}
+
+func TestRunWithoutACacheVolumeCreatesNone(t *testing.T) {
+	d := &fakeDocker{state: containerState{Status: "exited"}}
+	if _, err := (&Backend{run: d.run}).Run(context.Background(), spec()); err != nil {
+		t.Fatal(err)
+	}
+	if d.called("volume create --label reliant.gate.cache") || d.called("system df") {
+		t.Fatalf("a gate without a cache touched one: %v", d.calls)
+	}
+	// The tree is copied owned by the image's (non-root) user.
+	if !d.called("cp -a /tmp/src/. reliant-gate-gate-b1-1:/gate/src") {
+		t.Fatalf("the tree was not copied with -a: %v", d.calls)
+	}
+}

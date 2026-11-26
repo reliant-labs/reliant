@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 
+	"github.com/reliant-labs/reliant/internal/gatetest"
 	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
@@ -43,7 +44,7 @@ func TestRealRuncGate(t *testing.T) {
 	b := New()
 	ctx := context.Background()
 	if a := b.Detect(ctx); !a.Available {
-		t.Skipf("no docker engine: %s", a.Reason)
+		gatetest.DockerUnavailable(t, "no docker engine: %s", a.Reason)
 	}
 	if err := b.Preflight(ctx); err != nil {
 		t.Skipf("docker has no runc runtime: %v", err)
