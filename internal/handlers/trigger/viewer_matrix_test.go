@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/viewertest"
@@ -16,6 +17,6 @@ func TestTriggerServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo), Orgs: f.Membership})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Orgs: f.Membership})))
 	viewertest.RunService(t, f, svc, "reliant.v1.TriggerService", nil)
 }

@@ -46,7 +46,7 @@ func orgKeyEnv(t *testing.T, lister *MockOrgLister, keys ...core.ProviderAccount
 		}
 		return out, nil
 	}
-	deps := Deps{Repo: repo, OrgKeys: orgKeys}
+	deps := Deps{Repo: repo, Registrations: repo.regs, OrgKeys: orgKeys}
 	if lister != nil {
 		deps.MyOrgs = lister
 	}

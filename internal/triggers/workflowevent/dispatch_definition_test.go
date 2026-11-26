@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -125,7 +126,7 @@ func TestDispatch_FiringRecordsItsDefinitionAndABrokenOneIsRefused(t *testing.T)
 	}
 	require.True(t, refused, "the refusal is recorded, not skipped")
 	failed := core.TriggerEventFailed
-	ev, err := f.repo.GetLatestTriggerEvent(ctx, tr.ID, &failed)
+	ev, err := store.GetLatestTriggerEvent(ctx, f.repo.ORM(), tr.ID, &failed)
 	require.NoError(t, err)
 	require.True(t, ev.Definition.Broken(), "%+v", ev.Definition)
 	assert.Equal(t, reactorPath, ev.Definition.Path)
