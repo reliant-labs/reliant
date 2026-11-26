@@ -1,10 +1,12 @@
 package architecture
 
 import (
+	"bytes"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -60,7 +62,18 @@ func TestNoConcreteRepoTypeAssertions(t *testing.T) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		// Both shapes the guard fails, x.(T) and switch x.(type), spell ".(",
+		// and the type they name spells "Repo". A file with either missing has
+		// nothing to find, so it is not parsed: parsing every Go file in the
+		// tree was most of this test's time.
+		if !bytes.Contains(src, []byte(".(")) || !bytes.Contains(src, []byte("Repo")) {
+			return nil
+		}
+		file, err := parser.ParseFile(fset, path, src, parser.SkipObjectResolution)
 		if err != nil {
 			return err
 		}
