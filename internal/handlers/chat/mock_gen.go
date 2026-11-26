@@ -226,7 +226,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=b27b60a984b2d7e4bff0228994efd25a96994f8d44a48748339437b037b4e021
+// forge:hash=87ec20d63ae54083dc88671536c06c8aae05226e77b1d90f13e576e7f9ead949
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -349,7 +349,7 @@ type MockRepository struct {
 	GetWorkflowDraftBySlugFunc                               func(context.Context, string, string) (*db.WorkflowDraft, error)
 	ListProjectDaemonsForProjectFunc                         func(context.Context, string) ([]*core.ProjectDaemon, error)
 	ListWorktreesFunc                                        func(context.Context, db.WorktreeFilters) ([]*db.Worktree, error)
-	LockUserOrgsFunc                                         func(context.Context, string, ...db.OrgRead) error
+	LockUserOrgsSharedFunc                                   func(context.Context, string, ...db.OrgRead) error
 	MarkWorkflowStartFailedFunc                              func(context.Context, string) (bool, error)
 	SaveMessageToThreadFunc                                  func(context.Context, string, string, int32, string, *string, []string, *int32) (*db.Message, error)
 	SaveMessageToThreadOnceFunc                              func(context.Context, string, string, int32, string, *string, []string, *int32, string) (*db.Message, bool, error)
@@ -1380,13 +1380,13 @@ func (m *MockRepository) ListWorktrees(ctx context.Context, filters db.WorktreeF
 	return nil, contractkit.MockNotSet("MockRepository", "ListWorktrees")
 }
 
-// LockUserOrgs records the call and delegates to LockUserOrgsFunc when set.
-func (m *MockRepository) LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error {
-	m.Recorder.Record("LockUserOrgs", ctx, userID, reads)
-	if m.LockUserOrgsFunc != nil {
-		return m.LockUserOrgsFunc(ctx, userID, reads...)
+// LockUserOrgsShared records the call and delegates to LockUserOrgsSharedFunc when set.
+func (m *MockRepository) LockUserOrgsShared(ctx context.Context, userID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("LockUserOrgsShared", ctx, userID, reads)
+	if m.LockUserOrgsSharedFunc != nil {
+		return m.LockUserOrgsSharedFunc(ctx, userID, reads...)
 	}
-	return contractkit.MockNotSet("MockRepository", "LockUserOrgs")
+	return contractkit.MockNotSet("MockRepository", "LockUserOrgsShared")
 }
 
 // MarkWorkflowStartFailed records the call and delegates to MarkWorkflowStartFailedFunc when set.

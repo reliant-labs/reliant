@@ -114,6 +114,72 @@ func TestLaunchStartsTitleConcurrentlyWithRoot(t *testing.T) {
 		"the title start must only be issued once the chat row is committed")
 }
 
+// waitForTitleStarts blocks until every title start l has issued returned.
+func (l *Launcher) waitForTitleStarts() {
+	if l.titleStarts != nil {
+		l.titleStarts.Wait()
+	}
+}
+
+// slowTitleStarter accepts the root start at once and holds the title start
+// until release is closed, recording the context it was issued under.
+type slowTitleStarter struct {
+	release chan struct{}
+
+	mu          sync.Mutex
+	titleCalls  int
+	titleCtxErr error
+}
+
+func (s *slowTitleStarter) ExecuteWorkflow(
+	ctx context.Context, options client.StartWorkflowOptions, _ interface{}, args ...interface{},
+) (client.WorkflowRun, error) {
+	if _, isRoot := args[0].(v2.WorkflowInput); !isRoot {
+		<-s.release
+		s.mu.Lock()
+		s.titleCalls++
+		s.titleCtxErr = ctx.Err()
+		s.mu.Unlock()
+	}
+	return &fakeWorkflowRun{id: options.ID, runID: "run-" + options.ID}, nil
+}
+
+// The launch returns once the root start is accepted, without waiting for the
+// title start: waiting put the slower of the two Temporal round trips on every
+// StartChat. The title start outlives the request, so it must not take the
+// request's cancellation with it.
+func TestLaunchDoesNotWaitForTheTitleStart(t *testing.T) {
+	repo, _, projectID, _ := launchFixture(t)
+	starter := &slowTitleStarter{release: make(chan struct{})}
+	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: starter, Runs: &recordingRunRecorder{repo: repo, chats: store.NewChatsWithActivityExtStore(repo.ORM())}, TaskQueue: "test-task-queue"})
+	defer launcher.waitForTitleStarts()
+	defer close(starter.release)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID:   launchTestUserID,
+		ProjectID:     projectID,
+		Workflow:      "builtin://agent",
+		Params:        mockModelParams(t),
+		Messages:      userSeed("hello"),
+		GenerateTitle: true,
+	})
+	require.NoError(t, err, "the launch returned while its title start was still held")
+	require.NotNil(t, result.Chat)
+	starter.mu.Lock()
+	assert.Zero(t, starter.titleCalls, "the title start is still in flight when the launch returns")
+	starter.mu.Unlock()
+
+	// The request is over; its title start is not.
+	cancel()
+	starter.release <- struct{}{}
+	launcher.waitForTitleStarts()
+	starter.mu.Lock()
+	defer starter.mu.Unlock()
+	assert.Equal(t, 1, starter.titleCalls)
+	assert.NoError(t, starter.titleCtxErr, "the title start must not be cancelled with the request that issued it")
+}
+
 // The title is best-effort: its start failing must not fail a launch whose run
 // Temporal accepted.
 func TestLaunchSucceedsWhenTitleStartFails(t *testing.T) {

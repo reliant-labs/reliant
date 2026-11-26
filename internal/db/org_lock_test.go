@@ -151,3 +151,94 @@ func TestLockUserOrgs_ComparesEveryReadIsNotDistinctFrom(t *testing.T) {
 	require.NoError(t, check(OrgRead{Table: "workflow_drafts", ID: draft.ID, Org: &acme}))
 	require.True(t, errors.Is(check(OrgRead{Table: "workflow_drafts", ID: uuid.NewString()}), ErrOrgChanged), "a row that is gone")
 }
+
+// orgLockWaiters is how many of this test database's sessions are queued on
+// an advisory lock.
+func orgLockWaiters(ctx context.Context, repo *Repo) (int, error) {
+	var waiting int
+	err := repo.ORM().Bun().NewRaw(`SELECT count(*) FROM pg_locks l JOIN pg_stat_activity a ON a.pid = l.pid
+		WHERE l.locktype = 'advisory' AND NOT l.granted AND a.datname = current_database()`).Scan(ctx, &waiting)
+	return waiting, err
+}
+
+// The shared org lock is a reader's: two holders of one user's run side by
+// side, while the exclusive lock — the backfill's, a move's, every other
+// org-sensitive write's — still waits for them, and a shared taker waits for
+// it in turn. So a launch (a shared taker) never queues behind the same
+// user's other launches, and still never commits across a backfill.
+func TestLockUserOrgsShared_SharesWithItselfAndNotWithTheExclusiveLock(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	userID := "user-org-shared-" + uuid.NewString()[:8]
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// hold takes the lock (shared or not) in a transaction of its own and
+	// keeps it until release is closed.
+	hold := func(shared bool) (held chan struct{}, release chan struct{}, done chan error) {
+		held, release, done = make(chan struct{}), make(chan struct{}), make(chan error, 1)
+		go func() {
+			done <- repo.RunTx(ctx, orm.ReadCommitted, func(ctx context.Context) error {
+				lock := repo.LockUserOrgs
+				if shared {
+					lock = repo.LockUserOrgsShared
+				}
+				if err := lock(ctx, userID); err != nil {
+					return err
+				}
+				close(held)
+				<-release
+				return nil
+			})
+		}()
+		return held, release, done
+	}
+	awaitHeld := func(held chan struct{}, done chan error, what string) {
+		t.Helper()
+		select {
+		case <-held:
+		case err := <-done:
+			t.Fatalf("%s ended before it held the lock: %v", what, err)
+		case <-ctx.Done():
+			t.Fatalf("%s never took the org lock", what)
+		}
+	}
+	awaitQueued := func(what string) {
+		t.Helper()
+		require.Eventually(t, func() bool {
+			waiting, err := orgLockWaiters(ctx, repo)
+			return err == nil && waiting > 0
+		}, 10*time.Second, 5*time.Millisecond, "%s never queued on the org lock", what)
+	}
+
+	firstHeld, firstRelease, firstDone := hold(true)
+	awaitHeld(firstHeld, firstDone, "the first shared holder")
+	secondHeld, secondRelease, secondDone := hold(true)
+	awaitHeld(secondHeld, secondDone, "a second shared holder, beside the first")
+
+	exclusiveHeld, exclusiveRelease, exclusiveDone := hold(false)
+	awaitQueued("the exclusive taker, behind two shared holders")
+	close(firstRelease)
+	require.NoError(t, <-firstDone)
+	select {
+	case <-exclusiveHeld:
+		t.Fatal("the exclusive lock was granted while a shared holder still held it")
+	default:
+	}
+	close(secondRelease)
+	require.NoError(t, <-secondDone)
+	awaitHeld(exclusiveHeld, exclusiveDone, "the exclusive taker, once the shared holders committed")
+
+	lateHeld, lateRelease, lateDone := hold(true)
+	awaitQueued("a shared taker, behind the exclusive holder")
+	select {
+	case <-lateHeld:
+		t.Fatal("the shared lock was granted while the exclusive holder held it")
+	default:
+	}
+	close(exclusiveRelease)
+	require.NoError(t, <-exclusiveDone)
+	awaitHeld(lateHeld, lateDone, "the shared taker, once the exclusive holder committed")
+	close(lateRelease)
+	require.NoError(t, <-lateDone)
+}

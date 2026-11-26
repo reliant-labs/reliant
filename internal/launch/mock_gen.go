@@ -126,7 +126,7 @@ func (m *MockChatReader) GetChat(ctx context.Context, id string) (*db.Chat, erro
 var _ ChatReader = (*MockChatReader)(nil)
 
 // forge:section MockChatWriter
-// forge:hash=9a07deb2b182753e4ee444fecf5136cfe74b7c8c786290fa1d67d0d378a2f204
+// forge:hash=3dce9a33290050675ce5b6c5b7980e171a55404f33e6bc66a083731595b3d51f
 
 // MockChatWriter is a test mock for the ChatWriter interface.
 //
@@ -136,7 +136,7 @@ var _ ChatReader = (*MockChatReader)(nil)
 // "MockChatWriter.<Method>Func not set" error.
 type MockChatWriter struct {
 	contractkit.Recorder
-	LockUserOrgsFunc            func(context.Context, string, ...db.OrgRead) error
+	LockUserOrgsSharedFunc      func(context.Context, string, ...db.OrgRead) error
 	CreateChatFunc              func(context.Context, *db.Chat) error
 	UpdateChatFunc              func(context.Context, *db.Chat) error
 	UpdateChatActiveDaemonFunc  func(context.Context, string, *string) error
@@ -146,13 +146,13 @@ type MockChatWriter struct {
 	CreateUserUpdateFunc        func(context.Context, *db.UserUpdate) error
 }
 
-// LockUserOrgs records the call and delegates to LockUserOrgsFunc when set.
-func (m *MockChatWriter) LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error {
-	m.Recorder.Record("LockUserOrgs", ctx, userID, reads)
-	if m.LockUserOrgsFunc != nil {
-		return m.LockUserOrgsFunc(ctx, userID, reads...)
+// LockUserOrgsShared records the call and delegates to LockUserOrgsSharedFunc when set.
+func (m *MockChatWriter) LockUserOrgsShared(ctx context.Context, userID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("LockUserOrgsShared", ctx, userID, reads)
+	if m.LockUserOrgsSharedFunc != nil {
+		return m.LockUserOrgsSharedFunc(ctx, userID, reads...)
 	}
-	return contractkit.MockNotSet("MockChatWriter", "LockUserOrgs")
+	return contractkit.MockNotSet("MockChatWriter", "LockUserOrgsShared")
 }
 
 // CreateChat records the call and delegates to CreateChatFunc when set.
@@ -700,7 +700,7 @@ func (m *MockTransactor) RunTx(p0 context.Context, policy orm.TxPolicy, f func(c
 var _ Transactor = (*MockTransactor)(nil)
 
 // forge:section MockStore
-// forge:hash=383f404c5fccb2cca9ed5f13b8ec329660bc5aa7a809ee33d77759f21c9586ba
+// forge:hash=19ef5288fd3d632e50e89325598fe0840b080472455b95bcdcd6934ef854803a
 
 // MockStore is a test mock for the Store interface.
 //
@@ -710,7 +710,7 @@ var _ Transactor = (*MockTransactor)(nil)
 // "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
-	LockUserOrgsFunc                   func(context.Context, string, ...db.OrgRead) error
+	LockUserOrgsSharedFunc             func(context.Context, string, ...db.OrgRead) error
 	CreateChatFunc                     func(context.Context, *db.Chat) error
 	UpdateChatFunc                     func(context.Context, *db.Chat) error
 	UpdateChatActiveDaemonFunc         func(context.Context, string, *string) error
@@ -738,13 +738,13 @@ type MockStore struct {
 	RunTxFunc                          func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 }
 
-// LockUserOrgs records the call and delegates to LockUserOrgsFunc when set.
-func (m *MockStore) LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error {
-	m.Recorder.Record("LockUserOrgs", ctx, userID, reads)
-	if m.LockUserOrgsFunc != nil {
-		return m.LockUserOrgsFunc(ctx, userID, reads...)
+// LockUserOrgsShared records the call and delegates to LockUserOrgsSharedFunc when set.
+func (m *MockStore) LockUserOrgsShared(ctx context.Context, userID string, reads ...db.OrgRead) error {
+	m.Recorder.Record("LockUserOrgsShared", ctx, userID, reads)
+	if m.LockUserOrgsSharedFunc != nil {
+		return m.LockUserOrgsSharedFunc(ctx, userID, reads...)
 	}
-	return contractkit.MockNotSet("MockStore", "LockUserOrgs")
+	return contractkit.MockNotSet("MockStore", "LockUserOrgsShared")
 }
 
 // CreateChat records the call and delegates to CreateChatFunc when set.

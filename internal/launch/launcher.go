@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,6 +78,10 @@ type Launcher struct {
 	// reads is what one Launch resolves workflows and presets through
 	// (forOneLaunch); nil, outside a Launch, is repo itself.
 	reads WorkflowResolver
+	// titleStarts counts the title starts still in flight, which outlive the
+	// Launch that issued them (startTitleGeneration). Shared by every
+	// forOneLaunch copy; nil only on a Launcher not built by New.
+	titleStarts *sync.WaitGroup
 }
 
 // forOneLaunch is l for the life of one Launch: every workflow, child and
@@ -134,6 +139,7 @@ func New(deps Deps) *Launcher {
 		threads:     deps.Threads,
 		taskQueue:   deps.TaskQueue,
 		pinner:      deps.Pinner,
+		titleStarts: &sync.WaitGroup{},
 	}
 }
 
@@ -546,8 +552,15 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		userMessageID = ""
 		// The owner's org lock first, before the guard's or any other row
 		// lock: the chat's org was decided from its project's, which no
-		// backfill may stamp between that decision and this insert.
-		if err := l.repo.LockUserOrgs(txCtx, userID, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
+		// backfill may stamp between that decision and this insert. Shared,
+		// because what it must keep out is an org change, not the owner's
+		// other launches: each of the concerns listed above has its own
+		// guard, and taken exclusive the lock queued every launch of one
+		// owner behind the last for its whole transaction (a burst of
+		// trigger fires held a StartChat here for hundreds of milliseconds).
+		// Nothing this transaction calls takes the lock again, exclusive or
+		// not (store.LockUserOrgsShared).
+		if err := l.repo.LockUserOrgsShared(txCtx, userID, db.OrgRead{Table: "projects", ID: project.ID, Org: project.OrgID}); err != nil {
 			return err
 		}
 		if spec.Guard != nil {
@@ -1456,10 +1469,10 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// The title start rides alongside the root start rather than after it.
 	// Both follow the commit, so the chat row GenerateTitleWorkflow reads
 	// already exists, and neither needs the other's result: serially they
-	// were two Temporal round trips on every launch. Joined before returning
-	// so it never outlives the request's context.
-	titleStarted := l.startTitleGeneration(runCtx, p)
-	defer func() { <-titleStarted }()
+	// were two Temporal round trips on every launch. It is not joined either:
+	// nothing the launch returns depends on it, and waiting for it put the
+	// slower of the two starts on the request (startTitleGeneration).
+	l.startTitleGeneration(runCtx, p)
 
 	// The root start stays synchronous. Returning before Temporal accepted
 	// it would hand the caller a committed chat that may never run.
@@ -1547,19 +1560,34 @@ func (l *Launcher) recordFailedStart(ctx context.Context, workflowID string) {
 	}
 }
 
+// titleStartBudget bounds a title start, which runs on past the launch that
+// issued it and so cannot take the request's deadline.
+const titleStartBudget = 15 * time.Second
+
 // startTitleGeneration starts GenerateTitleWorkflow in the background when the
-// launch asked for it, and returns a channel closed once that start has
-// returned. Best-effort: a failed or panicking start is logged and never fails
-// the launch.
-func (l *Launcher) startTitleGeneration(ctx context.Context, p startParams) <-chan struct{} {
-	done := make(chan struct{})
+// launch asked for it, and returns without waiting for it. Best-effort: a
+// failed or panicking start is logged and never fails the launch.
+//
+// The start is detached from ctx's cancellation (and bounded by
+// titleStartBudget instead), because the launch returns, and an RPC's context
+// is cancelled, while it is typically still in flight. Nothing depends on it
+// having been accepted when the launch returns: the title arrives on the chat
+// asynchronously whenever the workflow runs, and a start that never lands
+// leaves the chat untitled exactly as a failed one always has.
+func (l *Launcher) startTitleGeneration(ctx context.Context, p startParams) {
 	if !p.generateTitle {
-		close(done)
-		return done
+		return
 	}
 	chatID := p.chat.ID
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), titleStartBudget)
+	if l.titleStarts != nil {
+		l.titleStarts.Add(1)
+	}
 	go func() {
-		defer close(done)
+		defer cancel()
+		if l.titleStarts != nil {
+			defer l.titleStarts.Done()
+		}
 		defer func() {
 			if r := recover(); r != nil {
 				logging.ErrorContext(ctx, "Title generation start panicked", "panic", r, "chatID", chatID)
@@ -1578,7 +1606,6 @@ func (l *Launcher) startTitleGeneration(ctx context.Context, p startParams) <-ch
 			logging.ErrorContext(ctx, "Failed to start title generation workflow", "error", err, "chatID", chatID)
 		}
 	}()
-	return done
 }
 
 // splitSeedMessages separates user and system messages from the seed messages.

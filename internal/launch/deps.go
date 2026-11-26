@@ -89,10 +89,13 @@ type ChatReader interface {
 
 // ChatWriter creates and updates the chat a launch materializes.
 type ChatWriter interface {
-	// LockUserOrgs takes the owner's org lock for the launch's transaction,
-	// before any row lock, and re-checks the orgs a new chat's org was
-	// decided from (db.ErrOrgChanged when a backfill changed one).
-	LockUserOrgs(ctx context.Context, userID string, reads ...db.OrgRead) error
+	// LockUserOrgsShared takes the owner's org lock, shared, for the
+	// launch's transaction, before any row lock, and re-checks the orgs a new
+	// chat's org was decided from (db.ErrOrgChanged when a backfill changed
+	// one). Shared: the owner's other launches hold it beside this one, while
+	// the backfill, a move and every exclusive holder are still kept out
+	// (store.LockUserOrgsShared).
+	LockUserOrgsShared(ctx context.Context, userID string, reads ...db.OrgRead) error
 	CreateChat(ctx context.Context, chat *db.Chat) error
 	UpdateChat(ctx context.Context, chat *db.Chat) error
 	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
