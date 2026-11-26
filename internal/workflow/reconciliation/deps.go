@@ -82,6 +82,26 @@ type Deps struct {
 	// RunEvents records a repaired run's terminal event, inside the repair's
 	// transaction (runevents.NewStore).
 	RunEvents runevents.Store
+	// Runs stops one exact execution of a chat's run: the stall watchdog's
+	// enforce mode (runs.Service.TerminateExecution). nil: enforce reports.
+	Runs RunTerminator
+	// Observations is where the stall watchdog records each stalled run
+	// (node_observations, source "reconciler"). nil: logs and metrics only.
+	Observations StallRecorder
+}
+
+// RunTerminator stops exactly one execution of a chat's run through the run
+// lifecycle's cancel path (its finally: runs), refusing with
+// runs.ErrExecutionNotCurrent when runID is no longer the chat's current,
+// running execution. runs.Service satisfies it.
+type RunTerminator interface {
+	TerminateExecution(ctx context.Context, chatID, workflowID, runID string) error
+}
+
+// StallRecorder writes the stall watchdog's durable record of a stalled
+// run, one row per run, streak and outcome. *db.Repo satisfies it.
+type StallRecorder interface {
+	RecordNodeObservation(ctx context.Context, obs *db.NodeObservation, maxPerRun int) (db.NodeObservationWrite, error)
 }
 
 // ToolCallLists lists the tool-call rows the stranded-spawn and

@@ -91,6 +91,7 @@
         "RepoUpdateFeed",
         "ResetGuard",
         "Run",
+        "RunLifecycle",
         "Scenario",
         "ScheduleSyncer",
         "Seatmatch",
