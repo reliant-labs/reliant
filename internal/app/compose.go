@@ -2128,10 +2128,10 @@ func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 // pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
 func (g *Graph) newPipeline() (*pipeline.Service, error) {
 	return pipeline.New(pipeline.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Pipeline: g.ServerProcessConfig.GetPipeline(),
-		Store:    g.Database(),
-		Now:      nil, // optional — no provider
+		Logger:          g.Log,
+		Config:          g.Cfg,
+		PipelineEnabled: g.ServerProcessConfig.GetPipeline().GetEnabled(),
+		Store:           g.Database(),
+		Now:             nil, // optional — no provider
 	})
 }
