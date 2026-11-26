@@ -4,7 +4,7 @@
  * THE NAV (U6e): the owner's hybrid, round 2 (u6e-hybrid-round2-brief).
  *
  *   Find · switcher (the shell draws them above)
- *   Overview · Inbox (count) · Agents › ·
+ *   Overview · Inbox (count) · Agents › · GTM › (org-gated) ·
  *   Dashboards ▾ · Observability › · Analytics ▾ ·
  *   Deployments ▾ (Services, Releases, Environments, Previews) ·
  *   Data · Storage · Auth ·
@@ -30,6 +30,7 @@ import {
   data,
   deploymentsGroup,
   footer,
+  gtmArea,
   inbox,
   observabilityArea,
   overview,
@@ -46,6 +47,7 @@ export const hybridNav: NavConfig = {
     overview,
     inbox,
     agentsArea,
+    gtmArea,
     dashboards,
     observabilityArea,
     analyticsGroup,

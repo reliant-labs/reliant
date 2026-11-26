@@ -69,7 +69,7 @@ import { ForgeLandingJourney } from './components/ForgeShell/ForgeLandingJourney
 import { captureForgeEntry } from './components/ForgeShell/forgeEntry'
 import { bootForgeTour } from './components/ForgeShell/forgeTourBoot'
 import { isForgeShell } from './lib/shell'
-import { authPath, homePath, mobileChatsPath } from '@/lib/paths'
+import { authPath, gtmPath, homePath, mobileChatsPath } from '@/lib/paths'
 import { isForgeAuth } from '@/lib/auth/forge-api'
 
 // ─── One router, two brands ─────────────────────────────────────────────────
@@ -224,6 +224,17 @@ const WorkflowDetailPage = lazyRoute(
   () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
 const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
+// GTM (components/Gtm): org-gated, so its chunks load only on its pages.
+const GtmIdeasPage = lazyRoute(
+  () => import('./components/Gtm/Ideas/IdeasPage'), 'IdeasPage')
+const GtmIdeaDetailPage = lazyRoute(
+  () => import('./components/Gtm/Ideas/IdeaDetailPage'), 'IdeaDetailPage')
+const GtmCampaignsPage = lazyRoute(
+  () => import('./components/Gtm/Campaigns/CampaignsPage'), 'CampaignsPage')
+const GtmCalendarPage = lazyRoute(
+  () => import('./components/Gtm/Calendar/CalendarPage'), 'CalendarPage')
+const GtmPositioningPage = lazyRoute(
+  () => import('./components/Gtm/Positioning/PositioningPage'), 'PositioningPage')
 const UsageBillingPage = lazyRoute(
   () => import('./components/Usage/UsageBillingPage'), 'UsageBillingPage')
 const ConnectorsPage = lazyRoute(
@@ -1020,6 +1031,21 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: InboxPage,
   })
 
+  // GTM: ideas, campaigns, the calendar, positioning and facts. Each page
+  // asks the org gate itself (components/Gtm/shared/GtmShell.tsx); `/gtm`
+  // opens Ideas.
+  const gtmIndexRoute = createRoute({
+    getParentRoute: authParent,
+    path: '/gtm',
+    component: () => <Navigate to={gtmPath('ideas')} replace />,
+  })
+  const gtmIdeasRoute = createRoute({ getParentRoute: authParent, path: '/gtm/ideas', component: GtmIdeasPage })
+  const gtmIdeaRoute = createRoute({ getParentRoute: authParent, path: '/gtm/ideas/$ideaId', component: GtmIdeaDetailPage })
+  const gtmCampaignsRoute = createRoute({ getParentRoute: authParent, path: '/gtm/campaigns', component: GtmCampaignsPage })
+  const gtmCalendarRoute = createRoute({ getParentRoute: authParent, path: '/gtm/calendar', component: GtmCalendarPage })
+  const gtmPositioningRoute = createRoute({ getParentRoute: authParent, path: '/gtm/positioning', component: GtmPositioningPage })
+  const gtmRoutes = [gtmIndexRoute, gtmIdeasRoute, gtmIdeaRoute, gtmCampaignsRoute, gtmCalendarRoute, gtmPositioningRoute] as const
+
   // Usage & billing: the org's spend over time, per project, AI and sandbox
   // time, plan, credits and invoices (components/Usage/UsageBillingPage.tsx;
   // U6c). Its period is the page's `?range=` search, read without a route id.
@@ -1084,7 +1110,7 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
 
   return {
     app: [indexRoute, projectRoute, chatRoute, threadRoute, newChatRoute] as const,
-    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, usageRoute, connectorsRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, projectSettingsRoute, projectWorkspacesRoute, ...retiredPageRoutes] as const,
+    authenticated: [forgeConsoleRoutes, workflowNewRoute, workflowBuilderRoute, ...workflowsAreaRoutes, inboxRoute, ...gtmRoutes, usageRoute, connectorsRoute, sandboxesAliasRoute, projectsRoute, projectHomeRoute, projectSettingsRoute, projectWorkspacesRoute, ...retiredPageRoutes] as const,
   }
 }
 

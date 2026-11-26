@@ -147,6 +147,19 @@ export function inboxPath(ctx?: PathContext): string {
   return withOrg("/inbox", ctx);
 }
 
+/** A GTM page (components/Gtm): Ideas, Campaigns, Calendar, Positioning & facts. */
+export type GtmPage = "ideas" | "campaigns" | "calendar" | "positioning";
+
+/** The GTM area (`/gtm` opens Ideas); `page` one of its pages. Gated per org (components/Gtm/shared/access.ts). */
+export function gtmPath(page?: GtmPage, ctx?: PathContext): string {
+  return withOrg(page ? `/gtm/${page}` : "/gtm", ctx);
+}
+
+/** One GTM idea's page: its rationale, evidence and draft. */
+export function gtmIdeaPath(ideaId: string, ctx?: PathContext): string {
+  return withOrg(`/gtm/ideas/${seg(ideaId)}`, ctx);
+}
+
 // ── Apps (forge) ────────────────────────────────────────────────────────────
 
 /** The org's Usage & billing page (components/Usage/UsageBillingPage.tsx); `usageBillingPath` names the same URL. */

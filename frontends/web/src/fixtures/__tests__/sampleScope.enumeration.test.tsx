@@ -126,6 +126,10 @@ const GLOBAL_READS: Record<string, { why: string; answer: () => object }> = {
     why: "the person's roster: the switcher and the shell's scope",
     answer: () => ({}),
   },
+  "reliant.v1.GtmService/GetGtmAccess": {
+    why: "whether the person's org may see GTM: the shell nav's GTM › row (Gtm/shared/access.ts)",
+    answer: () => ({ enabled: false }),
+  },
 };
 
 /**

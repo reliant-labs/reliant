@@ -15,6 +15,7 @@ import { memo, useLayoutEffect, useMemo, useState } from "react";
 
 import { appScope, AppScopeProvider } from "@/fixtures/scope";
 
+import { useGtmAccess } from "../../Gtm/shared/access";
 import { consolePageOf, orgPageOf } from "../../Forge/Console/paths";
 import type { GroupedNavInput } from "../../Forge/Console/consoleNavModel";
 import { useConsoleNavModel, type ConsoleNavModel } from "../../Forge/Console/useConsoleNavModel";
@@ -88,6 +89,9 @@ const ScopedConsoleModel = memo(function ScopedConsoleModel({
 });
 
 function NavBody({ config, shell, pathname, search, slots, onNavigate, flat, onBack, topLevel, console }: ShellNavBodyProps & { console: GroupedNavInput | null }) {
+  // GTM is org-gated by the server (Gtm/shared/access.ts): asked only by a nav
+  // that has the area, and hidden until the answer is yes.
+  const gtm = useGtmAccess({ ask: config.items.some((item) => item.id === "gtm") }).enabled;
   const ctx = useMemo<NavCtx>(
     () => ({
       pathname,
@@ -99,8 +103,9 @@ function NavBody({ config, shell, pathname, search, slots, onNavigate, flat, onB
       console,
       page: consolePageOf(pathname)?.page ?? null,
       orgPage: orgPageOf(pathname),
+      features: { gtm },
     }),
-    [pathname, search, shell.mode, shell.projectId, shell.name, shell.app, console],
+    [pathname, search, shell.mode, shell.projectId, shell.name, shell.app, console, gtm],
   );
   return <NavRenderer config={config} ctx={ctx} slots={slots} onNavigate={onNavigate} flat={flat} onBack={onBack} topLevel={topLevel} />;
 }
