@@ -28,8 +28,9 @@ var agent = gtm.Actor{UserID: "user-1", OrgID: tenantZero, Kind: gtm.ActorAgent,
 // generated MockStore: the approver is tested against the service's own
 // checks, hold and record, not a stand-in for them.
 type memItems struct {
-	mu  sync.Mutex
-	row store.GtmItem
+	mu       sync.Mutex
+	row      store.GtmItem
+	channels map[string]store.GtmChannel
 }
 
 func (m *memItems) get(orgID, id string) (*store.GtmItem, error) {
@@ -76,22 +77,49 @@ func (m *memItems) store() *gtm.MockStore {
 			m.row = c
 			return nil
 		},
-		SetItemSendAttemptFunc: func(_ context.Context, orgID, id string, revision int32, from, to string) error {
+		HoldItemSendFunc: func(_ context.Context, orgID, id string, revision int32, hash string, at time.Time) error {
 			m.mu.Lock()
 			defer m.mu.Unlock()
 			if m.row.OrgID != orgID || m.row.ID != id || m.row.Revision != revision ||
-				m.row.Status != string(gtm.ItemApproved) || m.row.ApprovalHash != from {
+				m.row.Status != string(gtm.ItemApproved) || m.row.ApprovalHash != "" {
 				return gtm.ErrRevisionConflict
 			}
-			m.row.ApprovalHash = to
+			m.row.ApprovalHash, m.row.UpdatedAt = hash, at
 			return nil
+		},
+		ReleaseItemSendFunc: func(_ context.Context, orgID, id string, revision int32, hash string, at time.Time, invalidate bool) error {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			if m.row.OrgID != orgID || m.row.ID != id || m.row.Revision != revision ||
+				m.row.Status != string(gtm.ItemApproved) || m.row.ApprovalHash != hash {
+				return gtm.ErrRevisionConflict
+			}
+			m.row.ApprovalHash, m.row.UpdatedAt = "", at
+			if invalidate {
+				m.row.Revision++
+			}
+			return nil
+		},
+		CountChannelsFunc: func(context.Context, string) (int64, error) { return 1, nil },
+		GetChannelFunc: func(_ context.Context, orgID, id string) (*store.GtmChannel, error) {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			ch, ok := m.channels[id]
+			if !ok || ch.OrgID != orgID {
+				return nil, gtm.ErrNotFound
+			}
+			return &ch, nil
 		},
 	}
 }
 
 func rowOf(it gtm.Item) store.GtmItem {
+	var channelID *string
+	if it.ChannelID != "" {
+		channelID = &it.ChannelID
+	}
 	return store.GtmItem{
-		ID: it.ID, OrgID: it.OrgID, Kind: string(it.Kind), Title: it.Title, BodyMd: it.BodyMD,
+		ID: it.ID, OrgID: it.OrgID, Format: string(it.Format), ChannelID: channelID, Title: it.Title, BodyMd: it.BodyMD,
 		Status: string(it.Status), EmailTo: slices.Clone(it.EmailTo), EmailSubject: it.EmailSubject,
 		ApprovalHash: it.ApprovalHash, Revision: it.Revision,
 	}
@@ -105,7 +133,7 @@ type recordingEmail struct {
 	err  error
 }
 
-func (e *recordingEmail) Send(_ context.Context, run gtm.EmailRun, msg gtm.EmailMessage) (string, error) {
+func (e *recordingEmail) Send(_ context.Context, _ gtm.Actor, run gtm.EmailRun, msg gtm.EmailMessage) (string, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if e.err != nil {
@@ -129,9 +157,26 @@ type fixture struct {
 	approver *email.Approver
 }
 
-func newFixture(t *testing.T, it gtm.Item, sender gtm.Email) *fixture {
+// gmailChannel is an ACTIVE, INTEGRATED gmail channel of tenant zero.
+func gmailChannel(id, connectionID string) store.GtmChannel {
+	kind := gtm.GmailIntegration
+	ch := store.GtmChannel{
+		ID: id, OrgID: tenantZero, Key: id, Name: "Founder newsletter",
+		Mode: string(gtm.ChannelIntegrated), IntegrationKind: &kind,
+		Status: string(gtm.ChannelActive), Revision: 1,
+	}
+	if connectionID != "" {
+		ch.ConnectionID = &connectionID
+	}
+	return ch
+}
+
+func newFixture(t *testing.T, it gtm.Item, sender gtm.Email, channels ...store.GtmChannel) *fixture {
 	t.Helper()
-	items := &memItems{row: rowOf(it)}
+	items := &memItems{row: rowOf(it), channels: map[string]store.GtmChannel{}}
+	for _, ch := range channels {
+		items.channels[ch.ID] = ch
+	}
 	st := items.store()
 	svc := gtm.New(gtm.Deps{
 		Store: st,
@@ -162,7 +207,7 @@ func TestPrepare_AttendedAlwaysNeedsACard(t *testing.T) {
 	f := newFixture(t, approvedEmail(), &recordingEmail{})
 	card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
 	require.NoError(t, err)
-	assert.Equal(t, email.ApprovalHash(approvedEmail()), card.Hash)
+	assert.Equal(t, gtm.ApprovalHash(approvedEmail()), card.Hash)
 	assert.Contains(t, card.Title, "To: ann@example.com, bo@example.com")
 	assert.Contains(t, card.Title, "Subject: Launch week")
 	assert.Contains(t, card.Title, "│ We **shipped** it.")
@@ -187,10 +232,11 @@ func TestPrepareAndExecute_RefuseUnlessAnApprovedEmailAtTheRevision(t *testing.T
 		{"draft", func(it *gtm.Item) { it.Status = gtm.ItemDraft }, gtm.ErrNotApproved},
 		{"review", func(it *gtm.Item) { it.Status = gtm.ItemReview }, gtm.ErrNotApproved},
 		{"paused", func(it *gtm.Item) { it.Status = gtm.ItemPaused }, gtm.ErrNotApproved},
-		{"not an email", func(it *gtm.Item) { it.Kind = gtm.ItemBlogPost; it.EmailTo = nil; it.EmailSubject = "" }, gtm.ErrNotApproved},
+		{"not an email", func(it *gtm.Item) { it.Format = gtm.FormatLongPost; it.EmailTo = nil; it.EmailSubject = "" }, gtm.ErrNotApproved},
 		{"sent", func(it *gtm.Item) { it.Status = gtm.ItemSent }, gtm.ErrAlreadySent},
 		{"sent, other revision", func(it *gtm.Item) { it.Status = gtm.ItemSent; it.Revision = 9 }, gtm.ErrAlreadySent},
-		{"held by a send in doubt", func(it *gtm.Item) { it.ApprovalHash = "gtm_email:v1:earlier" }, gtm.ErrSendInDoubt},
+		{"held by a send in doubt", func(it *gtm.Item) { it.ApprovalHash = "earlier-card" }, gtm.ErrSendInDoubt},
+		{"held, other revision", func(it *gtm.Item) { it.ApprovalHash = "earlier-card"; it.Revision = 9 }, gtm.ErrSendInDoubt},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			it := approvedEmail()
@@ -202,7 +248,7 @@ func TestPrepareAndExecute_RefuseUnlessAnApprovedEmailAtTheRevision(t *testing.T
 			require.ErrorIs(t, err, tc.want)
 
 			// Execute re-checks on its own read, whatever card it was given.
-			_, err = f.approver.Execute(approvedCtx(email.ApprovalHash(it)), agent, sendReq, sendRun)
+			_, err = f.approver.Execute(approvedCtx(gtm.ApprovalHash(it)), agent, sendReq, sendRun)
 			require.ErrorIs(t, err, tc.want)
 			assert.Zero(t, sender.count())
 		})
@@ -241,7 +287,7 @@ func TestExecute_RefusedUnattended(t *testing.T) {
 	f := newFixture(t, approvedEmail(), sender)
 	ctx := automationpolicy.WithExecution(context.Background(), automationpolicy.Execution{
 		Unattended: true,
-		Approvals:  map[string]string{sendRun.ToolCallID: email.ApprovalHash(approvedEmail())},
+		Approvals:  map[string]string{sendRun.ToolCallID: gtm.ApprovalHash(approvedEmail())},
 	})
 	_, err := f.approver.Execute(ctx, agent, sendReq, sendRun)
 	require.ErrorIs(t, err, email.ErrUnattended)
@@ -250,7 +296,7 @@ func TestExecute_RefusedUnattended(t *testing.T) {
 }
 
 func TestExecute_NeedsTheCardForThisCall(t *testing.T) {
-	hash := email.ApprovalHash(approvedEmail())
+	hash := gtm.ApprovalHash(approvedEmail())
 	for name, ctx := range map[string]context.Context{
 		"no runtime context": context.Background(),
 		"no approval":        automationpolicy.WithExecution(context.Background(), automationpolicy.Execution{}),
@@ -286,7 +332,7 @@ func TestExecute_RefusesACardForOtherContent(t *testing.T) {
 
 	other := approvedEmail()
 	other.EmailTo = []string{"eve@example.com"}
-	_, err = f.approver.Execute(approvedCtx(email.ApprovalHash(other)), agent, sendReq, sendRun)
+	_, err = f.approver.Execute(approvedCtx(gtm.ApprovalHash(other)), agent, sendReq, sendRun)
 	require.ErrorIs(t, err, email.ErrCardStale)
 
 	// A person edits and re-approves after the card was raised: the revision
@@ -330,8 +376,9 @@ func TestExecute_FailsClosedWithNoGmailConnection(t *testing.T) {
 
 	_, err = f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
 	require.Error(t, err)
+	// The service answers with the bare sentinel and logs the cause
+	// (Gmail's own test pins ErrNotConnected).
 	assert.ErrorIs(t, err, gtm.ErrEmailNotSent)
-	assert.ErrorIs(t, err, email.ErrNotConnected)
 	assert.NotErrorIs(t, err, gtm.ErrSendInDoubt)
 	assert.Zero(t, exec.count(), "nothing reached Gmail")
 
@@ -387,4 +434,117 @@ func TestApprover_RefusesAnIncompleteRequest(t *testing.T) {
 			require.ErrorIs(t, err, gtm.ErrInvalidArgument)
 		})
 	}
+}
+
+// COLD_OUTREACH is an email-type format: it is carded and sent like EMAIL.
+func TestColdOutreachIsSendable(t *testing.T) {
+	it := approvedEmail()
+	it.Format = gtm.FormatColdOutreach
+	sender := &recordingEmail{}
+	f := newFixture(t, it, sender)
+
+	card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
+	require.NoError(t, err)
+	assert.Equal(t, gtm.ApprovalHash(it), card.Hash)
+	sent, err := f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
+	require.NoError(t, err)
+	assert.Equal(t, gtm.ItemSent, sent.Status)
+	assert.Equal(t, 1, sender.count())
+}
+
+// A channel that cannot send email is refused at Prepare, so no card is
+// ever shown for the item, and again at Execute.
+func TestPrepare_RefusesAnUnsendableChannel(t *testing.T) {
+	paused := gmailChannel("ch-1", "")
+	paused.Status = string(gtm.ChannelPaused)
+	archived := gmailChannel("ch-1", "")
+	archived.Status = string(gtm.ChannelArchived)
+	manual := gmailChannel("ch-1", "")
+	manual.Mode, manual.IntegrationKind = string(gtm.ChannelManual), nil
+	slack := gmailChannel("ch-1", "")
+	kind := "slack"
+	slack.IntegrationKind = &kind
+	for name, tc := range map[string]struct {
+		channels []store.GtmChannel
+		req      email.SendRequest
+		want     error
+	}{
+		"paused":                        {[]store.GtmChannel{paused}, sendReq, gtm.ErrChannelNotSendable},
+		"archived":                      {[]store.GtmChannel{archived}, sendReq, gtm.ErrChannelNotSendable},
+		"manual":                        {[]store.GtmChannel{manual}, sendReq, gtm.ErrChannelNotSendable},
+		"not gmail":                     {[]store.GtmChannel{slack}, sendReq, gtm.ErrChannelNotSendable},
+		"call names another connection": {[]store.GtmChannel{gmailChannel("ch-1", "conn-channel")}, email.SendRequest{ItemID: "item-1", ExpectedRevision: 3, ConnectionID: "conn-other"}, gtm.ErrChannelNotSendable},
+		"channel gone":                  {nil, sendReq, gtm.ErrNotFound},
+	} {
+		t.Run(name, func(t *testing.T) {
+			it := approvedEmail()
+			it.ChannelID = "ch-1"
+			sender := &recordingEmail{}
+			f := newFixture(t, it, sender, tc.channels...)
+
+			_, err := f.approver.Prepare(context.Background(), agent, tc.req, false)
+			require.ErrorIs(t, err, tc.want)
+			_, err = f.approver.Execute(approvedCtx(gtm.ApprovalHash(it)), agent, tc.req, sendRun)
+			require.ErrorIs(t, err, tc.want)
+			assert.Zero(t, sender.count())
+			assert.Empty(t, f.items.snapshot().ApprovalHash, "never held")
+		})
+	}
+}
+
+// A sendable channel is named on the card, and its connection is the one
+// the email goes out through.
+func TestExecute_SendsThroughTheChannelsConnection(t *testing.T) {
+	it := approvedEmail()
+	it.ChannelID = "ch-1"
+	sender := &recordingEmail{}
+	f := newFixture(t, it, sender, gmailChannel("ch-1", "conn-channel"))
+
+	card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
+	require.NoError(t, err)
+	assert.Contains(t, card.Title, "From: Your Gmail on channel “Founder newsletter”, under your name")
+	_, err = f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
+	require.NoError(t, err)
+	require.Equal(t, 1, sender.count())
+	assert.Equal(t, "conn-channel", sender.runs[0].ConnectionID)
+
+	// The call naming the channel's own connection is the same send.
+	it2 := approvedEmail()
+	it2.ChannelID = "ch-1"
+	f2 := newFixture(t, it2, &recordingEmail{}, gmailChannel("ch-1", "conn-channel"))
+	req := email.SendRequest{ItemID: "item-1", ExpectedRevision: 3, ConnectionID: "conn-channel"}
+	_, err = f2.approver.Prepare(context.Background(), agent, req, false)
+	require.NoError(t, err)
+}
+
+// A run's connection that contradicts the request's is refused before any
+// read: the request is what Prepare checked and the card was raised for.
+func TestExecute_RunConnectionMustBeTheRequests(t *testing.T) {
+	sender := &recordingEmail{}
+	f := newFixture(t, approvedEmail(), sender)
+	run := sendRun
+	run.ConnectionID = "conn-other"
+	_, err := f.approver.Execute(approvedCtx(gtm.ApprovalHash(approvedEmail())), agent, sendReq, run)
+	require.ErrorIs(t, err, gtm.ErrChannelNotSendable)
+	assert.Zero(t, sender.count())
+}
+
+// The run the email would go out through is someone else's: nothing is
+// sent, the failure is ErrEmailNotSent, and the item is released.
+func TestExecute_FailsClosedOnAnotherUsersRun(t *testing.T) {
+	src := &fakeSource{}
+	exec := &fakeExecutor{}
+	g := newGmailRuns(t, src, exec, &fakeRuns{owner: "user-2", org: tenantZero})
+	f := newFixture(t, approvedEmail(), g)
+	card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
+	require.NoError(t, err)
+
+	_, err = f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
+	require.ErrorIs(t, err, gtm.ErrEmailNotSent)
+	assert.NotErrorIs(t, err, gtm.ErrSendInDoubt)
+	assert.Empty(t, src.reqs, "no credential is resolved")
+	assert.Zero(t, exec.count())
+	row := f.items.snapshot()
+	assert.Equal(t, string(gtm.ItemApproved), row.Status)
+	assert.Empty(t, row.ApprovalHash, "released, not held")
 }

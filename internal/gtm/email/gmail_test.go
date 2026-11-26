@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
@@ -60,12 +61,21 @@ type fakeExecutor struct {
 	calls  []httpaction.ExecutorCall
 	result *httpaction.Result
 	err    error
+	// block, when set, holds the call until it is closed, whatever its ctx
+	// says: a request that outlives its deadline.
+	block chan struct{}
 }
 
 func (e *fakeExecutor) send(_ context.Context, call httpaction.ExecutorCall) (*httpaction.Result, error) {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.calls = append(e.calls, call)
+	block := e.block
+	e.mu.Unlock()
+	if block != nil {
+		<-block
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if e.err != nil {
 		return nil, e.err
 	}
@@ -81,15 +91,54 @@ func (e *fakeExecutor) count() int {
 	return len(e.calls)
 }
 
+// fakeRuns is the run record: run-1 is user-1's in tenant zero.
+type fakeRuns struct {
+	owner, org string
+	err        error
+	// block, when set, holds the lookup until it is closed.
+	block chan struct{}
+}
+
+func (r *fakeRuns) OwnerOf(_ context.Context, runID string) (string, error) {
+	if r.block != nil {
+		<-r.block
+	}
+	if r.err != nil {
+		return "", r.err
+	}
+	if runID != "run-1" {
+		return "", errors.New("run not found")
+	}
+	return r.owner, nil
+}
+
+func (r *fakeRuns) RunOrgOf(_ context.Context, runID string) (string, error) {
+	if r.err != nil {
+		return "", r.err
+	}
+	if runID != "run-1" {
+		return "", errors.New("run not found")
+	}
+	return r.org, nil
+}
+
+func ownRuns() *fakeRuns { return &fakeRuns{owner: "user-1", org: tenantZero} }
+
 // newGmail is the real sender over the real runner and catalog, with the
-// Gmail executor faked.
+// Gmail executor faked; run-1 is the agent actor's.
 func newGmail(t *testing.T, src httpaction.CredentialSource, exec *fakeExecutor) *email.Gmail {
+	t.Helper()
+	return newGmailRuns(t, src, exec, ownRuns())
+}
+
+func newGmailRuns(t *testing.T, src httpaction.CredentialSource, exec *fakeExecutor, runs email.RunRecords) *email.Gmail {
 	t.Helper()
 	reg := httpaction.NewExecutorRegistry()
 	reg.MustRegister(gmail.SendExecutor, exec.send)
 	g, err := email.NewGmail(email.Deps{
 		Runner:      httpaction.NewRunner(netguard.New()).WithExecutors(reg),
 		Credentials: src,
+		Runs:        runs,
 	})
 	require.NoError(t, err)
 	return g
@@ -108,7 +157,7 @@ func TestGmailSend_SendsAsTheRunsOwner(t *testing.T) {
 	exec := &fakeExecutor{}
 	g := newGmail(t, src, exec)
 
-	id, err := g.Send(context.Background(), testRun, testMessage)
+	id, err := g.Send(context.Background(), agent, testRun, testMessage)
 	require.NoError(t, err)
 	assert.Equal(t, "gmail-msg-1", id)
 
@@ -142,7 +191,7 @@ func TestGmailSend_NamedConnection(t *testing.T) {
 
 	run := testRun
 	run.ConnectionID = "conn-work"
-	_, err := g.Send(context.Background(), run, testMessage)
+	_, err := g.Send(context.Background(), agent, run, testMessage)
 	require.NoError(t, err)
 	require.Len(t, src.reqs, 1)
 	assert.Equal(t, "conn-work", src.reqs[0].ConnectionID)
@@ -159,7 +208,7 @@ func TestGmailSend_FailsClosedWithNoGmailConnection(t *testing.T) {
 			exec := &fakeExecutor{}
 			g := newGmail(t, src, exec)
 
-			id, err := g.Send(context.Background(), testRun, testMessage)
+			id, err := g.Send(context.Background(), agent, testRun, testMessage)
 			require.Error(t, err)
 			assert.Empty(t, id)
 			assert.ErrorIs(t, err, email.ErrNotConnected)
@@ -173,7 +222,7 @@ func TestGmailSend_FailsClosedWithNoGmailConnection(t *testing.T) {
 		exec := &fakeExecutor{}
 		g := newGmail(t, src, exec)
 
-		_, err := g.Send(context.Background(), testRun, testMessage)
+		_, err := g.Send(context.Background(), agent, testRun, testMessage)
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 		assert.ErrorIs(t, err, gtm.ErrEmailNotSent, "the credential is resolved before anything is posted")
@@ -186,7 +235,7 @@ func TestGmailSend_RefusesWithoutARun(t *testing.T) {
 	exec := &fakeExecutor{}
 	g := newGmail(t, src, exec)
 
-	_, err := g.Send(context.Background(), gtm.EmailRun{ToolCallID: "call-1"}, testMessage)
+	_, err := g.Send(context.Background(), agent, gtm.EmailRun{ToolCallID: "call-1"}, testMessage)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, gtm.ErrEmailNotSent)
 	assert.Empty(t, src.reqs, "no run: no owner to resolve a credential for")
@@ -206,7 +255,7 @@ func TestGmailSend_RefusesAnIncompleteMessage(t *testing.T) {
 			src := &fakeSource{}
 			exec := &fakeExecutor{}
 			g := newGmail(t, src, exec)
-			_, err := g.Send(context.Background(), testRun, msg)
+			_, err := g.Send(context.Background(), agent, testRun, msg)
 			require.Error(t, err)
 			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.ErrorIs(t, err, gtm.ErrEmailNotSent, "refused before any request")
@@ -237,7 +286,7 @@ func TestGmailSend_NotSentOnlyWhenCertain(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			g := newGmail(t, &fakeSource{}, tc.exec)
-			id, err := g.Send(context.Background(), testRun, testMessage)
+			id, err := g.Send(context.Background(), agent, testRun, testMessage)
 			require.Error(t, err)
 			assert.Empty(t, id)
 			assert.Equal(t, 1, tc.exec.count())
@@ -246,17 +295,90 @@ func TestGmailSend_NotSentOnlyWhenCertain(t *testing.T) {
 	}
 }
 
-func TestNewGmail_RequiresARunnerAndCredentials(t *testing.T) {
-	_, err := email.NewGmail(email.Deps{Runner: httpaction.NewRunner(netguard.New())})
+// The run must be the actor's, in the actor's org, by the run record:
+// another user's run, a run of another org, or a run whose record cannot be
+// read sends nothing, and says so (gtm.ErrEmailNotSent).
+func TestGmailSend_FailsClosedUnlessTheRunIsTheActors(t *testing.T) {
+	for name, tc := range map[string]struct {
+		runs  *fakeRuns
+		actor gtm.Actor
+		code  connect.Code
+	}{
+		"another user's run":    {runs: &fakeRuns{owner: "user-2", org: tenantZero}, actor: agent, code: connect.CodePermissionDenied},
+		"another org's run":     {runs: &fakeRuns{owner: "user-1", org: "org-2"}, actor: agent, code: connect.CodePermissionDenied},
+		"a run of no org":       {runs: &fakeRuns{owner: "user-1"}, actor: agent, code: connect.CodePermissionDenied},
+		"actor with no user":    {runs: ownRuns(), actor: gtm.Actor{OrgID: tenantZero, Kind: gtm.ActorAgent}, code: connect.CodePermissionDenied},
+		"actor with no org":     {runs: ownRuns(), actor: gtm.Actor{UserID: "user-1", Kind: gtm.ActorAgent}, code: connect.CodePermissionDenied},
+		"run record unreadable": {runs: &fakeRuns{err: errors.New("db down")}, actor: agent, code: connect.CodeUnavailable},
+	} {
+		t.Run(name, func(t *testing.T) {
+			src := &fakeSource{}
+			exec := &fakeExecutor{}
+			g := newGmailRuns(t, src, exec, tc.runs)
+
+			id, err := g.Send(context.Background(), tc.actor, testRun, testMessage)
+			require.Error(t, err)
+			assert.Empty(t, id)
+			assert.ErrorIs(t, err, gtm.ErrEmailNotSent)
+			assert.Equal(t, tc.code, svcerr.Code(err))
+			if tc.code == connect.CodePermissionDenied {
+				assert.ErrorIs(t, err, email.ErrNotRunOwner)
+			}
+			assert.Empty(t, src.reqs, "no credential is resolved for someone else's run")
+			assert.Zero(t, exec.count())
+		})
+	}
+}
+
+// Send returns by its deadline (the gtm.Email contract). A request still
+// running then is abandoned and in doubt; one never started is not sent.
+func TestGmailSend_ReturnsByTheDeadline(t *testing.T) {
+	t.Run("request outlives the deadline", func(t *testing.T) {
+		exec := &fakeExecutor{block: make(chan struct{})}
+		defer close(exec.block)
+		g := newGmail(t, &fakeSource{}, exec)
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		_, err := g.Send(ctx, agent, testRun, testMessage)
+		require.Error(t, err)
+		assert.Less(t, time.Since(start), 5*time.Second)
+		assert.NotErrorIs(t, err, gtm.ErrEmailNotSent, "the request may have been delivered")
+		assert.Equal(t, 1, exec.count())
+	})
+	t.Run("deadline before the request", func(t *testing.T) {
+		runs := ownRuns()
+		runs.block = make(chan struct{})
+		defer close(runs.block)
+		exec := &fakeExecutor{}
+		g := newGmailRuns(t, &fakeSource{}, exec, runs)
+		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+		defer cancel()
+
+		start := time.Now()
+		_, err := g.Send(ctx, agent, testRun, testMessage)
+		require.Error(t, err)
+		assert.Less(t, time.Since(start), 5*time.Second)
+		assert.ErrorIs(t, err, gtm.ErrEmailNotSent, "nothing was posted")
+		assert.Zero(t, exec.count())
+	})
+}
+
+func TestNewGmail_RequiresARunnerCredentialsAndRuns(t *testing.T) {
+	runner := httpaction.NewRunner(netguard.New())
+	_, err := email.NewGmail(email.Deps{Runner: runner, Runs: ownRuns()})
 	require.Error(t, err, "no credential source: no Gmail")
-	_, err = email.NewGmail(email.Deps{Credentials: &fakeSource{}})
+	_, err = email.NewGmail(email.Deps{Credentials: &fakeSource{}, Runs: ownRuns()})
 	require.Error(t, err, "no runner: no Gmail")
+	_, err = email.NewGmail(email.Deps{Runner: runner, Credentials: &fakeSource{}})
+	require.Error(t, err, "no run records: no Gmail")
 
 	var zero *email.Gmail
-	_, err = zero.Send(context.Background(), testRun, testMessage)
+	_, err = zero.Send(context.Background(), agent, testRun, testMessage)
 	assert.ErrorIs(t, err, email.ErrNotConfigured)
 	assert.ErrorIs(t, err, gtm.ErrEmailNotSent)
-	_, err = (&email.Gmail{}).Send(context.Background(), testRun, testMessage)
+	_, err = (&email.Gmail{}).Send(context.Background(), agent, testRun, testMessage)
 	assert.ErrorIs(t, err, email.ErrNotConfigured)
 }
 

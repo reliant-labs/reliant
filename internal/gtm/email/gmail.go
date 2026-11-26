@@ -7,13 +7,14 @@
 //
 //   - Gmail implements gtm.Email: one message through the Gmail
 //     integration's message.send action (catalog/gmail/manifest.yaml), with
-//     the run owner's own Gmail connection, resolved from the run (connauth).
-//     A run with no usable Gmail connection is refused; nothing is sent
-//     unauthenticated or as anyone else.
+//     the acting user's own Gmail connection, resolved from their run
+//     (connauth). A run that is not the actor's, or has no usable Gmail
+//     connection, is refused; nothing is sent unauthenticated or as anyone
+//     else.
 //   - Approver is what the send_gtm_email tool calls: Prepare builds the
-//     approval card for an APPROVED email item and the hash that binds it
-//     (ApprovalHash), and Execute sends the item only when the owner approved
-//     a card whose hash still matches the item as it is now.
+//     approval card for an APPROVED email-type item and the hash that binds
+//     it (gtm.ApprovalHash), and Execute sends the item only when the owner
+//     approved a card whose hash still matches the item as it is now.
 //
 // The send never goes through the generic gmail__message_send tool: a person
 // can auto-approve that tool's permission prompt, and an unattended step that
@@ -34,6 +35,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
@@ -82,8 +84,23 @@ type Deps struct {
 	// Credentials resolves the run owner's Gmail connection: connauth's
 	// Service. Required: there is no unauthenticated send.
 	Credentials httpaction.CredentialSource
+	// Runs reads whose run a send is from, from the run record: the same
+	// read the credential source resolves the owner with.
+	// *connections.Resolver satisfies it. Required: a send is refused unless
+	// the run is the acting user's, in the acting org.
+	Runs RunRecords
 	// Catalog resolves SendAction; nil is the builtin catalog.
 	Catalog *catalog.Catalog
+}
+
+// RunRecords reads a run's owner and org from the run record (a workflow
+// run, else its thread's workflow, else its chat). *connections.Resolver
+// satisfies it.
+type RunRecords interface {
+	// OwnerOf is the user the run acts for.
+	OwnerOf(ctx context.Context, runID string) (string, error)
+	// RunOrgOf is the org the run belongs to; "" for none.
+	RunOrgOf(ctx context.Context, runID string) (string, error)
 }
 
 // Gmail sends GTM emails through the Gmail integration. It implements
@@ -91,16 +108,18 @@ type Deps struct {
 type Gmail struct {
 	runner  writeledger.Runner
 	creds   httpaction.CredentialSource
+	runs    RunRecords
 	catalog *catalog.Catalog
 }
 
 var _ gtm.Email = (*Gmail)(nil)
 
-// NewGmail builds the sender. A missing runner or credential source is an
-// error: a process that cannot authenticate a send must not build one.
+// NewGmail builds the sender. A missing runner, credential source or run
+// records is an error: a process that cannot authenticate a send, or tell
+// whose run it is from, must not build one.
 func NewGmail(deps Deps) (*Gmail, error) {
-	if deps.Runner == nil || deps.Credentials == nil {
-		return nil, errors.New("email: a runner and a credential source are required")
+	if deps.Runner == nil || deps.Credentials == nil || deps.Runs == nil {
+		return nil, errors.New("email: a runner, a credential source and run records are required")
 	}
 	c := deps.Catalog
 	if c == nil {
@@ -112,35 +131,45 @@ func NewGmail(deps Deps) (*Gmail, error) {
 	if _, err := c.Resolve(SendAction); err != nil {
 		return nil, fmt.Errorf("email: %w", err)
 	}
-	return &Gmail{runner: deps.Runner, creds: deps.Credentials, catalog: c}, nil
+	return &Gmail{runner: deps.Runner, creds: deps.Credentials, runs: deps.Runs, catalog: c}, nil
 }
 
-// Send implements gtm.Email: it sends msg from the run owner's Gmail and
-// returns Gmail's message id.
+// Send implements gtm.Email: it sends msg from actor's Gmail, for an email
+// of actor's run, and returns Gmail's message id.
 //
 // The body is sent as plain text, byte for byte the markdown the approval
 // card showed: what the person approved is what goes out, with no rendering
 // step between them that could add, drop or reorder anything.
 //
-// The credential is the run's: the owner is read from the run record by the
-// credential source, and run.ConnectionID, when set, names one of the owner's
-// own Gmail connections (the source refuses anyone else's).
+// It fails closed unless run is actor.UserID's in actor.OrgID, read from the
+// run record (ErrNotRunOwner). The Gmail connection is then the run owner's,
+// resolved by the credential source from that same record: the owner's
+// default, or run.ConnectionID, which the source refuses unless it is the
+// owner's own.
 //
 // An error wraps gtm.ErrEmailNotSent only when nothing can have left Gmail,
-// which lets SendItemEmail release the item for a retry:
+// which lets SendItemEmail release the item:
 //
 //   - the sender is not configured (ErrNotConfigured), or the message fails
 //     validation before any request (no run, no recipients, a subject or
 //     address Gmail would refuse, a body that is not valid UTF-8);
+//   - the run is not the actor's (ErrNotRunOwner), or its record could not
+//     be read;
 //   - no usable Gmail connection (ErrNotConnected): every credential
 //     failure is decided before the message is posted, or is Gmail's 401;
 //   - Gmail answered 4xx (other than 408 Request Timeout), which is Gmail
-//     refusing the request.
+//     refusing the request;
+//   - ctx ended before the request was started.
 //
-// Every other failure (a transport error, a timeout, a 5xx or 408, a 2xx
-// without a message id) may have sent, and does not wrap it.
-func (g *Gmail) Send(ctx context.Context, run gtm.EmailRun, msg gtm.EmailMessage) (string, error) {
-	if g == nil || g.runner == nil || g.creds == nil || g.catalog == nil {
+// Every other failure (a transport error, a 5xx or 408, a 2xx without a
+// message id, ctx ending while the request runs) may have sent, and does not
+// wrap it.
+//
+// Send returns by ctx's deadline, as gtm.Email requires: a request still
+// running then is abandoned (its ctx is the caller's, so it is cancelled
+// with it) and reported as in doubt.
+func (g *Gmail) Send(ctx context.Context, actor gtm.Actor, run gtm.EmailRun, msg gtm.EmailMessage) (string, error) {
+	if g == nil || g.runner == nil || g.creds == nil || g.runs == nil || g.catalog == nil {
 		return "", notSent(ErrNotConfigured)
 	}
 	if strings.TrimSpace(run.RunID) == "" {
@@ -155,6 +184,47 @@ func (g *Gmail) Send(ctx context.Context, run gtm.EmailRun, msg gtm.EmailMessage
 	if err != nil {
 		return "", notSent(svcerr.WithCause(svcerr.Internal("the Gmail send action is missing from the catalog"), err))
 	}
+	type outcome struct {
+		id  string
+		err error
+	}
+	// stage decides, once, whether the request starts or the send is
+	// abandoned before it: whichever moves it off stagePending first wins.
+	var stage atomic.Int32
+	done := make(chan outcome, 1)
+	go func() {
+		id, err := g.deliver(ctx, actor, run, msg, action, &stage)
+		done <- outcome{id, err}
+	}()
+	select {
+	case o := <-done:
+		return o.id, o.err
+	case <-ctx.Done():
+		if stage.CompareAndSwap(stagePending, stageAbandoned) {
+			return "", notSent(svcerr.WithCause(svcerr.DeadlineExceeded("the email send ran out of time before it started"), ctx.Err()))
+		}
+		return "", fmt.Errorf("gmail send: abandoned at the deadline, the request may have been delivered: %w", ctx.Err())
+	}
+}
+
+// Send's stages: the request has not started, it has (and may deliver), or
+// Send gave up on it before it started (and it never will).
+const (
+	stagePending int32 = iota
+	stagePosted
+	stageAbandoned
+)
+
+// deliver is Send past validation: the run's owner, then the request. It
+// moves stage to stagePosted just before the request may leave, unless Send
+// abandoned it first.
+func (g *Gmail) deliver(ctx context.Context, actor gtm.Actor, run gtm.EmailRun, msg gtm.EmailMessage, action *catalog.Action, stage *atomic.Int32) (string, error) {
+	if err := g.checkRunOwner(ctx, actor.UserID, actor.OrgID, run.RunID); err != nil {
+		return "", notSent(err)
+	}
+	if err := ctx.Err(); err != nil {
+		return "", notSent(svcerr.WithCause(svcerr.DeadlineExceeded("the email send ran out of time before it started"), err))
+	}
 	to := make([]any, len(msg.To))
 	for i, addr := range msg.To {
 		to[i] = addr
@@ -162,6 +232,9 @@ func (g *Gmail) Send(ctx context.Context, run gtm.EmailRun, msg gtm.EmailMessage
 	params := map[string]any{"to": to, "subject": msg.Subject, "text": msg.BodyMD}
 	if run.ConnectionID != "" {
 		params[httpaction.ConnectionParam] = run.ConnectionID
+	}
+	if !stage.CompareAndSwap(stagePending, stagePosted) {
+		return "", notSent(svcerr.DeadlineExceeded("the email send ran out of time before it started"))
 	}
 	res, err := g.runner.RunAuthenticated(ctx, action.Manifest, action.Spec, params, g.creds, httpaction.CallSite{
 		RunID: run.RunID, NodeID: run.NodeID, ToolCallID: run.ToolCallID,
@@ -193,6 +266,33 @@ func (g *Gmail) Send(ctx context.Context, run gtm.EmailRun, msg gtm.EmailMessage
 		return "", svcerr.Internal("the Gmail send returned no message id")
 	}
 	return id, nil
+}
+
+// ErrNotRunOwner is a send whose run is not the acting user's, in the
+// acting org (PermissionDenied). It is returned wrapped with
+// gtm.ErrEmailNotSent: nothing was sent.
+var ErrNotRunOwner = svcerr.PermissionDenied("the run this email would be sent from is not yours in this organization; nothing was sent")
+
+// checkRunOwner refuses a run that is not userID's in orgID, read from the
+// run record. The credential source resolves the Gmail connection for that
+// same owner (a named connection must be the owner's own), so a run that is
+// the actor's sends only from the actor's Gmail.
+func (g *Gmail) checkRunOwner(ctx context.Context, userID, orgID, runID string) error {
+	if userID == "" || orgID == "" {
+		return ErrNotRunOwner
+	}
+	owner, err := g.runs.OwnerOf(ctx, runID)
+	if err != nil {
+		return svcerr.WithCause(svcerr.Unavailable("could not read the run this email would be sent from"), err)
+	}
+	org, err := g.runs.RunOrgOf(ctx, runID)
+	if err != nil {
+		return svcerr.WithCause(svcerr.Unavailable("could not read the run this email would be sent from"), err)
+	}
+	if owner != userID || org != orgID {
+		return svcerr.WithCause(ErrNotRunOwner, fmt.Errorf("run %s is user %q's in org %q, not user %q's in org %q", runID, owner, org, userID, orgID))
+	}
+	return nil
 }
 
 // notSent marks err as certain that nothing left: it is gtm.ErrEmailNotSent

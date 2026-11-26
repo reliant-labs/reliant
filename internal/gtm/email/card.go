@@ -3,11 +3,7 @@
 package email
 
 import (
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
 	"fmt"
-	"hash"
 	"strconv"
 	"strings"
 	"unicode"
@@ -21,52 +17,6 @@ import (
 // registered; until then the runtime wiring spells the same literal.
 const ToolName = "send_gtm_email"
 
-// HashPrefix starts every approval hash: the scheme and its version. A
-// change to the encoding below is a new version, so a card approved under
-// the old one never matches.
-const HashPrefix = "gtm_email:v1:"
-
-// hashDomain is the first field hashed, so no other sha256 in Reliant over
-// the same bytes can be mistaken for an email approval.
-const hashDomain = "reliant/gtm/email-approval/v1"
-
-// ApprovalHash is the hash an email item's approval card binds: HashPrefix
-// followed by the lowercase hex sha256 of the length-prefixed encoding of
-//
-//	hashDomain, item id, revision (decimal), recipient count (decimal),
-//	each recipient in order, subject, body
-//
-// where each field is its byte length as an unsigned 64-bit big-endian
-// integer followed by its bytes. The length prefix makes the encoding
-// injective: no two different items encode alike, however their fields
-// split (a recipient "a,b" against two recipients "a" and "b", a subject
-// ending where the body would begin). Recipients are hashed in order, as
-// they are sent.
-//
-// It is pure and stable: the same item content gives the same hash in every
-// process and release of v1. Any change to the id, revision, recipients,
-// subject or body changes it.
-func ApprovalHash(it gtm.Item) string {
-	h := sha256.New()
-	writeField(h, hashDomain)
-	writeField(h, it.ID)
-	writeField(h, strconv.FormatInt(int64(it.Revision), 10))
-	writeField(h, strconv.Itoa(len(it.EmailTo)))
-	for _, addr := range it.EmailTo {
-		writeField(h, addr)
-	}
-	writeField(h, it.EmailSubject)
-	writeField(h, it.BodyMD)
-	return HashPrefix + hex.EncodeToString(h.Sum(nil))
-}
-
-func writeField(h hash.Hash, s string) {
-	var n [8]byte
-	binary.BigEndian.PutUint64(n[:], uint64(len(s)))
-	h.Write(n[:])
-	h.Write([]byte(s))
-}
-
 // Card is the approval card for sending one email item: what the owner sees
 // and the hash their approval binds.
 type Card struct {
@@ -74,7 +24,8 @@ type Card struct {
 	// the web client reads in lib/approvalCard.ts): a lead sentence, the
 	// To and Subject rows, the body, then the technical lines.
 	Title string
-	// Hash is ApprovalHash of the item the card shows.
+	// Hash is gtm.ApprovalHash of the item the card shows: what
+	// SendItemEmail checks the approval against.
 	Hash string
 	// ItemID and Revision are the item and the revision the card shows.
 	ItemID   string
@@ -96,12 +47,15 @@ const (
 	leadSubjectLimit = 120
 )
 
-// BuildCard lays out the approval card for it. It is pure and checks only
-// that the item can be shown faithfully and sent: an EMAIL item with
-// recipients, a one-line subject and a body. Whether it may be sent (APPROVED, at the revision named,
-// never SENT) is Approver.Prepare's to check.
-func BuildCard(it gtm.Item) (Card, error) {
-	if it.Kind != gtm.ItemEmail {
+// BuildCard lays out the approval card for it, sent from ch (nil when the
+// item names no channel: the actor's default Gmail connection). It is pure
+// and checks only that the item can be shown faithfully and sent: an
+// email-type item (EMAIL or COLD_OUTREACH) with recipients, a one-line
+// subject and a body. Whether it may be sent (APPROVED, at the revision
+// named, never SENT, unheld, on a sendable channel) is Approver.Prepare's to
+// check.
+func BuildCard(it gtm.Item, ch *gtm.Channel) (Card, error) {
+	if !it.Format.EmailType() {
 		return Card{}, gtm.ErrNotApproved
 	}
 	if len(it.EmailTo) == 0 {
@@ -123,12 +77,16 @@ func BuildCard(it gtm.Item) (Card, error) {
 			return Card{}, &gtm.ValidationError{Field: "email_to", Reason: "a recipient is one bare address"}
 		}
 	}
-	hash := ApprovalHash(it)
+	from := "Your default Gmail connection, under your name"
+	if ch != nil {
+		from = fmt.Sprintf("Your Gmail on channel “%s”, under your name", clip(strings.Join(strings.Fields(ch.Name), " "), leadSubjectLimit))
+	}
+	hash := gtm.ApprovalHash(it)
 	lines := []string{
 		fmt.Sprintf("Send email “%s” to %s?", clip(it.EmailSubject, leadSubjectLimit), recipients(len(it.EmailTo))),
 		"To: " + strings.Join(it.EmailTo, ", "),
 		"Subject: " + it.EmailSubject,
-		"From: Your connected Gmail account, under your name",
+		"From: " + from,
 		"Approval needed: Sending cannot be undone. The email goes out exactly as shown, once.",
 	}
 	lines = append(lines, bodyLines(it.BodyMD)...)
