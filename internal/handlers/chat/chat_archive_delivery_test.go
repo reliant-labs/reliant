@@ -53,7 +53,7 @@ func TestArchive_DropsTheMessageQueuedForTheMachine(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	// The delivery sweep and a machine connect deliver only what this lists.
-	queued, err := f.repo.ListChatsQueuedForMachine(f.ctx, "", 10)
+	queued, err := store.ListChatsQueuedForMachine(f.ctx, f.repo.ORM(), "", 10)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "unarchiving does not revive the queued message")
 	assert.Empty(t, f.temporal.runsStarted(), "no run is ever started for the archived message")
