@@ -13,7 +13,7 @@
  *
  * A history read names a `lookback` (the last day before the server's now)
  * rather than a fixed since: it is resolved as control-plane resolves it,
- * against the clock the pack answers at (`now`, shopStory.ts demoNow by
+ * against the clock the pack answers at (`clock`, shopStory.ts demoNow by
  * default), never the wall clock.
  */
 
@@ -27,7 +27,7 @@ import type { ObservabilityApi } from "@/services/controlPlane/observability/Obs
 import { createShopApi } from "../model/shopApi";
 import { demoNow } from "../shopStory";
 import { completed } from "./defaults";
-import { msOf, msOfDuration, ts, tsOpt } from "./wire";
+import { instantOf, msOf, msOfDuration, ts, tsOpt, type PackClock } from "./wire";
 
 const WIRE_RECEIVER_TYPE: Record<ReceiverType, WireReceiverType> = {
   slack: WireReceiverType.SLACK,
@@ -60,7 +60,7 @@ const wireSilence = (s: Silence): MessageInitShape<typeof SilenceSchema> => ({
   state: s.state,
 });
 
-export function alertingHandlers(fixtures: ObservabilityApi = createShopApi(), { now = demoNow }: { now?: () => number } = {}): MockHandlers {
+export function alertingHandlers(fixtures: ObservabilityApi = createShopApi(), { clock = demoNow }: { clock?: PackClock } = {}): MockHandlers {
   return completed(AlertingService, mockService(AlertingService, {
     listAlerts: async (req) => {
       const alerts = await fixtures.listAlerts(req.orgId, req.envId);
@@ -82,7 +82,7 @@ export function alertingHandlers(fixtures: ObservabilityApi = createShopApi(), {
     listAlertHistory: async (req) => {
       // A since wins over a lookback, as control-plane has it.
       const lookback = msOfDuration(req.lookback);
-      const sinceMs = req.since ? msOf(req.since) : lookback !== undefined ? now() - lookback : undefined;
+      const sinceMs = req.since ? msOf(req.since) : lookback !== undefined ? instantOf(clock) - lookback : undefined;
       const events = await fixtures.listAlertHistory(req.orgId, { envId: req.envId, sinceMs, limit: req.limit });
       return { events: events.map((e) => ({ envId: e.envId, rule: e.rule, fingerprint: e.fingerprint, labels: { ...e.labels }, transition: e.transition, value: e.value, at: ts(e.atMs) })) };
     },

@@ -17,7 +17,7 @@ import { AlertingService, type ListAlertHistoryRequest } from "@/gen/controlplan
 import { alertingServiceKeys, useExpireSilence } from "@/hooks/controlplane/alerting-service-hooks_gen";
 import { alertingHandlers } from "@/fixtures/shop/handlers/alerting";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
-import { mockTransport } from "@/lib/test-utils";
+import type { MockHandlers } from "@/lib/test-utils";
 import { listAlertHistoryRequest } from "@/services/controlPlane/observability/alertingApi";
 import { createShopApi } from "@/fixtures/shop/model/shopApi";
 import { demoNow } from "@/fixtures/shop/shopStory";
@@ -100,7 +100,7 @@ describe("alerting writes", () => {
 describe("the shop pack's handler", () => {
   it("resolves a lookback against the pack's clock, and a since wins over it", async () => {
     const read = (now: number, req: Parameters<typeof listAlertHistoryRequest>[1]) => {
-      const handlers = alertingHandlers(createShopApi(), { now: () => now }) as Parameters<typeof mockTransport>[0];
+      const handlers = alertingHandlers(createShopApi(), { clock: () => now }) as MockHandlers;
       const listAlertHistory = handlers[`${AlertingService.typeName}/ListAlertHistory`] as (r: unknown) => Promise<{ events: { at?: { seconds: bigint } }[] }>;
       return listAlertHistory(listAlertHistoryRequest("org-acme", req));
     };

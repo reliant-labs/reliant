@@ -71,7 +71,7 @@ func TestResumeAfterOrgMove(t *testing.T) {
 					return tc.pauseHeld, nil
 				},
 			}
-			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), OrgMoves: resumer, OrgGitHubApps: tc.apps}))
+			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo), OrgMoves: resumer, OrgGitHubApps: tc.apps}))
 			resumed, why, err := svc.ResumeAfterOrgMove(context.Background(), tc.trigger)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, outcome{resumed: resumed, asked: asked}, "why: %s", why)
@@ -88,7 +88,7 @@ func TestResumeAfterOrgMove(t *testing.T) {
 	down := &StubOrgGitHubApps{ListOrgGitHubInstallationsFunc: func(context.Context, string) ([]gitcredentialclient.OrgInstallation, error) {
 		return nil, errors.New("control-plane is down")
 	}}
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), OrgGitHubApps: down}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo), OrgGitHubApps: down}))
 	_, _, err := svc.ResumeAfterOrgMove(context.Background(), movedTrigger(t, "acme", "4242"))
 	require.Error(t, err)
 
@@ -98,7 +98,7 @@ func TestResumeAfterOrgMove(t *testing.T) {
 	changed := &MockOrgMoveResumer{ResumePausedTriggerFunc: func(context.Context, string, string, time.Time) (bool, error) {
 		return false, core.ErrTriggerChangedSinceRead
 	}}
-	svc = NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Projects: projectaccesstest.For(repo), OrgMoves: changed}))
+	svc = NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, Projects: projectaccesstest.For(repo), OrgMoves: changed}))
 	_, _, err = svc.ResumeAfterOrgMove(context.Background(), movedTrigger(t, "acme", ""))
 	require.ErrorIs(t, err, core.ErrTriggerChangedSinceRead)
 }

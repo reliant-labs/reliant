@@ -23,6 +23,7 @@ import (
 // hides it from the caller, and under enough contention the retries run out
 // and a cleanup flag is lost.
 func TestMergeWorktreeCleanupMetadataLoserReadsTheWinnersWrite(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond)

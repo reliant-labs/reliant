@@ -180,7 +180,7 @@ func TestSpawnSendAndStop_BranchedChat_RefuseInheritedChildWithOwnerNamed(t *tes
 	f := seedBranchedSpawnFixture(t, repo, ctx)
 	branchRC := rctx.NewToolContext(ctx, f.branchThreadID, f.branchThreadID, nil, nil)
 
-	send := runSpawnSend(t, NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil}), branchRC, SpawnSendParams{AgentID: f.inheritedChildID, Subject: "Status", Message: "status?"})
+	send := runSpawnSend(t, NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil}), branchRC, SpawnSendParams{AgentID: f.inheritedChildID, Subject: "Status", Message: "status?"})
 	require.True(t, send.IsError)
 	require.Contains(t, send.Content, "branched", "the refusal must name the branch as the reason")
 	require.Contains(t, send.Content, f.sourceThreadID, "the refusal must name the owning thread")

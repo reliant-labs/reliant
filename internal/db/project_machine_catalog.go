@@ -204,12 +204,20 @@ func (r *Repo) GetProjectMachineCatalogPushedAt(ctx context.Context, projectID, 
 // GetProjectMachineWorkflowsJSON reads one machine's synced workflows of a
 // project, and no other column of its catalog row. synced is false when that
 // machine has never synced the project, which is not the same as having
-// synced none.
+// synced none. A value this Repo read before is served again while its row
+// is unchanged (catalogColumnCache).
 func (r *Repo) GetProjectMachineWorkflowsJSON(ctx context.Context, projectID, daemonID string) (*string, bool, error) {
 	if err := requireMachineCatalogKey(projectID, daemonID); err != nil {
 		return nil, false, err
 	}
-	return store.GetProjectMachineWorkflowsJSON(ctx, r.ORM(), projectID, daemonID)
+	return r.catalogColumns().read(ctx, catalogColumnKey{column: "machine.workflows", projectID: projectID, daemonID: daemonID}, catalogColumnReads{
+		version: func(ctx context.Context) (string, bool, error) {
+			return store.ProjectMachineCatalogVersion(ctx, r.ORM(), projectID, daemonID)
+		},
+		versioned: func(ctx context.Context) (*string, string, bool, error) {
+			return store.GetProjectMachineWorkflowsJSONVersioned(ctx, r.ORM(), projectID, daemonID)
+		},
+	}, r.fillsCatalogColumns(ctx))
 }
 
 // GetProjectMachinePresetsJSON is GetProjectMachineWorkflowsJSON for presets.
@@ -217,7 +225,14 @@ func (r *Repo) GetProjectMachinePresetsJSON(ctx context.Context, projectID, daem
 	if err := requireMachineCatalogKey(projectID, daemonID); err != nil {
 		return nil, false, err
 	}
-	return store.GetProjectMachinePresetsJSON(ctx, r.ORM(), projectID, daemonID)
+	return r.catalogColumns().read(ctx, catalogColumnKey{column: "machine.presets", projectID: projectID, daemonID: daemonID}, catalogColumnReads{
+		version: func(ctx context.Context) (string, bool, error) {
+			return store.ProjectMachineCatalogVersion(ctx, r.ORM(), projectID, daemonID)
+		},
+		versioned: func(ctx context.Context) (*string, string, bool, error) {
+			return store.GetProjectMachinePresetsJSONVersioned(ctx, r.ORM(), projectID, daemonID)
+		},
+	}, r.fillsCatalogColumns(ctx))
 }
 
 func requireMachineCatalogKey(projectID, daemonID string) error {

@@ -25,6 +25,7 @@ import (
 // one that answered sql.ErrNoRows keeps that too, for the callers that treat
 // absence as a default.
 func TestByKeyMissIsClassifiedNotFound(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	db := env.ORM
