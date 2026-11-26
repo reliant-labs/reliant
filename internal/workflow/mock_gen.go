@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockPauseStore
-// forge:hash=1cb4ecfdaf9a046f6d5dc62da0f043fe8c003d6b74a89e8ef66546ce7b58c0ae
+// forge:hash=b8e28f575dd50feacbf652768e268c090b26aa02ec4304912bebd67741f4a190
 
 // MockPauseStore is a test mock for the PauseStore interface.
 //
@@ -36,7 +36,6 @@ type MockPauseStore struct {
 	ReviveSubtreeLiveAtFunc                  func(context.Context, string, time.Time) (int64, int64, error)
 	CascadeTerminalStatusToDescendantsFunc   func(context.Context, string, db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtreeFunc func(context.Context, string, db.WorkflowStopReason) error
-	EmitChatRefetchFunc                      func(context.Context, string, db.RefetchType) error
 	RunTxFunc                                func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 }
 
@@ -110,15 +109,6 @@ func (m *MockPauseStore) CascadeTerminalStatusToThreadSubtree(ctx context.Contex
 		return m.CascadeTerminalStatusToThreadSubtreeFunc(ctx, workflowID, reason)
 	}
 	return contractkit.MockNotSet("MockPauseStore", "CascadeTerminalStatusToThreadSubtree")
-}
-
-// EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
-func (m *MockPauseStore) EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error {
-	m.Recorder.Record("EmitChatRefetch", ctx, chatID, refetchType)
-	if m.EmitChatRefetchFunc != nil {
-		return m.EmitChatRefetchFunc(ctx, chatID, refetchType)
-	}
-	return contractkit.MockNotSet("MockPauseStore", "EmitChatRefetch")
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.

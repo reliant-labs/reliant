@@ -93,6 +93,15 @@ service FileSystemService {
       activity: {none: "filesystem edit through the daemon: an empty directory is not even something git records"}
     };
   }
+
+  // DownloadFile returns the whole content of a file of any kind (text,
+  // image, spreadsheet, archive, ...), for saving it on the user's device.
+  // It is scoped and guarded exactly like the viewer reads (GetFilePreview),
+  // and refuses a file over 25 MB with FailedPrecondition and the error
+  // reason "file_too_large_to_download".
+  rpc DownloadFile(DownloadFileRequest) returns (DownloadFileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ============================================
@@ -457,5 +466,25 @@ message GetFilePreviewResponse {
   bytes content = 1; // Raw binary file content
   string content_type = 2; // MIME type (e.g. "image/png", "application/pdf")
   string filename = 3; // Base filename for Content-Disposition
+  int64 size = 4; // File size in bytes
+}
+
+// ============================================
+// DownloadFile
+// ============================================
+
+message DownloadFileRequest {
+  string project_id = 1;
+  // The file to download: relative to the workspace, or absolute on the
+  // machine that holds it (as the viewer reads accept).
+  string path = 2;
+  optional string worktree_id = 3;
+  optional string chat_id = 4;
+}
+
+message DownloadFileResponse {
+  bytes content = 1; // The file's raw bytes
+  string content_type = 2; // MIME type; "application/octet-stream" when unknown
+  string filename = 3; // Base filename to save as
   int64 size = 4; // File size in bytes
 }

@@ -10,12 +10,13 @@ import (
 	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
-// validateActionNode checks an action node against the integration catalog:
-// `uses` must name a real action@major, and literal params must satisfy that
-// action's manifest schema. A param written as a {{expr}} template cannot be
+// validateActionNode checks an action node against the integration catalog,
+// or, for a `uses: reliant/...`, the server-action catalog: `uses` must name a
+// real action@major, and literal params must satisfy that action's schema. A param written as a {{expr}} template cannot be
 // typed statically, so it satisfies "present" and is otherwise left to run
 // time; the same goes for a `uses` that is itself an expression.
 func validateActionNode(node *reliantv1.Node, nodePath []string, result *Result) {
@@ -50,6 +51,10 @@ func validateActionNode(node *reliantv1.Node, nodePath []string, result *Result)
 		return
 	}
 	uses := strings.TrimSpace(model.CelStringRaw(args.GetUses()))
+	if serveraction.IsRef(uses) {
+		validateServerActionNode(args, uses, nodePath, result)
+		return
+	}
 	resolved, err := catalog.MustBuiltin().Resolve(uses)
 	if err != nil {
 		result.AddError(CategoryStructure, nodePath, "uses", err.Error())
@@ -58,7 +63,40 @@ func validateActionNode(node *reliantv1.Node, nodePath []string, result *Result)
 	if resolved.Spec.GetParams() == nil {
 		return
 	}
-	schema := resolved.Spec.GetParams().AsMap()
+	checkActionParams(resolved.Spec.GetParams().AsMap(), args, uses, nodePath, result)
+}
+
+// serverActions is the server-action catalog a `uses: reliant/...` resolves
+// against; a variable so tests can declare actions of their own.
+var serverActions = serveraction.Builtin
+
+// validateServerActionNode checks a `uses: reliant/...` node against the
+// server-action catalog, not the integration catalog: the name must be
+// declared, and its literal params must satisfy its schema. A server action
+// runs on Reliant's own state as the run's principal, so it takes none of an
+// integration action's ways to authenticate.
+func validateServerActionNode(args *reliantv1.ActionArgs, uses string, nodePath []string, result *Result) {
+	spec, err := serverActions().Resolve(uses)
+	if err != nil {
+		result.AddError(CategoryStructure, nodePath, "uses", err.Error())
+		return
+	}
+	if model.CelStringIsSet(args.GetConnection()) {
+		result.AddError(CategoryStructure, nodePath, "connection", fmt.Sprintf("%s is a Reliant server action: it runs as the run itself and takes no connection", uses))
+	}
+	if args.GetCredential() != nil {
+		result.AddError(CategoryStructure, nodePath, "credential", fmt.Sprintf("%s is a Reliant server action: it runs as the run itself and takes no credential", uses))
+	}
+	if spec.Params == nil {
+		return
+	}
+	checkActionParams(spec.Params, args, uses, nodePath, result)
+}
+
+// checkActionParams checks a node's `with:` against an action's params
+// schema: every required param present, no unknown one when the schema is
+// closed, and each literal value valid. A {{expr}} value is left to run time.
+func checkActionParams(schema map[string]any, args *reliantv1.ActionArgs, uses string, nodePath []string, result *Result) {
 	props, _ := schema["properties"].(map[string]any)
 	required, _ := schema["required"].([]any)
 	closed := schema["additionalProperties"] == false

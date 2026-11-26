@@ -3,6 +3,7 @@ version: 1
 check: {run: "task ci", checks: ["lint"]}
 gate:
   run: "task gate"
+  stages: {lint: {run: "task lint"}, build: off, sbom_scan: {run: "task scan"}}
   runner: machine
   pool: gate-big
   timeout: 90m

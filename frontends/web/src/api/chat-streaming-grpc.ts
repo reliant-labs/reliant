@@ -16,7 +16,7 @@ import { ChatStream, type StreamingClient } from "@reliantlabs/sdk/client";
 import { connectClient } from "../lib/connect";
 import { withRequestSent } from "./transport";
 import { logger } from "../lib/logger";
-import { pageActivity } from "../lib/pageActivity";
+import { streamPageEnvironment } from "../lib/pageActivity";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import { TRANSCRIPT_TOOL_BODIES } from "../lib/toolBodies";
 import { markChatOpen, noteChatOpenSync } from "../lib/chatOpenInteraction";
@@ -63,7 +63,7 @@ export class ChatStreamingService extends ChatStream {
       skipTotal: true,
       client: () => markingStreamRequests(connectClient(StreamingService)),
       logger,
-      onConnectionLost: () => pageActivity().noteConnectionLost(),
+      ...streamPageEnvironment(),
       hooks: {
         onSubscribe: (chatId) => {
           markChatOpen(chatId, "subscribe");

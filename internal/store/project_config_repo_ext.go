@@ -234,6 +234,41 @@ func GetProjectPresetsJSON(ctx context.Context, db orm.Context, projectID string
 	return projectConfigColumn(ctx, db, projectID, ProjectConfigFieldProjectPresetsJSON)
 }
 
+// ProjectConfigVersion is the version of the project's config record
+// (rowVersionSQL); found is false when the project has none.
+func ProjectConfigVersion(ctx context.Context, db orm.Context, projectID string) (version string, found bool, err error) {
+	if projectID == "" {
+		return "", false, fmt.Errorf("project ID cannot be empty")
+	}
+	return rowVersion(ctx, db, `SELECT `+rowVersionSQL+` FROM project_configs WHERE project_id = $1`,
+		"the config of project "+projectID, projectID)
+}
+
+// GetProjectWorkflowsJSONVersioned is GetProjectWorkflowsJSON with the version
+// of the record it was read from, in the same statement; found is false (and
+// the error nil) when the project has no record.
+func GetProjectWorkflowsJSONVersioned(ctx context.Context, db orm.Context, projectID string) (workflows *string, version string, found bool, err error) {
+	if projectID == "" {
+		return nil, "", false, fmt.Errorf("project ID cannot be empty")
+	}
+	return versionedColumn(ctx, db, `SELECT `+rowVersionSQL+`, project_workflows_json FROM project_configs WHERE project_id = $1`,
+		"the workflows of project "+projectID, projectID)
+}
+
+// GetProjectPresetsJSONVersioned is GetProjectWorkflowsJSONVersioned for the
+// synced presets.
+func GetProjectPresetsJSONVersioned(ctx context.Context, db orm.Context, projectID string) (presets *string, version string, found bool, err error) {
+	if projectID == "" {
+		return nil, "", false, fmt.Errorf("project ID cannot be empty")
+	}
+	return versionedColumn(ctx, db, `SELECT `+rowVersionSQL+`, project_presets_json FROM project_configs WHERE project_id = $1`,
+		"the presets of project "+projectID, projectID)
+}
+
+// MissingProjectConfig is the error GetProjectWorkflowsJSON and
+// GetProjectPresetsJSON return for a project with no config record.
+func MissingProjectConfig() error { return missing("project config") }
+
 // GetProjectScenariosJSON reads the synced .reliant scenarios.
 func GetProjectScenariosJSON(ctx context.Context, db orm.Context, projectID string) (*string, error) {
 	return projectConfigColumn(ctx, db, projectID, ProjectConfigFieldProjectScenariosJSON)

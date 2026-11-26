@@ -64,7 +64,7 @@ export interface Site {
 // per-call client (forge-web-runtime/transport-scope): its first argument is
 // the service too.
 const CLIENT_FACTORIES = new Set(["connectClient", "getControlPlaneClient", "createClient", "createPromiseClient", "scopedClient"]);
-const CLIENT_FACTORY_CALL = /\b(?:connectClient|getControlPlaneClient|createClient|createPromiseClient)\s*[(<]/;
+const CLIENT_FACTORY_CALL = /\b(?:connectClient|getControlPlaneClient|createClient|createPromiseClient|scopedClient)\s*[(<]/;
 
 const IMPERATIVE_READS = new Set(["fetchQuery", "ensureQueryData", "prefetchQuery", "fetchInfiniteQuery", "prefetchInfiniteQuery", "ensureInfiniteQueryData"]);
 

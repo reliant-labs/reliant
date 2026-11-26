@@ -127,8 +127,34 @@ func (m *MockOrgResolver) ListScope(ctx context.Context, userID string, requeste
 // Compile-time check.
 var _ OrgResolver = (*MockOrgResolver)(nil)
 
+// forge:section MockTriggers
+// forge:hash=59cb3a2dcafae7207794081fe400d0c480e46f7e9c80d17b1ee9e6351b591bc6
+
+// MockTriggers is a test mock for the Triggers interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockTriggers.<Method>Func not set" error.
+type MockTriggers struct {
+	contractkit.Recorder
+	RemoveTriggerFunc func(context.Context, string) error
+}
+
+// RemoveTrigger records the call and delegates to RemoveTriggerFunc when set.
+func (m *MockTriggers) RemoveTrigger(ctx context.Context, id string) error {
+	m.Recorder.Record("RemoveTrigger", ctx, id)
+	if m.RemoveTriggerFunc != nil {
+		return m.RemoveTriggerFunc(ctx, id)
+	}
+	return contractkit.MockNotSet("MockTriggers", "RemoveTrigger")
+}
+
+// Compile-time check.
+var _ Triggers = (*MockTriggers)(nil)
+
 // forge:section MockRepository
-// forge:hash=395bb5bb4ec9d550b11336143f19bf9cef8b1af81c520d4f8864c5af4fdf352a
+// forge:hash=4ae0de48acaf4bf9a2da5c28a3cd259a43926307a37abb002af2a9516452555e
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -140,7 +166,6 @@ type MockRepository struct {
 	contractkit.Recorder
 	AssignUnassignedOrgFunc          func(context.Context, string, string) error
 	ListTriggersFunc                 func(context.Context, core.TriggerFilters) ([]*core.Trigger, error)
-	DeleteTriggerFunc                func(context.Context, string) error
 	RunTxFunc                        func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
 	ListVisibilityOverridesFunc      func(context.Context, string, int32) (map[string]bool, error)
 	ListHiddenItemDefaultsFunc       func(context.Context, int32) ([]string, error)
@@ -165,15 +190,6 @@ func (m *MockRepository) ListTriggers(ctx context.Context, f core.TriggerFilters
 		return m.ListTriggersFunc(ctx, f)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "ListTriggers")
-}
-
-// DeleteTrigger records the call and delegates to DeleteTriggerFunc when set.
-func (m *MockRepository) DeleteTrigger(ctx context.Context, id string) error {
-	m.Recorder.Record("DeleteTrigger", ctx, id)
-	if m.DeleteTriggerFunc != nil {
-		return m.DeleteTriggerFunc(ctx, id)
-	}
-	return contractkit.MockNotSet("MockRepository", "DeleteTrigger")
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
