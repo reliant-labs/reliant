@@ -27,6 +27,11 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // org's. A link to a strategy, campaign, channel, idea or item of another org
 // is NotFound.
 //
+// The (buf.validate) rules state the contract; the user API chain does not
+// run them (serverkit.NoValidate), so the service checks each one and answers
+// InvalidArgument. A date field (YYYY-MM-DD) must be a real calendar date:
+// the service rejects an impossible one such as 2026-02-30.
+//
 // Writes are optimistic: an update names the revision it read
 // (expected_revision), and a row that moved since is Aborted with a
 // GtmRevisionConflict detail carrying the current revision.
@@ -108,10 +113,11 @@ service GtmService {
 
   // ListChannels lists the org's channels by key. An allowlisted org with no
   // channel yet is given the default set on its first List or Get (blog,
-  // email, hacker-news, reddit, linkedin, x, youtube), idempotently; nothing
-  // else differs between calls. connection_state is computed per caller.
+  // email, hacker-news, reddit, linkedin, x, youtube), each with a small
+  // generic channel_types set: a write, so the rpc is IDEMPOTENT rather than
+  // side-effect free. connection_state is computed per caller.
   rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
+    option idempotency_level = IDEMPOTENT;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "read-only (the first read seeds the default channels, idempotently)"}
@@ -120,7 +126,7 @@ service GtmService {
 
   // GetChannel returns one channel (seeding the defaults as ListChannels does).
   rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
+    option idempotency_level = IDEMPOTENT;
     option (forge.v1.method) = {
       auth_required: true
       activity: {none: "read-only (the first read seeds the default channels, idempotently)"}
@@ -194,7 +200,10 @@ service GtmService {
   // The client PUTs the bytes to upload_url with required_headers before
   // expires_at, then calls ConfirmAssetUpload. Limits are the service's: 25
   // MiB per asset (64 MiB when an agent copies a chat attachment), about 2 GiB
-  // per org (ResourceExhausted past either).
+  // per org (ResourceExhausted past either). A PENDING asset counts toward the
+  // org's quota (at its declared size) until it is confirmed or swept: the
+  // storage implementation removes a PENDING asset older than 24 hours, row
+  // and object.
   rpc CreateAssetUpload(CreateAssetUploadRequest) returns (CreateAssetUploadResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -262,10 +271,13 @@ service GtmService {
   }
 
   // ImportStrategyLibrary upserts a batch of library entries by key, at most
-  // 500: a new key is created, a changed entry updated, an equal one left
-  // alone (each counted). With prune, the org's entries whose key is not in
-  // the batch are removed (strategies made from them keep their library_key).
-  // A person's act only (PermissionDenied for an agent).
+  // 500 per call: a new key is created, a changed entry updated, an equal one
+  // left alone (each counted). A library larger than one batch is imported in
+  // several calls. With prune, all_keys must list the library's COMPLETE key
+  // set (every batch's keys), and the org's entries whose key is not in it are
+  // removed, so each batch of a multi-call import may prune safely
+  // (strategies made from a removed entry keep their library_key). A person's
+  // act only (PermissionDenied for an agent).
   rpc ImportStrategyLibrary(ImportStrategyLibraryRequest) returns (ImportStrategyLibraryResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -285,8 +297,9 @@ service GtmService {
   // goal (from north_star and objective), target metric (from kpis),
   // category and library_key. With create_first_campaign it also makes a
   // first DRAFT campaign under it (campaign_name, or the entry's name), whose
-  // planned_channel_ids are the org's channels whose key matches one of the
-  // entry's channel_types. A person or an agent may call it.
+  // planned_channel_ids are the org's ACTIVE channels that fit the entry: a
+  // channel whose channel_types share a type with the entry's channel_types,
+  // or whose key equals one of them. A person or an agent may call it.
   rpc UseLibraryStrategy(UseLibraryStrategyRequest) returns (UseLibraryStrategyResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -602,7 +615,7 @@ service GtmService {
 
 // ---------------------------------------------------------------------------
 // Enums. The tables store each value by its name (gtm_* CHECK lists); the
-// UNSPECIFIED zero is "unset" on the wire and never stored.
+// UNSPECIFIED zero means "unset" in a message and is never stored.
 // ---------------------------------------------------------------------------
 
 // GtmIdeaKind is what an idea is about.
@@ -708,7 +721,9 @@ enum GtmItemFormat {
 // GtmAssetStatus is whether an asset's bytes are in place.
 enum GtmAssetStatus {
   GTM_ASSET_STATUS_UNSPECIFIED = 0;
-  // CreateAssetUpload issued an upload URL; the bytes are not confirmed.
+  // CreateAssetUpload issued an upload URL; the bytes are not confirmed. It
+  // counts toward the org's quota, and is swept (row and object) after 24
+  // hours.
   GTM_ASSET_STATUS_PENDING = 1;
   // ConfirmAssetUpload checked the bytes (size, type, sha256).
   GTM_ASSET_STATUS_READY = 2;
@@ -896,7 +911,7 @@ message GtmStrategy {
   string goal_md = 4;
   // What success is measured by, free text: "200 weekly active orgs".
   string target_metric = 5;
-  // The period, as calendar dates (YYYY-MM-DD); empty for open.
+  // The period, as real calendar dates (YYYY-MM-DD); empty for open.
   string period_start = 6;
   string period_end = 7;
   GtmStrategyStatus status = 8;
@@ -917,14 +932,16 @@ message GtmStrategy {
 message GtmChannel {
   string id = 1;
   string org_id = 2;
-  // A slug, unique in the org: "blog", "hacker-news". Fixed at creation.
+  // A slug, unique in the org: "blog", "hacker-news". UpdateChannel may
+  // change it (a key the org already holds is AlreadyExists).
   string key = 3;
   string name = 4;
   GtmChannelMode mode = 5;
-  // INTEGRATED only: the Reliant integration catalog id, e.g. "gmail".
+  // INTEGRATED only: the Reliant integration catalog id, e.g. "gmail". Empty
+  // here is NULL in the table (never stored as '').
   string integration_kind = 6;
-  // INTEGRATED only: the Reliant connection to use; empty means the acting
-  // user's default connection for integration_kind.
+  // INTEGRATED only: the Reliant connection to use; empty (NULL in the table)
+  // means the acting user's default connection for integration_kind.
   string connection_id = 7;
   // How to post on it by hand (MANUAL), in markdown.
   string manual_instructions_md = 8;
@@ -940,6 +957,19 @@ message GtmChannel {
   // The user who added it (for an agent, the user it ran as); empty when
   // seeded.
   string created_by = 15;
+  // The kinds of channel it is, as slugs (^[a-z0-9-]{1,32}$): what a library
+  // entry's channel_types are matched against (UseLibraryStrategy). The org
+  // chooses its own; the seeded defaults carry a small generic set.
+  repeated string channel_types = 16;
+}
+
+// GtmChannelTypeList is a whole channel_types list, so an update can tell
+// "replace with this list" (set, possibly empty) from "leave alone" (unset).
+message GtmChannelTypeList {
+  repeated string types = 1 [(buf.validate.field).repeated = {
+    max_items: 32
+    items: {string: {pattern: "^[a-z0-9-]{1,32}$"}}
+  }];
 }
 
 // GtmLibraryStep is one step of a play and who does it.
@@ -953,7 +983,12 @@ message GtmLibraryStep {
 // (gtm_strategy_library), as imported. The org's own import is the only
 // source of entries: Reliant ships none.
 message GtmStrategyLibraryEntry {
-  // A slug, unique in the org: what an import upserts by.
+  // A slug, unique in the org: what an import upserts by
+  // (^[a-z0-9][a-z0-9_-]{0,127}$). A catalog entry without a key of its own
+  // (a tactic) gets one derived by the importer: its category's slug and its
+  // name's, lower-cased, every run of other characters turned into one "-",
+  // trimmed of "-" and cut to 128 characters ("<category>-<name>"), so the
+  // same entry gets the same key on every import.
   string key = 1;
   GtmStrategyCategory category = 2;
   GtmLibraryDepth depth = 3;
@@ -1110,8 +1145,10 @@ message GtmItemStatusCount {
 // its items counted by status. A planned pair no item uses has no counts
 // ("Reddit planned, nothing drafted").
 message GtmCoverageRow {
-  // Empty: items with no channel yet.
+  // Empty on a planned row: any channel (only formats were planned). Empty on
+  // an unplanned row: items with no channel yet.
   string channel_id = 1;
+  // UNSPECIFIED on a planned row: any format (only channels were planned).
   GtmItemFormat format = 2;
   // Whether the campaign planned this pair.
   bool planned = 3;
@@ -1281,7 +1318,7 @@ message CreateStrategyRequest {
   }];
   string goal_md = 3;
   string target_metric = 4 [(buf.validate.field).string.max_len = 500];
-  // YYYY-MM-DD, or empty.
+  // A real calendar date, YYYY-MM-DD (2026-02-30 is InvalidArgument), or empty.
   string period_start = 5 [(buf.validate.field).string.pattern = "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"];
   string period_end = 6 [(buf.validate.field).string.pattern = "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"];
   // Unset: DRAFT. An agent creates DRAFT only.
@@ -1310,7 +1347,7 @@ message UpdateStrategyRequest {
   }];
   optional string goal_md = 5;
   optional string target_metric = 6 [(buf.validate.field).string.max_len = 500];
-  // Set: YYYY-MM-DD, or empty to clear.
+  // Set: a real calendar date, YYYY-MM-DD, or empty to clear.
   optional string period_start = 7 [(buf.validate.field).string.pattern = "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"];
   optional string period_end = 8 [(buf.validate.field).string.pattern = "^([0-9]{4}-[0-9]{2}-[0-9]{2})?$"];
   // A person's act only.
@@ -1366,14 +1403,20 @@ message CreateChannelRequest {
     defined_only: true
     not_in: [0]
   }];
+  // Empty is stored as NULL.
   string integration_kind = 5;
-  // Empty: the acting user's default connection for integration_kind.
+  // Empty (stored as NULL): the acting user's default connection for
+  // integration_kind.
   string connection_id = 6;
   string manual_instructions_md = 7;
   // Unset: ACTIVE.
   optional GtmChannelStatus status = 8 [(buf.validate.field).enum = {
     defined_only: true
     not_in: [0]
+  }];
+  repeated string channel_types = 9 [(buf.validate.field).repeated = {
+    max_items: 32
+    items: {string: {pattern: "^[a-z0-9-]{1,32}$"}}
   }];
 }
 
@@ -1395,7 +1438,7 @@ message UpdateChannelRequest {
     defined_only: true
     not_in: [0]
   }];
-  // Set: replaces it; empty clears it.
+  // Set: replaces it; empty clears it (NULL in the table).
   optional string integration_kind = 6;
   optional string connection_id = 7;
   optional string manual_instructions_md = 8;
@@ -1403,6 +1446,10 @@ message UpdateChannelRequest {
     defined_only: true
     not_in: [0]
   }];
+  // Set: renames the key; a key the org already holds is AlreadyExists.
+  optional string key = 10 [(buf.validate.field).string.pattern = "^[a-z0-9-]{1,32}$"];
+  // Set: replaces channel_types (empty clears them).
+  GtmChannelTypeList channel_types = 11;
 }
 
 message UpdateChannelResponse {
@@ -1410,7 +1457,8 @@ message UpdateChannelResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Assets (metadata; upload and download are on hold).
+// Assets: metadata here, bytes in the org's bucket (presigned upload,
+// confirm, short-lived download URL).
 // ---------------------------------------------------------------------------
 
 message ListAssetsRequest {
@@ -1462,8 +1510,9 @@ message CreateAssetUploadRequest {
     min_len: 1
     max_len: 255
   }];
-  // The exact size the PUT must carry. At most 64 MiB on the wire; the
-  // service's per-asset and per-org limits are lower (CreateAssetUpload).
+  // The exact size the PUT must carry. At most 64 MiB (the most any path
+  // allows); the service's per-asset and per-org limits are lower
+  // (CreateAssetUpload).
   int64 size_bytes = 6 [(buf.validate.field).int64 = {
     gt: 0
     lte: 67108864
@@ -1537,6 +1586,11 @@ message GetStrategyLibraryEntryResponse {
 }
 
 message ImportStrategyLibraryRequest {
+  option (buf.validate.message).cel = {
+    id: "prune_needs_all_keys"
+    message: "prune needs all_keys: the complete key set of the library"
+    expression: "!this.prune || size(this.all_keys) > 0"
+  };
   string org_id = 1 [(buf.validate.field).required = true];
   // At most 500 per call; every key once.
   repeated GtmStrategyLibraryEntry entries = 2 [(buf.validate.field).repeated = {
@@ -1548,8 +1602,14 @@ message ImportStrategyLibraryRequest {
     min_len: 1
     max_len: 200
   }];
-  // Remove the org's entries whose key is not in entries.
+  // Remove the org's entries whose key is not in all_keys.
   bool prune = 4;
+  // With prune (required then): the complete key set of the library being
+  // imported, across all batches; at most 5000.
+  repeated string all_keys = 5 [(buf.validate.field).repeated = {
+    max_items: 5000
+    items: {string: {pattern: "^[a-z0-9][a-z0-9_-]{0,127}$"}}
+  }];
 }
 
 message ImportStrategyLibraryResponse {
@@ -1705,10 +1765,14 @@ message GetCampaignResponse {
   repeated GtmItem items = 3;
   // ideas and items each hold at most 200 rows; true when either was cut.
   bool truncated = 4;
-  // Planned against actual, one row per (channel, format) pair that is
-  // planned or used by any of its items (all of them, not only those above):
-  // planned pairs first (planned_channel_ids order, then planned_formats
-  // order), then the unplanned pairs its items use.
+  // Planned against actual, over ALL its items (not only those above):
+  // planned rows first, then one row per unplanned (channel, format) pair its
+  // items use. The planned rows are planned_channel_ids x planned_formats,
+  // in that order. A one-sided plan leaves the other side unset: planned
+  // channels only give one row per channel with format UNSPECIFIED (any
+  // format), planned formats only give one row per format with channel_id
+  // empty (any channel). An item counts in the first planned row it matches,
+  // else in its unplanned pair.
   repeated GtmCoverageRow coverage = 5;
 }
 

@@ -72,7 +72,9 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 	t.Run("a sent item is an email with its send record", func(t *testing.T) {
 		require.NoError(t, exec(`INSERT INTO gtm_items (id, org_id, title, format, status) VALUES ('e1', 'org-a', 'Mail', 'GTM_ITEM_FORMAT_EMAIL', 'GTM_ITEM_STATUS_APPROVED')`))
 		refused(t, "gtm_items_sent_has_record", `UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_SENT' WHERE id = 'e1'`)
-		refused(t, "gtm_items_sent_is_email", `UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_SENT', gmail_message_id = 'm', sent_at = now(), sent_by = 'u1', approval_hash = 'h' WHERE id = 't3'`)
+		// (Its send record's approval hash already marks it: the approval-hash
+		// backstop answers before gtm_items_sent_is_email.)
+		refused(t, "gtm_items_approval_hash_is_email", `UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_SENT', gmail_message_id = 'm', sent_at = now(), sent_by = 'u1', approval_hash = 'h' WHERE id = 't3'`)
 		require.NoError(t, exec(`UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_SENT', gmail_message_id = 'm', sent_at = now(), sent_by = 'u1', approval_hash = 'h' WHERE id = 'e1'`))
 		refused(t, "gtm_items_scheduled_has_date", `UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_SCHEDULED' WHERE id = 't3'`)
 	})
@@ -93,8 +95,21 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		refused(t, "gtm_items_email_never_published", `UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_PUBLISHED' WHERE id = 'o1'`)
 		require.NoError(t, exec(`UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_SENT', gmail_message_id = 'm', sent_at = now(), sent_by = 'u1', approval_hash = 'h' WHERE id = 'o1'`))
 		require.NoError(t, exec(`INSERT INTO gtm_items (id, org_id, title, format) VALUES ('v1', 'org-a', 'Demo', 'GTM_ITEM_FORMAT_VIDEO')`))
-		refused(t, "gtm_items_sent_is_email", `UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_SENT', gmail_message_id = 'm', sent_at = now(), sent_by = 'u1', approval_hash = 'h' WHERE id = 'v1'`)
+		refused(t, "gtm_items_approval_hash_is_email", `UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_SENT', gmail_message_id = 'm', sent_at = now(), sent_by = 'u1', approval_hash = 'h' WHERE id = 'v1'`)
 		refused(t, "gtm_items_format_check", `UPDATE gtm_items SET format = 'GTM_ITEM_FORMAT_UNSPECIFIED' WHERE id = 'v1'`)
+	})
+
+	t.Run("an approval hash is held only by an approved or sent email-type item", func(t *testing.T) {
+		require.NoError(t, exec(`INSERT INTO gtm_items (id, org_id, title, format) VALUES ('e5', 'org-a', 'Mail', 'GTM_ITEM_FORMAT_EMAIL')`))
+		refused(t, "gtm_items_approval_hash_status", `UPDATE gtm_items SET approval_hash = 'h' WHERE id = 'e5'`)
+		// Held: APPROVED with a hash, its send in doubt.
+		require.NoError(t, exec(`UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_APPROVED', approval_hash = 'h' WHERE id = 'e5'`))
+		refused(t, "gtm_items_approval_hash_status", `UPDATE gtm_items SET status = 'GTM_ITEM_STATUS_PAUSED' WHERE id = 'e5'`)
+		refused(t, "gtm_items_approval_hash_is_email", `UPDATE gtm_items SET format = 'GTM_ITEM_FORMAT_SHORT_POST' WHERE id = 'e5'`)
+		// Released: the hash goes, and the item may move again.
+		require.NoError(t, exec(`UPDATE gtm_items SET approval_hash = '', status = 'GTM_ITEM_STATUS_PAUSED' WHERE id = 'e5'`))
+		require.NoError(t, exec(`INSERT INTO gtm_items (id, org_id, title, format, status) VALUES ('p5', 'org-a', 'Post', 'GTM_ITEM_FORMAT_SHORT_POST', 'GTM_ITEM_STATUS_APPROVED')`))
+		refused(t, "gtm_items_approval_hash_is_email", `UPDATE gtm_items SET approval_hash = 'h' WHERE id = 'p5'`)
 	})
 
 	t.Run("published_url is http or https", func(t *testing.T) {
@@ -122,6 +137,14 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		refused(t, "gtm_channels_integrated_has_kind", `INSERT INTO gtm_channels (id, org_id, key, name, created_by, mode) VALUES ('h5', 'org-a', 'mail2', 'Mail', 'u1', 'GTM_CHANNEL_MODE_INTEGRATED')`)
 		refused(t, "gtm_channels_manual_has_no_integration", `INSERT INTO gtm_channels (id, org_id, key, name, created_by, mode, connection_id) VALUES ('h6', 'org-a', 'reddit', 'Reddit', 'u1', 'GTM_CHANNEL_MODE_MANUAL', 'conn-1')`)
 		refused(t, "gtm_channels_manual_has_no_integration", `UPDATE gtm_channels SET mode = 'GTM_CHANNEL_MODE_MANUAL' WHERE id = 'h1'`)
+		// Never '': an empty integration field is NULL, and a type is a word.
+		refused(t, "gtm_channels_integration_kind_not_empty", `UPDATE gtm_channels SET integration_kind = '' WHERE id = 'h2'`)
+		refused(t, "gtm_channels_connection_id_not_empty", `UPDATE gtm_channels SET connection_id = '' WHERE id = 'h1'`)
+		require.NoError(t, exec(`UPDATE gtm_channels SET connection_id = 'conn-1', channel_types = '{inbox,newsletter}' WHERE id = 'h1'`))
+		refused(t, "gtm_channels_channel_types_not_empty", `UPDATE gtm_channels SET channel_types = '{forum,""}' WHERE id = 'h2'`)
+		// A key may be renamed, never onto another channel's.
+		require.NoError(t, exec(`UPDATE gtm_channels SET key = 'hn' WHERE id = 'h2'`))
+		refused(t, "gtm_channels_org_id_key_key", `UPDATE gtm_channels SET key = 'email' WHERE id = 'h2'`)
 		// A seeded channel has no creator; an added one names who added it.
 		require.NoError(t, exec(`INSERT INTO gtm_channels (id, org_id, key, name, mode, source) VALUES ('h7', 'org-a', 'blog', 'Blog', 'GTM_CHANNEL_MODE_MANUAL', 'GTM_CHANNEL_SOURCE_SEED')`))
 		refused(t, "gtm_channels_creator", `INSERT INTO gtm_channels (id, org_id, key, name, mode, source) VALUES ('h8', 'org-a', 'forum', 'Forum', 'GTM_CHANNEL_MODE_MANUAL', 'GTM_CHANNEL_SOURCE_AGENT')`)

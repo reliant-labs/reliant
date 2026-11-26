@@ -18378,7 +18378,7 @@
           "output": "reliant.v1.GetChannelResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
+          "idempotency": "IDEMPOTENT",
           "auth_required": true
         },
         {
@@ -18478,7 +18478,7 @@
           "output": "reliant.v1.ListChannelsResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
+          "idempotency": "IDEMPOTENT",
           "auth_required": true
         },
         {
@@ -18748,8 +18748,7 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
+            "Idempotency": "IDEMPOTENT",
             "InputTypeFQ": "reliant.v1.ListChannelsRequest",
             "OutputTypeFQ": "reliant.v1.ListChannelsResponse",
             "InputProtoFile": "reliant/v1/gtm.proto",
@@ -18768,8 +18767,7 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
+            "Idempotency": "IDEMPOTENT",
             "InputTypeFQ": "reliant.v1.GetChannelRequest",
             "OutputTypeFQ": "reliant.v1.GetChannelResponse",
             "InputProtoFile": "reliant/v1/gtm.proto",
@@ -19598,6 +19596,11 @@
               "Name": "status",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "channel_types",
+              "ProtoType": "[]string",
+              "IsOptional": false
             }
           ],
           "CreateChannelResponse": [
@@ -20018,6 +20021,11 @@
             {
               "Name": "prune",
               "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "all_keys",
+              "ProtoType": "[]string",
               "IsOptional": false
             }
           ],
@@ -20584,6 +20592,17 @@
               "Name": "status",
               "ProtoType": "enum",
               "IsOptional": true
+            },
+            {
+              "Name": "key",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "channel_types",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmChannelTypeList"
             }
           ],
           "UpdateChannelResponse": [
@@ -21161,6 +21180,11 @@
               "kind": "enum",
               "type_name": "reliant.v1.GtmChannelStatus",
               "optional": true
+            },
+            {
+              "name": "channel_types",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.CreateChannelResponse": [
@@ -21775,11 +21799,23 @@
             {
               "name": "created_by",
               "kind": "string"
+            },
+            {
+              "name": "channel_types",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.GtmChannelIdList": [
             {
               "name": "ids",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.GtmChannelTypeList": [
+            {
+              "name": "types",
               "kind": "string",
               "repeated": true
             }
@@ -22407,6 +22443,11 @@
             {
               "name": "prune",
               "kind": "bool"
+            },
+            {
+              "name": "all_keys",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ImportStrategyLibraryResponse": [
@@ -23042,6 +23083,19 @@
               "kind": "enum",
               "type_name": "reliant.v1.GtmChannelStatus",
               "optional": true
+            },
+            {
+              "name": "key",
+              "kind": "string",
+              "optional": true,
+              "validate": {
+                "pattern": "^[a-z0-9-]{1,32}$"
+              }
+            },
+            {
+              "name": "channel_types",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmChannelTypeList"
             }
           ],
           "reliant.v1.UpdateChannelResponse": [
@@ -23482,6 +23536,7 @@
           "reliant.v1.GtmCampaign": "reliant/v1/gtm.proto",
           "reliant.v1.GtmChannel": "reliant/v1/gtm.proto",
           "reliant.v1.GtmChannelIdList": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmChannelTypeList": "reliant/v1/gtm.proto",
           "reliant.v1.GtmClaim": "reliant/v1/gtm.proto",
           "reliant.v1.GtmClaimFinding": "reliant/v1/gtm.proto",
           "reliant.v1.GtmCoverageRow": "reliant/v1/gtm.proto",
