@@ -24,6 +24,9 @@ type built struct {
 	trees   []string
 	verdict Verdict
 	result  GateResult
+	// rerunOfRed is the red batch this one reruns on the same tree: a pass
+	// here makes that red a flake.
+	rerunOfRed *built
 }
 
 func (b *built) ids() []string {
@@ -213,6 +216,10 @@ func (r *round) gate(ctx context.Context, b *built, attempt int, avoid []string,
 	if res.Class == GatePass && r.shadow {
 		v.WouldLand = r.landEntries(b)
 	}
+	if res.Class == GatePass && b.rerunOfRed != nil {
+		v.Flaky = b.rerunOfRed.result.FailingTests
+		v.Note = "flake: batch " + b.rerunOfRed.batch.ID + " was red on this tree, which passed on the rerun"
+	}
 	if res.Class == GateFail && ejectOnFail {
 		for _, le := range r.landEntries(b) {
 			v.Ejected = append(v.Ejected, EjectedEntry{
@@ -234,6 +241,9 @@ func (r *round) gate(ctx context.Context, b *built, attempt int, avoid []string,
 		return err
 	}
 	b.batch = batch
+	if to == core.QueueBatchPassed {
+		r.passed = append(r.passed, b)
+	}
 	if to == core.QueueBatchFailed {
 		r.failed = append(r.failed, batch.ID)
 		if ejectOnFail {
@@ -251,6 +261,25 @@ func (r *round) gate(ctx context.Context, b *built, attempt int, avoid []string,
 		r.repo.QueueState = core.PipelineQueueRunning
 	}
 	return nil
+}
+
+// retryGate gates an unproven batch again, on another member.
+func (r *round) retryGate(ctx context.Context, b *built, ejectOnFail bool) error {
+	batch, err := r.s.deps.Store.SetQueueBatchState(ctx, b.batch.ID, core.QueueBatchUnproven, core.QueueBatchGating, core.QueueBatchUpdate{})
+	if err != nil {
+		return err
+	}
+	b.batch = batch
+	var avoid []string
+	for _, a := range b.verdict.Attempts {
+		if a.Machine != "" {
+			avoid = append(avoid, a.Machine)
+		}
+	}
+	if b.verdict.Machine != "" {
+		avoid = append(avoid, b.verdict.Machine)
+	}
+	return r.gate(ctx, b, batch.Attempt, avoid, ejectOnFail)
 }
 
 // redBatches are the batches that judged b's entries red: b, and the batch
