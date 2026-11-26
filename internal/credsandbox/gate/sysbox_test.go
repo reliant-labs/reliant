@@ -40,6 +40,9 @@ type fakeDocker struct {
 	slotSize     int64 // what every disk slot holds
 	wiped        []string
 	listed       map[string]string // list command (first two args) -> ids
+	containersOf map[string]string // run id -> what `ps -aq --filter label=<run id>` lists, over listed["ps"]
+	psFails      bool              // listing containers fails
+	rmFails      bool              // removing containers fails
 	copiedTar    bytes.Buffer
 }
 
@@ -49,10 +52,11 @@ func newFake(t *testing.T) *fakeDocker {
 		t:        t,
 		runtimes: `{"runc":{"path":"runc"},"sysbox-runc":{"path":"/usr/bin/sysbox-runc"}}`,
 		v4:       v4, v6: v6,
-		imageEnv: []string{"PATH=/image/bin", "DOCKER_VERSION=27.0"},
-		state:    containerState{Status: "exited"},
-		killed:   make(chan struct{}),
-		listed:   map[string]string{},
+		imageEnv:     []string{"PATH=/image/bin", "DOCKER_VERSION=27.0"},
+		state:        containerState{Status: "exited"},
+		killed:       make(chan struct{}),
+		listed:       map[string]string{},
+		containersOf: map[string]string{},
 	}
 }
 
@@ -122,7 +126,26 @@ func (f *fakeDocker) exec(ctx context.Context, stdin io.Reader, stdout, stderr i
 		}
 	case args[0] == "kill":
 		f.killOnce.Do(func() { close(f.killed) })
-	case head == "ps -aq", head == "volume ls", head == "network ls":
+	case head == "ps -aq":
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.psFails {
+			fmt.Fprintln(stderr, "Cannot connect to the Docker daemon")
+			return errors.New("exit status 1")
+		}
+		if ids, ok := f.containersOf[strings.TrimPrefix(args[len(args)-1], "label="+LabelRunID+"=")]; ok {
+			fmt.Fprint(stdout, ids)
+			return nil
+		}
+		fmt.Fprint(stdout, f.listed["ps"])
+	case head == "rm -f":
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		if f.rmFails {
+			fmt.Fprintln(stderr, "Error response from daemon: could not kill container")
+			return errors.New("exit status 1")
+		}
+	case head == "volume ls", head == "network ls":
 		fmt.Fprint(stdout, f.listed[args[0]])
 	}
 	return nil
@@ -568,6 +591,189 @@ func TestRunRefusesUnboundingDiskSlots(t *testing.T) {
 	}
 	if f.ran("create") {
 		t.Error("a refused gate created its container")
+	}
+}
+
+// slotGate runs a gate on a one-slot machine and returns the backend, the
+// slot and the spec.
+func slotGate(t *testing.T, f *fakeDocker, dir string) (*Sysbox, string, Spec) {
+	t.Helper()
+	f.slotSize = 10 << 30
+	s := f.backend(SysboxConfig{DiskSlotsDir: dir})
+	spec := testSpec(t)
+	spec.Limits.DiskBytes = 10 << 30
+	if _, err := s.Run(context.Background(), spec); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	slot := filepath.Join(dir, "slot-0")
+	if owner, err := readOwner(slot); err != nil || owner != spec.RunID {
+		t.Fatalf("the claimed slot's owner record = %q, %v; want %q", owner, err, spec.RunID)
+	}
+	return s, slot, spec
+}
+
+// crash drops what this process holds, as its death would: the slot's lock
+// goes, while its containers and the records beside the slot stay.
+func crash(s *Sysbox) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for id, slot := range s.slots {
+		_ = slot.lock.Close()
+		delete(s.slots, id)
+	}
+}
+
+func (f *fakeDocker) wipes() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.wiped)
+}
+
+// A teardown that cannot remove the gate's containers neither wipes nor
+// frees its slot: it quarantines it, and only a teardown of the same run
+// that confirms the containers gone releases it.
+func TestTeardownQuarantinesSlotWhenContainersSurvive(t *testing.T) {
+	f := newFake(t)
+	s, slot, spec := slotGate(t, f, slotsDir(t, 1))
+	f.listed["ps"] = "gate-container\n"
+	f.rmFails = true
+	err := s.Teardown(context.Background(), spec.RunID)
+	if !errors.Is(err, ErrDiskSlotQuarantined) {
+		t.Fatalf("Teardown = %v, want ErrDiskSlotQuarantined", err)
+	}
+	if f.wipes() != 1 {
+		t.Errorf("a slot whose containers survive was wiped: %q", f.wiped)
+	}
+	marker, rerr := os.ReadFile(quarantinePath(slot))
+	if rerr != nil || !strings.Contains(string(marker), spec.RunID) {
+		t.Errorf("quarantine marker = %q, %v", marker, rerr)
+	}
+	other := testSpec(t)
+	other.RunID = "run-2"
+	other.Limits.DiskBytes = 10 << 30
+	if _, err := s.Run(context.Background(), other); !errors.Is(err, errNoFreeSlot) {
+		t.Errorf("a gate claimed a quarantined slot: %v", err)
+	}
+	// A retry that removes them releases it.
+	f.rmFails = false
+	if err := s.Teardown(context.Background(), spec.RunID); err != nil {
+		t.Fatalf("retried Teardown: %v", err)
+	}
+	if f.wipes() != 2 {
+		t.Errorf("the released slot was not wiped: %q", f.wiped)
+	}
+	for _, p := range []string{quarantinePath(slot), ownerPath(slot)} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("%s is left after a clean teardown: %v", p, err)
+		}
+	}
+	f.listed["ps"] = ""
+	if _, err := s.Run(context.Background(), other); err != nil {
+		t.Errorf("the released slot: %v", err)
+	}
+}
+
+// The quarantine is on disk: a restarted daemon honours it, whatever the
+// engine now says, until a teardown of that run confirms its containers gone.
+func TestQuarantinedSlotSurvivesARestart(t *testing.T) {
+	f := newFake(t)
+	dir := slotsDir(t, 1)
+	s, slot, spec := slotGate(t, f, dir)
+	f.psFails = true
+	if err := s.Teardown(context.Background(), spec.RunID); !errors.Is(err, ErrDiskSlotQuarantined) {
+		t.Fatalf("Teardown with an unlistable engine = %v, want ErrDiskSlotQuarantined", err)
+	}
+	crash(s)
+	f.psFails = false
+
+	restarted := f.backend(SysboxConfig{DiskSlotsDir: dir})
+	other := testSpec(t)
+	other.RunID = "run-2"
+	other.Limits.DiskBytes = 10 << 30
+	_, err := restarted.Run(context.Background(), other)
+	if !errors.Is(err, errNoFreeSlot) || !strings.Contains(err.Error(), "quarantined") {
+		t.Fatalf("a restarted daemon's claim of a quarantined slot = %v", err)
+	}
+	if f.wipes() != 1 {
+		t.Errorf("the quarantined slot was wiped: %q", f.wiped)
+	}
+	// The restarted daemon's teardown of the old run finds the slot by its
+	// owner record and, with the containers confirmed gone, releases it.
+	if err := restarted.Teardown(context.Background(), spec.RunID); err != nil {
+		t.Fatalf("Teardown after the restart: %v", err)
+	}
+	if _, err := os.Stat(quarantinePath(slot)); !os.IsNotExist(err) {
+		t.Errorf("the quarantine marker is left: %v", err)
+	}
+	if _, err := restarted.Run(context.Background(), other); err != nil {
+		t.Errorf("the released slot: %v", err)
+	}
+}
+
+// After a daemon restart the slot is unlocked, but the gate's container may
+// still be running on it: the claim confirms through the engine that the
+// previous owner's containers are gone before it wipes anything.
+func TestClaimReconcilesAPreviousOwner(t *testing.T) {
+	f := newFake(t)
+	dir := slotsDir(t, 1)
+	s, slot, spec := slotGate(t, f, dir)
+	crash(s)
+
+	restarted := f.backend(SysboxConfig{DiskSlotsDir: dir})
+	other := testSpec(t)
+	other.RunID = "run-2"
+	other.Limits.DiskBytes = 10 << 30
+	claim := func() error {
+		t.Helper()
+		_, err := restarted.Run(context.Background(), other)
+		return err
+	}
+
+	f.containersOf[spec.RunID] = "surviving-gate\n"
+	if err := claim(); !errors.Is(err, errNoFreeSlot) || !strings.Contains(err.Error(), "still has containers") {
+		t.Errorf("claim with the previous gate still running = %v", err)
+	}
+	f.psFails = true
+	if err := claim(); !errors.Is(err, errNoFreeSlot) || !strings.Contains(err.Error(), "cannot confirm") {
+		t.Errorf("claim with an engine that cannot list = %v", err)
+	}
+	f.psFails = false
+	if f.wipes() != 1 {
+		t.Fatalf("a slot whose previous gate may survive was wiped: %q", f.wiped)
+	}
+	if owner, _ := readOwner(slot); owner != spec.RunID {
+		t.Errorf("a skipped slot's owner record changed to %q", owner)
+	}
+
+	// The stale owner's containers are gone: the slot is reclaimed.
+	f.containersOf[spec.RunID] = ""
+	if err := claim(); err != nil {
+		t.Fatalf("claim of a stale owner's slot: %v", err)
+	}
+	if f.wipes() != 2 {
+		t.Errorf("the reclaimed slot was not wiped: %q", f.wiped)
+	}
+	if owner, _ := readOwner(slot); owner != other.RunID {
+		t.Errorf("the reclaimed slot's owner = %q, want %q", owner, other.RunID)
+	}
+}
+
+// An owner record that is not a run id never becomes a label filter.
+func TestClaimSkipsAnUnreadableOwnerRecord(t *testing.T) {
+	f := newFake(t)
+	f.slotSize = 10 << 30
+	dir := slotsDir(t, 1)
+	if err := os.WriteFile(ownerPath(filepath.Join(dir, "slot-0")), []byte("x,label=other\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec := testSpec(t)
+	spec.Limits.DiskBytes = 10 << 30
+	_, err := f.backend(SysboxConfig{DiskSlotsDir: dir}).Run(context.Background(), spec)
+	if !errors.Is(err, errNoFreeSlot) || !strings.Contains(err.Error(), "not a run id") {
+		t.Errorf("claim over a malformed owner record = %v", err)
+	}
+	if f.ran("ps") || f.wipes() != 0 {
+		t.Errorf("a malformed owner record was used: %q", f.commands())
 	}
 }
 

@@ -650,7 +650,9 @@ func (l *limitWriter) Write(p []byte) (int, error) {
 }
 
 // Teardown removes the run's containers, then its volumes and networks, by
-// label. See Backend.
+// label, then releases its disk slot: wiped and freed only when the
+// containers were confirmed removed, quarantined otherwise (disk.go). See
+// Backend.
 func (s *Sysbox) Teardown(ctx context.Context, runID string) error {
 	if !runIDPattern.MatchString(runID) {
 		// An empty or odd id must never become a label filter matching
@@ -658,29 +660,29 @@ func (s *Sysbox) Teardown(ctx context.Context, runID string) error {
 		return fmt.Errorf("%w: run id %q", ErrInvalidSpec, runID)
 	}
 	filter := "label=" + LabelRunID + "=" + runID
-	var errs []error
-	for _, kind := range []struct{ list, rm []string }{
-		{[]string{"ps", "-aq", "--filter", filter}, []string{"rm", "-f", "-v"}},
-		{[]string{"volume", "ls", "-q", "--filter", filter}, []string{"volume", "rm", "-f"}},
-		{[]string{"network", "ls", "-q", "--filter", filter}, []string{"network", "rm"}},
-	} {
-		out, err := s.output(ctx, nil, kind.list...)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		ids := strings.Fields(out)
-		if len(ids) == 0 {
-			continue
-		}
-		if _, err := s.output(ctx, nil, append(append([]string{}, kind.rm...), ids...)...); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if err := s.releaseSlot(ctx, runID); err != nil {
-		errs = append(errs, err)
+	containersErr := s.removeListed(ctx, []string{"ps", "-aq", "--filter", filter}, []string{"rm", "-f", "-v"})
+	errs := []error{
+		containersErr,
+		s.removeListed(ctx, []string{"volume", "ls", "-q", "--filter", filter}, []string{"volume", "rm", "-f"}),
+		s.removeListed(ctx, []string{"network", "ls", "-q", "--filter", filter}, []string{"network", "rm"}),
+		s.releaseSlot(ctx, runID, containersErr),
 	}
 	return errors.Join(errs...)
+}
+
+// removeListed removes what the list command prints; nil means all of it is
+// gone (or there was none).
+func (s *Sysbox) removeListed(ctx context.Context, list, rm []string) error {
+	out, err := s.output(ctx, nil, list...)
+	if err != nil {
+		return err
+	}
+	ids := strings.Fields(out)
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err = s.output(ctx, nil, append(append([]string{}, rm...), ids...)...)
+	return err
 }
 
 func randomSuffix() string {

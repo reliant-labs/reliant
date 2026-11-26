@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 )
 
 // The disk limit fails closed: a gate whose disk cannot be bounded is
@@ -30,6 +31,23 @@ import (
 //
 // The container's own writable layer is outside both (the gate's HOME, TMPDIR,
 // tree and nested engine all live on the volumes).
+//
+// A slot is wiped only when nothing can still be using it. The process-local
+// lock says no live process holds the slot, but containers outlive the
+// process that started them, so ownership is also persisted beside the slot,
+// where its lock file is (DiskSlotsDir, which this process can write even
+// when the engine is failing; the slot's own root belongs to its filesystem):
+//
+//   - slot-<n>.owner names the run the slot was last claimed for. It is
+//     written before any of that run's containers exist and cleared only
+//     after Teardown confirmed them removed and wiped the slot. A claim that
+//     finds one first confirms through the engine that no container labelled
+//     with that run id exists; if it cannot confirm it, the slot is skipped,
+//     never wiped.
+//   - slot-<n>.quarantine marks a slot whose run's containers Teardown could
+//     not list or remove. No claim takes it. A later Teardown of the same run
+//     that confirms them gone wipes the slot and clears the marker; otherwise
+//     an operator does, after checking the slot is unused.
 
 // slotName is a disk slot's directory name inside DiskSlotsDir.
 var slotName = regexp.MustCompile(`^slot-[0-9]+$`)
@@ -37,10 +55,97 @@ var slotName = regexp.MustCompile(`^slot-[0-9]+$`)
 // errSlotBusy: another gate holds the slot.
 var errSlotBusy = errors.New("disk slot in use")
 
+// errNoFreeSlot: no slot can be claimed now; the error says why for each.
+var errNoFreeSlot = errors.New("no disk slot is free")
+
 // diskSlot is a slot a gate holds: its directory and its lock.
 type diskSlot struct {
 	dir  string
 	lock *os.File
+}
+
+func ownerPath(slot string) string      { return slot + ".owner" }
+func quarantinePath(slot string) string { return slot + ".quarantine" }
+
+// readOwner returns the run id slot was last claimed for ("" when none). An
+// unreadable record, or one that is not a run id, is an error: it must never
+// become a label filter.
+func readOwner(slot string) (string, error) {
+	b, err := os.ReadFile(ownerPath(slot))
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	id := strings.TrimSpace(string(b))
+	if !runIDPattern.MatchString(id) {
+		return "", fmt.Errorf("%s holds %q, which is not a run id", ownerPath(slot), id)
+	}
+	return id, nil
+}
+
+// writeSlotFile replaces path's content durably: a crash leaves the old
+// content or the new, never a torn one.
+func writeSlotFile(path, content string) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".tmp-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }()
+	if _, err := tmp.WriteString(content); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp.Name(), path); err != nil {
+		return err
+	}
+	if d, err := os.Open(filepath.Dir(path)); err == nil {
+		_ = d.Sync()
+		_ = d.Close()
+	}
+	return nil
+}
+
+func removeSlotFile(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// slotUnusable says why slot, which the caller has locked, must not be
+// claimed ("" when it may be): it is quarantined, or a previous owner's
+// containers may survive.
+func (s *Sysbox) slotUnusable(ctx context.Context, slot string) string {
+	name := filepath.Base(slot)
+	if b, err := os.ReadFile(quarantinePath(slot)); err == nil {
+		return fmt.Sprintf("%s is quarantined (%s)", name, strings.TrimSpace(string(b)))
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Sprintf("%s's quarantine marker is unreadable: %v", name, err)
+	}
+	owner, err := readOwner(slot)
+	if err != nil {
+		return fmt.Sprintf("%s's owner record is unreadable: %v", name, err)
+	}
+	if owner == "" {
+		return ""
+	}
+	out, err := s.output(ctx, nil, "ps", "-aq", "--filter", "label="+LabelRunID+"="+owner)
+	if err != nil {
+		return fmt.Sprintf("%s: cannot confirm its previous run %s has no containers left: %v", name, owner, err)
+	}
+	if ids := strings.Fields(out); len(ids) > 0 {
+		return fmt.Sprintf("%s: its previous run %s still has containers (%s)", name, owner, strings.Join(ids, " "))
+	}
+	return ""
 }
 
 // createVolumes creates the gate's work and engine volumes with its disk
@@ -71,24 +176,40 @@ func (s *Sysbox) createVolumes(ctx context.Context, spec Spec, n names) error {
 }
 
 // claimSlot takes the first free disk slot, checks it bounds the gate to
-// limit, and wipes it for the gate.
+// limit, records runID as its owner, and wipes it for the gate. A slot that
+// is locked, quarantined, or whose previous run may still have containers is
+// skipped and left as it is.
 func (s *Sysbox) claimSlot(ctx context.Context, runID string, limit int64) (*diskSlot, error) {
 	dir := s.cfg.DiskSlotsDir
 	slots, err := listSlots(dir)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrDiskLimitNotEnforced, err)
 	}
+	var skipped []string
 	for _, p := range slots {
 		lock, err := lockSlot(p + ".lock")
 		if errors.Is(err, errSlotBusy) {
+			skipped = append(skipped, filepath.Base(p)+" is in use")
 			continue
 		}
 		if err != nil {
 			return nil, fmt.Errorf("locking disk slot %s: %w", p, err)
 		}
+		if why := s.slotUnusable(ctx, p); why != "" {
+			_ = lock.Close()
+			skipped = append(skipped, why)
+			continue
+		}
 		size, err := s.slotSize(dir, p)
 		if err == nil && size > limit {
 			err = fmt.Errorf("disk slot %s holds %d bytes, more than the gate's disk limit of %d", p, size, limit)
+		}
+		if err == nil {
+			// Before any of the run's containers exist, so a crash from
+			// here on leaves a record the next claim reconciles.
+			if werr := writeSlotFile(ownerPath(p), runID+"\n"); werr != nil {
+				err = fmt.Errorf("recording disk slot %s's owner: %w", p, werr)
+			}
 		}
 		if err == nil {
 			err = s.wipeSlot(ctx, runID, p)
@@ -103,21 +224,73 @@ func (s *Sysbox) claimSlot(ctx context.Context, runID string, limit int64) (*dis
 		s.mu.Unlock()
 		return slot, nil
 	}
-	return nil, fmt.Errorf("all %d disk slots in %s are in use", len(slots), dir)
+	return nil, fmt.Errorf("%w in %s: %s", errNoFreeSlot, dir, strings.Join(skipped, "; "))
 }
 
-// releaseSlot wipes and unlocks the slot runID holds, if it holds one. A
-// slot whose holder died unlocks with it and is wiped by the next claim.
-func (s *Sysbox) releaseSlot(ctx context.Context, runID string) error {
+// releaseSlot releases the slot runID holds: in this process, or, after a
+// restart, the unlocked slot whose owner record names runID. containersErr
+// is why Teardown could not confirm runID's containers removed (nil when it
+// did). Only then is the slot wiped, its records cleared and its lock
+// dropped; otherwise it is quarantined and, when this process holds it,
+// kept locked so a retried Teardown can still release it.
+func (s *Sysbox) releaseSlot(ctx context.Context, runID string, containersErr error) error {
 	s.mu.Lock()
 	slot := s.slots[runID]
 	delete(s.slots, runID)
 	s.mu.Unlock()
 	if slot == nil {
-		return nil
+		if slot = s.findOwnedSlot(runID); slot == nil {
+			return nil
+		}
+	}
+	if containersErr != nil {
+		s.mu.Lock()
+		s.slots[runID] = slot
+		s.mu.Unlock()
+		reason := fmt.Sprintf("run %s: its containers could not be confirmed removed: %v", runID, containersErr)
+		if err := writeSlotFile(quarantinePath(slot.dir), reason+"\n"); err != nil {
+			return fmt.Errorf("%w: disk slot %s is kept locked, but its quarantine marker could not be written (%v): %s", ErrDiskSlotQuarantined, slot.dir, err, reason)
+		}
+		return fmt.Errorf("%w: disk slot %s was not wiped or released, and %s marks why: %s", ErrDiskSlotQuarantined, slot.dir, quarantinePath(slot.dir), reason)
 	}
 	defer func() { _ = slot.lock.Close() }()
-	return s.wipeSlot(ctx, runID, slot.dir)
+	if err := s.wipeSlot(ctx, runID, slot.dir); err != nil {
+		// The owner record stays: no container is left, so the next claim
+		// confirms that and wipes the slot itself.
+		return err
+	}
+	if err := removeSlotFile(quarantinePath(slot.dir)); err != nil {
+		return fmt.Errorf("clearing disk slot %s's quarantine marker: %w", slot.dir, err)
+	}
+	return removeSlotFile(ownerPath(slot.dir))
+}
+
+// findOwnedSlot locks the slot whose owner record names runID, when no one
+// holds it (nil when there is none, or it is held).
+func (s *Sysbox) findOwnedSlot(runID string) *diskSlot {
+	if s.cfg.DiskSlotsDir == "" {
+		return nil
+	}
+	slots, err := listSlots(s.cfg.DiskSlotsDir)
+	if err != nil {
+		return nil
+	}
+	for _, p := range slots {
+		if owner, err := readOwner(p); err != nil || owner != runID {
+			continue
+		}
+		lock, err := lockSlot(p + ".lock")
+		if err != nil {
+			return nil
+		}
+		// Re-read under the lock: a claim may have taken it meanwhile.
+		if owner, err := readOwner(p); err != nil || owner != runID {
+			_ = lock.Close()
+			return nil
+		}
+		return &diskSlot{dir: p, lock: lock}
+	}
+	return nil
 }
 
 // wipeScript empties a slot and leaves the gate's two volume directories on
