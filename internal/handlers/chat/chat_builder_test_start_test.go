@@ -84,7 +84,7 @@ func (f *builderTestFixture) start(workflow string, builderTest *bool, chatID *s
 
 func (f *builderTestFixture) launchKind(t *testing.T, chatID string) string {
 	t.Helper()
-	chat, err := f.repo.GetChat(f.ctx, chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	return chat.LaunchKind
 }
@@ -108,7 +108,7 @@ func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
 	assert.Equal(t, chatID, event.DedupeKey, "attended: deduped on the chat id, like chat.start")
 	assert.Equal(t, "bt-draft", event.Payload["workflow"])
 
-	chat, err := f.repo.GetChat(f.ctx, chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.False(t, chat.ListInSidebar)
 	assert.Equal(t, core.ChatOriginBuilderTest, chat.Origin)

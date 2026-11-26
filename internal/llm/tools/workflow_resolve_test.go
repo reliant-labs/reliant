@@ -138,9 +138,9 @@ func TestWorkflowTools_RequireID(t *testing.T) {
 		ListScenariosToolName: NewListScenariosTool(repo, workflowdraftstest.New(t, repo)),
 		"view_scenario":       NewViewScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM())),
 		"edit_scenario":       NewEditScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM())),
-		"write_scenario":      NewWriteScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
+		"write_scenario":      NewWriteScenarioTool(WithChats(repo), workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
 		"delete_scenario":     NewDeleteScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM())),
-		"run_scenario":        NewRunScenarioTool(repo, workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
+		"run_scenario":        NewRunScenarioTool(WithChats(repo), workflowdraftstest.New(t, repo), store.NewWorkflowScenarioExtStore(repo.ORM()), nil),
 	}
 	require.Len(t, tools, 9)
 	extra := map[string]string{

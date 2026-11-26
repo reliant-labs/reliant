@@ -33,6 +33,11 @@ type Service interface {
 	// EmitUserRefetch tells userID's clients to re-read data of the given type
 	// (user_updates, global stream), scoped by opts.
 	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
+
+	// EmitQuestionUpdate tells clients watching chatID that a question
+	// changed status (chat_updates, per-chat stream); each call is a distinct
+	// entity, so the feed keeps the question's whole history.
+	EmitQuestionUpdate(ctx context.Context, chatID string, update core.QuestionUpdate) error
 }
 
 // Store is the two appends. store.ChatUpdateExtStore and

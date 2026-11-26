@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
@@ -125,7 +126,7 @@ func TestReportContentFreeTurn_WritesTheErrorToTheChat(t *testing.T) {
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 
-	a := &CallLLMActivity{repo: repo}
+	a := &CallLLMActivity{repo: tools.WithChats(repo)}
 	a.reportContentFreeTurn(
 		context.Background(),
 		chatID,

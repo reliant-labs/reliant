@@ -231,7 +231,7 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	require.NotNil(t, resp.Msg.Chat)
 
 	chatID := resp.Msg.Chat.Id
-	createdChat, getErr := repo.GetChat(ctx, chatID)
+	createdChat, getErr := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, getErr)
 	require.NotNil(t, createdChat)
 

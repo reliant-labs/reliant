@@ -8,6 +8,8 @@ Most software stacks are stitched together. A framework comes from one vendor, C
 
 Reliant owns the whole path, as four products: [Forge](/forge/overview), the open-source framework and CLI that puts guardrails on the code and deploys it with no account; [Reliant Cloud](/hosting/overview), the hosting and delivery platform that runs what you ship and monitors it ([observability](/hosting/observability)); [Reliant Workflows](/getting-started/quick-start), the multi-agent YAML workflows, and Autopilot built on them, that write and review the code; and Reliant Engine (coming soon), which will run those workflows inside your own app, under your brand. Because one system declares, builds, deploys and watches your app, it knows your services, RPCs, schema, config, secrets, releases, metrics and alerts. Those are standard seams, the same in every project, and they are what let Reliant and your agents do things a stitched stack can't.
 
+For the list of tools this replaces and what stays yours, see [What Reliant replaces](/getting-started/what-reliant-replaces).
+
 ```mermaid
 flowchart LR
   A["Agents and workflows<br/>write, review, fix"] -->|"generate, lint, test"| F["Forge project<br/>proto, migrations, envs"]

@@ -33,7 +33,7 @@ const (
 // setChatWorkflow points a test chat at a given workflow name.
 func setChatWorkflow(t *testing.T, ctx context.Context, repo *db.Repo, chatID, workflowName string) {
 	t.Helper()
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	chat.WorkflowName = ptr.Of(workflowName)
 	require.NoError(t, repo.UpdateChat(ctx, chat))
@@ -41,7 +41,7 @@ func setChatWorkflow(t *testing.T, ctx context.Context, repo *db.Repo, chatID, w
 
 func chatWorkflowName(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) string {
 	t.Helper()
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.WorkflowName)
 	return *chat.WorkflowName

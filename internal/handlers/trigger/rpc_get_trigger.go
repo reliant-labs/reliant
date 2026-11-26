@@ -20,7 +20,7 @@ func (s *Service) GetTrigger(
 		return nil, err
 	}
 	out := s.render(ctx, trigger)
-	changes, err := s.deps.Repo.ListTriggerChanges(ctx, trigger.UserID, trigger.ID)
+	changes, err := s.deps.TriggerWrites.TriggerChanges(ctx, trigger.UserID, trigger.ID)
 	if err != nil {
 		return nil, svcerr.Wrap(err)
 	}

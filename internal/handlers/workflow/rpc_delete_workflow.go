@@ -54,7 +54,7 @@ func (s *Service) DeleteWorkflow(
 			return err
 		}
 		for _, t := range removed {
-			if err := s.deps.Repo.DeleteTrigger(ctx, t.ID); err != nil {
+			if err := s.deps.Triggers.RemoveTrigger(ctx, t.ID); err != nil {
 				return fmt.Errorf("delete automation %q: %w", t.Name, err)
 			}
 		}

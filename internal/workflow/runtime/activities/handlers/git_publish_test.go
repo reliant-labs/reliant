@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/provenance"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -141,7 +142,7 @@ func newPublishActivityFixture(t *testing.T) *publishFixture {
 	r := &publishRouter{prepare: gitpublish.PrepareResponse{Committed: true, Commits: 1, HeadSHA: "abc1234def", BaseSHA: "0000111", FilesChanged: 3, Insertions: 10, Deletions: 2},
 		push: gitpublish.PushResponse{Pushed: true}}
 	f := &publishFixture{activityPlacementFixture: base, router: r, tok: &fakeToken{actor: core.IntegrationActorOwner}, ledger: &ledgerRecorder{}}
-	f.act = NewGitPublishActivity(base.repo, workspaceRowsOf(base.repo), r, nil)
+	f.act = NewGitPublishActivity(tools.WithChats(base.repo), workspaceRowsOf(base.repo), r, nil)
 	f.act.token = f.tok
 	f.act.github = func(httpaction.CallSite) gitpublish.GitHubReader { return fakeGH{def: "trunk"} }
 	f.act = f.act.WithLedger(f.ledger)

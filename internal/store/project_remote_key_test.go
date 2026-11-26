@@ -19,6 +19,7 @@ import (
 // ssh:// spelling), so case-sensitive paths, other ports, transports and ssh
 // users stay apart; and a remote that names no server has no key.
 func TestGitRemoteKey(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	const props = "github.com/acme/props"
@@ -100,6 +101,7 @@ func TestGitRemoteKey(t *testing.T) {
 // nothing for a remote with no host. The column is the database's: a row
 // written with a remote_url has its key with no help from the writer.
 func TestGetProjectByRemoteKeyAndUserInScope(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 25, 12, 0, 0, 0, time.UTC)
