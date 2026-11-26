@@ -343,11 +343,10 @@ runs:
           tar -xzf "${RUNNER_TEMP}/rg.tgz" -C "${RUNNER_TEMP}" "${f}/rg"
           install -m 0755 "${RUNNER_TEMP}/${f}/rg" "$d/rg"
         fi
-        echo "$d" >> "$GITHUB_PATH"
         # The cicd self-hosted runners (merge-queue.yml) have no sudo and a
-        # read-only /usr; the machine carries ripgrep in /usr/bin, one of the
-        # fixed paths internal/cmdutil's finder looks in.
-        if [ "${RUNNER_ENV}" != self-hosted ]; then
+        # read-only /usr; the machine carries ripgrep in /usr/bin, which is on
+        # PATH and one of the fixed paths internal/cmdutil's finder looks in.
+        if [ "${RUNNER_ENV:-}" != self-hosted ]; then
           sudo install -m 0755 "$d/rg" /usr/local/bin/rg
         fi
 
