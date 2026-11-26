@@ -12,14 +12,18 @@ import { Code } from "@connectrpc/connect";
 import { createShopTransport } from "@/fixtures/shop";
 import { demoSubjects } from "@/fixtures/shop/handlers/inventory";
 import { DEMO_ORG } from "@/fixtures/shop/shopStory";
-import { installShellTransport } from "@/lib/connect";
+import { connectClient, installShellTransport } from "@/lib/connect";
 import { queryClient } from "@/lib/query-client";
 import { controlPlaneIdentityApi as identity } from "@/services/controlPlane/identity/IdentityApiContext";
-import { controlPlaneDataBrowserApi as data } from "@/services/controlPlane/observability/DataBrowserApiContext";
+import { AppDatabaseService } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
+import { createDataBrowserApi } from "@/services/controlPlane/observability/appDatabaseApi";
 import { controlPlaneStorageBrowserApi as storage } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
 
 // The demo bundle's twin (services/controlPlane/config.demo.ts): the cloud reads are on.
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://demo.invalid", hasControlPlane: true }));
+
+// The data browser's reads outside any scope: its mappers over the app's module client (useDataBrowser.ts).
+const data = createDataBrowserApi(connectClient(AppDatabaseService));
 
 const request = { environmentId: "env-staging", database: "shop", table: "public.customers", columns: [], filters: [], sort: [], limit: 25, offset: 0, count: "estimated" as const };
 

@@ -1,13 +1,13 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The console's Tests, Security, Storage and Identity pages read from the
+ * The console's Tests, Security, Data, Storage and Identity pages read from the
  * nearest TransportScope (lib/transportScope.tsx), not the app's transport:
  * each renders the shop pack's data under a scope over `createShopTransport()`,
  * while the module transport records every call and refuses it.
  *
  * The family is these pages' reads (the TestApi, VulnerabilityApi,
- * StorageBrowserApi and IdentityApi defaults, and the coverage source
+ * data browser's reads, the StorageBrowserApi and IdentityApi defaults, and the coverage source
  * fetch): none may reach the module transport. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
@@ -38,6 +38,7 @@ vi.mock("@/components/Forge/Observability/AskReliant/AskReliant", () => ({
 }));
 
 import { setReaderPrincipal } from "@/components/Forge/AuditedAccess/readerSession";
+import { DataBrowser } from "@/components/Forge/Data/DataBrowser";
 import { IdentityTab } from "@/components/Forge/EnvPage/IdentityTab";
 import { ObsReadOnlyProvider } from "@/components/Forge/Observability/obsReadOnly";
 import { SbomsView } from "@/components/Forge/Security/SbomsPage";
@@ -66,6 +67,7 @@ const FAMILY = new Set([
   "controlplane.v1.TestsService",
   "controlplane.v1.VulnerabilityService",
   "controlplane.v1.StorageBrowserService",
+  "controlplane.v1.AppDatabaseService",
   "controlplane.v1.IdentityService",
   "reliant.v1.CoverageSourceService",
 ]);
@@ -183,6 +185,12 @@ describe("the console's Security pages in a TransportScope", () => {
 });
 
 describe("the console's data and identity pages in a TransportScope", () => {
+  it("data", async () => {
+    renderScoped(<DataBrowser env={STAGING} search={{ db: "shop", table: "public.customers" }} onNavigate={() => undefined} href={() => "/data"} />);
+    expect(await screen.findByText("lena.fischer@example.com", {}, { timeout: 15_000 })).toBeInTheDocument();
+    expectFamilyOnScope("controlplane.v1.AppDatabaseService/ListBrowsableDatabases", "controlplane.v1.AppDatabaseService/DescribeDatabase", "controlplane.v1.AppDatabaseService/BrowseTable");
+  }, 30_000);
+
   it("storage", async () => {
     renderScoped(<StorageBrowser env={STAGING} search={{ bucket: "uploads" }} onNavigate={() => undefined} href={() => "/storage"} />);
     expect(await screen.findByTestId("storage-listing", {}, { timeout: 15_000 })).toBeInTheDocument();

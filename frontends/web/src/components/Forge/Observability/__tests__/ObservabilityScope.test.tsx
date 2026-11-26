@@ -8,7 +8,7 @@
  * refuses it.
  *
  * The family is the observability reads (services/controlPlane/observability:
- * the ObservabilityApi and DataBrowserApi defaults, the billing and cost
+ * the ObservabilityApi default, the billing and cost
  * hooks): none may reach the module transport. Nor does the app transport's
  * observability read stage (obsInterceptors.ts) reach them: the sample app's
  * reads spend none of the person's server slots or quota, so the person's
@@ -52,7 +52,6 @@ import { createShopTransport } from "@/fixtures/shop";
 import { setTransport, transport as appTransport } from "@/lib/connect";
 import { queryClient as appQueryClient } from "@/lib/query-client";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
-import { controlPlaneDataBrowserApi, dataBrowserApiOf } from "@/services/controlPlane/observability/DataBrowserApiContext";
 import { controlPlaneObservabilityApi, observabilityApiOf } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { obsQuotaStore, resetObsQuotaStore } from "@/services/controlPlane/observability/quotaStore";
@@ -201,11 +200,9 @@ describe("the console's observability pages in a TransportScope", () => {
 describe("the scoped context defaults", () => {
   it("are the app's constants on the app's transport, and one api per scope transport", () => {
     expect(observabilityApiOf(appTransport)).toBe(controlPlaneObservabilityApi);
-    expect(dataBrowserApiOf(appTransport)).toBe(controlPlaneDataBrowserApi);
     const shop = createShopTransport();
     expect(observabilityApiOf(shop)).toBe(observabilityApiOf(shop));
     expect(observabilityApiOf(shop)).not.toBe(controlPlaneObservabilityApi);
-    expect(dataBrowserApiOf(shop)).toBe(dataBrowserApiOf(shop));
     expect(Object.keys(observabilityApiOf(shop)).sort()).toEqual(Object.keys(controlPlaneObservabilityApi).sort());
   });
 });

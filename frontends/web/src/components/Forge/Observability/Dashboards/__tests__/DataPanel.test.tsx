@@ -4,13 +4,10 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import { setReaderPrincipal } from "../../../AuditedAccess/readerSession";
 import { writeAccess } from "../../../Data/dataAccess-model";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code } from "@connectrpc/connect";
-import type { ReactNode } from "react";
-import { DataBrowserApiProvider } from "@/services/controlPlane/observability/DataBrowserApiContext";
 import type { Panel, PanelResult } from "@/services/controlPlane/observability/types";
 import { createDataFixtureApi, fixtureUserId } from "../../../Data/__fixtures__/fixtureDataApi";
-import { browseCalls, dataHref, searchOf, STAGING, PROD } from "../../../Data/__tests__/dataTestUtils";
+import { browseCalls, dataFixtureWrapper, dataHref, searchOf, STAGING, PROD } from "../../../Data/__tests__/dataTestUtils";
 import { decodeFilter, decodeList } from "../../../Data/dataUrl-model";
 import { DataPanelBody, type PanelDataContext } from "../DataPanel";
 
@@ -20,8 +17,7 @@ const panel: Panel = { id: "users", title: "Users", kind: "table", signal: "trac
 const result: PanelResult = { kind: "table", unit: "count", stepSeconds: 0, bucketSeconds: 0, window: { startMs: 0, endMs: 1000 }, columns: ["count"], rows: [{ group: { user_id: fixtureUserId(0) }, values: [4] }, { group: {}, values: [2] }], series: [], funnelSteps: [], issues: [], sessions: [], seriesMeta: [], seriesTotal: 0, warnings: [], compiledSql: [], truncated: false };
 const query = { data: result, isLoading: false, error: null };
 function setup(api = createDataFixtureApi()) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return { api, wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}><DataBrowserApiProvider api={api}>{children}</DataBrowserApiProvider></QueryClientProvider> };
+  return { api, wrapper: dataFixtureWrapper(api) };
 }
 
 describe("dashboard Data links", () => {

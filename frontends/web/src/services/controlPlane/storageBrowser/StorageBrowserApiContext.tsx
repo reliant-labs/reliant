@@ -4,8 +4,7 @@
  * The seam between the storage browser (components/Forge/Storage) and the
  * five StorageBrowserService calls it makes.
  *
- * The same shape as the data browser's DataBrowserApiContext: component tests
- * hand it the in-memory fixture (Storage/__fixtures__/fixtureStorageApi.ts),
+ * Component tests hand it the in-memory fixture (Storage/__fixtures__/fixtureStorageApi.ts),
  * and production (and the dev-only preview, /forge-storage-preview, over the
  * shop fixture pack's transport) never provides anything but the real
  * client, which calls the control plane

@@ -232,6 +232,10 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // models its plan permits.
   "controlplane.v1.LLMGatewayService",
   "cp",
+  // AppDatabaseService's generated reads: the databases a postgres panel may
+  // read. (The data browser's reads are keyed by reader, "data-browser", and
+  // evicted when the reader changes, not by org.)
+  "controlplane.v1.AppDatabaseService",
   // Every DaemonService read on its generated keys: a machine's detail,
   // preview template and port-access rules.
   "controlplane.v1.DaemonService",

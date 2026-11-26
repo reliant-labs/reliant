@@ -1,24 +1,26 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Renders the real DataBrowser against the fixture api, with the URL state
+ * Renders the real DataBrowser against the fixture api, served on the wire in
+ * a TransportScope (dataFixtureTransport.ts), with the URL state
  * held in a harness: onNavigate replaces it (so a click that changes the view
  * re-renders the browser on the new state, as the router would), and every
  * navigation is recorded. Links render real hrefs (withSearch, as the console
  * builds them), read back with `searchOf`.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { beforeEach } from "vitest";
 import { setReaderPrincipal } from "../../AuditedAccess/readerSession";
 beforeEach(() => setReaderPrincipal("fixture-reader", true));
 import { act, render } from "@testing-library/react";
 import { defaultParseSearch } from "@tanstack/react-router";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 
-import { DataBrowserApiProvider, type DataBrowserApi } from "@/services/controlPlane/observability/DataBrowserApiContext";
+import { TransportScopeProvider } from "@/lib/transportScope";
 
 import { withSearch } from "../../Console/paths";
+import { dataFixtureScope } from "../__fixtures__/dataFixtureTransport";
 import type { DataFixtureApi } from "../__fixtures__/fixtureDataApi";
 import { DataBrowser } from "../DataBrowser";
 import type { DataSearch } from "../dataUrl-model";
@@ -35,7 +37,13 @@ export function searchOf(href: string | null): DataSearch {
   return defaultParseSearch((href ?? "").slice((href ?? "").indexOf("?"))) as DataSearch;
 }
 
-export function renderBrowser(api: DataBrowserApi, initial: DataSearch = {}, env: { id: string; name: string } = STAGING) {
+/** A wrapper serving `api` in a TransportScope over a fresh test QueryClient (no retries). */
+export function dataFixtureWrapper(api: DataFixtureApi) {
+  const scope = dataFixtureScope(api, new QueryClient({ defaultOptions: { queries: { retry: false } } }));
+  return ({ children }: { children: ReactNode }) => <TransportScopeProvider scope={scope}>{children}</TransportScopeProvider>;
+}
+
+export function renderBrowser(api: DataFixtureApi, initial: DataSearch = {}, env: { id: string; name: string } = STAGING) {
   const navigations: { search: DataSearch; replace: boolean }[] = [];
   let current = initial;
   let set: (next: DataSearch) => void = () => undefined;
@@ -55,14 +63,7 @@ export function renderBrowser(api: DataBrowserApi, initial: DataSearch = {}, env
       />
     );
   }
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const utils = render(
-    <QueryClientProvider client={client}>
-      <DataBrowserApiProvider api={api}>
-        <Harness />
-      </DataBrowserApiProvider>
-    </QueryClientProvider>
-  );
+  const utils = render(<Harness />, { wrapper: dataFixtureWrapper(api) });
   return {
     ...utils,
     navigations,

@@ -17,6 +17,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { transport as appTransport } from "@/lib/connect";
 import { useTransport } from "@/lib/transportScope";
+import { appDatabaseServiceKeys } from "@/hooks/controlplane/app-database-service-hooks_gen";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { useCloudEnvStatus, useCloudEnvStatuses, useEnvironmentShape, useEnvironmentShapes, useSetWorkloadRunState } from "@/hooks/forge-queries";
 import { useEnvPromotions } from "@/hooks/release-queries";
@@ -282,7 +283,11 @@ export function WorkloadPage() {
     // The environment the PATH names, by its control-plane id: a restart is always "in <env>".
     mutationFn: (environmentId) => restartWorkload(transport, environmentId, name),
     // The pods roll over the next minute: re-read the workload so the Pods table follows.
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["observability"] }),
+    // The panel editor's databases (AppDatabaseService's generated keys) refresh with them, as they did under "observability".
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["observability"] });
+      void queryClient.invalidateQueries({ queryKey: appDatabaseServiceKeys.listDashboardDatabases.all });
+    },
   });
   const runState = useSetWorkloadRunState();
   const lock = useObsReadOnly();

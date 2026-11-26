@@ -29,6 +29,7 @@ import {
   DatabaseTableKind,
   IdentitySubjectKind,
   type DatabaseForeignKey,
+  type ListDashboardDatabasesResponse,
 } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
 import type { PanelResultPoint } from "@/gen/controlplane/controlplane/v1/shared_pb";
 
@@ -298,6 +299,11 @@ function foreignKey(fk: DatabaseForeignKey): DbForeignKey {
   };
 }
 
+/**
+ * The data browser's three reads over `browserClient`, mapped to its model:
+ * the client the read's QueryClient resolves (components/Forge/Data/
+ * useDataBrowser.ts, scopedClient), or the app's module client.
+ */
 export function createDataBrowserApi(browserClient: Pick<Client<typeof AppDatabaseService>, "listBrowsableDatabases" | "describeDatabase" | "browseTable">) {
 async function listBrowsableDatabases(environmentId: string, options: { signal?: AbortSignal } = {}): Promise<BrowsableDb[]> {
   const res = await browserClient.listBrowsableDatabases({ environmentId }, options.signal ? { signal: options.signal } : undefined);
@@ -372,25 +378,8 @@ async function browseTable(req: BrowseInput, options: { signal?: AbortSignal } =
 return { listBrowsableDatabases, describeDatabase, browseTable };
 }
 
-// Lazy production client resolution preserves the authenticated transport boundary.
-export const listBrowsableDatabases = (...args: Parameters<ReturnType<typeof createDataBrowserApi>["listBrowsableDatabases"]>) => createDataBrowserApi(client()).listBrowsableDatabases(...args);
-export const describeDatabase = (...args: Parameters<ReturnType<typeof createDataBrowserApi>["describeDatabase"]>) => createDataBrowserApi(client()).describeDatabase(...args);
-export const browseTable = (...args: Parameters<ReturnType<typeof createDataBrowserApi>["browseTable"]>) => createDataBrowserApi(client()).browseTable(...args);
-
-type DataBrowserReads = ReturnType<typeof createDataBrowserApi>;
-
-/**
- * The same three reads on `transport`: a TransportScope's (the data browser's
- * context default, DataBrowserApiContext), or none for the app's. The client
- * is still resolved per call.
- */
-export function dataBrowserReadsOn(transport?: Transport): DataBrowserReads {
-  return {
-    listBrowsableDatabases: (...args) => createDataBrowserApi(client(transport)).listBrowsableDatabases(...args),
-    describeDatabase: (...args) => createDataBrowserApi(client(transport)).describeDatabase(...args),
-    browseTable: (...args) => createDataBrowserApi(client(transport)).browseTable(...args),
-  };
-}
+/** The data browser's three reads, in its model. */
+export type DataBrowserReads = ReturnType<typeof createDataBrowserApi>;
 
 /** One database a postgres panel may read: its limits, and what the dashboard role may SELECT. */
 export interface DashboardDatabase {
@@ -404,7 +393,11 @@ export interface DashboardDatabase {
 }
 
 export async function listDashboardDatabases(environmentId: string, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<DashboardDatabase[]> {
-  const res = await client(transport).listDashboardDatabases({ environmentId }, options.signal ? { signal: options.signal } : undefined);
+  return toDashboardDatabases(await client(transport).listDashboardDatabases({ environmentId }, options.signal ? { signal: options.signal } : undefined));
+}
+
+/** ListDashboardDatabases' answer as the panel editor reads it: the `select` of useDashboardDatabases (hooks/observability-queries.ts). */
+export function toDashboardDatabases(res: ListDashboardDatabasesResponse): DashboardDatabase[] {
   return res.databases.map((db) => ({
     name: db.name,
     rowCap: db.rowCap,

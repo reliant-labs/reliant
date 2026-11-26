@@ -13,8 +13,8 @@ and the console's typed Data route builder. No environment is read from a panel.
 All-environment, org and platform views cannot read a saved browse panel or
 activate Data links. Choose one project environment first.
 
-Data admission uses the same `DataBrowserApiContext` list/describe/browse API and
-React Query hooks as Data. Selection is exact: a missing database or table never
+Data admission uses the same list/describe/browse reads and React Query hooks as
+Data (`components/Forge/Data/useDataBrowser.ts`). Selection is exact: a missing database or table never
 falls back to another database. Audited reads require that environment's tab
 confirmation and reason; denied/unknown policies never read rows. The server's
 `db:query` admission remains authoritative. A permission refusal is displayed,
