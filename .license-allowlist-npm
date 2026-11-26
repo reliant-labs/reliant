@@ -2,7 +2,7 @@
 #
 # The gate is an ALLOWLIST: only the permissive licenses named in the script
 # pass, and anything unrecognized FAILS. This file records the deliberate
-# exceptions. It is the npm twin of .license-allowlist, which covers Go.
+# exceptions. Go's exceptions live in forge.yaml ci.license.exceptions.
 #
 # Format:  <package name>   # why this is acceptable
 #
