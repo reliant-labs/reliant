@@ -165,6 +165,58 @@ func (m *MockOrphans) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Co
 // Compile-time check.
 var _ Orphans = (*MockOrphans)(nil)
 
+// forge:section MockRunTerminator
+// forge:hash=d601ff59afbfb306a5a1646d879ffc66eb7a0648343e22d98b52ea52be80cd5a
+
+// MockRunTerminator is a test mock for the RunTerminator interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockRunTerminator.<Method>Func not set" error.
+type MockRunTerminator struct {
+	contractkit.Recorder
+	TerminateExecutionFunc func(context.Context, string, string, string) error
+}
+
+// TerminateExecution records the call and delegates to TerminateExecutionFunc when set.
+func (m *MockRunTerminator) TerminateExecution(ctx context.Context, chatID string, workflowID string, runID string) error {
+	m.Recorder.Record("TerminateExecution", ctx, chatID, workflowID, runID)
+	if m.TerminateExecutionFunc != nil {
+		return m.TerminateExecutionFunc(ctx, chatID, workflowID, runID)
+	}
+	return contractkit.MockNotSet("MockRunTerminator", "TerminateExecution")
+}
+
+// Compile-time check.
+var _ RunTerminator = (*MockRunTerminator)(nil)
+
+// forge:section MockStallRecorder
+// forge:hash=0f8cfd0aaaf676ccdf24f44b47dc93cabce79584a18572f3685bc6ed0d129dbf
+
+// MockStallRecorder is a test mock for the StallRecorder interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockStallRecorder.<Method>Func not set" error.
+type MockStallRecorder struct {
+	contractkit.Recorder
+	RecordNodeObservationFunc func(context.Context, *db.NodeObservation, int) (db.NodeObservationWrite, error)
+}
+
+// RecordNodeObservation records the call and delegates to RecordNodeObservationFunc when set.
+func (m *MockStallRecorder) RecordNodeObservation(ctx context.Context, obs *db.NodeObservation, maxPerRun int) (db.NodeObservationWrite, error) {
+	m.Recorder.Record("RecordNodeObservation", ctx, obs, maxPerRun)
+	if m.RecordNodeObservationFunc != nil {
+		return m.RecordNodeObservationFunc(ctx, obs, maxPerRun)
+	}
+	return *new(db.NodeObservationWrite), contractkit.MockNotSet("MockStallRecorder", "RecordNodeObservation")
+}
+
+// Compile-time check.
+var _ StallRecorder = (*MockStallRecorder)(nil)
+
 // forge:section MockToolCallLists
 // forge:hash=e55a7a9720ea25666bc936e92861c9c03b1f1744425adc54fce7122feffcceea
 
