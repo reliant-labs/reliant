@@ -24,7 +24,8 @@ tmp_dir = "tmp/air-worker"
   # scripts/air-build.sh builds ./cmd/reliant ONCE per save for every Air
   # watcher (api, worker and gateway run the same binary), with -trimpath, and
   # links the result here atomically. A failed build exits non-zero for every
-  # watcher and never replaces this binary.
+  # watcher and never replaces this binary. It links without DWARF (-w);
+  # FORGE_DEV_DWARF=1 forge env up dev keeps it, to attach delve.
   # $FORGE_GO_BUILD_FLAGS is how `forge env up dev` builds it for coverage
   # (forge.yaml tests.coverage: -cover -covermode=atomic -coverpkg=…, with
   # GOCOVERDIR=.forge/tests/covdata/dev/<workload>/); unset, nothing changes.
