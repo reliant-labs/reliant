@@ -575,6 +575,12 @@ func verdictIndependentOfShutdown(execErr error) bool {
 	if errors.Is(execErr, context.Canceled) || errors.Is(execErr, context.DeadlineExceeded) {
 		return false
 	}
+	// RunStepReleased is benign because a rollout is not a fault, not
+	// because the activity reached a user verdict independent of the drain.
+	var appErr *temporal.ApplicationError
+	if errors.As(execErr, &appErr) && appErr.Type() == "RunStepReleased" {
+		return false
+	}
 	return errclass.Classify(execErr) == svcerr.ClassUser || isTerminal(execErr)
 }
 
