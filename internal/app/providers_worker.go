@@ -524,7 +524,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Repo:           repo,
 		Chats:          store.NewChatExtStore(repo.ORM()),
 		Firings:        store.NewTriggerEventExtStore(repo.ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(repo.ORM()), Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()),
 		Owners:         d.Owners,
 		Projects:       projectaccess.NewFromORM(repo.ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(repo.ORM()),
@@ -557,15 +557,17 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 type WorkerToolsFactoryDeps struct {
 	ConnectionVault connectionvault.Service
 	DB              *db.Repo
-	Backoff         providerbackoff.Service
-	Network         *configv1.NetworkConfig
-	Temporal        *TemporalClient
-	AgentRuns       *agentruns.Runs
-	Triggers        *WorkerTrigger
-	Credentials     *WorkerIntegrationCredentials
-	WriteLedger     writeledger.Service
-	CatalogSearch   *WorkerCatalogSearch
-	Router          *WorkerDaemonRouter
+	// Updates writes the plan, task and worktree refetches the tools announce.
+	Updates       chatupdates.Service
+	Backoff       providerbackoff.Service
+	Network       *configv1.NetworkConfig
+	Temporal      *TemporalClient
+	AgentRuns     *agentruns.Runs
+	Triggers      *WorkerTrigger
+	Credentials   *WorkerIntegrationCredentials
+	WriteLedger   writeledger.Service
+	CatalogSearch *WorkerCatalogSearch
+	Router        *WorkerDaemonRouter
 	// WorkflowDrafts is the saved workflows the workflow and scenario tools
 	// read and write.
 	WorkflowDrafts workflowdrafts.Service
@@ -629,17 +631,18 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		Placement:          daemonplacement.NewRecords(repo.ORM()),
 		Workflows:          store.NewWorkflowExtStore(repo.ORM()),
 		Planning:           planner,
+		Refetch:            d.Updates,
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
-		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(tools.WithChats(repo))),
 		// spawn_status reads which sub-agents are parked on a usage limit.
 		ProviderBackoff: d.Backoff,
 		// spawn_stop executes here too, and the stop is NOT best-effort: with
 		// no stopper the tool reports that it cannot stop anything rather than
 		// claiming a cancellation that never left the process.
-		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(repo), repo),
+		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(tools.WithChats(repo)), repo),
 		// generate_image executes here, inside the ExecuteTools activity, so
 		// this is the wiring that actually decides whether the tool works.
 		ImageGeneratorResolver: resolveImageGenerator,
@@ -786,12 +789,15 @@ type TemporalWorkerDeps struct {
 	Router           *WorkerDaemonRouter
 	ConfigProvider   *reliantconfig.StoredConfigProvider
 	Launcher         *launch.Launcher
-	Credentials      *WorkerIntegrationCredentials
-	WriteLedger      writeledger.Service
-	Pollers          *webhook.Registry
-	ControlPlane     *configv1.ControlPlaneConfig
-	Network          *configv1.NetworkConfig
-	Recorder         *AccountRecorder
+	// Runs stops the run a trigger firing supersedes under
+	// concurrency.cancel_running, the way a user's stop does.
+	Runs         *runs.Service
+	Credentials  *WorkerIntegrationCredentials
+	WriteLedger  writeledger.Service
+	Pollers      *webhook.Registry
+	ControlPlane *configv1.ControlPlaneConfig
+	Network      *configv1.NetworkConfig
+	Recorder     *AccountRecorder
 	// WorkflowTaskSlots and WorkflowTaskPollers are WorkerConfig's
 	// RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS and
 	// RELIANT_WORKER_WORKFLOW_TASK_POLLERS (0: workersetup's default).
@@ -982,6 +988,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		MCPBinder:              toolexec.NewDaemonMCPContextBinder(d.Router),
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
+		TriggerRunCanceller:    triggerRunCanceller(d.Runs),
 		Membership:             d.Membership,
 		Policies:               d.Policies,
 		IntegrationCredentials: creds,
@@ -999,6 +1006,15 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		return nil, fmt.Errorf("failed to create worker: %w", err)
 	}
 	return worker, nil
+}
+
+// triggerRunCanceller is the run service as the trigger firers' canceller,
+// or nil (no canceller, rather than a nil *runs.Service inside an interface).
+func triggerRunCanceller(r *runs.Service) triggers.RunCanceller {
+	if r == nil {
+		return nil
+	}
+	return r
 }
 
 // WorkflowEventRelayDeps is the outbox and the workflows it dispatches to.

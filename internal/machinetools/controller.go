@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -162,7 +163,7 @@ func (m *Controller) StartMachine(ctx context.Context, userID, daemonID string, 
 		return nil
 	}
 	if errors.Is(err, toolexec.ErrAutomationAccessNotGranted) {
-		return errors.New("no live sign-in to act as the user: they can start it in Settings -> Machines, or send a message in this chat to refresh the session")
+		return svcerr.FailedPrecondition("no live sign-in to act as the user: they can start it in Settings -> Machines, or send a message in this chat to refresh the session")
 	}
 	return err
 }
@@ -291,13 +292,15 @@ func (m *Controller) owned(ctx context.Context, userID, daemonID string) error {
 }
 
 // ownerSession is the user's live session token, after the ownership check.
+// No live session is the user's to fix, so it is a svcerr user error, not a
+// server fault (as in changetools).
 func (m *Controller) ownerSession(ctx context.Context, userID, daemonID string) (string, error) {
 	if err := m.owned(ctx, userID, daemonID); err != nil {
 		return "", err
 	}
 	jwt, ok := auth.GetUserJWT(userID)
 	if !ok || strings.TrimSpace(jwt) == "" {
-		return "", errors.New("no live sign-in to act as the user: they can do this in Settings -> Machines, or send a message in this chat to refresh the session")
+		return "", svcerr.FailedPrecondition("no live sign-in to act as the user: they can do this in Settings -> Machines, or send a message in this chat to refresh the session")
 	}
 	return jwt, nil
 }

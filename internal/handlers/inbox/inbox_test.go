@@ -23,6 +23,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/questions"
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 type inboxFixture struct {
@@ -88,7 +90,7 @@ func (f *inboxFixture) trigger(t *testing.T, id string) {
 	t.Helper()
 	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	require.NoError(t, f.repo.CreateTrigger(f.ctx, &core.Trigger{
+	require.NoError(t, triggertest.Create(f.ctx, f.repo, &core.Trigger{
 		ID: id, UserID: f.userID, ProjectID: f.project(), Name: "nightly " + id,
 		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "wf", DaemonID: "d-" + id,
 		Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
@@ -315,7 +317,7 @@ func TestListInbox_AutomationRunOutOfTheChatListStillReachesTheUser(t *testing.T
 	f.question(t, "q-review", "chat-review", now)
 	f.approval(t, "appr-review", "chat-review", now)
 
-	chat, err := f.repo.GetChat(f.ctx, "chat-review")
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), "chat-review")
 	require.NoError(t, err)
 	require.Equal(t, core.ChatOriginAutomation, chat.Origin)
 	require.False(t, chat.ListInSidebar, "the run is not in the chat list")
@@ -386,7 +388,7 @@ func (f *inboxFixture) notifyingTrigger(t *testing.T, id string, notify bool) {
 	tr, err := f.repo.GetTrigger(f.ctx, id)
 	require.NoError(t, err)
 	tr.NotifyOnComplete = notify
-	require.NoError(t, f.repo.UpdateTrigger(f.ctx, tr))
+	require.NoError(t, triggertest.Update(f.ctx, f.repo, tr))
 }
 
 // The Inbox is for what needs the person. A run an automation launched that
@@ -549,7 +551,7 @@ func TestListInbox_ScopedToCallerAcrossEveryKind(t *testing.T) {
 	require.NoError(t, questions.NewFromRepo(f.repo).CreateQuestion(otherCtx, &db.Question{ID: "o-ques", ChatID: "o-q", WorkflowID: "o-q", Status: 1, Metadata: &meta, CreatedAt: now}))
 	require.NoError(t, f.repo.SetChatDaemonBlocked(otherCtx, "o-w", true))
 	cfg, _ := json.Marshal(core.ScheduleConfig{Cron: []string{"0 9 * * *"}})
-	require.NoError(t, f.repo.CreateTrigger(otherCtx, &core.Trigger{
+	require.NoError(t, triggertest.Create(otherCtx, f.repo, &core.Trigger{
 		ID: "o-trg", UserID: otherUser, ProjectID: otherProject, Name: "theirs", Kind: core.TriggerKindSchedule,
 		Enabled: true, Workflow: "wf", DaemonID: "od", Presets: map[string]string{}, Params: map[string]any{},
 		Config: cfg, CreatedAt: now, UpdatedAt: now,
@@ -618,7 +620,7 @@ func TestListInbox_ArchivedChatsAreNotWaitingOnAnyone(t *testing.T) {
 	f.approval(t, "a-arch", "c-arch", now)
 	require.Len(t, f.list(t, nil).Items, 1)
 
-	chat, err := f.repo.GetChat(f.ctx, "c-arch")
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), "c-arch")
 	require.NoError(t, err)
 	chat.State = db.ChatStateArchived
 	require.NoError(t, f.repo.UpdateChat(f.ctx, chat))

@@ -204,7 +204,7 @@ By the time you would run one, the release has applied its migrations and writte
 - **Signing proves the ledger, not the builder.** Hosted bundles are signed with a per-organization key; any valid deploy token can still record a bundle built anywhere. Signing defaults to `audit` on a control plane and is capped at `audit` (default `off`) self-hosted. `trusted_builder`, the vulnerability gate, admission verification and signed promotions are recorded but block nothing yet; `forge env shape <env> --json` shows the resolved `delivery_policy`.
 - **Floors need a control plane that supports them**, and `--floor` against one that doesn't is refused rather than dropped.
 - **`--from` works within one control plane.**
-- **A hosted deploy can be queued.** Past the free tier (one static site per person across the organizations they own without a plan, counted across environments), it is recorded and held on billing with exit 7, and goes live by itself once billing is set up.
+- **A hosted deploy can be queued.** Past the free tier (static sites in one organization per person, 1 GiB each and 10 GiB in total; anything with a backend or database needs billing), it is recorded and held on billing with exit 7, and goes live by itself once billing is set up.
 
 ## See it for yourself
 

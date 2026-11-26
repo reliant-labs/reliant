@@ -8,17 +8,13 @@ package plan
 import (
 	"context"
 
-	"github.com/reliant-labs/forge/pkg/orm"
-
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// PlanStore reads and writes plans. store.PlanExtStore satisfies it.
+// PlanStore reads plans outside the CRUD rpcs. store.PlanExtStore satisfies
+// it. The plan CRUD rpcs run on Deps.DB through the generated ops.
 type PlanStore interface {
 	GetPlan(ctx context.Context, id string) (*core.Plan, error)
-	InsertPlan(ctx context.Context, p *core.Plan) error
-	ReplacePlan(ctx context.Context, p *core.Plan) error
-	RemovePlan(ctx context.Context, id string) error
 	ListPlansByChatID(ctx context.Context, chatID string) ([]*core.Plan, error)
 }
 
@@ -42,10 +38,4 @@ type ChatStore interface {
 // *db.Repo satisfies it.
 type ChatRefetcher interface {
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType core.RefetchType) error
-}
-
-// TxRunner opens the transactions of the read-check-write rpcs. *orm.Client
-// satisfies it.
-type TxRunner interface {
-	RunTx(ctx context.Context, policy orm.TxPolicy, fn func(ctx context.Context) error) error
 }

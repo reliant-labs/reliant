@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
@@ -120,7 +121,7 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 	repo, cleanup := setupTestDB(t)
 	t.Cleanup(cleanup)
 	chatID := newCaller(t, repo)
-	chat, err := repo.GetChat(context.Background(), chatID)
+	chat, err := store.GetChat(context.Background(), repo.ORM(), chatID)
 	require.NoError(t, err)
 	project, err := repo.GetProject(context.Background(), chat.ProjectID)
 	require.NoError(t, err)
@@ -148,7 +149,7 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 
 func (f *worktreeToolFixture) call(t *testing.T, params WorktreeParams) ToolResponse {
 	t.Helper()
-	return callRunTool(t, NewWorktreeTool(f.repo, f.repo, store.NewChatExtStore(f.repo.ORM()), f.machine, f.settler), f.rc, WorktreeToolName, params)
+	return callRunTool(t, NewWorktreeTool(f.repo, f.repo, store.NewChatExtStore(f.repo.ORM()), f.machine, f.settler, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, params)
 }
 
 func (f *worktreeToolFixture) row(t *testing.T, name string) *db.Worktree {
@@ -611,7 +612,7 @@ func TestWorktreeTool_RefusesANameThatIsAPath(t *testing.T) {
 func TestWorktreeTool_WithoutAMachine_DoesNothingLocally(t *testing.T) {
 	f := newWorktreeToolFixture(t)
 
-	resp := callRunTool(t, NewWorktreeTool(f.repo, f.repo, store.NewChatExtStore(f.repo.ORM()), nil, nil), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "feature-auth"})
+	resp := callRunTool(t, NewWorktreeTool(f.repo, f.repo, store.NewChatExtStore(f.repo.ORM()), nil, nil, chatupdates.NewFromORM(f.repo.ORM(), f.repo, nil)), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "feature-auth"})
 	require.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "no machine can be reached")
 	assert.Nil(t, f.row(t, "feature-auth"))
@@ -750,7 +751,7 @@ func TestWorktreeTool_Get_ShowsBoundChats(t *testing.T) {
 	wt := f.register(t, "branchy", 1)
 	idle := f.register(t, "idle", 1)
 	ctx := context.Background()
-	chat, err := f.repo.GetChat(ctx, f.chatID)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	chat.WorktreeID = &wt.ID
 	require.NoError(t, f.repo.UpdateChat(ctx, chat))

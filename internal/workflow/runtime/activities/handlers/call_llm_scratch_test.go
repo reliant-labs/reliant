@@ -66,3 +66,14 @@ func TestScratchDirGuidance_NamesTheLifecycleAndTheKeepMarker(t *testing.T) {
 	assert.Contains(t, guidance, "after 7 days unused")
 	assert.Contains(t, guidance, "`"+idlereclaim.KeepFile+"`")
 }
+
+// The shared guidance says the agent-id subdirectories belong to the chat's
+// sub-agents and are not to be deleted: a root agent freeing disk once
+// removed every subdirectory of its scratch directory, running sub-agents'
+// briefings and logs included (agent reports 25075365, e60bb521).
+func TestScratchDirGuidance_SaysSubAgentDirectoriesAreNotYoursToDelete(t *testing.T) {
+	t.Parallel()
+	guidance := scratchDirGuidance(&db.Chat{ID: "chat-123"})
+	assert.Contains(t, guidance, "subdirectory named by its agent id")
+	assert.Contains(t, guidance, "never delete a subdirectory you did not create")
+}

@@ -33,6 +33,12 @@ var declinedScaffolds = []string{
 	"deploy/observability/profiles-schema.sql",
 	"docker-compose.yml",
 	"frontends/web/eslint.config.mjs",
+	// forge's CRUD lifecycle test creates a plan or task with no chat, and
+	// reliant authorizes every create through the caller's chat; each
+	// package's tenant_isolation_test.go covers the CRUD rpcs on a real
+	// database instead.
+	"internal/handlers/plan/handlers_crud_test.go",
+	"internal/handlers/task/handlers_crud_test.go",
 }
 
 // keptObservability is the observability configuration reliant does deploy.

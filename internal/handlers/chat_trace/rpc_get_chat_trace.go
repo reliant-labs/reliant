@@ -86,7 +86,7 @@ func (s *Service) GetChatTrace(
 		return nil, svcerr.InvalidArgument("end_time must be after start_time")
 	}
 
-	chat, err := s.deps.Store.GetChatRow(ctx, msg.GetChatId())
+	chat, err := s.deps.Chats.GetChatRow(ctx, msg.GetChatId())
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}

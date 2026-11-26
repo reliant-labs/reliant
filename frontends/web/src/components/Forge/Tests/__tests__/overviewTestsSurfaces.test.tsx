@@ -24,6 +24,9 @@ import { useTestsNavCount } from "../surfaces/useTestsNavCount";
 import { COVERAGE_DROP_ATTENTION_POINTS, testsAttentionCount, testsAttentionItems } from "../surfaces/surfacesModel";
 import { renderWithApi } from "./testsTestUtils";
 
+// The Tests card draws its coverage line with UPlotChart; uPlot needs a canvas jsdom lacks.
+vi.mock("uplot", async () => (await import("../../Observability/__tests__/obsMocks")).obsMocks.uplot());
+
 vi.mock("@/components/forge-ui/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: ReactNode }) => (
     <a href={href} {...rest}>

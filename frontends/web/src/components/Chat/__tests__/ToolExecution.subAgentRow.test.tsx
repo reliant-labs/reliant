@@ -92,6 +92,33 @@ describe("ToolExecution sub-agent row", () => {
     expect(screen.queryByRole("button", { name: "Cancel tool execution" })).not.toBeInTheDocument();
   });
 
+  it("opens the agent's thread from its title, without toggling the progress", () => {
+    mockAllWorkflows = [{ id: "wf-child-4", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED, children: [] }];
+    const onSelectThread = vi.fn();
+
+    render(<ToolExecution toolCall={spawnCall("toolu_spawn_open", "wf-child-4")} chatId="chat-1" onSelectThread={onSelectThread} />);
+
+    const row = screen.getByTestId("sub-agent-row");
+    const progress = within(row).getByRole("button", { name: "Show progress of Write edge-case tests" });
+    expect(progress).toHaveAttribute("aria-expanded", "false");
+
+    const title = within(row).getByRole("button", { name: "Open thread: Write edge-case tests" });
+    expect(title).toHaveTextContent("Write edge-case tests");
+    fireEvent.click(title);
+    expect(onSelectThread).toHaveBeenCalledWith("wf-child-4");
+    expect(progress).toHaveAttribute("aria-expanded", "false");
+    // The title is the one way to the thread: no second icon for it.
+    expect(within(row).queryByRole("button", { name: "Open full thread view" })).not.toBeInTheDocument();
+  });
+
+  it("shows the title as plain text when there is no thread to open yet", () => {
+    render(<ToolExecution toolCall={spawnCall("toolu_spawn_nothread")} chatId="chat-1" onSelectThread={vi.fn()} />);
+
+    const row = screen.getByTestId("sub-agent-row");
+    expect(within(row).getByText("Write edge-case tests").tagName).toBe("SPAN");
+    expect(within(row).queryByTestId("sub-agent-open-thread")).not.toBeInTheDocument();
+  });
+
   it("shows a denied sub-agent as denied, with the reason, not as working", () => {
     const denied = create(ApprovalSchema, {
       id: "approval-1",

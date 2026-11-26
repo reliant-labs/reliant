@@ -43,14 +43,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // InsertTask stores a new task. created_at is t's when set; updated_at is the
 // time of the write. Both are written back onto t.
 func InsertTask(ctx context.Context, db orm.Context, t *core.Task) error {
-	status := reliantv1.TaskStatus(t.Status)
+	status := t.Status
 	row := &Task{
 		ID:           t.ID,
 		PlanID:       t.PlanID,
@@ -102,7 +101,7 @@ func ListTasksByPlan(ctx context.Context, db orm.Context, planID string) ([]*cor
 // status, position, metadata, assignee, completed_at) from t and stamps
 // updated_at, which is written back onto t. A missing task is orm.ErrNoRows.
 func ReplaceTask(ctx context.Context, db orm.Context, t *core.Task) error {
-	status := reliantv1.TaskStatus(t.Status)
+	status := t.Status
 	row := &Task{
 		ID:          t.ID,
 		Title:       t.Title,
@@ -148,7 +147,7 @@ func taskToCore(row *Task) *core.Task {
 		CompletedAt:  row.CompletedAt,
 	}
 	if row.Status != nil {
-		t.Status = int32(*row.Status)
+		t.Status = *row.Status
 	}
 	return t
 }

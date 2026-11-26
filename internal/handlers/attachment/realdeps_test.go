@@ -7,5 +7,5 @@ import (
 
 // RealDeps is the Deps the composition root builds, over repo's database.
 func RealDeps(repo *db.Repo) Deps {
-	return Deps{Attachments: store.NewAttachmentExtStore(repo.ORM())}
+	return Deps{Attachments: store.NewAttachmentExtStore(repo.ORM()), DB: repo.ORM()}
 }

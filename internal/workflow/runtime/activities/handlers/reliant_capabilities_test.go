@@ -96,7 +96,7 @@ func TestReliantCapabilities_FrontendOnlyIsFirstClass(t *testing.T) {
 		"`reliant forge env up dev`",
 		"promoted by digest",
 		"static hosting with a CDN",
-		"one static site per org is free; each environment's site counts",
+		"static sites are free, any number of them, in one org per person",
 		"custom domains",
 		"`reliant forge ui component search`",
 		"`frontend/design` skill",

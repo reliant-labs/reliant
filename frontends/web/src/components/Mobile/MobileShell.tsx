@@ -78,7 +78,7 @@ import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 import { navDrawerHeld } from "../Layout/sidebar/navDrawerHold";
 import { onboardingPath } from "@/lib/paths";
 import { isForgeShell } from "@/lib/shell";
-import { homeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGate";
+import { homeTarget, routeRequiresOnboarding } from "@/components/OnboardingFlow/onboardingGatePolicy";
 
 export function MobileShell() {
   const navigate = useNavigate();
@@ -97,7 +97,7 @@ export function MobileShell() {
   const notOnboardedHome = homeTarget(pathname, "onboard", { forgeBrand: isForgeShell() });
 
   // Same gate the desktop shell applies (see ModernApp), on the same routes:
-  // the chats (onboardingGate.ts). A user without a completed setup has no
+  // the chats (onboardingGatePolicy.ts). A user without a completed setup has no
   // daemon, so the chat screens would render empty; machines, projects,
   // workflows, the Inbox and settings work without one. Wait for
   // `isUserLoading` to settle first, otherwise the one-frame

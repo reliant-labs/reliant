@@ -670,7 +670,7 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 		return held(w, ReasonUnverified, "no git checkout found under the workspace")
 	}
 	if r.IdleFloor > 0 {
-		last, err := idleSince(ctx, w.Path, checkouts)
+		last, err := r.useSince(ctx, w, checkouts)
 		if err != nil {
 			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
 		}
@@ -720,7 +720,7 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	}
 	archivedAt, hasArchiveTime := r.useCountsAfter(w)
 	if r.IdleFloor > 0 || hasArchiveTime {
-		last, err := idleSince(ctx, w.Path, checkouts)
+		last, err := r.useSince(ctx, w, checkouts)
 		if err != nil {
 			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
 		}
@@ -1380,6 +1380,9 @@ func (r *Reclaimer) recoverLocked(ctx context.Context, rowID string) (restored, 
 			_ = setLock(ctx, lockInfo{CommonDir: info.CommonDir}, dest, info.Reason)
 		}
 		_ = os.Remove(originMarker(q))
+		// The move back changed the directory it came home to; for a
+		// workspace of several checkouts that is the workspace itself.
+		r.recordOwnMove(Worktree{ID: rowID, Path: filepath.Dir(dest)})
 		restored = append(restored, dest)
 	}
 	return restored, parked

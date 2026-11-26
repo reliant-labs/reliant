@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -181,7 +182,7 @@ func TestEffectiveWorktreeID_ThreadBeatsChat(t *testing.T) {
 	chatWT := f.worktree(t, "chat-wt", "daemon-a")
 	threadWT := f.worktree(t, "thread-wt", "daemon-b")
 	chatID := f.chat(t, chatWT)
-	chat, err := f.repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 
 	// Unbound thread and unknown thread both fall back to the chat's.
@@ -211,11 +212,11 @@ func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
 	f := newSpawnWorktreeFixture(t)
 	ctx := context.Background()
 	wtID := f.worktree(t, "feature-x", "daemon-b")
-	chat, err := f.repo.GetChat(ctx, f.chatID)
+	chat, err := store.GetChat(ctx, f.repo.ORM(), f.chatID)
 	require.NoError(t, err)
 	project, err := f.repo.GetProject(ctx, f.projectID)
 	require.NoError(t, err)
-	a := &ExecuteToolsActivity{repo: f.repo, rows: workspaceRowsOf(f.repo)}
+	a := &ExecuteToolsActivity{repo: tools.WithChats(f.repo), rows: workspaceRowsOf(f.repo)}
 
 	spawned := f.spawn(t, "feature-x", "")
 	info, _, err := a.loadWorktreeInfo(ctx, chat, project, spawned.ThreadID)
@@ -277,7 +278,7 @@ func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testi
 
 	run := func(thread string, override string, sel *types.DaemonSelector) *toolexec.ToolRequest {
 		exec := &capturingExecutor{mockToolExecutor: *newMockToolExecutor()}
-		act := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: exec, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
+		act := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.repo), Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: exec, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
 		fn := func(ctx context.Context) (message.ToolResult, error) {
 			return act.executeSingleTool(ctx, nil, f.chatID, thread, "shell", `{"command":"pwd"}`,
 				"tc-"+uuid.NewString(), "act", "run", 1, override, sel), nil
@@ -405,7 +406,7 @@ func TestEnsureBatchWorkspace_ThreadBoundWorktree(t *testing.T) {
 	wt := mustWorktree(t, f, wtID)
 
 	executor := &daemonLikeExecutor{}
-	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: f.repo, Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
+	a := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(f.repo), Rows: workspaceRowsOf(f.repo), ToolCalls: toolCallsOf(f.repo), ToolExecutor: executor, Preemption: store.NewAgentMessageExtStore(f.repo.ORM())})
 	rtx := &types.RuntimeContext{
 		ChatID: f.chatID, Thread: spawned.ThreadID,
 		ProjectPath:    "/home/u/projects/p",

@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
+	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -80,7 +81,7 @@ func (f *receiptFixture) trigger(t *testing.T, id string, kind core.TriggerKind,
 	if kind == core.TriggerKindIntegration {
 		cfg = json.RawMessage(`{"integration":"github","events":["issues.*"]}`)
 	}
-	require.NoError(t, f.Repo.CreateTrigger(t.Context(), &core.Trigger{ID: id, Name: id, UserID: "alice", ProjectID: "receipt-project", Kind: kind, Enabled: enabled,
+	require.NoError(t, triggertest.Create(t.Context(), f.Repo, &core.Trigger{ID: id, Name: id, UserID: "alice", ProjectID: "receipt-project", Kind: kind, Enabled: enabled,
 		Workflow: "builtin://agent", Config: cfg, NoMachine: true, CreatedAt: at, UpdatedAt: at}))
 	if kind == core.TriggerKindWebhook {
 		require.NoError(t, f.Repo.SetTriggerWebhookTokenHash(t.Context(), id, triggers.HashWebhookToken(hookToken)))

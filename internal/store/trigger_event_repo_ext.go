@@ -107,6 +107,9 @@ func GetTriggerEventByDedupe(ctx context.Context, db orm.Context, kind core.Trig
 // event that references it — or core.ErrTriggerEventNotFound. Served by
 // idx_trigger_events_chat.
 func GetTriggerEventByChatID(ctx context.Context, db orm.Context, chatID string) (*core.TriggerEvent, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
 	return firstTriggerEvent(ctx, db, "get trigger event by chat id",
 		orm.WhereEq(TriggerEventFieldChatID, chatID),
 		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
@@ -474,6 +477,12 @@ LIMIT ?5`
 // with the run it launched, and whether more follow. It reads one row beyond
 // the limit to learn that without a count.
 func ListTriggerEventsPage(ctx context.Context, db orm.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
+	if f.TriggerID == "" {
+		return nil, false, fmt.Errorf("trigger ID cannot be empty")
+	}
+	if f.UserID == "" {
+		return nil, false, fmt.Errorf("user ID cannot be empty")
+	}
 	limit := f.Limit
 	if limit <= 0 {
 		limit = defaultTriggerEventLimit

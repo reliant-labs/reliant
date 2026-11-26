@@ -434,10 +434,12 @@ function registeredRows(ctx: NavCtx, group: ConsoleNavGroup): NavRow[] {
 /**
  * Experiments: the project's Forge Changes (Forge/Experiments). Listed behind
  * the web config's CHANGES_UI, and always while one of its pages is open.
+ * Labelled Beta until delivery, readout and the UI ship (owner decision).
  */
 const experimentsRow: NavRow = {
   ...consoleRow("experiments", "Experiments", { kind: "experiments" }, undefined, ["experiments", "experiment"]),
   flatIcon: icon(Split),
+  badge: () => ({ type: "label", text: "Beta" }),
 };
 const experimentsShown = (ctx: NavCtx): boolean => changesUIEnabled() || pageIs("experiments", "experiment")(ctx);
 

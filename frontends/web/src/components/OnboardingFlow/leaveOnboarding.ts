@@ -30,7 +30,7 @@ import { trackEvent } from "@/lib/analytics";
 import { TOUR_PICKER } from "@/components/Onboarding/tourParam";
 import { startForIntent } from "@/components/Apps/appStart";
 import { stepsViewedCount } from "./analytics";
-import { isOnboardingReturnTo } from "./onboardingGate";
+import { isOnboardingReturnTo } from "./onboardingGatePolicy";
 import type { OnboardingIntent } from "./types";
 import { authPath, homePath } from "@/lib/paths";
 

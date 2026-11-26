@@ -51,7 +51,7 @@ export function hostingLimit(read: {
   if (read.error) return { value: "Unavailable" };
   if (!read.data) return { value: "Loading…" };
   const agreement = read.data.agreement;
-  if (!agreement) return { value: "Not set up", detail: "Free static site only" };
+  if (!agreement) return { value: "Not set up", detail: "Free static sites only" };
   if (agreement.status === "active") return { value: `${cents(agreement.infraBudgetCents)} / month`, detail: "New deploys pause at the budget" };
   if (agreement.status === "pending") return { value: "Checkout pending" };
   return { value: "Not active", detail: agreement.status };

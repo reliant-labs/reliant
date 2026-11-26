@@ -2,7 +2,7 @@
  * Whether a person's daemons include one they can use: the one predicate the
  * wizard's machine step (steps/ComputeStep.tsx), the returning-user heal
  * (useReturningUserHeal.ts) and the shell's "do chats have a machine?"
- * (onboardingGate.ts, chatSetup) all read. Its own module so the shell can
+ * (onboardingGatePolicy.ts, chatSetup) all read. Its own module so the shell can
  * import it without the wizard's step.
  */
 
