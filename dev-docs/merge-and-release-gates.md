@@ -12,7 +12,8 @@ release. Details: [CI](#ci).
 **Target: ≤5 minutes wall time; slow suites gate releases, not merges (owner,
 2026-10-28).** The merge gate runs what the diff can affect. When the rules cannot
 scope a change (`go.mod`, `package.json`, config, an unclaimed path) it runs the
-whole Go `-short` lane and electron's tests (5m13s and 40s measured on a loaded
+whole Go `-short` lane (a forge pin move alone selects by the forge packages it
+changes: `dev-docs/testing-affected.md`, "A forge pin move") and electron's tests (5m13s and 40s measured on a loaded
 host), and for a full web fallback `tsc -b` over every web source plus the vitest
 files the diff's own web modules reach (below); the whole vitest suite (1033
 files, ~22 min loaded) is the one lane left to the release gate's `task test`,
