@@ -332,6 +332,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.github-read-token }}
+        RUNNER_ENV: ${{ runner.environment }}
       run: |
         set -euo pipefail
         v=14.1.1; f="ripgrep-${v}-x86_64-unknown-linux-musl"; d="$HOME/.cache/ci-tools/rg-${v}"
@@ -342,7 +343,15 @@ runs:
           tar -xzf "${RUNNER_TEMP}/rg.tgz" -C "${RUNNER_TEMP}" "${f}/rg"
           install -m 0755 "${RUNNER_TEMP}/${f}/rg" "$d/rg"
         fi
-        sudo install -m 0755 "$d/rg" /usr/local/bin/rg
+        # The cicd self-hosted runners (merge-queue.yml) have no sudo and a
+        # read-only /usr: there the pinned rg goes on PATH instead
+        # (internal/fileutil finds it with exec.LookPath).
+        # TestSetupRipgrepOnSelfHostedRunners holds both branches.
+        if [ "${RUNNER_ENV:-}" = self-hosted ]; then
+          echo "$d" >> "$GITHUB_PATH"
+        else
+          sudo install -m 0755 "$d/rg" /usr/local/bin/rg
+        fi
 
     - name: Save ripgrep (main only)
       if: inputs.ripgrep == 'true' && steps.rg-cache.outputs.cache-hit != 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'

@@ -83,7 +83,7 @@ func TestCapacityOneBadRowDoesNotBlockTheScope(t *testing.T) {
 	b := &failingReleaseBoundary{capacityBoundary: capacityBoundary{event: &core.TriggerEvent{ID: "waiting", Outcome: core.TriggerEventPending},
 		desc: &workflowservice.DescribeWorkflowExecutionResponse{WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Execution: &commonpb.WorkflowExecution{WorkflowId: "workflow"}, FirstRunId: "first", Status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED}}}}
 	spec := launch.Spec{}
-	require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+	require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, capacityCancel{}, &spec))
 	require.Equal(t, []string{"good"}, b.releasedRows)
 }
 
@@ -118,7 +118,7 @@ func TestCapacityReleaseRequiresMatchingTerminalTemporalChain(t *testing.T) {
 				}
 			}
 			spec := launch.Spec{}
-			require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+			require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, capacityCancel{}, &spec))
 			require.Equal(t, tc.want, b.released)
 			reason, err := spec.Guard(context.Background())
 			require.NoError(t, err)
@@ -157,7 +157,7 @@ func TestCapacityClosedChainReleasesBeforeStartAttemptBound(t *testing.T) {
 				b.err = serviceerror.NewNotFound("workflow execution not found")
 			}
 			spec := launch.Spec{}
-			require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, &spec))
+			require.NoError(t, prepareCapacity(context.Background(), b, b, b, &core.Trigger{UserID: "user", ProjectID: "project", Workflow: "workflow-ref"}, b.event, store.TriggerCapacityLimits{MaxRunning: 1}, capacityCancel{}, &spec))
 			require.Equal(t, tc.want, b.released)
 			reason, err := spec.Guard(context.Background())
 			require.NoError(t, err)

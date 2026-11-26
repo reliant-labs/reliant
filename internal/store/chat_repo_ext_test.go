@@ -70,6 +70,7 @@ func requireSameChat(t *testing.T, label string, got, want *core.Chat) {
 }
 
 func TestChatCreateGetUpdateDelete(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -199,6 +200,7 @@ func TestChatCreateGetUpdateDelete(t *testing.T) {
 }
 
 func TestChatListAndSearch(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -351,6 +353,7 @@ func without(ids []string, drop string) []string {
 }
 
 func TestChatMachineMarkers(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
@@ -463,7 +466,7 @@ FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft
 		if err != nil {
 			t.Fatalf("ListChatsQueuedForMachine(%q): %v", user, err)
 		}
-		twin, err := env.Repo.ListChatsQueuedForMachine(ctx, user, 10)
+		twin, err := store.ListChatsQueuedForMachine(ctx, env.Repo.ORM(), user, 10)
 		if err != nil {
 			t.Fatalf("Repo.ListChatsQueuedForMachine(%q): %v", user, err)
 		}
@@ -481,7 +484,7 @@ FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft
 	if err != nil {
 		t.Fatalf("ListChatsPausedForMachine: %v", err)
 	}
-	paused, err := env.Repo.ListChatsPausedForMachine(ctx, "", 10)
+	paused, err := store.ListChatsPausedForMachine(ctx, env.Repo.ORM(), "", 10)
 	if err != nil {
 		t.Fatalf("Repo.ListChatsPausedForMachine: %v", err)
 	}
@@ -503,7 +506,7 @@ FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft
 	if err != nil {
 		t.Fatalf("ListChatsWaitingForMachine: %v", err)
 	}
-	twinWaiting, err := env.Repo.ListChatsWaitingForMachine(ctx, storetest.SeedUserID)
+	twinWaiting, err := store.ListChatsWaitingForMachine(ctx, env.Repo.ORM(), storetest.SeedUserID)
 	if err != nil {
 		t.Fatalf("Repo.ListChatsWaitingForMachine: %v", err)
 	}
@@ -529,6 +532,7 @@ FROM chats WHERE id = 'm-3'`).Scan(ctx, &markersLeft); err != nil || markersLeft
 }
 
 func TestChatRootStatusMapsFromTheView(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond)
@@ -569,6 +573,7 @@ func TestChatRootStatusMapsFromTheView(t *testing.T) {
 // change only when the id moves, and never writes a chat whose root workflow
 // is a different one.
 func TestSetChatRunID(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)

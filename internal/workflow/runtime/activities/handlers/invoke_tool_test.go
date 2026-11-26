@@ -12,6 +12,9 @@ import (
 	structpb "google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/rctx"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -132,4 +135,41 @@ func TestInvokeToolCallIDIsPositional(t *testing.T) {
 		invokeToolCallID("wf-1", "hero", "each_item", 1),
 		invokeToolCallID("wf-1", "hero", "each_item", 2),
 		"loop iterations must each get their own idempotency key")
+}
+
+// An invoke_tool node runs the tool through the same execution path as an
+// execute_tools node, so what tells the owner's clients a workspace changed
+// must reach it too: WithUpdates on the node's activity is the one the shared
+// path announces through. No file-mutating tool is node-exposed today, so the
+// announcement is driven the way a mutating call reaches it.
+func TestInvokeToolActivity_WithUpdatesReachesTheSharedExecutionPath(t *testing.T) {
+	t.Parallel()
+	updates := &MockUserRefetcher{EmitUserRefetchFunc: func(context.Context, string, core.RefetchType, core.RefetchOpts) error { return nil }}
+	activity := NewInvokeToolActivityWithDeps(ExecuteToolsDeps{}).WithUpdates(updates)
+
+	project, worktree := "proj-1", "wt-1"
+	activity.executeTools.emitWorktreeRefetch(context.Background(), &toolExecutionContext{
+		chat:     &db.Chat{ID: "chat-1", UserID: "owner-1"},
+		project:  &db.Project{ID: project},
+		worktree: &rctx.WorktreeInfo{ID: worktree},
+	})
+
+	calls := updates.Calls("EmitUserRefetch")
+	require.Len(t, calls, 1, "the node's worktree change is announced")
+	assert.Equal(t, "owner-1", calls[0].Args[1], "to the chat's owner")
+	assert.Equal(t, core.RefetchWorktreeChanges, calls[0].Args[2])
+	opts := calls[0].Args[3].(core.RefetchOpts)
+	require.NotNil(t, opts.WorktreeID)
+	assert.Equal(t, worktree, *opts.WorktreeID)
+	assert.Equal(t, project, *opts.ProjectID)
+}
+
+// Without WithUpdates the shared path announces nothing, which is why the
+// node's registration must set it.
+func TestInvokeToolActivity_WithoutUpdatesAnnouncesNothing(t *testing.T) {
+	t.Parallel()
+	activity := NewInvokeToolActivityWithDeps(ExecuteToolsDeps{})
+	require.NotPanics(t, func() {
+		activity.executeTools.emitWorktreeRefetch(context.Background(), &toolExecutionContext{chat: &db.Chat{ID: "chat-1", UserID: "owner-1"}})
+	})
 }

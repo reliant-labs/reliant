@@ -23,7 +23,7 @@ import { FlaskConical, Plus } from "lucide-react";
 import Card from "@/components/forge-ui/card";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Tag from "@/components/forge-ui/tag";
 import { useChanges, useChangesOrg } from "@/hooks/changes-queries";
@@ -32,6 +32,7 @@ import { changeErrorKind, describeChangeError } from "@/services/controlPlane/ch
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { ENV_ALL } from "../Console/envScope";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { BetaTag } from "./BetaTag";
 import { ChangeDetail } from "./ChangeDetail";
 import { ageOf, deliveryPhrase, MODE_LABELS } from "./changeModel";
@@ -40,7 +41,7 @@ import { NewChangeDialog, type NewChangeEnv } from "./NewChangeDialog";
 function PageFrame({ children, onNew, canCreate }: { children: ReactNode; onNew?: () => void; canCreate: boolean }) {
   return (
     <div className="min-w-0 space-y-4" data-testid="console-experiments">
-      <PageHeader
+      <ConsolePageHeader
         density="compact"
         title="Experiments"
         titleAccessory={<BetaTag />}
@@ -68,6 +69,8 @@ export function useLiveEnvs(): NewChangeEnv[] {
 
 export function ExperimentsPage() {
   const { forgeProject, env, roster, href } = useForgeConsole();
+  // The demo console: no writes, so no new change (obsReadOnly.tsx).
+  const lock = useObsReadOnly();
   const org = useChangesOrg();
   const envs = useLiveEnvs();
   const scoped = env === ENV_ALL ? null : (envs.find((candidate) => candidate.name === env) ?? null);
@@ -80,7 +83,7 @@ export function ExperimentsPage() {
   const declaredKeys = useMemo(() => [...new Set(changes.filter((c) => c.declaration).map((c) => c.key))].sort(), [changes]);
 
   const frame = (body: ReactNode) => (
-    <PageFrame onNew={() => setCreating(true)} canCreate={envs.length > 0 && !!org.orgId}>
+    <PageFrame onNew={() => setCreating(true)} canCreate={envs.length > 0 && !!org.orgId && !lock.readOnly}>
       {body}
       <NewChangeDialog
         open={creating}
@@ -130,7 +133,7 @@ export function ExperimentsPage() {
             ? "Deploy an environment first: a change lives in one environment and reaches the apps running there."
             : "A change lets you turn something on for everyone, for a share of your users, or compare two versions — without a deploy. Declare it in changes.yaml, then decide who gets it here."
         }
-        actionLabel={envs.length > 0 ? "New change" : undefined}
+        actionLabel={envs.length > 0 && !lock.readOnly ? "New change" : undefined}
         onAction={() => setCreating(true)}
       />
     );

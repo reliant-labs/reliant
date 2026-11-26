@@ -11,7 +11,7 @@
 import { UserStream, type UserStreamCallbacks } from "@reliantlabs/sdk/client";
 import { connectClient } from "../lib/connect";
 import { logger } from "../lib/logger";
-import { pageActivity } from "../lib/pageActivity";
+import { streamPageEnvironment } from "../lib/pageActivity";
 import {
   StreamingService,
   ChatUpdateType,
@@ -86,7 +86,7 @@ export class UserStreamingService extends UserStream {
       callbacks: callbacks satisfies UserStreamCallbacks,
       client: () => connectClient(StreamingService),
       logger,
-      onConnectionLost: () => pageActivity().noteConnectionLost(),
+      ...streamPageEnvironment(),
     });
   }
 }

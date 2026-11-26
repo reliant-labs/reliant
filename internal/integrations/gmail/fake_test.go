@@ -49,7 +49,11 @@ type fakeGmail struct {
 	historyPageSize int
 	unauthorized    bool
 	sent            []map[string]any
-	labels          []map[string]any
+	drafts          []map[string]any
+	// lacksCompose makes drafts.create answer as Google does for a token
+	// without the gmail.compose scope.
+	lacksCompose bool
+	labels       []map[string]any
 }
 
 type historyRecord struct {
@@ -109,6 +113,16 @@ func (f *fakeGmail) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "POST" && path == "/messages/send":
 		f.sent = append(f.sent, rec.Body)
 		writeJSON(w, map[string]any{"id": fmt.Sprintf("sent%04d", len(f.sent)), "threadId": orString(rec.Body["threadId"], "thr-new"), "labelIds": []string{"SENT"}})
+	case r.Method == "POST" && path == "/drafts":
+		if f.lacksCompose {
+			googleErr(w, 403, "PERMISSION_DENIED", "insufficientPermissions", "Request had insufficient authentication scopes.")
+			return
+		}
+		f.drafts = append(f.drafts, rec.Body)
+		msg, _ := rec.Body["message"].(map[string]any)
+		n := len(f.drafts)
+		writeJSON(w, map[string]any{"id": fmt.Sprintf("r-draft%04d", n), "message": map[string]any{
+			"id": fmt.Sprintf("draftmsg%04d", n), "threadId": orString(msg["threadId"], "thr-draft"), "labelIds": []string{"DRAFT"}}})
 	case r.Method == "GET" && path == "/labels":
 		writeJSON(w, map[string]any{"labels": f.labels})
 	default:
