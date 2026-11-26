@@ -156,3 +156,18 @@ func TestNewWebhookValidates(t *testing.T) {
 		t.Fatalf("an empty token was sent: err=%v saw=%+v", err, got)
 	}
 }
+
+func TestWebhookReceiptCarriesTheChatAndRunWhenTheServerNamesThem(t *testing.T) {
+	srv, _ := hookServer(t, 202, `{"event_id":"ev-1","outcome":"pending","duplicate":false,"chat_id":"chat-1","run_id":"run-1"}`)
+	w, err := NewWebhook(srv.URL, "trig-1", WebhookBearer("whk_secret"), WithWebhookInsecureLoopback())
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := w.SendJSON(context.Background(), map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.ChatID != "chat-1" || d.RunID != "run-1" {
+		t.Fatalf("receipt = %+v", d)
+	}
+}
