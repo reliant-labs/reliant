@@ -126,6 +126,7 @@ CREATE TABLE gtm_items (
         OR (gmail_message_id <> '' AND sent_at IS NOT NULL AND sent_by <> '' AND approval_hash <> '')),
     CONSTRAINT gtm_items_scheduled_has_date CHECK (status <> 'GTM_ITEM_STATUS_SCHEDULED' OR scheduled_at IS NOT NULL)
 );
+COMMENT ON COLUMN gtm_items.approval_hash IS 'forge:readable SHA-256 of the approved item id, revision, recipients, subject and body; a content hash, not a credential';
 CREATE INDEX gtm_items_org_id_scheduled_at_idx ON gtm_items (org_id, scheduled_at) WHERE scheduled_at IS NOT NULL;
 CREATE INDEX gtm_items_org_id_created_at_idx ON gtm_items (org_id, created_at DESC);
 CREATE INDEX gtm_items_org_id_campaign_id_idx ON gtm_items (org_id, campaign_id) WHERE campaign_id IS NOT NULL;
