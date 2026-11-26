@@ -20,7 +20,7 @@ import (
 // yet; this is its stand-in for these files.
 func TestPipelineTemplatesStayInBudget(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"pipeline-pr.yaml", "pipeline-pr-fix.yaml"} {
+	for _, name := range []string{"pipeline-pr.yaml", "pipeline-pr-fix.yaml", "pipeline-pr-sweep.yaml"} {
 		data, err := builtin.BuiltinWorkflowsFS.ReadFile(name)
 		require.NoError(t, err)
 		lines := strings.Count(string(data), "\n")

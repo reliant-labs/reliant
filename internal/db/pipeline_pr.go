@@ -13,6 +13,12 @@ import (
 // pipeline_attempts). Each method is the internal/store query of the same
 // name; its doc there says what it locks and which errors it returns.
 
+// ListOpenPRPipelines lists a repository's rows that are not landed or
+// closed: the daily PR sweep's input.
+func (r *Repo) ListOpenPRPipelines(ctx context.Context, repoID string) ([]*core.PRPipeline, error) {
+	return store.ListOpenPRPipelines(ctx, r.ORM(), repoID)
+}
+
 // GetPRPipeline returns the PR record's pipeline row, or nil.
 func (r *Repo) GetPRPipeline(ctx context.Context, recordID string) (*core.PRPipeline, error) {
 	return store.GetPRPipeline(ctx, r.ORM(), recordID)

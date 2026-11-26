@@ -9,7 +9,32 @@ package serveraction
 // each with its Handler bound on the worker (app.WorkerServerActions). Every
 // one of them runs only while the server's pipeline.enabled switch is on.
 func builtinSpecs() []Spec {
-	return append(prSpecs(), queueSpecs()...)
+	return append(append(prSpecs(), queueSpecs()...), sweepSpecs()...)
+}
+
+// SweepPR is the daily PR sweep (pipeline build plan M13;
+// internal/pipeline/practions.Sweep).
+const SweepPR = "reliant/sweep.pr@1"
+
+// sweepChecks mirrors practions.SweepChecks (TestSweepSpecNamesEveryCheck).
+var sweepChecks = []any{"superseded", "stuck_in_queue", "stale_needs_person", "draft_abandoned", "stale_pr"}
+
+func sweepSpecs() []Spec {
+	return []Spec{{
+		Name: SweepPR,
+		Description: "Find the run's project's open PRs that fell through the cracks and act on each once: " +
+			"wake the pr workflow, close it with cited evidence, or ask a person. Shadow mode records its GitHub writes only.",
+		Params: map[string]any{
+			"type": "object", "additionalProperties": false,
+			"properties": map[string]any{
+				"checks": map[string]any{
+					"type": "array", "items": map[string]any{"type": "string", "enum": sweepChecks},
+					"description": "The checks to run; empty or absent runs every one.",
+				},
+			},
+		},
+		Mutates: true,
+	}}
 }
 
 // QueueEnqueue is the queue.enqueue action (pipeline build plan M7;
