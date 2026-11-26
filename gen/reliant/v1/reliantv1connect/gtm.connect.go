@@ -102,7 +102,9 @@ type GtmServiceClient interface {
 	SetIdeaStatus(context.Context, *connect.Request[v1.SetIdeaStatusRequest]) (*connect.Response[v1.SetIdeaStatusResponse], error)
 	// ListCampaigns lists the org's campaigns, newest first.
 	ListCampaigns(context.Context, *connect.Request[v1.ListCampaignsRequest]) (*connect.Response[v1.ListCampaignsResponse], error)
-	// GetCampaign returns one campaign with the ideas and items linked to it.
+	// GetCampaign returns one campaign with the ideas and items linked to it,
+	// at most 200 of each (truncated says when either list was cut; ListIdeas
+	// and ListItems with campaign_id page through all of them).
 	GetCampaign(context.Context, *connect.Request[v1.GetCampaignRequest]) (*connect.Response[v1.GetCampaignResponse], error)
 	// CreateCampaign adds a campaign, DRAFT unless the request says otherwise.
 	CreateCampaign(context.Context, *connect.Request[v1.CreateCampaignRequest]) (*connect.Response[v1.CreateCampaignResponse], error)
@@ -114,11 +116,21 @@ type GtmServiceClient interface {
 	ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error)
 	// GetItem returns one item.
 	GetItem(context.Context, *connect.Request[v1.GetItemRequest]) (*connect.Response[v1.GetItemResponse], error)
-	// CreateItem adds a DRAFT item.
+	// CreateItem adds an item, DRAFT or REVIEW (unset: DRAFT). No other status
+	// is created: an item reaches APPROVED only through a person's UpdateItem.
 	CreateItem(context.Context, *connect.Request[v1.CreateItemRequest]) (*connect.Response[v1.CreateItemResponse], error)
 	// UpdateItem edits an item, its schedule or its status. Unset fields are
-	// left alone. APPROVED is a person's decision; SENT is never set here (only
-	// the approved email path writes it), and a SENT item is not edited.
+	// left alone. Who may make which change is the lifecycle on GtmItemStatus;
+	// a change it does not allow is PermissionDenied (an agent) or
+	// FailedPrecondition (a transition no one may make). In short:
+	//
+	//   - An agent edits content and sets or clears scheduled_at only on a
+	//     DRAFT or REVIEW item, moves status only between DRAFT and REVIEW, and
+	//     never touches an item in any other status.
+	//   - A content edit by a person on an APPROVED or SCHEDULED item returns
+	//     it to REVIEW (it must be approved again).
+	//   - SENT is never set here: only the approved email path writes it, and a
+	//     SENT item is not edited.
 	UpdateItem(context.Context, *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error)
 	// GetPositioning returns the org's positioning. An org that has none yet
 	// gets an empty one at revision 0.
@@ -130,10 +142,17 @@ type GtmServiceClient interface {
 	ListClaims(context.Context, *connect.Request[v1.ListClaimsRequest]) (*connect.Response[v1.ListClaimsResponse], error)
 	// UpsertClaim adds an UNVERIFIED claim (id empty) or changes one (id set,
 	// with expected_revision). A claim's text and category are fixed at
-	// creation: they are what a verification vouches for. Setting status
-	// VERIFIED is a person's act and needs the evidence (source_url and
-	// source_kind; a COMPARISON needs a PRIMARY_THIRD_PARTY source); the
-	// verifier and time are the caller's and now.
+	// creation: they are what a verification vouches for. A create whose text
+	// normalizes (text_norm) to a claim the org already holds is AlreadyExists.
+	//
+	// Who may do what:
+	//   - Setting status VERIFIED is a person's act and needs the evidence
+	//     (source_url and source_kind; a COMPARISON needs a PRIMARY_THIRD_PARTY
+	//     source); the verifier and time are the caller's and now.
+	//   - An agent creates UNVERIFIED claims and edits UNVERIFIED claims only.
+	//     It never changes a VERIFIED or RETIRED claim in any field (status,
+	//     source_url, source_kind, expires_or_recheck_at, notes):
+	//     PermissionDenied.
 	UpsertClaim(context.Context, *connect.Request[v1.UpsertClaimRequest]) (*connect.Response[v1.UpsertClaimResponse], error)
 	// CheckClaims finds the candidate claims in a text (markdown) and matches
 	// each against the org's registry. Nothing is stored.
@@ -417,7 +436,9 @@ type GtmServiceHandler interface {
 	SetIdeaStatus(context.Context, *connect.Request[v1.SetIdeaStatusRequest]) (*connect.Response[v1.SetIdeaStatusResponse], error)
 	// ListCampaigns lists the org's campaigns, newest first.
 	ListCampaigns(context.Context, *connect.Request[v1.ListCampaignsRequest]) (*connect.Response[v1.ListCampaignsResponse], error)
-	// GetCampaign returns one campaign with the ideas and items linked to it.
+	// GetCampaign returns one campaign with the ideas and items linked to it,
+	// at most 200 of each (truncated says when either list was cut; ListIdeas
+	// and ListItems with campaign_id page through all of them).
 	GetCampaign(context.Context, *connect.Request[v1.GetCampaignRequest]) (*connect.Response[v1.GetCampaignResponse], error)
 	// CreateCampaign adds a campaign, DRAFT unless the request says otherwise.
 	CreateCampaign(context.Context, *connect.Request[v1.CreateCampaignRequest]) (*connect.Response[v1.CreateCampaignResponse], error)
@@ -429,11 +450,21 @@ type GtmServiceHandler interface {
 	ListItems(context.Context, *connect.Request[v1.ListItemsRequest]) (*connect.Response[v1.ListItemsResponse], error)
 	// GetItem returns one item.
 	GetItem(context.Context, *connect.Request[v1.GetItemRequest]) (*connect.Response[v1.GetItemResponse], error)
-	// CreateItem adds a DRAFT item.
+	// CreateItem adds an item, DRAFT or REVIEW (unset: DRAFT). No other status
+	// is created: an item reaches APPROVED only through a person's UpdateItem.
 	CreateItem(context.Context, *connect.Request[v1.CreateItemRequest]) (*connect.Response[v1.CreateItemResponse], error)
 	// UpdateItem edits an item, its schedule or its status. Unset fields are
-	// left alone. APPROVED is a person's decision; SENT is never set here (only
-	// the approved email path writes it), and a SENT item is not edited.
+	// left alone. Who may make which change is the lifecycle on GtmItemStatus;
+	// a change it does not allow is PermissionDenied (an agent) or
+	// FailedPrecondition (a transition no one may make). In short:
+	//
+	//   - An agent edits content and sets or clears scheduled_at only on a
+	//     DRAFT or REVIEW item, moves status only between DRAFT and REVIEW, and
+	//     never touches an item in any other status.
+	//   - A content edit by a person on an APPROVED or SCHEDULED item returns
+	//     it to REVIEW (it must be approved again).
+	//   - SENT is never set here: only the approved email path writes it, and a
+	//     SENT item is not edited.
 	UpdateItem(context.Context, *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error)
 	// GetPositioning returns the org's positioning. An org that has none yet
 	// gets an empty one at revision 0.
@@ -445,10 +476,17 @@ type GtmServiceHandler interface {
 	ListClaims(context.Context, *connect.Request[v1.ListClaimsRequest]) (*connect.Response[v1.ListClaimsResponse], error)
 	// UpsertClaim adds an UNVERIFIED claim (id empty) or changes one (id set,
 	// with expected_revision). A claim's text and category are fixed at
-	// creation: they are what a verification vouches for. Setting status
-	// VERIFIED is a person's act and needs the evidence (source_url and
-	// source_kind; a COMPARISON needs a PRIMARY_THIRD_PARTY source); the
-	// verifier and time are the caller's and now.
+	// creation: they are what a verification vouches for. A create whose text
+	// normalizes (text_norm) to a claim the org already holds is AlreadyExists.
+	//
+	// Who may do what:
+	//   - Setting status VERIFIED is a person's act and needs the evidence
+	//     (source_url and source_kind; a COMPARISON needs a PRIMARY_THIRD_PARTY
+	//     source); the verifier and time are the caller's and now.
+	//   - An agent creates UNVERIFIED claims and edits UNVERIFIED claims only.
+	//     It never changes a VERIFIED or RETIRED claim in any field (status,
+	//     source_url, source_kind, expires_or_recheck_at, notes):
+	//     PermissionDenied.
 	UpsertClaim(context.Context, *connect.Request[v1.UpsertClaimRequest]) (*connect.Response[v1.UpsertClaimResponse], error)
 	// CheckClaims finds the candidate claims in a text (markdown) and matches
 	// each against the org's registry. Nothing is stored.
