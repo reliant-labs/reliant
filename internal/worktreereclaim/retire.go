@@ -170,56 +170,13 @@ func (r *Reclaimer) workspaceMtimeIsOwn(w Worktree) bool {
 }
 
 // useSince is idleSince for w's workspace, without the workspace directory's
-// own mtime while that is what this reclaimer's last move left (recordOwnMove,
-// or for a move made before moves were recorded, legacyOwnMove).
+// own mtime while that is what this reclaimer's last move left (recordOwnMove).
 func (r *Reclaimer) useSince(ctx context.Context, w Worktree, checkouts []string) (time.Time, error) {
 	path := w.Path
-	if r.workspaceMtimeIsOwn(w) || r.legacyOwnMove(w) {
+	if r.workspaceMtimeIsOwn(w) {
 		path = ""
 	}
 	return idleSince(ctx, path, checkouts)
-}
-
-// legacyOwnMoveWindow bounds how long before the quarantine root's last change
-// a rollback's put-back changed the workspace directory: the put-back renames
-// the checkout out of the quarantine root into the workspace (both
-// directories change at once), and its origin marker is removed from the
-// quarantine root next, milliseconds later.
-const legacyOwnMoveWindow = time.Second
-
-// legacyOwnMove reports whether w's workspace directory last changed in a
-// rollback this reclaimer made before #3643 recorded such moves
-// (recordOwnMove): the row's quarantine root holds no parked checkout, and
-// the workspace changed at most legacyOwnMoveWindow before the quarantine
-// root last did. Such a rollback moved the workspace mtime past the archive
-// and held the row as used after its archive for good: on 2026-11-26, 37 of
-// the 43 such rows on one machine that still had a quarantine root matched
-// this exactly (30-300ms apart). Any later change at the workspace root
-// moves its mtime past the quarantine root's, and counts again.
-func (r *Reclaimer) legacyOwnMove(w Worktree) bool {
-	if r.Root == "" || w.ID == "" || w.Path == "" {
-		return false
-	}
-	q := r.quarantineRoot(w.ID)
-	qi, err := os.Lstat(q)
-	if err != nil || !qi.IsDir() {
-		return false
-	}
-	entries, err := os.ReadDir(q)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			return false
-		}
-	}
-	wi, err := os.Lstat(w.Path)
-	if err != nil {
-		return false
-	}
-	gap := qi.ModTime().Sub(wi.ModTime())
-	return gap >= 0 && gap <= legacyOwnMoveWindow
 }
 
 // usedAfterArchive is the hold for a checkout something changed after its

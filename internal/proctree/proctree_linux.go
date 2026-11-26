@@ -577,8 +577,7 @@ func refusals(dir string) (n uint64, exact bool) {
 // agent), and never this process's own. Afterwards (own) it takes only this
 // process's, whose commands may have left processes behind when they were
 // released, sparing the held ones: those of trees not yet released, which are
-// empty until their command starts. With own, the caller holds heldMu. Each
-// cgroup it retires takes its command's GOTMPDIR with it (removePairedGoTmp).
+// empty until their command starts. With own, the caller holds heldMu.
 func sweep(dir string, own bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -604,10 +603,8 @@ func sweep(dir string, own bool) {
 		} else if pid == self || !errors.Is(unix.Kill(pid, 0), unix.ESRCH) {
 			continue
 		}
-		if !populated(sub) && removeCgroup(sub) == nil {
-			// Retired: none of its command's processes is left, so its
-			// GOTMPDIR goes too, if the watcher did not take it.
-			removePairedGoTmp(name)
+		if !populated(sub) {
+			_ = removeCgroup(sub)
 		}
 	}
 }

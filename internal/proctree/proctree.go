@@ -185,8 +185,7 @@ type Limiter struct {
 	nproc uint64
 }
 
-// cgroupSeq numbers this process's commands: their cgroups, cmd-<pid>-<n>,
-// and their GOTMPDIRs, gotmp-<pid>-[c]<n> (gotmp_linux.go). The names
+// cgroupSeq numbers this process's command cgroups, cmd-<pid>-<n>. The names
 // are the process's, not one limiter's: a daemon whose runtime starts again
 // (re-registration) builds a second limiter while the first one's trees may
 // still be prepared or running, and a sequence of each limiter's own would
@@ -367,18 +366,14 @@ type Tree struct {
 func (l *Limiter) Prepare(cmd *exec.Cmd, owner Owner) *Tree {
 	t := &Tree{l: l, owner: owner, fd: -1}
 	setProcessGroup(cmd)
+	t.prepareGoTmp(cmd)
 	if credsandbox.IsInit(cmd) {
 		t.footprint, _ = accountedFootprint(cmd)
 	}
-	// One number names both the cgroup and the GOTMPDIR, so whatever
-	// retires cmd-<pid>-<n> can free the root paired with it
-	// (gotmp_linux.go, removePairedGoTmp). The cgroup first: the root's
-	// name says whether it has one.
-	seq := cgroupSeq.Add(1)
-	if l != nil && l.commands != "" {
-		t.prepareCgroup(cmd, seq)
+	if l == nil || l.commands == "" {
+		return t
 	}
-	t.prepareGoTmp(cmd, seq)
+	t.prepareCgroup(cmd, cgroupSeq.Add(1))
 	return t
 }
 
