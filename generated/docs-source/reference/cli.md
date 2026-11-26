@@ -1636,7 +1636,8 @@ directories; forge's version, OS and architecture; the command line with
 secrets removed; the project's pinned forge_version; the agent harness
 forge detected; and a random install id used only for rate limiting. Never
 file contents or environment values. --dry-run prints the exact payload
-without sending it. forge sends nothing unless someone runs this command.
+without sending it. forge sends no report unless someone runs this command
+(its anonymous usage events are another matter: forge telemetry --help).
 
 When you are logged in (forge login), the report carries your user id so
 the team can follow up; --anonymous leaves it off.
@@ -20770,7 +20771,8 @@ directories; forge's version, OS and architecture; the command line with
 secrets removed; the project's pinned forge_version; the agent harness
 forge detected; and a random install id used only for rate limiting. Never
 file contents or environment values. --dry-run prints the exact payload
-without sending it. forge sends nothing unless someone runs this command.
+without sending it. forge sends no report unless someone runs this command
+(its anonymous usage events are another matter: forge telemetry --help).
 
 When you are logged in (forge login), the report carries your user id so
 the team can follow up; --anonymous leaves it off.
@@ -22377,10 +22379,17 @@ reliant forge storage worktrees [flags]
 
 Show or change whether forge sends anonymous usage events
 
-forge sends anonymous usage events (the first run of an install: version, OS,
-architecture, the coding agent running it) so the Reliant team can see how
-forge is used. Events carry a random install id and never code, paths, names
-or personal data.
+forge sends anonymous usage events so the Reliant team can see how forge is
+used. There are two: the first run of an install (version, OS, architecture,
+the coding agent running it), and a refused claimable deploy, when forge
+itself refuses `forge env deploy --claimable` before the control plane hears
+of it (the reason, from a fixed list, with the same version, OS, architecture
+and agent, and the kind of app and its auth mode). Events carry a random
+install id and never code, paths, names, error messages or personal data.
+
+A claimable deploy also names its app template (vite, nextjs-static,
+dockerfile-app, forge-native or other) and auth mode (managed or none) to the
+control plane, in its X-Forge-Client header.
 
 It is off when DO_NOT_TRACK=1 or FORGE_TELEMETRY=off, always on a CI runner
 (CI=true, GITHUB_ACTIONS and the like), and after

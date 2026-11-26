@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -333,7 +334,7 @@ func TestListRuns_CarriesChatAndTriggerColumns(t *testing.T) {
 	assert.Empty(t, adhoc.DaemonID)
 
 	// Deleting the trigger leaves the run listed, with a blank name.
-	require.NoError(t, repo.DeleteTrigger(ctx, trig))
+	require.NoError(t, store.RemoveTrigger(ctx, repo.ORM(), trig))
 	items, _, err = repo.ListRuns(ctx, RunListFilters{UserID: "test-user", Limit: 50, Workflows: []string{"builtin://agent"}})
 	require.NoError(t, err)
 	assert.Len(t, items, 2)

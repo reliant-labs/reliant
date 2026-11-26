@@ -298,16 +298,17 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	// polls (so a dismissal holds).
 	inboxService, err := inbox.New(inbox.Deps{
 		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo,
-		Chats:       extstore.NewChatsWithActivityExtStore(repo.ORM()),
-		ProjectRows: extstore.NewProjectExtStore(repo.ORM()),
-		Machines:    extstore.NewDaemonExtStore(repo.ORM()),
-		OrgKeys:     db.TestOrgAccounts(t, repo),
-		Items:       extstore.NewInboxDismissalExtStore(repo.ORM()),
-		Firings:     extstore.NewTriggerEventExtStore(repo.ORM()),
-		Notices:     extstore.NewTriggerExtStore(repo.ORM()),
-		Storage:     worktreesweep.NewStores(repo, extstore.NewWorktreeExtStore(repo.ORM())),
-		Recoveries:  extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
-		Marks:       extstore.NewWorktreeExtStore(repo.ORM()),
+		Chats:         extstore.NewChatsWithActivityExtStore(repo.ORM()),
+		ProjectRows:   extstore.NewProjectExtStore(repo.ORM()),
+		Machines:      extstore.NewDaemonExtStore(repo.ORM()),
+		OrgKeys:       db.TestOrgAccounts(t, repo),
+		Items:         extstore.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:       extstore.NewTriggerEventExtStore(repo.ORM()),
+		Notices:       extstore.NewTriggerExtStore(repo.ORM()),
+		Registrations: extstore.NewTriggerRegistrationExtStore(repo.ORM()),
+		Storage:       worktreesweep.NewStores(repo, extstore.NewWorktreeExtStore(repo.ORM())),
+		Recoveries:    extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
+		Marks:         extstore.NewWorktreeExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 	failing := func(userID string) []*reliantv1.InboxItem {

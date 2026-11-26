@@ -16,7 +16,7 @@ import { Rocket } from "lucide-react";
 import Card from "@/components/forge-ui/card";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Link from "@/components/forge-ui/link";
-import PageHeader, { type PageHeaderAction } from "@/components/forge-ui/page_header";
+import type { PageHeaderAction } from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import type { LiveEnv } from "@/services/forge/live";
 import type { RosterEnv } from "@/services/forge/roster";
@@ -24,6 +24,7 @@ import type { RosterEnv } from "@/services/forge/roster";
 import { DeployWithAgentButton } from "../Observability/AskReliant/AskReliant";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL, envsInScope } from "./envScope";
+import { ConsolePageHeader } from "./severalSectionContext";
 
 /**
  * A console page's header: one compact row (forge-ui PageHeader, "compact").
@@ -32,7 +33,8 @@ import { ENV_ALL, envsInScope } from "./envScope";
  * every title was empty space above every page.
  */
 export function Header({ title, subtitle, meta, actions }: { title: string; subtitle?: ReactNode; meta?: ReactNode; actions?: PageHeaderAction[] }) {
-  return <PageHeader density="compact" title={title} subtitle={subtitle} meta={meta} actions={actions} className="mb-0" />;
+  // One project's section of a page across several (severalProjectSections.tsx) keeps only its facts and actions.
+  return <ConsolePageHeader density="compact" title={title} subtitle={subtitle} meta={meta} actions={actions} className="mb-0" />;
 }
 
 export function Page({ testId, children }: { testId: string; children: ReactNode }) {

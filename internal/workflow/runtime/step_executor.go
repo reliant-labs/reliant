@@ -10,6 +10,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -939,6 +940,10 @@ func (e *StepExecutor) startAction(
 ) (workflow.Future, string, bool) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
+	// A model call in a review node's session is offered the reviewer's
+	// tools and nothing else, whatever its definition declares (review_node.go).
+	clampReviewerStep(e.execContext, node.GetType(), evalResult)
+
 	// Special handling for ExecuteTools - intercept "spawn" tool calls
 	if node.GetType() == model.NodeTypeExecuteTools {
 		// expected_response_tools is `repeated string`, so ResolveCELFields
@@ -1432,6 +1437,12 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	rtx.Unattended = IsUnattended(e.workflowInputs)
 	rtx.ActingIdentity = ActingIdentity(e.workflowInputs)
 	rtx.Automation, _ = e.workflowInputs[InputKeyAutomation].(string)
+	// A Reliant server action places the run's definition (its provenance)
+	// through the catalog the run started with. Only those nodes carry it,
+	// so every other action's input is unchanged.
+	if model.NodeType(node) == model.NodeTypeAction && serveraction.IsRef(model.CelStringRaw(node.GetAction().GetUses())) {
+		rtx.CatalogPin = catalogPinFrom(e.ctx)
+	}
 
 	// What load_tool has granted on this thread so far. call_llm offers it,
 	// within what the node declares; this is how a tool loaded on one turn is

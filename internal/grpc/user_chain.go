@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
+	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
 	"github.com/reliant-labs/reliant/pkg/middleware"
 )
@@ -151,7 +152,7 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
 		Deadline: serverkit.Deadline{
 			Unary:      interceptors.UnaryTimeout,
-			Procedures: interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines()),
+			Procedures: interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines(), file_system.FileSystemRPCDeadlines()),
 			OnSlow:     interceptors.ReportSlowRPC,
 		},
 		Extras: []connect.Interceptor{

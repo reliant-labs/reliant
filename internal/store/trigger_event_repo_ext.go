@@ -135,6 +135,9 @@ func GetTriggerEventByChat(ctx context.Context, db orm.Context, kind core.Trigge
 // run still going?") asks for the latest launched event; the detail view for
 // the latest of any outcome.
 func GetLatestTriggerEvent(ctx context.Context, db orm.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	if triggerID == "" {
+		return nil, errors.New("trigger ID cannot be empty")
+	}
 	opts := []orm.QueryOption{orm.WhereEq(TriggerEventFieldTriggerID, triggerID)}
 	if outcome != nil {
 		opts = append(opts, orm.WhereEq(TriggerEventFieldOutcome, *outcome))

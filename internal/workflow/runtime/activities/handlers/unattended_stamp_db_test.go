@@ -76,7 +76,7 @@ func TestUnattendedStamp_DeletedTriggerStaysOrgFundedOnly(t *testing.T) {
 		personalOnly(t, child)
 	})
 
-	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
+	require.NoError(t, store.RemoveTrigger(ctx, repo.ORM(), triggerID))
 	chat, err := store.GetChat(ctx, repo.ORM(), root)
 	require.NoError(t, err)
 	require.Nil(t, chat.TriggerID, "deleting the trigger cleared the launch's trigger id")

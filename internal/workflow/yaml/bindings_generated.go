@@ -19,6 +19,7 @@ const yamlKeyDaemon = "daemon"
 const yamlKeyOutcome = "outcome"
 const yamlKeyTolerateFailure = "tolerate_failure"
 const yamlKeyObserve = "observe"
+const yamlKeyRole = "role"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -183,6 +184,17 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"ref":         {},
 			"thread":      {},
 			"while":       {},
+		},
+	},
+	"review": {
+		oneofFieldName: "review",
+		isStructural:   true,
+		argFieldKeys: map[string]struct{}{
+			"max_turns": {},
+			"model":     {},
+			"project":   {},
+			"prompt":    {},
+			"with":      {},
 		},
 	},
 	"router": {

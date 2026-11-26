@@ -121,7 +121,7 @@ func TestChatLaunchOriginUsesEarliestEventAndSurvivesTriggerDeletion(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "schedule", chat.LaunchKind, "the earliest event is the launch event")
 
-	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
+	require.NoError(t, store.RemoveTrigger(ctx, repo.ORM(), triggerID))
 	chat, err = store.GetChat(ctx, repo.ORM(), "origin-two-events")
 	require.NoError(t, err)
 	assert.Equal(t, "schedule", chat.LaunchKind, "deleting the trigger keeps the origin kind")
