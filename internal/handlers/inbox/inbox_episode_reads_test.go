@@ -242,7 +242,7 @@ func TestListInbox_EpisodeReadsDoNotReturnEverySkippedFiring(t *testing.T) {
 		f.firing(t, fmt.Sprintf("noisy-skip-%d", i), "noisy", core.TriggerEventSkipped, "", base.Add(time.Duration(i+2)*time.Second))
 	}
 
-	full, err := f.repo.FiringsSinceLastUnmanagedSuccess(f.ctx, f.userID, []string{"noisy"}, triggers.EpisodeFirings)
+	full, err := store.NewTriggerEventExtStore(f.repo.ORM()).FiringsSinceLastUnmanagedSuccess(f.ctx, f.userID, []string{"noisy"}, triggers.EpisodeFirings)
 	require.NoError(t, err)
 	require.Len(t, full["noisy"], skipped+2, "the episode itself is every firing since the last success")
 
