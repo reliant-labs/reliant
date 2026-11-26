@@ -190,7 +190,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 		t.Errorf("after update Config: got %s", updated.Config)
 	}
 
-	if err := repo.DeleteTrigger(ctx, want.ID); err != nil {
+	if err := store.RemoveTrigger(ctx, repo.ORM(), want.ID); err != nil {
 		t.Fatalf("DeleteTrigger: %v", err)
 	}
 	if _, err := repo.GetTrigger(ctx, want.ID); !errors.Is(err, core.ErrTriggerNotFound) {
@@ -623,7 +623,7 @@ func TestDeleteTriggerNullsEventTriggerID(t *testing.T) {
 		t.Fatalf("CreateTriggerEvent: %v", err)
 	}
 
-	if err := repo.DeleteTrigger(ctx, trigger.ID); err != nil {
+	if err := store.RemoveTrigger(ctx, repo.ORM(), trigger.ID); err != nil {
 		t.Fatalf("DeleteTrigger: %v", err)
 	}
 

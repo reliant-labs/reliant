@@ -59453,6 +59453,17 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Registrations",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Registrations",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Repository",
       "methods": [],
@@ -62486,6 +62497,17 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Triggers",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.Triggers",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

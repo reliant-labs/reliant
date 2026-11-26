@@ -2755,13 +2755,6 @@ func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core
 	return store.ListTriggersForUser(ctx, r.ORM(), f)
 }
 
-func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
-	if id == "" {
-		return fmt.Errorf("trigger ID cannot be empty")
-	}
-	return store.RemoveTrigger(ctx, r.ORM(), id)
-}
-
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
 // (kind, dedupe_key) DO NOTHING, so created=false means a firing for that
 // key already existed and nothing was written. That constraint is what
@@ -2852,13 +2845,6 @@ func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, trigg
 // ledger through launch.Deps.TriggerEvents.
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
 	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
-}
-
-func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
 }
 
 // ==================== Step Executions ====================
