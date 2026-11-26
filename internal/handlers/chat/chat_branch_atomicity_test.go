@@ -202,7 +202,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	require.NotNil(t, resp.Msg.Chat)
 
 	branchChatID := resp.Msg.Chat.Id
-	branchChat, getErr := repo.GetChat(ctx, branchChatID)
+	branchChat, getErr := store.GetChat(ctx, repo.ORM(), branchChatID)
 	require.NoError(t, getErr)
 	require.NotNil(t, branchChat)
 

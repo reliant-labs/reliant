@@ -28,7 +28,7 @@ events:
       3. Implement CRUD endpoints in the handler
       4. Write integration tests
       
-      Switch to Auto or Manual mode to begin implementation.
+      Switch to Default or Manual mode to begin implementation.
 
 expect:
   outcome: completed

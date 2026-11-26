@@ -251,7 +251,7 @@ func TestFireRetryResumesAHalfLaunchedFireInsteadOfWedgingTheTrigger(t *testing.
 	stored, err := f.repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindSchedule, first.FireWorkflowID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventLaunched, stored.Outcome)
-	events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 10})
+	events, _, err := store.ListTriggerEventsPage(ctx, f.repo.ORM(), core.TriggerEventFilters{UserID: f.trigger.UserID, TriggerID: f.trigger.ID, Limit: 10})
 	require.NoError(t, err)
 	assert.Len(t, events, 1, "retries must not accumulate event rows")
 
@@ -387,7 +387,7 @@ func TestFireRetryOfARecordedSkipReturnsTheRecordedOutcome(t *testing.T) {
 
 	// Enabling the trigger afterwards must not turn the already-skipped fire
 	// into a launch: that fire's slot is spent.
-	require.NoError(t, f.repo.SetTriggerEnabled(ctx, f.trigger.ID, true))
+	require.NoError(t, store.EnableTrigger(ctx, f.repo.ORM(), f.trigger.ID, true))
 	retry, err := f.firer.Fire(ctx, req)
 	require.NoError(t, err)
 	assert.Equal(t, string(core.TriggerEventSkipped), retry.Outcome)

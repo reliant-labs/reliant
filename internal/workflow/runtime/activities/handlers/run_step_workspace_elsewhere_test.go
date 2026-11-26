@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -33,7 +34,7 @@ func TestRunStep_SelectorAwayFromTheBranchWorkspaceExplainsTheFailure(t *testing
 		Status: 1, CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}
 	require.NoError(t, f.h.Repo().CreateWorktree(ctx, wt))
-	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	chat.WorktreeID = &wt.ID
 	require.NoError(t, f.h.Repo().UpdateChat(ctx, chat))

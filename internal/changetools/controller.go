@@ -15,6 +15,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	deployv1 "github.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1"
 	"github.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1/controlplanev1connect"
@@ -153,10 +154,13 @@ func changeErrorOf(resp *http.Response, body []byte) error {
 }
 
 // asUserSession is the user's live session token, or the error a tool shows.
+// No live session is the user's state to fix, not a fault of ours, so it is a
+// svcerr user error: the tool middleware logs it at INFO instead of opening an
+// ERROR issue (prod 0fb2d2a9, e001d63d).
 func (c *Controller) asUserSession(userID string) (string, error) {
 	jwt, ok := c.session(userID)
 	if !ok || strings.TrimSpace(jwt) == "" {
-		return "", errors.New("no live sign-in to act as the user: they can do this in the Experiments page of the Forge console, or send a message in this chat to refresh the session")
+		return "", svcerr.FailedPrecondition("no live sign-in to act as the user: they can do this in the Experiments page of the Forge console, or send a message in this chat to refresh the session")
 	}
 	return strings.TrimSpace(jwt), nil
 }

@@ -182,7 +182,7 @@ func TestBranchChat_InheritedMessage_UsesRequestingChatWorktree(t *testing.T) {
 	require.NotNil(t, resp.Msg.Chat)
 
 	// Verify the branched chat has Chat B's worktree (W2), NOT Chat A's (W1)
-	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	branchedChat, err := store.GetChat(ctx, repo.ORM(), resp.Msg.Chat.Id)
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.WorktreeID, "branched chat should have a worktree")
 	require.Equal(t, worktreeID2, *branchedChat.WorktreeID,
@@ -286,7 +286,7 @@ func TestBranchChat_SameChat_UsesSourceWorktree(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.Chat)
 
-	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	branchedChat, err := store.GetChat(ctx, repo.ORM(), resp.Msg.Chat.Id)
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.WorktreeID, "branched chat should have a worktree")
 	require.Equal(t, worktreeID, *branchedChat.WorktreeID,
@@ -381,7 +381,7 @@ func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.Chat)
 
-	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	branchedChat, err := store.GetChat(ctx, repo.ORM(), resp.Msg.Chat.Id)
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.ActiveDaemonID, "branched chat must be pinned to the worktree's daemon")
 	require.Equal(t, daemonID, *branchedChat.ActiveDaemonID)
@@ -445,7 +445,7 @@ func TestBranchChat_InheritsSourceMachineOnUnownedWorktree(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	branchedChat, err := store.GetChat(ctx, repo.ORM(), resp.Msg.Chat.Id)
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.ActiveDaemonID, "branch must stay on its source chat's machine")
 	require.Equal(t, sourceDaemonID, *branchedChat.ActiveDaemonID)

@@ -160,7 +160,7 @@ func TestWithLiveModeFloor_UnknownModeRefusesTheSend(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, chatID := orgChatFixture(t, repo, "org-floor")
-	chat, err := repo.GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	// The run is closed (its inputs cannot be queried), and the chat's
 	// workflow cannot be built (its mode cannot be resolved).

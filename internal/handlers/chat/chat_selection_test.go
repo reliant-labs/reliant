@@ -220,7 +220,7 @@ func TestUpdateWorkflowParams_ModeOnlySignalsExactlyMode(t *testing.T) {
 // and it is never the chat's selection.
 func TestUpdateWorkflowParams_ThreadScopedCarriesNoPresetAndIsNotStored(t *testing.T) {
 	ctx, fx, repo, temporal, service := selectionFixture(t, db.Active())
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	chat.SelectedPresets = map[string]string{"": "general"}
 	require.NoError(t, repo.UpdateChat(ctx, chat))
@@ -387,7 +387,7 @@ func TestBranchChat_CopiesTheSelectionAndPresets(t *testing.T) {
 	ctx, projectID := branchTestContext(t, repo)
 	sourceChatID, messageID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	source, err := repo.GetChat(ctx, sourceChatID)
+	source, err := store.GetChat(ctx, repo.ORM(), sourceChatID)
 	require.NoError(t, err)
 	source.SelectedPresets = map[string]string{"": "general"}
 	require.NoError(t, repo.UpdateChat(ctx, source))

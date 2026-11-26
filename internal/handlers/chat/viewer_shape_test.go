@@ -32,7 +32,7 @@ func TestViewerReadsAreReadOnlyAndRedacted(t *testing.T) {
 	router := &wakeRecordingRouter{Recorder: &toolexectest.Recorder{}}
 	svc := NewTestChat(t, WithChatDeps(Deps{Repo: repo, Chats: chataccess.NewFromORM(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Orgs: f.Membership, Router: router, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}))
 	require.NoError(t, repo.UpdateChatUnread(f.Owner, f.ChatID, true, "test"))
-	before, err := repo.GetChatRow(context.Background(), f.ChatID)
+	before, err := store.GetChatRow(context.Background(), repo.ORM(), f.ChatID)
 	require.NoError(t, err)
 
 	got, err := svc.GetChat(f.Viewer, connect.NewRequest(&reliantv1.GetChatRequest{ChatId: f.ChatID}))
@@ -77,7 +77,7 @@ func TestViewerReadsAreReadOnlyAndRedacted(t *testing.T) {
 	_, err = svc.ListStepExecutions(f.Viewer, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: f.ChatID}))
 	require.NoError(t, err)
 
-	after, err := repo.GetChatRow(context.Background(), f.ChatID)
+	after, err := store.GetChatRow(context.Background(), repo.ORM(), f.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, before.Unread, after.Unread, "reading does not clear the owner's unread")
 	assert.True(t, before.LastActive.Equal(after.LastActive), "reading does not bump last_active")

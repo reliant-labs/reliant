@@ -65,7 +65,7 @@ func (s *Service) ListTriggerEvents(
 		filters.After = cursor
 	}
 
-	stored, hasMore, err := s.deps.Repo.ListTriggerEvents(ctx, filters)
+	stored, hasMore, err := s.deps.FiringReads.ListTriggerEventsPage(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list trigger events", err)
 	}

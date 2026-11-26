@@ -45,7 +45,7 @@ func (s *Service) SetTriggerEnabled(
 		}
 	}
 
-	if err := s.deps.Repo.SetTriggerEnabled(ctx, trigger.ID, req.Msg.Enabled); err != nil {
+	if err := s.deps.TriggerWrites.EnableTrigger(ctx, trigger.ID, req.Msg.Enabled); err != nil {
 		return nil, triggerDBError("set trigger enabled", err)
 	}
 	trigger.Enabled = req.Msg.Enabled
@@ -66,7 +66,7 @@ func (s *Service) SetTriggerEnabled(
 		if !trigger.Enabled {
 			s.retireAlerting(ctx, trigger.ID)
 		} else if err := s.provisionAlerting(ctx, trigger); err != nil {
-			if revertErr := s.deps.Repo.SetTriggerEnabled(ctx, trigger.ID, false); revertErr != nil {
+			if revertErr := s.deps.TriggerWrites.EnableTrigger(ctx, trigger.ID, false); revertErr != nil {
 				logging.ErrorContext(ctx, "could not pause a trigger whose alerts could not be connected",
 					"trigger_id", trigger.ID, "error", err, "revert_error", revertErr)
 			}

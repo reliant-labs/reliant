@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -78,4 +79,8 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 	spy.mu.Lock()
 	defer spy.mu.Unlock()
 	require.Empty(t, spy.callers, "worker preset paths read the whole project config row")
+}
+
+func (s *fullConfigRowReads) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	return chatviews.Of(s.Repo).GetChat(ctx, id)
 }
