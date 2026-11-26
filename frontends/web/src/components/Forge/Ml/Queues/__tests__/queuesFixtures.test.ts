@@ -4,8 +4,9 @@
 
 import { describe, expect, it } from "vitest";
 
-import { MlEarlyAccessService, MlSubjectKind, type GetMlQueuesResponse, type QueryMlSeriesResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlEarlyAccessService, MlSubjectKind, type GetMlQueuesResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { answerMl } from "@/fixtures/shop/handlers/ml";
+import { mlObs } from "@/fixtures/shop/model/ml/__tests__/mlObs";
 import { V3_PREEMPTION_GPU_HOURS } from "@/fixtures/shop/model/ml/queues";
 import { attemptId, POOLS, QUEUES, RUNS, V3_ATTEMPTS } from "@/fixtures/shop/model/ml/world";
 
@@ -59,13 +60,13 @@ describe("queues fixtures", () => {
     expect(queues().summary!.preemptions24h).toBe(2);
   });
 
-  it("pod start shares sum to 1 and the series show demand under a capacity line", () => {
+  it("pod start shares sum to 1 and the series show demand under a capacity line", async () => {
     const q = queues();
     expect(q.podStart!.stages.reduce((s, x) => s + x.share, 0)).toBeCloseTo(1, 6);
-    const res = ask<QueryMlSeriesResponse>("queryMlSeries", { subject: { kind: MlSubjectKind.QUEUE, id: QUEUES.research.id }, keys: ["queue.demand_gpus"] });
-    const cap = res.series.find((s) => s.stat === "limit")!;
+    const series = await mlObs(NOW).series({ kind: MlSubjectKind.QUEUE, id: QUEUES.research.id }, ["queue.demand_gpus"]);
+    const cap = series.find((s) => s.group === "nominal + borrowing")!;
     expect(cap.y.every((v) => v === 64)).toBe(true);
-    const admitted = res.series.find((s) => s.group === "admitted")!;
+    const admitted = series.find((s) => s.group === "admitted")!;
     expect(admitted.y[admitted.y.length - 1]).toBe(64);
   });
 });

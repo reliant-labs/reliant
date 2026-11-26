@@ -12,8 +12,9 @@
  * Triage states: most are open; the straggler is assigned to maya; the
  * replica cold start has a PR (#412); the reranker's overprovisioning is
  * snoozed; the v1 /dev/shm fix is verified fixed and the pretrain checkpoint
- * interval dismissed (both only with include_closed). listMlEvents for a
- * FINDING subject answers the finding's evidence events.
+ * interval dismissed (both only with include_closed). A FINDING subject's
+ * events (served through ObservabilityService, ./telemetry.ts) are the
+ * finding's evidence events.
  */
 
 import type { MessageInitShape } from "@bufbuild/protobuf";
@@ -26,6 +27,7 @@ import {
   MlFindingState,
   MlFixKind,
   MlImpactUnit,
+  MlFindingSeverity,
   MlSeverity,
   MlSubjectKind,
   type MlEventSchema,
@@ -35,6 +37,7 @@ import {
 
 import { v3StepTimeMs } from "./curves";
 import type { MlDomain } from "./domain";
+import type { MlTelemetryDomain } from "./telemetryTypes";
 import { DCGM_PROFILING_MISSING, deviceByUuid, deviceSeries, fleetEvents, HW_ALERT_IDS, idleAllocations, nodeByName, sampleAt, subj } from "./fleet";
 import { coverageRatio, STACK_ITEMS } from "./setup";
 import {
@@ -142,7 +145,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.xid79,
       ruleId: "gpu-fatal-xid",
       category: C.HEALTH,
-      severity: MlSeverity.CRITICAL,
+      severity: MlFindingSeverity.CRITICAL,
       title: `Faulty GPU: ${BAD_NODE} GPU ${BAD_GPU_INDEX} fell off the bus (Xid 79)`,
       summary: "Cordoned automatically; 8 reserved H100s out of service until the board is reset or replaced.",
       why: `Xid 79 killed v3 sft attempt 2 at step 32,750 (750 steps since checkpoint 32,000 lost, 64 GPUs). The node is cordoned and its 8 reserved H100s ($${Math.round(8 * h100Day)}/day) do nothing; the hot spare that replaced it was the last one.`,
@@ -184,7 +187,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.thermal,
       ruleId: "gpu-hw-thermal-slowdown",
       category: C.HEALTH,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: `${HOT_NODE} GPU ${HOT_GPU_INDEX} in HW thermal slowdown (87°C, HBM 95°C)`,
       summary: `Its SM clock drops to 1,290 MHz; it is rank ${STRAGGLER_RANK} of v3, so the whole job waits on it.`,
       why: "HW thermal slowdown 47% of the last 12h; every allreduce of the 64-GPU job waits for this GPU, so v3 runs 15% slower (the straggler finding counts the money). HBM at its 95°C limit precedes ECC errors: SBE 14/h already.",
@@ -226,7 +229,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.rowRemap,
       ruleId: "gpu-row-remap-pending",
       category: C.HEALTH,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: `${REMAP_NODE} GPU ${REMAP_GPU_INDEX}: row remap pending, needs a reset`,
       summary: "The HBM row is remapped only at the next GPU reset; until then an uncorrectable error on it kills the job.",
       why: "DCGM_FI_DEV_ROW_REMAP_PENDING=1 for 2 days, correctable remapped rows +3 in 7d, SBE 22/h. v3 runs on it: an uncorrectable error now would cost up to 1,000 steps (2.8h × 64 H100) and a restart.",
@@ -273,7 +276,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.nvlinkCrc,
       ruleId: "nvlink-crc-rising",
       category: C.HEALTH,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: `${NVLINK_NODE}: NVLink CRC errors rising between GPU 1 and GPU 3`,
       summary: "18,420 flit errors, ×4 in a day; replays slow NCCL on that pair.",
       why: "CRC flit errors 4,610 → 18,420 in 24h (fleet p99: 40), 96 replays. Each replay stalls the collective on this pair; a link that degrades further drops to PCIe and takes the job's allreduce with it.",
@@ -308,7 +311,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.idleNotebook,
       ruleId: "idle-allocated-gpu",
       category: C.WASTE,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: `Notebook ${NOTEBOOK_POD.pod} holds 2 L4s at 0% for ${NOTEBOOK_POD.idleHours}h`,
       summary: "No kernel activity since yesterday; the GPUs are allocated and do nothing.",
       why: `$${Math.round(notebook.usdPerDay)}/day and 48 GPU-h/day while serving has 3 free L4s and no spare TP-2 pair on one node.`,
@@ -356,7 +359,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.idleEvalHolding,
       ruleId: "idle-allocated-gpu",
       category: C.WASTE,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: "A finished eval's vLLM pod holds 4 A100s idle",
       summary: "The release-gate run on v3's sft 40k checkpoint finished; its model server never exited.",
       why: `4 A100 idle for ${evalIdle.idleHours.toFixed(1)}h: $${Math.round(evalIdle.usdPerDay)}/day and 96 GPU-h/day while it lasts, and the next periodic eval waits for a100-dev capacity.`,
@@ -396,7 +399,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.rerankerOverprovisioned,
       ruleId: "serving-overprovisioned",
       category: C.WASTE,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "reranker-prod uses 2 L4s at 6% busy",
       summary: "Peak load fits one L4 with 3× headroom.",
       why: "GPU util p95 9%, memory 9.6 of 24 GB on each L4 over 7 days; one L4 would serve the peak at 27%. $23.5/day.",
@@ -435,7 +438,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.quotaStarved,
       ruleId: "queue-starved",
       category: C.SCHEDULING,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: `team-research has waited ${Math.round(DPO_PENDING.waitingMs / MINUTE / 60)}h for 32 H100s`,
       summary: "The DPO ablation is pending on insufficient quota: v3 holds the cohort's nominal 48, and serving-batch lends nothing.",
       why: `${RUNS.dpo.name} needs ${DPO_PENDING.gpus} H100s; team-research's nominal quota is 48 and v3 uses all of it through borrowing. team-serving-batch's 16 sit unused 70% of the week but are not lendable.`,
@@ -480,7 +483,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.preemptionChurn,
       ruleId: "preemption-churn",
       category: C.SCHEDULING,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "Cohort reclaims preempt v3 without a checkpoint first",
       summary: `${PREEMPTOR_WORKLOAD} reclaimed 16 H100s and ended pretrain attempt 1: 400 steps redone, 1h50m waiting.`,
       why: "InCohortReclamation gives the borrower no warning; the job dies with 400 steps since its checkpoint (51 GPU-h redone) and waits for quota. Three reclaims in 7 days in ml-h100.",
@@ -523,7 +526,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.imagePull,
       ruleId: "image-pull-slow",
       category: C.STARTUP,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: "support-assistant replicas take 5m40s to start; 62% is the image pull",
       summary: "A 14.2 GB vLLM image pulled fresh on each scale-up node.",
       why: "When the HPA scales at the afternoon peak, a new replica serves after 5m40s p95; TTFT p95 rises 340 ms meanwhile because the 4 replicas queue.",
@@ -570,7 +573,7 @@ function build(now: () => number): FindingInit[] {
         approach: "adopt",
       },
       verify: "Verified when replica start p95 is under 2 min for 7 days.",
-      podStart: {
+      startBreakdown: {
         workload: "support-assistant-prod",
         sampleCount: 23,
         stages: [
@@ -586,7 +589,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.modelLoad,
       ruleId: "model-load-slow",
       category: C.STARTUP,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "Each replica pulls 16 GB of weights from the registry on start",
       summary: "Model load 41s p50 from us-docker.pkg.dev across regions; a node-local cache makes it ~8s.",
       why: "Every restart and scale-up re-pulls v2's 16 GB OCI artifact from us-central1 into us-east-1 (cross-region egress $0.02/GB): 41s of the cold start and $19/day of egress.",
@@ -622,7 +625,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.straggler,
       ruleId: "training-straggler",
       category: C.TRAINING_EFFICIENCY,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: `v3 runs 15% slower: rank ${STRAGGLER_RANK} straggles on ${HOT_NODE} GPU ${HOT_GPU_INDEX}`,
       summary: "Every step waits ~18% longer in allreduce for one thermally throttled GPU.",
       why: `Step time ${Math.round(v3StepTimeMs("sft", 41_000, true))} ms vs ${Math.round(v3StepTimeMs("sft", 36_000, false))} ms before, since 12h ago: 15% of 64 H100 = $${Math.round(straggleUsd)}/day and the run finishes ~2 days later.`,
@@ -674,7 +677,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.checkpointBlocking,
       ruleId: "checkpoint-blocking",
       category: C.TRAINING_EFFICIENCY,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "v3 stops training for 95s at every checkpoint",
       summary: "Checkpoints save synchronously: all 64 GPUs wait for 212 GB to reach GCS.",
       why: "95s × 8.6 checkpoints/day × 64 H100 = 14.5 GPU-h/day; async save (torch.distributed.checkpoint async_save) overlaps it with the next steps.",
@@ -709,7 +712,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.dataloaderShm,
       ruleId: "dataloader-shm",
       category: C.TRAINING_EFFICIENCY,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: "DataLoader workers crash on a 64Mi /dev/shm",
       summary: "v1 failed with a Bus error; runs now mount a memory-backed /dev/shm.",
       why: `${RUNS.v1.name} died with "Bus error" in a DataLoader worker: the container default 64Mi /dev/shm cannot hold the pinned batches of 8 workers. Fixed: v3 runs with 64Gi and uses 41.6 GB.`,
@@ -739,7 +742,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.fp8SafetyGate,
       ruleId: "serving-gate-failing",
       category: C.INFERENCE,
-      severity: MlSeverity.CRITICAL,
+      severity: MlFindingSeverity.CRITICAL,
       title: "10% of prod traffic is on v2.1-fp8, which fails the release gate",
       summary: "safety_refusals 0.979 < 0.98 on release-gate v7; the Changes arm keeps serving it.",
       why: "The fp8 arm saves 38% of serving GPU time but refuses 1.2 points fewer unsafe prompts than v2. The gate is the org's own rule; Reliant never rolls back on its own, so the arm stays at 10% until someone moves it.",
@@ -781,7 +784,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.kvSaturation,
       ruleId: "kv-cache-saturation",
       category: C.INFERENCE,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: "support-assistant-prod's KV cache hits 94% at peak and preempts requests",
       summary: "vLLM swaps out sequences for 2h each afternoon; TTFT p95 +410 ms.",
       why: "vllm:gpu_cache_usage_perc above 0.9 for 2h a day with 31 preemptions/min at the peak; each preempted request recomputes its prefix.",
@@ -816,7 +819,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.dcgmProfilingOff,
       ruleId: "dcgm-profiling-off",
       category: C.COVERAGE,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "DCGM profiling counters are off on eks-us-east-1-serve",
       summary: "No SM active, tensor or DRAM activity for 16 L4s: utilisation reads only as time-active.",
       why: "GPU util 70% on a prod L4 says a kernel ran, not how hard. Without DCGM_FI_PROF_* the inference pages cannot tell decode-bound from compute-bound, and the waste rules fall back to the coarse util.",
@@ -853,7 +856,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.kubeletTracingOff,
       ruleId: "kubelet-tracing-off",
       category: C.COVERAGE,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "Kubelet tracing is off on both clusters",
       summary: "Pod start has stage metrics but no spans: sandbox, pull and start are not in any trace.",
       why: "A slow cold start shows as 5m40s in a histogram; with KubeletTracing the pod-start waterfall shows which CRI call took it, per pod.",
@@ -889,7 +892,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.inferenceTracingOff,
       ruleId: "inference-tracing-off",
       category: C.COVERAGE,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "reranker-prod sends no request traces",
       summary: "Triton's tracing is off; the reranker is a dark hop inside support-assistant's requests.",
       why: "support-assistant's traces show 120 ms in an untraced call to the reranker at p95; nothing says whether it is queue, compute or the network.",
@@ -916,7 +919,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.trainingUntracked,
       ruleId: "training-untracked",
       category: C.COVERAGE,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "reranker-nightly trains outside forge: no step stats or checkpoints",
       summary: "Observed from its pods only: GPU time and cost, but no loss, step time or goodput.",
       why: "A CronJob in ml-search fine-tunes the reranker nightly on 2 L4s; it is in Training as 'untracked' with hardware only.",
@@ -943,7 +946,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.npdGpuRulesMissing,
       ruleId: "npd-gpu-rules-missing",
       category: C.COVERAGE,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "node-problem-detector on eks-us-east-1-serve has no GPU rules",
       summary: "Xids, thermal slowdown and NVLink faults never become node conditions there.",
       why: "The Xid 13 on ip-10-40-1-37 GPU 3 came only from DCGM; a fatal Xid would show as failing pods, not a node condition anything can act on.",
@@ -972,7 +975,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.checkpointInterval,
       ruleId: "checkpoint-interval",
       category: C.RELIABILITY,
-      severity: MlSeverity.INFO,
+      severity: MlFindingSeverity.INFO,
       title: "Pretrain checkpoints every 4h: a failure costs 2h × 64 H100 on average",
       summary: "Every 2,000 steps at 500 steps/h.",
       why: "With ~1 interruption per 2 days in ml-h100, the expected loss is 128 GPU-h per failure ($182/day); every 1,000 steps halves it.",
@@ -994,7 +997,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.ncclTimeout,
       ruleId: "nccl-timeout-default",
       category: C.RELIABILITY,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: "NCCL watchdog at the 10-minute default: a hang idles 64 H100s for 10 min",
       summary: "sft attempt 1 sat hung for 600s on allreduce seq 88213 before anything noticed.",
       why: "Step time is 10s; a 2-minute timeout catches the same hang 8 minutes sooner. With the flight recorder on, the dump names the rank (it was 37).",
@@ -1032,7 +1035,7 @@ function build(now: () => number): FindingInit[] {
       id: FINDINGS.noSpareServe,
       ruleId: "no-hot-spare",
       category: C.RELIABILITY,
-      severity: MlSeverity.WARNING,
+      severity: MlFindingSeverity.WARNING,
       title: "No hot spare: serving has none, and h100-spare is used up",
       summary: `l4-serve has no idle TP-2 pair on one node; ${SPARE_NODE} replaced r4vb, so the next H100 fault waits for a new node.`,
       why: "Losing an L4 node at peak drops support-assistant to 2 replicas until Karpenter launches one (~6 min with the cold start): TTFT p95 +900 ms. On training, the next fatal Xid has no spare: v3 waits for repair instead of resuming in minutes.",
@@ -1088,12 +1091,24 @@ export const findingsCoverage = () => {
   return coverageRatio(states);
 };
 
+/** A finding's severity as its events': the same three levels. */
+const EVENT_SEVERITY: Record<MlFindingSeverity, MlSeverity> = {
+  [MlFindingSeverity.UNSPECIFIED]: MlSeverity.UNSPECIFIED,
+  [MlFindingSeverity.CRITICAL]: MlSeverity.CRITICAL,
+  [MlFindingSeverity.WARNING]: MlSeverity.WARNING,
+  [MlFindingSeverity.INFO]: MlSeverity.INFO,
+};
+
 export const findingsAnswers: MlDomain = {
   listMlFindings: (req, now) => {
     const findings = build(now).filter((f) => (req.includeClosed || !CLOSED.has(f.state!)) && (!req.clusterId || f.clusterIds?.includes(req.clusterId)));
     return { findings, coverageRatio: findingsCoverage() };
   },
-  listMlEvents: (req, now) => {
+};
+
+/** A finding's own events (its evidence, and when it opened), served by ./telemetry.ts. */
+export const findingsTelemetry: MlTelemetryDomain = {
+  events: (req, now) => {
     if (req.subject?.kind !== MlSubjectKind.FINDING) return undefined;
     const f = build(now).find((x) => x.id === req.subject!.id);
     if (!f) return undefined;
@@ -1101,7 +1116,7 @@ export const findingsAnswers: MlDomain = {
       id: `ev-opened-${f.id}`,
       at: f.firstSeenAt,
       kind: MlEventKind.FINDING_OPENED,
-      severity: f.severity,
+      severity: EVENT_SEVERITY[f.severity ?? MlFindingSeverity.UNSPECIFIED],
       title: `Opened: ${f.title}`,
       subject: subj(K.FINDING, f.id!, f.title!),
       source: "forge",

@@ -28,7 +28,6 @@
 import type { DescMessage, MessageInitShape } from "@bufbuild/protobuf";
 
 import {
-  MlAlertState,
   MlAxis,
   MlCapacityType,
   MlCollection,
@@ -38,11 +37,9 @@ import {
   MlHealth,
   MlSeverity,
   MlSubjectKind,
-  type MlAlertRuleSchema,
   type MlDeviceSchema,
   type MlEventSchema,
   type MlFieldValueSchema,
-  type MlHistogramSchema,
   type MlNodeConditionSchema,
   type MlNodeSchema,
   type MlNodeWorkloadSchema,
@@ -53,6 +50,7 @@ import {
 
 import { prodRps } from "./curves";
 import type { MlDomain } from "./domain";
+import { MlAlertState, type AlertRuleInit, type MlTelemetryDomain } from "./telemetryTypes";
 import {
   ALERTS,
   ALL_POOLS,
@@ -1042,7 +1040,7 @@ export function nodeMessage(n: NodeModel, now: () => number, full: boolean): Ini
     instanceType: n.pool.instanceType,
     zone: n.pool.zone,
     incarnation: n.incarnation,
-    health: n.health,
+    healthState: n.health,
     healthScore: n.score,
     healthReason: n.reason,
     cordoned: n.cordoned,
@@ -1716,7 +1714,7 @@ function eventsFor(subject: Subj, now: () => number): EventInit[] | undefined {
 
 export const HW_ALERT_IDS = { ...ALERTS, rowRemap: "alert-row-remap-pending", nvlinkCrc: "alert-nvlink-crc", eccDbe: "alert-ecc-dbe" } as const;
 
-function alertsFor(subject: Subj, now: () => number): Init<typeof MlAlertRuleSchema>[] | undefined {
+function alertsFor(subject: Subj, now: () => number): AlertRuleInit[] | undefined {
   const scope = subject.kind;
   const node =
     scope === MlSubjectKind.NODE ? nodeById(subject.id) : scope === MlSubjectKind.DEVICE ? nodeByName(deviceByUuid(subject.id)?.node ?? "") : undefined;
@@ -1726,7 +1724,7 @@ function alertsFor(subject: Subj, now: () => number): Init<typeof MlAlertRuleSch
   if (![MlSubjectKind.ORG, MlSubjectKind.CLUSTER, MlSubjectKind.POOL, MlSubjectKind.NODE, MlSubjectKind.DEVICE].includes(scope)) return undefined;
   const cluster = subj(MlSubjectKind.CLUSTER, CLUSTERS.train.id, CLUSTERS.train.name);
   const firingHere = (names: string[]) => (node ? names.includes(node.name) : true);
-  const rules: (Init<typeof MlAlertRuleSchema> & { state: MlAlertState; nodes: string[] })[] = [
+  const rules: (AlertRuleInit & { state: MlAlertState; nodes: string[] })[] = [
     {
       id: HW_ALERT_IDS.xidFatal,
       name: "Fatal Xid",
@@ -1808,37 +1806,7 @@ function alertsFor(subject: Subj, now: () => number): Init<typeof MlAlertRuleSch
   return rules.map(({ nodes, ...r }) => ({ ...r, state: r.state === MlAlertState.FIRING && !firingHere(nodes) ? MlAlertState.OK : r.state }));
 }
 
-// ── Histograms ────────────────────────────────────────────────────────────────
-
-function histograms(devices: DeviceModel[], keys: readonly string[], now: () => number): Init<typeof MlHistogramSchema>[] {
-  const defs: Record<string, { def: SeriesKeyDef; bucket: number; lo: number; hi: number }> = {
-    "gpu.sm_active": { def: DEVICE_SERIES[1], bucket: 0.05, lo: 0, hi: 1 },
-    "gpu.util": { def: DEVICE_SERIES[0], bucket: 0.05, lo: 0, hi: 1 },
-    "gpu.temp_c": { def: DEVICE_SERIES[8], bucket: 2, lo: 26, hi: 96 },
-    "gpu.power_w": { def: DEVICE_SERIES[5], bucket: 25, lo: 0, hi: 725 },
-  };
-  const want = keys.length ? keys.filter((k) => defs[k]) : Object.keys(defs);
-  return want.map((key) => {
-    const { def, bucket, lo, hi } = defs[key];
-    const vals: number[] = [];
-    for (const d of devices) {
-      const r = rng(hash(`${d.uuid}|hist|${key}`));
-      for (let k = 0; k < 96; k++) {
-        const v = def.read(sampleAt(d, -k * 15 * MINUTE, now, r));
-        if (Number.isFinite(v)) vals.push(v);
-      }
-    }
-    if (!vals.length) return { key, label: def.label, unit: def.unit, collection: MlCollection.NOT_COLLECTED, missingSource: def.profiling ? DCGM_PROFILING_MISSING : "no samples" };
-    vals.sort((a, b) => a - b);
-    const buckets = [];
-    for (let b = lo; b < hi; b += bucket) {
-      const c = vals.filter((v) => v >= b && v < b + bucket).length;
-      buckets.push({ lower: b, upper: b + bucket, count: BigInt(c) });
-    }
-    return { key, label: def.label, unit: def.unit, buckets, p50: quantile(vals, 0.5), p95: quantile(vals, 0.95), p99: quantile(vals, 0.99), count: BigInt(vals.length), collection: MlCollection.COLLECTED };
-  });
-}
-
+/** The devices a subject covers: the org's, a cluster's, a pool's, a node's, or one. */
 function devicesOf(subject: Subj): DeviceModel[] | undefined {
   switch (subject.kind) {
     case MlSubjectKind.ORG:
@@ -1890,7 +1858,11 @@ export const fleetAnswers: MlDomain = {
         : [{ nodeId: d.nodeId, index: d.index, from: at(-(nodeByName(d.node)!.bootedDaysAgo + 30) * DAY, now) }];
     return { device: deviceMessage(d, now, true), workloads: workloadsOf([d], now), placements };
   },
-  queryMlSeries: (req, now) => {
+};
+
+/** DCGM, node-exporter and the cluster's events, by device, node, pool and the org; served by ./telemetry.ts. */
+export const fleetTelemetry: MlTelemetryDomain = {
+  series: (req, now) => {
     const subject = req.subject;
     if (!subject) return undefined;
     const devices = devicesOf(subject);
@@ -1924,12 +1896,7 @@ export const fleetAnswers: MlDomain = {
     }
     return { series: aggregateSeries(devices, keys, groupBy, w, now, subject) };
   },
-  queryMlHistograms: (req, now) => {
-    const devices = req.subject && devicesOf(req.subject);
-    if (!devices || req.subject?.kind === MlSubjectKind.ORG) return undefined;
-    return { histograms: histograms(devices, req.keys, now) };
-  },
-  listMlEvents: (req, now) => {
+  events: (req, now) => {
     if (!req.subject) return undefined;
     let events = eventsFor(req.subject, now);
     if (!events) return undefined;
@@ -1942,7 +1909,7 @@ export const fleetAnswers: MlDomain = {
     });
     return { events: req.limit ? events.slice(0, req.limit) : events };
   },
-  listMlAlerts: (req, now) => {
+  alerts: (req, now) => {
     if (!req.subject) return undefined;
     const alerts = alertsFor(req.subject, now);
     return alerts ? { alerts } : undefined;

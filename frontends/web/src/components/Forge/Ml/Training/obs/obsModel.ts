@@ -1,28 +1,21 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The view models of a run's observability tabs (Metrics, System, Logs,
- * Traces, Profiles): pure functions over the generated messages, so each is
- * tested without rendering.
+ * The view models of a run's Metrics and System tabs: pure functions over
+ * the series they read, so each is tested without rendering. (Logs, Traces
+ * and Profiles are Observability's own explorers: kit/explorer.tsx.)
  */
 
 import {
-  MlAxis,
   MlCollection,
-  MlProfileKind,
   MlSubjectKind,
-  MlTraceKind,
   type MlAttempt,
-  type MlCollectiveState,
-  type MlLogLine,
-  type MlPhase,
   type MlRank,
   type MlSeries,
   type MlSubject,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { attemptId } from "../../kit/ids";
-import type { MlBand } from "../../kit/charts";
 import type { RunScope } from "../runScope";
 
 // ── Scope ─────────────────────────────────────────────────────────────────────
@@ -41,8 +34,6 @@ export function attemptSubjectOf(scope: RunScope): Pick<MlSubject, "kind" | "id"
   if (scope.rank !== null && scope.attempt) return scope.subject;
   return { kind: MlSubjectKind.ATTEMPT, id: attemptId(scope.run.id, scope.phase.key, a.n), label: `${scope.phase.key} attempt ${a.n}` };
 }
-
-export const axisOf = (axis: string | undefined): MlAxis => (axis === "tokens" ? MlAxis.TOKENS : axis === "time" ? MlAxis.TIME : MlAxis.STEP);
 
 // ── Metrics workspace ─────────────────────────────────────────────────────────
 
@@ -156,21 +147,6 @@ export function ema(values: readonly number[], weight: number): number[] {
   });
 }
 
-/** The steps an attempt redid: from where it resumed to where the previous one died (drawn as a band). */
-export function redoneBands(phase: MlPhase | null): MlBand[] {
-  if (!phase) return [];
-  const attempts = [...phase.attempts].sort((a, b) => a.n - b.n);
-  const out: MlBand[] = [];
-  for (let i = 1; i < attempts.length; i++) {
-    const prev = attempts[i - 1];
-    const next = attempts[i];
-    const from = Number(next.startStep);
-    const to = Number(prev.endStep);
-    if (to > from) out.push({ from, to, label: `redone by attempt ${next.n} (${(to - from).toLocaleString("en-US")} steps)`, tone: "warning" });
-  }
-  return out;
-}
-
 /** The last collected value in a series list for a key (the tile header). */
 export function latestOf(series: readonly MlSeries[]): number | null {
   for (let i = series.length - 1; i >= 0; i--) {
@@ -211,94 +187,4 @@ export function firstCrossing(s: MlSeries | undefined, threshold: number): numbe
   if (!s) return null;
   const i = s.y.findIndex((v) => Number.isFinite(v) && v >= threshold);
   return i >= 0 ? s.x[i] : null;
-}
-
-// ── Logs ──────────────────────────────────────────────────────────────────────
-
-export const HIGHLIGHT_LABELS: Record<string, string> = {
-  nccl: "NCCL",
-  watchdog: "Watchdog",
-  xid: "Xid",
-  traceback: "Traceback",
-  shm: "Bus error / shm",
-  oom: "OOM",
-  nan: "NaN",
-  loss_spike: "Loss spike",
-  straggler: "Straggler",
-};
-
-/** Highlight kinds with their line counts, most first. */
-export function highlightCounts(lines: readonly MlLogLine[]): { highlight: string; label: string; count: number }[] {
-  const counts = new Map<string, number>();
-  for (const l of lines) if (l.highlight) counts.set(l.highlight, (counts.get(l.highlight) ?? 0) + 1);
-  return [...counts.entries()].map(([highlight, count]) => ({ highlight, label: HIGHLIGHT_LABELS[highlight] ?? highlight, count })).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-}
-
-/** The first error line of each attempt (pinned above the log). */
-export function firstErrors(lines: readonly MlLogLine[]): MlLogLine[] {
-  const seen = new Map<number, MlLogLine>();
-  for (const l of lines) if (l.level === "error" && !seen.has(l.attempt)) seen.set(l.attempt, l);
-  return [...seen.values()].sort((a, b) => a.attempt - b.attempt);
-}
-
-export interface LogFilter {
-  rank: number | null;
-  errorsOnly: boolean;
-  highlight: string | null;
-  q: string;
-}
-
-export function filterLogs(lines: readonly MlLogLine[], f: LogFilter): MlLogLine[] {
-  const q = f.q.trim().toLowerCase();
-  return lines.filter(
-    (l) =>
-      (f.rank === null || l.rank === f.rank) &&
-      (!f.errorsOnly || l.level === "error") &&
-      (!f.highlight || (f.highlight === "*" ? !!l.highlight : l.highlight === f.highlight)) &&
-      (!q || l.message.toLowerCase().includes(q) || l.pod.toLowerCase().includes(q)),
-  );
-}
-
-/** "error" | "warn" | ... as Observability's Severity. */
-export function severityOf(level: string): "error" | "warn" | "info" | "debug" | "unknown" {
-  return level === "error" || level === "warn" || level === "info" || level === "debug" ? level : "unknown";
-}
-
-// ── Traces ────────────────────────────────────────────────────────────────────
-
-export const TRACE_KINDS: readonly { id: string; label: string; kind: MlTraceKind | undefined }[] = [
-  { id: "all", label: "All", kind: undefined },
-  { id: "step", label: "Train steps", kind: MlTraceKind.TRAIN_STEP },
-  { id: "checkpoint", label: "Checkpoints", kind: MlTraceKind.CHECKPOINT },
-  { id: "data", label: "Data pipeline", kind: MlTraceKind.DATA_PIPELINE },
-  { id: "pod", label: "Pod start", kind: MlTraceKind.POD_START },
-];
-
-export const traceKindLabel = (k: MlTraceKind): string => TRACE_KINDS.find((t) => t.kind === k)?.label.replace(/s$/, "") ?? "Trace";
-
-// ── Profiles ──────────────────────────────────────────────────────────────────
-
-export const PROFILE_KIND_LABELS: Record<number, string> = {
-  [MlProfileKind.PYTORCH_PROFILER]: "PyTorch profiler (Kineto)",
-  [MlProfileKind.NSIGHT_SYSTEMS]: "Nsight Systems",
-  [MlProfileKind.NSIGHT_COMPUTE]: "Nsight Compute",
-  [MlProfileKind.MEMORY_SNAPSHOT]: "Memory snapshot",
-  [MlProfileKind.FLIGHT_RECORDER]: "NCCL flight recorder",
-  [MlProfileKind.PY_SPY]: "py-spy",
-  [MlProfileKind.CPU_CONTINUOUS]: "Continuous CPU (eBPF)",
-  [MlProfileKind.GPU_CONTINUOUS]: "Continuous GPU (CUPTI)",
-};
-
-/** The flight recorder's collectives: mismatched ranks first, then by rank. */
-export function collectiveRows(collectives: readonly MlCollectiveState[]): MlCollectiveState[] {
-  return [...collectives].sort((a, b) => Number(b.mismatched) - Number(a.mismatched) || a.rank - b.rank);
-}
-
-/** The one-line verdict of a flight recorder dump: which seq and which ranks did not join it. */
-export function flightVerdict(collectives: readonly MlCollectiveState[]): string {
-  if (collectives.length === 0) return "No collectives recorded";
-  const maxSeq = collectives.reduce((m, c) => (c.lastSeq > m ? c.lastSeq : m), collectives[0].lastSeq);
-  const behind = collectives.filter((c) => c.mismatched || c.lastSeq < maxSeq).map((c) => c.rank);
-  if (behind.length === 0) return `All ${collectives.length} ranks reached collective ${maxSeq}`;
-  return `Not all ranks joined collective ${maxSeq} (${collectives.find((c) => c.lastSeq === maxSeq)?.op ?? ""}): missing rank${behind.length > 1 ? "s" : ""} ${behind.join(", ")}`;
 }

@@ -17,9 +17,9 @@ import {
   MlFieldGroup,
   MlHealth,
   MlSubjectKind,
-  QueryMlSeriesRequestSchema,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { fleetAnswers, fleetNodes } from "@/fixtures/shop/model/ml/fleet";
+import { mlObs } from "@/fixtures/shop/model/ml/__tests__/mlObs";
 import { BAD_GPU_INDEX, BAD_NODE, CLUSTERS, gpuUuid, HOT_NODE, POOLS } from "@/fixtures/shop/model/ml/world";
 
 const NOW = Date.UTC(2026, 10, 26, 15, 0);
@@ -81,22 +81,23 @@ describe("fleet fixture", () => {
     expect(res.placements).toHaveLength(2);
   });
 
-  it("serves the Overview's ORG series and a node's per-device series", () => {
-    const req = (subject: object, keys: string[], groupBy?: string) => create(QueryMlSeriesRequestSchema, { orgId: "o", subject, keys, groupBy });
-    const org = fleetAnswers.queryMlSeries!(req({ kind: MlSubjectKind.ORG, id: "" }, ["pool.busy", "fleet.allocated", "fleet.busy"], "pool"), now)!;
-    const pools = org.series!.filter((s) => s.key === "pool.busy");
+  it("serves the Overview's ORG series and a node's per-device series", async () => {
+    const obs = mlObs(NOW);
+    const pools = await obs.series({ kind: MlSubjectKind.ORG, id: "" }, ["pool.busy"], { groupBy: "pool" });
     expect(pools.map((s) => s.group).sort()).toEqual(["a100-dev", "h100-spare", "h100-train", "l4-serve"]);
-    expect(pools[0].x!.length).toBeGreaterThan(40);
-    const alloc = org.series!.find((s) => s.key === "fleet.allocated")!;
-    expect(alloc.y![alloc.y!.length - 1]).toBe(89);
+    expect(pools[0].x.length).toBeGreaterThan(40);
+    const alloc = (await obs.series({ kind: MlSubjectKind.ORG, id: "" }, ["fleet.allocated", "fleet.busy"])).find((s) => s.key === "fleet.allocated")!;
+    expect(alloc.y[alloc.y.length - 1]).toBe(89);
     const hot = fleetNodes().find((n) => n.name === HOT_NODE)!;
-    const node = fleetAnswers.queryMlSeries!(req({ kind: MlSubjectKind.NODE, id: hot.id }, ["gpu.temp_c"], "device"), now)!;
-    expect(node.series).toHaveLength(8);
+    const node = await obs.series({ kind: MlSubjectKind.NODE, id: hot.id }, ["gpu.temp_c"], { groupBy: "device" });
+    expect(node).toHaveLength(8);
+    // The device dimension is DCGM's UUID label, each one a GPU of the node.
+    expect(node.map((s) => s.group)).toEqual(hot.devices.map((d) => d.uuid));
   });
 
-  it("node events include the device's", () => {
+  it("node events include the device's", async () => {
     const n = fleetNodes().find((x) => x.name === BAD_NODE)!;
-    const ev = fleetAnswers.listMlEvents!({ orgId: "o", subject: { kind: MlSubjectKind.NODE, id: n.id }, kinds: [] } as never, now)!;
-    expect(ev.events!.some((e) => e.id === "ev-xid79-r4vb")).toBe(true);
+    const events = await mlObs(NOW).events({ kind: MlSubjectKind.NODE, id: n.id });
+    expect(events.some((e) => e.id === "ev-xid79-r4vb")).toBe(true);
   });
 });

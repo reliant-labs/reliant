@@ -9,14 +9,13 @@
  *               reads as steps; a series nothing reports is <NotCollected>.
  *   ChartTile   a small multiple: title, latest value, chart.
  *   Gantt       rows of state spans with marks (attempts, workloads, waits).
- *   Histogram   buckets with p50/p95/p99 and an optional comparison outline.
  *   Heatmap     rows × time cells (ranks, devices, pools).
  *   Sparkline   an inline SVG line for a table cell.
  */
 
 import { useMemo, type ReactNode } from "react";
 
-import { MlAxis, MlCollection, type MlEvent, type MlHistogram, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlAxis, MlCollection, type MlEvent, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { cn } from "@/lib/utils";
 
 import { UPlotChart, type ChartBand, type ChartMarker, type ChartSeries, type ChartTone } from "../../Observability/charts/UPlotChart";
@@ -399,59 +398,6 @@ function GanttMarkGlyph({ mark, left }: { mark: GanttMark; left: string }) {
     </a>
   ) : (
     body
-  );
-}
-
-// ── Histogram ─────────────────────────────────────────────────────────────────
-
-/** A distribution: bars per bucket, the percentiles as rules, a comparison as outlines. */
-export function Histogram({ histogram, height = 120, testId }: { histogram: MlHistogram; height?: number; testId?: string }) {
-  const h = histogram;
-  if (h.collection === MlCollection.NOT_COLLECTED) return <NotCollected what={h.label} source={h.missingSource} height={height} />;
-  const buckets = h.buckets;
-  const max = Math.max(1, ...buckets.map((b) => num(b.count)), ...h.compareBuckets.map((b) => num(b.count)));
-  const lo = buckets[0]?.lower ?? 0;
-  const hi = buckets[buckets.length - 1]?.upper ?? 1;
-  const at = (v: number) => `${((Math.min(Math.max(v, lo), hi) - lo) / (hi - lo || 1)) * 100}%`;
-  const f = (v: number) => fmtUnit(v, h.unit);
-  return (
-    <div className="space-y-1" data-testid={testId}>
-      <div className="relative flex items-end gap-px" style={{ height }} role="img" aria-label={`${h.label}: p50 ${f(h.p50)}, p95 ${f(h.p95)}, p99 ${f(h.p99)}`}>
-        {buckets.map((b, i) => {
-          const cmp = h.compareBuckets[i];
-          return (
-            <div key={i} className="relative h-full flex-1" title={`${f(b.lower)}–${f(b.upper)}: ${num(b.count).toLocaleString()}`}>
-              <div className="absolute inset-x-0 bottom-0 rounded-t-sm" style={{ height: `${(num(b.count) / max) * 100}%`, backgroundColor: "hsl(var(--chart-1) / 0.8)" }} />
-              {cmp && <div className="absolute inset-x-0 bottom-0 rounded-t-sm border border-b-0 border-dashed border-ink-muted" style={{ height: `${(num(cmp.count) / max) * 100}%` }} />}
-            </div>
-          );
-        })}
-        {(
-          [
-            ["p50", h.p50],
-            ["p95", h.p95],
-            ["p99", h.p99],
-          ] as const
-        ).map(([name, v]) =>
-          Number.isFinite(v) && v > 0 ? (
-            <div key={name} className="pointer-events-none absolute inset-y-0 border-l border-ink/60" style={{ left: at(v) }}>
-              <span className="absolute -top-0.5 left-1 whitespace-nowrap text-meta tabular-nums text-ink-muted">
-                {name} {f(v)}
-              </span>
-            </div>
-          ) : null,
-        )}
-      </div>
-      <div className="flex justify-between text-meta tabular-nums text-ink-muted">
-        <span>{f(lo)}</span>
-        {h.compareLabel && (
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2 w-3 rounded-sm border border-dashed border-ink-muted" aria-hidden="true" /> {h.compareLabel}
-          </span>
-        )}
-        <span>{f(hi)}</span>
-      </div>
-    </div>
   );
 }
 

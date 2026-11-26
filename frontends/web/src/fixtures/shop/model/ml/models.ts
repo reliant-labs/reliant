@@ -2,8 +2,9 @@
 
 /**
  * The ML fixture world's Models: ListMlModels, GetMlModel,
- * GetMlModelVersion, and ListMlEvents for MODEL / MODEL_VERSION subjects
- * (plus the org's alias moves and promotions).
+ * GetMlModelVersion, and the events of MODEL / MODEL_VERSION subjects
+ * (plus the org's alias moves and promotions), which ./telemetry.ts serves
+ * through ObservabilityService.
  *
  * The registry (world.ts MODELS, VERSIONS):
  *   support-assistant
@@ -28,6 +29,7 @@ import { MlEventKind, MlSeverity, MlSubjectKind, MlVersionSource } from "@/gen/c
 
 import { prodRps } from "./curves";
 import type { MlDomain } from "./domain";
+import type { EventsQuery, MlTelemetryDomain } from "./telemetryTypes";
 import { fakeDigest, filterEvents } from "./evals";
 import { at, BASE_MODEL, DAY, HOUR, CLUSTERS, EVAL_RUNS, ML_PEOPLE, ML_PROJECT, MODELS, REVISIONS, RUNS, SERVICES, V21_FP8_CHECKPOINT, V2_FINAL_CHECKPOINT, VERSIONS } from "./world";
 
@@ -527,7 +529,7 @@ function modelEvents(modelId: string | undefined, versionId: string | undefined,
   return out;
 }
 
-type EventsReq = Parameters<NonNullable<MlDomain["listMlEvents"]>>[0];
+type EventsReq = EventsQuery;
 
 function events(req: EventsReq, now: () => number) {
   const s = req.subject;
@@ -545,5 +547,9 @@ export const modelsAnswers: MlDomain = {
   listMlModels: (_req, now) => ({ models: Object.values(MODELS).map((m) => modelInit(m, now)) }),
   getMlModel: (req, now) => getModel(req.modelId, now),
   getMlModelVersion: (req, now) => getVersion(req.versionId, now),
-  listMlEvents: (req, now) => events(req, now),
+};
+
+/** The registry's events (registrations, alias moves, promotions), served by ./telemetry.ts. */
+export const modelsTelemetry: MlTelemetryDomain = {
+  events: (req, now) => events(req, now),
 };

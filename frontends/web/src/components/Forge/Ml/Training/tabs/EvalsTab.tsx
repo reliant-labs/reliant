@@ -11,17 +11,18 @@ import { create } from "@bufbuild/protobuf";
 import { MlAxis, MlCollection, MlSeriesSchema, MlSubjectKind, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { cn } from "@/lib/utils";
 
-import { ChartTile, EmptyNote, fmtStep, MlLink, MlTable, mlHref, num, Panel, SubjectLink, useMl } from "../../kit";
-import type { RunScope } from "../runScope";
+import { ChartTile, EmptyNote, fmtStep, MlLink, MlTable, mlHref, num, Panel, SubjectLink, useMl, useMlSeries } from "../../kit";
+import { scopeRange, type RunScope } from "../runScope";
 import { evalCurves, evaluatedCheckpoints } from "../trainingModel";
 import { seriesSubject } from "./OverviewTab";
 
 const pct = (v: number) => `${(v * 100).toFixed(1)}`;
+const EVAL_KEYS = ["eval/*"];
 
 export function EvalsTab({ scope }: { scope: RunScope }) {
   const { detail, run } = scope;
   const subject = seriesSubject(scope);
-  const series = useMl("queryMlSeries", { subject, keys: ["eval/*"], axis: MlAxis.STEP });
+  const series = useMlSeries(subject, EVAL_KEYS, { range: scopeRange(scope) });
   const suites = useMl("listMlEvalSuites", {});
   const suiteList = suites.data?.kind === "ok" ? suites.data.data.suites : [];
   const gate = suiteList.find((s) => s.name === "release-gate") ?? suiteList[0];

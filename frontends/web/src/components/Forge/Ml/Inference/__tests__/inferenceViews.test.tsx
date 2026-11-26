@@ -74,21 +74,18 @@ describe("the Inference pages", () => {
     expect(screen.getByTestId(`ml-inference-revisions-row-${REVISIONS.prodCurrent}`)).toHaveAttribute("aria-selected", "true");
   });
 
-  it("opens a slow request's trace in a side panel", async () => {
+  it("lists a service's request traces in Observability's explorer and opens one", async () => {
+    show("inference", [SERVICES.prod.id], { tab: "traces" });
+    expect(await screen.findByTestId("obs-trace-table")).toBeInTheDocument();
+    cleanup();
     show("inference", [SERVICES.prod.id], { tab: "traces", sel: TRACES.slowRequest });
-    const panel = await screen.findByTestId("ml-inference-trace-panel");
-    expect(await within(panel).findByTestId("waterfall")).toHaveTextContent("epp.schedule");
-  });
-
-  it("says the reranker's traces are not collected, naming the finding", async () => {
-    show("inference", [SERVICES.reranker.id], { tab: "traces" });
-    expect(await screen.findByTestId("ml-not-collected")).toHaveTextContent("Request traces: not collected");
+    expect(await screen.findByTestId("trace-detail")).toBeInTheDocument();
+    expect(await screen.findByTestId("waterfall")).toHaveTextContent("epp.schedule");
   });
 
   it("draws a request trace on its own page", async () => {
     show("inference", ["traces", TRACES.slowRequest]);
     expect(await screen.findByTestId("waterfall")).toHaveTextContent("llm_request");
-    expect(screen.getByTestId("ml-crumbs")).toHaveTextContent(SERVICES.prod.id);
   });
 });
 

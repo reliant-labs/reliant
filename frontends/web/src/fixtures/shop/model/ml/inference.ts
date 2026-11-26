@@ -23,25 +23,19 @@
  * the devices to these REPLICA ids), so links resolve both ways.
  */
 
-import type { MessageInitShape } from "@bufbuild/protobuf";
-
 import {
-  MlAlertState,
   MlAxis,
   MlCollection,
   MlCostCategory,
   MlEventKind,
   MlReleaseVerdict,
   MlSeverity,
-  MlSpanStatus,
   MlSubjectKind,
-  MlTraceKind,
-  type MlHistogramSchema,
-  type MlSpanSchema,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { prodRps } from "./curves";
 import type { MlDomain } from "./domain";
+import { MlAlertState, MlSpanStatus, MlTraceKind, type MlTelemetryDomain, type SpanInit } from "./telemetryTypes";
 import {
   ALERTS,
   at,
@@ -964,60 +958,6 @@ function detail(id: string, now: Now) {
   };
 }
 
-// ── Histograms ────────────────────────────────────────────────────────────────
-
-/** The standard normal CDF (Abramowitz–Stegun 7.1.26). */
-function phi(z: number): number {
-  const t = 1 / (1 + 0.3275911 * Math.abs(z / Math.SQRT2));
-  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-(z * z) / 2);
-  return z >= 0 ? (1 + y) / 2 : (1 - y) / 2;
-}
-
-/** Buckets of a log-normal with this median and p95, `count` samples over [0, hi). */
-export function lognormalBuckets(median: number, p95: number, count: number, hi: number, n = 30) {
-  const sigma = Math.log(p95 / median) / 1.645;
-  const cdf = (v: number) => (v <= 0 ? 0 : phi((Math.log(v) - Math.log(median)) / sigma));
-  const width = hi / n;
-  return Array.from({ length: n }, (_, k) => ({ lower: k * width, upper: (k + 1) * width, count: BigInt(Math.round(count * (cdf((k + 1) * width) - cdf(k * width)))) }));
-}
-
-const quantile = (median: number, p95: number, q: number) => median * Math.exp((Math.log(p95 / median) / 1.645) * q);
-
-function histograms(subject: { kind: MlSubjectKind; id: string }, keys: readonly string[], now: Now) {
-  const serviceId = subject.kind === MlSubjectKind.INFERENCE_SERVICE ? subject.id : subject.id.split("/")[0];
-  const def = serviceDef(serviceId);
-  if (!def) return [];
-  const h = serviceHeadline(serviceId, now);
-  const rev = subject.kind === MlSubjectKind.REVISION ? revisionDef(subject.id) : undefined;
-  const fp8 = rev?.fp8 ?? false;
-  const count = h.requests24h * (rev ? rev.share || 0.9 : 1);
-  const wanted = keys.length ? keys : ["serve.ttft", "serve.itl", "serve.e2e"];
-  return wanted.flatMap((key): MessageInitShape<typeof MlHistogramSchema>[] => {
-    const meta = KEY_META[key];
-    if (!meta) return [];
-    if (!def.generative && key !== "serve.e2e") return [{ key, label: meta.label, unit: "ms", collection: MlCollection.NOT_APPLICABLE, missingSource: "Triton cross-encoder: no token generation", buckets: [], compareBuckets: [], count: 0n, p50: NaN, p95: NaN, p99: NaN }];
-    const f = fp8 ? (key === "serve.ttft" ? 0.86 : key === "serve.itl" ? 0.77 : 0.8) : 1;
-    const p95 = (key === "serve.ttft" ? def.ttftP95 : key === "serve.itl" ? def.itlP95 : def.e2eP95) * f;
-    const median = p95 * (key === "serve.ttft" ? 0.48 : key === "serve.itl" ? 0.24 : 0.44);
-    const hi = p95 * 2.2;
-    const prev = def.id === SERVICES.prod.id && !fp8 ? (key === "serve.ttft" ? 395 : key === "serve.itl" ? 37.6 : 4050) : null;
-    return [
-      {
-        key,
-        label: meta.label,
-        unit: "ms",
-        buckets: lognormalBuckets(median, p95, count, hi),
-        p50: median,
-        p95,
-        p99: quantile(median, p95, 2.326),
-        count: BigInt(Math.round(count)),
-        collection: MlCollection.COLLECTED,
-        ...(prev ? { compareLabel: `${RELEASE_PREV} (previous revision)`, compareBuckets: lognormalBuckets(prev * (median / p95), prev, count, hi) } : {}),
-      },
-    ];
-  });
-}
-
 // ── Events and alerts ─────────────────────────────────────────────────────────
 
 const svcSubject = (def: ServiceDef) => ({ kind: MlSubjectKind.INFERENCE_SERVICE, id: def.id, label: `${def.name} (${def.env})` });
@@ -1397,7 +1337,7 @@ function traceSummary(r: RequestDef, now: Now) {
 }
 
 /** A request's spans: app → gen_ai client → gateway → endpoint picker → vLLM (queued, prefill, decode, stream) + the GPUs' DCGM samples. */
-function requestSpans(r: RequestDef, now: Now): MessageInitShape<typeof MlSpanSchema>[] {
+function requestSpans(r: RequestDef, now: Now): SpanInit[] {
   const t0 = -r.agoMs;
   const rep = r.replica;
   const node = serveNodeId(rep.node);
@@ -1413,7 +1353,7 @@ function requestSpans(r: RequestDef, now: Now): MessageInitShape<typeof MlSpanSc
   const status = err ? MlSpanStatus.ERROR : MlSpanStatus.OK;
   const serveJoins = { nodeId: node, deviceUuid: devices[0], pod: rep.pod, rank: -1 };
   const id = (s: string) => hash(`${r.traceId}-${s}`).toString(16).padStart(8, "0") + "00000000";
-  const spans: MessageInitShape<typeof MlSpanSchema>[] = [
+  const spans: SpanInit[] = [
     {
       spanId: id("root"),
       parentSpanId: "",
@@ -1642,26 +1582,26 @@ export const inferenceAnswers: MlDomain = {
     return { services: SERVICE_DEFS.map((s) => serviceMessage(s.id, now)) };
   },
   getMlInferenceService: (req, now) => detail(req.serviceId, now),
-  queryMlSeries: (req, now) => {
+};
+
+/** What the gateway, vLLM / Triton and the request tracer report, by service, revision and replica; served by ./telemetry.ts. */
+export const inferenceTelemetry: MlTelemetryDomain = {
+  series: (req, now) => {
     if (!req.subject || !SERVING_KINDS.has(req.subject.kind)) return undefined;
     const frame = frameOf(req.subject, now);
     if (!frame) return undefined;
     return { series: querySeries(frame, req.keys, req.groupBy, now) };
   },
-  queryMlHistograms: (req, now) => {
-    if (!req.subject || !SERVING_KINDS.has(req.subject.kind)) return undefined;
-    return { histograms: histograms(req.subject, req.keys, now) };
-  },
-  listMlEvents: (req, now) => {
+  events: (req, now) => {
     if (!req.subject) return undefined;
     const events = eventsFor(req.subject, now).filter((e) => req.kinds.length === 0 || req.kinds.includes(e.kind));
     return events.length ? { events } : undefined;
   },
-  listMlAlerts: (req, now) => {
+  alerts: (req, now) => {
     if (!req.subject) return undefined;
     const alerts = alertsFor(req.subject, now);
     return alerts.length ? { alerts } : undefined;
   },
-  listMlTraces: (req, now) => (req.subject ? tracesFor(req.subject, req.limit, now) : undefined),
-  getMlTrace: (req, now) => traceById(req.traceId, now),
+  traces: (req, now) => (req.subject ? tracesFor(req.subject, req.limit, now) : undefined),
+  trace: (req, now) => traceById(req.traceId, now),
 };

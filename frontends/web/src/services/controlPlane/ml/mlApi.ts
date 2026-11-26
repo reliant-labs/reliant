@@ -6,7 +6,11 @@
  *   getMyOrgEntitlements   OrganizationService: whether the org has "ml", and whether someone asked
  *   requestOrgEntitlement  OrganizationService: ask Reliant for a feature (idempotent per org)
  *   read(method, req)      any MlEarlyAccessService rpc, by its client method name
- *                          ("getMlRun", "queryMlSeries", ...), typed by the generated client
+ *                          ("getMlRun", "listMlFindings", ...), typed by the generated client
+ *
+ * Telemetry (metrics, logs, traces, profiles, events, alerts) is not here:
+ * the ML tab reads it from ObservabilityService and AlertingService
+ * (components/Forge/Ml/kit/telemetry.ts).
  *
  * Each is one call over the generated client (proto-vendor/controlplane). An
  * ML read resolves to an MlOutcome holding the generated response message:

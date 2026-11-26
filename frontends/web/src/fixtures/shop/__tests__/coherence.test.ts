@@ -31,6 +31,7 @@ import { createClient } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
+import { subjectOfAlertLabels } from "@/services/controlPlane/ml/telemetry";
 import { ActivityService } from "@/gen/controlplane/services/activity/v1/activity_pb";
 import { AppDatabaseService } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
 import { DeployService } from "@/gen/controlplane/services/deploy/v1/deploy_pb";
@@ -214,7 +215,8 @@ describe.each(WHEN)("the demo's one story, %s", (_when, at) => {
     expect(CAST.has(issues.issues[0].assignee?.name ?? "")).toBe(true);
     const detail = seen(await obs().getIssue({ ...scope(), issueId: DEMO_INCIDENT.issueId }));
     expect(detail.firstRelease?.gitCommit).toBe(DEMO_RELEASES.find((r) => r.version === "v1.8.3")!.commit);
-    const alerts = seen(await obs().listAlerts("org-acme", ""));
+    // The org's list also holds its ML world's alerts, which belong to no environment of shop's.
+    const alerts = seen(await obs().listAlerts("org-acme", "")).filter((a) => !subjectOfAlertLabels(a.labels));
     expect(alerts.filter((a) => a.state === "firing").map((a) => a.rule)).toEqual([DEMO_INCIDENT.alert]);
     const notifications = seen(await obs().listNotifications("org-acme", {}));
     expect(notifications.unread).toBe(alerts.length);

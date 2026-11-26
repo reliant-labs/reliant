@@ -12,7 +12,7 @@ import {
   MlFindingCategory,
   MlFindingState,
   MlRunState,
-  MlSeverity,
+  MlFindingSeverity,
   type MlCost,
   type MlEvent,
   type MlFinding,
@@ -86,8 +86,8 @@ export function recentChanges(events: readonly MlEvent[], limit = 12): MlEvent[]
 export function findingCounts(findings: readonly MlFinding[]): { critical: number; warning: number; info: number } {
   const open = findings.filter((f) => f.state === MlFindingState.OPEN || f.state === MlFindingState.ASSIGNED);
   return {
-    critical: open.filter((f) => f.severity === MlSeverity.CRITICAL).length,
-    warning: open.filter((f) => f.severity === MlSeverity.WARNING).length,
-    info: open.filter((f) => f.severity === MlSeverity.INFO).length,
+    critical: open.filter((f) => f.severity === MlFindingSeverity.CRITICAL).length,
+    warning: open.filter((f) => f.severity === MlFindingSeverity.WARNING).length,
+    info: open.filter((f) => f.severity === MlFindingSeverity.INFO).length,
   };
 }

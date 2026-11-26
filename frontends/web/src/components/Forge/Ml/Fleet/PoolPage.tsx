@@ -9,12 +9,12 @@
 
 import { Ban } from "lucide-react";
 
-import { MlSubjectKind, type GetMlPoolResponse, type MlNode, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlHealth, MlSubjectKind, type GetMlPoolResponse, type MlNode, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import Link from "@/components/forge-ui/link";
 import { cn } from "@/lib/utils";
 
 import { MlFrame, MlRead } from "../MlParts";
-import { ChartTile, EmptyNote, fmtInt, fmtPct, fmtUnit, fmtUsd, lastValue, Grid, healthOf, KpiStrip, MlChart, mlHref, MlTable, Panel, StackedBar, StatusDot, useMl } from "../kit";
+import { ChartTile, EmptyNote, fmtInt, fmtPct, fmtUnit, fmtUsd, lastValue, Grid, healthOf, KpiStrip, MlChart, mlHref, MlTable, Panel, StackedBar, StatusDot, useMl, useMlEvents, useMlSeries } from "../kit";
 import { allocShare, utilFill } from "./fleetModel";
 import { dataOf } from "./parts";
 
@@ -27,6 +27,10 @@ const BANDS: { key: string; title: string }[] = [
   { key: "gpu.power_ratio", title: "Power / limit" },
   { key: "gpu.temp_c", title: "GPU temperature" },
 ];
+const BAND_KEYS = BANDS.map((b) => b.key);
+/** Each band is the spread across the pool's GPUs. */
+const BAND_STATS = ["p5", "p50", "p95"];
+const NAMESPACE_KEYS = ["pool.allocated_by_namespace"];
 
 export function PoolPage({ poolId, cluster, pool }: { poolId: string; cluster: string; pool: string }) {
   const q = useMl("getMlPool", { poolId });
@@ -42,9 +46,9 @@ export function PoolPage({ poolId, cluster, pool }: { poolId: string; cluster: s
 function PoolBody({ data }: { data: GetMlPoolResponse }) {
   const p = data.pool!;
   const subject = { kind: MlSubjectKind.POOL, id: p.id };
-  const bands = useMl("queryMlSeries", { subject, keys: BANDS.map((b) => b.key) });
-  const byNs = useMl("queryMlSeries", { subject, keys: ["pool.allocated_by_namespace"], maxPoints: 96 });
-  const events = dataOf(useMl("listMlEvents", { subject, kinds: [] }))?.events ?? [];
+  const bands = useMlSeries(subject, BAND_KEYS, { stats: BAND_STATS });
+  const byNs = useMlSeries(subject, NAMESPACE_KEYS, { groupBy: "namespace" });
+  const events = dataOf(useMlEvents(subject))?.events ?? [];
   const throttled = data.throttleReasons.filter((r) => r.name !== "none" && r.name !== "GPU idle").reduce((a, r) => a + r.share, 0);
   return (
     <div className="space-y-4">
@@ -120,13 +124,13 @@ function PoolBody({ data }: { data: GetMlPoolResponse }) {
 }
 
 function NodeTile({ node }: { node: MlNode }) {
-  const h = healthOf(node.health);
+  const h = healthOf(node.healthState);
   const [cluster, name] = node.id.split("/");
   return (
     <Link href={mlHref("fleet", [cluster, name])} className="block rounded-xl border border-border bg-surface p-3 hover:border-ink-muted" data-testid={`ml-pool-tile-${node.name}`}>
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="truncate text-ui font-medium text-ink">{node.name}</span>
-        <StatusDot tone={h.tone} label={node.health === 1 ? `${Math.round(node.healthScore)}` : `${h.label} · ${Math.round(node.healthScore)}`} />
+        <StatusDot tone={h.tone} label={node.healthState === MlHealth.HEALTHY ? `${Math.round(node.healthScore)}` : `${h.label} · ${Math.round(node.healthScore)}`} />
       </div>
       <div className={cn("grid gap-1", node.devices.length > 4 ? "grid-cols-8" : "grid-cols-4")}>
         {node.devices.map((d) => {

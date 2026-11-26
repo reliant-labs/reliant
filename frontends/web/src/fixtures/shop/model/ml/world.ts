@@ -458,8 +458,9 @@ export const CHANGES_FP8 = { id: "chg_support_fp8", name: "support-assistant-fp8
 
 // ── Traces, profiles, alerts ──────────────────────────────────────────────────
 
+/** Trace ids share one namespace with shop's (ObservabilityService.GetTrace answers both): none may be one of shop's. */
 export const TRACES = {
-  slowStep: "4bf92f3577b34da6a3ce929d0e0e4736",
+  slowStep: "6d3e1b9a0f2c4e7a8b5d1c3f9e0a2b4d",
   normalStep: "5c0a1f3e9b2d4c6a8e0f1a3b5c7d9e2f",
   checkpoint: "7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d",
   dataPipeline: "1f2e3d4c5b6a79881f2e3d4c5b6a7988",

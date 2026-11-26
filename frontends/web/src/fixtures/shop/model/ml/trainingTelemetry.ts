@@ -3,9 +3,9 @@
 /**
  * The ML fixture world's TRAINING TELEMETRY: what the instrumented trainer,
  * DCGM, node-exporter, the pod logs, the step tracer and the profilers report
- * for runs, phases, attempts, ranks, checkpoints and experiments
- * (QueryMlSeries, QueryMlHistograms, ListMlLogs, ListMlTraces, GetMlTrace,
- * ListMlProfiles, GetMlProfile). Ids and the story: ./world.ts; the shared
+ * for runs, phases, attempts, ranks, checkpoints and experiments, served
+ * through ObservabilityService by ./telemetry.ts (metrics, logs, traces,
+ * flamegraphs, each keyed by the subject's ml.* attributes). Ids and the story: ./world.ts; the shared
  * numbers (loss, LR, grad norm, tokens/s, MFU, step time, eval scores):
  * ./curves.ts, so a point on a chart is the number the checkpoints table and
  * the eval matrix show.
@@ -23,29 +23,24 @@
  * kubelet and Kueue.
  */
 
-import type { MessageInitShape } from "@bufbuild/protobuf";
 import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 
-import {
-  MlAxis,
-  MlCollection,
-  MlProfileKind,
-  MlSpanStatus,
-  MlSubjectKind,
-  MlTraceKind,
-  type MlCollectiveStateSchema,
-  type MlHistogramSchema,
-  type MlLogLineSchema,
-  type MlProfileSchema,
-  type MlSeries,
-  type MlSeriesSchema,
-  type MlSpanSchema,
-  type MlSubjectSchema,
-  type MlTraceSummarySchema,
-} from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlAxis, MlCollection, MlSubjectKind } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { evalScore, V3_STRAGGLER_STEP, v3GradNorm, v3LmLoss, v3LossCurve, v3Lr, v3Mfu, v3StepTimeMs, v3TokensPerSecond, v3TrainLoss, v3ValLoss } from "./curves";
-import type { MlDomain } from "./domain";
+import {
+  MlProfileKind,
+  MlSpanStatus,
+  MlTraceKind,
+  type CollectiveInit,
+  type LogLineInit as LogInit,
+  type MlTelemetryDomain,
+  type ProfileInit,
+  type SeriesInit,
+  type SpanInit,
+  type SubjectInit,
+  type TraceSummaryInit as SummaryInit,
+} from "./telemetryTypes";
 import {
   BAD_GPU_INDEX,
   BAD_NODE,
@@ -79,15 +74,6 @@ import {
   type AttemptEnd,
 } from "./world";
 
-/** A series as a plain init (never the message itself), so spreads and overrides stay inits. */
-type SeriesInit = Exclude<MessageInitShape<typeof MlSeriesSchema>, MlSeries>;
-type SubjectInit = MessageInitShape<typeof MlSubjectSchema>;
-type LogInit = MessageInitShape<typeof MlLogLineSchema>;
-type SpanInit = MessageInitShape<typeof MlSpanSchema>;
-type SummaryInit = MessageInitShape<typeof MlTraceSummarySchema>;
-type ProfileInit = MessageInitShape<typeof MlProfileSchema>;
-type HistogramInit = MessageInitShape<typeof MlHistogramSchema>;
-type CollectiveInit = MessageInitShape<typeof MlCollectiveStateSchema>;
 
 /** Smooth deterministic jitter in [-1, 1] for (key, x): curves.ts's, for this file's own series. */
 const jit = (key: string, x: number) => noise(rng(hash(`${key}@${Math.round(x)}`)));
@@ -607,7 +593,7 @@ export function expandKeys(keys: readonly string[]): string[] {
   return [...new Set(out)];
 }
 
-// ── QueryMlSeries ─────────────────────────────────────────────────────────────
+// ── Series ────────────────────────────────────────────────────────────────────
 
 interface SeriesReq {
   axis: MlAxis;
@@ -826,95 +812,7 @@ function querySeries(req: { subject?: { kind: MlSubjectKind; id: string; label: 
   return out;
 }
 
-// ── QueryMlHistograms ─────────────────────────────────────────────────────────
-
-function gauss(r: () => number): number {
-  const u = Math.max(1e-9, r());
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r());
-}
-
-function pct(sorted: readonly number[], q: number): number {
-  if (sorted.length === 0) return NaN;
-  return sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
-}
-
-function bucketsOf(values: readonly number[], lo: number, hi: number, width: number, scale = 1) {
-  const n = Math.ceil((hi - lo) / width);
-  const counts = new Array<number>(n).fill(0);
-  for (const v of values) counts[Math.max(0, Math.min(n - 1, Math.floor((v - lo) / width)))]++;
-  return counts.map((c, i) => ({ lower: lo + i * width, upper: lo + (i + 1) * width, count: BigInt(Math.round(c * scale)) }));
-}
-
-/** Step times (ms) of an attempt: one sample per step, the straggler's mode after it began. */
-function stepTimeSamples(run: TRun, a: TAttempt): number[] {
-  const r = rng(hash(`steps-${run.key}-${a.phase}-${a.n}`));
-  const out: number[] = [];
-  const stride = Math.max(1, Math.round((a.endStep - a.startStep) / 6000));
-  for (let s = a.startStep + 1; s <= a.endStep; s += stride) {
-    const straggling = stragglingAt(run, a, s);
-    const base = isV3(run) ? v3StepTimeMs(a.phase, s, straggling) : (run.tokensPerStep / run.tpsBase) * 1000;
-    let v = base * (1 + (straggling ? 0.022 : 0.014) * gauss(r));
-    if (r() < (straggling ? 0.03 : 0.008)) v += base * (0.08 + 0.25 * r()); // data stalls, GC pauses, the straggler's worst steps
-    out.push(v);
-  }
-  return out;
-}
-
-function histogram(key: string, label: string, unit: string, values: number[], lo: number, hi: number, width: number, compare?: { label: string; values: number[] }): HistogramInit {
-  const sorted = [...values].sort((a, b) => a - b);
-  return {
-    key,
-    label,
-    unit,
-    buckets: bucketsOf(values, lo, hi, width),
-    p50: pct(sorted, 0.5),
-    p95: pct(sorted, 0.95),
-    p99: pct(sorted, 0.99),
-    count: BigInt(values.length),
-    ...(compare ? { compareLabel: compare.label, compareBuckets: bucketsOf(compare.values, lo, hi, width, values.length / Math.max(1, compare.values.length)) } : {}),
-    collection: MlCollection.COLLECTED,
-  };
-}
-
-function queryHistograms(scope: Scope, keys: readonly string[]): HistogramInit[] {
-  const { run } = scope;
-  const wanted = keys.length ? keys : ["train.step_time", "ckpt.save_time", "data.loader_wait"];
-  const a = scope.attempts[scope.attempts.length - 1];
-  const prev = scope.single ? run.attempts.find((x) => x.phase === a?.phase && x.n === (a?.n ?? 0) - 1) : scope.attempts[scope.attempts.length - 2];
-  const out: HistogramInit[] = [];
-  for (const key of wanted) {
-    const label = key === "train.step_time" ? "Step time" : key === "ckpt.save_time" ? "Checkpoint save time" : key === "data.loader_wait" ? "Data loader wait" : key;
-    if (!run.instrumented) {
-      out.push({ key, label, unit: "ms", collection: MlCollection.NOT_COLLECTED, missingSource: "training instrumentation (ml/instrument skill, MLflow or W&B)" });
-      continue;
-    }
-    if (!a) {
-      out.push({ key, label, unit: "ms", collection: MlCollection.NOT_COLLECTED, missingSource: "phase has not started" });
-      continue;
-    }
-    if (key === "train.step_time") {
-      const values = stepTimeSamples(run, a);
-      const base = isV3(run) ? v3StepTimeMs(a.phase, a.endStep, false) : (run.tokensPerStep / run.tpsBase) * 1000;
-      out.push(histogram(key, label, "ms", values, base * 0.9, base * 1.45, base * 0.0125, prev ? { label: `attempt ${prev.n}`, values: stepTimeSamples(run, prev) } : undefined));
-    } else if (key === "ckpt.save_time") {
-      const every = run.checkpointEvery[a.phase] ?? 1000;
-      const sample = (x: TAttempt) => {
-        const r = rng(hash(`ckpt-${run.key}-${x.phase}-${x.n}`));
-        return Array.from({ length: Math.max(1, Math.floor((x.lastCheckpointStep - x.startStep) / every)) }, () => 41 + 1.8 * gauss(r) + (r() < 0.05 ? 9 : 0));
-      };
-      out.push(histogram(key, label, "s", sample(a), 34, 56, 1, prev ? { label: `attempt ${prev.n}`, values: sample(prev) } : undefined));
-    } else if (key === "data.loader_wait") {
-      const r = rng(hash(`lw-${run.key}-${a.phase}-${a.n}`));
-      const values = Array.from({ length: 4000 }, () => Math.exp(Math.log(run.key === "v1" ? 210 : 40) + 0.45 * gauss(r)));
-      out.push(histogram(key, label, "ms", values, 0, run.key === "v1" ? 800 : 300, run.key === "v1" ? 25 : 10));
-    } else {
-      out.push({ key, label, unit: "", collection: MlCollection.NOT_COLLECTED, missingSource: "nothing reports this histogram for training" });
-    }
-  }
-  return out;
-}
-
-// ── ListMlLogs ────────────────────────────────────────────────────────────────
+// ── Logs ──────────────────────────────────────────────────────────────────────
 
 const LEVELS = ["debug", "info", "warn", "error"] as const;
 const levelRank = (l: string) => Math.max(0, LEVELS.indexOf(l as (typeof LEVELS)[number]));
@@ -1737,37 +1635,33 @@ function listProfiles(scope: Scope, now: () => number): ProfileInit[] {
   });
 }
 
-// ── The answers ───────────────────────────────────────────────────────────────
+// ── The telemetry ─────────────────────────────────────────────────────────────
 
-export const trainingTelemetryAnswers: MlDomain = {
-  queryMlSeries: (req, now) => {
+/** What the trainer, DCGM, the pods and the profilers report, by subject (served by ./telemetry.ts). */
+export const trainingTelemetry: MlTelemetryDomain = {
+  series: (req, now) => {
     const series = querySeries(req, now);
     return series ? { series } : undefined;
   },
-  queryMlHistograms: (req, now) => {
-    void now;
-    const scope = scopeOf(req.subject);
-    return scope ? { histograms: queryHistograms(scope, req.keys) } : undefined;
-  },
-  listMlLogs: (req, now) => {
+  logs: (req, now) => {
     const scope = scopeOf(req.subject);
     return scope ? listLogs(scope, req, now) : undefined;
   },
-  listMlTraces: (req, now) => {
+  traces: (req, now) => {
     const scope = scopeOf(req.subject);
     return scope ? listTraces(scope, req.kind, req.limit, now) : undefined;
   },
-  getMlTrace: (req, now) => {
+  trace: (req, now) => {
     const t = traces().get(req.traceId);
     if (!t) return undefined;
     const built = t.build(now);
     return { summary: built.summary, spans: built.spans, truncated: false };
   },
-  listMlProfiles: (req, now) => {
+  profiles: (req, now) => {
     const scope = scopeOf(req.subject);
     return scope ? { profiles: listProfiles(scope, now) } : undefined;
   },
-  getMlProfile: (req, now) => {
+  profile: (req, now) => {
     const profile = profileList(now, true).find((p) => p.id === req.profileId);
     return profile ? { profile } : undefined;
   },

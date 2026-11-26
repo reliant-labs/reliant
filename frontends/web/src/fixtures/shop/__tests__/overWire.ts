@@ -4,7 +4,8 @@
  * The shop pack as the demo host reads it: the console's REAL observability
  * client (controlPlaneObservabilityApi: api.ts and friends, their mappers, the
  * read scheduler) over the pack's transport, beside the story's model
- * (model/shopApi.ts), so a test can hold the two to one answer.
+ * (model/shopApi.ts, with the ML world's telemetry on it as the pack serves
+ * it: model/ml/telemetry.ts), so a test can hold the two to one answer.
  *
  * The importing test file must mock the control-plane config first (vi.mock
  * is per file and hoisted):
@@ -18,6 +19,7 @@ import { installShellTransport, setTransport } from "@/lib/connect";
 import { controlPlaneObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 import { createShopTransport } from "..";
+import { withMlTelemetry } from "../model/ml/telemetry";
 import { createShopApi } from "../model/shopApi";
 import { demoNow, resetDemoNowForTests } from "../shopStory";
 
@@ -38,7 +40,7 @@ export function installOverWire(at: number): OverWire {
   setTransport(null);
   const transport = createShopTransport();
   installShellTransport(transport);
-  return { transport, wire: controlPlaneObservabilityApi, model: createShopApi(now), now };
+  return { transport, wire: controlPlaneObservabilityApi, model: withMlTelemetry(createShopApi(now), () => now), now };
 }
 
 export function uninstallOverWire(): void {

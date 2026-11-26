@@ -21,6 +21,7 @@ import { MlAxis, MlCollection, MlEventKind, MlPendingReason, MlSeverity, MlSubje
 
 import { v3StepTimeMs } from "./curves";
 import type { MlDomain } from "./domain";
+import type { MlTelemetryDomain } from "./telemetryTypes";
 import { INFERENCE_REPLICAS, replicaId } from "./inference";
 import {
   at,
@@ -528,12 +529,16 @@ export const queuesAnswers: MlDomain = {
     if (!req.clusterId) return res;
     return { ...res, queues: res.queues.filter((q) => q.clusterId === req.clusterId), pending: res.pending.filter((p) => p.queueId.startsWith(`${req.clusterId}/`)) };
   },
-  queryMlSeries: (req, now) => {
+};
+
+/** Kueue's history (demand, admission waits) and events, served by ./telemetry.ts. */
+export const queuesTelemetry: MlTelemetryDomain = {
+  series: (req, now) => {
     if (req.subject?.kind !== MlSubjectKind.QUEUE) return undefined;
     const series = queueSeries(req.subject.id, req.keys, now);
     return series.length ? { series } : undefined;
   },
-  listMlEvents: (req, now) => {
+  events: (req, now) => {
     if (!req.subject || ![MlSubjectKind.ORG, MlSubjectKind.QUEUE, MlSubjectKind.WORKLOAD].includes(req.subject.kind)) return undefined;
     const events = eventsFor(req.subject, now).filter((e) => req.kinds.length === 0 || req.kinds.includes(e.kind));
     return events.length ? { events } : undefined;

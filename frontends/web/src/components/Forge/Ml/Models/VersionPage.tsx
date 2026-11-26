@@ -37,6 +37,7 @@ import {
   SubjectLink,
   tsMs,
   useMl,
+  useMlEvents,
 } from "../kit";
 import { LineageGraph } from "./LineageGraph";
 import { useRunNames } from "./ModelPage";
@@ -45,7 +46,7 @@ import { AliasHistory, GateChecks, VersionLink } from "./parts";
 
 /** The version's events (registration, alias moves), newest first, with the hook each emits. */
 function VersionEvents({ versionId, now }: { versionId: string; now: number }) {
-  const q = useMl("listMlEvents", { subject: { kind: MlSubjectKind.MODEL_VERSION, id: versionId } });
+  const q = useMlEvents({ kind: MlSubjectKind.MODEL_VERSION, id: versionId }, { range: "30d" });
   return (
     <MlRead query={q} what="events">
       {(d) =>

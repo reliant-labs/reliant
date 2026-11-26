@@ -46,8 +46,11 @@ import {
   Sparkline,
   StatusDot,
   SubjectLink,
+  relabel,
   tsMs,
   useMl,
+  useMlEvents,
+  useMlSeries,
   type MlColumn,
 } from "../kit";
 import { byGroup, fieldOf, fmtField, groupFields, nvlinkMatrix, nvlinkTone } from "./fleetModel";
@@ -64,17 +67,23 @@ export function NodePage({ nodeId, node }: { nodeId: string; cluster: string; no
   );
 }
 
+const DEVICE_KEYS = ["gpu.util", "gpu.sm_active", "gpu.temp_c", "gpu.power_w", "gpu.sm_clock_mhz", "gpu.nvlink_tx_gbps"];
+const HOST_KEYS = ["host.cpu", "host.mem", "host.psi_cpu", "host.psi_io", "host.net_rx", "ib.xmit_gbps"];
+
 function NodeBody({ data, name }: { data: GetMlNodeResponse; name: string }) {
   const n = data.node!;
-  const h = healthOf(n.health);
+  const h = healthOf(n.healthState);
   const subject = { kind: MlSubjectKind.NODE, id: n.id };
   const [cluster, poolName] = n.poolId.split("/");
   const fleet = dataOf(useMl("getMlFleet", { clusterId: n.clusterId }));
   const findings = new Map((fleet?.unhealthy ?? []).filter((u) => u.nodeId === n.id && u.findingId).map((u) => [u.subject?.id ?? "", u.findingId]));
   const nodeFinding = findings.get(n.id) ?? [...findings.values()][0];
-  const series = useMl("queryMlSeries", { subject, keys: ["gpu.util", "gpu.sm_active", "gpu.temp_c", "gpu.power_w", "gpu.sm_clock_mhz", "gpu.nvlink_tx_gbps"], groupBy: "device" });
-  const host = useMl("queryMlSeries", { subject, keys: ["host.cpu", "host.mem", "host.psi_cpu", "host.psi_io", "host.net_rx", "ib.xmit_gbps"] });
-  const events = dataOf(useMl("listMlEvents", { subject, kinds: [] }))?.events ?? [];
+  const byDevice = useMlSeries(subject, DEVICE_KEYS, { groupBy: "device" });
+  // The device dimension is the GPU's UUID; the page names a GPU by its index.
+  const gpuNames = new Map(n.devices.map((d) => [d.uuid, `GPU ${d.index}`]));
+  const series = { ...byDevice, data: byDevice.data?.kind === "ok" ? { kind: "ok" as const, data: { series: relabel(byDevice.data.data.series, gpuNames) } } : byDevice.data };
+  const host = useMlSeries(subject, HOST_KEYS);
+  const events = dataOf(useMlEvents(subject))?.events ?? [];
   const nowMs = Date.now();
   const product = n.devices[0]?.product.replace("NVIDIA ", "") ?? "";
   const power = n.devices.reduce((a, d) => a + (Number.isFinite(d.powerW) ? d.powerW : 0), 0);

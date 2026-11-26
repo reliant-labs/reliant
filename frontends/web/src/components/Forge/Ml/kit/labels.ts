@@ -25,6 +25,7 @@ import {
   MlReleaseVerdict,
   MlRunBadge,
   MlRunState,
+  MlFindingSeverity,
   MlSeverity,
   MlSubjectKind,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
@@ -40,14 +41,17 @@ function table<E extends number>(rows: Partial<Record<E, ToneLabel>>): (value: E
   return (value) => rows[value] ?? { label: "unknown", tone: "neutral" };
 }
 
-export const severityOf = table<MlSeverity>({
+/** A severity: an event's (MlSeverity) or a finding's (MlFindingSeverity, the same values). */
+export type AnySeverity = MlSeverity | MlFindingSeverity;
+
+export const severityOf = table<AnySeverity>({
   [MlSeverity.CRITICAL]: { label: "Critical", tone: "danger" },
   [MlSeverity.WARNING]: { label: "Warning", tone: "warning" },
   [MlSeverity.INFO]: { label: "Info", tone: "neutral" },
 });
 
 /** Worst first: a sort key for severities. */
-export const severityRank = (s: MlSeverity): number => (s === MlSeverity.CRITICAL ? 0 : s === MlSeverity.WARNING ? 1 : s === MlSeverity.INFO ? 2 : 3);
+export const severityRank = (s: AnySeverity): number => (s === MlSeverity.CRITICAL || s === MlFindingSeverity.CRITICAL ? 0 : s === MlSeverity.WARNING || s === MlFindingSeverity.WARNING ? 1 : s === MlSeverity.INFO || s === MlFindingSeverity.INFO ? 2 : 3);
 
 export const healthOf = table<MlHealth>({
   [MlHealth.HEALTHY]: { label: "Healthy", tone: "success" },

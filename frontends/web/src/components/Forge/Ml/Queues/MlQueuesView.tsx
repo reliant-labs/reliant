@@ -12,7 +12,7 @@
 
 import type { ReactNode } from "react";
 
-import { MlAxis, MlSubjectKind, type GetMlQueuesResponse, type MlPendingWorkload, type MlPreemption, type MlSubject } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlSubjectKind, type GetMlQueuesResponse, type MlPendingWorkload, type MlPreemption, type MlSubject } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { cn } from "@/lib/utils";
 
 import { MlFrame, MlRead } from "../MlParts";
@@ -39,6 +39,8 @@ import {
   tail,
   tsMs,
   useMl,
+  useMlEvents,
+  useMlSeries,
   useMlSearch,
   type MlColumn,
 } from "../kit";
@@ -224,10 +226,12 @@ function WorkLink({ subject }: { subject?: MlSubject }) {
   );
 }
 
+const QUEUE_KEYS = ["queue.demand_gpus", "queue.wait_p95"];
+
 function QueueCharts({ queueId, name }: { queueId: string; name: string }) {
   const subject = { kind: MlSubjectKind.QUEUE, id: queueId, label: name };
-  const series = useMl("queryMlSeries", { subject, keys: ["queue.demand_gpus", "queue.wait_p95"], axis: MlAxis.TIME });
-  const events = useMl("listMlEvents", { subject });
+  const series = useMlSeries(subject, QUEUE_KEYS, { range: "7d" });
+  const events = useMlEvents(subject, { range: "7d" });
   const evs = events.data?.kind === "ok" ? events.data.data.events : [];
   return (
     <MlRead query={series} what="queue history">
@@ -248,7 +252,7 @@ function QueueCharts({ queueId, name }: { queueId: string; name: string }) {
 function WhyItWaits({ workload, queueName }: { workload: MlPendingWorkload; queueName: string }) {
   const now = Date.now();
   const kind = workload.subject?.kind ?? MlSubjectKind.WORKLOAD;
-  const events = useMl("listMlEvents", { subject: { kind: MlSubjectKind.WORKLOAD, id: kind === MlSubjectKind.WORKLOAD ? (workload.subject?.id ?? workload.name) : workload.name, label: workload.name } });
+  const events = useMlEvents({ kind: MlSubjectKind.WORKLOAD, id: kind === MlSubjectKind.WORKLOAD ? (workload.subject?.id ?? workload.name) : workload.name }, { range: "7d" });
   const evs = events.data?.kind === "ok" ? events.data.data.events : [];
   const r = pendingReasonOf(workload.reason);
   return (

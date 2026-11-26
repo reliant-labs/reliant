@@ -4,11 +4,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { MlEarlyAccessService, MlReleaseVerdict, MlSubjectKind, type GetMlInferenceServiceResponse, type ListMlInferenceServicesResponse, type ListMlTracesResponse, type QueryMlSeriesResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlEarlyAccessService, MlReleaseVerdict, MlSubjectKind, type GetMlInferenceServiceResponse, type ListMlInferenceServicesResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { answerMl } from "@/fixtures/shop/handlers/ml";
+import { mlObs } from "@/fixtures/shop/model/ml/__tests__/mlObs";
 import { REVISIONS, SERVICES } from "@/fixtures/shop/model/ml/world";
 
-import { armDeltaLabel, armMetricRows, armVerdict, byKey, deltaTone, filterTraces, fmtDelta, heatmapRows, notApplicable, orderRevisions, relDelta, servicesKpis, sloTone, traceBuckets } from "../inferenceModel";
+import { armDeltaLabel, armMetricRows, armVerdict, byKey, deltaTone, fmtDelta, heatmapRows, notApplicable, orderRevisions, relDelta, servicesKpis, sloTone } from "../inferenceModel";
 
 const NOW = Date.UTC(2026, 10, 26, 15, 30);
 const method = (name: string) => MlEarlyAccessService.methods.find((m) => m.localName === name)!;
@@ -68,8 +69,8 @@ describe("inferenceModel", () => {
     expect(armMetricRows(undefined)).toEqual([]);
   });
 
-  it("heatmapRows averages per-replica KV into quarter-hours and flags the hot replica", () => {
-    const res = ask<QueryMlSeriesResponse>("queryMlSeries", { subject: { kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id }, keys: ["engine.kv_cache_ratio"], groupBy: "replica" });
+  it("heatmapRows averages per-replica KV into quarter-hours and flags the hot replica", async () => {
+    const res = { series: await mlObs(NOW).series({ kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id }, ["engine.kv_cache_ratio"], { groupBy: "replica" }) };
     const { rows, columns } = heatmapRows(res.series, 3, undefined, (s) => Math.max(...s.y.filter(Number.isFinite)) >= 0.9);
     expect(rows).toHaveLength(4);
     expect(columns.length).toBe(Math.ceil(res.series[0].x.length / 3));
@@ -78,18 +79,10 @@ describe("inferenceModel", () => {
     expect(rows.find((r) => r.label === "vllm-2")!.cells.some((c) => c === null)).toBe(true);
   });
 
-  it("notApplicable names why the reranker has no TTFT", () => {
-    const res = ask<QueryMlSeriesResponse>("queryMlSeries", { subject: { kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.reranker.id }, keys: ["serve.ttft", "serve.e2e"] });
-    expect(notApplicable(byKey(res.series, "serve.ttft"))).toMatch(/no token generation/);
-    expect(notApplicable(byKey(res.series, "serve.e2e"))).toBeNull();
+  it("notApplicable names why the reranker has no TTFT", async () => {
+    const series = await mlObs(NOW).series({ kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.reranker.id }, ["serve.ttft", "serve.e2e"], { stats: ["p50", "p95", "p99"] });
+    expect(notApplicable(byKey(series, "serve.ttft"))).toMatch(/no token generation/);
+    expect(notApplicable(byKey(series, "serve.e2e"))).toBeNull();
   });
 
-  it("buckets slow requests and filters by bucket", () => {
-    const { traces } = ask<ListMlTracesResponse>("listMlTraces", { subject: { kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id } });
-    const buckets = traceBuckets(traces);
-    expect(buckets.reduce((s, b) => s + b.count, 0)).toBe(traces.length);
-    const b = buckets[0].bucket;
-    expect(filterTraces(traces, b).every((t) => t.attributes.bucket === b)).toBe(true);
-    expect(filterTraces(traces, "nope")).toHaveLength(traces.length);
-  });
 });

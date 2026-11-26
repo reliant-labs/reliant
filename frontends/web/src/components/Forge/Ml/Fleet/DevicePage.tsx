@@ -26,6 +26,8 @@ import {
   tail,
   tsMs,
   useMl,
+  useMlEvents,
+  useMlSeries,
 } from "../kit";
 import { fieldOf, fmtField, groupFields } from "./fleetModel";
 import { dataOf, FieldTable, WorkloadGantt } from "./parts";
@@ -46,6 +48,8 @@ const CHARTS: { title: string; keys: string[] }[] = [
   { title: "NVLink CRC flit errors", keys: ["gpu.nvlink_crc"] },
 ];
 
+const CHART_KEYS = CHARTS.flatMap((c) => c.keys);
+
 export function DevicePage({ uuid }: { uuid: string }) {
   const q = useMl("getMlDevice", { uuid });
   return (
@@ -59,8 +63,8 @@ function DeviceBody({ data }: { data: GetMlDeviceResponse }) {
   const d = data.device!;
   const subject = { kind: MlSubjectKind.DEVICE, id: d.uuid };
   const [cluster, nodeName] = d.nodeId.split("/");
-  const series = useMl("queryMlSeries", { subject, keys: CHARTS.flatMap((c) => c.keys) });
-  const events = dataOf(useMl("listMlEvents", { subject, kinds: [] }))?.events ?? [];
+  const series = useMlSeries(subject, CHART_KEYS);
+  const events = dataOf(useMlEvents(subject))?.events ?? [];
   const h = healthOf(d.health);
   const nowMs = Date.now();
   const value = (key: string) => {

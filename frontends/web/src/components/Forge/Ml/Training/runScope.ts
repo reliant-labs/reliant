@@ -10,7 +10,11 @@
 
 import { MlSubjectKind, type GetMlRunResponse, type MlAttempt, type MlPhase, type MlRun, type MlSubject } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
+import type { RangePreset } from "@/services/controlPlane/observability/window";
+
 import { attemptId, phaseId, rankId } from "../kit/ids";
+import { tsMs } from "../kit/format";
+import { rangeSince } from "../kit/telemetry";
 
 export interface RunScope {
   detail: GetMlRunResponse;
@@ -37,4 +41,9 @@ export function runScopeOf(detail: GetMlRunResponse, phaseKey: string | undefine
   if (phase && attempt) subject = { kind: MlSubjectKind.ATTEMPT, id: attemptId(run.id, phase.key, attempt.n), label: `${phase.key} attempt ${attempt.n}` };
   if (phase && attempt && r !== null) subject = { kind: MlSubjectKind.RANK, id: rankId(run.id, phase.key, attempt.n, r), label: `rank ${r}` };
   return { detail, run, phase, attempt, rank: r, phaseScoped: !!phaseKey && phase?.key === phaseKey, subject };
+}
+
+/** The window a tab's telemetry reads: everything since the scope's attempt (else phase, else run) started. */
+export function scopeRange(scope: Pick<RunScope, "run" | "phase" | "attempt">): RangePreset {
+  return rangeSince(tsMs(scope.attempt?.runningAt) ?? tsMs(scope.phase?.startedAt) ?? tsMs(scope.run.startedAt) ?? tsMs(scope.run.createdAt));
 }

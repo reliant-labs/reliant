@@ -2,8 +2,9 @@
 
 /**
  * The ML fixture world's Evals: ListMlEvalSuites, GetMlEvalMatrix,
- * ListMlEvalRuns, GetMlEvalRun, ListMlEvalSamples, and ListMlEvents for
- * EVAL_RUN subjects (plus the org's "eval finished" items).
+ * ListMlEvalRuns, GetMlEvalRun, ListMlEvalSamples, and the events of
+ * EVAL_RUN subjects (plus the org's "eval finished" items), which
+ * ./telemetry.ts serves through ObservabilityService.
  *
  * Every score is curves.ts evalScore(task, subject), so the matrix cell, the
  * eval run's result and the score-vs-step point for a checkpoint agree.
@@ -30,6 +31,7 @@ import { MlEventKind, MlSeverity, MlSubjectKind } from "@/gen/controlplane/servi
 
 import { EVAL_SAMPLES, evalScore, evalStderr, type EvalTask } from "./curves";
 import type { MlDomain } from "./domain";
+import type { MlTelemetryDomain } from "./telemetryTypes";
 import {
   at,
   checkpointId,
@@ -949,7 +951,7 @@ const fmtDelta = (d: number) => `${d >= 0 ? "+" : "−"}${Math.abs(d * 100).toFi
 
 type EventsReq = { subject?: { kind: MlSubjectKind; id: string }; from?: { seconds: bigint }; to?: { seconds: bigint }; kinds: MlEventKind[]; limit?: number };
 
-/** Applies a ListMlEvents request's window, kinds and limit (newest first). */
+/** Applies an events query's window, kinds and limit (newest first). */
 export function filterEvents<E extends { at: { seconds: bigint }; kind: MlEventKind }>(events: E[], req: EventsReq): E[] {
   const from = req.from ? Number(req.from.seconds) : -Infinity;
   const to = req.to ? Number(req.to.seconds) : Infinity;
@@ -984,5 +986,9 @@ export const evalsAnswers: MlDomain = {
     return def ? { evalRun: runInit(def, now) } : undefined;
   },
   listMlEvalSamples: (req) => samples(req),
-  listMlEvents: (req, now) => events(req, now),
+};
+
+/** The eval runs' events (eval-periodic per checkpoint), served by ./telemetry.ts. */
+export const evalsTelemetry: MlTelemetryDomain = {
+  events: (req, now) => events(req, now),
 };

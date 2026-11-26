@@ -52,6 +52,7 @@ import { securityHandlers } from "./handlers/security";
 import { withSpeedInsights } from "./handlers/speedInsights";
 import { storageScenarioHandlers } from "./handlers/storage";
 import { testsHandlers } from "./handlers/tests";
+import { withMlTelemetry } from "./model/ml/telemetry";
 import { createShopApi } from "./model/shopApi";
 import { demoNow, pinClock } from "./shopStory";
 
@@ -85,7 +86,8 @@ export interface ShopScenarioOptions {
  * story's, for the scope's app, by default).
  */
 export function shopScenario(fixtures?: ObservabilityApi, { scope = DEMO_SCOPE, idPrefix = "" }: ShopScenarioOptions = {}): MockScenario {
-  const story = fixtures ?? createShopApi(undefined, scope.app);
+  // The ML world's telemetry rides the same observability handlers: an ML-scoped read is the world's (model/ml/telemetry.ts).
+  const story = withMlTelemetry(fixtures ?? createShopApi(undefined, scope.app), demoNow);
   // Dispatch, most specific first: the tour's encoded observability reads, the console's story
   // (handlers/console.ts: Releases, Environments, Secrets, Domains, Activity; config, inventory,
   // storage), then forge's generated defaults for every other read of the console's services

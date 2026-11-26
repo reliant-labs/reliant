@@ -4,13 +4,13 @@ import "@/components/Forge/Ml/__tests__/jsdomShims";
 import { create } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { ListMlFindingsResponseSchema, MlFindingCategory, MlFindingSchema, MlSeverity } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { ListMlFindingsResponseSchema, MlFindingCategory, MlFindingSchema, MlFindingSeverity } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { findingsAnswers } from "@/fixtures/shop/model/ml/findings";
 import { FINDINGS } from "@/fixtures/shop/model/ml/world";
 
 import { filterFindings, groupFindings, inboxKpis, parseDiff, parseFilter, prNumber, serializeFilter, sortFindings } from "../recsModel";
 
-const finding = (id: string, category: MlFindingCategory, severity: MlSeverity, usd: number, gpuH = 0) => create(MlFindingSchema, { id, category, severity, title: id, state: 1, impact: { usdPerDay: usd, gpuHoursPerDay: gpuH } });
+const finding = (id: string, category: MlFindingCategory, severity: MlFindingSeverity, usd: number, gpuH = 0) => create(MlFindingSchema, { id, category, severity, title: id, state: 1, impact: { usdPerDay: usd, gpuHoursPerDay: gpuH } });
 
 describe("recsModel", () => {
   it("round-trips the URL filter and ignores junk", () => {
@@ -21,14 +21,14 @@ describe("recsModel", () => {
   });
 
   it("sorts by money, GPU-hours, then severity", () => {
-    const xs = [finding("a", 1, MlSeverity.INFO, 0), finding("b", 2, MlSeverity.WARNING, 47), finding("c", 1, MlSeverity.CRITICAL, 0), finding("d", 5, MlSeverity.WARNING, 657, 230), finding("e", 2, MlSeverity.WARNING, 0, 10)];
+    const xs = [finding("a", 1, MlFindingSeverity.INFO, 0), finding("b", 2, MlFindingSeverity.WARNING, 47), finding("c", 1, MlFindingSeverity.CRITICAL, 0), finding("d", 5, MlFindingSeverity.WARNING, 657, 230), finding("e", 2, MlFindingSeverity.WARNING, 0, 10)];
     expect(sortFindings(xs, "impact").map((f) => f.id)).toEqual(["d", "b", "e", "c", "a"]);
     expect(sortFindings(xs, "severity")[0].id).toBe("c");
   });
 
   it("groups by category by money, with coverage folded last", () => {
     const xs = sortFindings(
-      [finding("h", MlFindingCategory.HEALTH, MlSeverity.CRITICAL, 547), finding("w", MlFindingCategory.WASTE, MlSeverity.WARNING, 47), finding("cov1", MlFindingCategory.COVERAGE, MlSeverity.INFO, 0), finding("t", MlFindingCategory.TRAINING_EFFICIENCY, MlSeverity.WARNING, 657), finding("cov2", MlFindingCategory.COVERAGE, MlSeverity.INFO, 0)],
+      [finding("h", MlFindingCategory.HEALTH, MlFindingSeverity.CRITICAL, 547), finding("w", MlFindingCategory.WASTE, MlFindingSeverity.WARNING, 47), finding("cov1", MlFindingCategory.COVERAGE, MlFindingSeverity.INFO, 0), finding("t", MlFindingCategory.TRAINING_EFFICIENCY, MlFindingSeverity.WARNING, 657), finding("cov2", MlFindingCategory.COVERAGE, MlFindingSeverity.INFO, 0)],
       "impact",
     );
     const groups = groupFindings(xs, "category");
