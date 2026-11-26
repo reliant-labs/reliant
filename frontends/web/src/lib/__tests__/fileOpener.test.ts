@@ -42,7 +42,7 @@ function holdWorktrees(state: { worktrees: Partial<Worktree>[]; currentWorktree:
     currentWorktree: state.currentWorktree ? { project_id: 'proj-1', ...state.currentWorktree } : null,
   });
 }
-import type { ParsedFilePath } from '../filePath';
+import { parseFilePath, type ParsedFilePath } from '../filePath';
 
 describe('classifyPath', () => {
   // Test fixtures
@@ -213,6 +213,22 @@ describe('classifyPath', () => {
       expect(result.isClickable).toBe(true);
       expect(result.tooltipMessage).toContain('/home/user/notes/todo.md');
       expect(result.tooltipMessage).toContain('read-only');
+    });
+
+    // Agents write outside the project (~/.reliant/scratch/<chat>, /tmp): the
+    // owner could not open those files. A scratch path is absolute (the server
+    // expands "~" on the machine), never joined onto the workspace.
+    it.each([
+      '/tmp/report.csv',
+      '~/.reliant/scratch/chat-1/notes.md',
+      '~/.reliant/uploads/chat-1/data.xlsx',
+    ])('opens %s, a file outside the project, through the viewer', (raw) => {
+      holdWorktrees({ worktrees: [{ id: 'wt-1', path: '/home/user/my-project' }], currentWorktree: { id: 'wt-1', path: '/home/user/my-project' } });
+      const parsed = parseFilePath(raw);
+      expect(parsed?.isAbsolute).toBe(true);
+      const result = classifyPath(parsed);
+      expect(result.classification).toBe('external');
+      expect(result.isClickable).toBe(true);
     });
 
     it('explains an unresolvable relative path rather than calling it external', () => {

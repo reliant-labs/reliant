@@ -30,6 +30,15 @@ A file browser for exploring and managing project files with syntax-highlighted 
 - Deep search across all files and folders
 - Auto-expand folders containing matches
 
+### Machine and Chat scratch scopes
+- A scope switcher above the tree: **Project** (the project or worktree tree), **Scratch**
+  (this chat's `~/.reliant/scratch/<chat>`), **Machine** (the whole machine that holds the
+  workspace, from the home directory up to `/`)
+- The machine-wide scopes (`MachineBrowser.tsx`, `ListMachineDirectory`) are read-only: a
+  file opens in the viewer or downloads by its absolute path; credential stores are refused
+- "Reveal in Machine View" on a tree entry, and the arrow beside the switcher, pop out of the
+  project to the folder that holds it; "Go to path…" opens any pasted path
+
 ### Breadcrumb Navigation
 - Shows current path with clickable segments
 - Home button to return to root

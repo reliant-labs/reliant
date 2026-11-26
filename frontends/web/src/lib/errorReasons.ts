@@ -61,6 +61,10 @@ export const ERROR_REASONS = [
   "approval_not_pending",
   /** The operator turned the forge rpc surface off (internal/grpc/forge_api_disabled.go). */
   "forge_api_disabled",
+  /** ListMachineDirectory on a machine whose daemon predates it; updating Reliant there fixes it (handlers/file_system). FailedPrecondition. */
+  "machine_browse_unsupported",
+  /** ListMachineDirectory on a path that is a file; open it instead (handlers/file_system). FailedPrecondition. */
+  "not_a_directory",
   // ── reliant: client version floor (internal/errreason.UpgradeRequired) ──
   /** This app is older than the minimum the server serves; it must reload or update. FailedPrecondition. */
   "upgrade_required",

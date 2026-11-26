@@ -38,6 +38,19 @@ describe('parseFilePath', () => {
     expect(result?.isAbsolute).toBe(false);
   });
 
+  it('parses a path in the home directory as absolute', () => {
+    const result = parseFilePath('~/.reliant/scratch/c1/notes.md:12');
+    expect(result?.path).toBe('~/.reliant/scratch/c1/notes.md');
+    expect(result?.line).toBe(12);
+    expect(result?.isAbsolute).toBe(true);
+  });
+
+  it('parses the data and media files agents write', () => {
+    for (const p of ['/tmp/report.csv', '/tmp/chart.png', '/tmp/out.pdf', '/tmp/data.xlsx', '/tmp/run.log']) {
+      expect(parseFilePath(p)?.path).toBe(p);
+    }
+  });
+
   it('should return null for invalid extension', () => {
     const result = parseFilePath('/path/to/file.xyz');
     expect(result).toBeNull();
@@ -55,6 +68,11 @@ describe('detectFilePaths', () => {
     const results = detectFilePaths(text);
     expect(results).toHaveLength(1);
     expect(results[0].parsed.path).toBe('/src/components/App.tsx');
+  });
+
+  it('detects a scratch path in the home directory whole', () => {
+    const results = detectFilePaths('Wrote ~/.reliant/scratch/c1/summary.md and /tmp/out.csv');
+    expect(results.map(r => r.parsed.path)).toEqual(['~/.reliant/scratch/c1/summary.md', '/tmp/out.csv']);
   });
 
   it('should detect relative paths in text', () => {
