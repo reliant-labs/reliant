@@ -64,7 +64,7 @@ func TestBuilderTestRunIsNotListedInSidebar(t *testing.T) {
 	}
 
 	project := "test-project"
-	chats, err := repo.ListChats(ctx, ChatFilters{UserID: "test-user", ProjectID: &project, Limit: 100, SidebarOnly: true})
+	chats, err := store.ListChats(ctx, repo.ORM(), ChatFilters{UserID: "test-user", ProjectID: &project, Limit: 100, SidebarOnly: true})
 	require.NoError(t, err)
 	got := map[string]bool{}
 	for _, c := range chats {

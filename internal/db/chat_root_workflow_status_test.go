@@ -105,7 +105,7 @@ func TestChatReadsCarryRootWorkflowStatus(t *testing.T) {
 
 	t.Run("ListChats", func(t *testing.T) {
 		projectID := "test-project"
-		chats, err := repo.ListChats(ctx, ChatFilters{
+		chats, err := store.ListChats(ctx, repo.ORM(), ChatFilters{
 			UserID:    "test-user",
 			ProjectID: &projectID,
 			Limit:     100,
@@ -127,7 +127,7 @@ func TestChatReadsCarryRootWorkflowStatus(t *testing.T) {
 	})
 
 	t.Run("SearchChats", func(t *testing.T) {
-		chats, err := repo.SearchChats(ctx, ChatSearchFilters{
+		chats, err := store.SearchChats(ctx, repo.ORM(), ChatSearchFilters{
 			UserID:      "test-user",
 			ProjectID:   "test-project",
 			SearchQuery: "root status chat",

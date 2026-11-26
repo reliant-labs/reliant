@@ -132,7 +132,7 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	}
 
 	// Baseline: chats that exist before the branch attempt.
-	before, err := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})
+	before, err := store.ListChats(ctx, repo.ORM(), db.ChatFilters{ProjectID: &projectID})
 	require.NoError(t, err)
 	beforeCount := len(before)
 
@@ -142,7 +142,7 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	}))
 	require.Error(t, branchErr, "BranchChat must fail when the trailing chat_created write fails")
 
-	after, err := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})
+	after, err := store.ListChats(ctx, repo.ORM(), db.ChatFilters{ProjectID: &projectID})
 	require.NoError(t, err)
 	require.Len(t, after, beforeCount, "no orphan branch chat row should survive a failed transaction")
 

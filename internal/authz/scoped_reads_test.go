@@ -51,8 +51,6 @@ var userScopedReads = map[string]string{
 	// Deprecated forwarders still decide visibility through workflowdrafts.
 	"ListWorkflowDraftsByUser": readRepoChecks,
 
-	"ListArchivedChats":        readCallersFilter,
-	"ListChats":                readCallersFilter,
 	"ListMainWorktreesForUser": readCallersFilter,
 	"ListProjects":             readCallersFilter,
 	"ListRuns":                 readCallersFilter,
@@ -75,7 +73,6 @@ var userScopedReads = map[string]string{
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
 	"ListAttentionIncidents":       readCallersFilter,
-	"SearchChats":                  readCallersFilter,
 	"GetUserUpdatesSince":          readCallersFilter,
 	"GetProjectByPathAndUser":      readCallersFilter,
 	"GetProjectByRemoteURLAndUser": readCallersFilter,

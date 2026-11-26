@@ -262,7 +262,7 @@ nodes:
 	require.Equal(t, mainWorktreeID, resp.Msg.GetChat().GetWorktreeId(),
 		"the response must report the resolved worktree")
 
-	chats, listErr := repo.ListChats(ctx, db.ChatFilters{
+	chats, listErr := store.ListChats(ctx, repo.ORM(), db.ChatFilters{
 		UserID:    "test-user",
 		ProjectID: &projectID,
 		Limit:     10,

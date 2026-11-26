@@ -559,7 +559,7 @@ func startNamed(e *startDaemonEnv, t *testing.T, content, id string) (*connect.R
 
 func countChats(t *testing.T, e *startDaemonEnv) int {
 	t.Helper()
-	chats, err := e.repo.ListChats(e.ctx, db.ChatFilters{UserID: "test-user", Limit: 100})
+	chats, err := store.ListChats(e.ctx, e.repo.ORM(), db.ChatFilters{UserID: "test-user", Limit: 100})
 	require.NoError(t, err)
 	return len(chats)
 }

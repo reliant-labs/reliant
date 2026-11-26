@@ -86,7 +86,7 @@ func (f *deleteFixture) listed(t *testing.T) (projects, chats bool) {
 	t.Helper()
 	ps, err := f.repo.ListProjects(f.ctx, ProjectFilters{UserID: f.owner})
 	require.NoError(t, err)
-	cs, err := f.repo.ListChats(f.ctx, ChatFilters{UserID: f.owner, Limit: 100})
+	cs, err := store.ListChats(f.ctx, f.repo.ORM(), ChatFilters{UserID: f.owner, Limit: 100})
 	require.NoError(t, err)
 	return len(ps) == 1, len(cs) == 1
 }

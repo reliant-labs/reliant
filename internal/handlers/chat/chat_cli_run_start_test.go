@@ -52,7 +52,7 @@ func TestStartChat_CLIRunRecordsCLIRunKindOutOfTheSidebar(t *testing.T) {
 	assert.Equal(t, "cicd-probe · inventory the machine", chat.Title,
 		"named for the workflow and the message's first line, not generated")
 
-	sidebar, err := f.repo.ListChats(f.ctx, db.ChatFilters{UserID: "test-user", ProjectID: &f.projectID, Limit: 100, SidebarOnly: true})
+	sidebar, err := store.ListChats(f.ctx, f.repo.ORM(), db.ChatFilters{UserID: "test-user", ProjectID: &f.projectID, Limit: 100, SidebarOnly: true})
 	require.NoError(t, err)
 	for _, c := range sidebar {
 		assert.NotEqual(t, chatID, c.ID, "a command-line run is not a sidebar chat")
@@ -99,7 +99,7 @@ func TestStartChat_CLIRunRefusesAChatIDOrBuilderTest(t *testing.T) {
 		})
 	}
 
-	chats, err := f.repo.ListChats(f.ctx, db.ChatFilters{ProjectID: &f.projectID})
+	chats, err := store.ListChats(f.ctx, f.repo.ORM(), db.ChatFilters{ProjectID: &f.projectID})
 	require.NoError(t, err)
 	assert.Empty(t, chats)
 }

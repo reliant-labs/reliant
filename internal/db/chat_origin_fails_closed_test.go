@@ -113,13 +113,13 @@ func TestUnrecordedOriginFailsClosed(t *testing.T) {
 		"an insert that does not name origin stores NULL, not USER")
 
 	project := "test-project"
-	sidebar, err := repo.ListChats(ctx, ChatFilters{UserID: "test-user", ProjectID: &project, Limit: 100, SidebarOnly: true})
+	sidebar, err := store.ListChats(ctx, repo.ORM(), ChatFilters{UserID: "test-user", ProjectID: &project, Limit: 100, SidebarOnly: true})
 	require.NoError(t, err)
 	listed := map[string]bool{}
 	for _, c := range sidebar {
 		listed[c.ID] = true
 	}
-	searched, err := repo.SearchChats(ctx, ChatSearchFilters{UserID: "test-user", SearchQuery: "run", Limit: 100})
+	searched, err := store.SearchChats(ctx, repo.ORM(), ChatSearchFilters{UserID: "test-user", SearchQuery: "run", Limit: 100})
 	require.NoError(t, err)
 	found := map[string]bool{}
 	for _, c := range searched {
@@ -145,7 +145,7 @@ func TestUnrecordedOriginFailsClosed(t *testing.T) {
 	// Archived runs stay out of the Archived tab too.
 	require.NoError(t, repo.UpdateChatState(ctx, "old-"+string(core.TriggerEventKindSchedule), ChatStateArchived, ""))
 	require.NoError(t, repo.UpdateChatState(ctx, "old-"+string(core.TriggerEventKindChatStart), ChatStateArchived, ""))
-	archived, _, err := repo.ListArchivedChats(ctx, "test-user", nil, ArchivedChatPage{})
+	archived, _, err := store.ListArchivedChats(ctx, repo.ORM(), "test-user", nil, ArchivedChatPage{})
 	require.NoError(t, err)
 	archivedIDs := map[string]bool{}
 	for _, a := range archived {

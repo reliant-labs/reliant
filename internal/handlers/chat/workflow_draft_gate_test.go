@@ -59,7 +59,7 @@ nodes:
 		}))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "is a draft")
-		chats, listErr := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})
+		chats, listErr := store.ListChats(ctx, repo.ORM(), db.ChatFilters{ProjectID: &projectID})
 		require.NoError(t, listErr)
 		assert.Empty(t, chats, "no chat is created for a draft workflow")
 	})

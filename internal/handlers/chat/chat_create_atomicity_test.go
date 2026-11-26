@@ -146,7 +146,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	require.True(t, failingRepo.injected, "StartChat must fail on the injected chat_created write, not before it: %v", err)
 
 	// No chat row should have been committed.
-	chats, listErr := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})
+	chats, listErr := store.ListChats(ctx, repo.ORM(), db.ChatFilters{ProjectID: &projectID})
 	require.NoError(t, listErr)
 	require.Empty(t, chats, "no orphan chat row should survive a failed transaction")
 

@@ -72,14 +72,14 @@ func TestStartChat_AppName(t *testing.T) {
 		assert.Nil(t, stored.AppName, name)
 	}
 
-	before, err := f.repo.ListChats(f.ctx, db.ChatFilters{UserID: "test-user", Limit: 100})
+	before, err := store.ListChats(f.ctx, f.repo.ORM(), db.ChatFilters{UserID: "test-user", Limit: 100})
 	require.NoError(t, err)
 	for _, bad := range []string{"9lives", "my app", "a/b", strings.Repeat("a", 129)} {
 		_, err := start(ptr.Of(bad))
 		require.Error(t, err, bad)
 		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "%q: %v", bad, err)
 	}
-	after, err := f.repo.ListChats(f.ctx, db.ChatFilters{UserID: "test-user", Limit: 100})
+	after, err := store.ListChats(f.ctx, f.repo.ORM(), db.ChatFilters{UserID: "test-user", Limit: 100})
 	require.NoError(t, err)
 	assert.Len(t, after, len(before), "a refused start creates no chat")
 }

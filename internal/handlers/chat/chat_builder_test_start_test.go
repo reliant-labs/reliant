@@ -176,7 +176,7 @@ func TestStartChat_BuilderTestRequiresAnOwnedSavedDraft(t *testing.T) {
 		})
 	}
 
-	chats, err := f.repo.ListChats(f.ctx, db.ChatFilters{ProjectID: &f.projectID})
+	chats, err := store.ListChats(f.ctx, f.repo.ORM(), db.ChatFilters{ProjectID: &f.projectID})
 	require.NoError(t, err)
 	assert.Empty(t, chats, "a rejected test run creates no chat")
 }

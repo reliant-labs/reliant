@@ -46,14 +46,6 @@ func (r *Repo) ListWorktreeIDsWithRunningChat(ctx context.Context, worktreeIDs [
 	return store.ListWorktreeIDsWithRunningChat(ctx, r.ORM(), worktreeIDs)
 }
 
-func (r *Repo) ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error) {
-	return store.ListChats(ctx, r.ORM(), filters)
-}
-
-func (r *Repo) SearchChats(ctx context.Context, filters ChatSearchFilters) ([]*Chat, error) {
-	return store.SearchChats(ctx, r.ORM(), filters)
-}
-
 func (r *Repo) UpdateChat(ctx context.Context, chat *Chat) error {
 	if chat == nil {
 		return fmt.Errorf("chat cannot be nil")
@@ -69,12 +61,6 @@ func (r *Repo) DeleteChat(ctx context.Context, id string) error {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
 	return store.RemoveChat(ctx, r.ORM(), id)
-}
-
-// ListArchivedChats lists the user's archived chats, a page of them when
-// page.Limit is set; the bool says whether more follow.
-func (r *Repo) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page ArchivedChatPage) ([]*ArchivedChatInfo, bool, error) {
-	return store.ListArchivedChats(ctx, r.ORM(), userID, org, page)
 }
 
 // ListRuns is the cross-cutting run list, scoped to filters.UserID.
@@ -813,18 +799,6 @@ func (r *Repo) ListContentBlocksForMessages(ctx context.Context, messageIDs []st
 		return []*MessageContentBlock{}, nil
 	}
 	return store.ListContentBlocksForMessages(ctx, r.ORM(), messageIDs)
-}
-
-// ListContentBlocksByIDs reads blocks by primary key, in one query. An id no
-// row holds is absent from the result.
-func (r *Repo) ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*MessageContentBlock, error) {
-	return store.ListContentBlocksByIDs(ctx, r.ORM(), ids)
-}
-
-// ListMessagesByIDs reads messages by primary key, in one query. An id no
-// row holds is absent from the result.
-func (r *Repo) ListMessagesByIDs(ctx context.Context, ids []string) ([]*Message, error) {
-	return store.ListMessagesByIDs(ctx, r.ORM(), ids)
 }
 
 // DeleteMessage deletes a message and cascades to content blocks (ON DELETE CASCADE)
@@ -2870,12 +2844,6 @@ func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*
 // ListRunNodeExecutions returns bounded diagnostics for one workflow subtree.
 func (r *Repo) ListRunNodeExecutions(ctx context.Context, workflowID string, limit int) ([]*StepExecution, error) {
 	return store.ListRunNodeExecutions(ctx, r.ORM(), workflowID, limit)
-}
-
-// ListStepExecutionRecordsForChat returns full step rows (inputs, output,
-// error), newest first, optionally scoped to one node and what ran inside it.
-func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
-	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
 }
 
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {

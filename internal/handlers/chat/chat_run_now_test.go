@@ -218,7 +218,7 @@ func TestRunNow_IsOwnerOnly(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "the same refusal StartChat gives an unresolvable workflow: %v", err)
 	assert.Contains(t, err.Error(), "theirs")
 
-	chats, err := f.repo.ListChats(f.ctx, db.ChatFilters{ProjectID: &f.projectID})
+	chats, err := store.ListChats(f.ctx, f.repo.ORM(), db.ChatFilters{ProjectID: &f.projectID})
 	require.NoError(t, err)
 	assert.Empty(t, chats, "a refused run writes no chat")
 }
