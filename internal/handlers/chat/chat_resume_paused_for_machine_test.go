@@ -68,7 +68,7 @@ func (f pausedFixture) markBreakerPause(t *testing.T) {
 
 func (f pausedFixture) isMarked(t *testing.T) bool {
 	t.Helper()
-	paused, err := f.repo.ListChatsPausedForMachine(f.ctx, "", 100)
+	paused, err := store.ListChatsPausedForMachine(f.ctx, f.repo.ORM(), "", 100)
 	require.NoError(t, err)
 	for _, c := range paused {
 		if c.ChatID == f.chatID {

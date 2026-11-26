@@ -2007,6 +2007,13 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
 }
 
+// CopyChatPlans gives toThreadID a pending copy of every plan of fromChatID
+// and of their tasks, in one statement (store.CopyChatPlans). A branch
+// starts with its source chat's plans this way.
+func (r *Repo) CopyChatPlans(ctx context.Context, fromChatID, toThreadID string) error {
+	return store.CopyChatPlans(ctx, r.ORM(), fromChatID, toThreadID, int32(PlanStatusPending), int32(TaskStatusPending))
+}
+
 // ==================== Tasks ====================
 
 func (r *Repo) CreateTask(ctx context.Context, task *Task) error {

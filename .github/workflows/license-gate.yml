@@ -8,7 +8,7 @@
 # surfaces during diligence — years later, at the worst possible moment.
 #
 # The gate is an allowlist: unrecognized licenses FAIL and need an explicit,
-# reasoned entry in .license-allowlist.
+# reasoned entry in forge.yaml ci.license.exceptions (Go) or .license-allowlist-npm.
 #
 # Each job is a thin wrapper over `task licenses:go` / `task licenses:npm`, the
 # commands a laptop runs (`task licenses` runs both).
@@ -32,9 +32,8 @@ on:
       - "frontends/web/package.json"
       - "frontends/web/pnpm-lock.yaml"
       - "frontends/web/pnpm-workspace.yaml"
-      - ".license-allowlist"
       - ".license-allowlist-npm"
-      - "scripts/check-licenses.sh"
+      - "forge.yaml"
       - "scripts/check-npm-licenses.sh"
       - "Taskfile.yml"
       - ".github/workflows/license-gate.yml"
@@ -46,9 +45,8 @@ on:
       - "frontends/web/package.json"
       - "frontends/web/pnpm-lock.yaml"
       - "frontends/web/pnpm-workspace.yaml"
-      - ".license-allowlist"
       - ".license-allowlist-npm"
-      - "scripts/check-licenses.sh"
+      - "forge.yaml"
       - "scripts/check-npm-licenses.sh"
       - "Taskfile.yml"
       - ".github/workflows/license-gate.yml"
@@ -71,16 +69,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: ./.github/actions/setup
 
-      # The checker reads each dependency's LICENSE out of the module cache;
-      # the task downloads the modules first (a no-op on a cache hit).
+      # forge's license-check row (go-licenses under forge.yaml ci.license);
+      # the task downloads the modules first (a no-op on a cache hit). On
+      # failure the row prints each offending library and its license.
       - name: task licenses:go
         run: task licenses:go
-
-      # On failure, print the full inventory so the PR author can see every
-      # dependency and its detected license without re-running locally.
-      - name: Full license inventory (on failure)
-        if: failure()
-        run: task licenses:go -- --list
 
   # The npm half. Separate job: it needs Node rather than Go, and a frontend
   # dependency problem should be reported on its own.

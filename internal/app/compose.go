@@ -679,6 +679,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Pollers:          g.TriggerPollers(),
 		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
 		Network:          g.ServerProcessConfig.GetNetwork(),
+		Pipeline:         g.ServerProcessConfig.GetPipeline(),
 		Recorder:         g.AccountRecorder(),
 		DB:               g.Database(),
 		// Read here, not in workersetup, so the worker root's config reach

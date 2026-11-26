@@ -52,6 +52,8 @@ import { ForgeConsoleContext, rosterReadFailed, type ForgeConsole } from "./cons
 import { useConsoleNavModel } from "./useConsoleNavModel";
 import { rememberEnv } from "./envScope";
 import { consolePath, isTestsPage, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
+import { severalModeOf, useSeveralApps } from "./severalProjects";
+import { SeveralProjectSections } from "./severalProjectSections";
 import { AppScopeProvider } from "@/fixtures/scope";
 
 /** Where switching to the forge app `app` lands: the same page there. */
@@ -149,9 +151,14 @@ function ConsoleLayoutInScope() {
   const shellFocus = useShellLastPick((state) => state.focus);
   const undeployed = inShell && model.settled && roster.envs.length === 0 && !rosterReadFailed(roster);
   const deployProjectId = projectId ?? (shellFocus && !shellFocus.startsWith("app:") ? shellFocus : null);
+  // Several projects in the shell (severalProjects.tsx): a list page shows every one of them, so
+  // the focused app's own state (nothing deployed, two checkouts) never stands in for the page.
+  const several = useSeveralApps();
+  const severalMode = several ? severalModeOf(page) : "one";
+  const across = !!several && severalMode !== "one";
   const body = useMemo(
     () =>
-      candidates ? (
+      candidates && !across ? (
         <ConsoleCheckoutPicker app={forgeProject} candidates={candidates} />
       ) : listed ? (
         <ForgeConsoleContext.Provider value={value}>
@@ -160,7 +167,15 @@ function ConsoleLayoutInScope() {
           </div>
           {/* The Overview is the landing: with nothing deployed it shows the chats and the way to deploy (WorkloadPages OverviewPage). */}
           {/* Tests need no deploy: a CI lane records runs before any release (TestsService RecordTestRun), so they keep their pages. */}
-          {undeployed && page.kind !== "overview" && !isTestsPage(page) ? <AppSectionEmptyState page={page} projectId={deployProjectId} /> : <Outlet />}
+          {undeployed && !across && page.kind !== "overview" && !isTestsPage(page) ? (
+            <AppSectionEmptyState page={page} projectId={deployProjectId} />
+          ) : several && severalMode === "sections" ? (
+            <SeveralProjectSections apps={several.apps}>
+              <Outlet />
+            </SeveralProjectSections>
+          ) : (
+            <Outlet />
+          )}
         </ForgeConsoleContext.Provider>
       ) : (
         <div aria-busy="true" aria-label="Loading" data-testid="forge-console-loading" className="space-y-4">
@@ -168,7 +183,7 @@ function ConsoleLayoutInScope() {
           <SkeletonLoader variant="table-row" count={4} />
         </div>
       ),
-    [candidates, forgeProject, listed, value, undeployed, page, deployProjectId]
+    [candidates, forgeProject, listed, value, undeployed, page, deployProjectId, across, several, severalMode]
   );
 
   const primeMetrics = page.kind === "obs-view" && page.view === "metrics" && (

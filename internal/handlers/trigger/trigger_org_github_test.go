@@ -64,7 +64,7 @@ func linkedApps() *StubOrgGitHubApps {
 // installations records it in its config, so routing gives it only that
 // installation's events; the rendered trigger names it back.
 func TestBindOrgGitHubApp_RecordsTheInstallation(t *testing.T) {
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{OrgRollout: gateOn, OrgGitHubApps: linkedApps()}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, OrgRollout: gateOn, OrgGitHubApps: linkedApps()}))
 	ctx := authz.WithMembership(context.Background(), ghMembers{"alice@acme": true})
 	tr := githubTrigger(t, "acme")
 
@@ -78,7 +78,7 @@ func TestBindOrgGitHubApp_RecordsTheInstallation(t *testing.T) {
 
 // A definition that names no org installation is left exactly as it was.
 func TestBindOrgGitHubApp_LeavesOtherDefinitionsAlone(t *testing.T) {
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{OrgRollout: gateOn, OrgGitHubApps: linkedApps()}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, OrgRollout: gateOn, OrgGitHubApps: linkedApps()}))
 	for name, def := range map[string]*reliantv1.TriggerDefinition{
 		"no definition":      nil,
 		"no connection":      {},
@@ -142,7 +142,7 @@ func TestBindOrgGitHubApp_Refusals(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			svc := NewTestTrigger(t, WithTriggerDeps(Deps{OrgRollout: gateOn, OrgGitHubApps: tc.apps}))
+			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, OrgRollout: gateOn, OrgGitHubApps: tc.apps}))
 			ctx := authz.WithMembership(context.Background(), ghMembers{"alice@acme": tc.member})
 			before := string(tc.trigger.Config)
 			err := svc.bindOrgGitHubApp(ctx, "alice", namingConnection(tc.conn), tc.trigger)
@@ -159,7 +159,7 @@ func TestBindOrgGitHubApp_Refusals(t *testing.T) {
 // ignores and erases one) safe during a rollout or a rollback.
 func TestBindOrgGitHubApp_RefusedWhileTheRolloutGateIsOff(t *testing.T) {
 	apps := linkedApps()
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{OrgGitHubApps: apps}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, OrgGitHubApps: apps}))
 	ctx := authz.WithMembership(context.Background(), ghMembers{"alice@acme": true})
 	tr := githubTrigger(t, "acme")
 	before := string(tr.Config)
@@ -175,7 +175,7 @@ func TestBindOrgGitHubApp_RefusedWhileTheRolloutGateIsOff(t *testing.T) {
 // With the gate off, every definition that names no org installation is
 // exactly as before: personal triggers, saved connections, the personal bot.
 func TestBindOrgGitHubApp_GateOffLeavesEveryOtherDefinitionAlone(t *testing.T) {
-	svc := NewTestTrigger(t, WithTriggerDeps(Deps{OrgGitHubApps: linkedApps()}))
+	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Triggers: &MockTriggers{}, FiringReads: &MockFiringReads{}, Registrations: &MockRegistrationReads{}, OrgGitHubApps: linkedApps()}))
 	for name, def := range map[string]*reliantv1.TriggerDefinition{
 		"no definition":      nil,
 		"no connection":      {},

@@ -656,6 +656,21 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"gmail__draft_create": {
+		Bindable: map[string]struct{}{
+			"bcc":         {},
+			"cc":          {},
+			"connection":  {},
+			"html":        {},
+			"in_reply_to": {},
+			"references":  {},
+			"subject":     {},
+			"text":        {},
+			"thread_id":   {},
+			"to":          {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"gmail__label_list": {
 		Bindable: map[string]struct{}{
 			"connection": {},

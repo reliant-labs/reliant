@@ -368,6 +368,7 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		Workflows:        store.NewWorkflowExtStore(s.Repo.ORM()),
 		Worktrees:        store.NewWorktreeExtStore(s.Repo.ORM()),
 		ProjectRows:      store.NewProjectExtStore(s.Repo.ORM()),
+		TriggerEvents:    store.NewTriggerEventExtStore(s.Repo.ORM()),
 		Questions:        store.NewQuestionExtStore(s.Repo.ORM()),
 		Spawns:           store.NewToolCallExtStore(s.Repo.ORM()),
 		Selections:       store.NewChatSelectionExtStore(s.Repo.ORM()),
