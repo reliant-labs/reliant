@@ -75,7 +75,7 @@ export function OrgGitHubPage() {
 function OrgGitHub({ org }: { org: MyOrg }) {
   const { orgs } = useActiveOrg();
   const isAdmin = canAdministerMembers(org.role);
-  const linked = useListGitHubAppInstallations({ orgId: org.id });
+  const linked = useListGitHubAppInstallations({ orgId: org.id }, { enabled: !!org.id });
   const start = useStartGitHubAppInstall(SILENT);
   const link = useLinkGitHubAppInstallation(SILENT);
   const unlink = useUnlinkGitHubAppInstallation(SILENT);
@@ -263,7 +263,7 @@ interface LinkSectionProps {
 function LinkSection({ org, linkingId, installing, onLink, onInstall }: LinkSectionProps) {
   const credential = useGitHubCredential();
   const connected = credential.hasToken;
-  const linkable = useListLinkableGitHubAppInstallations({ orgId: org.id }, { enabled: connected, refetchOnWindowFocus: true, retry: false });
+  const linkable = useListLinkableGitHubAppInstallations({ orgId: org.id }, { enabled: !!org.id && connected, refetchOnWindowFocus: true, retry: false });
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
 
