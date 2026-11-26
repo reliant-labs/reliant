@@ -4,11 +4,12 @@
  * A model-level ObservabilityApi fake for a component or hook test, served the
  * way the app reads it: through ObservabilityApiProvider for the reads that
  * still go through the context, AND on the wire for ObservabilityService's
- * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …),
- * which call their QueryClient's transport and never the context.
+ * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …)
+ * and DashboardService's reads and writes (hooks/dashboard-queries.ts), which
+ * call their QueryClient's transport and never the context.
  *
  * The wire half is the shop fixture pack's handlers (fixtures/shop/handlers/
- * observability.ts) over the fake: each decodes the request into the model,
+ * observability.ts, dashboards.ts) over the fake: each decodes the request into the model,
  * asks the fake, and encodes its answer, so the hook's real request builder
  * and `select` mapper run. A relative window resolves against the wall clock
  * (`Date.now()`), as the fakes' data is laid out around it.
@@ -26,7 +27,9 @@ import { useMemo, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Transport } from "@connectrpc/connect";
 
+import { DashboardService } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { dashboardsHandlers } from "@/fixtures/shop/handlers/dashboards";
 import { observabilityHandlers } from "@/fixtures/shop/handlers/observability";
 import { transport as appTransport } from "@/lib/connect";
 import { createTransportScope, TransportScopeProvider, type TransportScope } from "@/lib/transportScope";
@@ -41,9 +44,15 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
  * setTransport(...) still answers it.
  */
 export function observabilityFixtureTransport(api: () => ObservabilityApi, now: () => number = Date.now): Transport {
+  const handlersOf: Record<string, () => unknown> = {
+    [ObservabilityService.typeName]: () => observabilityHandlers(api(), { now }),
+    // DashboardService's reads and writes, all on generated hooks (hooks/dashboard-queries.ts).
+    [DashboardService.typeName]: () => dashboardsHandlers(api()),
+  };
   const pick = (method: { parent: { typeName: string }; name: string }): Transport => {
-    if (method.parent.typeName !== ObservabilityService.typeName) return appTransport;
-    const handlers = observabilityHandlers(api(), { now }) as Parameters<typeof mockTransport>[0];
+    const of = handlersOf[method.parent.typeName];
+    if (!of) return appTransport;
+    const handlers = of() as Parameters<typeof mockTransport>[0];
     return handlers && `${method.parent.typeName}/${method.name}` in handlers ? mockTransport(handlers) : appTransport;
   };
   return {

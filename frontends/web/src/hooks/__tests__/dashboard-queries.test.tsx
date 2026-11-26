@@ -7,6 +7,9 @@
  * own built-ins (the person's LLM usage) join a project's list only where the
  * console reads the person's own account, never on sample data (a read-only
  * console: the public demo, the forge tour's sample app).
+ *
+ * The hooks run on DashboardService's generated hooks, so the fake answers on
+ * the wire (test/observabilityFixtures.tsx: the shop pack's handlers over it).
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -16,13 +19,30 @@ import type { ReactNode } from "react";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObsReadOnlyProvider } from "@/components/Forge/Observability/obsReadOnly";
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
+import { dashboardServiceKeys } from "@/hooks/controlplane/dashboard-service-hooks_gen";
+import { listDashboardsRequest } from "@/services/controlPlane/observability/dashboardsApi";
 import { LLM_USAGE_KEY } from "@/services/controlPlane/observability/clientBuiltins";
 import type { DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 
-import { dashboardKeys, useDashboard, useDashboardIndex } from "../dashboard-queries";
+import { invalidateOrgDashboards, useDashboard, useDashboardIndex, useToggleDashboardStar } from "../dashboard-queries";
 
-const SERVER_BUILTIN = { ref: { kind: "builtin", projectId: "", key: "org-costs" }, source: "builtin", title: "Costs" } as unknown as DashboardSummary;
+/** A whole index row, as the wire carries every field. */
+const row = (fields: Pick<DashboardSummary, "ref" | "source" | "title"> & Partial<DashboardSummary>): DashboardSummary => ({
+  description: "",
+  readOnly: false,
+  starred: false,
+  lastViewedAtMs: null,
+  panelCount: 0,
+  previewPanels: [],
+  release: null,
+  workspace: null,
+  category: "",
+  ...fields,
+});
+
+const SERVER_BUILTIN = row({ ref: { kind: "builtin", projectId: "", key: "org-costs" }, source: "builtin", title: "Costs" });
 
 function setup({ readOnly = false, dashboards = [] as DashboardSummary[] } = {}) {
   const listDashboards = vi.fn(async () => ({ dashboards, canWrite: true }));
@@ -34,7 +54,7 @@ function setup({ readOnly = false, dashboards = [] as DashboardSummary[] } = {})
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
       <ObsReadOnlyProvider value={{ readOnly }}>
-        <ObservabilityApiProvider api={api}>{children}</ObservabilityApiProvider>
+        <ObservabilityFixtures api={api}>{children}</ObservabilityFixtures>
       </ObsReadOnlyProvider>
     </QueryClientProvider>
   );
@@ -60,10 +80,10 @@ describe("useDashboardIndex", () => {
 
   it("keeps org-wide, one app and project-less lists apart in the cache", () => {
     const keys = [
-      dashboardKeys.index("org-1", null, ""),
-      dashboardKeys.index("org-1", "", ""),
-      dashboardKeys.index("org-1", "shop", ""),
-    ].map((key) => JSON.stringify(key));
+      listDashboardsRequest({ orgId: "org-1" }),
+      listDashboardsRequest({ orgId: "org-1", projectId: "" }),
+      listDashboardsRequest({ orgId: "org-1", projectId: "shop" }),
+    ].map((req) => JSON.stringify(dashboardServiceKeys.listDashboards(req)));
     expect(new Set(keys).size).toBe(3);
   });
 
@@ -89,5 +109,44 @@ describe("useDashboardIndex", () => {
     const refused = renderHook(() => useDashboard("org-1", ref), { wrapper: sample.wrapper });
     await waitFor(() => expect(sample.getDashboard).toHaveBeenCalled());
     expect(refused.result.current.data).toBeUndefined();
+  });
+});
+
+describe("dashboard writes", () => {
+  const SHOP_ROW = row({ ref: { kind: "workspace", projectId: "shop", key: "ops" }, source: "workspace", title: "Ops" });
+
+  it("re-read only the org's dashboards", async () => {
+    const { wrapper, client, listDashboards } = setup({ dashboards: [SHOP_ROW] });
+    const mine = renderHook(() => useDashboardIndex("org-1", "shop", undefined), { wrapper });
+    const theirs = renderHook(() => useDashboardIndex("org-2", "shop", undefined), { wrapper });
+    await waitFor(() => expect(mine.result.current.isSuccess && theirs.result.current.isSuccess).toBe(true));
+    const asked = () => (listDashboards.mock.calls as unknown as Array<[{ orgId: string }]>).map(([req]) => req.orgId);
+    expect(asked().sort()).toEqual(["org-1", "org-2"]);
+    await invalidateOrgDashboards(client, "org-1");
+    expect(asked().sort()).toEqual(["org-1", "org-1", "org-2"]);
+  });
+
+  it("star shows at once on every cached index of the org, and flips back when the server refuses", async () => {
+    let refuse!: (error: Error) => void;
+    const starDashboard = vi.fn(() => new Promise<void>((_resolve, reject) => (refuse = reject)));
+    const { listDashboards } = setup({ dashboards: [SHOP_ROW] });
+    const api = { listDashboards, starDashboard } as unknown as ObservabilityApi;
+    const client = createTestQueryClient();
+    const own = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <ObservabilityFixtures api={api}>{children}</ObservabilityFixtures>
+      </QueryClientProvider>
+    );
+    // Read the rows while rendering, as a component does (React Query re-renders for what was read).
+    const index = renderHook(() => useDashboardIndex("org-1", "shop", undefined).data, { wrapper: own });
+    await waitFor(() => expect(index.result.current).toBeDefined());
+    const ops = () => index.result.current!.dashboards.find((d) => d.ref.key === "ops")!.starred;
+    const star = renderHook(() => useToggleDashboardStar("org-1"), { wrapper: own });
+    star.result.current.mutate({ ref: SHOP_ROW.ref, starred: true });
+    await waitFor(() => expect(ops()).toBe(true));
+    await waitFor(() => expect(starDashboard).toHaveBeenCalledWith("org-1", SHOP_ROW.ref, true));
+    refuse(new Error("refused"));
+    await waitFor(() => expect(star.result.current.isError).toBe(true));
+    expect(ops()).toBe(false);
   });
 });

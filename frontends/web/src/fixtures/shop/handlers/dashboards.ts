@@ -9,7 +9,10 @@
  * decodes it. A dashboard's spec travels as the JSON control-plane stores.
  *
  * Saving, copying, restoring, archiving, starring, promoting and recording a
- * view are writes: the transport's read-only guard refuses them first.
+ * view are writes: in the demo and the tour the transport's read-only guard
+ * refuses them first. They are encoded here too, over the same model, for a
+ * test fake that answers them (test/observabilityFixtures.tsx): the shop
+ * model's own writes refuse (model/dashboards.ts).
  */
 
 import type { JsonObject } from "@bufbuild/protobuf";
@@ -17,8 +20,8 @@ import { mockService, type MockHandlers } from "@reliantlabs/forge-web-runtime/m
 
 import { AppDatabaseService } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
 import { DashboardService, DashboardSource as WireSource, DashboardViewKind as WireViewKind, type DashboardRef as WireRef } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
-import { dashboardToJson } from "@/services/controlPlane/observability/dashboardsApi";
-import type { DashboardKind, DashboardRef, DashboardSource, DashboardSummary, DashboardUser, DashboardVersion } from "@/services/controlPlane/observability/dashboardTypes";
+import { dashboardFromJson, dashboardToJson } from "@/services/controlPlane/observability/dashboardsApi";
+import type { DashboardKind, DashboardRef, DashboardSource, DashboardSummary, DashboardUser, DashboardVersion, SavedDashboard } from "@/services/controlPlane/observability/dashboardTypes";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 import { createShopApi } from "../model/shopApi";
@@ -87,6 +90,9 @@ function wireSummary(s: DashboardSummary) {
 }
 
 const wireVersion = (v: DashboardVersion) => ({ version: v.version, releaseVersion: v.releaseVersion, author: wireUser(v.author), message: v.message, createdAt: tsOpt(v.createdAtMs), current: v.current });
+const wireSaved = (s: SavedDashboard) => ({ summary: wireSummary(s.summary), version: wireVersion(s.version) });
+/** An env scope left off the request is left off the model's input (absent: unchanged on an update). */
+const modelEnvScope = (scope: { envIds: string[] } | undefined) => (scope ? { envScope: { envIds: [...scope.envIds] } } : {});
 
 export function dashboardsHandlers(fixtures: ObservabilityApi = createShopApi()): MockHandlers {
   return {
@@ -101,6 +107,52 @@ export function dashboardsHandlers(fixtures: ObservabilityApi = createShopApi())
         return { summary: wireSummary(d.summary), spec: dashboardToJson(d.spec) as JsonObject, version: d.version, canWrite: d.canWrite };
       },
       listDashboardVersions: async (req) => ({ versions: (await fixtures.listDashboardVersions(req.orgId, modelRef(req.ref))).map(wireVersion), nextPageToken: "" }),
+      saveDashboard: async (req) =>
+        wireSaved(
+          await fixtures.saveDashboard({
+            orgId: req.orgId,
+            projectId: req.projectId,
+            slug: req.slug,
+            spec: dashboardFromJson(req.spec),
+            ...modelEnvScope(req.envScope),
+            baseVersion: req.baseVersion,
+            message: req.message,
+          })
+        ),
+      // The console leaves a copy's slug, title and message empty to take the source's: absent, in the model.
+      saveAsCopy: async (req) =>
+        wireSaved(
+          await fixtures.saveDashboardAsCopy({
+            orgId: req.orgId,
+            from: modelRef(req.from),
+            projectId: req.projectId,
+            slug: req.slug || undefined,
+            title: req.title || undefined,
+            ...modelEnvScope(req.envScope),
+            message: req.message || undefined,
+          })
+        ),
+      restoreDashboardVersion: async (req) => wireSaved(await fixtures.restoreDashboardVersion(req.orgId, modelRef(req.ref), req.version, req.baseVersion)),
+      archiveDashboard: async (req) => {
+        await fixtures.archiveDashboard(req.orgId, modelRef(req.ref));
+        return {};
+      },
+      starDashboard: async (req) => {
+        await fixtures.starDashboard(req.orgId, modelRef(req.ref), true);
+        return {};
+      },
+      unstarDashboard: async (req) => {
+        await fixtures.starDashboard(req.orgId, modelRef(req.ref), false);
+        return {};
+      },
+      recordDashboardView: async (req) => {
+        await fixtures.recordDashboardView(req.orgId, modelRef(req.ref));
+        return {};
+      },
+      promoteDashboardToCode: async (req) => {
+        const promoted = await fixtures.promoteDashboardToCode(req.orgId, modelRef(req.ref), req.version);
+        return { file: { path: promoted.path, content: new TextEncoder().encode(promoted.content) }, prUrl: promoted.prUrl, warnings: [...promoted.warnings] };
+      },
     })),
     ...completed(AppDatabaseService, mockService(AppDatabaseService, {
       queryDatabasePanel: async (req) => {

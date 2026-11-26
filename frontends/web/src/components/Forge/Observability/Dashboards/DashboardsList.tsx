@@ -52,7 +52,9 @@ import { GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
 import Tag from "@/components/forge-ui/tag";
 import Tooltip from "@/components/forge-ui/tooltip";
-import { useDashboardIndex, useDashboardMutation, useDashboardTemplates, useStarDashboard } from "@/hooks/dashboard-queries";
+import { useDashboardIndex, useDashboardTemplates, useDashboardWriteOptions, useToggleDashboardStar } from "@/hooks/dashboard-queries";
+import { useSaveAsCopy, useSaveDashboard } from "@/hooks/controlplane/dashboard-service-hooks_gen";
+import { saveAsCopyRequest, savedDashboardOf, saveDashboardRequest } from "@/services/controlPlane/observability/dashboardsApi";
 import { useObservabilityOrg } from "@/hooks/observability-queries";
 import type { DashboardRef, DashboardSummary } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Dashboard } from "@/services/controlPlane/observability/types";
@@ -115,19 +117,20 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
   const envId = orgWide || env === ENV_ALL ? undefined : environments.find((candidate) => candidate.name === env)?.id;
   const index = useDashboardIndex(orgId, project, envId);
   const templates = useDashboardTemplates(orgId, !orgWide);
-  const star = useStarDashboard(orgId);
+  const star = useToggleDashboardStar(orgId);
   const galleryRef = useRef<HTMLDivElement | null>(null);
   const [creating, setCreating] = useState<"blank" | "import" | null>(null);
   const [fromTemplate, setFromTemplate] = useState<DashboardSummary | null>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<ListSection>>(new Set());
 
   const envIdOf = (name: string) => environments.find((candidate) => candidate.name === name)?.id;
-  const create = useDashboardMutation(orgId, (api, org, input: { slug: string; spec: Dashboard; scope: "scope" | "all" }) =>
-    api.saveDashboard({ orgId: org, projectId: requireProject(project), slug: input.slug, spec: input.spec, envScope: envScopeOf(input.scope, env, envIdOf), baseVersion: 0, message: "Created" })
-  );
-  const copy = useDashboardMutation(orgId, (api, org, input: { from: DashboardRef; title: string; scope: "scope" | "all" }) =>
-    api.saveDashboardAsCopy({ orgId: org, from: input.from, projectId: requireProject(project), title: input.title, envScope: envScopeOf(input.scope, env, envIdOf) })
-  );
+  const writeOptions = useDashboardWriteOptions(orgId);
+  const create = useSaveDashboard(writeOptions);
+  const createRequest = (input: { slug: string; spec: Dashboard; scope: "scope" | "all" }) =>
+    saveDashboardRequest({ orgId: orgId as string, projectId: requireProject(project), slug: input.slug, spec: input.spec, envScope: envScopeOf(input.scope, env, envIdOf), baseVersion: 0, message: "Created" });
+  const copy = useSaveAsCopy(writeOptions);
+  const copyRequest = (input: { from: DashboardRef; title: string; scope: "scope" | "all" }) =>
+    saveAsCopyRequest({ orgId: orgId as string, from: input.from, projectId: requireProject(project), title: input.title, envScope: envScopeOf(input.scope, env, envIdOf) });
 
   // A built-in another dashboard in the list supersedes is never shown (dashboardHubs.ts).
   const all = useMemo(() => withoutSuperseded(index.data?.dashboards ?? []), [index.data]);
@@ -389,10 +392,10 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
             setCreating(null);
           }}
           onCreate={(input) =>
-            create.mutate(input, {
-              onSuccess: (saved) => {
+            create.mutate(createRequest(input), {
+              onSuccess: (res) => {
                 setCreating(null);
-                navigateTo(hrefs.dashboard(saved.summary.ref));
+                navigateTo(hrefs.dashboard(savedDashboardOf(res).summary.ref));
               },
             })
           }
@@ -411,11 +414,11 @@ export function DashboardsList({ project, env, environments, search, onSearch, h
           }}
           onSave={(input) =>
             copy.mutate(
-              { from: fromTemplate.ref, ...input },
+              copyRequest({ from: fromTemplate.ref, ...input }),
               {
-                onSuccess: (saved) => {
+                onSuccess: (res) => {
                   setFromTemplate(null);
-                  navigateTo(hrefs.dashboard(saved.summary.ref));
+                  navigateTo(hrefs.dashboard(savedDashboardOf(res, "the copy").summary.ref));
                 },
               }
             )

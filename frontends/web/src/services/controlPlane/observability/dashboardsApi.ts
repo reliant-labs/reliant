@@ -17,7 +17,7 @@
  */
 
 import type { Transport } from "@connectrpc/connect";
-import type { JsonObject, JsonValue } from "@bufbuild/protobuf";
+import type { JsonObject, JsonValue, MessageInitShape } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
@@ -28,6 +28,21 @@ import {
   type DashboardSummary as WireSummary,
   type DashboardUser as WireUser,
   type DashboardVersionInfo as WireVersion,
+  type GetDashboardRequestSchema,
+  type GetDashboardResponse,
+  type ListDashboardsRequestSchema,
+  type ListDashboardsResponse,
+  type ListDashboardTemplatesResponse,
+  type ListDashboardVersionsRequestSchema,
+  type ListDashboardVersionsResponse,
+  type PromoteDashboardToCodeRequestSchema,
+  type PromoteDashboardToCodeResponse,
+  type RestoreDashboardVersionRequestSchema,
+  type RestoreDashboardVersionResponse,
+  type SaveAsCopyRequestSchema,
+  type SaveAsCopyResponse,
+  type SaveDashboardRequestSchema,
+  type SaveDashboardResponse,
 } from "@/gen/controlplane/services/dashboard/v1/dashboard_pb";
 
 import { getControlPlaneClient } from "../client";
@@ -190,40 +205,54 @@ export function dashboardToJson(dashboard: Dashboard): JsonObject {
   return JSON.parse(JSON.stringify(canonicalJson(dashboard) ?? {})) as JsonObject;
 }
 
-// ── RPCs ─────────────────────────────────────────────────────────────────────
+// ── Requests and answers ─────────────────────────────────────────────────────
+//
+// The console calls DashboardService through its generated hooks
+// (hooks/controlplane/dashboard-service-hooks_gen.ts): hooks/dashboard-queries.ts
+// builds each request here and maps each answer in `select`, and every write's
+// call site sends the request built here. The functions below them run the
+// same builders and mappers on a transport, for the model-level contract the
+// shop fixture pack and the over-the-wire fixture tests compare
+// (ObservabilityApi).
 
 /**
  * The merged index for a project and (optionally) one environment: release
  * dashboards, then workspace ones. No project is the whole org: the field is
  * left off the request, because "" would mean only the project-less ones.
  */
-export async function listDashboards(req: ListDashboardsInput, transport?: Transport): Promise<DashboardIndex> {
-  const res = await client(transport).listDashboards({
+export function listDashboardsRequest(req: ListDashboardsInput): MessageInitShape<typeof ListDashboardsRequestSchema> {
+  return {
     orgId: req.orgId,
     ...(req.projectId === undefined ? {} : { projectId: req.projectId }),
     envId: req.envId,
-  });
+  };
+}
+
+export function dashboardIndexOf(res: ListDashboardsResponse): DashboardIndex {
   return { dashboards: res.dashboards.map(mapSummary), canWrite: res.canWrite };
 }
 
-export async function listDashboardTemplates(orgId: string, transport?: Transport): Promise<DashboardSummary[]> {
-  const res = await client(transport).listDashboardTemplates({ orgId });
+export function dashboardTemplatesOf(res: ListDashboardTemplatesResponse): DashboardSummary[] {
   return res.templates.map(mapSummary);
 }
 
-export async function getDashboard(req: GetDashboardInput, transport?: Transport): Promise<DashboardDocument> {
-  const res = await client(transport).getDashboard({
+/** `ref` null is a read not sent yet (its query is disabled). */
+export function getDashboardRequest(req: Omit<GetDashboardInput, "ref"> & { ref: DashboardRef | null }): MessageInitShape<typeof GetDashboardRequestSchema> {
+  return {
     orgId: req.orgId,
-    ref: refInit(req.ref),
+    ref: req.ref ? refInit(req.ref) : undefined,
     version: req.version,
     releaseVersion: req.releaseVersion,
-  });
+  };
+}
+
+export function dashboardDocumentOf(res: GetDashboardResponse): DashboardDocument {
   if (!res.summary) throw new Error("the control plane answered without the dashboard");
   return { summary: mapSummary(res.summary), spec: dashboardFromJson(res.spec), version: res.version, canWrite: res.canWrite };
 }
 
-export async function saveDashboard(req: SaveDashboardInput, transport?: Transport): Promise<SavedDashboard> {
-  const res = await client(transport).saveDashboard({
+export function saveDashboardRequest(req: SaveDashboardInput): MessageInitShape<typeof SaveDashboardRequestSchema> {
+  return {
     orgId: req.orgId,
     projectId: req.projectId,
     slug: req.slug,
@@ -231,13 +260,17 @@ export async function saveDashboard(req: SaveDashboardInput, transport?: Transpo
     envScope: req.envScope ? { envIds: req.envScope.envIds } : undefined,
     baseVersion: req.baseVersion,
     message: req.message,
-  });
-  if (!res.summary) throw new Error("the control plane answered without the saved dashboard");
+  };
+}
+
+/** A write's answer: the dashboard as saved (`what` names it when the answer leaves it out). */
+export function savedDashboardOf(res: SaveDashboardResponse | SaveAsCopyResponse | RestoreDashboardVersionResponse, what = "the saved dashboard"): SavedDashboard {
+  if (!res.summary) throw new Error(`the control plane answered without ${what}`);
   return { summary: mapSummary(res.summary), version: mapVersion(res.version) };
 }
 
-export async function saveDashboardAsCopy(req: SaveAsCopyInput, transport?: Transport): Promise<SavedDashboard> {
-  const res = await client(transport).saveAsCopy({
+export function saveAsCopyRequest(req: SaveAsCopyInput): MessageInitShape<typeof SaveAsCopyRequestSchema> {
+  return {
     orgId: req.orgId,
     from: refInit(req.from),
     projectId: req.projectId,
@@ -245,41 +278,92 @@ export async function saveDashboardAsCopy(req: SaveAsCopyInput, transport?: Tran
     title: req.title ?? "",
     envScope: req.envScope ? { envIds: req.envScope.envIds } : undefined,
     message: req.message ?? "",
-  });
-  if (!res.summary) throw new Error("the control plane answered without the copy");
-  return { summary: mapSummary(res.summary), version: mapVersion(res.version) };
+  };
 }
 
-export async function listDashboardVersions(orgId: string, ref: DashboardRef, transport?: Transport): Promise<DashboardVersion[]> {
-  const res = await client(transport).listDashboardVersions({ orgId, ref: refInit(ref), pageSize: 100 });
+/** `ref` null is a read not sent yet (its query is disabled). */
+export function listDashboardVersionsRequest(orgId: string, ref: DashboardRef | null): MessageInitShape<typeof ListDashboardVersionsRequestSchema> {
+  return { orgId, ref: ref ? refInit(ref) : undefined, pageSize: 100 };
+}
+
+export function dashboardVersionsOf(res: ListDashboardVersionsResponse): DashboardVersion[] {
   return res.versions.map(mapVersion);
 }
 
-export async function restoreDashboardVersion(orgId: string, ref: DashboardRef, version: number, baseVersion: number, transport?: Transport): Promise<SavedDashboard> {
-  const res = await client(transport).restoreDashboardVersion({ orgId, ref: refInit(ref), version, baseVersion });
-  if (!res.summary) throw new Error("the control plane answered without the restored dashboard");
-  return { summary: mapSummary(res.summary), version: mapVersion(res.version) };
+export function restoreDashboardVersionRequest(orgId: string, ref: DashboardRef, version: number, baseVersion: number): MessageInitShape<typeof RestoreDashboardVersionRequestSchema> {
+  return { orgId, ref: refInit(ref), version, baseVersion };
 }
 
-export async function archiveDashboard(orgId: string, ref: DashboardRef, transport?: Transport): Promise<void> {
-  await client(transport).archiveDashboard({ orgId, ref: refInit(ref) });
+/** The request of a write that names only the dashboard: archive, star, unstar, record a view. */
+export function dashboardRefRequest(orgId: string, ref: DashboardRef) {
+  return { orgId, ref: refInit(ref) };
 }
 
-export async function starDashboard(orgId: string, ref: DashboardRef, starred: boolean, transport?: Transport): Promise<void> {
-  if (starred) await client(transport).starDashboard({ orgId, ref: refInit(ref) });
-  else await client(transport).unstarDashboard({ orgId, ref: refInit(ref) });
+export function promoteDashboardToCodeRequest(orgId: string, ref: DashboardRef, version?: number): MessageInitShape<typeof PromoteDashboardToCodeRequestSchema> {
+  return { orgId, ref: refInit(ref), version };
 }
 
-export async function recordDashboardView(orgId: string, ref: DashboardRef, transport?: Transport): Promise<void> {
-  await client(transport).recordDashboardView({ orgId, ref: refInit(ref) });
-}
-
-export async function promoteDashboardToCode(orgId: string, ref: DashboardRef, version?: number, transport?: Transport): Promise<PromotedDashboard> {
-  const res = await client(transport).promoteDashboardToCode({ orgId, ref: refInit(ref), version });
+export function promotedDashboardOf(res: PromoteDashboardToCodeResponse): PromotedDashboard {
   return {
     path: res.file?.path ?? "",
     content: new TextDecoder().decode(res.file?.content ?? new Uint8Array()),
     prUrl: res.prUrl,
     warnings: [...res.warnings],
   };
+}
+
+/** The dashboard a wire summary names, as the console's index names it (a generated or repo one is a release dashboard). */
+export function refOfSummary(s: WireSummary): DashboardRef {
+  return mapSummary(s).ref;
+}
+
+export function sameDashboardRef(a: DashboardRef, b: DashboardRef): boolean {
+  return a.kind === b.kind && a.projectId === b.projectId && a.key === b.key;
+}
+
+// ── The model-level contract, on a transport ─────────────────────────────────
+
+export async function listDashboards(req: ListDashboardsInput, transport?: Transport): Promise<DashboardIndex> {
+  return dashboardIndexOf(await client(transport).listDashboards(listDashboardsRequest(req)));
+}
+
+export async function listDashboardTemplates(orgId: string, transport?: Transport): Promise<DashboardSummary[]> {
+  return dashboardTemplatesOf(await client(transport).listDashboardTemplates({ orgId }));
+}
+
+export async function getDashboard(req: GetDashboardInput, transport?: Transport): Promise<DashboardDocument> {
+  return dashboardDocumentOf(await client(transport).getDashboard(getDashboardRequest(req)));
+}
+
+export async function saveDashboard(req: SaveDashboardInput, transport?: Transport): Promise<SavedDashboard> {
+  return savedDashboardOf(await client(transport).saveDashboard(saveDashboardRequest(req)));
+}
+
+export async function saveDashboardAsCopy(req: SaveAsCopyInput, transport?: Transport): Promise<SavedDashboard> {
+  return savedDashboardOf(await client(transport).saveAsCopy(saveAsCopyRequest(req)), "the copy");
+}
+
+export async function listDashboardVersions(orgId: string, ref: DashboardRef, transport?: Transport): Promise<DashboardVersion[]> {
+  return dashboardVersionsOf(await client(transport).listDashboardVersions(listDashboardVersionsRequest(orgId, ref)));
+}
+
+export async function restoreDashboardVersion(orgId: string, ref: DashboardRef, version: number, baseVersion: number, transport?: Transport): Promise<SavedDashboard> {
+  return savedDashboardOf(await client(transport).restoreDashboardVersion(restoreDashboardVersionRequest(orgId, ref, version, baseVersion)), "the restored dashboard");
+}
+
+export async function archiveDashboard(orgId: string, ref: DashboardRef, transport?: Transport): Promise<void> {
+  await client(transport).archiveDashboard(dashboardRefRequest(orgId, ref));
+}
+
+export async function starDashboard(orgId: string, ref: DashboardRef, starred: boolean, transport?: Transport): Promise<void> {
+  if (starred) await client(transport).starDashboard(dashboardRefRequest(orgId, ref));
+  else await client(transport).unstarDashboard(dashboardRefRequest(orgId, ref));
+}
+
+export async function recordDashboardView(orgId: string, ref: DashboardRef, transport?: Transport): Promise<void> {
+  await client(transport).recordDashboardView(dashboardRefRequest(orgId, ref));
+}
+
+export async function promoteDashboardToCode(orgId: string, ref: DashboardRef, version?: number, transport?: Transport): Promise<PromotedDashboard> {
+  return promotedDashboardOf(await client(transport).promoteDashboardToCode(promoteDashboardToCodeRequest(orgId, ref, version)));
 }

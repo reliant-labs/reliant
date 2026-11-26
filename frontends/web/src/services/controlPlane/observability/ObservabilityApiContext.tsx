@@ -236,8 +236,28 @@ export type GeneratedObservabilityReads =
   | "getReleaseHealth"
   | "listFrontendReplay";
 
-/** What a view may call through the context: everything but the reads on generated hooks. */
-export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads>;
+/**
+ * DashboardService: every read and write runs on its generated hooks
+ * (hooks/dashboard-queries.ts, hooks/controlplane/dashboard-service-hooks_gen.ts),
+ * so the context hands none of it out. It stays on ObservabilityApi as the
+ * model-level contract the shop fixture pack and test fakes implement; its wire
+ * handlers (fixtures/shop/handlers/dashboards.ts) serve them to the hooks.
+ */
+export type GeneratedDashboardCalls =
+  | "listDashboards"
+  | "listDashboardTemplates"
+  | "getDashboard"
+  | "saveDashboard"
+  | "saveDashboardAsCopy"
+  | "listDashboardVersions"
+  | "restoreDashboardVersion"
+  | "archiveDashboard"
+  | "starDashboard"
+  | "recordDashboardView"
+  | "promoteDashboardToCode";
+
+/** What a view may call through the context: everything but the calls on generated hooks. */
+export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads | GeneratedDashboardCalls>;
 
 /** The provided api, else the real client on the nearest TransportScope's transport, else on the app's. */
 export function useObservabilityApi(): ObservabilityContextApi {
