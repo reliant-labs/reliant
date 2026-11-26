@@ -134,7 +134,8 @@ service GtmService {
   }
 
   // CreateChannel adds a channel. A key the org already holds is
-  // AlreadyExists. An agent may create a channel, always MANUAL (mode,
+  // AlreadyExists. An agent may create a channel, with its channel_types,
+  // always MANUAL (mode,
   // integration_kind and connection_id are a person's to set:
   // PermissionDenied). No agent ever connects an integration or stores a
   // credential: connecting is Reliant's own connect flow, by a person, in the
@@ -155,7 +156,8 @@ service GtmService {
   }
 
   // UpdateChannel edits a channel. Unset fields are left alone. An agent may
-  // change name, key, manual_instructions_md and status; only a person sets
+  // change a MANUAL channel's name, key, manual_instructions_md, status and
+  // channel_types; only a person sets
   // mode INTEGRATED, integration_kind or connection_id, or changes any field
   // of an INTEGRATED channel's integration (PermissionDenied for an agent). A
   // new key the org already holds is AlreadyExists.
@@ -195,15 +197,18 @@ service GtmService {
   }
 
   // CreateAssetUpload starts an upload: it records a PENDING asset and
-  // returns a presigned PUT for its bytes in the org's bucket (object key
-  // gtm/<org_id>/<asset_id>), conditioned on size_bytes and content_type.
-  // The client PUTs the bytes to upload_url with required_headers before
-  // expires_at, then calls ConfirmAssetUpload. Limits are the service's: 25
-  // MiB per asset (64 MiB when an agent copies a chat attachment), about 2 GiB
-  // per org (ResourceExhausted past either). A PENDING asset counts toward the
-  // org's quota (at its declared size) until it is confirmed or swept: the
-  // storage implementation removes a PENDING asset older than 24 hours, row
-  // and object.
+  // returns a presigned PUT, conditioned on size_bytes and content_type, for
+  // the STAGING key gtm/<org_id>/<asset_id>.upload in the org's bucket. The
+  // client PUTs the bytes to upload_url with required_headers before
+  // expires_at (15 minutes), then calls ConfirmAssetUpload, which checks the
+  // staged bytes and copies them to the asset's final key
+  // gtm/<org_id>/<asset_id> (object_key). No client can ever write a final
+  // key. Limits are the service's: 25 MiB per asset (64 MiB when an agent
+  // copies a chat attachment), about 2 GiB per org (ResourceExhausted past
+  // either). A PENDING asset counts toward the org's quota, at its declared
+  // size, only until its upload URL expires (plus 5 minutes' grace, so 20
+  // minutes); the storage implementation sweeps a PENDING asset older than 24
+  // hours, row and objects.
   rpc CreateAssetUpload(CreateAssetUploadRequest) returns (CreateAssetUploadResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -219,11 +224,12 @@ service GtmService {
     };
   }
 
-  // ConfirmAssetUpload finishes an upload: the server reads the object,
-  // checks its size against the declared one, sniffs its type against the
-  // allowlist and computes its sha256, then marks the asset READY. If any
-  // check fails it deletes the object and the row (InvalidArgument). An asset
-  // that is not PENDING is FailedPrecondition.
+  // ConfirmAssetUpload finishes an upload: the server reads the staged
+  // object (gtm/<org_id>/<asset_id>.upload), checks its size against the
+  // declared one, sniffs its type against the allowlist and computes its
+  // sha256, copies it to the final key and removes the staged one, then marks
+  // the asset READY. If any check fails it deletes the object and the row
+  // (InvalidArgument). An asset that is not PENDING is FailedPrecondition.
   rpc ConfirmAssetUpload(ConfirmAssetUploadRequest) returns (ConfirmAssetUploadResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -233,6 +239,22 @@ service GtmService {
           kind: "gtm_asset"
           id: "asset_id"
           label: "response.asset.filename"
+        }
+        scope: "org_id"
+      }
+    };
+  }
+
+  // DeleteAsset removes an asset: its row and its objects (final and
+  // staging). A person's act only (PermissionDenied for an agent).
+  rpc DeleteAsset(DeleteAssetRequest) returns (DeleteAssetResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "gtm_asset"
+          id: "asset_id"
         }
         scope: "org_id"
       }
@@ -274,10 +296,23 @@ service GtmService {
   // 500 per call: a new key is created, a changed entry updated, an equal one
   // left alone (each counted). A library larger than one batch is imported in
   // several calls. With prune, all_keys must list the library's COMPLETE key
-  // set (every batch's keys), and the org's entries whose key is not in it are
-  // removed, so each batch of a multi-call import may prune safely
-  // (strategies made from a removed entry keep their library_key). A person's
-  // act only (PermissionDenied for an agent).
+  // set (every batch's keys, and every key of this batch: InvalidArgument
+  // otherwise), and the org's entries whose key is not in it are the ones a
+  // prune removes; without prune, all_keys is ignored. Strategies made from a
+  // removed entry keep their library_key. Every call is recorded
+  // (ListLibraryImports).
+  //
+  // Credentials. Only a person-class credential (a signed-in session, a
+  // shared key, a browser session) acts as a person; every other credential,
+  // the CLI login an agent's shell inherits included, acts as an agent and is
+  // PermissionDenied here. The one exception is this rpc: an access token may
+  // call it, acting as a person through a token, and a token only UPSERTS.
+  //   - prune over a person-class credential removes the entries at once
+  //     (pruned).
+  //   - prune over a token removes nothing: it stages a prune request
+  //     (prune_request_id, with the keys it would remove in would_remove) for
+  //     a person to confirm with ConfirmLibraryPrune or cancel with
+  //     CancelLibraryPrune, in the web app. Nothing to remove: no request.
   rpc ImportStrategyLibrary(ImportStrategyLibraryRequest) returns (ImportStrategyLibraryResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -289,6 +324,66 @@ service GtmService {
         }
         scope: "org_id"
         detail: ["source_revision"]
+      }
+    };
+  }
+
+  // ListLibraryImports lists the org's ImportStrategyLibrary calls, newest
+  // first: who, through which credential, from which source revision, and
+  // what each changed. The web's import history.
+  rpc ListLibraryImports(ListLibraryImportsRequest) returns (ListLibraryImportsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // ListLibraryPruneRequests lists the org's prune requests, newest first. A
+  // PENDING request older than 7 days is answered as EXPIRED.
+  rpc ListLibraryPruneRequests(ListLibraryPruneRequestsRequest) returns (ListLibraryPruneRequestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "read-only"}
+    };
+  }
+
+  // ConfirmLibraryPrune carries out a PENDING prune request. It needs a
+  // person-class credential (a token, even one that may import, is
+  // PermissionDenied). It removes only the request's keys that are still in
+  // the library AND were not imported again since the request was made (an
+  // entry whose imported_at is after the request's created_at is kept), and
+  // answers how many it removed. A request that is not PENDING, or is older
+  // than 7 days (EXPIRED), is FailedPrecondition.
+  rpc ConfirmLibraryPrune(ConfirmLibraryPruneRequest) returns (ConfirmLibraryPruneResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "confirm_prune"
+        target: {
+          kind: "gtm_library_prune_request"
+          id: "request_id"
+        }
+        scope: "org_id"
+        detail: ["response.removed"]
+      }
+    };
+  }
+
+  // CancelLibraryPrune cancels a PENDING prune request; nothing is removed. A
+  // person's act (PermissionDenied for an agent). A request that is not
+  // PENDING is FailedPrecondition.
+  rpc CancelLibraryPrune(CancelLibraryPruneRequest) returns (CancelLibraryPruneResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "cancel_prune"
+        target: {
+          kind: "gtm_library_prune_request"
+          id: "request_id"
+        }
+        scope: "org_id"
       }
     };
   }
@@ -721,9 +816,9 @@ enum GtmItemFormat {
 // GtmAssetStatus is whether an asset's bytes are in place.
 enum GtmAssetStatus {
   GTM_ASSET_STATUS_UNSPECIFIED = 0;
-  // CreateAssetUpload issued an upload URL; the bytes are not confirmed. It
-  // counts toward the org's quota, and is swept (row and object) after 24
-  // hours.
+  // CreateAssetUpload issued an upload URL (to the staging key); the bytes
+  // are not confirmed. It counts toward the org's quota until the URL expires
+  // (20 minutes), and is swept (row and objects) after 24 hours.
   GTM_ASSET_STATUS_PENDING = 1;
   // ConfirmAssetUpload checked the bytes (size, type, sha256).
   GTM_ASSET_STATUS_READY = 2;
@@ -770,6 +865,28 @@ enum GtmStrategyCategory {
   GTM_STRATEGY_CATEGORY_TRUST_REPUTATION = 12;
   // Market research & positioning
   GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING = 13;
+}
+
+// GtmCredentialKind is the class of credential a library import came
+// through.
+enum GtmCredentialKind {
+  GTM_CREDENTIAL_KIND_UNSPECIFIED = 0;
+  // A person-class credential: a signed-in session, a shared key, a browser
+  // session.
+  GTM_CREDENTIAL_KIND_PERSON = 1;
+  // An access token (the import rpc only): it upserts, never removes.
+  GTM_CREDENTIAL_KIND_TOKEN = 2;
+}
+
+// GtmPruneRequestStatus is a staged prune's lifecycle.
+enum GtmPruneRequestStatus {
+  GTM_PRUNE_REQUEST_STATUS_UNSPECIFIED = 0;
+  // Waiting for a person (ConfirmLibraryPrune / CancelLibraryPrune).
+  GTM_PRUNE_REQUEST_STATUS_PENDING = 1;
+  GTM_PRUNE_REQUEST_STATUS_CONFIRMED = 2;
+  GTM_PRUNE_REQUEST_STATUS_CANCELLED = 3;
+  // Not decided within 7 days; it can no longer be confirmed.
+  GTM_PRUNE_REQUEST_STATUS_EXPIRED = 4;
 }
 
 // GtmLibraryDepth is how much a library entry holds.
@@ -972,6 +1089,45 @@ message GtmChannelTypeList {
   }];
 }
 
+// GtmLibraryImport is one ImportStrategyLibrary call (gtm_library_imports),
+// for the audit history.
+message GtmLibraryImport {
+  string id = 1;
+  string org_id = 2;
+  // The user it acted as.
+  string actor_user_id = 3;
+  GtmCredentialKind credential_kind = 4;
+  string source_revision = 5;
+  int32 created = 6;
+  int32 updated = 7;
+  int32 unchanged = 8;
+  int32 pruned = 9;
+  // The prune request it staged, if any.
+  string prune_request_id = 10;
+  google.protobuf.Timestamp created_at = 11;
+}
+
+// GtmLibraryPruneRequest is a prune an import over a token staged
+// (gtm_library_prune_requests): the keys it would remove, waiting for a
+// person.
+message GtmLibraryPruneRequest {
+  string id = 1;
+  string org_id = 2;
+  // The user the staging import acted as.
+  string requested_by = 3;
+  GtmCredentialKind credential_kind = 4;
+  string source_revision = 5;
+  repeated string remove_keys = 6;
+  // PENDING past 7 days is answered as EXPIRED.
+  GtmPruneRequestStatus status = 7;
+  // Who confirmed or cancelled it, and when.
+  string decided_by = 8;
+  google.protobuf.Timestamp decided_at = 9;
+  google.protobuf.Timestamp created_at = 10;
+  // When a PENDING request expires (created_at + 7 days).
+  google.protobuf.Timestamp expires_at = 11;
+}
+
 // GtmLibraryStep is one step of a play and who does it.
 message GtmLibraryStep {
   // Who does it, as the catalog says ("agent", "you", ...).
@@ -1027,7 +1183,9 @@ message GtmStrategyLibraryEntry {
   repeated GtmLibraryStep steps = 30;
   // Any field of the entry this message has no field for, kept whole.
   google.protobuf.Struct extra = 31;
-  // Set by the import; ignored on the way in.
+  // Set by the import; ignored on the way in. imported_at moves on every
+  // import that names the key, changed or not: a prune request skips an entry
+  // imported again after it was made.
   string source_revision = 32;
   google.protobuf.Timestamp imported_at = 33;
   string imported_by = 34;
@@ -1548,6 +1706,13 @@ message GetAssetDownloadResponse {
   google.protobuf.Timestamp expires_at = 2;
 }
 
+message DeleteAssetRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string asset_id = 2 [(buf.validate.field).required = true];
+}
+
+message DeleteAssetResponse {}
+
 // ---------------------------------------------------------------------------
 // Strategy library.
 // ---------------------------------------------------------------------------
@@ -1591,6 +1756,11 @@ message ImportStrategyLibraryRequest {
     message: "prune needs all_keys: the complete key set of the library"
     expression: "!this.prune || size(this.all_keys) > 0"
   };
+  option (buf.validate.message).cel = {
+    id: "prune_all_keys_cover_entries"
+    message: "with prune, every entry's key must be in all_keys"
+    expression: "!this.prune || this.entries.all(e, e.key in this.all_keys)"
+  };
   string org_id = 1 [(buf.validate.field).required = true];
   // At most 500 per call; every key once.
   repeated GtmStrategyLibraryEntry entries = 2 [(buf.validate.field).repeated = {
@@ -1602,10 +1772,12 @@ message ImportStrategyLibraryRequest {
     min_len: 1
     max_len: 200
   }];
-  // Remove the org's entries whose key is not in all_keys.
+  // Remove the org's entries whose key is not in all_keys (over a token:
+  // stage a prune request instead).
   bool prune = 4;
   // With prune (required then): the complete key set of the library being
-  // imported, across all batches; at most 5000.
+  // imported, across all batches, at most 5000; every key of entries must be
+  // in it (InvalidArgument otherwise). Ignored without prune.
   repeated string all_keys = 5 [(buf.validate.field).repeated = {
     max_items: 5000
     items: {string: {pattern: "^[a-z0-9][a-z0-9_-]{0,127}$"}}
@@ -1616,7 +1788,69 @@ message ImportStrategyLibraryResponse {
   int32 created = 1;
   int32 updated = 2;
   int32 unchanged = 3;
+  // Entries removed now (prune over a person-class credential); 0 over a
+  // token.
   int32 pruned = 4;
+  // Over a token with prune: the staged request a person confirms; empty
+  // when none was staged (no prune, a person-class credential, or nothing to
+  // remove).
+  string prune_request_id = 5;
+  // The keys that request would remove.
+  repeated string would_remove = 6;
+}
+
+message ListLibraryImportsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // page_size is at most 200; 0 is 50.
+  int32 page_size = 2 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 3;
+}
+
+message ListLibraryImportsResponse {
+  repeated GtmLibraryImport imports = 1;
+  string next_page_token = 2;
+}
+
+message ListLibraryPruneRequestsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  optional GtmPruneRequestStatus status = 2;
+  // page_size is at most 200; 0 is 50.
+  int32 page_size = 3 [(buf.validate.field).int32 = {
+    gte: 0
+    lte: 200
+  }];
+  string page_token = 4;
+}
+
+message ListLibraryPruneRequestsResponse {
+  repeated GtmLibraryPruneRequest requests = 1;
+  string next_page_token = 2;
+}
+
+message ConfirmLibraryPruneRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string request_id = 2 [(buf.validate.field).required = true];
+}
+
+message ConfirmLibraryPruneResponse {
+  // How many entries it removed (the request's keys still present and not
+  // imported again since).
+  int32 removed = 1;
+  // The request, now CONFIRMED.
+  GtmLibraryPruneRequest request = 2;
+}
+
+message CancelLibraryPruneRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  string request_id = 2 [(buf.validate.field).required = true];
+}
+
+message CancelLibraryPruneResponse {
+  // The request, now CANCELLED.
+  GtmLibraryPruneRequest request = 1;
 }
 
 message UseLibraryStrategyRequest {

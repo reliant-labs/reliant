@@ -68,6 +68,8 @@ const (
 	// GtmServiceConfirmAssetUploadProcedure is the fully-qualified name of the GtmService's
 	// ConfirmAssetUpload RPC.
 	GtmServiceConfirmAssetUploadProcedure = "/reliant.v1.GtmService/ConfirmAssetUpload"
+	// GtmServiceDeleteAssetProcedure is the fully-qualified name of the GtmService's DeleteAsset RPC.
+	GtmServiceDeleteAssetProcedure = "/reliant.v1.GtmService/DeleteAsset"
 	// GtmServiceGetAssetDownloadProcedure is the fully-qualified name of the GtmService's
 	// GetAssetDownload RPC.
 	GtmServiceGetAssetDownloadProcedure = "/reliant.v1.GtmService/GetAssetDownload"
@@ -80,6 +82,18 @@ const (
 	// GtmServiceImportStrategyLibraryProcedure is the fully-qualified name of the GtmService's
 	// ImportStrategyLibrary RPC.
 	GtmServiceImportStrategyLibraryProcedure = "/reliant.v1.GtmService/ImportStrategyLibrary"
+	// GtmServiceListLibraryImportsProcedure is the fully-qualified name of the GtmService's
+	// ListLibraryImports RPC.
+	GtmServiceListLibraryImportsProcedure = "/reliant.v1.GtmService/ListLibraryImports"
+	// GtmServiceListLibraryPruneRequestsProcedure is the fully-qualified name of the GtmService's
+	// ListLibraryPruneRequests RPC.
+	GtmServiceListLibraryPruneRequestsProcedure = "/reliant.v1.GtmService/ListLibraryPruneRequests"
+	// GtmServiceConfirmLibraryPruneProcedure is the fully-qualified name of the GtmService's
+	// ConfirmLibraryPrune RPC.
+	GtmServiceConfirmLibraryPruneProcedure = "/reliant.v1.GtmService/ConfirmLibraryPrune"
+	// GtmServiceCancelLibraryPruneProcedure is the fully-qualified name of the GtmService's
+	// CancelLibraryPrune RPC.
+	GtmServiceCancelLibraryPruneProcedure = "/reliant.v1.GtmService/CancelLibraryPrune"
 	// GtmServiceUseLibraryStrategyProcedure is the fully-qualified name of the GtmService's
 	// UseLibraryStrategy RPC.
 	GtmServiceUseLibraryStrategyProcedure = "/reliant.v1.GtmService/UseLibraryStrategy"
@@ -160,14 +174,16 @@ type GtmServiceClient interface {
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
 	// CreateChannel adds a channel. A key the org already holds is
-	// AlreadyExists. An agent may create a channel, always MANUAL (mode,
+	// AlreadyExists. An agent may create a channel, with its channel_types,
+	// always MANUAL (mode,
 	// integration_kind and connection_id are a person's to set:
 	// PermissionDenied). No agent ever connects an integration or stores a
 	// credential: connecting is Reliant's own connect flow, by a person, in the
 	// app.
 	CreateChannel(context.Context, *connect.Request[v1.CreateChannelRequest]) (*connect.Response[v1.CreateChannelResponse], error)
 	// UpdateChannel edits a channel. Unset fields are left alone. An agent may
-	// change name, key, manual_instructions_md and status; only a person sets
+	// change a MANUAL channel's name, key, manual_instructions_md, status and
+	// channel_types; only a person sets
 	// mode INTEGRATED, integration_kind or connection_id, or changes any field
 	// of an INTEGRATED channel's integration (PermissionDenied for an agent). A
 	// new key the org already holds is AlreadyExists.
@@ -178,22 +194,29 @@ type GtmServiceClient interface {
 	// GetAsset returns one asset's metadata.
 	GetAsset(context.Context, *connect.Request[v1.GetAssetRequest]) (*connect.Response[v1.GetAssetResponse], error)
 	// CreateAssetUpload starts an upload: it records a PENDING asset and
-	// returns a presigned PUT for its bytes in the org's bucket (object key
-	// gtm/<org_id>/<asset_id>), conditioned on size_bytes and content_type.
-	// The client PUTs the bytes to upload_url with required_headers before
-	// expires_at, then calls ConfirmAssetUpload. Limits are the service's: 25
-	// MiB per asset (64 MiB when an agent copies a chat attachment), about 2 GiB
-	// per org (ResourceExhausted past either). A PENDING asset counts toward the
-	// org's quota (at its declared size) until it is confirmed or swept: the
-	// storage implementation removes a PENDING asset older than 24 hours, row
-	// and object.
+	// returns a presigned PUT, conditioned on size_bytes and content_type, for
+	// the STAGING key gtm/<org_id>/<asset_id>.upload in the org's bucket. The
+	// client PUTs the bytes to upload_url with required_headers before
+	// expires_at (15 minutes), then calls ConfirmAssetUpload, which checks the
+	// staged bytes and copies them to the asset's final key
+	// gtm/<org_id>/<asset_id> (object_key). No client can ever write a final
+	// key. Limits are the service's: 25 MiB per asset (64 MiB when an agent
+	// copies a chat attachment), about 2 GiB per org (ResourceExhausted past
+	// either). A PENDING asset counts toward the org's quota, at its declared
+	// size, only until its upload URL expires (plus 5 minutes' grace, so 20
+	// minutes); the storage implementation sweeps a PENDING asset older than 24
+	// hours, row and objects.
 	CreateAssetUpload(context.Context, *connect.Request[v1.CreateAssetUploadRequest]) (*connect.Response[v1.CreateAssetUploadResponse], error)
-	// ConfirmAssetUpload finishes an upload: the server reads the object,
-	// checks its size against the declared one, sniffs its type against the
-	// allowlist and computes its sha256, then marks the asset READY. If any
-	// check fails it deletes the object and the row (InvalidArgument). An asset
-	// that is not PENDING is FailedPrecondition.
+	// ConfirmAssetUpload finishes an upload: the server reads the staged
+	// object (gtm/<org_id>/<asset_id>.upload), checks its size against the
+	// declared one, sniffs its type against the allowlist and computes its
+	// sha256, copies it to the final key and removes the staged one, then marks
+	// the asset READY. If any check fails it deletes the object and the row
+	// (InvalidArgument). An asset that is not PENDING is FailedPrecondition.
 	ConfirmAssetUpload(context.Context, *connect.Request[v1.ConfirmAssetUploadRequest]) (*connect.Response[v1.ConfirmAssetUploadResponse], error)
+	// DeleteAsset removes an asset: its row and its objects (final and
+	// staging). A person's act only (PermissionDenied for an agent).
+	DeleteAsset(context.Context, *connect.Request[v1.DeleteAssetRequest]) (*connect.Response[v1.DeleteAssetResponse], error)
 	// GetAssetDownload returns a short-lived URL for a READY asset's bytes:
 	// either a presigned GET on the bucket or the gated proxy handler
 	// (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
@@ -208,11 +231,43 @@ type GtmServiceClient interface {
 	// 500 per call: a new key is created, a changed entry updated, an equal one
 	// left alone (each counted). A library larger than one batch is imported in
 	// several calls. With prune, all_keys must list the library's COMPLETE key
-	// set (every batch's keys), and the org's entries whose key is not in it are
-	// removed, so each batch of a multi-call import may prune safely
-	// (strategies made from a removed entry keep their library_key). A person's
-	// act only (PermissionDenied for an agent).
+	// set (every batch's keys, and every key of this batch: InvalidArgument
+	// otherwise), and the org's entries whose key is not in it are the ones a
+	// prune removes; without prune, all_keys is ignored. Strategies made from a
+	// removed entry keep their library_key. Every call is recorded
+	// (ListLibraryImports).
+	//
+	// Credentials. Only a person-class credential (a signed-in session, a
+	// shared key, a browser session) acts as a person; every other credential,
+	// the CLI login an agent's shell inherits included, acts as an agent and is
+	// PermissionDenied here. The one exception is this rpc: an access token may
+	// call it, acting as a person through a token, and a token only UPSERTS.
+	//   - prune over a person-class credential removes the entries at once
+	//     (pruned).
+	//   - prune over a token removes nothing: it stages a prune request
+	//     (prune_request_id, with the keys it would remove in would_remove) for
+	//     a person to confirm with ConfirmLibraryPrune or cancel with
+	//     CancelLibraryPrune, in the web app. Nothing to remove: no request.
 	ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error)
+	// ListLibraryImports lists the org's ImportStrategyLibrary calls, newest
+	// first: who, through which credential, from which source revision, and
+	// what each changed. The web's import history.
+	ListLibraryImports(context.Context, *connect.Request[v1.ListLibraryImportsRequest]) (*connect.Response[v1.ListLibraryImportsResponse], error)
+	// ListLibraryPruneRequests lists the org's prune requests, newest first. A
+	// PENDING request older than 7 days is answered as EXPIRED.
+	ListLibraryPruneRequests(context.Context, *connect.Request[v1.ListLibraryPruneRequestsRequest]) (*connect.Response[v1.ListLibraryPruneRequestsResponse], error)
+	// ConfirmLibraryPrune carries out a PENDING prune request. It needs a
+	// person-class credential (a token, even one that may import, is
+	// PermissionDenied). It removes only the request's keys that are still in
+	// the library AND were not imported again since the request was made (an
+	// entry whose imported_at is after the request's created_at is kept), and
+	// answers how many it removed. A request that is not PENDING, or is older
+	// than 7 days (EXPIRED), is FailedPrecondition.
+	ConfirmLibraryPrune(context.Context, *connect.Request[v1.ConfirmLibraryPruneRequest]) (*connect.Response[v1.ConfirmLibraryPruneResponse], error)
+	// CancelLibraryPrune cancels a PENDING prune request; nothing is removed. A
+	// person's act (PermissionDenied for an agent). A request that is not
+	// PENDING is FailedPrecondition.
+	CancelLibraryPrune(context.Context, *connect.Request[v1.CancelLibraryPruneRequest]) (*connect.Response[v1.CancelLibraryPruneResponse], error)
 	// UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
 	// goal (from north_star and objective), target metric (from kpis),
 	// category and library_key. With create_first_campaign it also makes a
@@ -409,6 +464,12 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(gtmServiceMethods.ByName("ConfirmAssetUpload")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteAsset: connect.NewClient[v1.DeleteAssetRequest, v1.DeleteAssetResponse](
+			httpClient,
+			baseURL+GtmServiceDeleteAssetProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("DeleteAsset")),
+			connect.WithClientOptions(opts...),
+		),
 		getAssetDownload: connect.NewClient[v1.GetAssetDownloadRequest, v1.GetAssetDownloadResponse](
 			httpClient,
 			baseURL+GtmServiceGetAssetDownloadProcedure,
@@ -434,6 +495,32 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+GtmServiceImportStrategyLibraryProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("ImportStrategyLibrary")),
+			connect.WithClientOptions(opts...),
+		),
+		listLibraryImports: connect.NewClient[v1.ListLibraryImportsRequest, v1.ListLibraryImportsResponse](
+			httpClient,
+			baseURL+GtmServiceListLibraryImportsProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ListLibraryImports")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listLibraryPruneRequests: connect.NewClient[v1.ListLibraryPruneRequestsRequest, v1.ListLibraryPruneRequestsResponse](
+			httpClient,
+			baseURL+GtmServiceListLibraryPruneRequestsProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ListLibraryPruneRequests")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		confirmLibraryPrune: connect.NewClient[v1.ConfirmLibraryPruneRequest, v1.ConfirmLibraryPruneResponse](
+			httpClient,
+			baseURL+GtmServiceConfirmLibraryPruneProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("ConfirmLibraryPrune")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelLibraryPrune: connect.NewClient[v1.CancelLibraryPruneRequest, v1.CancelLibraryPruneResponse](
+			httpClient,
+			baseURL+GtmServiceCancelLibraryPruneProcedure,
+			connect.WithSchema(gtmServiceMethods.ByName("CancelLibraryPrune")),
 			connect.WithClientOptions(opts...),
 		),
 		useLibraryStrategy: connect.NewClient[v1.UseLibraryStrategyRequest, v1.UseLibraryStrategyResponse](
@@ -570,43 +657,48 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // gtmServiceClient implements GtmServiceClient.
 type gtmServiceClient struct {
-	getGtmAccess            *connect.Client[v1.GetGtmAccessRequest, v1.GetGtmAccessResponse]
-	listStrategies          *connect.Client[v1.ListStrategiesRequest, v1.ListStrategiesResponse]
-	getStrategy             *connect.Client[v1.GetStrategyRequest, v1.GetStrategyResponse]
-	createStrategy          *connect.Client[v1.CreateStrategyRequest, v1.CreateStrategyResponse]
-	updateStrategy          *connect.Client[v1.UpdateStrategyRequest, v1.UpdateStrategyResponse]
-	listChannels            *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
-	getChannel              *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
-	createChannel           *connect.Client[v1.CreateChannelRequest, v1.CreateChannelResponse]
-	updateChannel           *connect.Client[v1.UpdateChannelRequest, v1.UpdateChannelResponse]
-	listAssets              *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
-	getAsset                *connect.Client[v1.GetAssetRequest, v1.GetAssetResponse]
-	createAssetUpload       *connect.Client[v1.CreateAssetUploadRequest, v1.CreateAssetUploadResponse]
-	confirmAssetUpload      *connect.Client[v1.ConfirmAssetUploadRequest, v1.ConfirmAssetUploadResponse]
-	getAssetDownload        *connect.Client[v1.GetAssetDownloadRequest, v1.GetAssetDownloadResponse]
-	listStrategyLibrary     *connect.Client[v1.ListStrategyLibraryRequest, v1.ListStrategyLibraryResponse]
-	getStrategyLibraryEntry *connect.Client[v1.GetStrategyLibraryEntryRequest, v1.GetStrategyLibraryEntryResponse]
-	importStrategyLibrary   *connect.Client[v1.ImportStrategyLibraryRequest, v1.ImportStrategyLibraryResponse]
-	useLibraryStrategy      *connect.Client[v1.UseLibraryStrategyRequest, v1.UseLibraryStrategyResponse]
-	listIdeas               *connect.Client[v1.ListIdeasRequest, v1.ListIdeasResponse]
-	getIdea                 *connect.Client[v1.GetIdeaRequest, v1.GetIdeaResponse]
-	createIdea              *connect.Client[v1.CreateIdeaRequest, v1.CreateIdeaResponse]
-	updateIdea              *connect.Client[v1.UpdateIdeaRequest, v1.UpdateIdeaResponse]
-	setIdeaStatus           *connect.Client[v1.SetIdeaStatusRequest, v1.SetIdeaStatusResponse]
-	listCampaigns           *connect.Client[v1.ListCampaignsRequest, v1.ListCampaignsResponse]
-	getCampaign             *connect.Client[v1.GetCampaignRequest, v1.GetCampaignResponse]
-	createCampaign          *connect.Client[v1.CreateCampaignRequest, v1.CreateCampaignResponse]
-	updateCampaign          *connect.Client[v1.UpdateCampaignRequest, v1.UpdateCampaignResponse]
-	listItems               *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
-	getItem                 *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
-	createItem              *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
-	updateItem              *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
-	resolveItemSend         *connect.Client[v1.ResolveItemSendRequest, v1.ResolveItemSendResponse]
-	getPositioning          *connect.Client[v1.GetPositioningRequest, v1.GetPositioningResponse]
-	updatePositioning       *connect.Client[v1.UpdatePositioningRequest, v1.UpdatePositioningResponse]
-	listClaims              *connect.Client[v1.ListClaimsRequest, v1.ListClaimsResponse]
-	upsertClaim             *connect.Client[v1.UpsertClaimRequest, v1.UpsertClaimResponse]
-	checkClaims             *connect.Client[v1.CheckClaimsRequest, v1.CheckClaimsResponse]
+	getGtmAccess             *connect.Client[v1.GetGtmAccessRequest, v1.GetGtmAccessResponse]
+	listStrategies           *connect.Client[v1.ListStrategiesRequest, v1.ListStrategiesResponse]
+	getStrategy              *connect.Client[v1.GetStrategyRequest, v1.GetStrategyResponse]
+	createStrategy           *connect.Client[v1.CreateStrategyRequest, v1.CreateStrategyResponse]
+	updateStrategy           *connect.Client[v1.UpdateStrategyRequest, v1.UpdateStrategyResponse]
+	listChannels             *connect.Client[v1.ListChannelsRequest, v1.ListChannelsResponse]
+	getChannel               *connect.Client[v1.GetChannelRequest, v1.GetChannelResponse]
+	createChannel            *connect.Client[v1.CreateChannelRequest, v1.CreateChannelResponse]
+	updateChannel            *connect.Client[v1.UpdateChannelRequest, v1.UpdateChannelResponse]
+	listAssets               *connect.Client[v1.ListAssetsRequest, v1.ListAssetsResponse]
+	getAsset                 *connect.Client[v1.GetAssetRequest, v1.GetAssetResponse]
+	createAssetUpload        *connect.Client[v1.CreateAssetUploadRequest, v1.CreateAssetUploadResponse]
+	confirmAssetUpload       *connect.Client[v1.ConfirmAssetUploadRequest, v1.ConfirmAssetUploadResponse]
+	deleteAsset              *connect.Client[v1.DeleteAssetRequest, v1.DeleteAssetResponse]
+	getAssetDownload         *connect.Client[v1.GetAssetDownloadRequest, v1.GetAssetDownloadResponse]
+	listStrategyLibrary      *connect.Client[v1.ListStrategyLibraryRequest, v1.ListStrategyLibraryResponse]
+	getStrategyLibraryEntry  *connect.Client[v1.GetStrategyLibraryEntryRequest, v1.GetStrategyLibraryEntryResponse]
+	importStrategyLibrary    *connect.Client[v1.ImportStrategyLibraryRequest, v1.ImportStrategyLibraryResponse]
+	listLibraryImports       *connect.Client[v1.ListLibraryImportsRequest, v1.ListLibraryImportsResponse]
+	listLibraryPruneRequests *connect.Client[v1.ListLibraryPruneRequestsRequest, v1.ListLibraryPruneRequestsResponse]
+	confirmLibraryPrune      *connect.Client[v1.ConfirmLibraryPruneRequest, v1.ConfirmLibraryPruneResponse]
+	cancelLibraryPrune       *connect.Client[v1.CancelLibraryPruneRequest, v1.CancelLibraryPruneResponse]
+	useLibraryStrategy       *connect.Client[v1.UseLibraryStrategyRequest, v1.UseLibraryStrategyResponse]
+	listIdeas                *connect.Client[v1.ListIdeasRequest, v1.ListIdeasResponse]
+	getIdea                  *connect.Client[v1.GetIdeaRequest, v1.GetIdeaResponse]
+	createIdea               *connect.Client[v1.CreateIdeaRequest, v1.CreateIdeaResponse]
+	updateIdea               *connect.Client[v1.UpdateIdeaRequest, v1.UpdateIdeaResponse]
+	setIdeaStatus            *connect.Client[v1.SetIdeaStatusRequest, v1.SetIdeaStatusResponse]
+	listCampaigns            *connect.Client[v1.ListCampaignsRequest, v1.ListCampaignsResponse]
+	getCampaign              *connect.Client[v1.GetCampaignRequest, v1.GetCampaignResponse]
+	createCampaign           *connect.Client[v1.CreateCampaignRequest, v1.CreateCampaignResponse]
+	updateCampaign           *connect.Client[v1.UpdateCampaignRequest, v1.UpdateCampaignResponse]
+	listItems                *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
+	getItem                  *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
+	createItem               *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
+	updateItem               *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
+	resolveItemSend          *connect.Client[v1.ResolveItemSendRequest, v1.ResolveItemSendResponse]
+	getPositioning           *connect.Client[v1.GetPositioningRequest, v1.GetPositioningResponse]
+	updatePositioning        *connect.Client[v1.UpdatePositioningRequest, v1.UpdatePositioningResponse]
+	listClaims               *connect.Client[v1.ListClaimsRequest, v1.ListClaimsResponse]
+	upsertClaim              *connect.Client[v1.UpsertClaimRequest, v1.UpsertClaimResponse]
+	checkClaims              *connect.Client[v1.CheckClaimsRequest, v1.CheckClaimsResponse]
 }
 
 // GetGtmAccess calls reliant.v1.GtmService.GetGtmAccess.
@@ -674,6 +766,11 @@ func (c *gtmServiceClient) ConfirmAssetUpload(ctx context.Context, req *connect.
 	return c.confirmAssetUpload.CallUnary(ctx, req)
 }
 
+// DeleteAsset calls reliant.v1.GtmService.DeleteAsset.
+func (c *gtmServiceClient) DeleteAsset(ctx context.Context, req *connect.Request[v1.DeleteAssetRequest]) (*connect.Response[v1.DeleteAssetResponse], error) {
+	return c.deleteAsset.CallUnary(ctx, req)
+}
+
 // GetAssetDownload calls reliant.v1.GtmService.GetAssetDownload.
 func (c *gtmServiceClient) GetAssetDownload(ctx context.Context, req *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error) {
 	return c.getAssetDownload.CallUnary(ctx, req)
@@ -692,6 +789,26 @@ func (c *gtmServiceClient) GetStrategyLibraryEntry(ctx context.Context, req *con
 // ImportStrategyLibrary calls reliant.v1.GtmService.ImportStrategyLibrary.
 func (c *gtmServiceClient) ImportStrategyLibrary(ctx context.Context, req *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error) {
 	return c.importStrategyLibrary.CallUnary(ctx, req)
+}
+
+// ListLibraryImports calls reliant.v1.GtmService.ListLibraryImports.
+func (c *gtmServiceClient) ListLibraryImports(ctx context.Context, req *connect.Request[v1.ListLibraryImportsRequest]) (*connect.Response[v1.ListLibraryImportsResponse], error) {
+	return c.listLibraryImports.CallUnary(ctx, req)
+}
+
+// ListLibraryPruneRequests calls reliant.v1.GtmService.ListLibraryPruneRequests.
+func (c *gtmServiceClient) ListLibraryPruneRequests(ctx context.Context, req *connect.Request[v1.ListLibraryPruneRequestsRequest]) (*connect.Response[v1.ListLibraryPruneRequestsResponse], error) {
+	return c.listLibraryPruneRequests.CallUnary(ctx, req)
+}
+
+// ConfirmLibraryPrune calls reliant.v1.GtmService.ConfirmLibraryPrune.
+func (c *gtmServiceClient) ConfirmLibraryPrune(ctx context.Context, req *connect.Request[v1.ConfirmLibraryPruneRequest]) (*connect.Response[v1.ConfirmLibraryPruneResponse], error) {
+	return c.confirmLibraryPrune.CallUnary(ctx, req)
+}
+
+// CancelLibraryPrune calls reliant.v1.GtmService.CancelLibraryPrune.
+func (c *gtmServiceClient) CancelLibraryPrune(ctx context.Context, req *connect.Request[v1.CancelLibraryPruneRequest]) (*connect.Response[v1.CancelLibraryPruneResponse], error) {
+	return c.cancelLibraryPrune.CallUnary(ctx, req)
 }
 
 // UseLibraryStrategy calls reliant.v1.GtmService.UseLibraryStrategy.
@@ -824,14 +941,16 @@ type GtmServiceHandler interface {
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
 	// CreateChannel adds a channel. A key the org already holds is
-	// AlreadyExists. An agent may create a channel, always MANUAL (mode,
+	// AlreadyExists. An agent may create a channel, with its channel_types,
+	// always MANUAL (mode,
 	// integration_kind and connection_id are a person's to set:
 	// PermissionDenied). No agent ever connects an integration or stores a
 	// credential: connecting is Reliant's own connect flow, by a person, in the
 	// app.
 	CreateChannel(context.Context, *connect.Request[v1.CreateChannelRequest]) (*connect.Response[v1.CreateChannelResponse], error)
 	// UpdateChannel edits a channel. Unset fields are left alone. An agent may
-	// change name, key, manual_instructions_md and status; only a person sets
+	// change a MANUAL channel's name, key, manual_instructions_md, status and
+	// channel_types; only a person sets
 	// mode INTEGRATED, integration_kind or connection_id, or changes any field
 	// of an INTEGRATED channel's integration (PermissionDenied for an agent). A
 	// new key the org already holds is AlreadyExists.
@@ -842,22 +961,29 @@ type GtmServiceHandler interface {
 	// GetAsset returns one asset's metadata.
 	GetAsset(context.Context, *connect.Request[v1.GetAssetRequest]) (*connect.Response[v1.GetAssetResponse], error)
 	// CreateAssetUpload starts an upload: it records a PENDING asset and
-	// returns a presigned PUT for its bytes in the org's bucket (object key
-	// gtm/<org_id>/<asset_id>), conditioned on size_bytes and content_type.
-	// The client PUTs the bytes to upload_url with required_headers before
-	// expires_at, then calls ConfirmAssetUpload. Limits are the service's: 25
-	// MiB per asset (64 MiB when an agent copies a chat attachment), about 2 GiB
-	// per org (ResourceExhausted past either). A PENDING asset counts toward the
-	// org's quota (at its declared size) until it is confirmed or swept: the
-	// storage implementation removes a PENDING asset older than 24 hours, row
-	// and object.
+	// returns a presigned PUT, conditioned on size_bytes and content_type, for
+	// the STAGING key gtm/<org_id>/<asset_id>.upload in the org's bucket. The
+	// client PUTs the bytes to upload_url with required_headers before
+	// expires_at (15 minutes), then calls ConfirmAssetUpload, which checks the
+	// staged bytes and copies them to the asset's final key
+	// gtm/<org_id>/<asset_id> (object_key). No client can ever write a final
+	// key. Limits are the service's: 25 MiB per asset (64 MiB when an agent
+	// copies a chat attachment), about 2 GiB per org (ResourceExhausted past
+	// either). A PENDING asset counts toward the org's quota, at its declared
+	// size, only until its upload URL expires (plus 5 minutes' grace, so 20
+	// minutes); the storage implementation sweeps a PENDING asset older than 24
+	// hours, row and objects.
 	CreateAssetUpload(context.Context, *connect.Request[v1.CreateAssetUploadRequest]) (*connect.Response[v1.CreateAssetUploadResponse], error)
-	// ConfirmAssetUpload finishes an upload: the server reads the object,
-	// checks its size against the declared one, sniffs its type against the
-	// allowlist and computes its sha256, then marks the asset READY. If any
-	// check fails it deletes the object and the row (InvalidArgument). An asset
-	// that is not PENDING is FailedPrecondition.
+	// ConfirmAssetUpload finishes an upload: the server reads the staged
+	// object (gtm/<org_id>/<asset_id>.upload), checks its size against the
+	// declared one, sniffs its type against the allowlist and computes its
+	// sha256, copies it to the final key and removes the staged one, then marks
+	// the asset READY. If any check fails it deletes the object and the row
+	// (InvalidArgument). An asset that is not PENDING is FailedPrecondition.
 	ConfirmAssetUpload(context.Context, *connect.Request[v1.ConfirmAssetUploadRequest]) (*connect.Response[v1.ConfirmAssetUploadResponse], error)
+	// DeleteAsset removes an asset: its row and its objects (final and
+	// staging). A person's act only (PermissionDenied for an agent).
+	DeleteAsset(context.Context, *connect.Request[v1.DeleteAssetRequest]) (*connect.Response[v1.DeleteAssetResponse], error)
 	// GetAssetDownload returns a short-lived URL for a READY asset's bytes:
 	// either a presigned GET on the bucket or the gated proxy handler
 	// (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
@@ -872,11 +998,43 @@ type GtmServiceHandler interface {
 	// 500 per call: a new key is created, a changed entry updated, an equal one
 	// left alone (each counted). A library larger than one batch is imported in
 	// several calls. With prune, all_keys must list the library's COMPLETE key
-	// set (every batch's keys), and the org's entries whose key is not in it are
-	// removed, so each batch of a multi-call import may prune safely
-	// (strategies made from a removed entry keep their library_key). A person's
-	// act only (PermissionDenied for an agent).
+	// set (every batch's keys, and every key of this batch: InvalidArgument
+	// otherwise), and the org's entries whose key is not in it are the ones a
+	// prune removes; without prune, all_keys is ignored. Strategies made from a
+	// removed entry keep their library_key. Every call is recorded
+	// (ListLibraryImports).
+	//
+	// Credentials. Only a person-class credential (a signed-in session, a
+	// shared key, a browser session) acts as a person; every other credential,
+	// the CLI login an agent's shell inherits included, acts as an agent and is
+	// PermissionDenied here. The one exception is this rpc: an access token may
+	// call it, acting as a person through a token, and a token only UPSERTS.
+	//   - prune over a person-class credential removes the entries at once
+	//     (pruned).
+	//   - prune over a token removes nothing: it stages a prune request
+	//     (prune_request_id, with the keys it would remove in would_remove) for
+	//     a person to confirm with ConfirmLibraryPrune or cancel with
+	//     CancelLibraryPrune, in the web app. Nothing to remove: no request.
 	ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error)
+	// ListLibraryImports lists the org's ImportStrategyLibrary calls, newest
+	// first: who, through which credential, from which source revision, and
+	// what each changed. The web's import history.
+	ListLibraryImports(context.Context, *connect.Request[v1.ListLibraryImportsRequest]) (*connect.Response[v1.ListLibraryImportsResponse], error)
+	// ListLibraryPruneRequests lists the org's prune requests, newest first. A
+	// PENDING request older than 7 days is answered as EXPIRED.
+	ListLibraryPruneRequests(context.Context, *connect.Request[v1.ListLibraryPruneRequestsRequest]) (*connect.Response[v1.ListLibraryPruneRequestsResponse], error)
+	// ConfirmLibraryPrune carries out a PENDING prune request. It needs a
+	// person-class credential (a token, even one that may import, is
+	// PermissionDenied). It removes only the request's keys that are still in
+	// the library AND were not imported again since the request was made (an
+	// entry whose imported_at is after the request's created_at is kept), and
+	// answers how many it removed. A request that is not PENDING, or is older
+	// than 7 days (EXPIRED), is FailedPrecondition.
+	ConfirmLibraryPrune(context.Context, *connect.Request[v1.ConfirmLibraryPruneRequest]) (*connect.Response[v1.ConfirmLibraryPruneResponse], error)
+	// CancelLibraryPrune cancels a PENDING prune request; nothing is removed. A
+	// person's act (PermissionDenied for an agent). A request that is not
+	// PENDING is FailedPrecondition.
+	CancelLibraryPrune(context.Context, *connect.Request[v1.CancelLibraryPruneRequest]) (*connect.Response[v1.CancelLibraryPruneResponse], error)
 	// UseLibraryStrategy makes a DRAFT strategy from a library entry: name,
 	// goal (from north_star and objective), target metric (from kpis),
 	// category and library_key. With create_first_campaign it also makes a
@@ -1069,6 +1227,12 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(gtmServiceMethods.ByName("ConfirmAssetUpload")),
 		connect.WithHandlerOptions(opts...),
 	)
+	gtmServiceDeleteAssetHandler := connect.NewUnaryHandler(
+		GtmServiceDeleteAssetProcedure,
+		svc.DeleteAsset,
+		connect.WithSchema(gtmServiceMethods.ByName("DeleteAsset")),
+		connect.WithHandlerOptions(opts...),
+	)
 	gtmServiceGetAssetDownloadHandler := connect.NewUnaryHandler(
 		GtmServiceGetAssetDownloadProcedure,
 		svc.GetAssetDownload,
@@ -1094,6 +1258,32 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		GtmServiceImportStrategyLibraryProcedure,
 		svc.ImportStrategyLibrary,
 		connect.WithSchema(gtmServiceMethods.ByName("ImportStrategyLibrary")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceListLibraryImportsHandler := connect.NewUnaryHandler(
+		GtmServiceListLibraryImportsProcedure,
+		svc.ListLibraryImports,
+		connect.WithSchema(gtmServiceMethods.ByName("ListLibraryImports")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceListLibraryPruneRequestsHandler := connect.NewUnaryHandler(
+		GtmServiceListLibraryPruneRequestsProcedure,
+		svc.ListLibraryPruneRequests,
+		connect.WithSchema(gtmServiceMethods.ByName("ListLibraryPruneRequests")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceConfirmLibraryPruneHandler := connect.NewUnaryHandler(
+		GtmServiceConfirmLibraryPruneProcedure,
+		svc.ConfirmLibraryPrune,
+		connect.WithSchema(gtmServiceMethods.ByName("ConfirmLibraryPrune")),
+		connect.WithHandlerOptions(opts...),
+	)
+	gtmServiceCancelLibraryPruneHandler := connect.NewUnaryHandler(
+		GtmServiceCancelLibraryPruneProcedure,
+		svc.CancelLibraryPrune,
+		connect.WithSchema(gtmServiceMethods.ByName("CancelLibraryPrune")),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceUseLibraryStrategyHandler := connect.NewUnaryHandler(
@@ -1253,6 +1443,8 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 			gtmServiceCreateAssetUploadHandler.ServeHTTP(w, r)
 		case GtmServiceConfirmAssetUploadProcedure:
 			gtmServiceConfirmAssetUploadHandler.ServeHTTP(w, r)
+		case GtmServiceDeleteAssetProcedure:
+			gtmServiceDeleteAssetHandler.ServeHTTP(w, r)
 		case GtmServiceGetAssetDownloadProcedure:
 			gtmServiceGetAssetDownloadHandler.ServeHTTP(w, r)
 		case GtmServiceListStrategyLibraryProcedure:
@@ -1261,6 +1453,14 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 			gtmServiceGetStrategyLibraryEntryHandler.ServeHTTP(w, r)
 		case GtmServiceImportStrategyLibraryProcedure:
 			gtmServiceImportStrategyLibraryHandler.ServeHTTP(w, r)
+		case GtmServiceListLibraryImportsProcedure:
+			gtmServiceListLibraryImportsHandler.ServeHTTP(w, r)
+		case GtmServiceListLibraryPruneRequestsProcedure:
+			gtmServiceListLibraryPruneRequestsHandler.ServeHTTP(w, r)
+		case GtmServiceConfirmLibraryPruneProcedure:
+			gtmServiceConfirmLibraryPruneHandler.ServeHTTP(w, r)
+		case GtmServiceCancelLibraryPruneProcedure:
+			gtmServiceCancelLibraryPruneHandler.ServeHTTP(w, r)
 		case GtmServiceUseLibraryStrategyProcedure:
 			gtmServiceUseLibraryStrategyHandler.ServeHTTP(w, r)
 		case GtmServiceListIdeasProcedure:
@@ -1362,6 +1562,10 @@ func (UnimplementedGtmServiceHandler) ConfirmAssetUpload(context.Context, *conne
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ConfirmAssetUpload is not implemented"))
 }
 
+func (UnimplementedGtmServiceHandler) DeleteAsset(context.Context, *connect.Request[v1.DeleteAssetRequest]) (*connect.Response[v1.DeleteAssetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.DeleteAsset is not implemented"))
+}
+
 func (UnimplementedGtmServiceHandler) GetAssetDownload(context.Context, *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.GetAssetDownload is not implemented"))
 }
@@ -1376,6 +1580,22 @@ func (UnimplementedGtmServiceHandler) GetStrategyLibraryEntry(context.Context, *
 
 func (UnimplementedGtmServiceHandler) ImportStrategyLibrary(context.Context, *connect.Request[v1.ImportStrategyLibraryRequest]) (*connect.Response[v1.ImportStrategyLibraryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ImportStrategyLibrary is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ListLibraryImports(context.Context, *connect.Request[v1.ListLibraryImportsRequest]) (*connect.Response[v1.ListLibraryImportsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ListLibraryImports is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ListLibraryPruneRequests(context.Context, *connect.Request[v1.ListLibraryPruneRequestsRequest]) (*connect.Response[v1.ListLibraryPruneRequestsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ListLibraryPruneRequests is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) ConfirmLibraryPrune(context.Context, *connect.Request[v1.ConfirmLibraryPruneRequest]) (*connect.Response[v1.ConfirmLibraryPruneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.ConfirmLibraryPrune is not implemented"))
+}
+
+func (UnimplementedGtmServiceHandler) CancelLibraryPrune(context.Context, *connect.Request[v1.CancelLibraryPruneRequest]) (*connect.Response[v1.CancelLibraryPruneResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.GtmService.CancelLibraryPrune is not implemented"))
 }
 
 func (UnimplementedGtmServiceHandler) UseLibraryStrategy(context.Context, *connect.Request[v1.UseLibraryStrategyRequest]) (*connect.Response[v1.UseLibraryStrategyResponse], error) {
