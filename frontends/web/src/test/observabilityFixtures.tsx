@@ -3,9 +3,11 @@
 /**
  * A model-level ObservabilityApi fake for a component or hook test, served the
  * way the app reads it: through ObservabilityApiProvider for the reads that
- * still go through the context, AND on the wire for ObservabilityService's
- * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …),
- * which call their QueryClient's transport and never the context.
+ * still go through the context, AND on the wire for the services on generated
+ * hooks — ObservabilityService's reads (useServiceOverview, useWorkloads,
+ * useTrace, …) and IssuesService's reads and writes (useIssues, useIssue,
+ * useUpdateIssueStatus, …) — which call their QueryClient's transport and
+ * never the context.
  *
  * The wire half is the shop fixture pack's handlers (fixtures/shop/handlers/
  * observability.ts) over the fake: each decodes the request into the model,
@@ -26,6 +28,7 @@ import { useMemo, type ReactNode } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { Transport } from "@connectrpc/connect";
 
+import { IssuesService } from "@/gen/controlplane/services/issues/v1/issues_pb";
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { observabilityHandlers } from "@/fixtures/shop/handlers/observability";
 import { transport as appTransport } from "@/lib/connect";
@@ -33,8 +36,11 @@ import { createTransportScope, TransportScopeProvider, type TransportScope } fro
 import { mockTransport } from "@/lib/test-utils";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
+/** The services whose calls run on generated hooks, answered on the wire from the fake. */
+const WIRE_SERVICES: ReadonlySet<string> = new Set([ObservabilityService.typeName, IssuesService.typeName]);
+
 /**
- * The fake's ObservabilityService reads on the wire; a relative window
+ * The fake's ObservabilityService and IssuesService calls on the wire; a relative window
  * resolves against `now`. Every other rpc (a project list, a deploy read, the
  * other observability services, still read through the context) goes to the
  * app's transport, as it would outside this scope, so a test's
@@ -42,7 +48,7 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
  */
 export function observabilityFixtureTransport(api: () => ObservabilityApi, now: () => number = Date.now): Transport {
   const pick = (method: { parent: { typeName: string }; name: string }): Transport => {
-    if (method.parent.typeName !== ObservabilityService.typeName) return appTransport;
+    if (!WIRE_SERVICES.has(method.parent.typeName)) return appTransport;
     const handlers = observabilityHandlers(api(), { now }) as Parameters<typeof mockTransport>[0];
     return handlers && `${method.parent.typeName}/${method.name}` in handlers ? mockTransport(handlers) : appTransport;
   };
