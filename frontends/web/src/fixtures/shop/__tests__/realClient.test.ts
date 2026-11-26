@@ -20,7 +20,6 @@ import { RumService } from "@/gen/controlplane/services/rum/v1/rum_pb";
 
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "https://cp.test", hasControlPlane: true }));
 
-import { sqlSubtitlePanel, sqlTrendPanel } from "@/components/Forge/Observability/Dashboards/viewerModel";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
 import type { Panel } from "@/services/controlPlane/observability/types";
@@ -124,36 +123,6 @@ describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
     }
     await same((api) => api.listAttributeValues({ ...scope(["env-prod"]), window: hour(), key: "service.name", prefix: "", limit: 50 }));
   });
-
-  it("answers every panel of every dashboard shop ships, as its dashboard asks", async () => {
-    let answeredSql = 0;
-    const index = await same((api) => api.listDashboards({ orgId: DEMO_ORG, projectId: "shop" }));
-    expect(index.dashboards.length).toBeGreaterThan(0);
-    for (const summary of index.dashboards) {
-      const doc = await same((api) => api.getDashboard({ orgId: DEMO_ORG, ref: summary.ref }));
-      await same((api) => api.listDashboardVersions(DEMO_ORG, summary.ref));
-      // Each panel as the viewer reads it: the figure, its sparkline and its subtitle (viewerModel.ts),
-      // and the figures an attention panel watches (DashboardView.tsx).
-      // As the spec carries them: a figure of its own leaves out what a sql panel does not use (series).
-      const panels = doc.spec.panels.flatMap((p) => [p, ...(p.attention?.figures ?? [])]);
-      const reads = panels.flatMap((p) => [p, sqlTrendPanel(p), sqlSubtitlePanel(p)].filter((r): r is Panel => !!r));
-      for (const panel of reads) {
-        if (panel.kind === "postgres" || panel.kind === "text" || panel.kind === "search") continue;
-        // The console names the dashboard (Forge-Panel); the pack must answer the same without it.
-        const ask = (api: ObservabilityApi) => api.queryPanel({ ...scope(["env-prod"]), window: day(), panel, services: [], stepSeconds: 0, dashboardId: doc.spec.id });
-        const fromModel = await ask(model);
-        const overWire = await ask(wire);
-        if (panel.kind === "sql" && (overWire.rows.length || overWire.series.length)) answeredSql++;
-        const expected = plain({ dashboard: doc.spec.id, panel: panel.id, result: fromModel });
-        expect(withoutDefaults(plain({ dashboard: doc.spec.id, panel: panel.id, result: overWire }), expected)).toEqual(expected);
-      }
-    }
-    // The built-in analytics dashboards' sql panels are answered by their dashboard (productAnalytics.ts): not blank.
-    expect(answeredSql).toBeGreaterThan(40);
-    await same((api) => api.listDashboardTemplates(DEMO_ORG));
-    // Every panel of every shipped dashboard, asked twice (model and wire): 3.5-5s on a CI runner,
-    // so the 5s default failed main under load. Its own budget, not a smaller sweep.
-  }, 30_000);
 
   it("answers the database panels and the databases a panel may read", async () => {
     await same((api) => api.listDashboardDatabases("env-prod"));

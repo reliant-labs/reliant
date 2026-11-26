@@ -14,7 +14,7 @@ import { useMemo, type ReactNode } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import Link from "@/components/forge-ui/link";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import { usePanelQuery } from "@/hooks/observability-queries";
 import { cn } from "@/lib/utils";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -44,7 +44,7 @@ export function SiteInsightsHeader({ view, controls }: { view: SiteInsightsView;
   const { site } = useSiteChoice();
   return (
     <>
-      <PageHeader density="compact" className="mb-0" title="Site insights" subtitle={PAGE_SUBTITLES["site-insights"]} controls={controls} />
+      <ConsolePageHeader density="compact" className="mb-0" title="Site insights" subtitle={PAGE_SUBTITLES["site-insights"]} controls={controls} />
       <nav aria-label="Site insights" className="-mt-1 flex gap-1 overflow-x-auto border-b border-border" data-testid="site-insights-tabs">
         {SITE_INSIGHTS_VIEWS.map((candidate) => (
           <Link
