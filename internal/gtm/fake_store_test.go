@@ -42,7 +42,11 @@ func (f *fakeStore) nextID() string {
 	return fmt.Sprintf("id-%03d", f.seq)
 }
 
+// InTx refuses a done ctx, as a real transaction cannot begin on one.
 func (f *fakeStore) InTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return fn(ctx)
 }
 

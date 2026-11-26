@@ -62,7 +62,7 @@ const (
 	ItemOther      ItemKind = "GTM_ITEM_KIND_OTHER"
 )
 
-// ItemStatus is where an item is. SENT is written only by MarkItemSent.
+// ItemStatus is where an item is. SENT is written only by the email path.
 type ItemStatus string
 
 // ItemStatus values.
@@ -177,6 +177,9 @@ type CampaignDetail struct {
 	Ideas []Idea
 	// Items are scheduled ones soonest first, then the rest newest first.
 	Items []Item
+	// Truncated is true when either list held more than its cap; ListIdeas
+	// and ListItems with the campaign page through all of them.
+	Truncated bool
 }
 
 // Item is a post, an email, a launch: with ScheduledAt it is on the calendar.
@@ -408,8 +411,10 @@ type GetItemInput struct {
 	ID string
 }
 
-// CreateItemInput is the input to Service.CreateItem. The item starts DRAFT.
+// CreateItemInput is the input to Service.CreateItem.
 type CreateItemInput struct {
+	// Status is DRAFT or REVIEW; "" is DRAFT.
+	Status  ItemStatus
 	Kind    ItemKind
 	Title   string
 	BodyMD  string
@@ -445,14 +450,14 @@ type UpdateItemInput struct {
 	Status *ItemStatus
 }
 
-// MarkItemSentInput is the input to Service.MarkItemSent.
-type MarkItemSentInput struct {
+// ResolveInDoubtSendInput is the input to Service.ResolveInDoubtSend.
+type ResolveInDoubtSendInput struct {
 	ItemID string
-	// ExpectedRevision is the revision whose content was approved and sent.
-	ExpectedRevision int32
-	GmailMessageID   string
-	// ApprovalHash is the hash of the approval card the email was sent under.
+	// ApprovalHash is the hold's: the card the in-doubt send ran under.
 	ApprovalHash string
+	// GmailMessageID, when set, is the message found in the sent mail, and
+	// the item is recorded SENT; nil releases the hold ("it did not go out").
+	GmailMessageID *string
 }
 
 // SendItemEmailInput is the input to Service.SendItemEmail.
@@ -460,7 +465,8 @@ type SendItemEmailInput struct {
 	ItemID string
 	// ExpectedRevision is the revision the person approved.
 	ExpectedRevision int32
-	// ApprovalHash is the hash of the approval card, recorded with the send.
+	// ApprovalHash is the approval card's hash, which must be ApprovalHash
+	// of the item as stored; it is recorded with the send.
 	ApprovalHash string
 	// Run is the credential context the email is sent with.
 	Run EmailRun

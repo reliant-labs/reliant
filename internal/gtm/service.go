@@ -7,14 +7,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/mail"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
-
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/featuregate"
 )
@@ -25,6 +24,10 @@ type service struct {
 	clock     Clock
 	analytics Analytics
 	email     Email
+	// log is where causes withheld from the caller go.
+	log *slog.Logger
+	// sendTimeout bounds one Email.Send (EmailSendTimeout; tests shorten it).
+	sendTimeout time.Duration
 }
 
 // New builds the service over deps. Store and Gate are required; with no
@@ -35,11 +38,13 @@ func New(deps Deps) Service {
 		clock = wallClock{}
 	}
 	return &service{
-		store:     deps.Store,
-		gate:      deps.Gate,
-		clock:     clock,
-		analytics: deps.Analytics,
-		email:     deps.Email,
+		store:       deps.Store,
+		gate:        deps.Gate,
+		clock:       clock,
+		analytics:   deps.Analytics,
+		email:       deps.Email,
+		log:         slog.Default(),
+		sendTimeout: EmailSendTimeout,
 	}
 }
 
@@ -50,22 +55,37 @@ func (wallClock) Now() time.Time { return time.Now() }
 func (s *service) now() time.Time { return s.clock.Now().UTC() }
 
 // admit is rule 1: the actor is whole, and the gate says yes. Every refusal,
-// a gate error included, is ErrNotFound, with the reason kept server-side.
+// a gate error included, is the bare ErrNotFound — byte for byte what a
+// missing row returns (notFound) — and the reason is only logged.
 func (s *service) admit(ctx context.Context, a Actor) error {
 	if err := a.validate(); err != nil {
-		return svcerr.WithCause(ErrNotFound, err)
+		s.log.DebugContext(ctx, "gtm: refused", "reason", err.Error())
+		return ErrNotFound
 	}
 	if s.gate == nil {
-		return svcerr.WithCause(ErrNotFound, errors.New("gtm: no gate"))
+		s.log.WarnContext(ctx, "gtm: refused: no gate configured")
+		return ErrNotFound
 	}
 	ok, err := s.gate.Allowed(ctx, featuregate.GTM, a.UserID, a.OrgID)
 	if err != nil {
-		return svcerr.WithCause(ErrNotFound, fmt.Errorf("gtm gate: %w", err))
+		s.log.WarnContext(ctx, "gtm: refused: gate check failed", "org_id", a.OrgID, "error", err)
+		return ErrNotFound
 	}
 	if !ok {
 		return ErrNotFound
 	}
 	return nil
+}
+
+// notFound is a missing row: the bare ErrNotFound a gate refusal returns,
+// so a caller cannot tell "no GTM" from "no such row". Which row is logged
+// only. Any other error passes through.
+func (s *service) notFound(ctx context.Context, err error, entity, id string) error {
+	if errors.Is(err, ErrNotFound) {
+		s.log.DebugContext(ctx, "gtm: not found", "entity", entity, "id", id)
+		return ErrNotFound
+	}
+	return err
 }
 
 // GetAccess reports the gate's answer; a refusal or an outage is "no".

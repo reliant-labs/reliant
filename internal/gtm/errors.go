@@ -38,11 +38,22 @@ var (
 	// (FailedPrecondition). A send is recorded once.
 	ErrAlreadySent = svcerr.FailedPrecondition("the item was already sent")
 
-	// ErrSendInDoubt is a send of an item whose earlier send was started and
-	// never recorded (FailedPrecondition): the email may have gone out. A
-	// person checks the sent mail and re-approves (any person's UpdateItem
-	// clears the hold) before it can be sent again. Not retryable.
-	ErrSendInDoubt = svcerr.FailedPrecondition("a send of this item was started and not recorded; check the sent mail, then re-approve it")
+	// ErrSendInDoubt is an item held by a send that was started and never
+	// recorded (FailedPrecondition): the email may have gone out. The item
+	// is frozen — no send, no edit, no status change — until a person checks
+	// the sent mail in Gmail and calls ResolveInDoubtSend. Not retryable.
+	// *SendInDoubtError names the item.
+	ErrSendInDoubt = svcerr.FailedPrecondition("a send of this item was started and not recorded; check the sent mail in Gmail, then resolve the send")
+
+	// ErrNotHeld is ResolveInDoubtSend on an item with no send in doubt
+	// (FailedPrecondition).
+	ErrNotHeld = svcerr.FailedPrecondition("the item has no send in doubt")
+
+	// ErrApprovalMismatch is an approval hash that is not the item's
+	// (FailedPrecondition): SendItemEmail's against ApprovalHash of the
+	// stored item, ResolveInDoubtSend's against the hold. The item changed
+	// since the card was shown, or the card is another item's.
+	ErrApprovalMismatch = svcerr.FailedPrecondition("the approval does not match the item as it is now; approve it again")
 
 	// ErrSentUnrecorded is an email that was sent whose SENT record failed
 	// to save (DataLoss). The item stays held (ErrSendInDoubt). Never retry
@@ -50,8 +61,13 @@ var (
 	ErrSentUnrecorded = svcerr.DataLoss("the email was sent but its send record was not saved")
 
 	// ErrEmailNotSent is what an Email wraps when it is certain the message
-	// did not leave; SendItemEmail then releases the item's hold.
+	// did not leave; SendItemEmail then releases the item's hold and
+	// returns it, with this fixed message.
 	ErrEmailNotSent = svcerr.FailedPrecondition("the email was not sent")
+
+	// ErrAnalyticsFailed is a product-analytics query the client could not
+	// answer (Unavailable). The client's error is logged, never returned.
+	ErrAnalyticsFailed = svcerr.Unavailable("the product analytics query failed")
 
 	// ErrInvalidTransition is an item status change the lifecycle does not
 	// allow (FailedPrecondition). *TransitionError names it.
@@ -90,8 +106,23 @@ func (e *RevisionConflictError) Error() string {
 // Unwrap returns ErrRevisionConflict.
 func (e *RevisionConflictError) Unwrap() error { return ErrRevisionConflict }
 
+// SendInDoubtError is an item held by an unrecorded send. It is
+// ErrSendInDoubt.
+type SendInDoubtError struct {
+	ItemID string
+}
+
+// Error implements error.
+func (e *SendInDoubtError) Error() string {
+	return fmt.Sprintf("a send of item %s was started and not recorded; check the sent mail in Gmail, then resolve the send", e.ItemID)
+}
+
+// Unwrap returns ErrSendInDoubt.
+func (e *SendInDoubtError) Unwrap() error { return ErrSendInDoubt }
+
 // SentUnrecordedError is an email Gmail accepted whose SENT record did not
-// save. It is ErrSentUnrecorded; the cause is kept server-side.
+// save. It is ErrSentUnrecorded and nothing else: the record's failure is
+// logged, never attached.
 type SentUnrecordedError struct {
 	ItemID         string
 	GmailMessageID string

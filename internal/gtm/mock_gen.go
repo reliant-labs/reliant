@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=7ea01bad2c8229e02a900e50ea03b6382e3a1a81b187510365605b316fd0e734
+// forge:hash=1c0984d8d91d1d232750222d396bac1de2248a17a991ceefafd4bc9cd471d0cd
 
 // MockService is a test mock for the Service interface.
 //
@@ -42,8 +42,8 @@ type MockService struct {
 	GetItemFunc              func(context.Context, Actor, GetItemInput) (Item, error)
 	CreateItemFunc           func(context.Context, Actor, CreateItemInput) (Item, error)
 	UpdateItemFunc           func(context.Context, Actor, UpdateItemInput) (Item, error)
-	MarkItemSentFunc         func(context.Context, Actor, MarkItemSentInput) (Item, error)
 	SendItemEmailFunc        func(context.Context, Actor, SendItemEmailInput) (Item, error)
+	ResolveInDoubtSendFunc   func(context.Context, Actor, ResolveInDoubtSendInput) (Item, error)
 	GetPositioningFunc       func(context.Context, Actor) (Positioning, error)
 	UpdatePositioningFunc    func(context.Context, Actor, UpdatePositioningInput) (Positioning, error)
 	ListClaimsFunc           func(context.Context, Actor, ListClaimsInput) (ListClaimsResult, error)
@@ -178,15 +178,6 @@ func (m *MockService) UpdateItem(ctx context.Context, actor Actor, in UpdateItem
 	return Item{}, contractkit.MockNotSet("MockService", "UpdateItem")
 }
 
-// MarkItemSent records the call and delegates to MarkItemSentFunc when set.
-func (m *MockService) MarkItemSent(ctx context.Context, actor Actor, in MarkItemSentInput) (Item, error) {
-	m.Recorder.Record("MarkItemSent", ctx, actor, in)
-	if m.MarkItemSentFunc != nil {
-		return m.MarkItemSentFunc(ctx, actor, in)
-	}
-	return Item{}, contractkit.MockNotSet("MockService", "MarkItemSent")
-}
-
 // SendItemEmail records the call and delegates to SendItemEmailFunc when set.
 func (m *MockService) SendItemEmail(ctx context.Context, actor Actor, in SendItemEmailInput) (Item, error) {
 	m.Recorder.Record("SendItemEmail", ctx, actor, in)
@@ -194,6 +185,15 @@ func (m *MockService) SendItemEmail(ctx context.Context, actor Actor, in SendIte
 		return m.SendItemEmailFunc(ctx, actor, in)
 	}
 	return Item{}, contractkit.MockNotSet("MockService", "SendItemEmail")
+}
+
+// ResolveInDoubtSend records the call and delegates to ResolveInDoubtSendFunc when set.
+func (m *MockService) ResolveInDoubtSend(ctx context.Context, actor Actor, in ResolveInDoubtSendInput) (Item, error) {
+	m.Recorder.Record("ResolveInDoubtSend", ctx, actor, in)
+	if m.ResolveInDoubtSendFunc != nil {
+		return m.ResolveInDoubtSendFunc(ctx, actor, in)
+	}
+	return Item{}, contractkit.MockNotSet("MockService", "ResolveInDoubtSend")
 }
 
 // GetPositioning records the call and delegates to GetPositioningFunc when set.
@@ -332,7 +332,7 @@ func (m *MockAnalytics) Query(ctx context.Context, orgID string, q AnalyticsQuer
 var _ Analytics = (*MockAnalytics)(nil)
 
 // forge:section MockEmail
-// forge:hash=8dbdf4f8839a346b5698e5b68c681dd84533a5f29fc89a62a8cb4ee823d27c0c
+// forge:hash=35d0f9ad9922d0c6ed12c12e01d30b8749cae0693062622a56a3a10878e098b9
 
 // MockEmail is a test mock for the Email interface.
 //
@@ -342,14 +342,14 @@ var _ Analytics = (*MockAnalytics)(nil)
 // "MockEmail.<Method>Func not set" error.
 type MockEmail struct {
 	contractkit.Recorder
-	SendFunc func(context.Context, EmailRun, EmailMessage) (string, error)
+	SendFunc func(context.Context, Actor, EmailRun, EmailMessage) (string, error)
 }
 
 // Send records the call and delegates to SendFunc when set.
-func (m *MockEmail) Send(ctx context.Context, run EmailRun, msg EmailMessage) (string, error) {
-	m.Recorder.Record("Send", ctx, run, msg)
+func (m *MockEmail) Send(ctx context.Context, actor Actor, run EmailRun, msg EmailMessage) (string, error) {
+	m.Recorder.Record("Send", ctx, actor, run, msg)
 	if m.SendFunc != nil {
-		return m.SendFunc(ctx, run, msg)
+		return m.SendFunc(ctx, actor, run, msg)
 	}
 	return "", contractkit.MockNotSet("MockEmail", "Send")
 }

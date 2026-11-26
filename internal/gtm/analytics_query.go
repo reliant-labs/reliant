@@ -179,7 +179,15 @@ func (s *service) ReadProductAnalytics(ctx context.Context, actor Actor, q Analy
 	}
 	res, err := s.analytics.Query(ctx, actor.OrgID, q)
 	if err != nil {
-		return AnalyticsResult{}, fmt.Errorf("product analytics: %w", err)
+		// The client's text can name hosts and queries: log it, say less.
+		s.log.WarnContext(ctx, "gtm: product analytics query failed", "template", string(q.Template), "error", err)
+		return AnalyticsResult{}, ErrAnalyticsFailed
+	}
+	// The domain holds the caps, whatever the client returned.
+	res.Template, res.From, res.To = q.Template, q.From, q.To
+	if len(res.Rows) > q.Limit {
+		res.Rows = res.Rows[:q.Limit]
+		res.Truncated = true
 	}
 	return res, nil
 }

@@ -42,21 +42,25 @@ func (s *service) GetCampaign(ctx context.Context, actor Actor, in GetCampaignIn
 	}
 	row, err := s.store.GetCampaign(ctx, actor.OrgID, in.ID)
 	if err != nil {
-		return CampaignDetail{}, readErr(err, "campaign")
+		return CampaignDetail{}, s.notFound(ctx, err, "campaign", in.ID)
 	}
-	ideaRows, err := s.store.ListIdeas(ctx, IdeaFilter{OrgID: actor.OrgID, CampaignID: &in.ID, Limit: MaxCampaignIdeas})
+	// One row past each cap says whether the list was cut.
+	ideaRows, err := s.store.ListIdeas(ctx, IdeaFilter{OrgID: actor.OrgID, CampaignID: &in.ID, Limit: MaxCampaignIdeas + 1})
 	if err != nil {
 		return CampaignDetail{}, err
 	}
+	itemRows, err := s.store.ListItems(ctx, ItemFilter{OrgID: actor.OrgID, CampaignID: &in.ID, Limit: MaxCampaignItems + 1})
+	if err != nil {
+		return CampaignDetail{}, err
+	}
+	truncated := len(ideaRows) > MaxCampaignIdeas || len(itemRows) > MaxCampaignItems
+	ideaRows = ideaRows[:min(len(ideaRows), MaxCampaignIdeas)]
+	itemRows = itemRows[:min(len(itemRows), MaxCampaignItems)]
 	ideas, err := ideasFromRows(ideaRows)
 	if err != nil {
 		return CampaignDetail{}, err
 	}
-	itemRows, err := s.store.ListItems(ctx, ItemFilter{OrgID: actor.OrgID, CampaignID: &in.ID, Limit: MaxCampaignItems})
-	if err != nil {
-		return CampaignDetail{}, err
-	}
-	return CampaignDetail{Campaign: campaignFromRow(row), Ideas: ideas, Items: itemsFromRows(itemRows)}, nil
+	return CampaignDetail{Campaign: campaignFromRow(row), Ideas: ideas, Items: itemsFromRows(itemRows), Truncated: truncated}, nil
 }
 
 // CreateCampaign creates a campaign, DRAFT unless a status is given.
@@ -127,7 +131,7 @@ func (s *service) UpdateCampaign(ctx context.Context, actor Actor, in UpdateCamp
 	err := s.store.InTx(ctx, func(ctx context.Context) error {
 		row, err := s.store.GetCampaign(ctx, actor.OrgID, in.ID)
 		if err != nil {
-			return readErr(err, "campaign")
+			return s.notFound(ctx, err, "campaign", in.ID)
 		}
 		if row.Revision != in.ExpectedRevision {
 			return conflict(in.ID, in.ExpectedRevision, row.Revision)
@@ -168,7 +172,7 @@ func (s *service) UpdateCampaign(ctx context.Context, actor Actor, in UpdateCamp
 		}
 		stored, err := s.store.GetCampaign(ctx, actor.OrgID, in.ID)
 		if err != nil {
-			return readErr(err, "campaign")
+			return s.notFound(ctx, err, "campaign", in.ID)
 		}
 		out = campaignFromRow(stored)
 		return nil

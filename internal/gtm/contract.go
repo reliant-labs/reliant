@@ -21,8 +21,9 @@
 //     (content, status between the two, and scheduled_at, which records a
 //     date and never publishes) and UNVERIFIED claims, and touches nothing
 //     else. The item lifecycle is checkTransition's.
-//  5. Nothing here publishes. SENT is written only by MarkItemSent (through
-//     SendItemEmail, the approved email path).
+//  5. Nothing here publishes. SENT is written only by the approved email
+//     path: SendItemEmail, or a person's ResolveInDoubtSend for a send that
+//     left without its record.
 //
 // Built by internal/app's GTM provider (PR-12), which wires the gate, the
 // store over the ORM (NewStore) and the analytics and email clients.
@@ -60,7 +61,9 @@ type Service interface {
 
 	// ListCampaigns lists the org's campaigns, newest first.
 	ListCampaigns(ctx context.Context, actor Actor, in ListCampaignsInput) (ListCampaignsResult, error)
-	// GetCampaign returns a campaign with the ideas and items linked to it.
+	// GetCampaign returns a campaign with the ideas and items linked to it,
+	// at most MaxCampaignIdeas / MaxCampaignItems of each (Truncated says
+	// when either was cut).
 	GetCampaign(ctx context.Context, actor Actor, in GetCampaignInput) (CampaignDetail, error)
 	// CreateCampaign creates a campaign (DRAFT unless a status is given).
 	CreateCampaign(ctx context.Context, actor Actor, in CreateCampaignInput) (Campaign, error)
@@ -72,30 +75,31 @@ type Service interface {
 	ListItems(ctx context.Context, actor Actor, in ListItemsInput) (ListItemsResult, error)
 	// GetItem returns one item.
 	GetItem(ctx context.Context, actor Actor, in GetItemInput) (Item, error)
-	// CreateItem creates a DRAFT item.
+	// CreateItem creates a DRAFT or REVIEW item (unset: DRAFT).
 	CreateItem(ctx context.Context, actor Actor, in CreateItemInput) (Item, error)
 	// UpdateItem changes an item's fields and status along the lifecycle
 	// (DRAFT <-> REVIEW; a person: -> APPROVED, APPROVED -> SCHEDULED and
 	// APPROVED/SCHEDULED -> PUBLISHED for non-emails, any -> PAUSED,
 	// PAUSED -> DRAFT); a refused move is a *TransitionError. A content
 	// change to an APPROVED or SCHEDULED item drops it to REVIEW. SENT is
-	// never set here (MarkItemSent), and a SENT item is final. An agent
-	// touches DRAFT and REVIEW items only.
+	// never set here, and a SENT item is final. A held item (a send in
+	// doubt) is refused whole (*SendInDoubtError) until ResolveInDoubtSend.
+	// An agent touches DRAFT and REVIEW items only.
 	UpdateItem(ctx context.Context, actor Actor, in UpdateItemInput) (Item, error)
-	// MarkItemSent records that an APPROVED email item, at exactly the
-	// revision named, was sent: SENT with its Gmail message id, sender and the
-	// approval hash it was sent under. A SENT item is refused (ErrAlreadySent),
-	// so a send is recorded once. It sends nothing.
-	MarkItemSent(ctx context.Context, actor Actor, in MarkItemSentInput) (Item, error)
 	// SendItemEmail sends an APPROVED email item, at exactly the revision
-	// named, through Email with the run's credential, then records it as
-	// MarkItemSent does. The message is built from the stored item, never
-	// from the caller. The approval card (and the hash it binds) is the
-	// caller's: this assumes the person approved this revision's content and
-	// stores the hash. A send that may have left without its record landing
-	// holds the item (ErrSendInDoubt, *SentUnrecordedError) rather than
-	// risk a second email.
+	// named, through Email as the actor with the run's credential, then
+	// records it SENT. The approval hash must be ApprovalHash of the item as
+	// stored now, so the person approved exactly what is sent. The message is
+	// built from the stored item, never from the caller. A send that may
+	// have left without its record landing holds the item
+	// (*SendInDoubtError, *SentUnrecordedError) rather than risk a second
+	// email; see the implementation for the steps.
 	SendItemEmail(ctx context.Context, actor Actor, in SendItemEmailInput) (Item, error)
+	// ResolveInDoubtSend settles a held item: a person's call, after checking
+	// the sent mail in Gmail. The approval hash must be the hold's. With a
+	// Gmail message id it records the item SENT; without one it releases the
+	// hold (the email did not go out). An item that is not held is ErrNotHeld.
+	ResolveInDoubtSend(ctx context.Context, actor Actor, in ResolveInDoubtSendInput) (Item, error)
 
 	// GetPositioning returns the org's positioning; revision 0 when it has none.
 	GetPositioning(ctx context.Context, actor Actor) (Positioning, error)
@@ -146,16 +150,23 @@ type Analytics interface {
 	Query(ctx context.Context, orgID string, q AnalyticsQuery) (AnalyticsResult, error)
 }
 
-// Email sends one email through Gmail as the run's owner
-// (internal/gtm/email). The credential is resolved from the run (connauth),
-// never from the message, and a run with no Gmail connection is refused.
-// It is called only by SendItemEmail, for an approved item.
+// Email sends one email through Gmail as the actor (internal/gtm/email). It
+// is called only by SendItemEmail, for an approved item, with the actor the
+// Service admitted.
+//
+// An implementation MUST fail closed, sending nothing, unless the run and
+// the Gmail connection it would send through belong to actor.UserID and
+// actor.OrgID: the run's recorded owner is actor.UserID and its org is
+// actor.OrgID, and the connection (run.ConnectionID, or the owner's default)
+// is that user's own. The credential is resolved from the run record
+// (connauth), never from the message or the run fields alone.
 type Email interface {
 	// Send sends msg and returns Gmail's message id. An error that wraps
-	// ErrEmailNotSent says the message certainly did not leave (no
-	// connection, a request Gmail refused); any other error leaves the send
-	// in doubt, and the item is held until a person re-approves it.
-	Send(ctx context.Context, run EmailRun, msg EmailMessage) (gmailMessageID string, err error)
+	// ErrEmailNotSent says the message certainly did not leave (a refused
+	// run or connection, no connection, a request Gmail rejected); any
+	// other error leaves the send in doubt, and the item is held until a
+	// person resolves it. The error's text is logged, never shown.
+	Send(ctx context.Context, actor Actor, run EmailRun, msg EmailMessage) (gmailMessageID string, err error)
 }
 
 // Store is GTM's persistence, over the generated internal/store entities.

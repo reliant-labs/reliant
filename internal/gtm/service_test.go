@@ -3,11 +3,16 @@
 package gtm
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
+	"slices"
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,9 +58,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	f := &fixture{
 		store: newFakeStore(),
-		email: &MockEmail{SendFunc: func(context.Context, EmailRun, EmailMessage) (string, error) {
-			return "gmail-1", nil
-		}},
+		email: &MockEmail{SendFunc: sendsAs("gmail-1")},
 		analytics: &MockAnalytics{QueryFunc: func(_ context.Context, _ string, q AnalyticsQuery) (AnalyticsResult, error) {
 			return AnalyticsResult{Template: q.Template, From: q.From, To: q.To}, nil
 		}},
@@ -136,8 +139,8 @@ func TestEveryMethodIsNotFoundWhenTheGateRefuses(t *testing.T) {
 			_, err := s.UpdateItem(ctx(), a, UpdateItemInput{ID: "x", ExpectedRevision: 1})
 			return err
 		},
-		"MarkItemSent": func(s Service, a Actor) error {
-			_, err := s.MarkItemSent(ctx(), a, MarkItemSentInput{ItemID: "x", ExpectedRevision: 1, GmailMessageID: "m", ApprovalHash: "h"})
+		"ResolveInDoubtSend": func(s Service, a Actor) error {
+			_, err := s.ResolveInDoubtSend(ctx(), a, ResolveInDoubtSendInput{ItemID: "x", ApprovalHash: "h", GmailMessageID: ptr("m")})
 			return err
 		},
 		"SendItemEmail": func(s Service, a Actor) error {
@@ -197,11 +200,16 @@ func TestEveryMethodIsNotFoundWhenTheGateRefuses(t *testing.T) {
 			assert.False(t, got.Enabled)
 		})
 	}
-	t.Run("a gate error keeps its cause server-side", func(t *testing.T) {
+	t.Run("a gate error is logged, never attached", func(t *testing.T) {
 		g := &featuregate.MockGate{AllowedFunc: func(context.Context, featuregate.Feature, string, string) (bool, error) { return false, gateErr }}
-		_, err := New(Deps{Store: &MockStore{}, Gate: g}).ListIdeas(ctx(), person, ListIdeasInput{})
+		svc := New(Deps{Store: &MockStore{}, Gate: g})
+		var logged bytes.Buffer
+		svc.(*service).log = slog.New(slog.NewTextHandler(&logged, nil))
+		_, err := svc.ListIdeas(ctx(), person, ListIdeasInput{})
 		require.ErrorIs(t, err, ErrNotFound)
-		assert.ErrorIs(t, svcerr.Cause(err), gateErr)
+		assert.NotErrorIs(t, err, gateErr)
+		assert.Nil(t, svcerr.Cause(err))
+		assert.Contains(t, logged.String(), "membership outage")
 	})
 	t.Run("entitled", func(t *testing.T) {
 		got, err := newFixture(t).svc.GetAccess(ctx(), person)
@@ -353,9 +361,11 @@ func TestAgentLimits(t *testing.T) {
 		it := f.emailItem(t, ItemDraft)
 		_, err := f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemApproved)})
 		require.ErrorIs(t, err, ErrPersonOnly)
-		for _, st := range []ItemStatus{ItemScheduled, ItemPublished, ItemPaused} {
+		_, err = f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemPaused)})
+		require.ErrorIs(t, err, ErrPersonOnly)
+		for _, st := range []ItemStatus{ItemScheduled, ItemPublished} {
 			_, err = f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(st)})
-			require.ErrorIs(t, err, ErrPersonOnly, st)
+			require.ErrorIs(t, err, ErrInvalidTransition, "an email draft can never get there: %s", st)
 		}
 		got, err := f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemReview), BodyMD: ptr("v2")})
 		require.NoError(t, err)
@@ -528,158 +538,6 @@ func TestClaims(t *testing.T) {
 	})
 }
 
-func TestSentIsWrittenOnlyByTheEmailPath(t *testing.T) {
-	t.Run("UpdateItem never writes SENT", func(t *testing.T) {
-		f := newFixture(t)
-		it := f.emailItem(t, ItemApproved)
-		_, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemSent)})
-		require.ErrorIs(t, err, ErrInvalidArgument)
-	})
-	t.Run("MarkItemSent preconditions", func(t *testing.T) {
-		f := newFixture(t)
-		rec := func(it Item) MarkItemSentInput {
-			return MarkItemSentInput{ItemID: it.ID, ExpectedRevision: it.Revision, GmailMessageID: "m-1", ApprovalHash: "h-1"}
-		}
-		draft := f.emailItem(t, ItemReview)
-		_, err := f.svc.MarkItemSent(ctx(), person, rec(draft))
-		require.ErrorIs(t, err, ErrNotApproved)
-
-		post, err := f.svc.CreateItem(ctx(), person, CreateItemInput{Kind: ItemBlogPost, Title: "Post"})
-		require.NoError(t, err)
-		post, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: post.ID, ExpectedRevision: post.Revision, Status: ptr(ItemApproved)})
-		require.NoError(t, err)
-		_, err = f.svc.MarkItemSent(ctx(), person, rec(post))
-		require.ErrorIs(t, err, ErrNotApproved, "only an email is sent")
-
-		ok := f.emailItem(t, ItemApproved)
-		stale := rec(ok)
-		stale.ExpectedRevision--
-		_, err = f.svc.MarkItemSent(ctx(), person, stale)
-		require.ErrorIs(t, err, ErrRevisionConflict)
-
-		_, err = f.svc.MarkItemSent(ctx(), person, MarkItemSentInput{ItemID: ok.ID, ExpectedRevision: ok.Revision, ApprovalHash: "h"})
-		require.ErrorIs(t, err, ErrInvalidArgument, "a send record needs the gmail id")
-
-		sent, err := f.svc.MarkItemSent(ctx(), agent, rec(ok))
-		require.NoError(t, err)
-		assert.Equal(t, ItemSent, sent.Status)
-		assert.Equal(t, "m-1", sent.GmailMessageID)
-		assert.Equal(t, "h-1", sent.ApprovalHash)
-		assert.Equal(t, agent.UserID, sent.SentBy)
-		require.NotNil(t, sent.SentAt)
-
-		_, err = f.svc.MarkItemSent(ctx(), person, rec(ok))
-		require.ErrorIs(t, err, ErrAlreadySent, "a send is recorded once")
-		_, err = f.svc.MarkItemSent(ctx(), person, rec(sent))
-		require.ErrorIs(t, err, ErrAlreadySent)
-		_, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: sent.ID, ExpectedRevision: sent.Revision, BodyMD: ptr("rewrite history")})
-		require.ErrorIs(t, err, ErrSentIsFinal)
-	})
-}
-
-func TestSendItemEmail(t *testing.T) {
-	run := EmailRun{RunID: "run-1"}
-	send := func(it Item) SendItemEmailInput {
-		return SendItemEmailInput{ItemID: it.ID, ExpectedRevision: it.Revision, ApprovalHash: "card-hash", Run: run}
-	}
-	t.Run("sends the stored content once and records it", func(t *testing.T) {
-		f := newFixture(t)
-		it := f.emailItem(t, ItemApproved)
-		got, err := f.svc.SendItemEmail(ctx(), agent, send(it))
-		require.NoError(t, err)
-		assert.Equal(t, ItemSent, got.Status)
-		assert.Equal(t, "gmail-1", got.GmailMessageID)
-		assert.Equal(t, "card-hash", got.ApprovalHash)
-		require.Equal(t, 1, f.email.CallCount("Send"))
-		call := f.email.Calls("Send")[0]
-		assert.Equal(t, run, call.Args[1])
-		assert.Equal(t, EmailMessage{To: []string{"a@example.com"}, Subject: "News", BodyMD: "Hello"}, call.Args[2])
-
-		_, err = f.svc.SendItemEmail(ctx(), agent, send(it))
-		require.ErrorIs(t, err, ErrAlreadySent)
-		assert.Equal(t, 1, f.email.CallCount("Send"), "never twice")
-	})
-	t.Run("refuses what is not an approved email at the approved revision", func(t *testing.T) {
-		f := newFixture(t)
-		review := f.emailItem(t, ItemReview)
-		_, err := f.svc.SendItemEmail(ctx(), agent, send(review))
-		require.ErrorIs(t, err, ErrNotApproved)
-		approved := f.emailItem(t, ItemApproved)
-		moved := send(approved)
-		moved.ExpectedRevision--
-		_, err = f.svc.SendItemEmail(ctx(), agent, moved)
-		require.ErrorIs(t, err, ErrRevisionConflict)
-		_, err = f.svc.SendItemEmail(ctx(), agent, SendItemEmailInput{ItemID: approved.ID, ExpectedRevision: approved.Revision, ApprovalHash: "h"})
-		require.ErrorIs(t, err, ErrInvalidArgument, "a send needs the run's credential context")
-		assert.Zero(t, f.email.CallCount("Send"))
-	})
-	t.Run("no email client", func(t *testing.T) {
-		_, err := New(Deps{Store: newFakeStore(), Gate: allowGate(orgA)}).SendItemEmail(ctx(), agent, SendItemEmailInput{ItemID: "x"})
-		require.ErrorIs(t, err, ErrEmailUnavailable)
-	})
-	t.Run("a send in doubt holds the item until a person re-approves", func(t *testing.T) {
-		f := newFixture(t)
-		it := f.emailItem(t, ItemApproved)
-		f.email.SendFunc = func(context.Context, EmailRun, EmailMessage) (string, error) {
-			return "", context.DeadlineExceeded
-		}
-		_, err := f.svc.SendItemEmail(ctx(), agent, send(it))
-		require.ErrorIs(t, err, ErrSendInDoubt)
-
-		f.email.SendFunc = func(context.Context, EmailRun, EmailMessage) (string, error) { return "gmail-2", nil }
-		_, err = f.svc.SendItemEmail(ctx(), agent, send(it))
-		require.ErrorIs(t, err, ErrSendInDoubt, "a retry never resends")
-		assert.Equal(t, 1, f.email.CallCount("Send"))
-
-		// An agent cannot release it.
-		_, err = f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemApproved)})
-		require.ErrorIs(t, err, ErrPersonOnly)
-
-		// A person's re-approval does.
-		re, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemApproved)})
-		require.NoError(t, err)
-		assert.Empty(t, re.ApprovalHash)
-		got, err := f.svc.SendItemEmail(ctx(), agent, send(re))
-		require.NoError(t, err)
-		assert.Equal(t, "gmail-2", got.GmailMessageID)
-	})
-	t.Run("a send that certainly failed releases the hold", func(t *testing.T) {
-		f := newFixture(t)
-		it := f.emailItem(t, ItemApproved)
-		f.email.SendFunc = func(context.Context, EmailRun, EmailMessage) (string, error) {
-			return "", svcerr.WithCause(ErrEmailNotSent, errors.New("no gmail connection"))
-		}
-		_, err := f.svc.SendItemEmail(ctx(), agent, send(it))
-		require.ErrorIs(t, err, ErrEmailNotSent)
-		require.NotErrorIs(t, err, ErrSendInDoubt)
-
-		f.email.SendFunc = func(context.Context, EmailRun, EmailMessage) (string, error) { return "gmail-3", nil }
-		got, err := f.svc.SendItemEmail(ctx(), agent, send(it))
-		require.NoError(t, err)
-		assert.Equal(t, "gmail-3", got.GmailMessageID)
-	})
-	t.Run("a sent email whose record fails names the message and is never resent", func(t *testing.T) {
-		f := newFixture(t)
-		it := f.emailItem(t, ItemApproved)
-		f.store.failUpdateItem = errors.New("connection reset")
-		_, err := f.svc.SendItemEmail(ctx(), agent, send(it))
-		var su *SentUnrecordedError
-		require.ErrorAs(t, err, &su)
-		assert.Equal(t, "gmail-1", su.GmailMessageID)
-		assert.ErrorIs(t, err, svcerr.ErrDataLoss)
-		assert.Contains(t, err.Error(), "gmail-1")
-
-		_, err = f.svc.SendItemEmail(ctx(), agent, send(it))
-		require.ErrorIs(t, err, ErrSendInDoubt)
-		assert.Equal(t, 1, f.email.CallCount("Send"))
-
-		// A person who finds it in the sent mail records it under the same card.
-		got, err := f.svc.MarkItemSent(ctx(), person, MarkItemSentInput{ItemID: it.ID, ExpectedRevision: it.Revision, GmailMessageID: "gmail-1", ApprovalHash: "card-hash"})
-		require.NoError(t, err)
-		assert.Equal(t, ItemSent, got.Status)
-	})
-}
-
 func TestReadProductAnalytics(t *testing.T) {
 	f := newFixture(t)
 	res, err := f.svc.ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventTrend, Events: []string{"signup", "chat.created"}})
@@ -712,6 +570,33 @@ func TestReadProductAnalytics(t *testing.T) {
 
 	_, err = New(Deps{Store: newFakeStore(), Gate: allowGate(orgA)}).ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventCounts})
 	require.ErrorIs(t, err, ErrAnalyticsUnavailable)
+
+	t.Run("the client's error text never reaches the caller", func(t *testing.T) {
+		f := newFixture(t)
+		f.analytics.QueryFunc = func(context.Context, string, AnalyticsQuery) (AnalyticsResult, error) {
+			return AnalyticsResult{}, errors.New(`control-plane 10.1.2.3: SELECT secret FROM product_events failed`)
+		}
+		_, err := f.svc.ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventCounts})
+		require.ErrorIs(t, err, ErrAnalyticsFailed)
+		assert.Equal(t, "the product analytics query failed", err.Error())
+		assert.Nil(t, svcerr.Cause(err))
+	})
+	t.Run("rows are capped at the limit in the domain", func(t *testing.T) {
+		f := newFixture(t)
+		f.analytics.QueryFunc = func(_ context.Context, _ string, q AnalyticsQuery) (AnalyticsResult, error) {
+			rows := make([]AnalyticsRow, 30)
+			return AnalyticsResult{Template: "other", Rows: rows}, nil
+		}
+		res, err := f.svc.ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventCounts, Limit: 10})
+		require.NoError(t, err)
+		assert.Len(t, res.Rows, 10)
+		assert.True(t, res.Truncated)
+		assert.Equal(t, AnalyticsEventCounts, res.Template)
+		res, err = f.svc.ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventCounts, Limit: 50})
+		require.NoError(t, err)
+		assert.Len(t, res.Rows, 30)
+		assert.False(t, res.Truncated)
+	})
 }
 
 func TestListsPageAndFilter(t *testing.T) {
@@ -917,25 +802,489 @@ func TestItemLifecycle(t *testing.T) {
 		})
 		require.ErrorIs(t, err, ErrInvalidTransition)
 	})
+	t.Run("an agent asking for a move no one may make is FailedPrecondition", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, ItemBlogPost, ItemDraft)
+		for _, to := range []ItemStatus{ItemScheduled, ItemPublished} {
+			_, err := f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(to)})
+			require.ErrorIs(t, err, ErrInvalidTransition, to)
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		}
+		for _, to := range []ItemStatus{ItemApproved, ItemPaused} {
+			_, err := f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(to)})
+			require.ErrorIs(t, err, ErrPersonOnly, to)
+			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+		}
+	})
+	t.Run("a person does everything an agent may on DRAFT and REVIEW items", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, ItemSocialPost, ItemDraft)
+		when := t0.Add(5 * time.Hour)
+		got, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemReview), BodyMD: ptr("v2"), ScheduledAt: &when})
+		require.NoError(t, err)
+		assert.Equal(t, ItemReview, got.Status)
+		assert.Equal(t, "v2", got.BodyMD)
+		got, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: got.Revision, Status: ptr(ItemDraft), Title: ptr("v3"), ClearScheduledAt: true})
+		require.NoError(t, err)
+		assert.Equal(t, ItemDraft, got.Status)
+		assert.Nil(t, got.ScheduledAt)
+	})
+	t.Run("only a date never drops an item to REVIEW", func(t *testing.T) {
+		f := newFixture(t)
+		for _, it := range []Item{f.itemAt(t, ItemBlogPost, ItemApproved), f.itemAt(t, ItemBlogPost, ItemScheduled), f.itemAt(t, ItemEmail, ItemApproved)} {
+			when := t0.Add(9 * time.Hour)
+			got, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, ScheduledAt: &when})
+			require.NoError(t, err)
+			assert.Equal(t, it.Status, got.Status)
+			assert.True(t, got.ScheduledAt.Equal(when))
+		}
+		for name, in := range map[string]UpdateItemInput{
+			"title":   {Title: ptr("new")},
+			"body":    {BodyMD: ptr("new")},
+			"kind":    {Kind: ptr(ItemOther)},
+			"channel": {Channel: ptr("new")},
+		} {
+			it := f.itemAt(t, ItemBlogPost, ItemScheduled)
+			in.ID, in.ExpectedRevision = it.ID, it.Revision
+			got, err := f.svc.UpdateItem(ctx(), person, in)
+			require.NoError(t, err)
+			assert.Equal(t, ItemReview, got.Status, name)
+		}
+		for name, in := range map[string]UpdateItemInput{
+			"email_to":      {EmailTo: &[]string{"z@example.com"}},
+			"email_subject": {EmailSubject: ptr("new")},
+		} {
+			it := f.itemAt(t, ItemEmail, ItemApproved)
+			in.ID, in.ExpectedRevision = it.ID, it.Revision
+			got, err := f.svc.UpdateItem(ctx(), person, in)
+			require.NoError(t, err)
+			assert.Equal(t, ItemReview, got.Status, name)
+		}
+	})
+	t.Run("clearing a scheduled item's date is a refused transition, not a CHECK", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, ItemBlogPost, ItemScheduled)
+		_, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, ClearScheduledAt: true})
+		var te *TransitionError
+		require.ErrorAs(t, err, &te)
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+		_, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemApproved)})
+		require.ErrorAs(t, err, &te, "there is no SCHEDULED -> APPROVED")
+
+		// The way off the calendar: PAUSED, DRAFT, approve again.
+		got := it
+		for _, st := range []ItemStatus{ItemPaused, ItemDraft} {
+			got, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: got.Revision, Status: ptr(st)})
+			require.NoError(t, err)
+		}
+		got, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: got.Revision, ClearScheduledAt: true, Status: ptr(ItemApproved)})
+		require.NoError(t, err)
+		assert.Equal(t, ItemApproved, got.Status)
+		assert.Nil(t, got.ScheduledAt)
+	})
+	t.Run("an item is created DRAFT or REVIEW", func(t *testing.T) {
+		f := newFixture(t)
+		for _, a := range []Actor{person, agent} {
+			it, err := f.svc.CreateItem(ctx(), a, CreateItemInput{Kind: ItemBlogPost, Title: "t", Status: ItemReview})
+			require.NoError(t, err)
+			assert.Equal(t, ItemReview, it.Status)
+			for _, st := range []ItemStatus{ItemApproved, ItemScheduled, ItemPublished, ItemPaused, ItemSent} {
+				_, err := f.svc.CreateItem(ctx(), a, CreateItemInput{Kind: ItemBlogPost, Title: "t", Status: st})
+				require.ErrorIs(t, err, ErrInvalidArgument, st)
+			}
+		}
+	})
+}
+
+func TestSentIsWrittenOnlyByTheEmailPath(t *testing.T) {
+	t.Run("UpdateItem never writes SENT", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		_, err := f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemSent)})
+		require.ErrorIs(t, err, ErrInvalidArgument)
+	})
+	t.Run("a SENT item is final, paused or edited", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		sent, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.NoError(t, err)
+		for name, in := range map[string]UpdateItemInput{
+			"pause": {Status: ptr(ItemPaused)},
+			"edit":  {BodyMD: ptr("rewrite history")},
+			"date":  {ClearScheduledAt: true},
+		} {
+			in.ID, in.ExpectedRevision = sent.ID, sent.Revision
+			_, err = f.svc.UpdateItem(ctx(), person, in)
+			require.ErrorIs(t, err, ErrSentIsFinal, name)
+		}
+	})
+}
+
+// send is a SendItemEmail of it under its true approval hash.
+func (f *fixture) send(it Item) SendItemEmailInput {
+	return SendItemEmailInput{ItemID: it.ID, ExpectedRevision: it.Revision, ApprovalHash: ApprovalHash(it), Run: EmailRun{RunID: "run-1"}}
+}
+
+func sendsAs(id string) func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+	return func(context.Context, Actor, EmailRun, EmailMessage) (string, error) { return id, nil }
+}
+
+func TestApprovalHash(t *testing.T) {
+	base := Item{ID: "item-1", Revision: 3, EmailTo: []string{"a@example.com", "b@example.com"}, EmailSubject: "News", BodyMD: "Hello"}
+	h := ApprovalHash(base)
+	assert.Len(t, h, 64)
+	assert.Equal(t, h, ApprovalHash(base), "stable")
+	// Pinned, computed independently of this code (Python: hashlib.sha256 over
+	// struct.pack(">Q", len) + bytes per field). A format change must change
+	// the version string and this value.
+	assert.Equal(t, "323f0e14e9d515d2bfa8a3d121a465548619ae4657c8e652f77356f427f19396", h)
+
+	for name, mut := range map[string]func(*Item){
+		"id":         func(i *Item) { i.ID = "item-2" },
+		"revision":   func(i *Item) { i.Revision = 4 },
+		"recipient":  func(i *Item) { i.EmailTo = []string{"a@example.com"} },
+		"order":      func(i *Item) { i.EmailTo = []string{"b@example.com", "a@example.com"} },
+		"subject":    func(i *Item) { i.EmailSubject = "news" },
+		"body":       func(i *Item) { i.BodyMD = "Hello!" },
+		"boundaries": func(i *Item) { i.EmailSubject, i.BodyMD = "NewsHello", "" },
+		"split addr": func(i *Item) { i.EmailTo = []string{"a@example.comb@example.com"} },
+	} {
+		other := base
+		other.EmailTo = slices.Clone(base.EmailTo)
+		mut(&other)
+		assert.NotEqual(t, h, ApprovalHash(other), name)
+	}
+	ignored := base
+	ignored.Title, ignored.Channel, ignored.CampaignID = "x", "y", "z"
+	assert.Equal(t, h, ApprovalHash(ignored), "only what the card shows is bound")
+}
+
+func TestSendItemEmail(t *testing.T) {
+	t.Run("sends the stored content once, as the actor, and records it", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		got, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.NoError(t, err)
+		assert.Equal(t, ItemSent, got.Status)
+		assert.Equal(t, "gmail-1", got.GmailMessageID)
+		assert.Equal(t, ApprovalHash(it), got.ApprovalHash)
+		assert.Equal(t, agent.UserID, got.SentBy)
+		require.Equal(t, 1, f.email.CallCount("Send"))
+		call := f.email.Calls("Send")[0]
+		assert.Equal(t, agent, call.Args[1], "Email learns who sends")
+		assert.Equal(t, EmailRun{RunID: "run-1"}, call.Args[2])
+		assert.Equal(t, EmailMessage{To: []string{"a@example.com"}, Subject: "News", BodyMD: "Hello"}, call.Args[3])
+
+		_, err = f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.ErrorIs(t, err, ErrAlreadySent)
+		assert.Equal(t, 1, f.email.CallCount("Send"), "never twice")
+	})
+	t.Run("refuses what is not an approved email at the approved revision", func(t *testing.T) {
+		f := newFixture(t)
+		review := f.emailItem(t, ItemReview)
+		_, err := f.svc.SendItemEmail(ctx(), agent, f.send(review))
+		require.ErrorIs(t, err, ErrNotApproved)
+		post := f.itemAt(t, ItemBlogPost, ItemApproved)
+		_, err = f.svc.SendItemEmail(ctx(), agent, f.send(post))
+		require.ErrorIs(t, err, ErrNotApproved, "only an email is sent")
+		approved := f.emailItem(t, ItemApproved)
+		moved := f.send(approved)
+		moved.ExpectedRevision--
+		_, err = f.svc.SendItemEmail(ctx(), agent, moved)
+		require.ErrorIs(t, err, ErrRevisionConflict)
+		noRun := f.send(approved)
+		noRun.Run = EmailRun{}
+		_, err = f.svc.SendItemEmail(ctx(), agent, noRun)
+		require.ErrorIs(t, err, ErrInvalidArgument, "a send needs the run's credential context")
+		assert.Zero(t, f.email.CallCount("Send"))
+	})
+	t.Run("the approval hash must be the stored item's", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		for name, hash := range map[string]string{
+			"made up":        "card-hash",
+			"another item":   ApprovalHash(f.emailItem(t, ItemApproved)),
+			"older revision": ApprovalHash(Item{ID: it.ID, Revision: it.Revision - 1, EmailTo: it.EmailTo, EmailSubject: it.EmailSubject, BodyMD: it.BodyMD}),
+			"other content":  ApprovalHash(Item{ID: it.ID, Revision: it.Revision, EmailTo: it.EmailTo, EmailSubject: it.EmailSubject, BodyMD: "Hello, edited"}),
+		} {
+			in := f.send(it)
+			in.ApprovalHash = hash
+			_, err := f.svc.SendItemEmail(ctx(), agent, in)
+			require.ErrorIs(t, err, ErrApprovalMismatch, name)
+		}
+		assert.Zero(t, f.email.CallCount("Send"))
+		got, err := f.svc.GetItem(ctx(), person, GetItemInput{ID: it.ID})
+		require.NoError(t, err)
+		assert.Empty(t, got.ApprovalHash, "a refused send leaves no hold")
+	})
+	t.Run("no email client", func(t *testing.T) {
+		_, err := New(Deps{Store: newFakeStore(), Gate: allowGate(orgA)}).SendItemEmail(ctx(), agent, SendItemEmailInput{ItemID: "x"})
+		require.ErrorIs(t, err, ErrEmailUnavailable)
+	})
+	t.Run("a held item is frozen during the send, even for a person", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		var during []error
+		f.email.SendFunc = func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+			for _, in := range []UpdateItemInput{
+				{ID: it.ID, ExpectedRevision: it.Revision, BodyMD: ptr("changed mid-send")},
+				{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemPaused)},
+				{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemApproved)},
+				{ID: it.ID, ExpectedRevision: it.Revision, ScheduledAt: &t0},
+			} {
+				_, err := f.svc.UpdateItem(ctx(), person, in)
+				during = append(during, err)
+			}
+			_, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+			during = append(during, err)
+			return "gmail-1", nil
+		}
+		got, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.NoError(t, err)
+		assert.Equal(t, ItemSent, got.Status)
+		assert.Equal(t, "Hello", got.BodyMD)
+		require.Len(t, during, 5)
+		for i, err := range during {
+			var held *SendInDoubtError
+			require.ErrorAs(t, err, &held, i)
+			assert.Equal(t, it.ID, held.ItemID)
+		}
+		assert.Equal(t, 1, f.email.CallCount("Send"), "the concurrent send never reached Gmail")
+	})
+	t.Run("a send in doubt holds the item until a person resolves it", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		f.email.SendFunc = func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+			return "", errors.New("gmail: 502 from 10.0.0.7")
+		}
+		_, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		var doubt *SendInDoubtError
+		require.ErrorAs(t, err, &doubt)
+		assert.NotContains(t, err.Error(), "10.0.0.7", "the client's text never reaches the caller")
+		assert.Contains(t, err.Error(), "check the sent mail in Gmail, then resolve")
+		assert.NotContains(t, err.Error(), "re-approve")
+
+		f.email.SendFunc = sendsAs("gmail-2")
+		_, err = f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.ErrorIs(t, err, ErrSendInDoubt, "a retry never resends")
+		_, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemApproved)})
+		require.ErrorIs(t, err, ErrSendInDoubt, "re-approving does not lift the hold")
+		assert.Equal(t, 1, f.email.CallCount("Send"))
+
+		hash := ApprovalHash(it)
+		_, err = f.svc.ResolveInDoubtSend(ctx(), agent, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: hash})
+		require.ErrorIs(t, err, ErrPersonOnly)
+		_, err = f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: "other"})
+		require.ErrorIs(t, err, ErrApprovalMismatch)
+
+		// "I checked Gmail; it did not go out."
+		released, err := f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: hash})
+		require.NoError(t, err)
+		assert.Equal(t, ItemApproved, released.Status)
+		assert.Empty(t, released.ApprovalHash)
+		assert.Equal(t, it.Revision, released.Revision)
+		_, err = f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: hash})
+		require.ErrorIs(t, err, ErrNotHeld)
+
+		got, err := f.svc.SendItemEmail(ctx(), agent, f.send(released))
+		require.NoError(t, err)
+		assert.Equal(t, "gmail-2", got.GmailMessageID)
+	})
+	t.Run("a person records an in-doubt send found in Gmail", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		f.email.SendFunc = func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+			return "", context.DeadlineExceeded
+		}
+		_, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.ErrorIs(t, err, ErrSendInDoubt)
+		_, err = f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: ApprovalHash(it), GmailMessageID: ptr("")})
+		require.ErrorIs(t, err, ErrInvalidArgument)
+		got, err := f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: ApprovalHash(it), GmailMessageID: ptr("gmail-found")})
+		require.NoError(t, err)
+		assert.Equal(t, ItemSent, got.Status)
+		assert.Equal(t, "gmail-found", got.GmailMessageID)
+		assert.Equal(t, person.UserID, got.SentBy)
+		_, err = f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: ApprovalHash(it), GmailMessageID: ptr("again")})
+		require.ErrorIs(t, err, ErrAlreadySent)
+	})
+	t.Run("ResolveInDoubtSend needs a hold", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		_, err := f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: ApprovalHash(it), GmailMessageID: ptr("fake")})
+		require.ErrorIs(t, err, ErrNotHeld, "no SENT without a send")
+	})
+	t.Run("a send that certainly failed releases the hold", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		f.email.SendFunc = func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+			return "", fmt.Errorf("%w: connection conn-7 belongs to another user", ErrEmailNotSent)
+		}
+		_, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.ErrorIs(t, err, ErrEmailNotSent)
+		require.NotErrorIs(t, err, ErrSendInDoubt)
+		assert.Equal(t, "the email was not sent", err.Error(), "a fixed message")
+
+		f.email.SendFunc = sendsAs("gmail-3")
+		got, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.NoError(t, err)
+		assert.Equal(t, "gmail-3", got.GmailMessageID)
+	})
+	t.Run("a sent email whose record fails names the message, is not a conflict, and is never resent", func(t *testing.T) {
+		for name, recErr := range map[string]error{
+			"store failure": errors.New("connection reset"),
+			"conflict":      ErrRevisionConflict,
+		} {
+			t.Run(name, func(t *testing.T) {
+				f := newFixture(t)
+				it := f.emailItem(t, ItemApproved)
+				f.store.failUpdateItem = recErr
+				_, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+				var su *SentUnrecordedError
+				require.ErrorAs(t, err, &su)
+				assert.Equal(t, "gmail-1", su.GmailMessageID)
+				assert.ErrorIs(t, err, ErrSentUnrecorded)
+				assert.ErrorIs(t, err, svcerr.ErrDataLoss)
+				assert.NotErrorIs(t, err, ErrRevisionConflict)
+				assert.NotErrorIs(t, err, svcerr.ErrAborted, "never retryable")
+				assert.Contains(t, err.Error(), "gmail-1")
+
+				_, err = f.svc.SendItemEmail(ctx(), agent, f.send(it))
+				require.ErrorIs(t, err, ErrSendInDoubt)
+				assert.Equal(t, 1, f.email.CallCount("Send"))
+
+				got, err := f.svc.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: it.ID, ApprovalHash: ApprovalHash(it), GmailMessageID: ptr("gmail-1")})
+				require.NoError(t, err)
+				assert.Equal(t, ItemSent, got.Status)
+			})
+		}
+	})
+	t.Run("Send is bounded by the send timeout", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		var deadline time.Time
+		f.email.SendFunc = func(ctx context.Context, _ Actor, _ EmailRun, _ EmailMessage) (string, error) {
+			deadline, _ = ctx.Deadline()
+			return "gmail-1", nil
+		}
+		start := time.Now()
+		_, err := f.svc.SendItemEmail(ctx(), agent, f.send(it))
+		require.NoError(t, err)
+		assert.WithinDuration(t, start.Add(EmailSendTimeout), deadline, 5*time.Second, "the default is 60s")
+		assert.Equal(t, 60*time.Second, EmailSendTimeout)
+
+		it2 := f.emailItem(t, ItemApproved)
+		f.svc.(*service).sendTimeout = 20 * time.Millisecond
+		f.email.SendFunc = func(ctx context.Context, _ Actor, _ EmailRun, _ EmailMessage) (string, error) {
+			<-ctx.Done() // a Gmail that never answers
+			return "", ctx.Err()
+		}
+		start = time.Now()
+		_, err = f.svc.SendItemEmail(ctx(), agent, f.send(it2))
+		require.ErrorIs(t, err, ErrSendInDoubt, "a timeout may have sent")
+		assert.Less(t, time.Since(start), 5*time.Second)
+	})
+	t.Run("the record lands although the caller gave up after the send", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.emailItem(t, ItemApproved)
+		callCtx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		f.email.SendFunc = func(context.Context, Actor, EmailRun, EmailMessage) (string, error) {
+			cancel() // the caller hangs up while Gmail answers
+			return "gmail-1", nil
+		}
+		got, err := f.svc.SendItemEmail(callCtx, agent, f.send(it))
+		require.NoError(t, err)
+		assert.Equal(t, ItemSent, got.Status)
+		stored, err := f.svc.GetItem(ctx(), person, GetItemInput{ID: it.ID})
+		require.NoError(t, err)
+		assert.Equal(t, ItemSent, stored.Status)
+	})
 }
 
 func TestGetCampaignCapsItsLists(t *testing.T) {
-	var ideaLimit, itemLimit int
-	st := &MockStore{
-		GetCampaignFunc: func(_ context.Context, org, id string) (*store.GtmCampaign, error) {
-			return &store.GtmCampaign{ID: id, OrgID: org}, nil
+	for name, n := range map[string]int{"under": 200, "over": 250} {
+		t.Run(name, func(t *testing.T) {
+			var ideaLimit, itemLimit int
+			st := &MockStore{
+				GetCampaignFunc: func(_ context.Context, org, id string) (*store.GtmCampaign, error) {
+					return &store.GtmCampaign{ID: id, OrgID: org}, nil
+				},
+				ListIdeasFunc: func(_ context.Context, f IdeaFilter) ([]*store.GtmIdea, error) {
+					ideaLimit = f.Limit
+					return nil, nil
+				},
+				ListItemsFunc: func(_ context.Context, f ItemFilter) ([]*store.GtmItem, error) {
+					itemLimit = f.Limit
+					rows := make([]*store.GtmItem, 0, n)
+					for i := range min(n, f.Limit) {
+						rows = append(rows, &store.GtmItem{ID: fmt.Sprint(i), OrgID: orgA})
+					}
+					return rows, nil
+				},
+			}
+			d, err := New(Deps{Store: st, Gate: allowGate(orgA)}).GetCampaign(ctx(), person, GetCampaignInput{ID: "c"})
+			require.NoError(t, err)
+			assert.Equal(t, MaxCampaignIdeas+1, ideaLimit)
+			assert.Equal(t, MaxCampaignItems+1, itemLimit)
+			assert.Equal(t, 200, MaxCampaignItems)
+			assert.Len(t, d.Items, 200)
+			assert.Equal(t, n > 200, d.Truncated)
+		})
+	}
+}
+
+// A missing row and a gate refusal are the same answer on the wire: the
+// same Connect code and the same message, byte for byte, for every entity.
+func TestMissingRowsReadLikeRefusals(t *testing.T) {
+	refused := New(Deps{Store: newFakeStore(), Gate: allowGate("another-org")})
+	f := newFixture(t)
+	calls := map[string]func(Service) error{
+		"idea": func(s Service) error { _, err := s.GetIdea(ctx(), person, GetIdeaInput{ID: "nope"}); return err },
+		"idea update": func(s Service) error {
+			_, err := s.UpdateIdea(ctx(), person, UpdateIdeaInput{ID: "nope", ExpectedRevision: 1, Title: ptr("x")})
+			return err
 		},
-		ListIdeasFunc: func(_ context.Context, f IdeaFilter) ([]*store.GtmIdea, error) {
-			ideaLimit = f.Limit
-			return nil, nil
+		"idea status": func(s Service) error {
+			_, err := s.SetIdeaStatus(ctx(), person, SetIdeaStatusInput{ID: "nope", ExpectedRevision: 1, Status: IdeaAccepted})
+			return err
 		},
-		ListItemsFunc: func(_ context.Context, f ItemFilter) ([]*store.GtmItem, error) {
-			itemLimit = f.Limit
-			return nil, nil
+		"campaign": func(s Service) error {
+			_, err := s.GetCampaign(ctx(), person, GetCampaignInput{ID: "nope"})
+			return err
+		},
+		"campaign update": func(s Service) error {
+			_, err := s.UpdateCampaign(ctx(), person, UpdateCampaignInput{ID: "nope", ExpectedRevision: 1, Name: ptr("x")})
+			return err
+		},
+		"item": func(s Service) error { _, err := s.GetItem(ctx(), person, GetItemInput{ID: "nope"}); return err },
+		"item update": func(s Service) error {
+			_, err := s.UpdateItem(ctx(), person, UpdateItemInput{ID: "nope", ExpectedRevision: 1})
+			return err
+		},
+		"item send": func(s Service) error {
+			_, err := s.SendItemEmail(ctx(), person, SendItemEmailInput{ItemID: "nope", ExpectedRevision: 1, ApprovalHash: "h", Run: EmailRun{RunID: "r"}})
+			return err
+		},
+		"item resolve": func(s Service) error {
+			_, err := s.ResolveInDoubtSend(ctx(), person, ResolveInDoubtSendInput{ItemID: "nope", ApprovalHash: "h"})
+			return err
+		},
+		"claim": func(s Service) error {
+			_, err := s.UpsertClaim(ctx(), person, UpsertClaimInput{ID: "nope", ExpectedRevision: 1, Notes: ptr("x")})
+			return err
 		},
 	}
-	_, err := New(Deps{Store: st, Gate: allowGate(orgA)}).GetCampaign(ctx(), person, GetCampaignInput{ID: "c"})
-	require.NoError(t, err)
-	assert.Equal(t, 200, ideaLimit)
-	assert.Equal(t, 200, itemLimit)
+	for name, call := range calls {
+		t.Run(name, func(t *testing.T) {
+			refusal, missing := call(refused), call(f.svc)
+			require.ErrorIs(t, refusal, ErrNotFound)
+			require.ErrorIs(t, missing, ErrNotFound)
+			rc, mc := svcerr.ToConnect(refusal), svcerr.ToConnect(missing)
+			assert.Equal(t, rc.Code(), mc.Code())
+			assert.Equal(t, connect.CodeNotFound, mc.Code())
+			assert.Equal(t, rc.Message(), mc.Message())
+			assert.Equal(t, rc.Error(), mc.Error())
+		})
+	}
 }
