@@ -169,9 +169,7 @@ func (s *Source) mint(ctx context.Context, repo *core.PipelineRepo) (Token, erro
 // Clients is the lander's [lander.Credentials] over GitHub's REST API.
 type Clients struct {
 	Source *Source
-	// BaseURL and HTTPClient configure the REST client (ghrest's defaults
-	// when empty).
-	BaseURL    string
+	// HTTPClient performs the REST calls (ghrest's default when nil).
 	HTTPClient *http.Client
 }
 
@@ -184,8 +182,8 @@ func (c *Clients) Client(ctx context.Context, repo *core.PipelineRepo) (ghport.C
 	if err != nil {
 		return nil, lander.Identity{}, err
 	}
-	client, err := ghrest.New(ghrest.Options{
-		BaseURL: c.BaseURL, HTTPClient: c.HTTPClient,
+	client := ghrest.NewInstrumented(ghrest.Deps{
+		HTTPClient: c.HTTPClient,
 		Token: func(ctx context.Context, _ ghport.Repo) (string, error) {
 			t, err := c.Source.Token(ctx, repo)
 			if err != nil {
@@ -196,8 +194,5 @@ func (c *Clients) Client(ctx context.Context, repo *core.PipelineRepo) (ghport.C
 			return plain, nil
 		},
 	})
-	if err != nil {
-		return nil, lander.Identity{}, err
-	}
 	return client, lander.Identity{Unenforced: tok.Unenforced, Login: tok.Login}, nil
 }

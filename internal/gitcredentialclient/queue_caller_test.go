@@ -42,6 +42,7 @@ func newQueueClient(t *testing.T, f *queueMint) gitcredentialclient.Service {
 	return gitcredentialclient.New(gitcredentialclient.Deps{
 		ControlPlane: &configv1.ControlPlaneConfig{Url: srv.URL},
 		Sign:         func() (string, error) { return auth.SignInternalServiceToken(secret) },
+		HTTPClient:   srv.Client(),
 	})
 }
 

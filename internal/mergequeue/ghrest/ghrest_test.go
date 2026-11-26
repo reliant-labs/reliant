@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -65,7 +66,7 @@ func (s *server) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for k, v := range rt.headers {
-		w.Header().Set(k, strings.ReplaceAll(v, "{base}", s.srv.URL))
+		w.Header().Set(k, strings.ReplaceAll(v, "{base}", ghrest.DefaultBaseURL))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if rt.status == 0 {
@@ -77,13 +78,23 @@ func (s *server) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *server) client() *ghrest.Client {
-	s.t.Helper()
-	c, err := ghrest.New(ghrest.Options{BaseURL: s.srv.URL, Token: func(context.Context, ghport.Repo) (string, error) { return "tok-1", nil }})
-	if err != nil {
-		s.t.Fatal(err)
-	}
-	return c
+func (s *server) client() ghrest.Service {
+	return newClient(s.srv.URL, func(context.Context, ghport.Repo) (string, error) { return "tok-1", nil })
+}
+
+// newClient is the adapter with its calls to api.github.com sent to target.
+func newClient(target string, token ghrest.TokenFunc) ghrest.Service {
+	u, _ := url.Parse(target)
+	return ghrest.New(ghrest.Deps{Token: token, HTTPClient: &http.Client{Transport: redirect{u}}})
+}
+
+// redirect sends every request to one test server, keeping its path.
+type redirect struct{ to *url.URL }
+
+func (r redirect) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.URL.Scheme, req.URL.Host = r.to.Scheme, r.to.Host
+	return http.DefaultTransport.RoundTrip(req)
 }
 
 func (s *server) requests() []recorded {
@@ -272,7 +283,7 @@ func TestServerErrorsAndTransportAreTransient(t *testing.T) {
 	}
 	dead := httptest.NewServer(http.NotFoundHandler())
 	dead.Close()
-	c, _ := ghrest.New(ghrest.Options{BaseURL: dead.URL, Token: func(context.Context, ghport.Repo) (string, error) { return "secret-token", nil }})
+	c := newClient(dead.URL, func(context.Context, ghport.Repo) (string, error) { return "secret-token", nil })
 	_, err = c.GetPullRequest(t.Context(), repo, 1)
 	if !errors.Is(err, ghport.ErrTransient) || strings.Contains(err.Error(), "secret-token") {
 		t.Fatalf("transport: %v", err)
@@ -376,13 +387,11 @@ func TestNextPageOutsideTheBaseIsRefused(t *testing.T) {
 
 func TestTokenErrorStopsTheCall(t *testing.T) {
 	s := newServer(t, nil)
-	c, _ := ghrest.New(ghrest.Options{BaseURL: s.srv.URL, Token: func(context.Context, ghport.Repo) (string, error) {
-		return "", fmt.Errorf("no token")
-	}})
+	c := newClient(s.srv.URL, func(context.Context, ghport.Repo) (string, error) { return "", fmt.Errorf("no token") })
 	if _, err := c.GetRef(t.Context(), repo, "refs/heads/main"); err == nil || len(s.requests()) != 0 {
 		t.Fatalf("err = %v, requests = %d", err, len(s.requests()))
 	}
-	if _, err := ghrest.New(ghrest.Options{}); err == nil {
-		t.Fatal("New without a token source must fail")
+	if _, err := newClient(s.srv.URL, nil).GetRef(t.Context(), repo, "refs/heads/main"); err == nil || len(s.requests()) != 0 {
+		t.Fatalf("a client without a token source must not call: %v", err)
 	}
 }

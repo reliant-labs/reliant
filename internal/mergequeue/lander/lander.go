@@ -211,17 +211,36 @@ type Deps struct {
 	Credentials Credentials
 	// Verifier gates main after an integrity failure. nil records the verify
 	// batch and leaves it for a person (the queue stays paused).
+	//
+	// forge:optional-dep
 	Verifier Verifier
-	Display  *display.Projector
-	Logger   *slog.Logger
-	Now      func() time.Time
+	// Display shows landings and ejections on GitHub. nil is a
+	// display.Projector over Store.
+	//
+	// forge:optional-dep
+	Display Display
+	// forge:optional-dep
+	Logger *slog.Logger
+	// forge:optional-dep
+	Now func() time.Time
 	// Sleep waits between retries; tests shrink it.
+	//
+	// forge:optional-dep
 	Sleep func(ctx context.Context, d time.Duration) error
 	// MaxAttempts bounds each GitHub write's retries (default 5).
+	//
+	// forge:optional-dep
 	MaxAttempts int
 	// MaxWait caps one wait for a rate limit's reset (default 1 minute):
 	// longer, and the landing returns to be resumed by a later tick.
+	//
+	// forge:optional-dep
 	MaxWait time.Duration
+}
+
+// Display publishes the queue's display (display.Projector).
+type Display interface {
+	Publish(ctx context.Context, repo *core.PipelineRepo, gh ghport.Client, batchID string, views []display.View) error
 }
 
 // Lander lands batches. It is safe for concurrent use across repositories;
