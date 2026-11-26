@@ -14,6 +14,7 @@ import (
 // TestWorkflowCheckpoint: one position per workflow, replaced on every save,
 // stamped by the database, read and cleared per workflow.
 func TestWorkflowCheckpoint(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 

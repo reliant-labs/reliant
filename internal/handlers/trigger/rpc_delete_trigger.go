@@ -26,7 +26,7 @@ func (s *Service) DeleteTrigger(
 			return nil, triggerSyncError(err)
 		}
 	}
-	if err := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); err != nil {
+	if err := s.deps.Triggers.RemoveTrigger(ctx, trigger.ID); err != nil {
 		return nil, triggerDBError("delete trigger", err)
 	}
 	if s.managed(trigger) {

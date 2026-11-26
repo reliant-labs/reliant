@@ -75,7 +75,7 @@ func (s *Service) chatNeedsRecovery(ctx context.Context, chat *db.Chat) bool {
 	if workflowID == "" {
 		return false
 	}
-	wf, err := s.deps.Repo.GetWorkflow(ctx, workflowID)
+	wf, err := s.deps.Workflows.LoadWorkflow(ctx, workflowID)
 	if err != nil || wf == nil || wf.Status != db.Active() {
 		return false
 	}

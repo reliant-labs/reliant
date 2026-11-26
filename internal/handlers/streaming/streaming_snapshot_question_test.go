@@ -99,13 +99,13 @@ func TestChatSnapshot_DoesNotReplayAnsweredQuestion(t *testing.T) {
 	questionID := uuid.NewString()
 
 	// The gate opens...
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
 		QuestionID: questionID, ChatID: chatID, Status: "pending",
 		Metadata: `{"type":"ask_user","questions":[{"question":"Ship it?"}]}`,
 	}))
 	time.Sleep(time.Millisecond)
 	// ...and the user answers it.
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
 		QuestionID: questionID, ChatID: chatID, Status: "resolved",
 	}))
 
@@ -132,16 +132,16 @@ func TestChatSnapshot_StillDeliversUnansweredQuestion(t *testing.T) {
 	answered := uuid.NewString()
 	stillOpen := uuid.NewString()
 
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
 		QuestionID: answered, ChatID: chatID, Status: "pending",
 	}))
 	time.Sleep(time.Millisecond)
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
 		QuestionID: answered, ChatID: chatID, Status: "resolved",
 	}))
 	time.Sleep(time.Millisecond)
 	// A later, unanswered gate — the run is parked on this one right now.
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
 		QuestionID: stillOpen, ChatID: chatID, Status: "pending",
 		Metadata: `{"type":"ask_user","questions":[{"question":"Which branch?"}]}`,
 	}))
@@ -178,7 +178,7 @@ func TestTerminateChat_EmitsQuestionResolved(t *testing.T) {
 		ID: questionID, ChatID: chatID, WorkflowID: "wf-1", ThreadID: chatID,
 		StepID: "ask", Status: db.QuestionStatusPending, CreatedAt: now,
 	}))
-	require.NoError(t, repo.EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
+	require.NoError(t, repo.UpdateWriter().EmitQuestionUpdate(ctx, chatID, db.QuestionUpdate{
 		QuestionID: questionID, ChatID: chatID, WorkflowID: "wf-1",
 		ThreadID: chatID, StepID: "ask", Status: "pending",
 		Metadata: `{"type":"ask_user","questions":[{"question":"Ship it?"}]}`,

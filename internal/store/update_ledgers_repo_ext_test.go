@@ -22,6 +22,7 @@ import (
 // outside the transaction that writes its ledger row could be consumed with
 // nothing durable behind it, so the allocator refuses.
 func TestUpdateSequenceAllocation_RequiresTransaction(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-alloc")
 	ctx := context.Background()
 	for _, kind := range []string{store.UpdateStreamUser, store.UpdateStreamChat} {
@@ -35,6 +36,7 @@ func TestUpdateSequenceAllocation_RequiresTransaction(t *testing.T) {
 }
 
 func TestChatUpdates_AcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-updates")
 	ctx := context.Background()
 	o := f.env.ORM
@@ -90,6 +92,7 @@ func TestChatUpdates_AcrossLayers(t *testing.T) {
 // re-keyed types collapse on their own key; messages, tool calls, finalize
 // markers and drains are not snapshot heads at all.
 func TestSnapshotHeads_AgreeWithRepository(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-heads")
 	ctx := context.Background()
 	write := func(typ reliantv1.ChatUpdateType, entity, data string) {
@@ -139,6 +142,7 @@ func TestSnapshotHeads_AgreeWithRepository(t *testing.T) {
 }
 
 func TestUserUpdates_AcrossLayers(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-user-updates")
 	ctx := context.Background()
 	o := f.env.ORM
@@ -195,6 +199,7 @@ func TestUserUpdates_AcrossLayers(t *testing.T) {
 
 // A read of a stream with no owner answers an error, never every owner's rows.
 func TestStreamReads_EmptyOwnerFailsClosed(t *testing.T) {
+	t.Parallel()
 	f := newMsgFixture(t, "chat-empty-owner")
 	ctx := context.Background()
 	o := f.env.ORM

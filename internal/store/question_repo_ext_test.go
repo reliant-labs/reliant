@@ -16,6 +16,7 @@ import (
 // The questions port (P5b L1b; hand SQL in internal/db), interleaved with
 // the Repository.
 func TestQuestionQueries(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)

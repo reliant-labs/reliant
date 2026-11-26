@@ -38,7 +38,7 @@ func (s *Service) GetLaunchEvent(
 	if err != nil || !authz.CanReadChat(ctx, userID, chat) {
 		return nil, svcerr.NotFound("chat")
 	}
-	ev, err := s.deps.Repo.GetTriggerEventByChatID(ctx, chat.ID)
+	ev, err := s.deps.FiringReads.GetTriggerEventByChatID(ctx, chat.ID)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerEventNotFound) {
 			return connect.NewResponse(&reliantv1.GetLaunchEventResponse{}), nil

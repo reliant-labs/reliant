@@ -38,6 +38,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // Scheme prefixes a ref can carry.
@@ -79,6 +81,13 @@ type notFoundError struct{ msg string }
 
 func (e *notFoundError) Error() string        { return e.msg }
 func (e *notFoundError) Is(target error) bool { return target == ErrNotFound }
+
+// ErrorClass implements svcerr.Classed: a miss is a workflow the caller named
+// that is not there, so the user's to fix, never a server fault. Without it
+// every run started with a misspelled or absent workflow name was an ERROR
+// issue (prod 5fc6fce4, 23295ad3). It changes no wire code: svcerr.Code still
+// reads the error as it did.
+func (e *notFoundError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 func notFound(format string, args ...any) error {
 	return &notFoundError{msg: fmt.Sprintf(format, args...)}

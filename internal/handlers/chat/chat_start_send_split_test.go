@@ -72,7 +72,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 		"a rejected send must not persist the message: StartChat will save it when it starts the chat")
 	assert.Empty(t, temporal.signals, "a rejected send must not signal anything")
 
-	root, err := repo.GetWorkflow(ctx, fx.chatID)
+	root, err := store.LoadWorkflow(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.Pending(), root.Status, "the chat must still be startable by StartChat")
 }

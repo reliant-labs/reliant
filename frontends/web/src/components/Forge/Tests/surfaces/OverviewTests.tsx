@@ -32,7 +32,7 @@ import type { FlakyFilters } from "@/services/controlPlane/tests/types";
 import { cn } from "@/lib/utils";
 
 import { flakyTestPath, testsPath, withSearch } from "../../Console/paths";
-import { Sparkline } from "../../LiveState/Sparkline";
+import { UPlotChart } from "../../Observability/charts/UPlotChart";
 import { formatDelta, formatPassRate, formatPercent, headlineCoverage } from "../testsModel";
 import { testsAttentionItems, type TestsAttentionHrefs } from "./surfacesModel";
 
@@ -103,7 +103,8 @@ export function OverviewTestsCard({ project, frame }: { project: string; frame: 
   } else {
     const data = summary.data;
     const coverage = headlineCoverage(data.latest);
-    const trend = data.trend.map((point) => point.combinedPercent);
+    // A commit with no recorded time has no place on a time axis.
+    const trend = data.trend.flatMap((point) => (point.atMs === null ? [] : [{ sec: point.atMs / 1000, percent: point.combinedPercent }])).sort((a, b) => a.sec - b.sec);
     body = (
       <div className="space-y-3" data-testid="overview-tests-ready">
         <div className="flex items-end justify-between gap-3">
@@ -133,7 +134,17 @@ export function OverviewTestsCard({ project, frame }: { project: string; frame: 
               )}
             </div>
           </div>
-          {trend.length >= 2 && <Sparkline values={trend} format={(v) => `${v.toFixed(1)}%`} label={`Coverage of ${data.branch} over its last ${trend.length} commits`} width={112} height={36} />}
+          {trend.length >= 2 && (
+            <UPlotChart
+              compact
+              className="w-28 shrink-0"
+              height={36}
+              timestamps={trend.map((point) => point.sec)}
+              series={[{ label: "Coverage", values: trend.map((point) => point.percent) }]}
+              format={formatPercent}
+              label={`Coverage of ${data.branch} over its last ${trend.length} commits`}
+            />
+          )}
         </div>
         <dl className="grid grid-cols-2 gap-3 border-t border-border-subtle pt-3 text-meta">
           <div className="min-w-0">

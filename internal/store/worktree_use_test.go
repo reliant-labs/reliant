@@ -26,6 +26,7 @@ func providerWait(t *testing.T, env *storetest.Env, chatID, threadID string, res
 }
 
 func TestWorktreeRunActivities_UsageLimitWaitIsRunning(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 
@@ -69,6 +70,7 @@ func TestWorktreeRunActivities_UsageLimitWaitIsRunning(t *testing.T) {
 }
 
 func TestWorktreeRunActivities_UsageLimitWaitOfSpawnedThread(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	parent := landedFixture(t, env, "parent")
@@ -84,6 +86,7 @@ func TestWorktreeRunActivities_UsageLimitWaitOfSpawnedThread(t *testing.T) {
 }
 
 func TestNoteWorktreeUse(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	c := landedFixture(t, env, "used")
