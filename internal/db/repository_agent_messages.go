@@ -15,7 +15,7 @@ import (
 // the stop path's (CancelStoppedSpawn), which resolves rows inside its own
 // transaction.
 func (r *Repo) announceAgentMailboxChanged(ctx context.Context, chatID string) {
-	if err := r.EmitChatRefetch(ctx, chatID, RefetchAgentMailbox); err != nil {
+	if err := r.UpdateWriter().EmitChatRefetch(ctx, chatID, RefetchAgentMailbox); err != nil {
 		logging.WarnContext(ctx, "failed to announce agent mailbox change", "chatID", chatID, "error", err)
 	}
 }
