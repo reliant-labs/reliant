@@ -36,7 +36,7 @@ import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
 import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
 
 import Button from "@/components/forge-ui/button";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import {
   useAddDomain,
@@ -173,7 +173,7 @@ export function ForgeDomainsPage() {
   if (availability !== "available") {
     return (
       <div className="p-6">
-        <PageHeader title="Custom domains" subtitle="Serve your project on a hostname you own." />
+        <ConsolePageHeader title="Custom domains" subtitle="Serve your project on a hostname you own." />
         <div className="rounded-lg border border-border bg-surface p-4">
           <p className="text-sm text-ink">
             {DOMAIN_AVAILABILITY_EXPLANATIONS[availability]}
@@ -188,7 +188,7 @@ export function ForgeDomainsPage() {
 
   return (
     <div className="p-6">
-      <PageHeader
+      <ConsolePageHeader
         title="Custom domains"
         subtitle={
           <>

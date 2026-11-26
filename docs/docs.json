@@ -595,6 +595,10 @@
   },
   "redirects": [
     {
+      "source": "/features/remote-daemons",
+      "destination": "/machines/overview"
+    },
+    {
       "source": "/features/deploy-and-host",
       "destination": "/forge/overview"
     },

@@ -40,6 +40,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
@@ -674,11 +675,13 @@ func NewVault(d VaultDeps) (vault.Service, error) {
 type PauseServiceDeps struct {
 	Temporal *TemporalClient
 	DB       *db.Repo
+	// Updates tells a chat's clients a run's executions changed.
+	Updates chatupdates.Service
 }
 
 // NewPauseService pauses and resumes runs through their workflows.
 func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
-	ps := v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: d.Temporal.Client, Store: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM())})
+	ps := v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: d.Temporal.Client, Store: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Updates: d.Updates})
 	ps.SetNamespace(d.Temporal.Namespace)
 	return ps, nil
 }

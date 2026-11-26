@@ -19,6 +19,7 @@ import (
 // a later one, not from a second caller racing it, and not after the user's
 // whole history is deleted.
 func TestClaimUserActivation(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	user, asst := reliantv1.MessageRole_MESSAGE_ROLE_USER, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT

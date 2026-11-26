@@ -1,9 +1,11 @@
 package catalog
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 )
 
@@ -43,6 +45,49 @@ func TestParamOrderFollowsTheManifest(t *testing.T) {
 				t.Errorf("%s/%s: param_order %v does not list every param", m.GetId(), act.GetId(), act.GetParamOrder())
 			}
 		}
+	}
+}
+
+// Validate the action contract directly, without the executor's MIME checks.
+func TestGmailDraftBodySchema(t *testing.T) {
+	a, err := MustBuiltin().Resolve("gmail/draft.create@1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(a.Spec.GetParams().AsMap())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema jsonschema.Schema
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := schema.Resolve(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		name   string
+		body   map[string]any
+		accept bool
+	}{
+		{"subject only", map[string]any{}, false},
+		{"empty text", map[string]any{"text": ""}, false},
+		{"empty html", map[string]any{"html": ""}, false},
+		{"both empty", map[string]any{"text": "", "html": ""}, false},
+		{"text", map[string]any{"text": "Hello"}, true},
+		{"html", map[string]any{"html": "<p>Hello</p>"}, true},
+		{"both", map[string]any{"text": "Hello", "html": "<p>Hello</p>"}, true},
+		{"text with empty html", map[string]any{"text": "Hello", "html": ""}, true},
+		{"html with empty text", map[string]any{"text": "", "html": "<p>Hello</p>"}, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.body["subject"] = "Draft"
+			err := resolved.Validate(tt.body)
+			if (err == nil) != tt.accept {
+				t.Errorf("validation error = %v, want accepted = %v", err, tt.accept)
+			}
+		})
 	}
 }
 

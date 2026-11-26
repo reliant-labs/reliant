@@ -30,7 +30,7 @@ import { consolePageOf, consolePath } from "../Console/paths";
 import { FIXTURE_PROJECT } from "../Observability/__fixtures__/fixtureApi";
 import { DemoDrawerActions } from "./DemoScreenActions";
 import { demoNav } from "./demoNavConfig";
-import { SidebarOrgLabel, SidebarOrgRow } from "@/components/Layout/sidebar/primitives";
+import { SidebarOrgRow, SidebarProjectLabel } from "@/components/Layout/sidebar/primitives";
 import { ForgeBrand } from "@/components/ForgeShell/ForgeBrand";
 
 /** Where the shell reads its scope: a console page's own path, else (a page of the demo's own) shop's Overview. */
@@ -43,7 +43,7 @@ export function DemoNav({ pathname, search, onNavigate }: ShellNavProps) {
   const slots = useMemo<NavSlots>(() => ({ "host-actions": () => (narrow ? <DemoDrawerActions /> : null) }), [narrow]);
   return (
     <ShellNavColumn config={demoNav} slots={slots} shell={shell} pathname={pathname} search={search} onNavigate={onNavigate} flat={narrow} find={false}
-      header={<><SidebarOrgRow><ForgeBrand /></SidebarOrgRow><div data-testid="demo-project-label"><SidebarOrgLabel name="shop" /></div></>} />
+      header={<><SidebarOrgRow><ForgeBrand /></SidebarOrgRow><SidebarProjectLabel name={FIXTURE_PROJECT} testId="demo-project-label" /></>} />
   );
 }
 
