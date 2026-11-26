@@ -99,6 +99,15 @@ describe('supabase module with an anon key configured', () => {
     )
   })
 
+  it('gives the client a fetch that bounds the token refresh (lib/auth/refreshFetch.ts)', async () => {
+    const { createClient } = await import('@supabase/supabase-js')
+    const createClientSpy = vi.mocked(createClient)
+    const { supabase } = await import('@/lib/supabase')
+    void supabase.auth
+    const options = createClientSpy.mock.calls[0]?.[2] as { global?: { fetch?: unknown } } | undefined
+    expect(typeof options?.global?.fetch).toBe('function')
+  })
+
   it('preserves `this` when a client method is called through the proxy', async () => {
     const { supabase } = await import('@/lib/supabase')
     await expect(supabase.auth.getSession()).resolves.toEqual({

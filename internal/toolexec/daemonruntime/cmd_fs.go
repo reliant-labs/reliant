@@ -1181,6 +1181,27 @@ func toFSFileNodes(nodes []*filetree.Node) []*fsFileNode {
 	return out
 }
 
+// maxTreeReplyReserve caps how much of a request's remaining time the walk
+// leaves for the reply: marshalling, the gateway stream, NATS, the API's
+// conversion and the browser's download of a tree that can hold
+// filetree.MaxTreeNodes nodes.
+const maxTreeReplyReserve = 2 * time.Second
+
+// treeWalkDeadline is when fs.get_tree stops walking: a fifth of the time the
+// request has left before its deadline (at most maxTreeReplyReserve) is kept
+// for the reply, so a partial tree arrives before the caller gives up rather
+// than a whole one after (filetree.Options.Deadline). handleDaemonCommand
+// bounds ctx by the command's budget, which the router has already cut to the
+// RPC's own deadline. Zero, meaning no deadline, when ctx has none.
+func treeWalkDeadline(ctx context.Context, now time.Time) time.Time {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return time.Time{}
+	}
+	reserve := min(max(deadline.Sub(now), 0)/5, maxTreeReplyReserve)
+	return deadline.Add(-reserve)
+}
+
 func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsGetTreeRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -1217,6 +1238,12 @@ func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 	// that names one anyway is refused here.
 	viewerRoot := req.ViewerRoot
 	if viewerRoot != "" {
+		// The exemption root must obey the same grant as the listing. A
+		// connector cannot claim an out-of-scope workspace to exempt a target.
+		viewerRoot, err = daemonpolicy.ResolveDir(ctx, viewerRoot)
+		if err != nil {
+			return nil, err
+		}
 		if err := daemonpolicy.DenyViewerRead(basePath, viewerRoot); err != nil {
 			return nil, err
 		}
@@ -1239,6 +1266,7 @@ func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 		Root:       basePath,
 		ShowHidden: req.ShowHidden,
 		Depth:      req.Depth,
+		Deadline:   treeWalkDeadline(ctx, time.Now()),
 		// A symlinked directory is expandable only where expanding it would
 		// be allowed: inside a confined caller's root, and not a credential
 		// store.

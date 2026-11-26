@@ -18,11 +18,13 @@ import { toJson } from "@bufbuild/protobuf";
 import {
   ChangeSchema,
   GetChangeReadoutResponseSchema,
+  GetChangesDeliveryStatusResponseSchema,
   ListChangeEventsResponseSchema,
   ListChangesResponseSchema,
   RequestChangeApprovalResponseSchema,
   type Change as ChangeMessage,
   type GetChangeReadoutResponse,
+  type GetChangesDeliveryStatusResponse,
   type ListChangeEventsResponse,
   type ListChangesResponse,
   type RequestChangeApprovalResponse,
@@ -39,6 +41,8 @@ import type {
   ChangeApprovalCode,
   ChangeAudience,
   ChangeDeclaration,
+  ChangeDeliveryTargetKind,
+  ChangesDeliveryStatus,
   ChangeEvent,
   ChangeEventPage,
   ChangeList,
@@ -293,6 +297,26 @@ export function changeEventPageFrom(resp: ListChangeEventsResponse): ChangeEvent
 
 export function readoutFrom(resp: GetChangeReadoutResponse): ChangeReadout {
   return readoutOf(toJson(GetChangeReadoutResponseSchema, resp));
+}
+
+const DELIVERY_KINDS: Record<string, ChangeDeliveryTargetKind> = {
+  CHANGE_DELIVERY_TARGET_KIND_STATIC_SITE: "static-site",
+  CHANGE_DELIVERY_TARGET_KIND_CONFIG_MAP: "config-map",
+};
+
+export function deliveryStatusOf(v: unknown): ChangesDeliveryStatus {
+  const r = obj(v);
+  return {
+    revision: num(r.revision),
+    targets: arr(r.targets).map((x) => {
+      const t = obj(x);
+      return { kind: DELIVERY_KINDS[str(t.kind)] ?? "unknown", name: str(t.name), location: str(t.location), revision: num(t.revision), deliveredAt: date(t.deliveredAt), current: t.current === true };
+    }),
+  };
+}
+
+export function deliveryStatusFrom(resp: GetChangesDeliveryStatusResponse): ChangesDeliveryStatus {
+  return deliveryStatusOf(toJson(GetChangesDeliveryStatusResponseSchema, resp));
 }
 
 export function approvalCodeFrom(resp: RequestChangeApprovalResponse): ChangeApprovalCode {

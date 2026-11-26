@@ -64,7 +64,7 @@ func (s *Service) GetFileTree(
 		Truncated bool              `json:"truncated"`
 		NodeCount int               `json:"node_count"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.get_tree", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.get_tree", cmdReq, &cmdResp, fsCommandTimeoutMs); err != nil {
 		if missing := s.checkoutMissingError(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, scope, resolvedPath, err); missing != nil {
 			return nil, missing
 		}

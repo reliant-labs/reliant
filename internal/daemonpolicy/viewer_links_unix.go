@@ -14,3 +14,9 @@ func mayHaveOtherNames(info os.FileInfo) bool {
 	st, ok := info.Sys().(*syscall.Stat_t)
 	return !ok || st.Nlink > 1
 }
+
+// ownedByCurrentUser reports whether this process's user owns a file.
+func ownedByCurrentUser(info os.FileInfo) bool {
+	st, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(st.Uid) == os.Getuid()
+}

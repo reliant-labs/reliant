@@ -77,6 +77,26 @@ message ServerProcessConfig {
   // refuses older ones (client_version_config.proto). The API server serves
   // it on SystemService.Version / Info; the gateway judges daemons by it.
   ClientVersionPolicy client_versions = 15;
+  // The PR and release pipeline's platform switch (PipelineConfig). Every
+  // role loads it: the worker runs the pipeline's server actions, and the API
+  // server serves its RPCs.
+  PipelineConfig pipeline = 16;
+}
+
+// PipelineConfig is the platform switch of Reliant's PR and release
+// pipeline: the merge queue, PR records' write side, incidents, releases and
+// sweeps. Each repository still opts in on its own (its enrolment's mode);
+// this switch decides whether this server runs any of it at all.
+message PipelineConfig {
+  // Off by default. Off, every Reliant server action (a workflow's
+  // `uses: reliant/...`) is refused with failed_precondition before its
+  // handler runs or the run's records are read, and the pipeline's RPCs
+  // answer FailedPrecondition. The worker and the API server read the same
+  // value; set it on both.
+  bool enabled = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_PIPELINE_ENABLED"
+    description: "Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them"
+  }];
 }
 
 // OrgPolicyEnforcementConfig is the platform's switch per org-policy
