@@ -85,6 +85,17 @@ func TestResolveDoesNotCacheParseFailures(t *testing.T) {
 	assert.Empty(t, parses.items)
 }
 
+// A hit is decided by the bytes, not the digest that found the entry: an
+// entry under data's key that was parsed from other bytes is not returned.
+func TestParseCacheComparesBytesOnHit(t *testing.T) {
+	c := &parseCache{items: map[[sha256.Size]byte]*parsedEntry{}}
+	data := []byte(wf("deploy"))
+	c.items[sha256.Sum256(data)] = &parsedEntry{src: wf("other"), wf: &reliantv1.Workflow{Name: "other"}, size: 1}
+	got, err := c.parse(data)
+	require.NoError(t, err)
+	assert.Equal(t, "deploy", got.GetName())
+}
+
 // The cache holds at most parseCacheEntries definitions and parseCacheBytes
 // of their source, oldest out first.
 func TestParseCacheIsBounded(t *testing.T) {

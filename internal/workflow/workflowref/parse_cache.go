@@ -14,7 +14,7 @@ import (
 // parseCacheEntries and parseCacheBytes bound the parsed workflows kept: one
 // per distinct definition (by content), so a few per activated workflow and
 // its children. Bytes counts the YAML each entry was parsed from, a stand-in
-// for the parsed tree's size.
+// for the parsed tree's size (each entry holds that source too).
 const (
 	parseCacheEntries = 512
 	parseCacheBytes   = 16 << 20
@@ -31,7 +31,8 @@ const (
 //
 // ParseWorkflow is a pure function of the bytes, so a hit is
 // indistinguishable from a parse, and a sync that changes one byte is a
-// miss. Each caller gets its own copy (proto.Clone), exactly as it got its
+// miss. The digest only finds the entry: a hit is decided by comparing the
+// bytes the entry was parsed from, never by the digest alone. Each caller gets its own copy (proto.Clone), exactly as it got its
 // own fresh parse before: launch and the runtime mutate the workflow they
 // resolved (inputs, overrides, bound secrets), and a shared tree would let
 // one request's edits reach another's. A definition that does not parse is
@@ -50,6 +51,7 @@ type parseCache struct {
 }
 
 type parsedEntry struct {
+	src  string              // the bytes wf was parsed from
 	wf   *reliantv1.Workflow // never handed out: callers get clones
 	size int
 }
@@ -60,14 +62,14 @@ func (c *parseCache) parse(data []byte) (*reliantv1.Workflow, error) {
 	c.mu.Lock()
 	hit := c.items[key]
 	c.mu.Unlock()
-	if hit != nil {
+	if hit != nil && hit.src == string(data) {
 		return proto.CloneOf(hit.wf), nil
 	}
 	wf, err := parseWorkflow(data)
 	if err != nil {
 		return nil, err
 	}
-	c.add(key, &parsedEntry{wf: proto.CloneOf(wf), size: len(data)})
+	c.add(key, &parsedEntry{src: string(data), wf: proto.CloneOf(wf), size: len(data)})
 	return wf, nil
 }
 
