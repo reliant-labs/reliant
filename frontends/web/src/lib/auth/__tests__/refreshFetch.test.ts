@@ -95,6 +95,43 @@ describe("withTokenRefreshTimeout", () => {
     expect(calls).toHaveLength(1);
   });
 
+  // What the resend's safety rests on (refreshFetch.ts, "Why resending is
+  // safe"): it carries the token the caller still holds, so the server sees it
+  // at most one rotation behind; it happens at most once per call; and never
+  // after the server's answer reached the caller.
+  it("resends only the identical request, at most once per call", async () => {
+    const { fetchFn, calls } = scriptedFetch(["hang", "hang", "hang", "hang"]);
+    const pending = withTokenRefreshTimeout(fetchFn)(REFRESH_URL, refresh).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(10 * REFRESH_ATTEMPT_TIMEOUT_MS);
+    expect(await pending).toBeInstanceOf(TokenRefreshTimeoutError);
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call.input).toBe(REFRESH_URL);
+      expect(call.init?.method).toBe("POST");
+      expect(call.init?.body).toBe(refresh.body);
+    }
+  });
+
+  it.each([400, 401, 429, 500, 503])("hands a %i answer to the caller instead of resending", async (status) => {
+    const { fetchFn, calls } = scriptedFetch([{ afterMs: 100, status }, { afterMs: 0 }]);
+    const pending = withTokenRefreshTimeout(fetchFn)(REFRESH_URL, refresh);
+    await vi.advanceTimersByTimeAsync(5 * REFRESH_ATTEMPT_TIMEOUT_MS);
+    expect((await pending).status).toBe(status);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("leaves a connection failure to supabase-js's own retry instead of resending", async () => {
+    const calls: unknown[] = [];
+    const fetchFn = ((input: RequestInfo | URL) => {
+      calls.push(input);
+      return Promise.reject(new TypeError("Load failed"));
+    }) as typeof fetch;
+    const settled = withTokenRefreshTimeout(fetchFn)(REFRESH_URL, refresh).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(5 * REFRESH_ATTEMPT_TIMEOUT_MS);
+    expect(await settled).toBeInstanceOf(TypeError);
+    expect(calls).toHaveLength(1);
+  });
+
   it("passes every other request through untouched", async () => {
     const { fetchFn, calls } = scriptedFetch(["hang"]);
     const otp = withTokenRefreshTimeout(fetchFn)("https://dash.example.invalid/auth/v1/otp", { method: "POST" });

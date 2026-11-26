@@ -15,9 +15,33 @@
  * on a fetch failure and tries again on its next tick). Both attempts fit
  * supabase-js's own 30s retry window, so it does not add a third.
  *
- * Resending is safe: Supabase Auth answers a refresh token that is the parent
- * of the session's active one with that active token, so a retry after the
- * first attempt's response was lost gets the tokens that attempt rotated to.
+ * Why resending is safe (checked 2026-11-26). Both projects, prod (custom
+ * domain dash.reliantlabs.io) and nonprod, are hosted Supabase running
+ * GoTrue v2.199.0 (GET /auth/v1/health). Rotation and the reuse interval are
+ * dashboard settings that only the Management API reads (hosted defaults:
+ * rotation on, 10s). They do not decide this case:
+ *
+ *  - The resend is the same request, so it carries the same refresh token.
+ *    If the first attempt reached the server, that token is now exactly ONE
+ *    rotation behind the session's active one. v2.199.0 accepts that at any
+ *    age and answers with the active token, without rotating again: a v1
+ *    token that is the active token's parent, or a v2 token whose counter is
+ *    one behind ("fail-to-save"; supabase/auth internal/tokens/service.go,
+ *    RefreshTokenGrant). The reuse interval, and revoking the token family
+ *    (or logging out the session), apply only to a token two or more
+ *    rotations behind.
+ *  - Only a client that received and stored the newer token could send one
+ *    that far behind. That client is not this one: a resend happens only
+ *    when no response reached the caller, so the caller still holds the
+ *    token it sent.
+ *  - A client-side window cannot keep the resend inside 10s anyway. On a
+ *    fetch failure supabase-js resends the same token itself, up to 30s
+ *    after the first try, and again on its next refresh tick. Dropping this
+ *    retry would only move the resend later.
+ *
+ * This rests on GoTrue's one-behind rule, which v2.100.0 lacks (v2.150.0 has
+ * it). On a GoTrue without it, supabase-js's own resends would be just as
+ * unsafe.
  *
  * Only the refresh grant is bounded. Other auth requests (sign-in, OTP,
  * sign-out) pass through untouched: they are user-initiated, and resending one
