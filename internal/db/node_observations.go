@@ -18,9 +18,11 @@ type NodeObservationWrite = core.NodeObservationWrite
 const (
 	NodeObservationSourceWorkflow = core.NodeObservationSourceWorkflow
 	NodeObservationSourceModel    = core.NodeObservationSourceModel
-	NodeObservationStored         = core.NodeObservationStored
-	NodeObservationDuplicate      = core.NodeObservationDuplicate
-	NodeObservationCapped         = core.NodeObservationCapped
+	// NodeObservationSourceReconciler is the reconciler's own record.
+	NodeObservationSourceReconciler = core.NodeObservationSourceReconciler
+	NodeObservationStored           = core.NodeObservationStored
+	NodeObservationDuplicate        = core.NodeObservationDuplicate
+	NodeObservationCapped           = core.NodeObservationCapped
 )
 
 // RecordNodeObservation stores what one node attempt's observe: block

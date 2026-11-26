@@ -221,6 +221,10 @@ var backgroundCommands = map[string]bool{
 	// activity; the touch itself says nothing more.
 	"exec.bg_touch": true,
 
+	// A node's machine self-check (machinepreflight.Command): a read before
+	// the node's work, which is the activity.
+	"machine.preflight": true,
+
 	"forge.deploy_plan":       true,
 	"forge.deploy_status":     true,
 	"forge.env_shape":         true,

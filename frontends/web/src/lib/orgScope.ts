@@ -184,12 +184,23 @@ export function orgRequest<T extends object>(req: T, orgId: string | null): T & 
  */
 export function requestOrgOfKey(queryKey: readonly unknown[]): string | null {
   for (const part of queryKey) {
-    if (typeof part === "object" && part !== null) {
-      const orgId = (part as { orgId?: unknown }).orgId;
-      if (typeof orgId === "string" && orgId) return orgId;
-    }
+    const orgId = orgOfRequest(part);
+    if (orgId) return orgId;
   }
   return null;
+}
+
+/**
+ * The org a generated key's request names: its `orgId`, or its scope's
+ * (control-plane's observability reads carry the org in a QueryScope,
+ * `{ scope: { orgId } }`).
+ */
+function orgOfRequest(part: unknown): string | null {
+  if (typeof part !== "object" || part === null) return null;
+  const { orgId, scope } = part as { orgId?: unknown; scope?: { orgId?: unknown } };
+  if (typeof orgId === "string" && orgId) return orgId;
+  const scoped = typeof scope === "object" && scope !== null ? scope.orgId : undefined;
+  return typeof scoped === "string" && scoped ? scoped : null;
 }
 
 /**
@@ -246,9 +257,5 @@ export function resetAfterLeavingOrg(client: QueryClient, queryKey: QueryKey, le
  * key) or as the `orgId` of a generated key's request.
  */
 export function keyNamesOrg(queryKey: readonly unknown[], orgId: string): boolean {
-  return queryKey.some(
-    (part) =>
-      part === orgId ||
-      (typeof part === "object" && part !== null && (part as { orgId?: unknown }).orgId === orgId),
-  );
+  return queryKey.some((part) => part === orgId || orgOfRequest(part) === orgId);
 }

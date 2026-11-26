@@ -485,6 +485,13 @@ var (
 	//   stranded_start_repaired  - the same PENDING root, but Temporal has its
 	//                              run: the launch's mark-active was lost;
 	//                              moved to ACTIVE
+	//   stall_watchdog_detected  - the stall watchdog (reconciler.stall_watchdog
+	//                              = report) found a running run with nothing in
+	//                              flight and no progress past its threshold;
+	//                              recorded, nothing changed
+	//   stall_watchdog_terminated
+	//                            - the same, in enforce: the execution was
+	//                              stopped through the run's cancel path
 	// Every increment of the fault classes is paired with an ERROR log (an
 	// issue); alert on any sustained non-zero rate of those.
 	ReconcilerAnomaliesTotal = newCounterVec(
@@ -492,7 +499,7 @@ var (
 			Namespace: "reliant",
 			Subsystem: "reconciler",
 			Name:      "anomalies_total",
-			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_descendant_reaped, orphan_descendant_reaped_after_terminate, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, silent_terminal_drift_expected, backgrounded_process_closed, stranded_start_failed, stranded_start_repaired).",
+			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_descendant_reaped, orphan_descendant_reaped_after_terminate, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, silent_terminal_drift_expected, backgrounded_process_closed, stranded_start_failed, stranded_start_repaired, stall_watchdog_detected, stall_watchdog_terminated).",
 		},
 		[]string{"class"},
 	)
@@ -631,5 +638,7 @@ func initMetrics() {
 		// Temporal
 		TemporalWorkflowsTotal,
 		TemporalActivityDuration,
+		// Pipeline server actions
+		PipelineGitHubWrites,
 	)
 }

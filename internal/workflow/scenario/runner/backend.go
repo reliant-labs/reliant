@@ -134,6 +134,17 @@ type Runner struct {
 	// (finally) and what it leaves alone (on_failure).
 	cancelAtRunStep string
 
+	// holdRunStep, when set, is the path of a `run` node whose command keeps
+	// running for holdRunStepFor before it completes as the scenario says,
+	// unless the run cancels it first — a test seam for what ends a run
+	// from inside (its timeout) while a command runs.
+	holdRunStep    string
+	holdRunStepFor time.Duration
+
+	// onWorkflowStatus, when set, sees every WorkflowStatus call — a test
+	// seam for how a run reported its ending.
+	onWorkflowStatus func(in map[string]interface{})
+
 	// launchedBy, when set, makes the run the launch run this trigger event
 	// fired (WorkflowInput.Trigger and the launch-run input): a test seam for
 	// what only such a run does, such as reporting to its `check:`.
@@ -1319,6 +1330,9 @@ var infrastructureActivities = []string{
 	// the run would check, not what a scenario tests.
 	"PreflightRequirements",
 	"MachineResumeWake",
+	// A scenario has no machine to check: a node's preflight passes (the
+	// stub's empty answer is a machine that passed).
+	"MachinePreflight",
 	// A scenario has no machine pools: the stub places nothing, so a pool
 	// or labels-only `daemon:` leaves the run unpinned.
 	machinepool.PlaceRunActivityName,
@@ -2222,6 +2236,9 @@ func (r *Runner) registerActivities(
 				return nil, err
 			}
 			rec.recordWorkflowStatus(in)
+			if r.onWorkflowStatus != nil {
+				r.onWorkflowStatus(in)
+			}
 			return map[string]interface{}{}, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowStatus"},
@@ -2317,6 +2334,13 @@ func (r *Runner) registerActivities(
 						env.CancelWorkflow()
 						<-ctx.Done()
 						return nil, ctx.Err()
+					}
+					if r.holdRunStep != "" && id == r.holdRunStep {
+						select {
+						case <-ctx.Done():
+							return nil, ctx.Err()
+						case <-time.After(r.holdRunStepFor):
+						}
 					}
 					out := normalizeOutput(events.next(id), activityName)
 					var req *types.SaveMessageRequest
