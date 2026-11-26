@@ -61018,7 +61018,9 @@
       "field": "RunLists",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.RunLists",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
