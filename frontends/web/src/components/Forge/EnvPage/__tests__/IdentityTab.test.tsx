@@ -1,8 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Identity tab, in every state a reader can meet it in, against an
- * in-memory IdentityApi (the same seam production fills with the real client).
+ * The Identity tab, in every state a reader can meet it in, against
+ * IdentityService fakes at the transport (test/identityTransport.tsx): the
+ * generated hooks the tab calls in production, on a scope's transport.
  *
  * The two that matter most:
  *   - NOT ENABLED. Prod answers Unavailable until the reconciler's internal API
@@ -16,11 +17,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { rowItem } from "./identityRowMenu";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { createTestQueryClient } from "@/test/renderWithQuery";
-import { IdentityApiProvider, type IdentityApi } from "@/services/controlPlane/identity/IdentityApiContext";
+import { fakeCurrentOrgId, IdentityFakeScope, type IdentityFakes } from "@/test/identityTransport";
 import type { IdentityStatus, IdentityUsersPage } from "@/services/controlPlane/identity/api";
 import type { LiveEnv } from "@/services/forge/live";
 
@@ -29,6 +28,10 @@ import { IdentityTab } from "../IdentityTab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() }));
 vi.mock("@/lib/toast-manager", () => ({ toast: toasts }));
+vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
+  currentOrgId: () => fakeCurrentOrgId(),
+}));
 
 const NOW = Date.now();
 const LIVE = { id: "env-prod", name: "prod" } as LiveEnv;
@@ -89,7 +92,7 @@ const USERS: IdentityUsersPage = {
   ],
 };
 
-function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
+function fakeApi(overrides: Partial<IdentityFakes> = {}): IdentityFakes {
   return {
     currentOrgId: vi.fn(async () => "org-a"),
     getStatus: vi.fn(async () => status()),
@@ -107,10 +110,9 @@ function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
   };
 }
 
-function renderTab(api: IdentityApi, props: Partial<Parameters<typeof IdentityTab>[0]> = {}) {
+function renderTab(api: IdentityFakes, props: Partial<Parameters<typeof IdentityTab>[0]> = {}) {
   return render(
-    <QueryClientProvider client={createTestQueryClient()}>
-      <IdentityApiProvider api={api}>
+    <IdentityFakeScope fakes={api}>
         <IdentityTab
           envName="prod"
           lifecycle="deployed"
@@ -118,8 +120,7 @@ function renderTab(api: IdentityApi, props: Partial<Parameters<typeof IdentityTa
           liveLoading={false}
           {...props}
         />
-      </IdentityApiProvider>
-    </QueryClientProvider>
+      </IdentityFakeScope>
   );
 }
 
@@ -312,6 +313,30 @@ describe("IdentityTab", () => {
     await waitFor(() => expect(api.unlockUser).toHaveBeenCalledWith("org-a", "env-prod", "u-bob"));
   });
 
+  it("re-reads the environment's status and users after a write, whether it worked or failed", async () => {
+    let fail = false;
+    const api = fakeApi({
+      unlockUser: vi.fn(async () => {
+        if (fail) throw new ConnectError("relay exploded", Code.Internal);
+      }),
+    });
+    renderTab(api);
+    const bob = await screen.findByTestId("identity-user-u-bob");
+    await waitFor(() => expect(api.listUsers).toHaveBeenCalledTimes(1));
+    expect(api.getStatus).toHaveBeenCalledTimes(1);
+
+    await userEvent.click(await rowItem(bob, "Unlock"));
+    await waitFor(() => expect(api.listUsers).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.getStatus).toHaveBeenCalledTimes(2));
+
+    // A verb that failed half way may still have changed the instance.
+    fail = true;
+    await userEvent.click(await rowItem(screen.getByTestId("identity-user-u-bob"), "Unlock"));
+    await waitFor(() => expect(toasts.warning).toHaveBeenCalled());
+    await waitFor(() => expect(api.listUsers).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(api.getStatus).toHaveBeenCalledTimes(3));
+  });
+
   it("invites with an email and console-managed roles only", async () => {
     const api = fakeApi();
     renderTab(api);
@@ -369,13 +394,11 @@ describe("IdentityTab", () => {
   it("shows the verbs disabled, with the reason, in a read-only console", async () => {
     const api = fakeApi();
     render(
-      <QueryClientProvider client={createTestQueryClient()}>
-        <IdentityApiProvider api={api}>
+      <IdentityFakeScope fakes={api}>
           <ObsReadOnlyProvider value={{ readOnly: true, reason: "Read-only demo" }}>
             <IdentityTab envName="prod" lifecycle="deployed" live={LIVE} liveLoading={false} layout="page" />
           </ObsReadOnlyProvider>
-        </IdentityApiProvider>
-      </QueryClientProvider>
+        </IdentityFakeScope>
     );
     const alice = await screen.findByTestId("identity-user-u-alice");
     for (const name of ["Edit roles", "Lock", "End sessions", "Delete"]) {

@@ -1014,6 +1014,8 @@ func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 		Router:     g.APIDaemonRouter(),
 		DB:         g.Database(),
 		Activity:   g.DaemonStatePublisher(),
+		Reconciler: g.ServerProcessConfig.GetReconciler(),
+		Runs:       g.RunLifecycle(),
 	})
 }
 
