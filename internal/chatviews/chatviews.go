@@ -15,6 +15,7 @@ package chatviews
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
@@ -49,4 +50,28 @@ func Of(s any) Chats {
 		}
 	}
 	return Chats{get: func(context.Context, string) (*core.Chat, error) { return nil, ErrNoChatReads }}
+}
+
+// PendingApprovals reads the chat's unresolved approvals through the generated
+// approval store over the database handle of s (a *db.Repo), or fails every
+// read when s has none.
+func PendingApprovals(ctx context.Context, s any, chatID string) ([]*core.Approval, error) {
+	if o, ok := s.(interface{ ORM() *orm.Client }); ok {
+		if c := o.ORM(); c != nil {
+			return store.NewApprovalExtStore(c).ListPendingApprovalsByChat(ctx, chatID)
+		}
+	}
+	return nil, ErrNoChatReads
+}
+
+// PersonTurnAt is when a person last sent a message into the chat, read through
+// the generated chat store over the database handle of s, or an error when s
+// has none.
+func PersonTurnAt(ctx context.Context, s any, chatID string) (*time.Time, error) {
+	if o, ok := s.(interface{ ORM() *orm.Client }); ok {
+		if c := o.ORM(); c != nil {
+			return store.NewChatExtStore(c).ChatPersonTurnAt(ctx, chatID)
+		}
+	}
+	return nil, ErrNoChatReads
 }

@@ -70,7 +70,7 @@ func (s *Service) ListApprovalsByChat(
 		return nil, err
 	}
 
-	approvals, err := s.deps.Repo.ListPendingApprovalsByChat(ctx, req.Msg.ChatId)
+	approvals, err := s.deps.Approvals.ListPendingApprovalsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list approvals"))
 	}

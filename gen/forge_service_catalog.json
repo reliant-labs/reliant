@@ -58299,6 +58299,17 @@
     },
     {
       "consumer": "Approval",
+      "field": "Approvals",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.Approvals",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Approval",
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/approval.Chats",
       "methods": [],

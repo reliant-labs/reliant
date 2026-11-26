@@ -25,12 +25,18 @@ import (
 
 // personRepo is a repository holding one pending approval in a chat the
 // test user owns, recording what the handler reads and writes.
-func personRepo() *approval.MockRepository {
-	return &approval.MockRepository{
+func personApprovals() *approval.MockApprovals {
+	return &approval.MockApprovals{
 		GetApprovalFunc: func(_ context.Context, id string) (*db.Approval, error) {
 			return &db.Approval{ID: id, ChatID: "chat-1", Status: int32(pb.ApprovalStatus_APPROVAL_STATUS_PENDING),
 				ApprovalType: int32(pb.ApprovalType_APPROVAL_TYPE_TOOL_CALL)}, nil
 		},
+		ListPendingApprovalsByChatFunc: func(context.Context, string) ([]*db.Approval, error) { return nil, nil },
+	}
+}
+
+func personRepo() *approval.MockRepository {
+	return &approval.MockRepository{
 		RunTxFunc: func(ctx context.Context, _ orm.TxPolicy, f func(context.Context) error) error { return f(ctx) },
 		UpdateApprovalStatusFunc: func(context.Context, string, int32, *string, *string, *string) error {
 			return nil
@@ -105,8 +111,8 @@ func TestDecisionsRefuseCredentialsSoftwareHolds(t *testing.T) {
 		for _, d := range decisions {
 			t.Run(d.name+" with "+cred.String(), func(t *testing.T) {
 				t.Parallel()
-				repo := personRepo()
-				svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Chats: personChats()}))
+				repo, approvals := personRepo(), personApprovals()
+				svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Approvals: approvals, Chats: personChats()}))
 
 				err := d.call(svc, asCaller(cred))
 
@@ -115,7 +121,7 @@ func TestDecisionsRefuseCredentialsSoftwareHolds(t *testing.T) {
 				ce := svcerr.ToConnect(err)
 				require.Equal(t, auth.ReasonPersonRequired, ce.Meta().Get(svcerr.ReasonHeader))
 				require.Contains(t, ce.Message(), "Reliant app")
-				require.Zero(t, repo.CallCount("GetApproval"), "nothing is read for a refused caller")
+				require.Zero(t, approvals.CallCount("GetApproval"), "nothing is read for a refused caller")
 				require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
 			})
 		}
@@ -130,8 +136,8 @@ func TestDecisionsAcceptAPerson(t *testing.T) {
 		for _, d := range decisions {
 			t.Run(d.name+" with "+cred.String(), func(t *testing.T) {
 				t.Parallel()
-				repo := personRepo()
-				svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Chats: personChats()}))
+				repo, approvals := personRepo(), personApprovals()
+				svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Approvals: approvals, Chats: personChats()}))
 
 				require.NoError(t, d.call(svc, asCaller(cred)))
 				require.NotZero(t, repo.CallCount("UpdateApprovalStatus"))
@@ -144,9 +150,8 @@ func TestDecisionsAcceptAPerson(t *testing.T) {
 // `supervise` read them with the CLI login.
 func TestListApprovalsAcceptsAnAccessToken(t *testing.T) {
 	t.Parallel()
-	repo := personRepo()
-	repo.ListPendingApprovalsByChatFunc = func(context.Context, string) ([]*db.Approval, error) { return nil, nil }
-	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Chats: personChats()}))
+	repo, approvals := personRepo(), personApprovals()
+	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Approvals: approvals, Chats: personChats()}))
 
 	_, err := svc.ListApprovalsByChat(asCaller(auth.CredentialAccessToken),
 		connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}))
@@ -189,8 +194,8 @@ func TestDecisionsCredentialMatrix(t *testing.T) {
 		for _, d := range decisions {
 			t.Run(tc.name+"/"+d.name, func(t *testing.T) {
 				t.Parallel()
-				repo := personRepo()
-				svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Chats: personChats()}))
+				repo, approvals := personRepo(), personApprovals()
+				svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Approvals: approvals, Chats: personChats()}))
 
 				err := d.call(svc, tc.ctx)
 
@@ -204,7 +209,7 @@ func TestDecisionsCredentialMatrix(t *testing.T) {
 				ce := svcerr.ToConnect(err)
 				require.Equal(t, tc.reason, ce.Meta().Get(svcerr.ReasonHeader))
 				require.Equal(t, tc.scopes, ce.Meta().Get(fat.ScopesHeader))
-				require.Zero(t, repo.CallCount("GetApproval"), "nothing is read for a refused caller")
+				require.Zero(t, approvals.CallCount("GetApproval"), "nothing is read for a refused caller")
 				require.Zero(t, repo.CallCount("UpdateApprovalStatus"), "nothing is written for a refused caller")
 			})
 		}
@@ -233,8 +238,8 @@ func TestDecisionsRefuseAnIntrospectedWildcard(t *testing.T) {
 	for _, d := range decisions {
 		t.Run(d.name, func(t *testing.T) {
 			t.Parallel()
-			repo := personRepo()
-			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Chats: personChats()}))
+			repo, approvals := personRepo(), personApprovals()
+			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: repo, Approvals: approvals, Chats: personChats()}))
 
 			err := d.call(svc, asToken(p))
 

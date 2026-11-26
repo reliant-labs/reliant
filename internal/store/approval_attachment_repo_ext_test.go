@@ -45,7 +45,7 @@ func TestApprovalQueries(t *testing.T) {
 		t.Fatalf("Repo.CreateApproval: %v", err)
 	}
 
-	twin, err := env.Repo.GetApproval(ctx, "ap-1")
+	twin, err := store.GetApproval(ctx, env.Repo.ORM(), "ap-1")
 	if err != nil || twin == nil {
 		t.Fatalf("Repo.GetApproval = %v, %v", twin, err)
 	}
@@ -83,7 +83,7 @@ func TestApprovalQueries(t *testing.T) {
 	if err := store.UpdateApprovalStatus(ctx, env.ORM, "ap-1", approved, nil, strp("Deploy Now"), nil, &resolved); err != nil {
 		t.Fatalf("UpdateApprovalStatus: %v", err)
 	}
-	twin, err = env.Repo.GetApproval(ctx, "ap-1")
+	twin, err = store.GetApproval(ctx, env.Repo.ORM(), "ap-1")
 	if err != nil {
 		t.Fatalf("Repo.GetApproval after resolve: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestApprovalQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListPendingApprovalsByChat: %v", err)
 	}
-	twinPend, err := env.Repo.ListPendingApprovalsByChat(ctx, "chat-approvals")
+	twinPend, err := store.ListPendingApprovalsByChat(ctx, env.Repo.ORM(), "chat-approvals")
 	if err != nil {
 		t.Fatalf("Repo.ListPendingApprovalsByChat: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestApprovalQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListApprovalsByChat: %v", err)
 	}
-	twinAll, err := env.Repo.ListApprovalsByChat(ctx, "chat-approvals")
+	twinAll, err := store.ListApprovalsByChat(ctx, env.Repo.ORM(), "chat-approvals")
 	if err != nil {
 		t.Fatalf("Repo.ListApprovalsByChat: %v", err)
 	}

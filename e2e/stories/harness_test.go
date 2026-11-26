@@ -866,7 +866,7 @@ func (h *Harness) WaitPendingApproval(chatID string) *db.Approval {
 	h.T.Helper()
 	var found *db.Approval
 	h.eventually("pending approval on chat "+chatID, func() (bool, string) {
-		pending, err := h.Stack.Repo.ListPendingApprovalsByChat(h.Ctx, chatID)
+		pending, err := store.ListPendingApprovalsByChat(h.Ctx, h.Stack.Repo.ORM(), chatID)
 		if err != nil {
 			return false, fmt.Sprintf("list pending approvals: %v", err)
 		}

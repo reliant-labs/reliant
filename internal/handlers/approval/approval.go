@@ -139,7 +139,7 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 	}
 	var chatID string
 	for _, id := range ids {
-		approval, err := s.deps.Repo.GetApproval(ctx, id)
+		approval, err := s.deps.Approvals.GetApproval(ctx, id)
 		if err != nil {
 			return "", 0, 0, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
 		}
@@ -163,7 +163,7 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 		var held *db.Approval
 		kept := ids[:0:0]
 		for _, id := range ids {
-			approval, err := s.deps.Repo.GetApproval(ctx, id)
+			approval, err := s.deps.Approvals.GetApproval(ctx, id)
 			if err != nil {
 				return "", 0, 0, svcerr.WrapOr(err, svcerr.Internal("failed to get approval"))
 			}
@@ -208,7 +208,7 @@ func (s *Service) resolveApprovals(ctx context.Context, ids []string, d decision
 	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		resolved, skipped = nil, nil
 		for _, id := range ids {
-			approval, err := s.deps.Repo.GetApproval(txCtx, id)
+			approval, err := s.deps.Approvals.GetApproval(txCtx, id)
 			if err != nil {
 				return err
 			}

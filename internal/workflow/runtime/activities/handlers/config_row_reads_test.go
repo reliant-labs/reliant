@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -79,6 +80,10 @@ func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
 	spy.mu.Lock()
 	defer spy.mu.Unlock()
 	require.Empty(t, spy.callers, "worker preset paths read the whole project config row")
+}
+
+func (s *fullConfigRowReads) ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error) {
+	return store.ChatPersonTurnAt(ctx, s.ORM(), chatID)
 }
 
 func (s *fullConfigRowReads) GetChat(ctx context.Context, id string) (*db.Chat, error) {

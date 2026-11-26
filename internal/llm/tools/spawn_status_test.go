@@ -79,7 +79,7 @@ func TestSpawnStatus_Listing_OnlyReturnsCallersOwnChildren(t *testing.T) {
 	otherParentID, otherChildID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 	require.NotEqual(t, callerParentID, otherParentID)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerParentID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{})
@@ -106,7 +106,7 @@ func TestSpawnStatus_Listing_ShowsAChildWaitingOnAUsageLimit(t *testing.T) {
 	createTestChat(t, repo, chatID)
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{})
@@ -142,7 +142,7 @@ func TestSpawnStatus_Listing_NoChildren_ReturnsFriendlyMessage(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, threadID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{})
@@ -165,7 +165,7 @@ func TestSpawnStatus_SingleAgent_RejectsNonChildAgent(t *testing.T) {
 	callerID, _, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 	_, unrelatedChildID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: unrelatedChildID})
@@ -183,7 +183,7 @@ func TestSpawnStatus_SingleAgent_OwnChildWithNoMessages_ReturnsFriendlyMessage(t
 
 	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: childID})
@@ -209,7 +209,7 @@ func TestSpawnStatus_SingleAgent_ReturnsLastAssistantMessage_NotFirstOrConcatena
 	seedMessage(t, repo, ctx, chatID, childID, reliantv1.MessageRole_MESSAGE_ROLE_USER, "keep going")
 	seedMessage(t, repo, ctx, chatID, childID, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "final answer")
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	resp, _ := runSpawnStatus(t, tool, rc, SpawnStatusParams{AgentID: childID})
@@ -233,7 +233,7 @@ func TestSpawnStatus_Wait_ReturnsPromptlyWhenAlreadyTerminal(t *testing.T) {
 
 	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	start := time.Now()
@@ -260,7 +260,7 @@ func TestSpawnStatus_Wait_UnknownAgentFailsFast(t *testing.T) {
 
 	callerID, _, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	start := time.Now()
@@ -284,7 +284,7 @@ func TestSpawnStatus_Wait_TimeoutIsNotAnError(t *testing.T) {
 
 	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	start := time.Now()
@@ -323,7 +323,7 @@ func TestSpawnStatus_Wait_CutShortSaysItStoppedEarly(t *testing.T) {
 	time.AfterFunc(200*time.Millisecond, cancel)
 	rc := rctx.NewToolContext(callCtx, chatID, callerID, nil, nil)
 
-	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
 
 	require.False(t, resp.IsError, "response: %+v", resp)
 	require.True(t, meta.StoppedEarly, "metadata: %+v", meta)
@@ -520,7 +520,7 @@ func TestSpawnStatus_Wait_ClampsTimeoutAboveCeiling(t *testing.T) {
 
 	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: &MockSpawnQuestions{PendingQuestionsByThreadFunc: func(context.Context, string) (map[string]*db.Question, error) { return nil, nil }}, Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
 	// Stated against the shared constant, not a literal. toolexec's ceiling is

@@ -249,7 +249,7 @@ func TestApprovalCreateActivity_ThreadIDAttribution(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, output.ApprovalID)
 
-	stored, err := h.Repo().GetApproval(ctx, output.ApprovalID)
+	stored, err := store.GetApproval(ctx, h.Repo().ORM(), output.ApprovalID)
 	require.NoError(t, err)
 	require.NotNil(t, stored.ThreadID, "approval must carry the raising thread's id, not NULL")
 	assert.Equal(t, subAgentThreadID, *stored.ThreadID,
@@ -293,7 +293,7 @@ func TestApprovalCreateActivity_ThreadIDOmittedIsNull(t *testing.T) {
 	err := h.ExecuteActivity(activity.Execute, input, &output)
 	require.NoError(t, err)
 
-	stored, err := h.Repo().GetApproval(ctx, output.ApprovalID)
+	stored, err := store.GetApproval(ctx, h.Repo().ORM(), output.ApprovalID)
 	require.NoError(t, err)
 	assert.Nil(t, stored.ThreadID, "no thread supplied should leave thread_id NULL, never guessed")
 }
@@ -378,7 +378,7 @@ func TestApprovalCreateActivity_ToolCallBatch(t *testing.T) {
 		ChatID: chatID, WorkflowID: workflowID, TemporalWorkflowID: workflowID, StepID: "agent_loop",
 		Title: "Approval: enable_trigger", ToolCallID: "call-1", BatchID: "batch-1",
 	}, &output))
-	stored, err := h.Repo().GetApproval(ctx, output.ApprovalID)
+	stored, err := store.GetApproval(ctx, h.Repo().ORM(), output.ApprovalID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL_CALL), stored.ApprovalType)
 	require.NotNil(t, stored.BatchID)
@@ -390,7 +390,7 @@ func TestApprovalCreateActivity_ToolCallBatch(t *testing.T) {
 	require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(h.Repo())).Execute, ApprovalCreateInput{
 		ChatID: chatID, WorkflowID: workflowID, TemporalWorkflowID: workflowID, StepID: "approve", Title: "Deploy?",
 	}, &step))
-	stored, err = h.Repo().GetApproval(ctx, step.ApprovalID)
+	stored, err = store.GetApproval(ctx, h.Repo().ORM(), step.ApprovalID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP), stored.ApprovalType)
 	assert.Nil(t, stored.BatchID)

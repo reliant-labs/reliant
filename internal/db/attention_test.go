@@ -98,10 +98,10 @@ func TestAttentionFenceAndStaleRegistration(t *testing.T) {
 	// Complete it before treating it as a safely managed legacy firing.
 	newer.Phase = "finish"
 	attentionApply(t, r, newer)
-	managed, err := r.AttentionManagedChats(context.Background(), "test-user", []string{older.ChatID, newer.ChatID, "missing"})
+	managed, err := store.AttentionManagedChats(context.Background(), r.ORM(), "test-user", []string{older.ChatID, newer.ChatID, "missing"})
 	require.NoError(t, err)
 	require.Equal(t, map[string]bool{older.ChatID: true, newer.ChatID: true}, managed)
-	managed, err = r.AttentionManagedChats(context.Background(), "other-user", []string{older.ChatID, newer.ChatID})
+	managed, err = store.AttentionManagedChats(context.Background(), r.ORM(), "other-user", []string{older.ChatID, newer.ChatID})
 	require.NoError(t, err)
 	require.Empty(t, managed)
 	// Preserve sub-microsecond Temporal ordering, not postgres rounding.
@@ -220,7 +220,7 @@ func TestAttentionOwnershipAndKeyIsolation(t *testing.T) {
 	_, err = applyAttentionUpdateRC(ctx, r, base)
 	require.Error(t, err)
 	require.Empty(t, attentionList(t, r))
-	managed, err := r.AttentionManagedChats(ctx, "test-user", []string{"owned"})
+	managed, err := store.AttentionManagedChats(ctx, r.ORM(), "test-user", []string{"owned"})
 	require.NoError(t, err)
 	require.Empty(t, managed)
 }
@@ -283,7 +283,7 @@ func TestAttentionManagedFailSafeOnLostTerminal(t *testing.T) {
 	at := time.Now().UTC()
 	managed := func(chat string) bool {
 		t.Helper()
-		m, err := r.AttentionManagedChats(ctx, "test-user", []string{chat})
+		m, err := store.AttentionManagedChats(ctx, r.ORM(), "test-user", []string{chat})
 		require.NoError(t, err)
 		return m[chat]
 	}
@@ -348,7 +348,7 @@ func TestAttentionInvalidUpdatesNeverRegister(t *testing.T) {
 		require.Error(t, err)
 		require.False(t, result.Managed)
 	}
-	managed, err := r.AttentionManagedChats(context.Background(), "test-user", []string{base.ChatID})
+	managed, err := store.AttentionManagedChats(context.Background(), r.ORM(), "test-user", []string{base.ChatID})
 	require.NoError(t, err)
 	require.Empty(t, managed)
 	require.Empty(t, attentionList(t, r))

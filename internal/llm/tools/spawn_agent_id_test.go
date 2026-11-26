@@ -78,7 +78,7 @@ func TestSpawnTools_AcceptAnUnambiguousAgentIDPrefix(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
-	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: childID[:8]})
+	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: childID[:8]})
 	require.False(t, resp.IsError, "response: %+v", resp)
 	require.Equal(t, childID, meta.AgentID)
 
@@ -89,7 +89,7 @@ func TestSpawnTools_AcceptAnUnambiguousAgentIDPrefix(t *testing.T) {
 	// A prefix of an agent the caller does not own resolves to nothing, so
 	// the tool's own refusal still applies.
 	_, otherChild, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	resp, _ = runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: otherChild[:8]})
+	resp, _ = runSpawnStatus(t, NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())}), rc, SpawnStatusParams{AgentID: otherChild[:8]})
 	require.True(t, resp.IsError)
 	require.Contains(t, resp.Content, "not a sub-agent spawned from this thread")
 }
@@ -116,7 +116,7 @@ func TestSpawnStatus_Listing_RunningFirstDedupedAndFilterable(t *testing.T) {
 		RequestedAt: resumedAt, CompletedAt: &resumedAt, CreatedAt: resumedAt, UpdatedAt: resumedAt,
 	}))
 
-	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: repo, Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())})
+	tool := NewSpawnStatusTool(SpawnStatusDeps{Store: WithChats(repo), Backoff: providerbackofftest.New(t, repo), Questions: store.NewQuestionExtStore(repo.ORM()), Tree: store.NewToolCallExtStore(repo.ORM())})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp, meta := runSpawnStatus(t, tool, rc, SpawnStatusParams{})

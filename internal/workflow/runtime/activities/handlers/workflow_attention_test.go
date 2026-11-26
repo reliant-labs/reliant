@@ -62,7 +62,7 @@ func TestAttentionReceiptFailureRollsBackCompletedLifecycle(t *testing.T) {
 	wf, err := store.LoadWorkflow(ctx, f.h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Equal(t, db.Active(), wf.Status, "cannot commit a completed lifecycle without its semantic fallback receipt")
-	managed, err := f.h.Repo().AttentionManagedChats(ctx, f.userID, []string{chatID})
+	managed, err := store.AttentionManagedChats(ctx, f.h.Repo().ORM(), f.userID, []string{chatID})
 	require.NoError(t, err)
 	require.False(t, managed[chatID])
 }
@@ -122,7 +122,7 @@ func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T)
 		return d
 	}()).Execute, in, &out)
 	require.Error(t, err, "terminal activity retries rather than acknowledge a lost transition")
-	managed, err := f.h.Repo().AttentionManagedChats(ctx, f.userID, []string{chatID})
+	managed, err := store.AttentionManagedChats(ctx, f.h.Repo().ORM(), f.userID, []string{chatID})
 	require.NoError(t, err)
 	require.False(t, managed[chatID], "a bare observer registration cannot permanently suppress failure")
 	wf, err := store.LoadWorkflow(ctx, f.h.Repo().ORM(), chatID)

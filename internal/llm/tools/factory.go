@@ -361,7 +361,7 @@ func (f *ToolsFactory) spawnStatusStore() spawnStatusStore {
 	if f.opts == nil || f.opts.Repo == nil {
 		return nil
 	}
-	return f.opts.Repo
+	return WithChats(f.opts.Repo)
 }
 
 // spawnSendStore and spawnStopStore are store() as those tools' roles, nil when

@@ -114,7 +114,7 @@ func TestSendMessage_PersonTurn(t *testing.T) {
 
 			_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "one more thing"))
 			require.NoError(t, err)
-			turn, err := repo.ChatPersonTurnAt(ctx, fx.chatID)
+			turn, err := store.ChatPersonTurnAt(ctx, repo.ORM(), fx.chatID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.want, turn != nil)
 		})

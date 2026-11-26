@@ -137,7 +137,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 			wf, err := store.LoadWorkflow(ctx, repo.ORM(), fx.rootThreadID)
 			require.NoError(t, err)
 			assert.Equal(t, tc.dbStatus, wf.Status, "a refused send must not move the run's status")
-			turn, err := repo.ChatPersonTurnAt(ctx, fx.chatID)
+			turn, err := store.ChatPersonTurnAt(ctx, repo.ORM(), fx.chatID)
 			require.NoError(t, err)
 			assert.Nil(t, turn, "a refused send must not make the trigger's chat attended")
 		})

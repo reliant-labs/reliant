@@ -165,6 +165,32 @@ func (m *MockOrphans) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Co
 // Compile-time check.
 var _ Orphans = (*MockOrphans)(nil)
 
+// forge:section MockPendingApprovals
+// forge:hash=ff1cc51177c50057efa4d863b4d7e8ffe0e5032caa814241066e6b743bc780f1
+
+// MockPendingApprovals is a test mock for the PendingApprovals interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockPendingApprovals.<Method>Func not set" error.
+type MockPendingApprovals struct {
+	contractkit.Recorder
+	ListPendingApprovalsByChatFunc func(context.Context, string) ([]*db.Approval, error)
+}
+
+// ListPendingApprovalsByChat records the call and delegates to ListPendingApprovalsByChatFunc when set.
+func (m *MockPendingApprovals) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error) {
+	m.Recorder.Record("ListPendingApprovalsByChat", ctx, chatID)
+	if m.ListPendingApprovalsByChatFunc != nil {
+		return m.ListPendingApprovalsByChatFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockPendingApprovals", "ListPendingApprovalsByChat")
+}
+
+// Compile-time check.
+var _ PendingApprovals = (*MockPendingApprovals)(nil)
+
 // forge:section MockChats
 // forge:hash=31c2cd871f3d0a9b0fca72ff139635fd6accae1d2080b86d6656595bde427c7d
 
@@ -244,7 +270,7 @@ func (m *MockDaemonReader) GetDaemon(ctx context.Context, id string) (*db.Daemon
 var _ DaemonReader = (*MockDaemonReader)(nil)
 
 // forge:section MockReconcilerStore
-// forge:hash=bc6f0fdead9d463e2b7fe71d32db0c1a0692551b857b6badbfbe8c8d123c8dd2
+// forge:hash=4804a4204aaa67f4f62f5f48bface134b3b9f03fcc2c6d7227f8adb70445aa2f
 
 // MockReconcilerStore is a test mock for the ReconcilerStore interface.
 //
@@ -267,7 +293,6 @@ type MockReconcilerStore struct {
 	ReapOrphanedWorkflowDescendantsFunc      func(context.Context) ([]db.ReapedWorkflow, error)
 	ReapOrphanedThreadsFunc                  func(context.Context) ([]db.ReapedThread, error)
 	GetThreadFunc                            func(context.Context, string) (*db.Thread, error)
-	ListPendingApprovalsByChatFunc           func(context.Context, string) ([]*db.Approval, error)
 	ListStrandedSpawnToolCallsFunc           func(context.Context) ([]*db.ToolCall, error)
 	ListStrandedBackgroundSpawnToolCallsFunc func(context.Context) ([]*db.StrandedBackgroundSpawn, error)
 	ListBackgroundedProcessToolCallsFunc     func(context.Context) ([]*db.BackgroundedProcessCall, error)
@@ -407,15 +432,6 @@ func (m *MockReconcilerStore) GetThread(ctx context.Context, id string) (*db.Thr
 		return m.GetThreadFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockReconcilerStore", "GetThread")
-}
-
-// ListPendingApprovalsByChat records the call and delegates to ListPendingApprovalsByChatFunc when set.
-func (m *MockReconcilerStore) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error) {
-	m.Recorder.Record("ListPendingApprovalsByChat", ctx, chatID)
-	if m.ListPendingApprovalsByChatFunc != nil {
-		return m.ListPendingApprovalsByChatFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockReconcilerStore", "ListPendingApprovalsByChat")
 }
 
 // ListStrandedSpawnToolCalls records the call and delegates to ListStrandedSpawnToolCallsFunc when set.

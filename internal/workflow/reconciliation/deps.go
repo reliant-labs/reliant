@@ -76,9 +76,18 @@ type Deps struct {
 	// Chats reads a chat's owner, activity, main thread and run, with no
 	// owner check. store.ChatsWithActivityExtStore satisfies it.
 	Chats Chats
+	// PendingApprovals lists a chat's approvals that wait on a person.
+	// store.ApprovalExtStore satisfies it.
+	PendingApprovals PendingApprovals
 	// RunEvents records a repaired run's terminal event, inside the repair's
 	// transaction (runevents.NewStore).
 	RunEvents runevents.Store
+}
+
+// PendingApprovals lists a chat's unresolved approvals, which the progress
+// watchdog treats as a wait on a person.
+type PendingApprovals interface {
+	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 }
 
 // Chats reads a chat with its computed state.
@@ -120,7 +129,6 @@ type ReconcilerStore interface {
 
 	// Chats, threads and the progress watchdog's user-input waits.
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 
 	// Stranded spawns, backgrounded processes and the tool-call rows they
 	// close.

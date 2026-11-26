@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestApprovalResolveActivity_Timeout creates a pending approval, then resolves it
@@ -64,7 +65,7 @@ func TestApprovalResolveActivity_Timeout(t *testing.T) {
 	assert.True(t, output.Success)
 
 	// Verify the approval was updated to denied status in the DB
-	approval, err := h.Repo().GetApproval(ctx, approvalID)
+	approval, err := store.GetApproval(ctx, h.Repo().ORM(), approvalID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED), approval.Status,
 		"Timeout should map to EXPIRED status")

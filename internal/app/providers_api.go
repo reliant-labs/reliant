@@ -1419,16 +1419,17 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	cfg := reconciliation.DefaultConfig()
 	cfg.Namespace = d.Namespace
 	r := reconciliation.New(reconciliation.Deps{
-		Store:     d.DB,
-		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
-		RunEvents: runevents.NewStore(d.DB.ORM()),
-		Questions: store.NewQuestionExtStore(d.DB.ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
-		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),
-		Temporal:  d.Temporal.Client,
-		Config:    cfg,
-		Workflows: store.NewWorkflowExtStore(d.DB.ORM()),
-		Daemons:   store.NewDaemonExtStore(d.DB.ORM()),
+		Store:            d.DB,
+		Chats:            store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		PendingApprovals: store.NewApprovalExtStore(d.DB.ORM()),
+		RunEvents:        runevents.NewStore(d.DB.ORM()),
+		Questions:        store.NewQuestionExtStore(d.DB.ORM()),
+		Mailbox:          agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		Orphans:          store.NewAgentMessageExtStore(d.DB.ORM()),
+		Temporal:         d.Temporal.Client,
+		Config:           cfg,
+		Workflows:        store.NewWorkflowExtStore(d.DB.ORM()),
+		Daemons:          store.NewDaemonExtStore(d.DB.ORM()),
 	})
 	r.SetResetGuard(d.ResetGuard)
 	r.SetApprovals(approvalSweepStore{reads: store.NewApprovalExtStore(d.DB.ORM()), closer: approvalclose.NewFromRepo(d.DB)})

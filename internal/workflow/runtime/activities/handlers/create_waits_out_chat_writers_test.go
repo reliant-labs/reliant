@@ -61,7 +61,7 @@ func TestApprovalCreate_WaitsOutAConcurrentChatWriterInOneTransaction(t *testing
 		}, &out)
 	})
 
-	approval, err := f.h.Repo().GetApproval(context.Background(), out.ApprovalID)
+	approval, err := store.GetApproval(context.Background(), f.h.Repo().ORM(), out.ApprovalID)
 	require.NoError(t, err)
 	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING), approval.Status)
 }

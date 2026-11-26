@@ -154,7 +154,7 @@ func TestInboxAttention_CancelledObserverWithLostTerminalStaysVisibleOnceReconci
 	at := time.Now().UTC().Add(-time.Minute)
 	attentionFiring(t, f, "cancelled-observer-job", "cancelled-observer", db.Active(), at)
 	applyInboxAttention(t, f, "cancelled-observer-job", "observer-run", "pr:42", "start", "", at, 0)
-	managed, err := f.repo.AttentionManagedChats(f.ctx, f.userID, []string{"cancelled-observer-job"})
+	managed, err := store.AttentionManagedChats(f.ctx, f.repo.ORM(), f.userID, []string{"cancelled-observer-job"})
 	require.NoError(t, err)
 	require.False(t, managed["cancelled-observer-job"], "a bare observer start cannot own the run's attention")
 

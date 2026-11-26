@@ -170,7 +170,7 @@ func TestApprovalService_Approve_SignalsApproval(t *testing.T) {
 	assert.Equal(t, "approved", signalData["status"])
 
 	// Verify DB was updated
-	approval, err := repo.GetApproval(context.Background(), approvalID)
+	approval, err := store.GetApproval(context.Background(), repo.ORM(), approvalID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), approval.Status)
 }
@@ -206,7 +206,7 @@ func TestApprovalService_Deny_SignalsDenial(t *testing.T) {
 	assert.Equal(t, denialReason, signalData["denial_reason"])
 
 	// Verify DB was updated
-	approval, err := repo.GetApproval(context.Background(), approvalID)
+	approval, err := store.GetApproval(context.Background(), repo.ORM(), approvalID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), approval.Status)
 }
@@ -354,7 +354,7 @@ func TestApprovalService_BatchApproveSkipsDecided(t *testing.T) {
 	assert.Equal(t, 3, mockClient.signalCalls, "one denial, then two approvals")
 
 	for id, want := range map[string]reliantv1.ApprovalStatus{a: reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED, b: reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED, c: reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED} {
-		got, err := repo.GetApproval(context.Background(), id)
+		got, err := store.GetApproval(context.Background(), repo.ORM(), id)
 		require.NoError(t, err)
 		assert.Equal(t, int32(want), got.Status, id)
 	}

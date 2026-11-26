@@ -1472,8 +1472,3 @@ func (r *Repo) EmitNodeExecutionEvent(ctx context.Context, eventType string, sta
 func (r *Repo) RecordChatPersonTurn(ctx context.Context, chatID, userID string) error {
 	return store.RecordChatPersonTurn(ctx, r.ORM(), chatID, userID, time.Now())
 }
-
-// ChatPersonTurnAt returns when a person last sent a message into chatID, nil when nobody has.
-func (r *Repo) ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error) {
-	return store.ChatPersonTurnAt(ctx, r.ORM(), chatID)
-}

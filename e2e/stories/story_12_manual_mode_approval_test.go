@@ -80,7 +80,7 @@ func TestStory12_ManualModeApprovalRunsToolOnlyAfterApprove(t *testing.T) {
 	h.WaitTemporalWorkflowDone(workflowID)
 	h.WaitWorkflowStatus(workflowID, db.Completed())
 
-	resolved, err := h.Stack.Repo.GetApproval(h.Ctx, approval.ID)
+	resolved, err := store.GetApproval(h.Ctx, h.Stack.Repo.ORM(), approval.ID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), resolved.Status)
 
@@ -136,7 +136,7 @@ func TestStory12_ManualModeApprovalDenyNeverRunsTool(t *testing.T) {
 	h.WaitTemporalWorkflowDone(workflowID)
 	h.WaitWorkflowStatus(workflowID, db.Completed())
 
-	resolved, err := h.Stack.Repo.GetApproval(h.Ctx, approval.ID)
+	resolved, err := store.GetApproval(h.Ctx, h.Stack.Repo.ORM(), approval.ID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), resolved.Status)
 

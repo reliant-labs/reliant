@@ -31,14 +31,14 @@ func TestChatPersonTurns(t *testing.T) {
 	bob := seedChatForRun(t, repo, ctx, "bob")
 
 	// Absent: nobody has taken a turn.
-	at, err := repo.ChatPersonTurnAt(ctx, alice)
+	at, err := store.ChatPersonTurnAt(ctx, repo.ORM(), alice)
 	require.NoError(t, err)
 	assert.Nil(t, at)
 
 	// Recorded at a fixed time, read back exactly.
 	first := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
 	require.NoError(t, store.RecordChatPersonTurn(ctx, repo.ORM(), alice, "alice", first))
-	at, err = repo.ChatPersonTurnAt(ctx, alice)
+	at, err = store.ChatPersonTurnAt(ctx, repo.ORM(), alice)
 	require.NoError(t, err)
 	require.NotNil(t, at)
 	assert.True(t, at.Equal(first), "got %v", at)
@@ -47,13 +47,13 @@ func TestChatPersonTurns(t *testing.T) {
 	later := first.Add(time.Hour)
 	require.NoError(t, store.RecordChatPersonTurn(ctx, repo.ORM(), alice, "alice", later))
 	assert.Equal(t, 1, countRows(alice))
-	at, err = repo.ChatPersonTurnAt(ctx, alice)
+	at, err = store.ChatPersonTurnAt(ctx, repo.ORM(), alice)
 	require.NoError(t, err)
 	assert.True(t, at.Equal(later), "got %v", at)
 
 	// Isolation: another chat and person are untouched, and their own row
 	// is theirs.
-	at, err = repo.ChatPersonTurnAt(ctx, bob)
+	at, err = store.ChatPersonTurnAt(ctx, repo.ORM(), bob)
 	require.NoError(t, err)
 	assert.Nil(t, at, "a turn in alice's chat says nothing of bob's")
 	require.NoError(t, repo.RecordChatPersonTurn(ctx, bob, "bob"))

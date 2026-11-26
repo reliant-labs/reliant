@@ -1116,6 +1116,7 @@ func (g *Graph) newApproval() (*approval.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Approvals:   store.NewApprovalExtStore(g.Database().ORM()),
 		Chats:       store.NewChatExtStore(g.Database().ORM()),
 		Signals:     g.PauseService(),
 		Connections: g.APIConnections().Service,

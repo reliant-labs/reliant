@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/approvalkind"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // ApprovalCreate stamps every approval it writes with the min_role
@@ -53,7 +54,7 @@ func TestApprovalCreateActivity_StampsMinRole(t *testing.T) {
 			var out ApprovalCreateOutput
 			require.NoError(t, h.ExecuteActivity(NewApprovalCreateActivity(approvalCreateDeps(h.Repo())).Execute, input, &out))
 
-			stored, err := h.Repo().GetApproval(ctx, out.ApprovalID)
+			stored, err := store.GetApproval(ctx, h.Repo().ORM(), out.ApprovalID)
 			require.NoError(t, err)
 			require.NotNil(t, stored.MinRole, "ApprovalCreate must stamp min_role")
 			require.Equal(t, tc.want.String(), *stored.MinRole)

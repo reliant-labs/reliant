@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -417,6 +418,10 @@ type nudgeSaveFailingRepo struct {
 	*db.Repo
 	failed int
 	mu     sync.Mutex
+}
+
+func (r *nudgeSaveFailingRepo) ChatPersonTurnAt(ctx context.Context, chatID string) (*time.Time, error) {
+	return store.ChatPersonTurnAt(ctx, r.ORM(), chatID)
 }
 
 func (r *nudgeSaveFailingRepo) GetChat(ctx context.Context, id string) (*db.Chat, error) {

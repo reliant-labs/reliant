@@ -19,7 +19,7 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=584e5d116bdbb26f78fe8678a025f586a3eb56e8c2a68edba0c8c44e71883262
+// forge:hash=ef58504ac3f74311eca1aa7d885a98d4c74eb3062442793110cbf9a045e693c5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -29,15 +29,13 @@ import (
 // "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
-	RunTxFunc                      func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
-	CreateChatUpdateFunc           func(context.Context, string, pb.ChatUpdateType, string, string) error
-	GetApprovalFunc                func(context.Context, string) (*db.Approval, error)
-	ListPendingApprovalsByChatFunc func(context.Context, string) ([]*db.Approval, error)
-	UpdateApprovalStatusFunc       func(context.Context, string, int32, *string, *string, *string) error
-	ListMessagesFunc               func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
-	ListContentBlocksFunc          func(context.Context, string) ([]*db.MessageContentBlock, error)
-	CreateNumberedMessageFunc      func(context.Context, *db.Message) error
-	CreateContentBlockFunc         func(context.Context, *db.MessageContentBlock) error
+	RunTxFunc                 func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
+	CreateChatUpdateFunc      func(context.Context, string, pb.ChatUpdateType, string, string) error
+	UpdateApprovalStatusFunc  func(context.Context, string, int32, *string, *string, *string) error
+	ListMessagesFunc          func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
+	ListContentBlocksFunc     func(context.Context, string) ([]*db.MessageContentBlock, error)
+	CreateNumberedMessageFunc func(context.Context, *db.Message) error
+	CreateContentBlockFunc    func(context.Context, *db.MessageContentBlock) error
 }
 
 // RunTx records the call and delegates to RunTxFunc when set.
@@ -56,24 +54,6 @@ func (m *MockRepository) CreateChatUpdate(ctx context.Context, chatID string, up
 		return m.CreateChatUpdateFunc(ctx, chatID, updateType, entityID, data)
 	}
 	return contractkit.MockNotSet("MockRepository", "CreateChatUpdate")
-}
-
-// GetApproval records the call and delegates to GetApprovalFunc when set.
-func (m *MockRepository) GetApproval(ctx context.Context, id string) (*db.Approval, error) {
-	m.Recorder.Record("GetApproval", ctx, id)
-	if m.GetApprovalFunc != nil {
-		return m.GetApprovalFunc(ctx, id)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetApproval")
-}
-
-// ListPendingApprovalsByChat records the call and delegates to ListPendingApprovalsByChatFunc when set.
-func (m *MockRepository) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error) {
-	m.Recorder.Record("ListPendingApprovalsByChat", ctx, chatID)
-	if m.ListPendingApprovalsByChatFunc != nil {
-		return m.ListPendingApprovalsByChatFunc(ctx, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListPendingApprovalsByChat")
 }
 
 // UpdateApprovalStatus records the call and delegates to UpdateApprovalStatusFunc when set.
@@ -123,6 +103,42 @@ func (m *MockRepository) CreateContentBlock(ctx context.Context, block *db.Messa
 
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
+
+// forge:section MockApprovals
+// forge:hash=0717125287badd40bf153beca4dee1ee9ff529a337439de4ab4e50fc46fdbd98
+
+// MockApprovals is a test mock for the Approvals interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockApprovals.<Method>Func not set" error.
+type MockApprovals struct {
+	contractkit.Recorder
+	GetApprovalFunc                func(context.Context, string) (*db.Approval, error)
+	ListPendingApprovalsByChatFunc func(context.Context, string) ([]*db.Approval, error)
+}
+
+// GetApproval records the call and delegates to GetApprovalFunc when set.
+func (m *MockApprovals) GetApproval(ctx context.Context, id string) (*db.Approval, error) {
+	m.Recorder.Record("GetApproval", ctx, id)
+	if m.GetApprovalFunc != nil {
+		return m.GetApprovalFunc(ctx, id)
+	}
+	return nil, contractkit.MockNotSet("MockApprovals", "GetApproval")
+}
+
+// ListPendingApprovalsByChat records the call and delegates to ListPendingApprovalsByChatFunc when set.
+func (m *MockApprovals) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error) {
+	m.Recorder.Record("ListPendingApprovalsByChat", ctx, chatID)
+	if m.ListPendingApprovalsByChatFunc != nil {
+		return m.ListPendingApprovalsByChatFunc(ctx, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockApprovals", "ListPendingApprovalsByChat")
+}
+
+// Compile-time check.
+var _ Approvals = (*MockApprovals)(nil)
 
 // forge:section MockChats
 // forge:hash=b516a1dcc6b11514f064ea8bd56b47cab1edd62387c1ddb08745cfe5ddb76430

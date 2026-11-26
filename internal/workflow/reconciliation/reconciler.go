@@ -97,6 +97,7 @@ type Reconciler struct {
 	repo       ReconcilerStore
 	runEvents  runevents.Store
 	chats      Chats
+	pending    PendingApprovals
 	workflows  WorkflowLoader
 	daemons    DaemonReader
 	approvals  Approvals
@@ -523,6 +524,7 @@ func New(deps Deps) *Reconciler {
 		repo:                    repo,
 		runEvents:               deps.RunEvents,
 		chats:                   chats,
+		pending:                 deps.PendingApprovals,
 		questions:               deps.Questions,
 		mailbox:                 deps.Mailbox,
 		orphans:                 deps.Orphans,
@@ -1931,7 +1933,7 @@ func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bo
 	if len(questions) > 0 {
 		return true, nil
 	}
-	approvals, err := r.repo.ListPendingApprovalsByChat(ctx, wf.ChatID)
+	approvals, err := r.pending.ListPendingApprovalsByChat(ctx, wf.ChatID)
 	if err != nil {
 		return false, fmt.Errorf("checking pending approvals: %w", err)
 	}

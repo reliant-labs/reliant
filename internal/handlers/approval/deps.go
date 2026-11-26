@@ -18,14 +18,19 @@ type Repository interface {
 
 	CreateChatUpdate(ctx context.Context, chatID string, updateType pb.ChatUpdateType, entityID string, data string) error
 
-	GetApproval(ctx context.Context, id string) (*db.Approval, error)
-	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 	UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error
 
 	ListMessages(ctx context.Context, chatID string, opts db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
 	CreateNumberedMessage(ctx context.Context, msg *db.Message) error
 	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error
+}
+
+// Approvals reads the approvals the handlers decide on and lists a chat's
+// pending ones. store.ApprovalExtStore satisfies it.
+type Approvals interface {
+	GetApproval(ctx context.Context, id string) (*db.Approval, error)
+	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*db.Approval, error)
 }
 
 // Chats reads the chat an approval belongs to, so the caller's right to act on

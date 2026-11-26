@@ -846,21 +846,6 @@ func (r *Repo) CreateApproval(ctx context.Context, approval *Approval) error {
 	return r.emitChatActivityIfChanged(ctx, approval.ChatID)
 }
 
-// GetApproval retrieves an approval by ID
-func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
-	return store.GetApproval(ctx, r.ORM(), id)
-}
-
-// ListPendingApprovalsByChat retrieves all pending approvals for a chat
-func (r *Repo) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
-	return store.ListPendingApprovalsByChat(ctx, r.ORM(), chatID)
-}
-
-// ListApprovalsByChat retrieves all approvals for a chat (including resolved)
-func (r *Repo) ListApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
-	return store.ListApprovalsByChat(ctx, r.ORM(), chatID)
-}
-
 // UpdateApprovalStatus updates the status of an approval and emits an activity event if the activity changed.
 func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error {
 	var resolvedAt *time.Time
@@ -874,7 +859,7 @@ func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32
 	}
 
 	// Look up the approval to get chatID for activity emission
-	approval, err := r.GetApproval(ctx, id)
+	approval, err := store.GetApproval(ctx, r.ORM(), id)
 	if err != nil {
 		return err
 	}

@@ -62,7 +62,7 @@ func TestApproval_ExpiredIsAnnouncedAndExplained(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, closed)
 
-	a, err := repo.GetApproval(ctx, approvalID)
+	a, err := store.GetApproval(ctx, repo.ORM(), approvalID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED), a.Status)
 	require.NotNil(t, a.DenialReason)
@@ -95,7 +95,7 @@ func TestResolvePendingApproval_KeepsADecision(t *testing.T) {
 		int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_EXPIRED), "timed out", "timeout")
 	require.NoError(t, err)
 	assert.False(t, closed)
-	a, err := repo.GetApproval(ctx, approvalID)
+	a, err := store.GetApproval(ctx, repo.ORM(), approvalID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), a.Status)
 }
@@ -130,10 +130,10 @@ func TestBatchApprove_SkipsResolvedApprovals(t *testing.T) {
 	assert.Equal(t, int32(1), resp.Msg.Approved)
 	assert.Contains(t, resp.Msg.Message, "1 already resolved")
 
-	a, err := repo.GetApproval(ctx, live)
+	a, err := store.GetApproval(ctx, repo.ORM(), live)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), a.Status)
-	s, err := repo.GetApproval(ctx, stale)
+	s, err := store.GetApproval(ctx, repo.ORM(), stale)
 	require.NoError(t, err)
 	assert.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), s.Status, "a skipped approval keeps its close")
 }

@@ -129,7 +129,7 @@ func TestConnectionProposalApprovedWithTheConnection(t *testing.T) {
 	require.Equal(t, "approved", signal["status"])
 	require.Equal(t, "mine", signal["connection_id"])
 
-	approval, err := repo.GetApproval(context.Background(), id)
+	approval, err := store.GetApproval(context.Background(), repo.ORM(), id)
 	require.NoError(t, err)
 	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), approval.Status)
 	require.Equal(t, "mine", approval.ApprovedConnectionID())
@@ -157,7 +157,7 @@ func TestConnectionProposalNeedsItsConnection(t *testing.T) {
 		err := approveWith(service, approvalTestCtx(), id, wrong)
 		require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), wrong)
 	}
-	approval, err := repo.GetApproval(context.Background(), id)
+	approval, err := store.GetApproval(context.Background(), repo.ORM(), id)
 	require.NoError(t, err)
 	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING), approval.Status)
 	require.Equal(t, 1, mockClient.signalCalls, "only the routine approval was signalled")

@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/approvalclose"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -130,27 +131,27 @@ func TestCleanupActivity_CancelsApprovals(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify pending approvals exist
-	pending, err := repo.ListPendingApprovalsByChat(ctx, chatID)
+	pending, err := store.ListPendingApprovalsByChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.Len(t, pending, 2)
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
+	activity := NewCleanupActivity(CleanupDeps{Store: tools.WithChats(repo), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 2, output.ApprovalsCancelled)
 
 	// Verify approvals are cancelled
-	pending, err = repo.ListPendingApprovalsByChat(ctx, chatID)
+	pending, err = store.ListPendingApprovalsByChat(ctx, repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.Len(t, pending, 0, "All pending approvals should be cancelled")
 
 	// Verify approval status changed
-	a1, err := repo.GetApproval(ctx, approval1.ID)
+	a1, err := store.GetApproval(ctx, repo.ORM(), approval1.ID)
 	require.NoError(t, err)
 	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), a1.Status)
 
-	a2, err := repo.GetApproval(ctx, approval2.ID)
+	a2, err := store.GetApproval(ctx, repo.ORM(), approval2.ID)
 	require.NoError(t, err)
 	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), a2.Status)
 }
@@ -164,7 +165,7 @@ func TestCleanupActivity_NoApprovals(t *testing.T) {
 	chatID := createTestChat(t, repo)
 
 	// Run cleanup activity (no approvals to cancel)
-	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
+	activity := NewCleanupActivity(CleanupDeps{Store: tools.WithChats(repo), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ApprovalsCancelled)
@@ -223,7 +224,7 @@ func TestCleanupActivity_CancelsOrphanedToolCalls(t *testing.T) {
 	require.Nil(t, resultBlock, "should have no tool_result block")
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
+	activity := NewCleanupActivity(CleanupDeps{Store: tools.WithChats(repo), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ToolCallsCancelled, "should have cancelled 1 orphaned tool call")
@@ -339,7 +340,7 @@ func TestCleanupActivity_SkipsToolCallsWithResults(t *testing.T) {
 	require.NotNil(t, resultBlock, "should have tool_result block")
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
+	activity := NewCleanupActivity(CleanupDeps{Store: tools.WithChats(repo), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 0, output.ToolCallsCancelled, "should NOT cancel tool calls that have results")
@@ -379,18 +380,18 @@ func TestCleanupActivity_OnlyPendingApprovals(t *testing.T) {
 	require.NoError(t, err)
 
 	// Run cleanup activity
-	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
+	activity := NewCleanupActivity(CleanupDeps{Store: tools.WithChats(repo), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 1, output.ApprovalsCancelled, "Only the pending approval should be cancelled")
 
 	// Verify pending approval is cancelled
-	pa, err := repo.GetApproval(ctx, pendingApproval.ID)
+	pa, err := store.GetApproval(ctx, repo.ORM(), pendingApproval.ID)
 	require.NoError(t, err)
 	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_CANCELLED), pa.Status)
 
 	// Verify approved approval is unchanged
-	aa, err := repo.GetApproval(ctx, approvedApproval.ID)
+	aa, err := store.GetApproval(ctx, repo.ORM(), approvedApproval.ID)
 	require.NoError(t, err)
 	require.Equal(t, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), aa.Status)
 }
@@ -433,7 +434,7 @@ func TestCleanupActivity_IdempotentRepair(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
+	activity := NewCleanupActivity(CleanupDeps{Store: tools.WithChats(repo), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
 
 	// First cleanup - should create repair
 	output1, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
@@ -506,7 +507,7 @@ func TestCleanupActivity_MultipleOrphanedToolCalls(t *testing.T) {
 	}
 
 	// Run cleanup
-	activity := NewCleanupActivity(CleanupDeps{Store: repo, ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
+	activity := NewCleanupActivity(CleanupDeps{Store: tools.WithChats(repo), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Approvals: approvalclose.NewFromRepo(repo), Workflows: workflowRunsOf(repo)})
 	output, err := activity.Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
 	require.Equal(t, 3, output.ToolCallsCancelled, "should repair all 3 orphaned tool calls")
