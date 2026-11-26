@@ -70,6 +70,7 @@ RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS kind=string flag="" default="audit"
 RELIANT_ORGS_POLICY_ENFORCEMENT_MACHINES kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_ORGS_POLICY_ENFORCEMENT_MCP kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
 RELIANT_ORGS_POLICY_ENFORCEMENT_PROVIDERS kind=string flag="" default="audit" required=false optional=false sensitive=false allowed=[off audit enforce] aliases=[]
+RELIANT_PIPELINE_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_PR_RECORD_REPOSITORIES kind=repeated string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_SDK_GO_UPGRADE_COMMAND kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_SDK_GO_UPGRADE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

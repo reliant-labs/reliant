@@ -45,6 +45,7 @@ func share(t *testing.T, env *storetest.Env, kind core.ShareKind, id, owner, org
 // create: never the caller's own, another org's, a private one, or an
 // archived one; most recently active first; narrowed by project on request.
 func TestListSharedChats(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	acme, globex := strp("acme"), strp("globex")
@@ -164,6 +165,7 @@ func TestListSharedChats(t *testing.T) {
 
 // The same predicate over projects.
 func TestListSharedProjects(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
@@ -207,6 +209,7 @@ func TestListSharedProjects(t *testing.T) {
 // visibility='org' rows of the org, never the viewer's own, a private one, a
 // hidden one or another org's; most recently shared first; paged.
 func TestListSharedWorkflowDrafts(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
@@ -278,6 +281,7 @@ func TestListSharedWorkflowDrafts(t *testing.T) {
 // neither. It moves nothing else on the row: changing who may read a chat is
 // not activity on it.
 func TestApplyShareChange(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
@@ -405,6 +409,7 @@ func TestApplyShareChange(t *testing.T) {
 // A row with no org cannot be shared: the change does not match it, and the
 // database refuses a visibility without an org or outside the set.
 func TestShareNeedsAnOrg(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
@@ -424,6 +429,7 @@ func TestShareNeedsAnOrg(t *testing.T) {
 
 // A saved workflow shares the same way and reads its visibility back.
 func TestShareWorkflowDraft(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
@@ -444,6 +450,7 @@ func TestShareWorkflowDraft(t *testing.T) {
 // The visibility change and its share_events row are one unit: when the event
 // cannot be written, the visibility change is rolled back.
 func TestApplyShareChangeRollsBackWithoutItsEvent(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)
@@ -475,6 +482,7 @@ func TestApplyShareChangeRollsBackWithoutItsEvent(t *testing.T) {
 // Concurrent changes of one resource serialize on its row: of N simultaneous
 // shares exactly one applies and records an event, and the rest are no-ops.
 func TestConcurrentShareChangesApplyOnce(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 11, 12, 10, 0, 0, 0, time.UTC)

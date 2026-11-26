@@ -190,7 +190,7 @@ func TestTriggerCRUDRoundTrip(t *testing.T) {
 		t.Errorf("after update Config: got %s", updated.Config)
 	}
 
-	if err := repo.DeleteTrigger(ctx, want.ID); err != nil {
+	if err := store.RemoveTrigger(ctx, repo.ORM(), want.ID); err != nil {
 		t.Fatalf("DeleteTrigger: %v", err)
 	}
 	if _, err := repo.GetTrigger(ctx, want.ID); !errors.Is(err, core.ErrTriggerNotFound) {
@@ -554,7 +554,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 
 	// Never fired: (nil, nil), not an error. This is the overlap check's first
 	// run, and it must not look like a failure.
-	latest, err := repo.GetLatestTriggerEvent(ctx, trigger.ID, nil)
+	latest, err := store.GetLatestTriggerEvent(ctx, repo.ORM(), trigger.ID, nil)
 	if err != nil {
 		t.Fatalf("GetLatestTriggerEvent(no events): %v", err)
 	}
@@ -573,7 +573,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 		}
 	}
 
-	latest, err = repo.GetLatestTriggerEvent(ctx, trigger.ID, nil)
+	latest, err = store.GetLatestTriggerEvent(ctx, repo.ORM(), trigger.ID, nil)
 	if err != nil {
 		t.Fatalf("GetLatestTriggerEvent(unfiltered): %v", err)
 	}
@@ -585,7 +585,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 	// skipped one started no run, so it says nothing about whether the
 	// previous run is still going.
 	wantLaunched := core.TriggerEventLaunched
-	latest, err = repo.GetLatestTriggerEvent(ctx, trigger.ID, &wantLaunched)
+	latest, err = store.GetLatestTriggerEvent(ctx, repo.ORM(), trigger.ID, &wantLaunched)
 	if err != nil {
 		t.Fatalf("GetLatestTriggerEvent(launched): %v", err)
 	}
@@ -595,7 +595,7 @@ func TestGetLatestTriggerEvent(t *testing.T) {
 
 	// An outcome that never occurred is also (nil, nil).
 	wantFailed := core.TriggerEventFailed
-	latest, err = repo.GetLatestTriggerEvent(ctx, trigger.ID, &wantFailed)
+	latest, err = store.GetLatestTriggerEvent(ctx, repo.ORM(), trigger.ID, &wantFailed)
 	if err != nil {
 		t.Fatalf("GetLatestTriggerEvent(failed): %v", err)
 	}
@@ -623,7 +623,7 @@ func TestDeleteTriggerNullsEventTriggerID(t *testing.T) {
 		t.Fatalf("CreateTriggerEvent: %v", err)
 	}
 
-	if err := repo.DeleteTrigger(ctx, trigger.ID); err != nil {
+	if err := store.RemoveTrigger(ctx, repo.ORM(), trigger.ID); err != nil {
 		t.Fatalf("DeleteTrigger: %v", err)
 	}
 

@@ -25,7 +25,7 @@ import (
 // 5–10s at p90. Every distinct read is now made once per listing.
 func TestListWorkflows_ReadsEachSourceOncePerListing(t *testing.T) {
 	ctx, repo := workflowlisttest.NewFixture(t, 12)
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: repo.Drafts(), Projects: projectaccesstest.For(repo)}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: repo.Drafts(), Projects: projectaccesstest.For(repo)}))
 
 	resp, err := svc.ListWorkflows(ctx, connect.NewRequest(&reliantv1.ListWorkflowsRequest{
 		ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true),
@@ -65,7 +65,7 @@ func TestListWorkflows_LatencyDoesNotScaleWithRefs(t *testing.T) {
 	const roundTrip = 20 * time.Millisecond
 	synctest.Test(t, func(t *testing.T) {
 		ctx, repo := workflowlisttest.NewFixture(t, 12)
-		svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: repo.Drafts(), Projects: projectaccesstest.For(repo)}))
+		svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: repo.Drafts(), Projects: projectaccesstest.For(repo)}))
 		req := connect.NewRequest(&reliantv1.ListWorkflowsRequest{ProjectId: repo.Project.ID, IncludeHidden: proto.Bool(true)})
 		list := func(latency time.Duration) time.Duration {
 			repo.Latency = latency

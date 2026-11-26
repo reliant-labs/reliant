@@ -39,7 +39,7 @@ import Card, { CardHeader } from "@/components/forge-ui/card";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
 import { DeployStatusUnread, deployStatusUnread } from "@/components/Forge/Console/DeployStatusUnread";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useCloudEnvStatuses, useEnvironmentShapes } from "@/hooks/forge-queries";
 import { useObservabilityOrg, useReleaseHealths, useWorkloads } from "@/hooks/observability-queries";
@@ -138,7 +138,7 @@ export function EnvironmentsPage() {
   );
 
   const header = (
-    <PageHeader
+    <ConsolePageHeader
       title={previewsOnly ? "Previews" : "Environments"}
       meta={
         <span>

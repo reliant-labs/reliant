@@ -49,6 +49,7 @@ func event(kind, userID string) core.ConnectionEvent {
 }
 
 func TestConnectionCreateAndReads(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	vaultKey(t, env)
 	ctx := context.Background()
@@ -123,6 +124,7 @@ func TestConnectionCreateAndReads(t *testing.T) {
 }
 
 func TestConnectionWrites(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	vaultKey(t, env)
 	ctx := context.Background()
@@ -209,6 +211,7 @@ func TestConnectionWrites(t *testing.T) {
 }
 
 func TestConnectionSecretsLock(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	vaultKey(t, env)
 	ctx := context.Background()
@@ -267,6 +270,7 @@ func TestConnectionSecretsLock(t *testing.T) {
 }
 
 func TestConnectionEventsPage(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	twin := db.TestConnections(t, env.Repo)
@@ -297,6 +301,7 @@ func TestConnectionEventsPage(t *testing.T) {
 }
 
 func TestOAuthFlowSingleUse(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	twin := db.TestConnections(t, env.Repo)

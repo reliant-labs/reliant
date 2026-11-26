@@ -39,6 +39,7 @@ func assertChildAdmissionLocks(t *testing.T, env *storetest.Env, id string, admi
 	require.Equal(t, "55P03", pg.Code)
 }
 func TestThreadWorkflowAdmissionSerializesWithChildArchive(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name        string
 		state, stop int
@@ -65,6 +66,7 @@ func TestThreadWorkflowAdmissionSerializesWithChildArchive(t *testing.T) {
 	}
 }
 func TestLiveWorkflowTransitionsSerializeWithChildArchive(t *testing.T) {
+	t.Parallel()
 	for _, state := range []int{1, 2, 3} {
 		t.Run(fmt.Sprint(state), func(t *testing.T) {
 			env := storetest.New(t)
@@ -87,6 +89,7 @@ func TestLiveWorkflowTransitionsSerializeWithChildArchive(t *testing.T) {
 }
 
 func TestThreadBindingAdmissionSerializesWithChildArchive(t *testing.T) {
+	t.Parallel()
 	for _, rebind := range []bool{false, true} {
 		t.Run(map[bool]string{false: "insert", true: "rebind"}[rebind], func(t *testing.T) {
 			env := storetest.New(t)

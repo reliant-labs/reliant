@@ -15231,6 +15231,16 @@
           "auth_required": true
         },
         {
+          "id": "reliant.v1.FileSystemService/DownloadFile",
+          "name": "DownloadFile",
+          "input": "reliant.v1.DownloadFileRequest",
+          "output": "reliant.v1.DownloadFileResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
           "id": "reliant.v1.FileSystemService/GetFileContent",
           "name": "GetFileContent",
           "input": "reliant.v1.GetFileContentRequest",
@@ -15559,6 +15569,24 @@
               "Declared": true,
               "None": "filesystem edit through the daemon: an empty directory is not even something git records"
             }
+          },
+          {
+            "Name": "DownloadFile",
+            "InputType": "DownloadFileRequest",
+            "OutputType": "DownloadFileResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.DownloadFileRequest",
+            "OutputTypeFQ": "reliant.v1.DownloadFileResponse",
+            "InputProtoFile": "reliant/v1/filesystem.proto",
+            "OutputProtoFile": "reliant/v1/filesystem.proto",
+            "Activity": {
+              "Mutating": false
+            }
           }
         ],
         "ProtoFile": "reliant/v1/filesystem.proto",
@@ -15697,6 +15725,50 @@
             {
               "Name": "message",
               "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "DownloadFileRequest": [
+            {
+              "Name": "project_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "path",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "worktree_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "chat_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "DownloadFileResponse": [
+            {
+              "Name": "content",
+              "ProtoType": "bytes",
+              "IsOptional": false
+            },
+            {
+              "Name": "content_type",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "filename",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "size",
+              "ProtoType": "int64",
               "IsOptional": false
             }
           ],
@@ -16223,6 +16295,44 @@
               "kind": "bool"
             }
           ],
+          "reliant.v1.DownloadFileRequest": [
+            {
+              "name": "project_id",
+              "kind": "string"
+            },
+            {
+              "name": "path",
+              "kind": "string"
+            },
+            {
+              "name": "worktree_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "chat_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.DownloadFileResponse": [
+            {
+              "name": "content",
+              "kind": "bytes"
+            },
+            {
+              "name": "content_type",
+              "kind": "string"
+            },
+            {
+              "name": "filename",
+              "kind": "string"
+            },
+            {
+              "name": "size",
+              "kind": "int64"
+            }
+          ],
           "reliant.v1.FileMetadata": [
             {
               "name": "name",
@@ -16731,6 +16841,8 @@
           "reliant.v1.DeleteFileOrFolderRequest": "reliant/v1/filesystem.proto",
           "reliant.v1.DeleteFileOrFolderResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.DirectoryEntry": "reliant/v1/filesystem.proto",
+          "reliant.v1.DownloadFileRequest": "reliant/v1/filesystem.proto",
+          "reliant.v1.DownloadFileResponse": "reliant/v1/filesystem.proto",
           "reliant.v1.FileMetadata": "reliant/v1/filesystem.proto",
           "reliant.v1.FileNode": "reliant/v1/filesystem.proto",
           "reliant.v1.FilePreviewInfo": "reliant/v1/filesystem.proto",
@@ -50874,6 +50986,10 @@
               "type_name": "reliant.v1.NodeObserve"
             },
             {
+              "name": "role",
+              "kind": "string"
+            },
+            {
               "name": "secret_refs",
               "kind": "message",
               "type_name": "reliant.v1.NodeSecretRef",
@@ -50973,6 +51089,12 @@
               "name": "git_publish",
               "kind": "message",
               "type_name": "reliant.v1.GitPublishArgs",
+              "oneof": "args"
+            },
+            {
+              "name": "review",
+              "kind": "message",
+              "type_name": "reliant.v1.ReviewArgs",
               "oneof": "args"
             }
           ],
@@ -51232,6 +51354,35 @@
               "name": "schema",
               "kind": "message",
               "type_name": "google.protobuf.Struct"
+            }
+          ],
+          "reliant.v1.ReviewArgs": [
+            {
+              "name": "prompt",
+              "kind": "message",
+              "type_name": "reliant.v1.CelString"
+            },
+            {
+              "name": "with",
+              "kind": "map",
+              "map_key_kind": "string",
+              "map_value_kind": "message",
+              "map_value_type_name": "google.protobuf.Value"
+            },
+            {
+              "name": "model",
+              "kind": "message",
+              "type_name": "reliant.v1.CelModelSelector"
+            },
+            {
+              "name": "max_turns",
+              "kind": "message",
+              "type_name": "reliant.v1.CelInt"
+            },
+            {
+              "name": "project",
+              "kind": "message",
+              "type_name": "reliant.v1.ProjectConfig"
             }
           ],
           "reliant.v1.RouterArgs": [
@@ -52260,6 +52411,11 @@
             {
               "name": "max_running_per_key",
               "kind": "uint32"
+            },
+            {
+              "name": "cancel_running",
+              "kind": "enum",
+              "type_name": "reliant.v1.WorkflowConcurrencyCancelRunning"
             }
           ],
           "reliant.v1.WorkflowEventSource": [
@@ -52558,6 +52714,7 @@
           "reliant.v1.ProjectConfig": "reliant/v1/workflow_v2.proto",
           "reliant.v1.PropertySchema": "reliant/v1/workflow_v2.proto",
           "reliant.v1.ResponseTool": "reliant/v1/workflow_v2.proto",
+          "reliant.v1.ReviewArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.RouterArgs": "reliant/v1/workflow_v2.proto",
           "reliant.v1.RouterWorkflowCandidate": "reliant/v1/workflow_v2.proto",
           "reliant.v1.RunArgs": "reliant/v1/workflow_v2.proto",
@@ -52616,6 +52773,12 @@
             "TRIGGER_OVERLAP_POLICY_SKIP",
             "TRIGGER_OVERLAP_POLICY_ALLOW"
           ],
+          "reliant.v1.WorkflowConcurrencyCancelRunning": [
+            "WORKFLOW_CONCURRENCY_CANCEL_RUNNING_UNSPECIFIED",
+            "WORKFLOW_CONCURRENCY_CANCEL_RUNNING_NEVER",
+            "WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT",
+            "WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_HEAD"
+          ],
           "reliant.v1.WorkflowConcurrencyWaiting": [
             "WORKFLOW_CONCURRENCY_WAITING_UNSPECIFIED",
             "WORKFLOW_CONCURRENCY_WAITING_FIFO",
@@ -52644,6 +52807,12 @@
             1,
             2
           ],
+          "reliant.v1.WorkflowConcurrencyCancelRunning": [
+            0,
+            1,
+            2,
+            3
+          ],
           "reliant.v1.WorkflowConcurrencyWaiting": [
             0,
             1,
@@ -52667,6 +52836,10 @@
           "reliant.v1.TriggerOverlapPolicy": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "TriggerOverlapPolicy"
+          },
+          "reliant.v1.WorkflowConcurrencyCancelRunning": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "WorkflowConcurrencyCancelRunning"
           },
           "reliant.v1.WorkflowConcurrencyWaiting": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
@@ -59453,6 +59626,17 @@
     },
     {
       "consumer": "Inbox",
+      "field": "Registrations",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Registrations",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Inbox",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Repository",
       "methods": [],
@@ -62486,6 +62670,17 @@
       ],
       "providers": [
         "APIDaemonRouter"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Workflow",
+      "field": "Triggers",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/workflow.Triggers",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
       ],
       "resolution": "composition_expression"
     },

@@ -120,26 +120,27 @@ export function ColorSchemeSelector() {
     loadSettings();
   }, []);
 
+  // Apply the scheme on screen whenever it changes, including the one just
+  // read on mount. Applying never saves: opening this page wrote the stored
+  // value straight back (BatchUpsertSettings with no user intent, reliant
+  // #3458). Only a pick saves (chooseScheme).
   useEffect(() => {
     if (!isLoaded) return;
-    
-    // Apply the color scheme
-    const applyScheme = (scheme: ColorScheme) => {
-      const root = document.documentElement;
 
-      root.setAttribute("data-color-scheme", COLOR_SCHEME_ATTR[scheme] ?? DEFAULT_COLOR_SCHEME_ATTR);
+    const root = document.documentElement;
+    root.setAttribute("data-color-scheme", COLOR_SCHEME_ATTR[selectedScheme] ?? DEFAULT_COLOR_SCHEME_ATTR);
 
-      // Sync to database
-      settingsSync.setSetting(SETTINGS_KEYS.COLOR_SCHEME, scheme).catch((error) => {
-        console.error("Failed to save color scheme:", error);
-      });
-
-      // Trigger theme update
-      window.dispatchEvent(new CustomEvent("color-scheme-updated", { detail: { scheme } }));
-    };
-
-    applyScheme(selectedScheme);
+    // Trigger theme update
+    window.dispatchEvent(new CustomEvent("color-scheme-updated", { detail: { scheme: selectedScheme } }));
   }, [selectedScheme, isLoaded]);
+
+  // The user picked a scheme: select it and save it.
+  const chooseScheme = (scheme: ColorScheme) => {
+    setSelectedScheme(scheme);
+    settingsSync.setSetting(SETTINGS_KEYS.COLOR_SCHEME, scheme).catch((error) => {
+      console.error("Failed to save color scheme:", error);
+    });
+  };
 
   // Don't render until settings are loaded
   if (!isLoaded) {
@@ -168,7 +169,7 @@ export function ColorSchemeSelector() {
               role="radio"
               aria-checked={isSelected}
               tabIndex={isSelected ? 0 : -1}
-              onClick={() => setSelectedScheme(scheme.id)}
+              onClick={() => chooseScheme(scheme.id)}
               onKeyDown={(event) => {
                 const step =
                   event.key === "ArrowRight" || event.key === "ArrowDown"
@@ -179,7 +180,7 @@ export function ColorSchemeSelector() {
                 if (!step) return;
                 event.preventDefault();
                 const next = (index + step + COLOR_SCHEMES.length) % COLOR_SCHEMES.length;
-                setSelectedScheme(COLOR_SCHEMES[next].id);
+                chooseScheme(COLOR_SCHEMES[next].id);
                 const group = event.currentTarget.parentElement;
                 group?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
               }}

@@ -29,7 +29,7 @@ import { FilterBar, FilterChip, FilterMenu, FilterSearch } from "@/components/fo
 import Link from "@/components/forge-ui/link";
 import { DOCS, GettingStarted } from "@/components/Forge/GettingStarted";
 import Mono from "@/components/forge-ui/mono";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import { useDoraMetrics, useObservabilityOrg } from "@/hooks/observability-queries";
 import { cn } from "@/lib/utils";
 
@@ -143,7 +143,7 @@ export function ReleasesList({ project, env, envs, envsLoading, search, onSearch
   const summary = led && model ? releasesSummary(model, env === ENV_ALL ? null : env) : null;
   const header = (
     <>
-      <PageHeader
+      <ConsolePageHeader
         density={led ? "compact" : undefined}
         title="Releases"
         subtitle={subtitle?.("releases") ?? undefined}

@@ -83,7 +83,6 @@ var userScopedReads = map[string]string{
 	"FiringsSinceLastSuccess":   readParentAuthorized,
 	"GetPresetBySlugAndProject": readParentAuthorized,
 	"ListPresetsByTag":          readParentAuthorized,
-	"ListTriggerRegistrations":  readParentAuthorized,
 	"ListUserPresetsByProject":  readParentAuthorized,
 	"ListWorktrees":             readParentAuthorized,
 	// The caller's own connection, metadata only (the ciphertext is internal/credentials/connectionvault's
@@ -106,10 +105,7 @@ var userScopedReads = map[string]string{
 	"ListDaemonsByUserID":               readOrgless,
 	"ListFreshDaemonAttachmentsForUser": readOrgless,
 
-	"ListCapacityWakeTargets":    readBackground,
-	"ListChatsPausedForMachine":  readBackground,
-	"ListChatsQueuedForMachine":  readBackground,
-	"ListChatsWaitingForMachine": readBackground,
+	"ListCapacityWakeTargets": readBackground,
 }
 
 var (

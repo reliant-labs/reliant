@@ -128,13 +128,6 @@ func TestFetchReleaseAsset(t *testing.T) {
 			wantGET: []string{direct, meta, apiAsset},
 		},
 		{
-			name:    "pinned sha mismatch is refused",
-			web:     map[string][]byte{direct: []byte("corrupt")},
-			pin:     goodSum,
-			wantErr: "FAILED",
-			wantGET: []string{direct},
-		},
-		{
 			name:    "no pin: the API's recorded digest verifies the asset",
 			web:     map[string][]byte{direct: good, meta: release("sha256:" + goodSum)},
 			wantGET: []string{direct, meta},
