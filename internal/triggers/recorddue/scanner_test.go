@@ -3,6 +3,7 @@ package recorddue_test
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -159,6 +160,56 @@ func TestScanFiresEachDueRecordOnce(t *testing.T) {
 	}
 	if fired, err := h.scanner().Scan(context.Background()); err != nil || fired != 1 {
 		t.Fatalf("new due time: fired %d, %v", fired, err)
+	}
+}
+
+func TestScanAdvancesPastStillDueBatch(t *testing.T) {
+	for _, unmatched := range []bool{false, true} {
+		t.Run(fmt.Sprintf("unmatched=%t", unmatched), func(t *testing.T) {
+			t.Parallel()
+			h := newHarness(t)
+			ctx := context.Background()
+			past := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
+			// Equal due times exercise the record_id tie breaker as well.
+			for i := 0; i <= recorddue.BatchSize; i++ {
+				id := fmt.Sprintf("rec-%03d", i)
+				h.pr(id, i+1, &past)
+				if unmatched && i < recorddue.BatchSize {
+					h.exec(`UPDATE pr_pipeline SET org_id = 'org-other' WHERE record_id = $1`, id)
+				}
+			}
+			h.activation("trg-pr", "org-1")
+			s := h.scanner()
+			wantFirst := recorddue.BatchSize
+			if unmatched {
+				wantFirst = 0
+			}
+			if n, err := s.Scan(ctx); err != nil || n != wantFirst {
+				t.Fatalf("first page: fired %d, %v; want %d", n, err, wantFirst)
+			}
+			if n, err := s.Scan(ctx); err != nil || n != 1 {
+				t.Fatalf("later row starved: fired %d, %v", n, err)
+			}
+			evs := h.events()
+			wantKey := recorddue.DedupeKey("trg-pr", fmt.Sprintf("rec-%03d", recorddue.BatchSize), past)
+			if len(evs) != wantFirst+1 || evs[len(evs)-1]["key"] != wantKey {
+				t.Fatalf("later row event missing: %+v", evs)
+			}
+			var stillDue int
+			if err := h.env.SQL.QueryRow(`SELECT count(*) FROM pr_pipeline WHERE next_action_at = $1`, past).Scan(&stillDue); err != nil {
+				t.Fatal(err)
+			}
+			if stillDue != recorddue.BatchSize+1 {
+				t.Fatalf("scan changed due state: %d rows remain due", stillDue)
+			}
+			// Wrapping revisits the first batch without recording duplicates.
+			if n, err := s.Scan(ctx); err != nil || n != 0 {
+				t.Fatalf("wrapped scan: fired %d, %v", n, err)
+			}
+			if len(h.events()) != wantFirst+1 {
+				t.Fatal("wrapped scan recorded duplicate events")
+			}
+		})
 	}
 }
 

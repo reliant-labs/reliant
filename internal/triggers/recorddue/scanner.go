@@ -15,8 +15,8 @@
 //
 // It clears nothing: whoever acts on the record (pr.next) moves or clears its
 // next_action_at by compare-and-set. Until then the record stays due and is
-// found again on every scan, and the event's dedupe key (trigger, record, due
-// time) makes each repeat a no-op: a record fires once per due time, however
+// found again on each traversal, and the event's dedupe key (trigger, record,
+// due time) makes each repeat a no-op: a record fires once per due time, however
 // many scans, workers or redeliveries see it. Rows are scanned FOR UPDATE
 // SKIP LOCKED and held while their events are recorded, so two workers'
 // scans split the due rows rather than both firing them.
@@ -32,6 +32,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -62,6 +63,10 @@ type Deps struct {
 //
 //forge:contract
 type scanner struct {
+	// mu serializes Scan, which advances after: the cursor of the next
+	// page of due rows.
+	mu       sync.Mutex
+	after    *core.PRPipeline
 	store    Store
 	intake   Intake
 	scope    func(context.Context) context.Context
@@ -99,9 +104,11 @@ func (s *scanner) Run(ctx context.Context) error {
 // cannot be recorded is logged and skipped, so one broken activation cannot
 // keep the others from firing; the error is a scan that could not run.
 func (s *scanner) Scan(ctx context.Context) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	now := s.now().UTC()
 	fired := 0
-	err := s.store.WithDuePRPipelines(ctx, now, BatchSize, func(due []core.DuePRPipeline) error {
+	next, err := s.store.WithDuePRPipelinesAfter(ctx, now, BatchSize, s.after, func(due []core.DuePRPipeline) error {
 		if len(due) == 0 {
 			return nil
 		}
@@ -130,6 +137,12 @@ func (s *scanner) Scan(ctx context.Context) (int, error) {
 		}
 		return nil
 	})
+	if err == nil {
+		// Advance even when no activation fired; still-due, filtered or broken
+		// records must not monopolize the next tick. Wrap after the last page
+		// so newly due rows behind the cursor are examined on the next pass.
+		s.after = next
+	}
 	return fired, err
 }
 

@@ -11,10 +11,11 @@ import (
 
 // Store is what the scan reads. *db.Repo satisfies it.
 type Store interface {
-	// WithDuePRPipelines calls fn with the due pr_pipeline rows (at most
-	// limit) and their records, the rows locked while fn runs; it does not
-	// call fn when none is due.
-	WithDuePRPipelines(ctx context.Context, now time.Time, limit int, fn func([]core.DuePRPipeline) error) error
+	// WithDuePRPipelinesAfter calls fn with the due pr_pipeline rows (at
+	// most limit) after the cursor, and their records, the rows locked
+	// while fn runs; it does not call fn when none is due. It returns the
+	// last row of a full page, the next call's cursor, or nil to start over.
+	WithDuePRPipelinesAfter(ctx context.Context, now time.Time, limit int, after *core.PRPipeline, fn func([]core.DuePRPipeline) error) (*core.PRPipeline, error)
 	ListEnabledTriggersOfKind(ctx context.Context, kind core.TriggerKind) ([]*core.Trigger, error)
 	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
 }

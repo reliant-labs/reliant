@@ -26,10 +26,21 @@ func (r *Repo) ListEnabledTriggersOfKind(ctx context.Context, kind core.TriggerK
 // out. With nothing due, the scan is the one indexed query and fn is not
 // called.
 func (r *Repo) WithDuePRPipelines(ctx context.Context, now time.Time, limit int, fn func([]core.DuePRPipeline) error) error {
-	return r.RunTx(ctx, orm.ReadCommitted, func(tx context.Context) error {
-		rows, err := store.ListDuePRPipelines(tx, r.ORM(), now, limit)
+	_, err := r.WithDuePRPipelinesAfter(ctx, now, limit, nil, fn)
+	return err
+}
+
+// WithDuePRPipelinesAfter scans one page after the cursor and returns the last
+// examined row, including rows whose PR record is gone. Nil means wrap around.
+func (r *Repo) WithDuePRPipelinesAfter(ctx context.Context, now time.Time, limit int, after *core.PRPipeline, fn func([]core.DuePRPipeline) error) (*core.PRPipeline, error) {
+	var next *core.PRPipeline
+	err := r.RunTx(ctx, orm.ReadCommitted, func(tx context.Context) error {
+		rows, err := store.ListDuePRPipelinesAfter(tx, r.ORM(), now, limit, after)
 		if err != nil || len(rows) == 0 {
 			return err
+		}
+		if len(rows) == limit {
+			next = rows[len(rows)-1]
 		}
 		ids := make([]string, len(rows))
 		for i, row := range rows {
@@ -51,4 +62,5 @@ func (r *Repo) WithDuePRPipelines(ctx context.Context, now time.Time, limit int,
 		}
 		return fn(due)
 	})
+	return next, err
 }

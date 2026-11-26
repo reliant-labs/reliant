@@ -54,7 +54,7 @@ func (m *MockService) Scan(ctx context.Context) (int, error) {
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=297c270ddb22a830f7308b081a304ceda4e217d283c32a980bb2cb7d78e3e231
+// forge:hash=3af0db067b6c58578b6822e01a210c11d38afea667e9d338f9d62235eadff0d1
 
 // MockStore is a test mock for the Store interface.
 //
@@ -64,18 +64,18 @@ var _ Service = (*MockService)(nil)
 // "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
-	WithDuePRPipelinesFunc        func(context.Context, time.Time, int, func([]core.DuePRPipeline) error) error
+	WithDuePRPipelinesAfterFunc   func(context.Context, time.Time, int, *core.PRPipeline, func([]core.DuePRPipeline) error) (*core.PRPipeline, error)
 	ListEnabledTriggersOfKindFunc func(context.Context, core.TriggerKind) ([]*core.Trigger, error)
 	GetTriggerEventByDedupeFunc   func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 }
 
-// WithDuePRPipelines records the call and delegates to WithDuePRPipelinesFunc when set.
-func (m *MockStore) WithDuePRPipelines(ctx context.Context, now time.Time, limit int, fn func([]core.DuePRPipeline) error) error {
-	m.Recorder.Record("WithDuePRPipelines", ctx, now, limit, fn)
-	if m.WithDuePRPipelinesFunc != nil {
-		return m.WithDuePRPipelinesFunc(ctx, now, limit, fn)
+// WithDuePRPipelinesAfter records the call and delegates to WithDuePRPipelinesAfterFunc when set.
+func (m *MockStore) WithDuePRPipelinesAfter(ctx context.Context, now time.Time, limit int, after *core.PRPipeline, fn func([]core.DuePRPipeline) error) (*core.PRPipeline, error) {
+	m.Recorder.Record("WithDuePRPipelinesAfter", ctx, now, limit, after, fn)
+	if m.WithDuePRPipelinesAfterFunc != nil {
+		return m.WithDuePRPipelinesAfterFunc(ctx, now, limit, after, fn)
 	}
-	return contractkit.MockNotSet("MockStore", "WithDuePRPipelines")
+	return nil, contractkit.MockNotSet("MockStore", "WithDuePRPipelinesAfter")
 }
 
 // ListEnabledTriggersOfKind records the call and delegates to ListEnabledTriggersOfKindFunc when set.
