@@ -36,5 +36,5 @@
 // Nothing sends a gate command yet; the queue's scheduler (M7) will, through
 // the Dispatcher.
 //
-//forge:exclude-contract: the daemon half of the gate (Runner over a consumer-declared Backend, Jobs keyed by gate id) is built by the daemon's gate command handler; its tests run the real stage script against a fake Backend, so a generated mock buys nothing
+//forge:not-a-component: the merge queue's scheduler (M7) builds the Dispatcher over the worker's daemon router, the machine-pool store and pipeline_repos; the daemon builds Jobs in its gate command handler. Neither is wired by the composition root yet
 package gaterun
