@@ -50,6 +50,9 @@ func (r *userStreamRaceRepo) CreateUserUpdate(ctx context.Context, update *db.Us
 	return r.Repository.CreateUserUpdate(ctx, update)
 }
 
+// branchTestTime is a fixed instant for the rows these tests seed.
+var branchTestTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+
 func newBranchTestService(repo *db.Repo, role Repository) *Service {
 	return &Service{
 		deps: Deps{
@@ -68,7 +71,7 @@ func newBranchTestService(repo *db.Repo, role Repository) *Service {
 func setupBranchProject(t *testing.T, repo *db.Repo, ctx context.Context) string {
 	t.Helper()
 	projectID := "test-project-branch-" + uuid.NewString()
-	now := time.Now().UTC()
+	now := branchTestTime
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{
 		ID: projectID, UserID: "test-user", Name: "Branch Project", Path: t.TempDir(),
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
@@ -118,7 +121,8 @@ func TestBranchChat_CopiesPlansAndTasksPending(t *testing.T) {
 	projectID := setupBranchProject(t, repo, ctx)
 	sourceChatID, msgID := setupBranchAtomicitySource(t, repo, ctx, projectID)
 
-	base := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	// Fixed instants: only their order matters.
+	base := branchTestTime
 	desc := "the description"
 	complexity := int32(reliantv1.PlanComplexity_PLAN_COMPLEXITY_SIMPLE)
 	older := &db.Plan{ID: uuid.NewString(), ThreadID: sourceChatID, Title: "older", Status: int32(db.PlanStatusCompleted), CreatedAt: base}

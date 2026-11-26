@@ -133,8 +133,10 @@ func ListPlansByChatID(ctx context.Context, db orm.Context, chatID string) ([]*c
 //
 // One statement, not a round trip per row: a chat with 20 plans and 116 tasks
 // took ~140 sequential inserts, about half a second, inside BranchChat's
-// transaction. The tasks' foreign keys to the plans inserted by the CTE
-// beside them hold, because Postgres checks them at the end of the statement.
+// transaction. The tasks are copied from the plans ins_plans RETURNED, so the
+// task insert depends on the plan insert and cannot copy a task whose plan
+// was not inserted. Their foreign keys to those plans are checked after the
+// whole statement, when the plan rows exist.
 const copyChatPlansSQL = `
 WITH src_plans AS (
     SELECT p.id, p.title, p.description, p.complexity, p.created_at,
@@ -147,6 +149,7 @@ ins_plans AS (
     INSERT INTO plans (id, thread_id, title, description, status, complexity, created_at, updated_at)
     SELECT new_id, ?1, title, description, ?2, complexity, created_at, now()
     FROM src_plans
+    RETURNING id
 ),
 src_tasks AS (
     SELECT tk.id, tk.parent_task_id, tk.title, tk.description, tk.position,
@@ -154,6 +157,7 @@ src_tasks AS (
            gen_random_uuid()::text AS new_id
     FROM tasks tk
     JOIN src_plans sp ON sp.id = tk.plan_id
+    JOIN ins_plans ip ON ip.id = sp.new_id
 )
 INSERT INTO tasks (id, plan_id, parent_task_id, title, description, status, position, created_at, updated_at)
 SELECT s.new_id, s.new_plan_id, parent.new_id, s.title, s.description, ?3, s.position, now(), now()
