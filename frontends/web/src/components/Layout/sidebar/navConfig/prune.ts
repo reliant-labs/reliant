@@ -2,7 +2,7 @@
 
 /**
  * A nav without the pages its host does not serve. The public demo serves
- * no Usage and no Speed insights (Forge/Demo/demoPath.ts DEMO_HIDDEN_PAGES):
+ * no Usage (Forge/Demo/demoPath.ts DEMO_HIDDEN_PAGES):
  * it draws the app's own items with those rows pruned, so no row leads to a
  * page that is not there.
  *

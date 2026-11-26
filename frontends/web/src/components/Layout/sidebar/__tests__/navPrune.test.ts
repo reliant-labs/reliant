@@ -3,7 +3,7 @@
 /**
  * withoutPages (navConfig/prune.ts): a nav without the console pages its host
  * does not serve, as a pure transform of the config. The public demo prunes
- * Usage and Speed insights from the app's own items this way.
+ * Usage from the app's own items this way.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -39,22 +39,22 @@ describe("withoutPages", () => {
   it("drops the rows that open a pruned page, at any depth, and keeps the rest", () => {
     const config: NavConfig = {
       items: [row("services", "services"), { kind: "group", id: "configure", label: "Configure", children: [row("secrets", "secrets"), row("usage", "usage")] }],
-      footer: [row("billing"), row("speed", "speed-insights")],
+      footer: [row("billing"), row("speed", "site-insights")],
     };
-    expect(ids(withoutPages(config, ["usage", "speed-insights"]))).toEqual(["services", "configure", "secrets", "billing"]);
+    expect(ids(withoutPages(config, ["usage", "site-insights"]))).toEqual(["services", "configure", "secrets", "billing"]);
   });
 
   it("drops a group, or an area, left with nothing to open", () => {
     const config: NavConfig = {
       items: [
         { kind: "group", id: "money", label: "Money", children: [row("usage", "usage")] },
-        { kind: "area", id: "perf", label: "Perf", match: () => false, children: [row("speed", "speed-insights")] },
+        { kind: "area", id: "perf", label: "Perf", match: () => false, children: [row("speed", "site-insights")] },
         { kind: "group", id: "empty", label: "Empty", children: [] },
       ],
       footer: [],
       sectionPages: [{ kind: "area", id: "settings", label: "Settings", match: () => false, children: [row("usage-settings", "usage")] }],
     };
-    const pruned = withoutPages(config, ["usage", "speed-insights"]);
+    const pruned = withoutPages(config, ["usage", "site-insights"]);
     // A group that was empty to begin with is the config's own business.
     expect(pruned.items.map((item) => item.id)).toEqual(["empty"]);
     expect(pruned.sectionPages).toEqual([]);
@@ -72,7 +72,7 @@ describe("withoutPages", () => {
     expect(withoutPages(hybridNav, [])).toBe(hybridNav);
     const ctx = ctxAt(consolePath("shopfront", { kind: "usage" }));
     const before = ids(hybridNav, ctx);
-    const pruned = withoutPages(hybridNav, ["usage", "speed-insights"]);
+    const pruned = withoutPages(hybridNav, ["usage", "site-insights"]);
     expect(ids(hybridNav, ctx)).toEqual(before);
     expect(before).toEqual(expect.arrayContaining(["project-usage"]));
     expect(ids(pruned, ctx)).not.toContain("project-usage");
@@ -82,9 +82,9 @@ describe("withoutPages", () => {
     const ctx = ctxAt(consolePath("shopfront", { kind: "overview" }));
     const area = (config: NavConfig) => visibleItems(config.items, ctx).find((item) => item.id === "observability")!;
     const obs = (config: NavConfig) => flattenIds([area(config)], ctx);
-    const pruned = withoutPages(hybridNav, ["usage", "speed-insights"]);
-    expect(ids(pruned, ctx)).toEqual(ids(hybridNav, ctx).filter((id) => id !== "project-usage" && id !== "speed-insights"));
-    expect(obs(pruned)).toEqual(obs(hybridNav).filter((id) => id !== "speed-insights"));
+    const pruned = withoutPages(hybridNav, ["usage", "site-insights"]);
+    expect(ids(pruned, ctx)).toEqual(ids(hybridNav, ctx).filter((id) => id !== "project-usage" && id !== "site-insights"));
+    expect(obs(pruned)).toEqual(obs(hybridNav).filter((id) => id !== "site-insights"));
   });
 });
 
@@ -98,7 +98,7 @@ describe("a row's page", () => {
   it("is the kind of console page the row opens", () => {
     const ctx = ctxAt(consolePath("shopfront", { kind: "overview" }));
     const tagged = rowsOf([...hybridNav.items, ...hybridNav.footer], ctx).filter((item) => item.page);
-    expect(tagged.map((item) => item.id)).toEqual(expect.arrayContaining(["services", "project-usage", "speed-insights", "previews", "auth"]));
+    expect(tagged.map((item) => item.id)).toEqual(expect.arrayContaining(["services", "project-usage", "site-insights", "previews", "auth"]));
     for (const item of tagged) {
       const href = hrefOf(item, ctx)!;
       expect(consolePageOf(href.split("?")[0])?.page.kind, item.id).toBe(item.page);

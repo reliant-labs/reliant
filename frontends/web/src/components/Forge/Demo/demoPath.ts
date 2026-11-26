@@ -30,7 +30,7 @@ export const demoSectionHref = (section: DemoSection) => `${FORGE_DEMO_PATH}?sec
  * Console pages the demo does not serve, because the sample shop has nothing
  * to show on them: it has no hosting bill, so Usage would only say its costs
  * cannot be read. The nav has no row for them (demoNavConfig.ts), no tip explains
- * them, and their URLs land on the Overview (demoShellRoutes.tsx). Speed
+ * them, and their URLs land on the Overview (demoShellRoutes.tsx). Site
  * insights is served: the shop pack measures its routes' page loads
  * (fixtures/shop/handlers/speedInsights.ts).
  */

@@ -36,7 +36,9 @@
  *   /forge/p/:project/events                  Product analytics › Events & metrics
  *   /forge/p/:project/analytics[/:tab]        Analytics: the built-in Product analytics dashboards as
  *                                             tabs (overview · users · product · acquisition) + events
- *   /forge/p/:project/speed-insights          Speed insights: web vitals per page
+ *   /forge/p/:project/site-insights[/:view]   Site insights: speed (web vitals per page, the default),
+ *                                             seo · accessibility (`site`: one site's service.name)
+ *   /forge/p/:project/speed-insights          → site-insights (its old name; redirected, search kept)
  *   /forge/p/:project/experiments             Experiments: the project's Forge Changes
  *                                             (remote config, rollouts, A/B tests)
  *   /forge/p/:project/experiments/:changeId   one change (`who` opens it on a "Who gets it?" answer)
@@ -199,8 +201,13 @@ export type ConsolePage =
    * segment; omitted, the first (Product overview).
    */
   | { kind: "analytics"; tab?: AnalyticsTab }
-  /** Speed insights (U6c): web vitals per page, from the browser runtime's RUM spans (Analytics/SpeedInsightsPage.tsx). */
-  | { kind: "speed-insights" }
+  /**
+   * Site insights (Analytics/SiteInsightsPage.tsx): Speed (web vitals per
+   * page, from the browser runtime's RUM spans), SEO and Accessibility. The
+   * view is a path segment; omitted, Speed. It was Speed insights, whose kind
+   * is still a ConsoleTarget that resolves here.
+   */
+  | { kind: "site-insights"; view?: SiteInsightsView }
   /** Auth (U6d): who can sign in, and how (Users/AuthPage.tsx). Omitted tab: users. */
   | { kind: "auth"; tab?: AuthTab }
   /** Tests › Overview: one branch's test health (Tests/TestsOverviewPage.tsx). */
@@ -262,6 +269,18 @@ export function isAnalyticsTab(value: string | undefined): value is AnalyticsTab
   return (ANALYTICS_TABS as readonly string[]).includes(value ?? "");
 }
 
+/** Site insights' views, in tab order: Speed (the default, the bare segment), then the two audits. */
+export const SITE_INSIGHTS_VIEWS = ["speed", "seo", "accessibility"] as const;
+export type SiteInsightsView = (typeof SITE_INSIGHTS_VIEWS)[number];
+export const SITE_INSIGHTS_VIEW_LABELS: Record<SiteInsightsView, string> = { speed: "Speed", seo: "SEO", accessibility: "Accessibility" };
+/** The path segment of Site insights, and of its old name (redirected to it). */
+export const SITE_INSIGHTS_SEGMENT = "site-insights";
+export const SPEED_INSIGHTS_SEGMENT = "speed-insights";
+
+export function isSiteInsightsView(value: string | undefined): value is SiteInsightsView {
+  return (SITE_INSIGHTS_VIEWS as readonly string[]).includes(value ?? "");
+}
+
 
 /**
  * The Tests section's path segments: `/forge/p/<app>/tests[/<page>]` (forge
@@ -301,7 +320,12 @@ export function isTestsPage(page: ConsolePage): boolean {
  * (the metrics explorer). Both resolve to the obs-view page they are, so
  * consolePageOf reads them back as that page.
  */
-export type ConsoleTarget = ConsolePage | { kind: "dashboards" } | { kind: "metrics" };
+export type ConsoleTarget =
+  | ConsolePage
+  | { kind: "dashboards" }
+  | { kind: "metrics" }
+  /** @deprecated Speed insights is Site insights' Speed view: name `{ kind: "site-insights" }`. */
+  | { kind: "speed-insights" };
 
 /** The page a target names. */
 export function pageOfTarget(target: ConsoleTarget): ConsolePage {
@@ -310,6 +334,8 @@ export function pageOfTarget(target: ConsoleTarget): ConsolePage {
       return { kind: "obs-view", view: "dashboards" };
     case "metrics":
       return { kind: "obs-view", view: "metrics" };
+    case "speed-insights":
+      return { kind: "site-insights" };
     default:
       return target;
   }
@@ -372,8 +398,8 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return `${base}/events`;
     case "analytics":
       return !page.tab || page.tab === ANALYTICS_TABS[0] ? `${base}/analytics` : `${base}/analytics/${page.tab}`;
-    case "speed-insights":
-      return `${base}/speed-insights`;
+    case "site-insights":
+      return !page.view || page.view === SITE_INSIGHTS_VIEWS[0] ? `${base}/${SITE_INSIGHTS_SEGMENT}` : `${base}/${SITE_INSIGHTS_SEGMENT}/${page.view}`;
     case "extension":
       return `${base}/${encodeURIComponent(page.segment)}`;
     case "experiments":
@@ -417,7 +443,10 @@ export const analyticsPath = (app: string, tab?: AnalyticsTab, ctx?: PathContext
 export const dataPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "data" }, ctx);
 /** Services' charts view (U6e): every workload's charts. */
 export const servicesChartsPath = (app: string, ctx?: PathContext) => withSearch(servicesPath(app, ctx), { view: "charts" });
-export const speedInsightsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "speed-insights" }, ctx);
+/** Site insights: `speed` (the default), `seo` or `accessibility`. */
+export const siteInsightsPath = (app: string, view?: SiteInsightsView, ctx?: PathContext) => consolePath(app, { kind: "site-insights", view }, ctx);
+/** @deprecated Speed insights is Site insights' Speed view: use siteInsightsPath. */
+export const speedInsightsPath = (app: string, ctx?: PathContext) => siteInsightsPath(app, "speed", ctx);
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
 /** Auth (U6d): `users` (the old Users page; the default) or `sign-in`. */
@@ -527,8 +556,13 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case "activity":
       case "usage":
       case "events":
-      case "speed-insights":
         return sub ? null : { kind: section };
+      case SITE_INSIGHTS_SEGMENT:
+        if (!sub) return { kind: "site-insights" };
+        return isSiteInsightsView(sub) && !dashKind ? { kind: "site-insights", view: sub } : null;
+      // The old name: its route redirects here, and until it does it is the same page.
+      case SPEED_INSIGHTS_SEGMENT:
+        return sub ? null : { kind: "site-insights" };
       case SECURITY_SEGMENT:
         if (sub === SECURITY_PAGES.vulnerabilities && !dashKey) {
           return dashKind ? { kind: "vulnerability", advisory: safeDecode(dashKind) } : { kind: "vulnerabilities" };

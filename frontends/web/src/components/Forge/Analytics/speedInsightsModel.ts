@@ -1,8 +1,9 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The query and arithmetic behind Speed insights (SpeedInsightsPage.tsx, U6e:
- * after Vercel's). Pure: the page renders what these return.
+ * The query and arithmetic behind Site insights' Speed view
+ * (SpeedInsightsPage.tsx, U6e: after Vercel's; it was Speed insights). Pure:
+ * the page renders what these return.
  *
  * SOURCE. forge's browser runtime (@reliantlabs/forge-web-runtime) records web
  * vitals as spans of the `webvitals` tracer, one attribute per vital (`lcp`,
@@ -16,6 +17,16 @@
  *             were good / needed improvement / were poor
  *   routes    the same, per route (the page's path)
  *   series    the same, per time bucket, for the chart
+ *
+ * and a fourth lists the sites that sent any, for the site picker:
+ *
+ *   sites     each `service.name` with page loads, busiest first
+ *
+ * THE SITE. Each frontend's telemetry carries its own `service.name`
+ * ("<project>-<frontend>", forge naming.FrontendServiceName). Every panel
+ * keeps to the query's services (QueryScope.services, the `{services}`
+ * parameter the control plane binds; none = every site), so a project with a
+ * static site and an app frontend reads one at a time instead of both mixed.
  *
  * THE REAL EXPERIENCE SCORE (realExperienceScore below), 0–100:
  *
@@ -143,12 +154,21 @@ function vitalColumns(percentile: Percentile): string[] {
   });
 }
 
-const WHERE = (device: Device) => [
+/**
+ * The site filter: the query's services (QueryScope.services, bound as
+ * `{services}`), or every site when it names none. A frontend's spans carry
+ * its own `service.name` (header).
+ */
+export const SERVICE_WHERE = "(empty({services:Array(String)}) OR has({services:Array(String)}, ResourceAttributes['service.name']))";
+
+const WHERE = (device: Device | "any") => [
   "FROM otel_traces",
   "WHERE ScopeName = 'webvitals'",
   "  AND Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}",
   "  AND (empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, ResourceAttributes['reliant.env.id']))",
-  `  AND ${deviceWhere(device)}`,
+  `  AND ${SERVICE_WHERE}`,
+  // The site list counts every device but bots, which no toggle ever shows.
+  `  AND ${device === "any" ? "ResourceAttributes['reliant.device.type'] != 'bot'" : deviceWhere(device)}`,
 ];
 
 /** Page loads: one TTFB per navigation, the one vital every load reports. */
@@ -157,7 +177,7 @@ const VIEWS = `countIf(${attr("ttfb")} != '') AS views`;
 export type SpeedPanelKind = "summary" | "routes" | "series";
 
 /** The id each panel carries (the fixtures and the cache key read it): `speed-insights-<kind>`. */
-export function speedPanelId(kind: SpeedPanelKind): string {
+export function speedPanelId(kind: SpeedPanelKind | "sites"): string {
   return `speed-insights-${kind}`;
 }
 
@@ -176,6 +196,38 @@ export function speedPanel(kind: SpeedPanelKind, device: Device, percentile: Per
   const tail = kind === "routes" ? ["GROUP BY page", "ORDER BY views DESC", "LIMIT 100"] : kind === "series" ? ["GROUP BY t", "ORDER BY t"] : [];
   const sql = [`SELECT ${[key, ...vitalColumns(percentile), VIEWS].join(",\n       ")}`, ...WHERE(device), ...tail].join("\n");
   return { id: speedPanelId(kind), title: `Web vitals: ${kind}`, kind: "sql", signal: "", series: [], sql };
+}
+
+/** The sites that sent web vitals in the window, busiest first: the site picker's choices (header). */
+export function sitesPanel(): Panel {
+  const sql = ["SELECT ResourceAttributes['service.name'] AS service,\n       " + VIEWS, ...WHERE("any"), "GROUP BY service", "ORDER BY views DESC", "LIMIT 50"].join("\n");
+  return { id: speedPanelId("sites"), title: "Web vitals: sites", kind: "sql", signal: "", series: [], sql };
+}
+
+export interface SiteRow {
+  /** The site's telemetry `service.name`. */
+  service: string;
+  views: number;
+}
+
+/** The sites panel's rows; a span with no service.name is not a site anyone can pick. */
+export function siteRows(result: PanelResult | undefined): SiteRow[] {
+  if (!result) return [];
+  const views = result.columns.indexOf("views");
+  return result.rows
+    .map((row) => ({ service: row.group.service ?? "", views: views < 0 ? 0 : (row.values[views] ?? 0) }))
+    .filter((row) => row.service !== "");
+}
+
+/**
+ * The `service.name`s a frontend's telemetry may carry: forge names it
+ * "<project>-<frontend>" (naming.FrontendServiceName), and a frontend that
+ * starts the SDK itself may report its bare name (Sessions/replayStatus.ts
+ * servesFrontend). What a caller that knows a site by its frontend name (the
+ * static site's page) passes as the services to read.
+ */
+export function siteServiceNames(project: string, frontend: string): string[] {
+  return project ? [`${project}-${frontend}`, frontend] : [frontend];
 }
 
 // ── Reading it ──────────────────────────────────────────────────────────────

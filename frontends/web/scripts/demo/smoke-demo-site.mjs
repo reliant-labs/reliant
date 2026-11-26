@@ -106,7 +106,7 @@ const pages = [
   `${home}/observability/logs`,
   `${home}/observability/dashboards`,
   `${home}/observability/alerts`,
-  `${home}/speed-insights`,
+  `${home}/site-insights`,
   `${home}/security/vulnerabilities`,
   `${home}/security/sboms`,
   `${home}/tests`,
@@ -153,7 +153,7 @@ const navDrill = {
     pages: [
       `${home}/observability`,
       ...["graph", "metrics", "logs", "rpc", "profiles", "errors", "alerts", "traces", "sessions"].map((view) => `${home}/observability/${view}`),
-      `${home}/speed-insights`,
+      `${home}/site-insights`,
     ],
   },
 };
