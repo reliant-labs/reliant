@@ -200,7 +200,7 @@ func (s *Service) projectForAnnouncedPath(ctx context.Context, conn *daemonConne
 			if row == nil || normalizeProjectPath(row.Path) != path {
 				continue
 			}
-			project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
+			project, err := s.deps.Access.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
 			if err == nil && project != nil && scope.Includes(project.OrgID) {
 				return project
 			}
@@ -906,7 +906,7 @@ func (s *Service) machineCheckoutAt(ctx context.Context, conn *daemonConnection,
 		if row == nil || ospath.Clean(row.Path) != want {
 			continue
 		}
-		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
+		project, err := s.deps.Access.GetProjectWithUserCheck(ctx, row.ProjectID, conn.userID)
 		if err == nil && project != nil && scope.Includes(project.OrgID) {
 			return project, nil
 		}

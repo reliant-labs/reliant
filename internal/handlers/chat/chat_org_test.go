@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/orgs"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 // orgSource: alice is a live member of home only; home is her default.
@@ -25,12 +26,11 @@ func (orgSource) ResolveOrgMembership(_ context.Context, userID, orgID string) (
 
 func orgService(t *testing.T, projectOrg *string) *Service {
 	t.Helper()
-	repo := &MockRepository{
-		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
-			return &db.Project{ID: id, UserID: userID, OrgID: projectOrg}, nil
-		},
-	}
-	return NewTestChat(t, WithChatDeps(Deps{Repo: repo, Chats: chataccesstest.For(repo), Orgs: orgs.New(orgSource{})}))
+	repo := &MockRepository{}
+	projects := projectaccesstest.Func(func(_ context.Context, id, userID string) (*db.Project, error) {
+		return &db.Project{ID: id, UserID: userID, OrgID: projectOrg}, nil
+	})
+	return NewTestChat(t, WithChatDeps(Deps{Repo: repo, Chats: chataccesstest.For(repo), Projects: projects, Orgs: orgs.New(orgSource{})}))
 }
 
 // A chat in an org's project belongs to that org, so even a request that

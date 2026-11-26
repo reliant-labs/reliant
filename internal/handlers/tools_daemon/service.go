@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
@@ -52,6 +54,9 @@ type Deps struct {
 	// Projects resolves the project a machine reports by its path or remote
 	// (ProjectLookups, deps.go).
 	Projects ProjectLookups
+	// Access reads a project only when the machine's owner may write it: owner
+	// and org decided together (projectaccess).
+	Access projectaccess.Service
 	// Installs is the machine's checkout rows (ProjectDaemons, deps.go).
 	Installs ProjectDaemons
 	// Checkouts is the machine's checkout lock and detachments
@@ -139,6 +144,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Projects == nil {
 		return fmt.Errorf("tools_daemon: Deps.Projects is required")
+	}
+	if d.Access == nil {
+		return fmt.Errorf("tools_daemon: Deps.Access is required")
 	}
 	if d.Installs == nil {
 		return fmt.Errorf("tools_daemon: Deps.Installs is required")

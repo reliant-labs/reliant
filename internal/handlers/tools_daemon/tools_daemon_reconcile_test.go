@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rowreads"
 
 	"github.com/google/uuid"
@@ -77,12 +78,12 @@ func TestReconcileProjectDaemonsUpsertsOnlyExistingPaths(t *testing.T) {
 	require.Empty(t, rowsAbsent)
 
 	// remote_url backfilled for present1 (was NULL); present2 untouched.
-	got1, err := repo.GetProjectWithUserCheck(ctx, present1.ID, userID)
+	got1, err := projectaccesstest.For(repo).GetProjectWithUserCheck(ctx, present1.ID, userID)
 	require.NoError(t, err)
 	require.NotNil(t, got1.RemoteURL)
 	require.Equal(t, backfillRemote, *got1.RemoteURL)
 
-	got2, err := repo.GetProjectWithUserCheck(ctx, present2.ID, userID)
+	got2, err := projectaccesstest.For(repo).GetProjectWithUserCheck(ctx, present2.ID, userID)
 	require.NoError(t, err)
 	require.NotNil(t, got2.RemoteURL)
 	require.Equal(t, existingRemote, *got2.RemoteURL)
@@ -129,7 +130,7 @@ func TestReconcileProjectDaemonsSkipsRemoteBackfillOnCollision(t *testing.T) {
 	require.Len(t, rows, 1)
 
 	// candidate.remote_url stays NULL — backfill skipped to avoid collision.
-	got, err := repo.GetProjectWithUserCheck(ctx, candidate.ID, userID)
+	got, err := projectaccesstest.For(repo).GetProjectWithUserCheck(ctx, candidate.ID, userID)
 	require.NoError(t, err)
 	require.True(t, got.RemoteURL == nil || *got.RemoteURL == "")
 }

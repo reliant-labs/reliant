@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 // A scroll-back page asks for the errors of exactly the history it loads: from
@@ -38,7 +39,7 @@ func TestPageErrorsBoundsTheReadByThePage(t *testing.T) {
 			EntityID: "err-a", SequenceNumber: 42, Data: []byte(`{"id":"err-a"}`), CreatedAt: t0.Add(time.Second),
 		}}, nil
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	svc := &Service{deps: Deps{Repo: repo, Projects: projectaccesstest.For(repo), Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 
 	out := svc.pageErrors(context.Background(), "chat-1", "main", 13, page, true)
 	if got.chatID != "chat-1" || got.thread != "main" || got.beforeSeq != 13 {
@@ -66,7 +67,7 @@ func TestPageErrorsDegradesOnAFailedRead(t *testing.T) {
 	repo.ListErrorUpdatesInRangeFunc = func(context.Context, string, *time.Time, string, int64) ([]db.ChatUpdate, error) {
 		return nil, errors.New("db down")
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	svc := &Service{deps: Deps{Repo: repo, Projects: projectaccesstest.For(repo), Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	page := []*db.Message{{ID: "a", Seq: 1, CreatedAt: time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)}}
 	if out := svc.pageErrors(context.Background(), "chat-1", "main", 2, page, true); out != nil {
 		t.Fatalf("errors = %+v, want none", out)

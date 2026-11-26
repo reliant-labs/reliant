@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess"
+
 	"connectrpc.com/connect"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -41,6 +43,10 @@ type Deps struct {
 	// Chats reads a chat the caller may write, the owner check and the org
 	// check in one call (chataccess).
 	Chats chataccess.Service
+	// Projects reads a project only when the caller may write it, the owner
+	// check and the org check in one call (projectaccess); the launcher takes
+	// the same service.
+	Projects projectaccess.Service
 	// ChatRows and ChatViews read a chat's own row and its computed view
 	// (ChatRows, ChatViews; deps.go).
 	ChatRows  ChatRows
@@ -147,6 +153,9 @@ func (d Deps) validateDeps() error {
 	}
 	if d.Chats == nil {
 		return fmt.Errorf("chat: Deps.Chats is required")
+	}
+	if d.Projects == nil {
+		return fmt.Errorf("chat: Deps.Projects is required")
 	}
 	if d.ChatRows == nil {
 		return fmt.Errorf("chat: Deps.ChatRows is required")
@@ -327,7 +336,7 @@ func New(deps Deps) (*Service, error) {
 // disagree.
 func (s *Service) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Chats: s.chatViews(), Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, Installs: s.deps.Repo, ProjectRows: s.deps.ProjectRows, TriggerEvents: s.deps.TriggerEvents, Projects: s.deps.Repo, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
+		s.launcherImpl = launch.New(launch.Deps{Store: s.deps.Repo, Chats: s.chatViews(), Workflows: s.deps.Workflows, Worktrees: s.deps.Worktrees, Installs: s.deps.Repo, ProjectRows: s.deps.ProjectRows, TriggerEvents: s.deps.TriggerEvents, Projects: s.deps.Projects, Selections: s.deps.Selections, Threads: threads.New(threads.Deps{Repo: s.deps.Repo}), Temporal: s.deps.Temporal, Runs: s.runs, TaskQueue: workflow.SharedTaskQueue, Pinner: s.chatPinner()})
 	})
 	return s.launcherImpl
 }

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rowreads"
 
 	"connectrpc.com/connect"
@@ -92,6 +93,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 	e.svc = &Service{
 		deps: Deps{
 			Repo:        rowreads.WithRepo(e.repo),
+			Projects:    projectaccesstest.For(e.repo),
 			Workflows:   store.NewWorkflowExtStore(e.repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(e.repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(e.repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(e.repo.ORM()),
@@ -175,6 +177,7 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 	svc := &Service{
 		deps: Deps{
 			Repo:        rowreads.WithRepo(repo),
+			Projects:    projectaccesstest.For(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

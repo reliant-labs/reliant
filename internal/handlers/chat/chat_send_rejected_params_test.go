@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/rowreads"
 
 	"connectrpc.com/connect"
@@ -108,6 +109,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 			service := &Service{
 				deps: Deps{
 					Repo:        rowreads.WithRepo(repo),
+					Projects:    projectaccesstest.For(repo),
 					Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 					Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 					ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),

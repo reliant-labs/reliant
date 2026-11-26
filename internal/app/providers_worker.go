@@ -379,6 +379,8 @@ type WorkerChatDeps struct {
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 	Router   *WorkerDaemonRouter
+	// Projects reads a project the chat's owner may write (projectaccess).
+	Projects projectaccess.Service
 	// Updates writes the chat's refetch signals and publishes them to the hubs.
 	Updates chatupdates.Service
 }
@@ -393,6 +395,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Config:           d.Config,
 		Repo:             rowreads.WithRepo(d.DB),
 		Chats:            chataccess.NewFromORM(d.DB.ORM()),
+		Projects:         d.Projects,
 		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
 		QuestionResolver: questions.NewFromRepo(d.DB),

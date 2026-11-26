@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 func threadTexts(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) []string {
@@ -176,7 +177,7 @@ func (r *failingLookups) GetProjectWithUserCheck(ctx context.Context, id, userID
 	if r.failProject {
 		return nil, errors.New("connection reset by peer")
 	}
-	return r.Repo.GetProjectWithUserCheck(ctx, id, userID)
+	return projectaccesstest.For(r.Repo).GetProjectWithUserCheck(ctx, id, userID)
 }
 
 func (r *failingLookups) GetChat(ctx context.Context, id string) (*db.Chat, error) {

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
@@ -224,7 +225,7 @@ func TestTriggerNamesJoined(t *testing.T) {
 	otherHost := "not-yours"
 	require.NoError(t, repo.UpsertDaemon(ctx, &Daemon{ID: orphan.DaemonID, UserID: "someone-else", Hostname: &otherHost}))
 
-	project, err := repo.GetProjectWithUserCheck(ctx, "test-project", "test-user")
+	project, err := projectaccesstest.For(repo).GetProjectWithUserCheck(ctx, "test-project", "test-user")
 	require.NoError(t, err)
 
 	got, err := repo.GetTrigger(ctx, named.ID)

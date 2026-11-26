@@ -378,6 +378,7 @@ func dialToolsDaemon(t *testing.T, repo *db.Repo, userID, daemonID string) *conn
 		Config:      &typedconfig.Config{},
 		Repo:        rowreads.WithRepo(repo),
 		Projects:    store.NewProjectExtStore(repo.ORM()),
+		Access:      projectaccesstest.For(repo),
 		Installs:    store.NewProjectDaemonExtStore(repo.ORM()),
 		Attachments: store.NewDaemonAttachmentExtStore(repo.ORM()),
 		LocalModels: store.NewDaemonExtStore(repo.ORM()),

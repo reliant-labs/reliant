@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 )
 
 type optedIn struct{}
@@ -100,7 +101,7 @@ func TestTrackMessageSentSeparatesPerChatFromFirstForUser(t *testing.T) {
 			return true, nil
 		},
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	svc := &Service{deps: Deps{Repo: repo, Projects: projectaccesstest.For(repo), Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	chatA := &db.Chat{ID: "chat-a", ProjectID: "proj-1"}
 	chatB := &db.Chat{ID: "chat-b", ProjectID: "proj-1"}
 
@@ -147,7 +148,7 @@ func TestUserFirstMessageIsNotEmittedAgainOnReplay(t *testing.T) {
 			return true, nil
 		},
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	svc := &Service{deps: Deps{Repo: repo, Projects: projectaccesstest.For(repo), Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	chat := &db.Chat{ID: "chat-a", ProjectID: "proj-1"}
 	for range 3 {
 		svc.trackMessageSent(context.Background(), "user-1", chat, "msg-1", "thread-a", "hello", 0)
@@ -164,7 +165,7 @@ func TestUserFirstMessageCarriesOpaqueIDsOnly(t *testing.T) {
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
 		ClaimUserActivationFunc:   func(context.Context, string, string, string) (bool, error) { return true, nil },
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	svc := &Service{deps: Deps{Repo: repo, Projects: projectaccesstest.For(repo), Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: "chat-a", ProjectID: "proj-1", WorkflowName: &name},
 		"msg-1", "thread-a", "private prompt text", 0)
 
@@ -186,7 +187,7 @@ func TestUserFirstMessageNotEmittedWhenTheClaimFails(t *testing.T) {
 		CountMessagesInThreadFunc: func(context.Context, string) (int, error) { return 1, nil },
 		ClaimUserActivationFunc:   func(context.Context, string, string, string) (bool, error) { return false, errors.New("db down") },
 	}
-	svc := &Service{deps: Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
+	svc := &Service{deps: Deps{Repo: repo, Projects: projectaccesstest.For(repo), Chats: chataccesstest.For(repo), Questions: &MockQuestions{}, Spawns: &MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &MockMailbox{}, AgentMessages: &MockAgentMessages{}, Messages: &MockMessages{}, ToolBlocks: &MockToolBlocks{}, Senders: &MockSenders{}}}
 	svc.trackMessageSent(context.Background(), "user-1", &db.Chat{ID: "chat-a"}, "msg-1", "thread-a", "hi", 0)
 
 	recs := out.records(t)
