@@ -272,7 +272,7 @@ WHERE id = (SELECT id FROM trigger_events WHERE chat_id = ?1::text ORDER BY crea
 // CapacityHeadRedriveInterval is how long a waiting capacity head whose scope
 // freed no slot goes between redrives (ListStalePendingTriggerEvents): the
 // safety net for capacity freed without a released or parked row to show it.
-var CapacityHeadRedriveInterval = 5 * time.Minute
+const CapacityHeadRedriveInterval = 5 * time.Minute
 
 // ListStalePendingTriggerEvents returns inbound events recorded but not yet
 // settled, older than the cutoff, oldest first: the fire workflow for them was
