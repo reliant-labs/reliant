@@ -171,6 +171,8 @@ type archiveStore struct {
 	// or release never sees a job gone from memory and not yet on disk.
 	mu   sync.Mutex
 	jobs map[string]*archiveJob
+	// preparing reserves capacity while a folder is scanned, before a job exists.
+	preparing int
 }
 
 // archiveJob is an archive being zipped.
@@ -370,9 +372,21 @@ func (s *archiveStore) handlePrepare(ctx context.Context, payload []byte) ([]byt
 		return nil, fmt.Errorf("creating the folder archive directory: %w", err)
 	}
 	s.sweep(dir)
-	if s.running() >= archiveMaxRunning {
+	s.mu.Lock()
+	if len(s.jobs)+s.preparing >= archiveMaxRunning {
+		s.mu.Unlock()
 		return nil, fmt.Errorf("%d folders are already being zipped on this machine; try again when one finishes", archiveMaxRunning)
 	}
+	s.preparing++
+	s.mu.Unlock()
+	reserved := true
+	defer func() {
+		if reserved {
+			s.mu.Lock()
+			s.preparing--
+			s.mu.Unlock()
+		}
+	}()
 
 	top := filepath.Base(realDir)
 	if top == "" || top == "." || top == string(filepath.Separator) {
@@ -420,17 +434,12 @@ func (s *archiveStore) handlePrepare(ctx context.Context, payload []byte) ([]byt
 		s.jobs = map[string]*archiveJob{}
 	}
 	s.jobs[id] = job
+	s.preparing--
+	reserved = false
 	s.mu.Unlock()
 	go s.build(jobCtx, job, id, dir, meta, entries, realRoot, maxBytes)
 
 	return json.Marshal(daemon.ArchivePrepareResponse{ArchiveID: id, TotalFiles: files, TotalBytes: totalBytes})
-}
-
-// running counts the archives being zipped.
-func (s *archiveStore) running() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.jobs)
 }
 
 // scanArchive lists what the archive of realDir holds, under the entry name

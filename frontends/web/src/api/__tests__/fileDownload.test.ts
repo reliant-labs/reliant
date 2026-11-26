@@ -79,6 +79,33 @@ async function blobBytes(blob: Blob): Promise<Uint8Array> {
 }
 
 describe("runRangedDownload", () => {
+  it.each([false, true])("aborts instead of committing when cancelled in a sink operation (fallback=%s)", async (fallback) => {
+    for (const stage of ["begin", "write"] as const) {
+      const fake = fakeClient(bytesOf(1));
+      if (fallback) fake.client.readFileRange.mockRejectedValue(reasoned("unsupported", Code.Unimplemented, "ranged_download_unsupported"));
+      const controller = new AbortController();
+      let entered!: () => void;
+      const started = new Promise<void>((resolve) => { entered = resolve; });
+      let resume!: () => void;
+      const blocked = new Promise<void>((resolve) => { resume = resolve; });
+      const sink = {
+        begin: vi.fn(async () => undefined),
+        write: vi.fn(async () => undefined),
+        close: vi.fn(async () => undefined),
+        abort: vi.fn(async () => undefined),
+      };
+      sink[stage].mockImplementation(async () => { entered(); await blocked; });
+      const transfer = runRangedDownload({ client: fake.asClient, scope, source: { path: "report.bin" }, sink, signal: controller.signal });
+      const rejected = expect(transfer).rejects.toBeInstanceOf(DownloadCancelledError);
+      await started;
+      controller.abort();
+      resume();
+      await rejected;
+      expect(sink.abort).toHaveBeenCalledOnce();
+      expect(sink.close).not.toHaveBeenCalled();
+    }
+  });
+
   it("streams every piece into the picked file, pinning the first piece's version", async () => {
     const content = bytesOf(10);
     const fake = fakeClient(content);

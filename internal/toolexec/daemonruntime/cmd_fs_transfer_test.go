@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -179,6 +180,45 @@ func TestFSReadRange_RefusesCredentialStores(t *testing.T) {
 // =============================================================================
 // Folder archives
 // =============================================================================
+
+func TestArchivePrepareReservesCapacityBeforeScanning(t *testing.T) {
+	f := newArchiveFixture(t)
+	writeTransferFile(t, filepath.Join(f.root, "file"), []byte("content"))
+	entered := make(chan struct{}, archiveMaxRunning)
+	release := make(chan struct{})
+	finished := make(chan struct{}, archiveMaxRunning)
+	defer func() {
+		close(release)
+		for range archiveMaxRunning {
+			<-finished
+		}
+	}()
+	var calls atomic.Int64
+	f.store.available = func(string) (uint64, bool) {
+		if calls.Add(1) <= archiveMaxRunning {
+			entered <- struct{}{}
+			<-release
+		}
+		return 0, true
+	}
+	payload, err := json.Marshal(daemon.ArchivePrepareRequest{Root: f.root, Path: f.root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range archiveMaxRunning {
+		go func() {
+			_, _ = f.store.handlePrepare(context.Background(), payload)
+			finished <- struct{}{}
+		}()
+	}
+	for range archiveMaxRunning {
+		<-entered
+	}
+	_, err = f.store.handlePrepare(context.Background(), payload)
+	if err == nil || !strings.Contains(err.Error(), "already being zipped") {
+		t.Fatalf("prepare with all slots reserved = %v; want capacity refusal", err)
+	}
+}
 
 type archiveFixture struct {
 	t     *testing.T

@@ -7,10 +7,12 @@ import { mockTransport } from "../../lib/test-utils";
 import { serviceHandlers } from "../../test/serviceTransport";
 import { renderWithQuery as render } from "../../test/renderWithQuery";
 import { FileTree } from "./FileTree";
+import { downloadWorkspaceFile, downloadWorkspaceFolder } from "./downloadWorkspaceFile";
 
 // The tree's "Download" through the real fileSystem API, stopping only at the
 // transport, so the request's project/chat/worktree scope is what is checked.
 const mocks = vi.hoisted(() => ({
+  chat: { activeChatId: "chat-1" },
   project: { currentProject: { id: "project-1", name: "Project", path: "/workspace/project" } },
   downloadFile: vi.fn(),
   readFileRange: vi.fn(),
@@ -31,7 +33,7 @@ vi.mock("../../store/viewerStore", () => ({
   useViewerStore: () => ({ openFileViewer: vi.fn(), getActiveViewer: vi.fn(() => null) }),
 }));
 vi.mock("../../store/chatStore", () => ({
-  useChatStore: { getState: () => ({ activeChatId: "chat-1" }) },
+  useChatStore: { getState: () => mocks.chat },
 }));
 vi.mock("../../hooks/worktree-queries", () => ({
   useCurrentWorktree: () => null,
@@ -76,6 +78,8 @@ async function downloadFromMenu(name: string) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.project.currentProject.id = "project-1";
+  mocks.chat.activeChatId = "chat-1";
   setTransport(mockTransport(serviceHandlers("FileSystemService", {
     getFileTree: () => ({ files: [
       { name: "docs", path: "docs", type: FileNodeType.DIRECTORY, children: [] },
@@ -212,6 +216,25 @@ describe("a file over 25 MB", () => {
     await waitFor(() => expect(mocks.saveBlob).toHaveBeenCalledTimes(1));
     expect(mocks.saveBlob.mock.calls[0][1]).toBe("movie.mov");
   });
+});
+
+it.each([false, true])("pins the source before the save picker resolves (folder=%s)", async (folder) => {
+  const { picker, writable } = fakeSaveFilePicker();
+  let resolvePicker!: (handle: { createWritable: () => Promise<typeof writable> }) => void;
+  picker.mockImplementationOnce(() => new Promise((resolve) => { resolvePicker = resolve; }));
+  servePieces(new Uint8Array([1]), "docs.zip");
+  mocks.prepareFolderArchive.mockResolvedValue({ archiveId: "ar-1" });
+  mocks.getFolderArchiveStatus.mockResolvedValue({ state: FolderArchiveState.READY, skipped: 0n });
+  const transfer = folder
+    ? downloadWorkspaceFolder("docs", "docs", "branch-1")
+    : downloadWorkspaceFile("movie.mov", "movie.mov", "branch-1");
+  mocks.project.currentProject.id = "project-2";
+  mocks.chat.activeChatId = "chat-2";
+  resolvePicker({ createWritable: async () => writable });
+  await transfer;
+  expect(writable.close).toHaveBeenCalledOnce();
+  expect(mocks.readFileRange.mock.calls[0][0]).toMatchObject({ projectId: "project-1", chatId: "chat-1", worktreeId: "branch-1" });
+  if (folder) expect(mocks.prepareFolderArchive.mock.calls[0][0]).toMatchObject({ projectId: "project-1", chatId: "chat-1" });
 });
 
 describe("Download as .zip", () => {

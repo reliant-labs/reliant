@@ -450,11 +450,11 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
 
   // `groups` (a dropped folder's files, folder by folder) all go out under
   // one scope; `directory` is the folder the tree opens to show them.
-  const enqueueUploadGroups = useCallback(async (groups: { directory: string; files: File[] }[], directory: string) => {
+  const enqueueUploadGroups = useCallback(async (groups: { directory: string; files: File[] }[], directory: string, capturedScope?: Awaited<ReturnType<typeof captureFileScope>>) => {
     if (groups.every((group) => group.files.length === 0)) return;
     const dir = directory === "/" ? "" : directory;
     try {
-      const scope = await captureFileScope(worktreeId);
+      const scope = capturedScope ?? await captureFileScope(worktreeId);
       for (const group of groups) enqueueToUploadStore(group.files, group.directory === "/" ? "" : group.directory, scope);
     } catch (err) {
       toast.notify("Couldn't upload", { description: err instanceof Error ? err.message : String(err) });
@@ -477,13 +477,14 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // (the machine makes missing parents when a file lands), and the empty
   // folders created on their own, since no file brings them along.
   const uploadDropped = useCallback(async (dataTransfer: DataTransfer, dir: string) => {
-    const { files, emptyFolders, unreadable } = await filesFromDrop(dataTransfer);
+    const scopeChoice = captureFileScope(worktreeId);
+    const [{ files, emptyFolders, unreadable }, scope] = await Promise.all([filesFromDrop(dataTransfer), scopeChoice]);
     const notice = unreadableMessage(unreadable);
     if (notice) toast.notify(notice.title, { description: notice.description });
-    await enqueueUploadGroups(uploadGroups(dir, files), dir);
+    await enqueueUploadGroups(uploadGroups(dir, files), dir, scope);
     if (emptyFolders.length === 0) return;
     const created = await Promise.allSettled(
-      emptyFolders.map((folder) => createFolder(dir ? `${dir}/${folder}` : folder, worktreeId)),
+      emptyFolders.map((folder) => createFolder(dir ? `${dir}/${folder}` : folder, worktreeId, scope)),
     );
     for (const result of created) {
       if (result.status === "rejected") console.debug("[upload] creating a dropped empty folder failed", result.reason);

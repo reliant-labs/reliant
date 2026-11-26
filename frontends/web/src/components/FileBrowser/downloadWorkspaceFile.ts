@@ -92,10 +92,10 @@ export async function downloadWorkspaceFile(path: string, name: string, worktree
   }
   // Before any await: the picker needs the click's user activation.
   const sinkChoice = chooseSink(name);
+  const source = Promise.all([captureFileScope(worktreeId), normalizeFilePathForAPI(path, worktreeId)]);
   try {
-    const sink = await sinkChoice;
+    const [sink, [scope, apiPath]] = await Promise.all([sinkChoice, source]);
     if (!sink) return;
-    const [scope, apiPath] = await Promise.all([captureFileScope(worktreeId), normalizeFilePathForAPI(path, worktreeId)]);
     const outcome = await useFileDownloadStore.getState().startFileDownload({ name, path: apiPath, scope, sink, size });
     toastFailure(name, outcome);
   } catch (error) {
@@ -126,10 +126,10 @@ export async function downloadWorkspaceFolder(path: string, name: string, worktr
   const zipName = `${name}.zip`;
   // Before any await: the picker needs the click's user activation.
   const sinkChoice = chooseSink(zipName);
+  const source = Promise.all([captureFileScope(worktreeId), normalizeFilePathForAPI(path, worktreeId)]);
   try {
-    const sink = await sinkChoice;
+    const [sink, [scope, apiPath]] = await Promise.all([sinkChoice, source]);
     if (!sink) return;
-    const [scope, apiPath] = await Promise.all([captureFileScope(worktreeId), normalizeFilePathForAPI(path, worktreeId)]);
     const outcome = await useFileDownloadStore.getState().startFolderDownload({ name, path: apiPath, scope, sink });
     toastFailure(zipName, outcome);
   } catch (error) {

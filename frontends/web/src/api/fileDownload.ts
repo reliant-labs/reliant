@@ -282,12 +282,15 @@ async function rangedDownload({
       }
       version = piece.version;
       info = { totalSize: Number(piece.totalSize), filename: piece.filename, contentType: piece.contentType };
+      if (signal?.aborted) throw new DownloadCancelledError();
       await sink.begin(info);
     } else {
       piece = await client.readFileRange(request, callOptions);
     }
 
+    if (signal?.aborted) throw new DownloadCancelledError();
     if (piece.data.length > 0) await sink.write(piece.data);
+    if (signal?.aborted) throw new DownloadCancelledError();
     offset += BigInt(piece.data.length);
     onProgress?.(Number(offset), Number(piece.totalSize));
     if (piece.eof) break;
@@ -295,6 +298,7 @@ async function rangedDownload({
     if (piece.data.length === 0) throw new Error("The machine stopped sending the file before its end");
   }
 
+  if (signal?.aborted) throw new DownloadCancelledError();
   await sink.close();
   return { filename: info.filename, totalSize: Number(offset) };
 }
@@ -322,13 +326,17 @@ async function wholeFileDownload(
     }
     throw err;
   }
+  const { signal } = callOptions;
+  if (signal?.aborted) throw new DownloadCancelledError();
   const totalSize = response.content.length;
   await sink.begin({
     totalSize,
     filename: response.filename,
     contentType: response.contentType || "application/octet-stream",
   });
+  if (signal?.aborted) throw new DownloadCancelledError();
   await sink.write(response.content);
+  if (signal?.aborted) throw new DownloadCancelledError();
   await sink.close();
   onProgress?.(totalSize, totalSize);
   return { filename: response.filename, totalSize };
