@@ -48,8 +48,16 @@ type DeleteWorktreeInput struct {
 // machine the run's tools execute on, via DaemonRouter.
 type CreateWorktreeActivity struct {
 	repo         CreateWorktreeStore
+	updates      UserRefetcher
 	rows         WorkspaceRows
 	daemonRouter toolexec.DaemonRouter
+}
+
+// WithUpdates sets what tells the owner's clients the workspace settled; nil
+// announces nothing.
+func (a *CreateWorktreeActivity) WithUpdates(u UserRefetcher) *CreateWorktreeActivity {
+	a.updates = u
+	return a
 }
 
 // NewCreateWorktreeActivity creates a new CreateWorktreeActivity
@@ -228,11 +236,13 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	}
 	finishErr := workspacecreate.Finish(ctx, a.repo, machine, createReq, wt)
 	// Settled either way (ACTIVE or FAILED): tell connected clients.
-	if err := a.repo.EmitUserRefetch(ctx, chat.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{
-		ProjectID:  &project.ID,
-		WorktreeID: &wt.ID,
-	}); err != nil {
-		logging.ErrorContext(ctx, "Failed to emit worktree refetch", "error", err, "worktreeID", wt.ID)
+	if a.updates != nil {
+		if err := a.updates.EmitUserRefetch(ctx, chat.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{
+			ProjectID:  &project.ID,
+			WorktreeID: &wt.ID,
+		}); err != nil {
+			logging.ErrorContext(ctx, "Failed to emit worktree refetch", "error", err, "worktreeID", wt.ID)
+		}
 	}
 	if finishErr != nil {
 		return CreateWorktreeOutput{}, finishErr

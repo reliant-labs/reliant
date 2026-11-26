@@ -11,7 +11,7 @@ keywords: ["how reliant hosting works", "hosted app architecture", "static site 
 - Static files are served by a global CDN edge in front of one origin. Content-hashed assets are cached for a year, while HTML and `/config.js` revalidate on every load. A deploy therefore shows up on the next page load with no cache purge.
 - Each environment's workloads run in a namespace of their own that denies all traffic in and out by default. The only things opened are DNS, outbound TCP 80 and 443 to public addresses, the environment's own database, the telemetry agent, and inbound traffic on the one exposed port.
 - Each managed database is its own Postgres server in that namespace, with no internet egress. Its owner password is generated inside the cluster, and the control plane never stores it.
-- There is one region (GCP `us-central1`), a fixed replica count you set, no autoscaling, and no hosted cron-kind workloads or operators.
+- There are no hosted cron-kind workloads or operators.
 
 ## The problem this solves
 
@@ -157,12 +157,8 @@ For an organization on pay-as-you-go app hosting, that ceiling is 2,000m of CPU 
 
 **Revalidation instead of purges.** A purge keyed to the platform hostname misses the same site under a custom domain, and an SPA's routes are URLs, not files a purge list names. Revalidation costs one origin round trip for each page's HTML and is always correct.
 
-**One region.** Every hosted workload, database and site origin runs in GCP `us-central1`. Only the static edge is global. This keeps the database next to the API, and backups and restores stay in one place. The cost is latency for users far from the central US on anything the CDN can't cache, and no regional failover.
-
 ## Limits and what it does not do
 
-- **No autoscaling.** A workload runs the `replicas` you declare, and a database the `instances` you declare. Nothing scales on load. To stop paying for compute you aren't using, `forge env stop <env>` suspends an environment by hand.
-- **One region**, `us-central1`, with no region choice and no multi-region failover.
 - **No hosted cron-kind workloads.** A `kind = "cron"` workload fails the render on hosted, because scheduled pods aren't metered yet. A worker that runs its own schedule (`forge scaffold worker <name> --kind cron`) is an ordinary worker and runs hosted.
 - **No operators, CRDs or RBAC.** There is no Kubernetes API access on shared machines.
 - **Outbound is TCP 80 and 443 to public addresses only.** Private addresses and other ports are blocked. An unclaimed service has no outbound internet at all.
@@ -262,35 +258,15 @@ Kept: the project's release images in the registry (they belong to the project, 
 
 ## Guides
 
-<CardGroup cols={2}>
-  <Card title="Deploy a static site to the CDN" icon="globe" href="/guides/forge/deploy-static-site-cdn">
-    Build a Vite or Next.js export once and publish it to static hosting.
-  </Card>
-  <Card title="Deploy a Go API with managed Postgres" icon="server" href="/guides/hosting/deploy-go-api-managed-postgres">
-    Ship the api workload, its migrate job and a dedicated database.
-  </Card>
-  <Card title="Preview environment per pull request" icon="git-pull-request" href="/guides/hosting/preview-environment-every-pull-request">
-    A self-expiring hosted environment for each pull request.
-  </Card>
-  <Card title="Promote staging to production" icon="trending-up" href="/guides/hosting/promote-release-staging-to-production">
-    Deploy the exact release staging runs, by digest.
-  </Card>
-  <Card title="Recover from a bad deploy" icon="rotate-ccw" href="/guides/hosting/recover-from-bad-deploy">
-    Roll forward, or redeploy an earlier release above every floor.
-  </Card>
-  <Card title="Add a custom domain with HTTPS" icon="lock" href="/guides/hosting/custom-domain-https">
-    Point your own hostname at a hosted site or service.
-  </Card>
-  <Card title="Manage production secrets" icon="key" href="/guides/hosting/manage-production-secrets">
-    Write-only secrets per environment, delivered at deploy time.
-  </Card>
-  <Card title="Stop a hosted environment" icon="pause" href="/guides/hosting/stop-hosted-environment">
-    Suspend workloads you aren't using, and start them again.
-  </Card>
-  <Card title="Restore Postgres to a point in time" icon="history" href="/guides/hosting/restore-postgres-point-in-time">
-    Recover data with a restoring database declaration.
-  </Card>
-</CardGroup>
+- [Deploy a static site to the CDN](/guides/forge/deploy-static-site-cdn): build a Vite or Next.js export once and publish it to static hosting
+- [Deploy a Go API with managed Postgres](/guides/hosting/deploy-go-api-managed-postgres): ship the api workload, its migrate job and a dedicated database
+- [Preview environment per pull request](/guides/hosting/preview-environment-every-pull-request): a self-expiring hosted environment for each pull request
+- [Promote staging to production](/guides/hosting/promote-release-staging-to-production): deploy the exact release staging runs, by digest
+- [Recover from a bad deploy](/guides/hosting/recover-from-bad-deploy): roll forward, or redeploy an earlier release above every floor
+- [Add a custom domain with HTTPS](/guides/hosting/custom-domain-https): point your own hostname at a hosted site or service
+- [Manage production secrets](/guides/hosting/manage-production-secrets): write-only secrets per environment, delivered at deploy time
+- [Stop a hosted environment](/guides/hosting/stop-hosted-environment): suspend workloads you aren't using, and start them again
+- [Restore Postgres to a point in time](/guides/hosting/restore-postgres-point-in-time): recover data with a restoring database declaration
 
 ## Reference
 

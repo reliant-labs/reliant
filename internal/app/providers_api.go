@@ -552,7 +552,7 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
-		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
@@ -1056,7 +1056,7 @@ type QueuedDelivererDeps struct {
 //forge:root-only api
 func NewQueuedDeliverer(d QueuedDelivererDeps) (queueddelivery.Service, error) {
 	return queueddelivery.NewInstrumented(queueddelivery.Deps{
-		Store:     d.DB,
+		Store:     store.NewChatExtStore(d.DB.ORM()),
 		Machines:  d.Router.NATSDaemonRouter,
 		Deliverer: d.Chat,
 		Signaler:  d.Temporal.Client,
@@ -1421,9 +1421,10 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
 		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		ToolCalls: store.NewToolCallExtStore(d.DB.ORM()),
 		RunEvents: runevents.NewStore(d.DB.ORM()),
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
-		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
+		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB.UpdateWriter()}),
 		Orphans:   store.NewAgentMessageExtStore(d.DB.ORM()),
 		Temporal:  d.Temporal.Client,
 		Config:    cfg,

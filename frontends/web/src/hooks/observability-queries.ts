@@ -21,6 +21,8 @@ import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryC
 import { useListDashboardDatabases } from "@/hooks/controlplane/app-database-service-hooks_gen";
 import { toDashboardDatabases } from "@/services/controlPlane/observability/appDatabaseApi";
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { useGetObservabilityUsage } from "@/hooks/controlplane/observability-billing-service-hooks_gen";
+import { toObservabilityUsage } from "@/services/controlPlane/observability/api";
 import { useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope, ReleaseHealth } from "@/services/controlPlane/observability/deliveryTypes";
@@ -90,7 +92,6 @@ export const obsKeys = {
     [...obsKeys.all(scope), "workloads", range, services] as const,
   workload: (scope: ObsScope | null, range: RangePreset, workload: string, container: string) =>
     [...obsKeys.all(scope), "workload", range, workload, container] as const,
-  usage: (orgId: string | null) => ["observability", orgId ?? "", "usage"] as const,
 };
 
 /**
@@ -483,10 +484,10 @@ export function useServiceSignals(scope: ObsScope | null, range: RangePreset) {
  * hour; polling faster would only re-read the same hour.
  */
 export function useObservabilityUsage(orgId: string | null) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.usage(orgId),
-    queryFn: () => api.getObservabilityUsage(orgId as string),
+  // ObservabilityBillingService's generated read (the billing panel's own key
+  // and fetch), mapped to the legacy panel's model.
+  return useGetObservabilityUsage({ orgId: orgId ?? "" }, {
+    select: toObservabilityUsage,
     enabled: !!orgId,
     staleTime: 5 * 60_000,
     refetchInterval: 15 * 60_000,

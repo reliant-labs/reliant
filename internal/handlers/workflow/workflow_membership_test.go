@@ -47,7 +47,7 @@ func TestWorkflowDraft_RemovedMemberByIDAndByName(t *testing.T) {
 		Definition: definition, Status: db.WorkflowDraftStatusComplete, CreatedAt: now, UpdatedAt: now, Version: 1,
 	}
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, left))
-	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
+	svc := NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo)}))
 
 	_, err := svc.GetWorkflow(ctx, connect.NewRequest(&reliantv1.GetWorkflowRequest{DraftId: &left.ID}))
 	require.Equal(t, connect.CodeNotFound, svcerr.Code(err), "get by draft id: %v", err)

@@ -121,6 +121,8 @@ type WorkflowStatusActivity struct {
 	attention AttentionRecorder
 	// runEvents records the terminal run event (deps.RunEvents).
 	runEvents runevents.Store
+	// updates announces the run's change to the chat's clients (deps.Updates).
+	updates ChatRefetcher
 	// pauser pauses a trigger whose run an org policy refused; nil pauses
 	// nothing (deps.TriggerPauser).
 	pauser TriggerPauser
@@ -137,6 +139,7 @@ func NewWorkflowStatusActivity(deps WorkflowStatusDeps) *WorkflowStatusActivity 
 		workflows:  deps.Workflows,
 		attention:  deps.Attention,
 		runEvents:  deps.RunEvents,
+		updates:    deps.Updates,
 		pauser:     deps.Pauser,
 		trackerFor: analytics.ForUser,
 	}
@@ -301,8 +304,10 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	}
 
 	// Emit refetch signal so frontend updates workflow executions without polling
-	if err := a.repo.EmitChatRefetch(ctx, input.ChatID, db.RefetchWorkflowExecutions); err != nil {
-		logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit workflow executions refetch", "error", err)
+	if a.updates != nil {
+		if err := a.updates.EmitChatRefetch(ctx, input.ChatID, db.RefetchWorkflowExecutions); err != nil {
+			logging.WarnContext(ctx, "[WorkflowStatus] Failed to emit workflow executions refetch", "error", err)
+		}
 	}
 
 	return WorkflowStatusOutput{Success: true}, nil
