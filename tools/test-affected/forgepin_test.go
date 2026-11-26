@@ -123,6 +123,31 @@ func TestDetectForgePin(t *testing.T) {
 	}
 }
 
+func TestForgePinUnchangedReplacementKeepsFullLane(t *testing.T) {
+	for _, module := range forgeModules {
+		for _, replacement := range []string{
+			"replace " + module + " => ../forge\n",
+			"replace " + module + " " + oldForge + " => " + module + " v1.0.0\n",
+			"replace (\n\t" + module + " " + newForge + " => ../forge\n)\n",
+			"replace (\n\t\"" + module + "\" => \"../forge\"\n)\n",
+		} {
+			t.Run(module+"/"+replacement, func(t *testing.T) {
+				d := forgeBump()
+				for _, files := range []map[string][]byte{d.old, d.cur} {
+					files["go.mod"] = append(files["go.mod"], []byte(replacement)...)
+				}
+				fp := loadForgePin(context.Background(), d.old, d.cur, func(context.Context, string, string) (fs.FS, error) {
+					t.Fatal("replacement must force full selection before downloading required versions")
+					return nil, errors.New("unexpected download")
+				}, []string{module + "/a"})
+				if fp.Narrows() || !strings.Contains(fp.NotNarrowed, "replaces forge module "+module) {
+					t.Fatalf("replacement must keep the full lane: %+v", fp)
+				}
+			})
+		}
+	}
+}
+
 // forgeTrees is forge's source at oldForge and newForge:
 //
 //	pkg/a      its code changes

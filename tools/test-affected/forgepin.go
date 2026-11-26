@@ -31,6 +31,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/mod/modfile"
 )
 
 // forgeModules are the module paths of forge: one commit pins both
@@ -115,6 +117,20 @@ func detectForgePin(old, cur map[string][]byte) (pinMove, string) {
 	for m, mv := range pm.Moves {
 		if mv.Old == "" || mv.New == "" {
 			return pm, "go.mod adds or drops the require of " + m
+		}
+	}
+	// Downloads compare the required versions, not replacement sources. Even
+	// an unchanged replace can stop applying when a version-specific require
+	// moves. Keep the full lane for forge replacements in either revision.
+	for _, b := range [][]byte{oldMod, newMod} {
+		mod, err := modfile.Parse("go.mod", b, nil)
+		if err != nil {
+			return pm, "cannot parse go.mod to rule out forge replacements"
+		}
+		for _, r := range mod.Replace {
+			if slices.Contains(forgeModules, r.Old.Path) {
+				return pm, "go.mod replaces forge module " + r.Old.Path
+			}
 		}
 	}
 	for _, l := range goModLines(newMod) {
