@@ -139,6 +139,12 @@ func TestHandleFSGetTree_EveryFolderOpens(t *testing.T) {
 		t.Errorf("expanding linkdir: %+v", linked.Nodes)
 	}
 
+	// Even a caller claiming the store itself as its workspace cannot exempt it.
+	store := filepath.Join(home, ".ssh")
+	if _, err := call(store, store, 1); !errors.Is(err, daemonpolicy.ErrViewerCredential) {
+		t.Errorf("listing a credential store as its own viewer root = %v, want ErrViewerCredential", err)
+	}
+
 	// Naming the link into ~/.ssh outright is refused like the viewer's read.
 	if _, err := call(filepath.Join(root, "creds"), root, 1); !errors.Is(err, daemonpolicy.ErrViewerCredential) {
 		t.Errorf("listing a credential store through a link = %v, want ErrViewerCredential", err)
