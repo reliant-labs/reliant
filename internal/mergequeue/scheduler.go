@@ -203,6 +203,9 @@ type round struct {
 	// failed are the round's failed batches: entries still batched in one
 	// at the end are requeued.
 	failed []string
+	// passed are the round's passed batches: all but the landing one are
+	// released at the end.
+	passed []*built
 	// wouldPush collects a shadow batch's suppressed pushes.
 	wouldPush []WouldPush
 	report    Report
@@ -235,7 +238,13 @@ func (r *round) recover(ctx context.Context) error {
 	}
 	for _, b := range batches {
 		switch b.State {
-		case core.QueueBatchBuilding, core.QueueBatchGating, core.QueueBatchUnproven:
+		case core.QueueBatchUnproven:
+			if b.Attempt >= 2 {
+				// Retried and still unproven: the round's final record.
+				continue
+			}
+			fallthrough
+		case core.QueueBatchBuilding, core.QueueBatchGating:
 			v := ParseVerdict(b.VerdictJSON)
 			v.Note = "abandoned: the queue's leader stopped while it was " + string(b.State)
 			if _, err := st.SetQueueBatchState(ctx, b.ID, b.State, core.QueueBatchAbandoned, core.QueueBatchUpdate{VerdictJSON: v.json()}); err != nil &&
