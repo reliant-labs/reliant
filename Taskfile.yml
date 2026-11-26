@@ -607,20 +607,6 @@ tasks:
     cmds:
       - ./scripts/release-gate.sh check {{.CLI_ARGS}}
 
-  gate:
-    # The Reliant merge queue's gate (.reliant/pipeline.yaml's test stage):
-    # today's main push suite as one command, on HEAD. The release gate's four
-    # parts (each in a private checkout), Playwright and the electron package
-    # smoke, migration order and the repo checks, concurrently, in one table.
-    # scripts/gate.sh says what each lane runs and what it leaves out. Never
-    # recorded or published. Exit 0 pass | 1 fail | 2 unproven (a lane could
-    # not run, or failed only on the host); task itself turns any failure into
-    # 201, so `task --exit-code gate` keeps them. 40-70 minutes: run it in the
-    # background. GATE_LANES=go,web narrows it; GATE_BASE names the base.
-    desc: "The merge queue's gate: the main push suite on HEAD (release gate parts, Playwright, electron package, repo checks); exit 0 pass | 1 fail | 2 unproven"
-    cmds:
-      - ./scripts/gate.sh
-
   # ── What CI adds to the two gates ─────────────────────────────────────
   # .github/workflows/ci.yml is a thin wrapper: a pull request runs
   # `task ci:merge`, main and the nightly run `task release:gate`, and the
