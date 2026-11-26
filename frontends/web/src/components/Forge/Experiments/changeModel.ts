@@ -2,11 +2,12 @@
 
 /**
  * The Experiments page's words and arithmetic, pure: what a change's mode is
- * called, who gets it in a phrase, percentages in basis points, and what
- * moved between two revisions (the conflict notice).
+ * called, who gets it in a phrase, percentages in basis points, what
+ * moved between two revisions (the conflict notice), and whether a saved
+ * revision reached the environment's apps (deliveryStateOf).
  */
 
-import type { Change, ChangeMode, ChangeSplitArm, ChangeUnit } from "@/services/controlPlane/changes/changesTypes";
+import type { Change, ChangeDeliveryTarget, ChangeMode, ChangeSplitArm, ChangesDeliveryStatus, ChangeUnit } from "@/services/controlPlane/changes/changesTypes";
 
 /** The three answers to "Who gets it?", in the page's words. */
 export type WhoGetsIt = "everyone" | "some" | "compare";
@@ -78,6 +79,56 @@ export function ageOf(since: Date | null, now: number = Date.now()): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 48) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
+}
+
+/** `since` as "12m ago", or "just now" inside the first minute. */
+export function agoOf(since: Date | null, now: number = Date.now()): string {
+  if (!since) return "";
+  const age = ageOf(since, now);
+  return age === "0m" ? "just now" : `${age} ago`;
+}
+
+/**
+ * Whether a change's saved revision reached the environment's apps, from
+ * GetChangesDeliveryStatus read AFTER the page saw that revision (its query
+ * is keyed by the change's revision, hooks/changes-queries.ts), so the
+ * snapshot revision it names covers it.
+ *
+ *   saved       the revision is saved; nothing yet says where it went (the
+ *               status is loading, failed, or the control plane can't say)
+ *   no-targets  the environment has no hosted apps the platform writes to
+ *   waiting     some target still has an older snapshot than the one the
+ *               environment renders now
+ *   delivered   every target has the environment's current snapshot written
+ *               to it (the CDN origin, the ConfigMap): `at` is the latest
+ *               write. A page applies it on its next load; a pod after the
+ *               ConfigMap sync plus the SDK's re-read. Not "seen".
+ *
+ * The server's `current` flag compares each target's ETag with the
+ * ENVIRONMENT's current snapshot, never the change's own revision.
+ * A later edit to another change in the environment moves it
+ * on, so "waiting" can outlast this change's own delivery: it says only that
+ * the environment's latest changes are not everywhere yet.
+ */
+export type ChangeDeliveryState =
+  | { kind: "saved" }
+  | { kind: "no-targets" }
+  | { kind: "waiting"; delivered: number; targets: number }
+  | { kind: "delivered"; targets: number; at: Date | null };
+
+/** Whether one target has the environment's current snapshot. */
+export function targetDelivered(target: ChangeDeliveryTarget): boolean {
+  return target.current;
+}
+
+export function deliveryStateOf(status: ChangesDeliveryStatus | undefined): ChangeDeliveryState {
+  if (!status) return { kind: "saved" };
+  const targets = status.targets.length;
+  if (targets === 0) return { kind: "no-targets" };
+  const reached = status.targets.filter((target) => targetDelivered(target));
+  if (reached.length < targets) return { kind: "waiting", delivered: reached.length, targets };
+  const at = reached.reduce<Date | null>((latest, target) => (target.deliveredAt && (!latest || target.deliveredAt > latest) ? target.deliveredAt : latest), null);
+  return { kind: "delivered", targets, at };
 }
 
 /** An even split across the declared variants (the remainder goes to the first), in basis points. */

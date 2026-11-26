@@ -47,7 +47,7 @@ import {
 } from "@/components/Layout/sidebar/navConfig/items";
 import { testsGroup } from "@/components/Layout/sidebar/navConfig/tests";
 import type { NavConfig } from "@/components/Layout/sidebar/navConfig/types";
-import { SidebarOrgLabel, SidebarOrgRow } from "@/components/Layout/sidebar/primitives";
+import { SidebarOrgRow, SidebarProjectLabel } from "@/components/Layout/sidebar/primitives";
 import { ShellNavColumn } from "@/components/Layout/sidebar/ShellNavColumn";
 import { useShellProject, type ShellProject } from "@/components/Layout/sidebar/shellProject";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";
@@ -101,9 +101,7 @@ function PreviewNav({ pathname, search, onNavigate }: ShellNavProps) {
           <SidebarOrgRow>
             <ForgeBrand />
           </SidebarOrgRow>
-          <div>
-            <SidebarOrgLabel name={DEMO_PROJECT} />
-          </div>
+          <SidebarProjectLabel name={DEMO_PROJECT} />
         </>
       }
     />

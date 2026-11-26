@@ -30,6 +30,7 @@ func launchBoundSlot(t *testing.T, ctx context.Context, env *storetest.Env, id s
 // A run parked on a provider holds no slot: the next queued firing launches,
 // and the parked run cannot take its slot back above the cap.
 func TestTriggerCapacityParkedRunReleasesItsSlot(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -56,6 +57,7 @@ func TestTriggerCapacityParkedRunReleasesItsSlot(t *testing.T) {
 // A parked run that asked for its slot back is ahead of every queued firing:
 // a freed slot goes to it, never to the queue, and nothing is preempted.
 func TestTriggerCapacityResumingRunHasPriorityOverQueue(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -88,6 +90,7 @@ func TestTriggerCapacityResumingRunHasPriorityOverQueue(t *testing.T) {
 // Resume is against the cap the run was admitted under, and counts only
 // running (unparked) runs.
 func TestTriggerCapacityResumeHonoursAdmittedCap(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()
@@ -114,6 +117,7 @@ func TestTriggerCapacityResumeHonoursAdmittedCap(t *testing.T) {
 // A slot is matched by its exact chain: a later chain on the chat (a human
 // turn), a released slot, or an uncapped event holds nothing to park.
 func TestTriggerCapacityParkMatchesOnlyTheAdmittedChain(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	scope := capacityScope()

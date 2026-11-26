@@ -119,7 +119,7 @@ func (c *liveGateChat) expect(wantActivity, wantWorking int) {
 	if err != nil {
 		c.t.Fatalf("GetChatActivity: %v", err)
 	}
-	chat, err := c.repo.GetChat(ctx, c.chatID)
+	chat, err := store.GetChat(ctx, c.repo.ORM(), c.chatID)
 	if err != nil {
 		c.t.Fatalf("GetChat: %v", err)
 	}

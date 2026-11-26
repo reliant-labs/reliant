@@ -19,9 +19,10 @@
  *          (hooks/useChatProjectFilter, `?projects=<id>,<id>`).
  *   all    every project ("All projects" in the switcher): `?projects=all`.
  *
- * In `many` and `all` the nav's Chats group by project and an app page names
- * its app in an in-page picker; the FOCUSED project (the app the nav's
- * sections open) is the route's app, else `?focus=`, else the last one picked.
+ * In `many` and `all` the nav's Chats group by project and an app page shows
+ * every project in scope (Forge/Console/severalProjects.tsx); the FOCUSED
+ * project (the app the nav's sections open) is the route's app, else
+ * `?focus=`, else the last one picked.
  *
  * The URL names the scope on every page (`projects`, `focus`: routeSchemas
  * PROJECTS_CARRIED, kept by the root route). Storage only fills a tab's
@@ -183,7 +184,7 @@ interface LastPickState {
   key: string | null;
   /** The projects of the last choice of several (the tab's copy of `sidebar.projects`' filter). */
   several: string[];
-  /** The project last picked on its own (the switcher, an app page's picker): the focus of a choice of several. */
+  /** The project last picked on its own (the switcher, a section's "open alone"): the focus of a choice of several. */
   focus: string | null;
   set: (key: string) => void;
   setFocus: (key: string) => void;
@@ -391,7 +392,7 @@ export function usePublishShellScope(shell: ShellProject, search: Record<string,
 
 /**
  * Whether the shell shows several projects, and which (for pages under the
- * route outlet: an app page's picker, the Overview of several): what the nav
+ * route outlet: an app page across several, the Overview of several): what the nav
  * on screen publishes (usePublishShellScope).
  */
 export function useShellSeveral(): { mode: "many" | "all" | null; rows: ProjectCatalogRow[] } {

@@ -166,7 +166,12 @@ func gitRun(t *testing.T, dir string, args ...string) string {
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), //nolint:forbidigo // a test's git child process
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com",
-		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
+		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+		// No detached `git maintenance run --auto` after a commit or push: it
+		// creates and removes objects/maintenance.lock while h.age walks the
+		// tree, and the walk's chtimes then fails on the vanished lock.
+		"GIT_CONFIG_COUNT=2", "GIT_CONFIG_KEY_0=maintenance.auto", "GIT_CONFIG_VALUE_0=false",
+		"GIT_CONFIG_KEY_1=gc.auto", "GIT_CONFIG_VALUE_1=0")
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
 	return strings.TrimSpace(string(out))

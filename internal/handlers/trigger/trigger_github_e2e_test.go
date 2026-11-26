@@ -157,7 +157,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Projects: projectaccesstest.For(repo),
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(repo, Deps{Repo: repo, Triggers: store.NewTriggerExtStore(repo.ORM()), FiringReads: store.NewTriggerEventExtStore(repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo),
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: publicURL}, Catalog: registry, Intake: intake,
 		Access: map[string]IntegrationAccess{"github": e2eGitHubAccess{refresher}},
 	})))
@@ -243,7 +243,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 	assert.Equal(t, "issues.opened", launched.Payload["event"])
 	assert.Equal(t, "98765", launched.Payload["account"])
 	assert.Equal(t, "123456", launched.Payload["resource"])
-	chat, err := repo.GetChat(ctx, *launched.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), *launched.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, alice, chat.UserID)
 	assertFirings(t, repo, alice, aliceIssues.GetId(), map[core.TriggerEventOutcome]int{core.TriggerEventLaunched: 1})
@@ -290,7 +290,7 @@ func waitForEventCount(t *testing.T, repo *db.Repo, userID, triggerID string, wa
 	t.Helper()
 	deadline := time.Now().Add(60 * time.Second)
 	for time.Now().Before(deadline) {
-		events, _, err := repo.ListTriggerEvents(context.Background(), core.TriggerEventFilters{UserID: userID, TriggerID: triggerID, Limit: 50})
+		events, _, err := store.ListTriggerEventsPage(context.Background(), repo.ORM(), core.TriggerEventFilters{UserID: userID, TriggerID: triggerID, Limit: 50})
 		if err == nil {
 			launched := 0
 			for _, ev := range events {

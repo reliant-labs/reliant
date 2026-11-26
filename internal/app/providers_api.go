@@ -556,10 +556,10 @@ func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
-		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(tools.WithChats(repo))),
 		// Lets spawn_stop reach the root workflow running a sub-agent. Shares
 		// the one implementation the UI's cancel path uses.
-		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(repo), repo),
+		SpawnStopper: temporal.NewSpawnStopper(temporalClient, workersetup.ChatWorkflowLookup(tools.WithChats(repo)), repo),
 		// Binds generate_image to the driver layer's image-model selection.
 		// Injected rather than imported: internal/llm/drivers already imports
 		// internal/llm/tools, so the tool cannot reach drivers directly.
@@ -1056,7 +1056,7 @@ type QueuedDelivererDeps struct {
 //forge:root-only api
 func NewQueuedDeliverer(d QueuedDelivererDeps) (queueddelivery.Service, error) {
 	return queueddelivery.NewInstrumented(queueddelivery.Deps{
-		Store:     d.DB,
+		Store:     store.NewChatExtStore(d.DB.ORM()),
 		Machines:  d.Router.NATSDaemonRouter,
 		Deliverer: d.Chat,
 		Signaler:  d.Temporal.Client,
@@ -1421,6 +1421,7 @@ func NewWorkflowReconciler(d WorkflowReconcilerDeps) (*WorkflowReconciler, error
 	r := reconciliation.New(reconciliation.Deps{
 		Store:     d.DB,
 		Chats:     store.NewChatsWithActivityExtStore(d.DB.ORM()),
+		ToolCalls: store.NewToolCallExtStore(d.DB.ORM()),
 		RunEvents: runevents.NewStore(d.DB.ORM()),
 		Questions: store.NewQuestionExtStore(d.DB.ORM()),
 		Mailbox:   agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(d.DB.ORM()), Announcer: d.DB}),
@@ -1863,5 +1864,5 @@ type OrgPolicyAttendanceDeps struct {
 // call made for a chat is scoped with, so the preview of the automations
 // policy counts exactly the chats it will govern.
 func NewOrgPolicyAttendance(d OrgPolicyAttendanceDeps) (org_policy_impact.ChatAttendance, error) {
-	return handlers.Attendance{Store: d.Store}, nil
+	return handlers.Attendance{Store: tools.WithChats(d.Store)}, nil
 }

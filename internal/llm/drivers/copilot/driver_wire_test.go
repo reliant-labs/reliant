@@ -9,7 +9,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -126,13 +125,10 @@ func TestWireFollowsRecordedSupportedEndpoints(t *testing.T) {
 // not mark preferred_endpoint still lands on the endpoint Copilot lists.
 func TestNewClientRoutesByCachedEndpoints(t *testing.T) {
 	token := "gho_test_route"
-	availabilityMu.Lock()
-	availabilityCache[tokenKey(token)] = availabilityEntry{
+	availabilityCache.Store(tokenKey(token), accountCatalog{
 		enabled:   map[string]bool{"grok-4.9": true},
 		endpoints: map[string][]string{"grok-4.9": {"/responses"}},
-		fetchedAt: time.Now(),
-	}
-	availabilityMu.Unlock()
+	}, nil)
 	defer EvictAvailabilityCache(token)
 
 	if got := cachedEndpoints(token, "grok-4.9"); len(got) != 1 || got[0] != "/responses" {

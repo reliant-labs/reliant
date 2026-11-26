@@ -22,6 +22,7 @@ import (
 // pending-guarded statement as the claim or the settlement, so the loser can
 // never rewrite what the winner launched against.
 func TestPendingEventDefinitionIsWrittenOnlyByTheFireThatWins(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	base := time.Now().UTC().Truncate(time.Microsecond)

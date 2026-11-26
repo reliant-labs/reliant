@@ -145,6 +145,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge db migration rebase`](#reliant-forge-db-migration-rebase) | Re-version migrations to fresh timestamps that sort after everything merged |
 | [`reliant forge db query`](#reliant-forge-db-query) | Run one read-only SQL statement against an environment's app database |
 | [`reliant forge db reset`](#reliant-forge-db-reset) | DROP the dev database, recreate it, migrate to head, and seed (dev-only) |
+| [`reliant forge db restore`](#reliant-forge-db-restore) | Declare a managed database restored from backups to a point in time (writes the env's KCL) |
 | [`reliant forge db seed`](#reliant-forge-db-seed) | Materialize deterministic development seed data at runtime |
 | [`reliant forge db seed apply`](#reliant-forge-db-seed-apply) | Materialize seed data into the dev database (dev-only) |
 | [`reliant forge db seed reset`](#reliant-forge-db-seed-reset) | Delete seeded rows (child-first) and re-seed (dev-only) |
@@ -276,9 +277,11 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v1.0.0) |
 | [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
 | [`reliant forge fix derive-contract`](#reliant-forge-fix-derive-contract) | Replace a package's hand-written Service interface with //forge:contract on its one implementation |
+| [`reliant forge fix entity-type-alias`](#reliant-forge-fix-entity-type-alias) | Alias entity type imports that collide with another import (`import type { Link as LinkEntity }`) in pages scaffolded before v1.11.0 |
 | [`reliant forge fix harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge fix tests-capture`](#reliant-forge-fix-tests-capture) | Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step |
 | [`reliant forge fix trimpath-default`](#reliant-forge-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`reliant forge fix zod4-forms`](#reliant-forge-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
@@ -304,9 +307,11 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge lint fix config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v1.0.0) |
 | [`reliant forge lint fix connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
 | [`reliant forge lint fix derive-contract`](#reliant-forge-lint-fix-derive-contract) | Replace a package's hand-written Service interface with //forge:contract on its one implementation |
+| [`reliant forge lint fix entity-type-alias`](#reliant-forge-lint-fix-entity-type-alias) | Alias entity type imports that collide with another import (`import type { Link as LinkEntity }`) in pages scaffolded before v1.11.0 |
 | [`reliant forge lint fix harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`reliant forge lint fix narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge lint fix operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge lint fix tests-capture`](#reliant-forge-lint-fix-tests-capture) | Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step |
 | [`reliant forge lint fix trimpath-default`](#reliant-forge-lint-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`reliant forge lint fix tx-isolation`](#reliant-forge-lint-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`reliant forge lint fix zod4-forms`](#reliant-forge-lint-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
@@ -1631,7 +1636,8 @@ directories; forge's version, OS and architecture; the command line with
 secrets removed; the project's pinned forge_version; the agent harness
 forge detected; and a random install id used only for rate limiting. Never
 file contents or environment values. --dry-run prints the exact payload
-without sending it. forge sends nothing unless someone runs this command.
+without sending it. forge sends no report unless someone runs this command
+(its anonymous usage events are another matter: forge telemetry --help).
 
 When you are logged in (forge login), the report carries your user id so
 the team can follow up; --anonymous leaves it off.
@@ -2146,6 +2152,9 @@ repository, same forge and pinned tools) is not run again: its row reads
 On a branch, unit-tests runs only the Go packages the branch's changes reach (affected
 mode), and falls back to the whole suite when anything but Go source changed, on the
 default branch, or with CI_FULL=1 / --full. The mode and why are printed.
+ci.gate.affected_rules say what other paths select (Go test packages, a frontend's
+tests as a test-<frontend> row, or the full suite), and an extra check with `paths`
+runs on a branch only when a changed file matches them.
 
 Tiers (--tier, or --event to pick one from a GitHub event name) run the gate as the
 scaffolded ci.yml runs it for that event. A requested built-in lane the tier does not
@@ -2176,6 +2185,7 @@ reliant forge ci gate [checks|test|integration|all|<lane>] [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--base` | `string` | - | Ref a branch's changes are measured from for affected unit tests (default origin/<default branch>; a stacked branch names its parent; also CI_BASE) |
 | `--event` | `string` | - | Pick the tier from a GitHub event name: pull_request, merge_group, push, schedule, workflow_dispatch (an action suffix such as pull_request.synchronize is ignored) |
+| `--files` | `stringSlice` | `[]` | With --plan: judge these changed files instead of the diff against the base (a what-if) |
 | `--full` | `bool` | - | Run the whole unit suite on a branch instead of the affected packages (also CI_FULL=1) |
 | `--groups` | `bool` | - | Print each check's output in a GitHub Actions ::group:: (automatic under GITHUB_ACTIONS) |
 | `--jobs` | `int` | `0` | Light checks to run at once (default: half the CPUs, 2-8); heavy checks are bounded by host slots |
@@ -2183,6 +2193,7 @@ reliant forge ci gate [checks|test|integration|all|<lane>] [flags]
 | `--list` | `bool` | - | Print the checks of the selected lanes (lane, group, name, scheduling) and exit |
 | `--no-cache` | `bool` | - | Run every check even when this tree already passed it (also CI_NO_CACHE=1) |
 | `--only` | `stringSlice` | `[]` | Checks or groups to run, in addition to CI_ONLY (plus what they depend on) |
+| `--plan` | `bool` | - | Print the affected-mode decision (packages, build set, why each, per changed file) and exit without running anything |
 | `--report` | `string` | - | Also write the Markdown summary to this file (also CI_REPORT) |
 | `--skip` | `stringSlice` | `[]` | Check names to skip, in addition to CI_SKIP (still listed, as SKIPPED) |
 | `--tier` | `string` | - | Run the gate as one CI event's tier: pr, queue (alias merge), main or full (see Tiers above) |
@@ -3905,6 +3916,7 @@ reliant forge cloud token create --env <env> --name <name> --scopes <s1,s2> [fla
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--bind-env` | `string` | - | Confine the token to one environment, by the control plane's environment id; every scope must bind to an environment (e.g. changes:read, obs:read). Needs a control plane whose CreateToken accepts a resource binding (control-plane#3713); an older one rejects the request |
 | `--env` | `string` | - | Env whose declared control plane to use (default, and for an env with no deploy/kcl: Reliant cloud) |
 | `--expires-in` | `duration` | `0s` | Expire after this long (default: never) |
 | `--json` | `bool` | - | Emit machine-readable JSON |
@@ -4689,6 +4701,7 @@ reliant forge db [flags]
 | [`migration`](#reliant-forge-db-migration) | Create and re-version forward-only SQL migration files |
 | [`query`](#reliant-forge-db-query) | Run one read-only SQL statement against an environment's app database |
 | [`reset`](#reliant-forge-db-reset) | DROP the dev database, recreate it, migrate to head, and seed (dev-only) |
+| [`restore`](#reliant-forge-db-restore) | Declare a managed database restored from backups to a point in time (writes the env's KCL) |
 | [`seed`](#reliant-forge-db-seed) | Materialize deterministic development seed data at runtime |
 | [`squash`](#reliant-forge-db-squash) | Collapse N migrations into one canonical baseline (.up.sql) |
 
@@ -5378,6 +5391,52 @@ reliant forge db reset [flags]
 | `--dsn` | `string` | - | Database connection string (falls back to $DATABASE_URL, then what the env declares) |
 | `--env` | `string` | `dev` | Target environment (must be dev; there is no override) |
 | `--yes` | `bool` | - | Skip the confirmation prompt (non-interactive use) |
+
+---
+
+#### reliant forge db restore
+
+Declare a managed database restored from backups to a point in time (writes the env's KCL)
+
+Declare a new managed database, restored from an existing one's backups to a
+point in time, in deploy/kcl/<env>/main.k.
+
+  forge db restore prod --to 2026-11-20T15:02:00Z
+  forge db restore prod --to 2026-11-20T15:02:00Z --database shop --as shop-before-inc12
+  forge db restore prod --to 2026-11-20T15:02:00Z --dry-run    # print the edit, write nothing
+
+A restore is a declaration: a forge.ManagedDatabase whose spec.restore names
+the source database and the time. This command writes it beside the source
+(same runtime and namespace), lists it in the same Bundle databases list, and
+renders the env to prove the edit took. It never touches the source: a
+restore always creates a NEW database, so a mistaken one cannot make things
+worse. The deploy that ships the edit creates it, from the source's newest base
+backup before --to, replaying archived changes up to it.
+
+  --to        an RFC 3339 time (2026-11-20T15:02:00Z, or with an offset), not in
+              the future. Recovery stops there: a change committed after it is
+              not replayed. Hosted Postgres keeps 7 days of backups.
+  --database  the database to restore from; default the env's only managed one
+  --as        the new database's name; default <source>-restored
+
+Then: review and commit the edit, build and deploy a release, check the
+restored rows (forge db query <env> "<sql>" --database <name>), and point the
+app at it by passing its name where the env passes the source's. The guide:
+https://docs.reliantlabs.io/guides/hosting/restore-postgres-point-in-time
+
+```
+reliant forge db restore <env> --to <time> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--as` | `string` | - | the restored database's name (default: <source>-restored) |
+| `--database` | `string` | - | the managed database to restore from (default: the env's only one) |
+| `--dry-run` | `bool` | - | print the edit and write nothing |
+| `--to` | `string` | - | the point in time to restore to, RFC 3339 (required) |
 
 ---
 
@@ -10684,9 +10743,11 @@ reliant forge fix [flags]
 | [`config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v1.0.0) |
 | [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
 | [`derive-contract`](#reliant-forge-fix-derive-contract) | Replace a package's hand-written Service interface with //forge:contract on its one implementation |
+| [`entity-type-alias`](#reliant-forge-fix-entity-type-alias) | Alias entity type imports that collide with another import (`import type { Link as LinkEntity }`) in pages scaffolded before v1.11.0 |
 | [`harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`tests-capture`](#reliant-forge-fix-tests-capture) | Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step |
 | [`trimpath-default`](#reliant-forge-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`zod4-forms`](#reliant-forge-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
@@ -10968,6 +11029,43 @@ reliant forge fix derive-contract <package-dir> [flags]
 
 ---
 
+#### reliant forge fix entity-type-alias
+
+Alias entity type imports that collide with another import (`import type { Link as LinkEntity }`) in pages scaffolded before v1.11.0
+
+Repair generated pages whose entity type import collides with another import
+of the same file: an entity named Link, Image, Head, Script, Form, Button,
+Resource, or anything else a page imports for itself, made the scaffolded page
+declare that identifier twice (`import type { Link }` beside
+`import Link from "next/link"`), so the frontend failed to type-check.
+
+Since v1.11.0 a page binds the entity type under a suffixed name
+(`import type { Link as LinkEntity }`). Pages are scaffolded once and are
+yours, so this rewrites the ones written earlier: in every .ts/.tsx file under a
+frontend's src/ (the project root and each frontends/<name>) that has the
+collision, the type import gets the alias, and the type's uses as a type argument
+(`ResourceColumn<Link>`, `<Resource<Link>`) and array type (`Link[]`) are
+renamed. JSX such as `<Link href=…>` belongs to the other import and is
+not touched. Every remaining reference (including values and JSX) is listed
+with its file:line for you to check: if it means the entity type, write the
+alias; otherwise leave it. Resolve this first-run report and run tsc before
+considering the repair complete. Files without the collision are left exactly as they
+are. Re-running it changes nothing.
+
+```
+reliant forge fix entity-type-alias [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
 #### reliant forge fix harness-mocks
 
 Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0)
@@ -11086,6 +11184,46 @@ reliant forge fix operatorkit [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge fix tests-capture
+
+Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step
+
+Rewrite the test lanes of a Taskfile an older forge scaffolded into the shape
+a new project gets, so every `task test` records its results and coverage
+under .forge/tests/runs/ (gitignored):
+
+  - test, test:integration, test:e2e: the `go test` runs through
+    `forge test capture` (lanes unit, integration, e2e), with -json and,
+    except e2e, a -coverprofile in the run; each task gets its RUN var
+    (`forge test begin`). The command still runs unchanged and the task
+    exits with its status.
+  - test:frontend: each Vitest frontend is recorded as lane frontend-<dir>
+    (coverage when @vitest/coverage-v8 is installed).
+  - test:report: added, to summarise runs and, with -- --upload, send them
+    to the control plane.
+  - .github/workflows/ci.yml: a `Report test results` step after each
+    `task test` / `task test:integration` step. It uploads with the
+    FORGE_CONTROL_PLANE_TOKEN secret and never fails the job.
+
+A lane is rewritten only when it is still exactly what forge scaffolded; one
+you edited is left alone and the run names the edit to make by hand. Nothing
+is written while forge.yaml pins a forge older than v1.12.0, which has no
+`forge test`. Re-running it changes nothing.
+The rest of the story: `forge skill load migrations/v1.12.0/tests-capture`.
+
+```
+reliant forge fix tests-capture [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -12210,9 +12348,11 @@ reliant forge lint fix [flags]
 | [`config-proto-package`](#reliant-forge-lint-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v1.0.0) |
 | [`connect-errors`](#reliant-forge-lint-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
 | [`derive-contract`](#reliant-forge-lint-fix-derive-contract) | Replace a package's hand-written Service interface with //forge:contract on its one implementation |
+| [`entity-type-alias`](#reliant-forge-lint-fix-entity-type-alias) | Alias entity type imports that collide with another import (`import type { Link as LinkEntity }`) in pages scaffolded before v1.11.0 |
 | [`harness-mocks`](#reliant-forge-lint-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0) |
 | [`narrow-deps`](#reliant-forge-lint-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-lint-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`tests-capture`](#reliant-forge-lint-fix-tests-capture) | Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step |
 | [`trimpath-default`](#reliant-forge-lint-fix-trimpath-default) | Declare -trimpath in an older project's GoBuild flags, .air.toml and Taskfile |
 | [`tx-isolation`](#reliant-forge-lint-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v1.0.0) |
 | [`zod4-forms`](#reliant-forge-lint-fix-zod4-forms) | Move frontends from zod 3 to zod 4 (GHSA-mrhx-c7xc-m3w5): bump the packages and port the generated forms |
@@ -12494,6 +12634,43 @@ reliant forge lint fix derive-contract <package-dir> [flags]
 
 ---
 
+#### reliant forge lint fix entity-type-alias
+
+Alias entity type imports that collide with another import (`import type { Link as LinkEntity }`) in pages scaffolded before v1.11.0
+
+Repair generated pages whose entity type import collides with another import
+of the same file: an entity named Link, Image, Head, Script, Form, Button,
+Resource, or anything else a page imports for itself, made the scaffolded page
+declare that identifier twice (`import type { Link }` beside
+`import Link from "next/link"`), so the frontend failed to type-check.
+
+Since v1.11.0 a page binds the entity type under a suffixed name
+(`import type { Link as LinkEntity }`). Pages are scaffolded once and are
+yours, so this rewrites the ones written earlier: in every .ts/.tsx file under a
+frontend's src/ (the project root and each frontends/<name>) that has the
+collision, the type import gets the alias, and the type's uses as a type argument
+(`ResourceColumn<Link>`, `<Resource<Link>`) and array type (`Link[]`) are
+renamed. JSX such as `<Link href=…>` belongs to the other import and is
+not touched. Every remaining reference (including values and JSX) is listed
+with its file:line for you to check: if it means the entity type, write the
+alias; otherwise leave it. Resolve this first-run report and run tsc before
+considering the repair complete. Files without the collision are left exactly as they
+are. Re-running it changes nothing.
+
+```
+reliant forge lint fix entity-type-alias [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
 #### reliant forge lint fix harness-mocks
 
 Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v1.0.0)
@@ -12612,6 +12789,46 @@ reliant forge lint fix operatorkit [flags]
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 | `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge lint fix tests-capture
+
+Record an older project's test runs: forge test capture in each Taskfile lane, test:report, and the CI report step
+
+Rewrite the test lanes of a Taskfile an older forge scaffolded into the shape
+a new project gets, so every `task test` records its results and coverage
+under .forge/tests/runs/ (gitignored):
+
+  - test, test:integration, test:e2e: the `go test` runs through
+    `forge test capture` (lanes unit, integration, e2e), with -json and,
+    except e2e, a -coverprofile in the run; each task gets its RUN var
+    (`forge test begin`). The command still runs unchanged and the task
+    exits with its status.
+  - test:frontend: each Vitest frontend is recorded as lane frontend-<dir>
+    (coverage when @vitest/coverage-v8 is installed).
+  - test:report: added, to summarise runs and, with -- --upload, send them
+    to the control plane.
+  - .github/workflows/ci.yml: a `Report test results` step after each
+    `task test` / `task test:integration` step. It uploads with the
+    FORGE_CONTROL_PLANE_TOKEN secret and never fails the job.
+
+A lane is rewritten only when it is still exactly what forge scaffolded; one
+you edited is left alone and the run names the edit to make by hand. Nothing
+is written while forge.yaml pins a forge older than v1.12.0, which has no
+`forge test`. Re-running it changes nothing.
+The rest of the story: `forge skill load migrations/v1.12.0/tests-capture`.
+
+```
+reliant forge lint fix tests-capture [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -16349,8 +16566,8 @@ reliant forge obs ops [env] [flags]
 
 Export an aggregated continuous profile as pprof, speedscope or collapsed stacks
 
-Export the continuous profile the local ClickStack collected, for a service
-over a time range or for one trace.
+Export the continuous profile an env collected, for a service over a time
+range or for one trace.
 
 Apps push a 5s CPU profile every 5 minutes and a live-heap snapshot every 2
 hours (pkg/observe, on by default whenever an OTLP endpoint is set). They land
@@ -16365,6 +16582,18 @@ in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
   forge obs profile --trace 0af7651916cd43dd8448eb211c80319c   # CPU burned inside one trace
   forge obs profile --service api --format folded | flamegraph.pl > api.svg
 
+Which env. With no [env] it reads the local ClickStack, and --env filters its
+samples by deployment.environment.name. With an [env] it reads that env where
+its telemetry goes, as every other obs verb does: a local env's ClickStack
+(only the env's samples), or a hosted env's control plane:
+
+  forge obs profile prod --service api --since 6h -o api.pb.gz
+  forge obs profile prod --service api --type inuse_space --format speedscope -o heap.json
+
+A hosted profile is the control plane's flamegraph (the console's): the
+heaviest 5000 stacks (a note says when there were more), no --span, and a
+credential that is not bound to one environment.
+
 Sample types: cpu (nanoseconds) and inuse_space / inuse_objects (live heap) by
 default; alloc_space / alloc_objects and goroutine only from a workload whose
 profiling block turns them on (see forge skill load observability/profiles).
@@ -16372,8 +16601,16 @@ CPU and the other accumulated types are summed over the range. The live heap
 and the goroutines are gauges: each instance's newest snapshot in the range,
 or, when the range holds none, the newest before it, so a range shorter than
 the heap interval still shows the heap as last measured. Raw samples (so --trace and the heap) are kept 24h; the
-per-minute aggregate behind --since is kept 30 days. --sql prints the query so
-you can run it yourself against the ClickStack ClickHouse.
+per-minute aggregate behind --since is kept 30 days.
+
+--sql prints the query instead of running it. With no [env], with its
+parameters, for clickhouse-client against the ClickStack. With an [env], in
+`forge obs query`'s parameters over the unqualified profile tables
+(otel_profiles, profile_samples_1m, profile_stacks), so it runs against that
+env, hosted or local, and the command to run it is printed on stderr:
+
+  forge obs profile prod --service api --sql > profile.sql
+  forge obs query prod --sql-file profile.sql --service api --since 1h
 
 --trace finds samples only when a CPU capture (5s of every 5 minutes) overlapped
 the trace, so most traces have none. To find the traces that do:
@@ -16381,10 +16618,10 @@ the trace, so most traces have none. To find the traces that do:
   forge obs query dev --sql "SELECT TraceId, ServiceName, count() AS n FROM otel_profiles
     WHERE TraceId != '' AND Timestamp > now() - INTERVAL 1 HOUR GROUP BY TraceId, ServiceName ORDER BY n DESC LIMIT 20"
 
-Needs the local ClickStack running (`forge env up`).
+With no [env], needs the local ClickStack running (`forge env up`).
 
 ```
-reliant forge obs profile [flags]
+reliant forge obs profile [env] [flags]
 ```
 
 **Flags:**
@@ -16392,15 +16629,15 @@ reliant forge obs profile [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
-| `--env` | `string` | - | only samples from this deployment.environment.name. A FILTER on the local ClickStack's samples, not the backend: unlike the other obs verbs' [env], it never reads a hosted env |
+| `--env` | `string` | - | only samples from this deployment.environment.name of the local ClickStack read with no [env]. A FILTER, not the backend: to read a hosted env, name it as [env] |
 | `--format` | `string` | `pprof` | pprof | speedscope | folded |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--list` | `bool` | - | list the services that sent profiles in the range |
 | `--output`, `-o` | `string` | - | write to this file instead of stdout |
 | `--service` | `string` | - | service.name to export (default: the only service that sent profiles) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
-| `--span` | `string` | - | narrow --trace to one span id |
-| `--sql` | `bool` | - | print the query and its parameters instead of running it |
+| `--span` | `string` | - | narrow --trace to one span id (not on a hosted env) |
+| `--sql` | `bool` | - | print the query and its parameters instead of running it (with [env]: for forge obs query <env> --sql-file) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--trace` | `string` | - | export only samples linked to this trace id (raw tier, last 24h) |
 | `--type` | `string` | `cpu` | sample type: cpu, alloc_space, inuse_space, alloc_objects, inuse_objects, goroutine |
@@ -18302,7 +18539,8 @@ reliant forge project features [flags]
 Print the directories of this project's in-repo frontends, one per line (what task and the CI gate loop over)
 
 Print the project-relative directory of every frontend in this repository,
-one per line, sorted by name.
+one per line, sorted by frontend name. A directory two frontends share is
+printed once, at its first frontend's place.
 
 The list is the one `forge ci gate` and the scaffolded workflows use: each
 frontend a forge.Frontend declaration in deploy/kcl/<env>/main.k names (any
@@ -18314,7 +18552,8 @@ Scripts loop over it rather than globbing frontends/*:
 
   for dir in $(forge project frontends); do (cd "$dir" && npm test); done
 
---json prints [{"name","path"}] instead.
+--json prints [{"name","path"}] instead, one row per frontend, so a shared
+directory appears under each name.
 --with-package-manager prints manager:path rows using forge's install/CI
 resolver, including the declared manager's own lockfile when several exist.
 
@@ -18683,6 +18922,7 @@ Pick a project kind with --kind:
                             a starter app (--frontend-kind nextjs, the default:
                             a static export; or vite-spa); --in-place inside an
                             existing Vite or Next.js app adopts it untouched.
+                            --dry-run prints the files instead.
   --kind app                An existing app in ANY language, with --in-place:
                             forge.yaml and deploy/kcl (workloads.k + dev,
                             staging and prod envs) declaring what it runs,
@@ -18722,11 +18962,14 @@ existing go.mod's major is kept.
 native (the default) scaffolds today's: the users in deploy/kcl/identity.k,
 the dev identity provider and mail catcher, the sign-in pages and the route
 guard. none scaffolds an app nobody signs in to: no identity, no dev IdP, a
-public frontend with no route guard and no sign-in pages, and a login broker
-that is never mounted. The API still authenticates, fail-closed: an rpc
-answers anonymous callers only when its proto declares
+public frontend with no route guard, no sign-in pages and no session requests,
+and a login broker that is never mounted. The API still authenticates,
+fail-closed: an rpc answers anonymous callers only when its proto declares
 `option (forge.v1.method) = {auth_required: false}`; every other rpc
-answers 401, because nothing can issue the token it requires.
+answers 401, because nothing can issue the token it requires. So in such a
+project `forge scaffold` births each entity's CRUD rpcs with
+auth_required: false written out, and `forge lint` warns about any rpc
+that still requires a caller.
 
 Example:
   forge project new my-project --mod github.com/example/my-project
@@ -18779,13 +19022,13 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--auth-mode` | `string` | - | Sign-in system of a service project with a --frontend: native (default — managed identity, the dev IdP, sign-in pages and a route guard) or none (no sign-in at all: no identity, no dev IdP, a public frontend). Either way the API fails closed: an rpc answers anonymous callers only when its proto declares auth_required: false |
+| `--auth-mode` | `string` | - | Sign-in system of a service project with a --frontend: native (default — managed identity, the dev IdP, sign-in pages and a route guard) or none (no sign-in at all: no identity, no dev IdP, a public frontend; forge scaffold births entity rpcs auth_required: false). Either way the API fails closed: an rpc answers anonymous callers only when its proto declares auth_required: false |
 | `--binary` | `string` | `per-service` | Binary packaging: 'per-service' (default — canonical cmd/server.go cobra root, one Application per service) or 'shared' (one Go binary, cobra subcommand per service, KCL MultiServiceApplication for deploy) |
 | `--buf-plugins` | `string` | `local` | Default proto plugin source: 'local' (resolved from PATH; no BSR auth needed) or 'remote' (BSR-hosted, requires login under load) |
 | `--claimable` | `bool` | - | Scaffold prod for an ANONYMOUS deploy: forge env deploy prod --claimable then publishes with no account and prints a claim link. prod declares control_plane = forge.ControlPlane {claimable = True} and sizes its hosted services and jobs to the claimable plan (125m / 128 MiB, request and limit) instead of the billed shape band. A static site needs nothing extra |
 | `--connect` | `string` | - | connect-go major of a service project: v2 (default; connectrpc.com/connect/v2) or v1 (connectrpc.com/connect). Chooses what go.mod requires; from then on forge generate reads the major from go.mod (a direct require of connectrpc.com/connect/v2 is v2). With --in-place and no --connect, the existing go.mod's major is kept |
 | `--disable` | `stringSlice` | `[]` | Features to leave out of the scaffold (comma-separated): orm, codegen, migrations, ci, build, deploy, contracts, frontend, observability, hot_reload. Each is pinned off in forge.yaml's features: block (orm, which has no key, only steers this scaffold). |
-| `--dry-run` | `bool` | - | With --kind app: print what was detected and every file it would write, and write nothing |
+| `--dry-run` | `bool` | - | With --kind app or --kind site: print what was detected and every file it would write, and write nothing |
 | `--force` | `bool` | - | With --in-place: scaffold over an existing forge.yaml, and REPLACE every pre-existing file the scaffold writes (README.md, go.mod, Taskfile.yml, …) with forge's version. Without it, existing files are kept and listed. .gitignore is always merged, never replaced |
 | `--forge-root` | `string` | - | The forge checkout --link-forge bridges to (also: FORGE_ROOT). Default: the checkout this binary was built from, else the go.mod replace it embeds forge through, else the checkout it sits or was started in |
 | `--frontend` | `stringSlice` | `[]` | Name(s) of Next.js frontends (can be repeated or comma-separated). With --kind site: the one name the site's frontend is declared under (default web) |
@@ -20528,7 +20771,8 @@ directories; forge's version, OS and architecture; the command line with
 secrets removed; the project's pinned forge_version; the agent harness
 forge detected; and a random install id used only for rate limiting. Never
 file contents or environment values. --dry-run prints the exact payload
-without sending it. forge sends nothing unless someone runs this command.
+without sending it. forge sends no report unless someone runs this command
+(its anonymous usage events are another matter: forge telemetry --help).
 
 When you are logged in (forge login), the report carries your user id so
 the team can follow up; --anonymous leaves it off.
@@ -22135,10 +22379,17 @@ reliant forge storage worktrees [flags]
 
 Show or change whether forge sends anonymous usage events
 
-forge sends anonymous usage events (the first run of an install: version, OS,
-architecture, the coding agent running it) so the Reliant team can see how
-forge is used. Events carry a random install id and never code, paths, names
-or personal data.
+forge sends anonymous usage events so the Reliant team can see how forge is
+used. There are two: the first run of an install (version, OS, architecture,
+the coding agent running it), and a refused claimable deploy, when forge
+itself refuses `forge env deploy --claimable` before the control plane hears
+of it (the reason, from a fixed list, with the same version, OS, architecture
+and agent, and the kind of app and its auth mode). Events carry a random
+install id and never code, paths, names, error messages or personal data.
+
+A claimable deploy also names its app template (vite, nextjs-static,
+dockerfile-app, forge-native or other) and auth mode (managed or none) to the
+control plane, in its X-Forge-Client header.
 
 It is off when DO_NOT_TRACK=1 or FORGE_TELEMETRY=off, always on a CI runner
 (CI=true, GITHUB_ACTIONS and the like), and after
@@ -22422,10 +22673,21 @@ bound with its n: a ranking, never a trigger.
 (the test's body, its failure signature and its runs), comments on an
 existing one, and closes an open one whose test left those states.
 
+Those states come from the local record, and a CI runner starts with none,
+so on CI that never closes anything. --stale-after <age> (7d, 168h) adds a
+sweep that reads the evidence from the open issues themselves: it closes each
+open flake:suspected issue forge filed whose test function no longer exists
+in this checkout (run it from the default branch), or whose newest evidence —
+the issue's creation, or the newest "Failed then passed on retry again"
+comment forge wrote — is older than <age>. Other comments do not keep an
+issue open, and an issue of a test the local record still calls suspected or
+flaky is left to it. Each close comments with its reason; a later flake of
+the test reopens the issue and comments on it. --dry-run prints the closes.
+
 --json prints a forge.test.flakes/v1 document.
 
 ```
-reliant forge test flakes [--state suspected|flaky|quarantined|removed|fixed] [--issues] [--json] [flags]
+reliant forge test flakes [--state suspected|flaky|quarantined|removed|fixed] [--issues [--stale-after 7d]] [--json] [flags]
 ```
 
 **Subcommands:**
@@ -22445,6 +22707,7 @@ reliant forge test flakes [--state suspected|flaky|quarantined|removed|fixed] [-
 | `--issues` | `bool` | - | File, update and close flake:suspected issues with gh |
 | `--json` | `bool` | - | Print a forge.test.flakes/v1 document |
 | `--repo` | `string` | - | With --issues: the owner/name to file in (default $GITHUB_REPOSITORY, else the current repository) |
+| `--stale-after` | `string` | - | With --issues: also close open flake:suspected issues with no flake evidence for this long (7d, 168h), or whose test is gone |
 | `--state` | `stringSlice` | `[]` | Only tests in these states (suspected, flaky, quarantined, removed, fixed, healthy); default every state but healthy |
 
 ---
@@ -23186,6 +23449,12 @@ reliant forge ui sourcemaps push <dist> [flags]
 Print the forge version and build identity (--pinned: the project's pinned forge)
 
 Print this forge's version and build identity.
+
+When another forge on PATH reports a different version, a warning on stderr
+names each one with its version, which one a bare 'forge' runs, and how to
+remove or update the stale one. It runs each forge's 'version' (an npm shim's
+package.json is read instead) and never uses the network; set
+FORGE_NO_PATH_CHECK=1 to skip it.
 
 --pinned prints the forge the project pins instead — the project found from
 the working directory or -C — fetching or building it the way a command

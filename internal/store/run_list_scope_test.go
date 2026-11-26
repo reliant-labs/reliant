@@ -17,6 +17,7 @@ import (
 // caller's unassigned runs in their default org), and one project or the
 // union of several (the side nav's choice of several projects).
 func TestRunListsScopeByOrgAndProjectSet(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) // fixed: nothing here depends on the wall clock

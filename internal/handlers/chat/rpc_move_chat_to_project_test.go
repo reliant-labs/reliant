@@ -119,7 +119,7 @@ func (f *moveFixture) move(req *reliantv1.MoveChatToProjectRequest) (*reliantv1.
 
 func (f *moveFixture) row(chatID string) *db.Chat {
 	f.t.Helper()
-	chat, err := f.repo.GetChat(f.ctx, chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(f.t, err)
 	return chat
 }

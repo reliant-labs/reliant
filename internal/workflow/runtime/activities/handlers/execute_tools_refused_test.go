@@ -25,7 +25,7 @@ func TestExecuteTools_RefusesCallTheWorkflowRefused(t *testing.T) {
 	const slackPost = "slack__message_post"
 	h, chatID := newValidationChat(t)
 	mockExecutor := newMockToolExecutor()
-	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: h.Repo(), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
+	activity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(h.Repo()), Rows: workspaceRowsOf(h.Repo()), ToolCalls: toolCallsOf(h.Repo()), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(h.Repo().ORM())})
 	refusedID := "toolu_" + uuid.NewString()
 	readID := "toolu_" + uuid.NewString()
 	reason := "The user did not approve slack__message_post, so it was not run. Do not attempt it another way."
@@ -69,7 +69,7 @@ func TestExecuteTools_RefusesCallAnEarlierReleaseRefused(t *testing.T) {
 	const slackPost = "slack__message_post"
 	h, chatID := newValidationChat(t)
 	mockExecutor := newMockToolExecutor()
-	activity := NewExecuteToolsActivity(h.Repo(), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
+	activity := NewExecuteToolsActivity(tools.WithChats(h.Repo()), workspaceRowsOf(h.Repo()), toolCallsOf(h.Repo()), mockExecutor)
 	refusedID := "toolu_" + uuid.NewString()
 	readID := "toolu_" + uuid.NewString()
 	reason := "The user did not approve slack__message_post, so it was not run. Do not attempt it another way."

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -59,7 +60,7 @@ func (f *multiProjectChat) call(t *testing.T, name, input string) (*reliantv1.To
 	executor := &daemonLikeExecutor{}
 	call := message.ToolCall{ID: "toolu_" + uuid.NewString(), Name: name, Input: input}
 	var output ExecuteToolsOutput
-	act := NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), executor).WithChatProjects(f.h.Repo())
+	act := NewExecuteToolsActivity(tools.WithChats(f.h.Repo()), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), executor).WithChatProjects(f.h.Repo())
 	require.NoError(t, f.h.ExecuteActivity(act.Execute, ExecuteToolsInput{
 		ChatID: f.chat, Thread: f.chat, ProjectPath: f.primaryDir, ToolCalls: []message.ToolCall{call},
 	}, &output), "a refusal never fails the activity: the conversation carries on")
@@ -162,7 +163,7 @@ func TestRouteCallProject_TheBatchWorkspaceBlockIsThePrimarysAlone(t *testing.T)
 	const blocked = "This workspace is archived with preserved work."
 	run := func(input string) (message.ToolResult, *daemonLikeExecutor) {
 		executor := &daemonLikeExecutor{}
-		act := NewExecuteToolsActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), executor).WithChatProjects(f.h.Repo())
+		act := NewExecuteToolsActivity(tools.WithChats(f.h.Repo()), workspaceRowsOf(f.h.Repo()), toolCallsOf(f.h.Repo()), executor).WithChatProjects(f.h.Repo())
 		call := message.ToolCall{ID: "toolu_" + uuid.NewString(), Name: tools.ShellToolName, Input: input}
 		var result message.ToolResult
 		fn := func(ctx context.Context) error {
@@ -196,7 +197,7 @@ func TestChatProjects_CollidingNamesAreNamedByID(t *testing.T) {
 	twin := f.attach(t, "Test Project", "cloud-box", t.TempDir())
 
 	ctx := context.Background()
-	chat, err := f.h.Repo().GetChat(ctx, f.chat)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), f.chat)
 	require.NoError(t, err)
 	primary, err := f.h.Repo().GetProject(ctx, f.project)
 	require.NoError(t, err)

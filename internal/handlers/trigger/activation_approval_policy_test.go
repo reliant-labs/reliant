@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/automationpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,7 +55,7 @@ func TestAgentActivationApprovalOnCapabilityChange(t *testing.T) {
 	require.ErrorContains(t, err, tools.ApprovalRequiredMessage)
 	created, err := env.svc.ManageActivation(env.ctx, env.userID, tools.ToolCreateTriggerActivation, create, preview.Hash)
 	require.NoError(t, err)
-	history, err := env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+	history, err := store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "card", history[0].Approval)
 	stored, err := env.repo.GetTrigger(env.ctx, created.ID)
@@ -73,7 +74,7 @@ func TestAgentActivationApprovalOnCapabilityChange(t *testing.T) {
 	unattended := automationpolicy.WithExecution(env.ctx, automationpolicy.Execution{Unattended: true})
 	_, err = env.svc.ManageActivation(unattended, env.userID, tools.ToolUpdateTriggerActivation, edit, "")
 	require.NoError(t, err)
-	history, err = env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+	history, err = store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Len(t, history, 2)
 	require.Equal(t, "update", history[0].Operation)
@@ -114,7 +115,7 @@ func TestAgentActivationApprovalOnCapabilityChange(t *testing.T) {
 	got, err := env.svc.ManageActivation(unattended, env.userID, tools.ToolEnableTrigger, id, "")
 	require.NoError(t, err)
 	require.True(t, got.Enabled)
-	history, err = env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+	history, err = store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "enable", history[0].Operation)
 	require.Equal(t, "auto:on_capability_change", history[0].Approval)
@@ -142,7 +143,7 @@ func TestAgentActivationApprovalModes(t *testing.T) {
 	unattended := automationpolicy.WithExecution(env.ctx, automationpolicy.Execution{Unattended: true})
 	created, err := env.svc.ManageActivation(unattended, env.userID, tools.ToolCreateTriggerActivation, create, "")
 	require.NoError(t, err)
-	history, err := env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+	history, err := store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "auto:never", history[0].Approval)
 	require.Contains(t, history[0].CapabilitiesAdded, "machine:"+machine)
@@ -153,7 +154,7 @@ func TestAgentActivationApprovalModes(t *testing.T) {
 	widen := tools.ActivationParams{TriggerID: created.ID, ActingIdentity: &other}
 	_, err = env.svc.ManageActivation(env.ctx, env.userID, tools.ToolUpdateTriggerActivation, widen, "")
 	require.NoError(t, err, "never applies a widening change too")
-	history, err = env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+	history, err = store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "auto:never", history[0].Approval)
 	require.Equal(t, []string{"identity:" + other}, history[0].CapabilitiesAdded)
@@ -170,7 +171,7 @@ func TestAgentActivationApprovalModes(t *testing.T) {
 	require.ErrorContains(t, err, tools.ApprovalRequiredMessage)
 	_, err = env.svc.ManageActivation(env.ctx, env.userID, tools.ToolUpdateTriggerActivation, edit, card.Hash)
 	require.NoError(t, err)
-	history, err = env.repo.ListTriggerChanges(env.ctx, env.userID, created.ID)
+	history, err = store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "card", history[0].Approval)
 

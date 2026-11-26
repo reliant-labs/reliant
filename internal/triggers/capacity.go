@@ -190,7 +190,7 @@ func (w *capacityWake) wakeNext(ctx context.Context, queue CapacityStore, t *cor
 	}
 }
 
-func prepareCapacity(ctx context.Context, events capacityEvents, repo CapacityStore, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, limits store.TriggerCapacityLimits, spec *launch.Spec) error {
+func prepareCapacity(ctx context.Context, events capacityEvents, repo CapacityStore, descriptions capacityDescriptions, t *core.Trigger, event *core.TriggerEvent, limits store.TriggerCapacityLimits, cancel capacityCancel, spec *launch.Spec) error {
 	if descriptions == nil {
 		return errors.New("workflow capacity Temporal descriptions are unavailable")
 	}
@@ -220,6 +220,9 @@ func prepareCapacity(ctx context.Context, events capacityEvents, repo CapacitySt
 	if enrolled.Outcome == core.TriggerEventPending && !limits.ExpiredBefore.IsZero() && enrolled.CreatedAt.Before(limits.ExpiredBefore) {
 		return errCapacityExpired
 	}
+	// concurrency.cancel_running: stop the key's older running run first, so
+	// the reconcile below sees it closed and frees its slot (capacity_cancel.go).
+	cancel.supersede(ctx, repo, descriptions, scope, enrolled)
 	// Reconcile only immutable chains in this scope. A missing, mismatched or
 	// unavailable description holds its slot; chat status is never release evidence.
 	occupied, err := repo.ListTriggerCapacityExecutions(ctx, scope)

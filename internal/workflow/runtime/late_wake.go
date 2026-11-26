@@ -121,6 +121,51 @@ func continueAsNewForLateWake(ctx workflow.Context, input WorkflowInput, thread 
 	return workflow.NewContinueAsNewError(ctx, DynamicWorkflow, lateWakeSuccessorInput(input))
 }
 
+// subAgentLateMessageChangeID gates a sub-agent taking one more turn for a
+// message that reached it after its loop-exit gate and before it completed
+// (subAgentOwesLateMessageTurn). Histories recorded before it completed
+// there, with the message unread.
+const subAgentLateMessageChangeID = "subagent-late-message-gets-a-turn"
+
+// subAgentOwesLateMessageTurn is the sub-agent's end-of-run check: called
+// once its loop has exited and its answer has been fetched, as the last thing
+// before it completes (reports to its parent and goes terminal). It reports
+// whether its doorbell rang after its last turn began, in which case the
+// agent must run again instead of completing.
+//
+// The loop-exit gate (awaitLiveDetachedSpawnsOrHandoff) covers a message that
+// lands during the agent's last turn. This covers the rest of the way to the
+// finish line: until the agent's thread goes terminal, a sender sees it live,
+// so spawn_send and SendAgentMessage accept the message, queue it and ring
+// the doorbell — and nothing read it. The root's version of this window
+// continues as a fresh run (continueAsNewForLateWake); a sub-agent has no run
+// of its own to continue, so it runs its loop again on the same thread and
+// tool call, exactly as a transient-error retry does. That turn's call_llm
+// drains the message from the mailbox, and the agent answers it before its
+// one report goes to its parent. A wake for input a turn already read costs a
+// turn that drains nothing and yields without calling the provider.
+//
+// A cancelled agent never runs again: the stop wins.
+//
+// Versioned unconditionally (not only when woken): the yield below lets other
+// coroutines run first, which can reorder their commands against a history
+// recorded without it.
+func subAgentOwesLateMessageTurn(ctx workflow.Context, tracker *ChildWorkflowTracker, thread string, pauseCtrl *PauseController) bool {
+	if tracker == nil || thread == "" || pauseCtrl.IsCancelled() {
+		return false
+	}
+	if workflow.GetVersion(ctx, subAgentLateMessageChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return false
+	}
+	// A doorbell delivered in the same workflow task as the activity this
+	// agent just awaited may not have been counted yet: let the wake
+	// handler's coroutine run before reading the count. (Not
+	// absorbPendingWakes: that would take a signal from the handler mid-run,
+	// skipping what it does for other threads.)
+	yieldToRunnableCoroutines(ctx)
+	return tracker.wakeSinceLastTurn(thread) && !pauseCtrl.IsCancelled()
+}
+
 // lateWakeSuccessorInput is the fresh run started for a late wake: graph
 // entry (no Resume), the current inputs, the same execution context and
 // trigger. It is a run a person's reply started, not the chat's launch run,

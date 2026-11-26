@@ -342,7 +342,7 @@ func TestStartRunThroughTheRealLauncherRecordsLineageAndIsIdempotent(t *testing.
 	assert.False(t, first.AlreadyStarted)
 
 	// The run is the OWNER's, not unattended, and Temporal was started once.
-	chat, err := repo.GetChat(ctx, first.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), first.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, owner, chat.UserID)
 	assert.Equal(t, core.ChatOriginAgent, chat.Origin, "an agent's run lists in Runs, not the chat list")

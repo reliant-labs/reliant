@@ -22,7 +22,7 @@ func (s *Service) DisableWorkflow(
 	if strings.TrimSpace(req.Msg.Workflow) == "" {
 		return nil, svcerr.InvalidArgument("workflow is required")
 	}
-	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId})
+	mine, err := s.deps.Triggers.ListTriggersForUser(ctx, core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId})
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}

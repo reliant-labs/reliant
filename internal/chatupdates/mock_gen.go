@@ -18,7 +18,7 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=eb88b1a14bb63f16cebbf14ca29596d8d736316ea881e08d6346e0c5cb401875
+// forge:hash=0a0d0f2715b91e3b73627a4804153ce0b3d375f175164cd21093ee75820e31f3
 
 // MockService is a test mock for the Service interface.
 //
@@ -28,8 +28,9 @@ import (
 // "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	EmitChatRefetchFunc func(context.Context, string, core.RefetchType) error
-	EmitUserRefetchFunc func(context.Context, string, core.RefetchType, core.RefetchOpts) error
+	EmitChatRefetchFunc    func(context.Context, string, core.RefetchType) error
+	EmitUserRefetchFunc    func(context.Context, string, core.RefetchType, core.RefetchOpts) error
+	EmitQuestionUpdateFunc func(context.Context, string, core.QuestionUpdate) error
 }
 
 // EmitChatRefetch records the call and delegates to EmitChatRefetchFunc when set.
@@ -48,6 +49,15 @@ func (m *MockService) EmitUserRefetch(ctx context.Context, userID string, refetc
 		return m.EmitUserRefetchFunc(ctx, userID, refetchType, opts)
 	}
 	return contractkit.MockNotSet("MockService", "EmitUserRefetch")
+}
+
+// EmitQuestionUpdate records the call and delegates to EmitQuestionUpdateFunc when set.
+func (m *MockService) EmitQuestionUpdate(ctx context.Context, chatID string, update core.QuestionUpdate) error {
+	m.Recorder.Record("EmitQuestionUpdate", ctx, chatID, update)
+	if m.EmitQuestionUpdateFunc != nil {
+		return m.EmitQuestionUpdateFunc(ctx, chatID, update)
+	}
+	return contractkit.MockNotSet("MockService", "EmitQuestionUpdate")
 }
 
 // Compile-time check.

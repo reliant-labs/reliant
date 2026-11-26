@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 const (
@@ -19,7 +20,7 @@ const (
 
 func activityOf(t *testing.T, repo *Repo, chatID string) int {
 	t.Helper()
-	chat, err := repo.GetChat(context.Background(), chatID)
+	chat, err := store.GetChat(context.Background(), repo.ORM(), chatID)
 	require.NoError(t, err)
 	require.NotNil(t, chat.Activity)
 	return *chat.Activity

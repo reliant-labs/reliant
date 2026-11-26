@@ -17,7 +17,7 @@ import (
 func TestUploadAttachment_Generated(t *testing.T) {
 	t.Parallel()
 
-	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{API: &config.ApiServerConfig{MaxUploadSize: 4}}))
+	svc := attachment.NewTestAttachment(t, attachment.WithAttachmentDeps(attachment.Deps{DB: nil, API: &config.ApiServerConfig{MaxUploadSize: 4}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.UploadAttachmentRequest, pb.UploadAttachmentResponse]{
 		{
