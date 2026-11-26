@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/rowreads"
 )
 
 type optedIn struct{}
@@ -220,6 +221,7 @@ type sendAnalyticsRead struct {
 
 type sendAnalyticsRepo struct {
 	*db.Repo
+	rowreads.Reads
 	requestDone <-chan struct{}
 	read        chan sendAnalyticsRead
 }
@@ -247,6 +249,7 @@ func TestSendMessageAnalyticsSurvivesRequestCancellation(t *testing.T) {
 	defer cancel()
 	analyticsRepo := &sendAnalyticsRepo{
 		Repo:        repo,
+		Reads:       rowreads.Of(repo),
 		requestDone: requestCtx.Done(),
 		read:        make(chan sendAnalyticsRead, 1),
 	}
