@@ -233,6 +233,35 @@ func (d *Dispatcher) Dispatch(ctx context.Context, ev *core.RunEvent) ([]Result,
 	return results, errors.Join(retryable...)
 }
 
+// MayReach reports whether Dispatch could fire, or record anything for, any
+// of candidates on ev, judged from the trigger rows alone. False means its
+// dispatch would match nothing and write nothing, so the relay need not start
+// one.
+//
+// It keeps Dispatch's listing rules and judges each trigger by its row's
+// source: an ad hoc trigger's own config, an activation's projection of its
+// declaration (triggers.Reconciler keeps it current). That is the projection
+// integration routing reads in SQL, with the same bounded lag: an activation
+// whose declaration was edited to listen to more workflows hears them once
+// the projection catches up (triggers.ReconcileInterval). A firing that does
+// start still re-reads the declaration, so a stale projection never fires on
+// its own say-so.
+//
+// A row that does not parse counts as reaching: Dispatch records a failed
+// event for it on every run event, so the owner sees why it never fires.
+func MayReach(candidates []*core.Trigger, ev *core.RunEvent) bool {
+	for _, trigger := range candidates {
+		if trigger.Kind != runevents.TriggerKind || !trigger.Enabled || trigger.UserID != ev.UserID {
+			continue
+		}
+		spec, err := SpecOf(trigger)
+		if err != nil || spec.Source.Matches(ev.WorkflowName, ev.Outcome) {
+			return true
+		}
+	}
+	return false
+}
+
 // traced runs one trigger's firing for ev as a trigger.fire span
 // (triggers.StartFireSpan): each matched trigger's is a trace of its own,
 // linked to the dispatch, and a run it launches links to it. recorded non-nil
