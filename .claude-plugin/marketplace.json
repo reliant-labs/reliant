@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "reliant-labs",
+  "description": "Reliant Labs plugins for Claude Code: Reliant Forge, deploys your agent can verify.",
+  "owner": {
+    "name": "Reliant Labs",
+    "url": "https://reliantlabs.io"
+  },
+  "plugins": [
+    {
+      "name": "reliant-forge",
+      "source": "./plugins/reliant-forge",
+      "description": "Deploy what your coding agent built, and let it prove the release works. Deploys need no account.",
+      "category": "deployment",
+      "homepage": "https://reliantlabs.io"
+    }
+  ]
+}

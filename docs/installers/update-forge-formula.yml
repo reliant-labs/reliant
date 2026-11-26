@@ -1,0 +1,118 @@
+# SOURCE OF TRUTH for reliant-labs/homebrew-reliant/.github/workflows/update-forge-formula.yml.
+#
+# It lives in forge so it changes with scripts/render-homebrew-formula.sh and
+# scripts/build-release-assets.sh, whose output it consumes. Copy it into the tap
+# (the tap is a separate repository, so this pull request cannot install it):
+#
+#   gh api repos/reliant-labs/homebrew-reliant/contents/.github/workflows/update-forge-formula.yml  # check first
+#   cp docs/installers/update-forge-formula.yml <tap>/.github/workflows/
+#
+# Triggered by scripts/release-forge.sh ("forge-release-published"), or by hand
+# with a version. Opens a PR against the tap's main; like the Reliant cask PR, the
+# tap's ruleset requires a human approval, so the formula bump is not self-merging.
+name: Update forge formula
+
+on:
+  repository_dispatch:
+    types: [forge-release-published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "forge version to update to (e.g., 0.1.46)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Two dispatches (a release and a hand re-run) must not race on one branch.
+concurrency:
+  group: update-forge-formula
+  cancel-in-progress: false
+
+jobs:
+  update-formula:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          PAYLOAD_VERSION: ${{ github.event.client_payload.version }}
+        run: |
+          VERSION="${INPUT_VERSION:-$PAYLOAD_VERSION}"
+          VERSION="${VERSION#v}"
+          if ! echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::version must look like X.Y.Z (got: '$VERSION'); prereleases are not published to Homebrew"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Render Formula/forge.rb
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # Fetch the renderer from the forge tag being released, so the formula
+          # always matches that release's asset names.
+          curl -fsSL --retry 3 -o render.sh \
+            "https://raw.githubusercontent.com/reliant-labs/forge/v${VERSION}/scripts/render-homebrew-formula.sh"
+          curl -fsSL --retry 3 -o checksums.txt \
+            "https://github.com/reliant-labs/forge/releases/download/v${VERSION}/checksums.txt"
+          mkdir -p Formula
+          bash render.sh "$VERSION" checksums.txt > Formula/forge.rb
+          rm render.sh checksums.txt
+          cat Formula/forge.rb
+
+      - name: Install, test and audit the rendered formula
+        run: |
+          # ubuntu-latest ships Homebrew but does NOT put it on PATH: without
+          # this, `brew` is "command not found" and no formula PR ever opens.
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          export HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_ANALYTICS=1
+          # Tap this checkout, then overlay the freshly rendered formula: the
+          # clone `brew tap` makes holds only what is committed, and
+          # Formula/forge.rb is not committed until the step below.
+          brew tap reliant-labs/reliant "$GITHUB_WORKSPACE"
+          TAP_DIR="$(brew --repository reliant-labs/reliant)"
+          mkdir -p "$TAP_DIR/Formula"
+          cp Formula/forge.rb "$TAP_DIR/Formula/forge.rb"
+          # Homebrew 7 refuses to load a formula from a tap nobody trusted;
+          # an older brew has no `trust` command and no such check.
+          brew trust --formula reliant-labs/reliant/forge 2>/dev/null || true
+          # The gate: a formula that cannot install the release's linux
+          # archive and pass its own `forge version` test never reaches a PR.
+          brew install --formula reliant-labs/reliant/forge
+          brew test reliant-labs/reliant/forge
+          # Advisory: a style finding is not a reason to withhold a release
+          # (the renderer at an older tag may predate an audit fix).
+          brew audit --strict --online --formula reliant-labs/reliant/forge ||
+            echo "::warning::brew audit --strict reported problems in Formula/forge.rb (see above)"
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          BRANCH="update-forge-${VERSION}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- Formula/forge.rb && git ls-files --error-unmatch Formula/forge.rb >/dev/null 2>&1; then
+            echo "Formula/forge.rb already at ${VERSION}; nothing to do"
+            exit 0
+          fi
+          git checkout -b "$BRANCH"
+          git add Formula/forge.rb
+          git commit -m "Update forge to ${VERSION}"
+          # A re-run for the same version replaces its branch rather than
+          # failing on a non-fast-forward push.
+          git push --force -u origin "$BRANCH"
+          if [ -n "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            echo "a pull request for ${BRANCH} is already open; its branch was updated"
+            exit 0
+          fi
+          gh pr create --base main \
+            --title "Update forge to ${VERSION}" \
+            --body "Automated update of the forge formula to ${VERSION}, rendered from the v${VERSION} release's checksums.txt by scripts/render-homebrew-formula.sh, and installed and tested on ubuntu-latest before this PR was opened."

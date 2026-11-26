@@ -1,0 +1,95 @@
+# The local telemetry agent of this env, written by `forge env up` from the
+# env's declared telemetry (forge.Telemetry). Regenerated on every run: edit the
+# declaration in deploy/kcl/<env>/main.k, never this file.
+# args: --config=<this file> --feature-gates=service.profilesSupport
+exporters:
+  otlphttp/forge_local:
+    endpoint: http://127.0.0.1:4419
+  otlphttp/forge_profiles:
+    profiles_endpoint: http://127.0.0.1:4420/v1development/profiles
+extensions:
+  bearertokenauth/telemetry_billing-worker_0:
+    filename: /project/.forge/observability/dev/secrets/worker-pprof/token
+  health_check/forge_agent:
+    endpoint: 127.0.0.1:47001
+processors:
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 200
+    spike_limit_mib: 50
+  transform/telemetry_target/billing-worker:
+    error_mode: ignore
+    profile_statements:
+    - context: resource
+      statements:
+      - set(attributes["service.name"], "billing-worker")
+      - set(attributes["deployment.environment.name"], "dev")
+  transform/telemetry_target/temporal:
+    error_mode: ignore
+    metric_statements:
+    - context: resource
+      statements:
+      - set(attributes["service.name"], "temporal")
+receivers:
+  pprof/telemetry_billing-worker_0_heap:
+    remote:
+      auth:
+        authenticator: bearertokenauth/telemetry_billing-worker_0
+      collection_interval: 5m
+      endpoint: https://127.0.0.1:6060/debug/pprof/heap
+      timeout: 30s
+      tls:
+        insecure_skip_verify: true
+  prometheus/telemetry_temporal:
+    config:
+      scrape_configs:
+      - fallback_scrape_protocol: PrometheusText0.0.4
+        job_name: telemetry/temporal/0
+        label_limit: 30
+        label_value_length_limit: 256
+        metric_relabel_configs:
+        - action: keep
+          regex: up|(?:service_requests|service_latency_(bucket|sum|count))
+          source_labels:
+          - __name__
+        metrics_path: /metrics
+        sample_limit: 5000
+        scheme: http
+        scrape_interval: 30s
+        scrape_timeout: 10s
+        static_configs:
+        - targets:
+          - 127.0.0.1:9233
+  tcpcheck/telemetry_temporal_0:
+    collection_interval: 30s
+    targets:
+    - endpoint: 127.0.0.1:7233
+service:
+  extensions:
+  - bearertokenauth/telemetry_billing-worker_0
+  - health_check/forge_agent
+  pipelines:
+    metrics/telemetry_temporal:
+      exporters:
+      - otlphttp/forge_local
+      processors:
+      - memory_limiter
+      - transform/telemetry_target/temporal
+      - batch
+      receivers:
+      - prometheus/telemetry_temporal
+      - tcpcheck/telemetry_temporal_0
+    profiles/telemetry_billing-worker:
+      exporters:
+      - otlphttp/forge_profiles
+      processors:
+      - memory_limiter
+      - transform/telemetry_target/billing-worker
+      receivers:
+      - pprof/telemetry_billing-worker_0_heap
+  telemetry:
+    metrics:
+      level: none

@@ -1,0 +1,115 @@
+# PGO refresh — keep each Go binary's profile current with how {{.Env}} runs it.
+#
+# Scaffolded by forge because the hosted env {{.Env}} builds a Go binary. Yours
+# from now on: edit freely, or turn it off with `ci.workflows: {pgo-refresh:
+# false}` in forge.yaml. A deleted copy stays deleted.
+#
+# Every `go build ./cmd/<bin>` reads the committed cmd/<bin>/default.pgo (Go's
+# default -pgo=auto), so the compiler inlines and devirtualizes the call sites
+# production actually runs hot. Once a week this job runs `forge pgo pull
+# --env {{.Env}}`, which merges the env's last week of continuous CPU profiles
+# into those files, and opens (or updates) one pull request when a file
+# changed. Merging it is what changes a build; nothing here deploys.
+#
+# IT NEVER BLOCKS ANYTHING. A binary with no profile data yet, or too little CPU
+# to optimize for, is skipped with a note and its file is left alone, so a new
+# project's runs end green with nothing to commit until the env has served real
+# traffic. Without the secret below the job only says so and ends green.
+#
+# Needs one repository secret: FORGE_OBS_TOKEN, a token with {{.TokenScopes}}:
+# the pull looks the env up (deploy:read) before it reads its profiles
+# (obs:read). A person signed in to the web app mints it under Settings → API
+# tokens (Reliant cloud: https://forge.reliantlabs.io/settings/tokens), then
+# stores the secret it shows once:
+#   gh secret set FORGE_OBS_TOKEN
+# It is not FORGE_CONTROL_PLANE_TOKEN on purpose: that one can deploy
+# (deploy:write) and cannot read profiles; this one can read and never deploy.
+#
+# A pull request opened with the workflow's GITHUB_TOKEN starts no other
+# workflow (GitHub's rule), so its checks run when someone pushes to it or
+# re-runs them; the profile is data, and `go build` is the only thing that
+# reads it.
+name: PGO refresh
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC: a full week of profiles
+  workflow_dispatch:
+
+concurrency:
+  group: pgo-refresh
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    name: Refresh default.pgo from {{.Env}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # forge reads the control-plane credential from this one variable.
+      FORGE_CONTROL_PLANE_TOKEN: ${{"{{"}} secrets.FORGE_OBS_TOKEN {{"}}"}}
+      BRANCH: forge/pgo-refresh
+    steps:
+      - name: No FORGE_OBS_TOKEN, nothing to pull
+        if: env.FORGE_CONTROL_PLANE_TOKEN == ''
+        run: echo "::notice::FORGE_OBS_TOKEN is not set, so there are no {{.Env}} profiles to pull. Mint a token with {{.TokenScopes}} and run gh secret set FORGE_OBS_TOKEN to turn this on."
+      - uses: actions/checkout@v4
+        if: env.FORGE_CONTROL_PLANE_TOKEN != ''
+      - uses: actions/setup-go@v5
+        if: env.FORGE_CONTROL_PLANE_TOKEN != ''
+        with:
+          go-version-file: go.mod
+      - name: Install forge
+        if: env.FORGE_CONTROL_PLANE_TOKEN != ''
+{{installForgeRun 8}}
+      - name: Pull {{.Env}} profiles
+        if: env.FORGE_CONTROL_PLANE_TOKEN != ''
+        # Exit 0: every binary was written or skipped with a reason (no data
+        # yet, below min_weight, PGO off). Exit 2: a source could not be read
+        # (the token, or a control plane without ExportPGOProfile): the step
+        # fails and every existing profile is untouched.
+        run: |
+          set -o pipefail
+          forge pgo pull --env {{.Env}} --json | tee pgo-pull.json
+          {
+            echo "### forge pgo pull --env {{.Env}}"
+            echo
+            echo "| binary | action | edges | reason |"
+            echo "|---|---|---|---|"
+            jq -r '.binaries[] | "| \(.package) | \(.action) | \(.edges) | \(.reason // "") |"' pgo-pull.json
+          } >>"$GITHUB_STEP_SUMMARY"
+      - name: Open or update the pull request
+        if: env.FORGE_CONTROL_PLANE_TOKEN != ''
+        env:
+          GH_TOKEN: ${{"{{"}} secrets.GITHUB_TOKEN {{"}}"}}
+        run: |
+          set -euo pipefail
+          mapfile -t written < <(jq -r '.binaries[] | select(.action == "written") | .path' pgo-pull.json)
+          if [ "${#written[@]}" -eq 0 ] || { git diff --quiet -- "${written[@]}" && [ -z "$(git ls-files --others --exclude-standard -- "${written[@]}")" ]; }; then
+            echo "No profile changed; nothing to commit."
+            exit 0
+          fi
+          git switch -C "$BRANCH"
+          git add -- "${written[@]}"
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "chore(pgo): refresh default.pgo from {{.Env}} profiles"
+          git push --force origin "$BRANCH"
+          if [ "$(gh pr view "$BRANCH" --json state --jq .state 2>/dev/null || true)" = "OPEN" ]; then
+            echo "Updated the open pull request on $BRANCH."
+            exit 0
+          fi
+          {
+            echo "\`forge pgo pull --env {{.Env}}\` merged the env's recent CPU profiles into each Go binary's \`default.pgo\`."
+            echo "Every build after this merges is optimized for how {{.Env}} runs the code (Go's \`-pgo=auto\`)."
+            echo
+            echo "| binary | edges | window |"
+            echo "|---|---|---|"
+            jq -r '.binaries[] | select(.action == "written") | "| \(.package) | \(.edges) | \(.oldest // "") .. \(.newest // "") |"' pgo-pull.json
+            echo
+            echo "Scheduled by \`.github/workflows/pgo-refresh.yml\`."
+          } >pr-body.md
+          gh pr create --head "$BRANCH" --title "chore(pgo): refresh default.pgo from {{.Env}} profiles" --body-file pr-body.md

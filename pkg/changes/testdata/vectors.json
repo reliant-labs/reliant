@@ -1,0 +1,672 @@
+{
+  "//": "Golden vectors for Forge Changes evaluation spec v1 (docs/proposals/changes.md, Appendix A). Read by BOTH pkg/changes (Go) and web-runtime/src/changes.test.ts, so the twins cannot disagree. An expected result with no \"value\" means the caller's default applies (Go: nil Value; TS: undefined).",
+  "murmur3": [
+    { "input": "", "hash": 0 },
+    { "input": "hello", "hash": 613153351 },
+    { "input": "abc", "hash": 3017643002 },
+    { "input": "ππππππππ", "hash": 3966940904 },
+    { "input": "héllo wörld", "hash": 2549609076 },
+    { "input": "日本語", "hash": 2779017879 },
+    { "input": "🙂", "hash": 1042440291 },
+    {
+      "input": "forge.changes/v1|enroll|new-checkout|r_8f2c|u_123",
+      "hash": 3681668612
+    },
+    {
+      "input": "forge.changes/v1|variant|new-checkout|r_8f2c|u_123",
+      "hash": 438083969
+    }
+  ],
+  "preview_hash": [
+    { "key": "new-checkout", "unit": "u_123", "hash": "943cb63b" },
+    { "key": "new-checkout", "unit": "alice", "hash": "479c9b91" },
+    { "key": "new-checkout", "unit": "bob", "hash": "3dfe731e" },
+    { "key": "new-checkout", "unit": "u|pipe", "hash": "c532d10e" },
+    { "key": "banner-copy", "unit": "bob", "hash": "7767f694" },
+    { "key": "kill-switch", "unit": "alice", "hash": "f318f30c" },
+    { "key": "team-preview", "unit": "alice", "hash": "a60ee47f" }
+  ],
+  "snapshots": {
+    "main": {
+      "schema": "forge.changes/v1",
+      "revision": 42,
+      "changes": {
+        "new-checkout": {
+          "variants": { "control": false, "treatment": true },
+          "default_variant": "control",
+          "delivery": {
+            "mode": "experiment",
+            "unit": "user",
+            "run": "r_8f2c",
+            "salt": "r_8f2c",
+            "audience": { "attribute": "plan", "in": ["paid"] },
+            "percent_bp": 2000,
+            "split": [
+              { "variant": "control", "weight_bp": 5000 },
+              { "variant": "treatment", "weight_bp": 5000 }
+            ],
+            "rollout_variant": null,
+            "variant": null,
+            "preview": [{ "unit_hash": "479c9b91", "variant": "treatment" }]
+          }
+        },
+        "banner-copy": {
+          "variants": {
+            "short": "Ship faster",
+            "long": {
+              "title": "Ship faster",
+              "body": "Previews, rollouts and experiments in one place."
+            }
+          },
+          "delivery": {
+            "mode": "everyone",
+            "unit": "user",
+            "variant": "long",
+            "preview": [{ "unit_hash": "7767f694", "variant": "short" }]
+          }
+        },
+        "kill-switch": {
+          "variants": { "old": "v1", "new": "v2" },
+          "default_variant": "old",
+          "delivery": {
+            "mode": "off",
+            "unit": "user",
+            "preview": [{ "unit_hash": "f318f30c", "variant": "new" }]
+          }
+        },
+        "off-no-default": {
+          "variants": { "on": true },
+          "delivery": { "mode": "off" }
+        },
+        "team-preview": {
+          "variants": { "old": 1, "new": 2 },
+          "default_variant": "old",
+          "delivery": {
+            "mode": "preview",
+            "unit": "user",
+            "preview": [{ "unit_hash": "a60ee47f", "variant": "new" }]
+          }
+        },
+        "account-rollout": {
+          "variants": { "off": false, "on": true },
+          "default_variant": "off",
+          "delivery": {
+            "mode": "rollout",
+            "unit": "account",
+            "run": "r_acct",
+            "salt": "s_acct",
+            "percent_bp": 10000,
+            "rollout_variant": "on"
+          }
+        },
+        "visitor-zero": {
+          "variants": { "off": false, "on": true },
+          "delivery": {
+            "mode": "rollout",
+            "unit": "visitor",
+            "salt": "s_vis",
+            "percent_bp": 0,
+            "rollout_variant": "on"
+          }
+        },
+        "audience-by-key": {
+          "variants": { "a": "A", "b": "B" },
+          "delivery": {
+            "mode": "experiment",
+            "unit": "user",
+            "run": "r_key",
+            "salt": "s_key",
+            "audience": { "attribute": "targetingKey", "in": ["u_3", "u_8"] },
+            "percent_bp": 10000,
+            "split": [
+              { "variant": "a", "weight_bp": 0 },
+              { "variant": "b", "weight_bp": 10000 }
+            ]
+          }
+        },
+        "pipe-unit": {
+          "variants": { "on": true },
+          "delivery": {
+            "mode": "rollout",
+            "unit": "user",
+            "salt": "s_pipe",
+            "percent_bp": 10000,
+            "rollout_variant": "on"
+          }
+        },
+        "bad-undeclared": {
+          "variants": { "a": 1 },
+          "delivery": { "mode": "everyone", "variant": "ghost" }
+        },
+        "bad-split-sum": {
+          "variants": { "a": 1, "b": 2 },
+          "delivery": {
+            "mode": "experiment",
+            "unit": "user",
+            "run": "r",
+            "salt": "s",
+            "percent_bp": 10000,
+            "split": [
+              { "variant": "a", "weight_bp": 5000 },
+              { "variant": "b", "weight_bp": 4999 }
+            ]
+          }
+        },
+        "bad-weight-negative": {
+          "variants": { "a": 1, "b": 2 },
+          "delivery": {
+            "mode": "experiment",
+            "unit": "user",
+            "run": "r",
+            "salt": "s",
+            "percent_bp": 10000,
+            "split": [
+              { "variant": "a", "weight_bp": -1 },
+              { "variant": "b", "weight_bp": 10001 }
+            ]
+          }
+        },
+        "bad-percent": {
+          "variants": { "on": true },
+          "delivery": {
+            "mode": "rollout",
+            "unit": "user",
+            "salt": "s",
+            "percent_bp": 10001,
+            "rollout_variant": "on"
+          }
+        },
+        "bad-percent-fraction": {
+          "variants": { "on": true },
+          "delivery": {
+            "mode": "rollout",
+            "unit": "user",
+            "salt": "s",
+            "percent_bp": 20.5,
+            "rollout_variant": "on"
+          }
+        },
+        "bad|key": {
+          "variants": { "on": true },
+          "delivery": { "mode": "everyone", "variant": "on" }
+        },
+        "bad-salt": {
+          "variants": { "on": true },
+          "delivery": {
+            "mode": "rollout",
+            "unit": "user",
+            "salt": "r|1",
+            "percent_bp": 10000,
+            "rollout_variant": "on"
+          }
+        },
+        "bad-mode": {
+          "variants": { "on": true },
+          "delivery": { "mode": "sometimes", "variant": "on" }
+        },
+        "bad-mode-case": {
+          "variants": { "on": true },
+          "delivery": { "Mode": "everyone", "variant": "on" }
+        },
+        "bad-unit": {
+          "variants": { "on": true },
+          "delivery": {
+            "mode": "rollout",
+            "unit": "device",
+            "salt": "s",
+            "percent_bp": 10000,
+            "rollout_variant": "on"
+          }
+        },
+        "bad-preview-hash": {
+          "variants": { "on": true },
+          "delivery": {
+            "mode": "everyone",
+            "unit": "user",
+            "variant": "on",
+            "preview": [{ "unit_hash": "479C9B91", "variant": "on" }]
+          }
+        },
+        "bad-preview-no-unit": {
+          "variants": { "on": true, "off": false },
+          "delivery": {
+            "mode": "everyone",
+            "variant": "on",
+            "preview": [{ "unit_hash": "479c9b91", "variant": "off" }]
+          }
+        },
+        "bad-null-value": {
+          "variants": { "a": null },
+          "delivery": { "mode": "off" }
+        },
+        "bad-default": {
+          "variants": { "a": 1 },
+          "default_variant": "ghost",
+          "delivery": { "mode": "off" }
+        },
+        "bad-experiment-no-run": {
+          "variants": { "a": 1 },
+          "delivery": {
+            "mode": "experiment",
+            "unit": "user",
+            "salt": "s",
+            "percent_bp": 10000,
+            "split": [{ "variant": "a", "weight_bp": 10000 }]
+          }
+        },
+        "bad-no-delivery": {
+          "variants": { "a": 1 }
+        },
+        "bad-audience-value": {
+          "variants": { "on": true },
+          "delivery": {
+            "mode": "rollout",
+            "unit": "user",
+            "salt": "s",
+            "audience": { "attribute": "plan", "in": ["paid", 3] },
+            "percent_bp": 10000,
+            "rollout_variant": "on"
+          }
+        },
+        "bad-not-object": 5
+      }
+    },
+    "enroll-at-boundary": {
+      "schema": "forge.changes/v1",
+      "revision": 1,
+      "changes": {
+        "new-checkout": {
+          "variants": { "control": false, "treatment": true },
+          "default_variant": "control",
+          "delivery": {
+            "mode": "rollout",
+            "unit": "user",
+            "run": "r_8f2c",
+            "salt": "r_8f2c",
+            "percent_bp": 8612,
+            "rollout_variant": "treatment"
+          }
+        }
+      }
+    },
+    "enroll-above-boundary": {
+      "schema": "forge.changes/v1",
+      "revision": 2,
+      "changes": {
+        "new-checkout": {
+          "variants": { "control": false, "treatment": true },
+          "default_variant": "control",
+          "delivery": {
+            "mode": "rollout",
+            "unit": "user",
+            "run": "r_8f2c",
+            "salt": "r_8f2c",
+            "percent_bp": 8613,
+            "rollout_variant": "treatment"
+          }
+        }
+      }
+    },
+    "split-at-boundary": {
+      "schema": "forge.changes/v1",
+      "revision": 3,
+      "changes": {
+        "new-checkout": {
+          "variants": { "control": false, "treatment": true },
+          "delivery": {
+            "mode": "experiment",
+            "unit": "user",
+            "run": "r_8f2c",
+            "salt": "r_8f2c",
+            "percent_bp": 10000,
+            "split": [
+              { "variant": "control", "weight_bp": 3969 },
+              { "variant": "treatment", "weight_bp": 6031 }
+            ]
+          }
+        }
+      }
+    },
+    "split-above-boundary": {
+      "schema": "forge.changes/v1",
+      "revision": 4,
+      "changes": {
+        "new-checkout": {
+          "variants": { "control": false, "treatment": true },
+          "delivery": {
+            "mode": "experiment",
+            "unit": "user",
+            "run": "r_8f2c",
+            "salt": "r_8f2c",
+            "percent_bp": 10000,
+            "split": [
+              { "variant": "control", "weight_bp": 3970 },
+              { "variant": "treatment", "weight_bp": 6030 }
+            ]
+          }
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "name": "experiment: enrolled unit, variant bucket 6476 lands in the second arm",
+      "snapshot": "main",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_3", "attributes": { "plan": "paid" } },
+      "expect": { "variant": "treatment", "value": true, "reason": "experiment", "run": "r_8f2c", "enrolled": true }
+    },
+    {
+      "name": "experiment: enrolled unit, variant bucket 1820 lands in the first arm",
+      "snapshot": "main",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_8", "attributes": { "plan": "paid" } },
+      "expect": { "variant": "control", "value": false, "reason": "experiment", "run": "r_8f2c", "enrolled": true }
+    },
+    {
+      "name": "experiment: enroll bucket 8612 is outside 2000 basis points",
+      "snapshot": "main",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_123", "attributes": { "plan": "paid" } },
+      "expect": { "variant": "control", "value": false, "reason": "not_enrolled", "run": "r_8f2c", "enrolled": false }
+    },
+    {
+      "name": "audience: attribute value not in the list",
+      "snapshot": "main",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_3", "attributes": { "plan": "free" } },
+      "expect": { "variant": "control", "value": false, "reason": "ineligible", "run": "r_8f2c", "enrolled": false }
+    },
+    {
+      "name": "audience: attribute missing",
+      "snapshot": "main",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_3" },
+      "expect": { "variant": "control", "value": false, "reason": "ineligible", "run": "r_8f2c", "enrolled": false }
+    },
+    {
+      "name": "no unit id: the default, not enrolled, never a control",
+      "snapshot": "main",
+      "key": "new-checkout",
+      "context": { "attributes": { "plan": "paid" } },
+      "expect": { "variant": "control", "value": false, "reason": "no_unit", "run": "r_8f2c", "enrolled": false }
+    },
+    {
+      "name": "preview: a listed unit outside the audience sees its variant",
+      "snapshot": "main",
+      "key": "new-checkout",
+      "context": { "targetingKey": "alice", "attributes": { "plan": "free" } },
+      "expect": { "variant": "treatment", "value": true, "reason": "preview", "run": "", "enrolled": false }
+    },
+    {
+      "name": "preview: experiment + listed unit that would have enrolled is previewed, not measured",
+      "snapshot": "main",
+      "key": "new-checkout",
+      "context": { "targetingKey": "alice", "attributes": { "plan": "paid" } },
+      "expect": { "variant": "treatment", "value": true, "reason": "preview", "run": "", "enrolled": false }
+    },
+    {
+      "name": "everyone: an object value",
+      "snapshot": "main",
+      "key": "banner-copy",
+      "context": { "targetingKey": "u_1" },
+      "expect": {
+        "variant": "long",
+        "value": { "title": "Ship faster", "body": "Previews, rollouts and experiments in one place." },
+        "reason": "everyone",
+        "run": "",
+        "enrolled": false
+      }
+    },
+    {
+      "name": "everyone: needs no unit id",
+      "snapshot": "main",
+      "key": "banner-copy",
+      "context": {},
+      "expect": {
+        "variant": "long",
+        "value": { "title": "Ship faster", "body": "Previews, rollouts and experiments in one place." },
+        "reason": "everyone",
+        "run": "",
+        "enrolled": false
+      }
+    },
+    {
+      "name": "everyone + listed unit: preview wins",
+      "snapshot": "main",
+      "key": "banner-copy",
+      "context": { "targetingKey": "bob" },
+      "expect": { "variant": "short", "value": "Ship faster", "reason": "preview", "run": "", "enrolled": false }
+    },
+    {
+      "name": "off + listed unit: off is the kill switch, previews included",
+      "snapshot": "main",
+      "key": "kill-switch",
+      "context": { "targetingKey": "alice" },
+      "expect": { "variant": "old", "value": "v1", "reason": "default", "run": "", "enrolled": false }
+    },
+    {
+      "name": "off: the declared default variant",
+      "snapshot": "main",
+      "key": "kill-switch",
+      "context": { "targetingKey": "u_1" },
+      "expect": { "variant": "old", "value": "v1", "reason": "default", "run": "", "enrolled": false }
+    },
+    {
+      "name": "off with no declared default: the caller's default",
+      "snapshot": "main",
+      "key": "off-no-default",
+      "context": { "targetingKey": "u_1" },
+      "expect": { "variant": "", "reason": "default", "run": "", "enrolled": false }
+    },
+    {
+      "name": "preview mode + listed unit: preview",
+      "snapshot": "main",
+      "key": "team-preview",
+      "context": { "targetingKey": "alice" },
+      "expect": { "variant": "new", "value": 2, "reason": "preview", "run": "", "enrolled": false }
+    },
+    {
+      "name": "preview mode + unlisted unit: default",
+      "snapshot": "main",
+      "key": "team-preview",
+      "context": { "targetingKey": "bob" },
+      "expect": { "variant": "old", "value": 1, "reason": "default", "run": "", "enrolled": false }
+    },
+    {
+      "name": "preview mode + no unit id: default, not no_unit",
+      "snapshot": "main",
+      "key": "team-preview",
+      "context": {},
+      "expect": { "variant": "old", "value": 1, "reason": "default", "run": "", "enrolled": false }
+    },
+    {
+      "name": "rollout by account: the account attribute is the unit",
+      "snapshot": "main",
+      "key": "account-rollout",
+      "context": { "targetingKey": "u_1", "attributes": { "account": "acct_42" } },
+      "expect": { "variant": "on", "value": true, "reason": "rollout", "run": "r_acct", "enrolled": true }
+    },
+    {
+      "name": "rollout by account: a user id alone is no unit",
+      "snapshot": "main",
+      "key": "account-rollout",
+      "context": { "targetingKey": "u_1" },
+      "expect": { "variant": "off", "value": false, "reason": "no_unit", "run": "r_acct", "enrolled": false }
+    },
+    {
+      "name": "rollout by account: an empty account is no unit",
+      "snapshot": "main",
+      "key": "account-rollout",
+      "context": { "targetingKey": "u_1", "attributes": { "account": "" } },
+      "expect": { "variant": "off", "value": false, "reason": "no_unit", "run": "r_acct", "enrolled": false }
+    },
+    {
+      "name": "rollout by visitor at 0 basis points: nobody enrolls",
+      "snapshot": "main",
+      "key": "visitor-zero",
+      "context": { "attributes": { "visitor": "v_7" } },
+      "expect": { "variant": "", "reason": "not_enrolled", "run": "", "enrolled": false }
+    },
+    {
+      "name": "audience on targetingKey, zero-weight first arm never wins",
+      "snapshot": "main",
+      "key": "audience-by-key",
+      "context": { "targetingKey": "u_3" },
+      "expect": { "variant": "b", "value": "B", "reason": "experiment", "run": "r_key", "enrolled": true }
+    },
+    {
+      "name": "audience on targetingKey: unlisted id is ineligible",
+      "snapshot": "main",
+      "key": "audience-by-key",
+      "context": { "targetingKey": "u_1" },
+      "expect": { "variant": "", "reason": "ineligible", "run": "r_key", "enrolled": false }
+    },
+    {
+      "name": "a unit id may contain the separator",
+      "snapshot": "main",
+      "key": "pipe-unit",
+      "context": { "targetingKey": "u|pipe" },
+      "expect": { "variant": "on", "value": true, "reason": "rollout", "run": "", "enrolled": true }
+    },
+    {
+      "name": "unknown key: the caller's default",
+      "snapshot": "main",
+      "key": "not-declared",
+      "context": { "targetingKey": "u_3" },
+      "expect": { "variant": "", "reason": "unknown", "run": "", "enrolled": false }
+    },
+    {
+      "name": "enrollment boundary: bucket 8612 at percent_bp 8612 is out",
+      "snapshot": "enroll-at-boundary",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_123" },
+      "expect": { "variant": "control", "value": false, "reason": "not_enrolled", "run": "r_8f2c", "enrolled": false }
+    },
+    {
+      "name": "enrollment boundary: bucket 8612 at percent_bp 8613 is in",
+      "snapshot": "enroll-above-boundary",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_123" },
+      "expect": { "variant": "treatment", "value": true, "reason": "rollout", "run": "r_8f2c", "enrolled": true }
+    },
+    {
+      "name": "split boundary: variant bucket 3969 at cumulative 3969 goes to the next arm",
+      "snapshot": "split-at-boundary",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_123" },
+      "expect": { "variant": "treatment", "value": true, "reason": "experiment", "run": "r_8f2c", "enrolled": true }
+    },
+    {
+      "name": "split boundary: variant bucket 3969 below cumulative 3970 stays in the first arm",
+      "snapshot": "split-above-boundary",
+      "key": "new-checkout",
+      "context": { "targetingKey": "u_123" },
+      "expect": { "variant": "control", "value": false, "reason": "experiment", "run": "r_8f2c", "enrolled": true }
+    }
+  ],
+  "invalid": {
+    "//": "Every key here evaluates as invalid in the main snapshot, beside the valid changes above.",
+    "snapshot": "main",
+    "context": { "targetingKey": "u_3", "attributes": { "plan": "paid" } },
+    "keys": [
+      "bad-undeclared",
+      "bad-split-sum",
+      "bad-weight-negative",
+      "bad-percent",
+      "bad-percent-fraction",
+      "bad|key",
+      "bad-salt",
+      "bad-mode",
+      "bad-mode-case",
+      "bad-unit",
+      "bad-preview-hash",
+      "bad-preview-no-unit",
+      "bad-null-value",
+      "bad-default",
+      "bad-experiment-no-run",
+      "bad-no-delivery",
+      "bad-audience-value",
+      "bad-not-object"
+    ]
+  },
+  "parse": [
+    { "name": "malformed JSON", "json": "{\"schema\":", "ok": false },
+    { "name": "not an object", "json": "[]", "ok": false },
+    { "name": "null", "json": "null", "ok": false },
+    { "name": "trailing data", "json": "{\"schema\":\"forge.changes/v1\",\"revision\":1} {}", "ok": false },
+    { "name": "unknown schema", "json": "{\"schema\":\"forge.changes/v2\",\"revision\":1,\"changes\":{}}", "ok": false },
+    { "name": "schema missing", "json": "{\"revision\":1,\"changes\":{}}", "ok": false },
+    { "name": "schema is not matched case-insensitively", "json": "{\"Schema\":\"forge.changes/v1\",\"revision\":1}", "ok": false },
+    { "name": "revision missing", "json": "{\"schema\":\"forge.changes/v1\",\"changes\":{}}", "ok": false },
+    { "name": "revision not an integer", "json": "{\"schema\":\"forge.changes/v1\",\"revision\":1.5}", "ok": false },
+    { "name": "revision negative", "json": "{\"schema\":\"forge.changes/v1\",\"revision\":-1}", "ok": false },
+    { "name": "revision past 2^53-1", "json": "{\"schema\":\"forge.changes/v1\",\"revision\":9007199254740992}", "ok": false },
+    { "name": "changes not an object", "json": "{\"schema\":\"forge.changes/v1\",\"revision\":1,\"changes\":[]}", "ok": false },
+    {
+      "name": "no changes: every key is unknown",
+      "json": "{\"schema\":\"forge.changes/v1\",\"revision\":7}",
+      "ok": true,
+      "revision": 7,
+      "cases": [
+        { "key": "anything", "context": { "targetingKey": "u_1" }, "expect": { "variant": "", "reason": "unknown", "run": "", "enrolled": false } }
+      ]
+    },
+    {
+      "name": "integers by value: 7.0 and 1e4 are integers; unknown fields are ignored",
+      "json": "{\"schema\":\"forge.changes/v1\",\"revision\":7.0,\"future\":true,\"changes\":{\"x\":{\"variants\":{\"a\":[1, 2]},\"future\":1,\"delivery\":{\"mode\":\"rollout\",\"unit\":\"user\",\"salt\":\"s\",\"percent_bp\":1e4,\"rollout_variant\":\"a\"}}}}",
+      "ok": true,
+      "revision": 7,
+      "cases": [
+        { "key": "x", "context": { "targetingKey": "u_1" }, "expect": { "variant": "a", "value": [1, 2], "reason": "rollout", "run": "", "enrolled": true } }
+      ]
+    },
+    {
+      "name": "duplicate keys: the last one wins, as JSON.parse decides",
+      "json": "{\"schema\":\"forge.changes/v1\",\"revision\":1,\"changes\":{\"x\":{\"variants\":{\"a\":1},\"delivery\":{\"mode\":\"everyone\",\"variant\":\"a\"}},\"x\":{\"variants\":{\"a\":2},\"delivery\":{\"mode\":\"everyone\",\"variant\":\"a\"}}}}",
+      "ok": true,
+      "revision": 1,
+      "cases": [
+        { "key": "x", "context": {}, "expect": { "variant": "a", "value": 2, "reason": "everyone", "run": "", "enrolled": false } }
+      ]
+    }
+  ],
+  "properties": {
+    "//": "Inputs and exact outcomes for the property tests. Units are unit_prefix + 0..n-1. Both twins assert the recorded counts AND the property itself.",
+    "unit_prefix": "p_",
+    "ramp": {
+      "key": "ramp",
+      "salt": "s_ramp",
+      "units": 5000,
+      "steps_bp": [500, 2500, 1000, 2500],
+      "enrolled": [254, 1217, 469, 1217]
+    },
+    "resalt": {
+      "key": "ramp",
+      "salts": ["s_ramp", "s_ramp_2"],
+      "percent_bp": 2500,
+      "units": 5000,
+      "enrolled": [1217, 1234],
+      "overlap": 313
+    },
+    "split": {
+      "key": "split",
+      "salt": "s_split",
+      "units": 20000,
+      "split": [
+        { "variant": "control", "weight_bp": 5000 },
+        { "variant": "treatment", "weight_bp": 3000 },
+        { "variant": "holdout", "weight_bp": 2000 }
+      ],
+      "counts": { "control": 10045, "treatment": 6004, "holdout": 3951 }
+    },
+    "independence": {
+      "key": "split",
+      "salt": "s_split",
+      "units": 20000,
+      "percents_bp": [1000, 5000, 10000],
+      "enrolled": [2046, 9881, 20000],
+      "treatment": [591, 2957, 6004]
+    }
+  }
+}

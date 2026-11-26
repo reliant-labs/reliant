@@ -1,0 +1,40 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// AccountSettings — the body of the account page (/account), reached from the
+// user menu (session_nav.tsx). STARTER CODE, NOT A DESIGN: it shows who is
+// signed in and mounts the panels a person manages themselves. Add yours
+// beside them.
+//
+// PasskeysPanel renders only where the identity's LOGIN_POLICY offers
+// passkeys (methods = ["passkey"]), so this is where a signed-in person
+// enrols the passkey the sign-in screen's "Continue with passkey" uses.
+
+import { PasskeysPanel } from "@/components/passkeys-panel";
+import PageHeader from "@/components/ui/page_header";
+import { useAuth } from "@/lib/auth/use-auth";
+
+export function AccountSettings() {
+  const { identity } = useAuth();
+  const name = identity.name?.trim();
+  const email = identity.email?.trim();
+
+  return (
+    <div>
+      <PageHeader title="Account" subtitle="Who you are signed in as, and how you sign in." />
+      <div className="max-w-2xl space-y-6">
+        <section className="rounded-xl border border-border bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-ink">Profile</h2>
+          <dl className="mt-4 grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
+            <dt className="text-ink-muted">Name</dt>
+            <dd className="text-ink">{name || "—"}</dd>
+            <dt className="text-ink-muted">Email</dt>
+            <dd className="text-ink">{email || "—"}</dd>
+          </dl>
+        </section>
+        <PasskeysPanel />
+      </div>
+    </div>
+  );
+}

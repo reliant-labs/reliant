@@ -1,0 +1,29 @@
+{
+  "schema": "forge.obs.test/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "dev",
+    "backend": "local",
+    "from": "2026-10-22T10:00:00Z",
+    "to": "2026-10-22T10:15:00Z"
+  },
+  "entries": [
+    {
+      "service": "api",
+      "body": "boom",
+      "attributes": {
+        "http.route": "/x",
+        "k": "v"
+      }
+    },
+    {
+      "service": "worker",
+      "body": "ok"
+    }
+  ],
+  "truncated": false,
+  "suggested": [
+    "forge obs trace abc dev"
+  ]
+}

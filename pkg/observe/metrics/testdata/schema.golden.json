@@ -1,0 +1,884 @@
+{
+  "schema_version": "forge.metrics/v1",
+  "service": "shop",
+  "version": "v1.4.0",
+  "metrics": [
+    {
+      "name": "forge.cgroup.cpu.throttled_periods",
+      "type": "counter",
+      "unit": "{period}",
+      "description": "CPU quota periods in which the cgroup was throttled.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.cgroup.cpu.throttled_time",
+      "type": "counter",
+      "unit": "s",
+      "description": "Time the cgroup was throttled by its CPU quota.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.cgroup.memory.limit",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "The cgroup's memory.max; absent when it is max.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.cgroup.memory.oom_kills",
+      "type": "counter",
+      "unit": "{kill}",
+      "description": "Processes the kernel killed for the cgroup's memory limit (memory.events oom_kill).",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.cgroup.memory.working_set",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "The cgroup's memory.current minus inactive_file: the kubelet's working set.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.cgroup.pids.count",
+      "type": "gauge",
+      "unit": "{pid}",
+      "description": "Tasks in the cgroup (pids.current).",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.cgroup.pids.limit",
+      "type": "gauge",
+      "unit": "{pid}",
+      "description": "The cgroup's pids.max; absent when it is max.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.cgroup.pressure.avg10",
+      "type": "gauge",
+      "unit": "1",
+      "description": "Share of the last ten seconds tasks in the cgroup stalled on a resource, from 0 to 1.",
+      "attributes": [
+        {
+          "key": "resource",
+          "values": [
+            "cpu",
+            "memory",
+            "io"
+          ]
+        },
+        {
+          "key": "kind",
+          "values": [
+            "some",
+            "full"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.cgroup.pressure.stall_time",
+      "type": "counter",
+      "unit": "s",
+      "description": "Time tasks in the cgroup stalled on a resource: some is at least one task, full is every task.",
+      "attributes": [
+        {
+          "key": "resource",
+          "values": [
+            "cpu",
+            "memory",
+            "io"
+          ]
+        },
+        {
+          "key": "kind",
+          "values": [
+            "some",
+            "full"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.metrics.rejected_attributes",
+      "type": "counter",
+      "unit": "{attribute}",
+      "description": "Measurements whose attribute was not in the metric's declaration, corrected before export. A rising value means code records an attribute the schema does not list.",
+      "attributes": [
+        {
+          "key": "metric"
+        },
+        {
+          "key": "reason",
+          "values": [
+            "undeclared_key",
+            "undeclared_value"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v0.1.45"
+    },
+    {
+      "name": "forge.process.file_descriptor.limit",
+      "type": "gauge",
+      "unit": "{fd}",
+      "description": "Soft RLIMIT_NOFILE of the process.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.process.file_descriptor.utilization",
+      "type": "gauge",
+      "unit": "1",
+      "description": "Open file descriptors over the soft limit.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.process.handle.count",
+      "type": "updowncounter",
+      "unit": "{handle}",
+      "description": "Open kernel object handles of the process (windows, which has no file descriptors).",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.process.memory.go_gap",
+      "type": "gauge",
+      "unit": "By",
+      "description": "Resident set size minus the memory the Go runtime has mapped: what cgo, mmap and fragmentation hold. Negative when the runtime has mapped more than is resident.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.resource.scope",
+      "type": "gauge",
+      "unit": "{scope}",
+      "description": "1 for the view the host metrics report: host (the whole machine) or cgroup (inside a Kubernetes pod, the container only).",
+      "attributes": [
+        {
+          "key": "scope",
+          "values": [
+            "host",
+            "cgroup"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.server.drain.duration",
+      "type": "histogram",
+      "unit": "s",
+      "description": "How long each phase of a graceful shutdown took: the pre-stop pause, the listener drain (unary requests and long-lived streams), stopping workers and operators, the caller's teardown, each node a lifecyclekit supervisor stops (node), and the whole shutdown (total).",
+      "attributes": [
+        {
+          "key": "phase",
+          "values": [
+            "pre_stop",
+            "listener",
+            "workers",
+            "operators",
+            "teardown",
+            "node",
+            "total"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v0.1.46"
+    },
+    {
+      "name": "forge.system.file_descriptor.count",
+      "type": "gauge",
+      "unit": "{fd}",
+      "description": "File handles allocated on the machine.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.system.file_descriptor.limit",
+      "type": "gauge",
+      "unit": "{fd}",
+      "description": "The machine's file handle limit (fs.file-max).",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.system.process.count",
+      "type": "gauge",
+      "unit": "{process}",
+      "description": "Processes on the machine.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "forge.system.process.limit",
+      "type": "gauge",
+      "unit": "{process}",
+      "description": "The lower of the kernel's pid_max and threads-max.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "go.config.gogc",
+      "type": "updowncounter",
+      "unit": "%",
+      "description": "Heap size target percentage configured by the user, otherwise 100.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.goroutine.count",
+      "type": "updowncounter",
+      "unit": "{goroutine}",
+      "description": "Count of live goroutines.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.allocated",
+      "type": "counter",
+      "unit": "By",
+      "description": "Memory allocated to the heap by the application.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.allocations",
+      "type": "counter",
+      "unit": "{allocation}",
+      "description": "Count of allocations to the heap by the application.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.gc.goal",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Heap size target for the end of the GC cycle.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.limit",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Go runtime memory limit configured by the user, when one exists.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.memory.used",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Memory used by the Go runtime.",
+      "attributes": [
+        {
+          "key": "go.memory.type",
+          "values": [
+            "stack",
+            "other"
+          ]
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.processor.limit",
+      "type": "updowncounter",
+      "unit": "{thread}",
+      "description": "The number of OS threads that can execute user-level Go code simultaneously.",
+      "attributes": [],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_closed_max_idle",
+      "type": "counter",
+      "unit": "{connection}",
+      "description": "Connections closed because of SetMaxIdleConns.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_closed_max_idle_time",
+      "type": "counter",
+      "unit": "{connection}",
+      "description": "Connections closed because of SetConnMaxIdleTime.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_closed_max_lifetime",
+      "type": "counter",
+      "unit": "{connection}",
+      "description": "Connections closed because of SetConnMaxLifetime.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_idle",
+      "type": "gauge",
+      "unit": "{connection}",
+      "description": "Idle connections.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_in_use",
+      "type": "gauge",
+      "unit": "{connection}",
+      "description": "Connections currently in use.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_max_open",
+      "type": "gauge",
+      "unit": "{connection}",
+      "description": "Maximum number of open connections to the database.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_open",
+      "type": "gauge",
+      "unit": "{connection}",
+      "description": "Established connections, in use and idle.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_wait_count",
+      "type": "counter",
+      "unit": "{wait}",
+      "description": "Total number of times a caller waited for a connection.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.connections_wait_duration",
+      "type": "counter",
+      "unit": "ns",
+      "description": "Total time blocked waiting for a new connection.",
+      "attributes": [
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "go.sql.query_timing",
+      "type": "histogram",
+      "unit": "ms",
+      "description": "Timing of processed database queries.",
+      "attributes": [
+        {
+          "key": "db.operation"
+        },
+        {
+          "key": "db.sql.table"
+        },
+        {
+          "key": "db.system"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "jobs_in_flight",
+      "type": "updowncounter",
+      "unit": "{job}",
+      "description": "Jobs running.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.2.0"
+    },
+    {
+      "name": "order_value",
+      "type": "histogram",
+      "unit": "{USD}",
+      "description": "Order value at creation.",
+      "attributes": [
+        {
+          "key": "channel",
+          "values": [
+            "web",
+            "api"
+          ]
+        }
+      ],
+      "stability": "stable",
+      "since": "v1.1.0"
+    },
+    {
+      "name": "orders_created",
+      "type": "counter",
+      "unit": "{order}",
+      "description": "Orders created.",
+      "attributes": [
+        {
+          "key": "status",
+          "values": [
+            "ok",
+            "failed"
+          ]
+        },
+        {
+          "key": "region"
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.0.0"
+    },
+    {
+      "name": "process.context_switches",
+      "type": "counter",
+      "unit": "{switch}",
+      "description": "Times the scheduler switched away from the process, by whether it yielded.",
+      "attributes": [
+        {
+          "key": "process.context_switch_type",
+          "values": [
+            "voluntary",
+            "involuntary"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.cpu.time",
+      "type": "counter",
+      "unit": "s",
+      "description": "CPU time the process has used, by mode.",
+      "attributes": [
+        {
+          "key": "cpu.mode",
+          "values": [
+            "user",
+            "system"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.cpu.utilization",
+      "type": "gauge",
+      "unit": "1",
+      "description": "CPU the process used since the previous sample, in cores (above 1 when more than one core is busy).",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.disk.io",
+      "type": "counter",
+      "unit": "By",
+      "description": "Bytes the process caused to be read from or written to storage.",
+      "attributes": [
+        {
+          "key": "disk.io.direction",
+          "values": [
+            "read",
+            "write"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.memory.usage",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Resident set size of the process.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.memory.virtual",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Virtual memory size of the process.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.paging.faults",
+      "type": "counter",
+      "unit": "{fault}",
+      "description": "Page faults the process has taken, by type.",
+      "attributes": [
+        {
+          "key": "system.paging.fault.type",
+          "values": [
+            "major",
+            "minor"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.thread.count",
+      "type": "updowncounter",
+      "unit": "{thread}",
+      "description": "OS threads of the process.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.unix.file_descriptor.count",
+      "type": "updowncounter",
+      "unit": "{fd}",
+      "description": "Open file descriptors of the process.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "process.uptime",
+      "type": "gauge",
+      "unit": "s",
+      "description": "Time since the process started.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "queue_depth",
+      "type": "gauge",
+      "unit": "{job}",
+      "description": "Jobs waiting.",
+      "attributes": [],
+      "stability": "deprecated",
+      "since": "v1.2.0"
+    },
+    {
+      "name": "rpc.server.calls",
+      "type": "counter",
+      "unit": "{call}",
+      "description": "Total RPC calls received.",
+      "attributes": [
+        {
+          "key": "procedure"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "rpc.server.duration",
+      "type": "histogram",
+      "unit": "s",
+      "description": "RPC duration.",
+      "attributes": [
+        {
+          "key": "procedure"
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "rpc.server.errors",
+      "type": "counter",
+      "unit": "{error}",
+      "description": "Total RPC calls that returned an error, by connect code and error class (server fault, user error, canceled). A call the server ended on purpose (svcerr.ExpectedClose) is not counted.",
+      "attributes": [
+        {
+          "key": "procedure"
+        },
+        {
+          "key": "code",
+          "values": [
+            "canceled",
+            "unknown",
+            "invalid_argument",
+            "deadline_exceeded",
+            "not_found",
+            "already_exists",
+            "permission_denied",
+            "resource_exhausted",
+            "failed_precondition",
+            "aborted",
+            "out_of_range",
+            "unimplemented",
+            "internal",
+            "unavailable",
+            "data_loss",
+            "unauthenticated"
+          ]
+        },
+        {
+          "key": "error_class",
+          "values": [
+            "server",
+            "user",
+            "canceled"
+          ]
+        }
+      ],
+      "stability": "stable",
+      "since": "v0.1.0"
+    },
+    {
+      "name": "system.cpu.load_average.15m",
+      "type": "gauge",
+      "unit": "{thread}",
+      "description": "Run-queue load average over 15 minutes.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.cpu.load_average.1m",
+      "type": "gauge",
+      "unit": "{thread}",
+      "description": "Run-queue load average over 1 minute.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.cpu.load_average.5m",
+      "type": "gauge",
+      "unit": "{thread}",
+      "description": "Run-queue load average over 5 minutes.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.cpu.logical.count",
+      "type": "updowncounter",
+      "unit": "{cpu}",
+      "description": "Logical CPUs the process may run on, lowered to the cgroup's CPU quota when one is set.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.cpu.time",
+      "type": "counter",
+      "unit": "s",
+      "description": "CPU time of the whole machine by mode, summed over every CPU. Nice time is counted as user, interrupt time as system.",
+      "attributes": [
+        {
+          "key": "cpu.mode",
+          "values": [
+            "user",
+            "system",
+            "idle",
+            "iowait",
+            "steal"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.cpu.utilization",
+      "type": "gauge",
+      "unit": "1",
+      "description": "Share of all CPU time in each mode since the previous sample, from 0 to 1.",
+      "attributes": [
+        {
+          "key": "cpu.mode",
+          "values": [
+            "user",
+            "system",
+            "idle",
+            "iowait",
+            "steal"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.filesystem.usage",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Space on the volumes the process writes to, by state and by the volume's role (never its path). Free is what an unprivileged process may use.",
+      "attributes": [
+        {
+          "key": "system.filesystem.state",
+          "values": [
+            "used",
+            "free"
+          ]
+        },
+        {
+          "key": "forge.filesystem.role",
+          "values": [
+            "cwd",
+            "tmp",
+            "data"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.filesystem.utilization",
+      "type": "gauge",
+      "unit": "1",
+      "description": "Used space over used plus free, per volume role.",
+      "attributes": [
+        {
+          "key": "forge.filesystem.role",
+          "values": [
+            "cwd",
+            "tmp",
+            "data"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.linux.memory.available",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "The kernel's estimate of memory available to a new workload without swapping (MemAvailable).",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.memory.limit",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Memory the process may use: the cgroup's memory.max when set, otherwise the machine's total.",
+      "attributes": [],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.memory.usage",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Memory of the machine by state; cached is page cache, buffers and reclaimable slab, and the three add up to the total.",
+      "attributes": [
+        {
+          "key": "system.memory.state",
+          "values": [
+            "used",
+            "free",
+            "cached"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    },
+    {
+      "name": "system.paging.usage",
+      "type": "updowncounter",
+      "unit": "By",
+      "description": "Swap space of the machine by state.",
+      "attributes": [
+        {
+          "key": "system.paging.state",
+          "values": [
+            "used",
+            "free"
+          ]
+        }
+      ],
+      "stability": "experimental",
+      "since": "v1.10.0"
+    }
+  ]
+}
