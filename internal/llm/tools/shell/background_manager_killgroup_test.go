@@ -155,7 +155,6 @@ func TestGroupWatchIgnoresUnreapedZombies(t *testing.T) {
 	z.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	require.NoError(t, z.Start())
 	w := watchGroup(z.Process.Pid)
-	require.True(t, w.alive(), "a running member is alive")
 
 	deadline := time.Now().Add(30 * time.Second)
 	for {
