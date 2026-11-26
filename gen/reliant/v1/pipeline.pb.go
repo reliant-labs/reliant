@@ -10,6 +10,7 @@ package reliantv1
 
 import (
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
+	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -1005,7 +1006,7 @@ var File_reliant_v1_pipeline_proto protoreflect.FileDescriptor
 const file_reliant_v1_pipeline_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/pipeline.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x83\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x83\x01\n" +
 	"\x16EnrolRepositoryRequest\x12%\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\tprojectId\x12\x1a\n" +
@@ -1106,10 +1107,15 @@ const file_reliant_v1_pipeline_proto_rawDesc = "" +
 	"\tsignature\x18\x04 \x01(\tR\tsignature\x12\x19\n" +
 	"\bbatch_id\x18\x05 \x01(\tR\abatchId\x12;\n" +
 	"\vobserved_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"observedAt2\x81\x03\n" +
-	"\x0fPipelineService\x12_\n" +
-	"\x0fEnrolRepository\x12\".reliant.v1.EnrolRepositoryRequest\x1a#.reliant.v1.EnrolRepositoryResponse\"\x03\x90\x02\x02\x12Z\n" +
-	"\x0fSetPipelineMode\x12\".reliant.v1.SetPipelineModeRequest\x1a#.reliant.v1.SetPipelineModeResponse\x12b\n" +
+	"observedAt2\xb7\x04\n" +
+	"\x0fPipelineService\x12\xc1\x01\n" +
+	"\x0fEnrolRepository\x12\".reliant.v1.EnrolRepositoryRequest\x1a#.reliant.v1.EnrolRepositoryResponse\"e\xa2\xbb\x18^:\\\n" +
+	"\x05enrol\x12G\n" +
+	"\rpipeline_repo\x12\x16response.repository.id\x1a\x1eresponse.repository.repository*\n" +
+	"project_id\x90\x02\x02\x12\xac\x01\n" +
+	"\x0fSetPipelineMode\x12\".reliant.v1.SetPipelineModeRequest\x1a#.reliant.v1.SetPipelineModeResponse\"P\xa2\xbb\x18L:J\n" +
+	"\bset_mode\x128\n" +
+	"\rpipeline_repo\x12\arepo_id\x1a\x1eresponse.repository.repository*\x04mode\x12b\n" +
 	"\x10GetPipelineState\x12#.reliant.v1.GetPipelineStateRequest\x1a$.reliant.v1.GetPipelineStateResponse\"\x03\x90\x02\x01\x12M\n" +
 	"\tListQueue\x12\x1c.reliant.v1.ListQueueRequest\x1a\x1d.reliant.v1.ListQueueResponse\"\x03\x90\x02\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 

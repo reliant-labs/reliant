@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -35,9 +36,9 @@ func (f *fakePipeline) GetPipelineState(_ context.Context, req *connect.Request[
 
 func (f *fakePipeline) SetPipelineMode(_ context.Context, req *connect.Request[reliantv1.SetPipelineModeRequest]) (*connect.Response[reliantv1.SetPipelineModeResponse], error) {
 	f.setMode = req.Msg
-	updated := *f.repo //nolint:govet // a test copy of a proto message
+	updated := proto.CloneOf(f.repo)
 	updated.Mode, updated.Version = req.Msg.GetMode(), f.repo.GetVersion()+1
-	return connect.NewResponse(&reliantv1.SetPipelineModeResponse{Repository: &updated}), nil
+	return connect.NewResponse(&reliantv1.SetPipelineModeResponse{Repository: updated}), nil
 }
 
 func (f *fakePipeline) ListQueue(_ context.Context, req *connect.Request[reliantv1.ListQueueRequest]) (*connect.Response[reliantv1.ListQueueResponse], error) {

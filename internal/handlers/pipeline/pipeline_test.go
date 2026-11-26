@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/pipeline"
 	"github.com/reliant-labs/reliant/internal/orgs"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // These tests run the service over a real database: who may act is the
@@ -73,6 +75,8 @@ func newEnv(t *testing.T, enabled bool) *env {
 		"org-2": {strayID: orgs.RoleAdmin},
 	}}}
 	e.svc = pipeline.NewTestPipeline(t, pipeline.WithPipelineDeps(pipeline.Deps{
+		Logger:   testkit.DiscardLogger(),
+		Config:   &config.Config{},
 		Pipeline: &configv1.PipelineConfig{Enabled: enabled},
 		Store:    repo,
 		Now:      func() time.Time { return e.now },

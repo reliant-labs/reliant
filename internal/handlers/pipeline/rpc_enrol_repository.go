@@ -15,7 +15,7 @@ import (
 )
 
 // EnrolRepository enrols a repository of the project's organization, mode
-// off. The provider keys are the caller's own fresh GitHub access grant to
+// off. The caller owns the project and is an owner or admin of its org. The provider keys are the caller's own fresh GitHub access grant to
 // the repository (integration_event_access): the App installation id and the
 // repository's stable id, the same values every webhook delivery, and so
 // every pr_records row, carries. Re-enrolling under the same project
@@ -47,7 +47,9 @@ func (s *Service) EnrolRepository(
 	if err != nil && !errors.Is(err, svcerr.ErrNotFound) {
 		return nil, svcerr.Wrap(err)
 	}
-	if project == nil || !authz.CanReadProject(ctx, userID, project) {
+	// The project's owner enrols its repositories: a viewer of a shared
+	// project is answered as an outsider is.
+	if project == nil || !authz.CanWriteProject(ctx, userID, project) {
 		return nil, svcerr.Wrap(svcerr.NotFound("project"))
 	}
 	if project.OrgID == nil || *project.OrgID == "" {

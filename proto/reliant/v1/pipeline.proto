@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -33,11 +34,34 @@ service PipelineService {
   // repository another project enrolled is AlreadyExists.
   rpc EnrolRepository(EnrolRepositoryRequest) returns (EnrolRepositoryResponse) {
     option idempotency_level = IDEMPOTENT;
+    option (forge.v1.method) = {
+      activity: {
+        verb: "enrol"
+        target: {
+          kind: "pipeline_repo"
+          id: "response.repository.id"
+          label: "response.repository.repository"
+        }
+        detail: ["project_id"]
+      }
+    };
   }
 
   // SetPipelineMode sets an enrolled repository's mode, if it is still at
   // expected_version (Aborted otherwise: read it again and decide again).
-  rpc SetPipelineMode(SetPipelineModeRequest) returns (SetPipelineModeResponse);
+  rpc SetPipelineMode(SetPipelineModeRequest) returns (SetPipelineModeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_mode"
+        target: {
+          kind: "pipeline_repo"
+          id: "repo_id"
+          label: "response.repository.repository"
+        }
+        detail: ["mode"]
+      }
+    };
+  }
 
   // GetPipelineState returns an enrolled repository, how many of its pull
   // requests are in each pipeline state, its newest merge-queue batches and

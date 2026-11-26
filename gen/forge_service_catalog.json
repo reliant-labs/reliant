@@ -24578,7 +24578,11 @@
             "InputProtoFile": "reliant/v1/pipeline.proto",
             "OutputProtoFile": "reliant/v1/pipeline.proto",
             "Activity": {
-              "Mutating": true
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "enrol",
+              "TargetKind": "pipeline_repo",
+              "Writer": "INTERCEPTOR"
             }
           },
           {
@@ -24595,7 +24599,11 @@
             "InputProtoFile": "reliant/v1/pipeline.proto",
             "OutputProtoFile": "reliant/v1/pipeline.proto",
             "Activity": {
-              "Mutating": true
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_mode",
+              "TargetKind": "pipeline_repo",
+              "Writer": "INTERCEPTOR"
             }
           },
           {
