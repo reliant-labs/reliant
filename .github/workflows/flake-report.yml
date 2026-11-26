@@ -34,8 +34,9 @@
 #
 # Daily, `flake-sweep` closes each open `flake:suspected` issue whose test no
 # longer exists on main or has not flaked again for 7 days
-# (`scripts/flake-report.sh --sweep`). A later flake of the same test reopens
-# its issue rather than filing a second one.
+# (`forge test flakes --issues --stale-after 7d`, at the forge forge.yaml pins).
+# A later flake of the same test reopens its issue rather than filing a second
+# one.
 
 name: Flake report
 
@@ -91,7 +92,8 @@ jobs:
     steps:
       # main's tree is what "the test no longer exists" is judged against.
       - uses: actions/checkout@v6
+      - uses: ./.github/actions/setup
       - name: Close the issues whose test is gone or quiet for 7 days
         env:
           GH_TOKEN: ${{ github.token }}
-        run: scripts/flake-report.sh --sweep
+        run: scripts/forge.sh test flakes --issues --stale-after 7d

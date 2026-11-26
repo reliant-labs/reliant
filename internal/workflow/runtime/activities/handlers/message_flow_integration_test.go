@@ -13,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -330,7 +331,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 			},
 		}
 
-		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: repo, Rows: workspaceRowsOf(repo), ToolCalls: toolCallsOf(repo), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(repo.ORM())})
+		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(repo), Rows: workspaceRowsOf(repo), ToolCalls: toolCallsOf(repo), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(repo.ORM())})
 		env.RegisterActivity(executeActivity.Execute)
 
 		// Use tool_calls from SaveMessage output
@@ -695,7 +696,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 			},
 		}
 
-		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: repo, Rows: workspaceRowsOf(repo), ToolCalls: toolCallsOf(repo), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(repo.ORM())})
+		executeActivity := NewExecuteToolsActivity(ExecuteToolsDeps{Store: tools.WithChats(repo), Rows: workspaceRowsOf(repo), ToolCalls: toolCallsOf(repo), ToolExecutor: mockExecutor, Preemption: store.NewAgentMessageExtStore(repo.ORM())})
 		env.RegisterActivity(executeActivity.Execute)
 
 		executeInput := ExecuteToolsInput{

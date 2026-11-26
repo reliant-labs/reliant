@@ -2117,7 +2117,7 @@ func (e *InlineLoopExecutor) executeIteration(askUserHandoff *toolBatchHandoff, 
 							runningSteps = append(runningSteps, newRunning)
 							continue
 						}
-						e.logger.Warn("[InlineLoop] Sub-agent step failed; ending this agent and reporting to its parent",
+						logSubAgentEnd(e.logger, stepEvent.Error, "[InlineLoop] Sub-agent step failed; ending this agent and reporting to its parent",
 							"loopID", e.loopID,
 							"iteration", e.iteration,
 							"stepID", running.StepID,

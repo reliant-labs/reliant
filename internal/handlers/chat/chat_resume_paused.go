@@ -75,7 +75,7 @@ func (s *Service) resumePausedRun(
 	// Resume the run. The service signals a live execution, reset-replays a
 	// dead-but-replayable one, and refreshes the chat's run id when a reset
 	// minted a new one — and whichever run wakes gets the input update first.
-	before, known := workflow.StatusBeforeWake(ctx, workflow.FacadeWorkflows{Repo: s.deps.Repo}, workflowID)
+	before, known := workflow.StatusBeforeWake(ctx, s.deps.Workflows, workflowID)
 	outcome, err := s.runs.Resume(ctx, chat.ID, inputUpdate)
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		return outcome, err
@@ -128,7 +128,7 @@ func (s *Service) resumePausedRunForMessage(ctx context.Context, userID string, 
 	release := s.runs.LockRunControl(ctx, chat.ID)
 	defer release()
 
-	root, err := s.deps.Repo.GetWorkflow(ctx, chat.MainThreadID())
+	root, err := s.deps.Workflows.LoadWorkflow(ctx, chat.MainThreadID())
 	if err != nil || root == nil || root.Status != db.Paused() {
 		// Not paused, or unreadable: the doorbell the caller rings is the
 		// delivery, as it is for any live run.

@@ -2670,7 +2670,8 @@ message WorkflowConcurrency {
   // Waiting is what happens to firings that wait: fifo (the default) keeps
   // every one, in arrival order; latest keeps only the newest waiting firing
   // per key, and each older one it replaces is recorded skipped with the
-  // detail "superseded", never failed. Running runs are never touched.
+  // detail "superseded", never failed. Waiting never touches running runs;
+  // cancel_running does.
   WorkflowConcurrencyWaiting waiting = 2;
   // Key groups firings, a template over `trigger` like a webhook dedupe_key,
   // e.g. '{{ trigger.payload.attributes.repository }}'. Under waiting: latest
@@ -2694,6 +2695,24 @@ message WorkflowConcurrency {
   // does not hold back firings of other keys behind it. Alone (no max_running
   // or per_member), only the per-key cap applies.
   uint32 max_running_per_key = 6;
+  // CancelRunning lets a newer firing of a key stop the run that holds the
+  // key's slot, instead of waiting behind it. Requires key and
+  // max_running_per_key: 1, so the slot holds exactly one run to stop.
+  //
+  // on_new_key_event: every firing whose key renders cancels each launched run
+  // of its key that enrolled before it and still holds the slot.
+  // on_new_head: the same, but only when the firing carries a GitHub pull
+  // request head (payload.data.pull_request.head.sha) and the running run's
+  // firing carries a different one. A firing with no head (an issue comment, a
+  // schedule) never cancels, and neither does one against a run whose firing
+  // had no head: a head that did not move is no reason to stop.
+  //
+  // The cancel is the run lifecycle's own (the one a user's stop takes): the
+  // run is cancelled cooperatively, so its finally: runs, and its firing
+  // settles run_status cancelled with outcome_detail "superseded by event
+  // <id>". The new firing then takes the slot under waiting. Unset or never:
+  // running runs are never touched.
+  WorkflowConcurrencyCancelRunning cancel_running = 7;
 }
 
 // WorkflowConcurrencyWaiting is how a capacity-bound workflow treats waiting
@@ -2705,4 +2724,18 @@ enum WorkflowConcurrencyWaiting {
   WORKFLOW_CONCURRENCY_WAITING_FIFO = 1;
   // LATEST: a new firing supersedes the older waiting firings of its key.
   WORKFLOW_CONCURRENCY_WAITING_LATEST = 2;
+}
+
+// WorkflowConcurrencyCancelRunning is when a newer firing of a key cancels the
+// run holding the key's slot. In YAML: never, on_new_key_event or on_new_head.
+enum WorkflowConcurrencyCancelRunning {
+  // UNSPECIFIED is NEVER.
+  WORKFLOW_CONCURRENCY_CANCEL_RUNNING_UNSPECIFIED = 0;
+  // NEVER: running runs finish; newer firings wait.
+  WORKFLOW_CONCURRENCY_CANCEL_RUNNING_NEVER = 1;
+  // ON_NEW_KEY_EVENT: any newer firing of the key cancels the running run.
+  WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT = 2;
+  // ON_NEW_HEAD: a newer firing whose pull request head differs from the
+  // running run's firing cancels it.
+  WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_HEAD = 3;
 }

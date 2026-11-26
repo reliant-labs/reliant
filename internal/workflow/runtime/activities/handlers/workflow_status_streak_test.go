@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -125,7 +126,7 @@ func (f *streakFixture) report(chatID, status string, launchRun bool) (bool, str
 	}
 	var out WorkflowStatusOutput
 	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
-	chat, err := f.h.Repo().GetChat(ctx, chatID)
+	chat, err := store.GetChat(ctx, f.h.Repo().ORM(), chatID)
 	require.NoError(f.t, err)
 	reason := ""
 	updates, err := f.h.Repo().GetUserUpdatesSince(ctx, f.userID, 0, 200)

@@ -66,7 +66,7 @@ func TestChatSnapshot_UpdateHeadsDoNotHoldUpTheTranscript(t *testing.T) {
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	fixture := dbtest.SeedToolCall(t, ctx, repo, `{"command":"ls"}`)
-	chat, err := repo.GetChat(ctx, fixture.ChatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fixture.ChatID)
 	require.NoError(t, err)
 	chat.WorkflowID = &fixture.ThreadID
 	require.NoError(t, repo.UpdateChat(ctx, chat))

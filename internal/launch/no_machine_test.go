@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -32,7 +33,7 @@ func TestLaunchNoMachineRecordsItOnTheChat(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	assert.True(t, chat.NoMachine)
 	assert.Nil(t, chat.ActiveDaemonID)
@@ -232,11 +233,11 @@ func TestAutomationPrecedenceSurvivesTriggerDeletion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	chat, err := repo.GetChat(ctx, result.Chat.ID)
+	chat, err := store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	assert.True(t, AutomationPrecedence(chat))
 	require.NoError(t, repo.DeleteTrigger(ctx, triggerID))
-	chat, err = repo.GetChat(ctx, result.Chat.ID)
+	chat, err = store.GetChat(ctx, repo.ORM(), result.Chat.ID)
 	require.NoError(t, err)
 	require.Nil(t, chat.TriggerID, "deleting the trigger clears the chat's trigger id")
 	assert.True(t, AutomationPrecedence(chat), "and leaves the run an automation")

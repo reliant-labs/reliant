@@ -1286,7 +1286,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 							runningSteps = append(runningSteps, newRunning)
 							continue
 						}
-						e.logger.Warn("[InlineWorkflow] Sub-agent step failed; ending this agent and reporting to its parent",
+						logSubAgentEnd(e.logger, stepEvent.Error, "[InlineWorkflow] Sub-agent step failed; ending this agent and reporting to its parent",
 							"nodeID", e.nodeID,
 							"subWorkflow", e.subWorkflowName,
 							"stepID", running.StepID,
