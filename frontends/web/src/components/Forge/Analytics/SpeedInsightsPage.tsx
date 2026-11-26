@@ -26,7 +26,7 @@ import { Gauge } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
-import PageHeader from "@/components/forge-ui/page_header";
+import { ConsolePageHeader } from "../Console/severalSectionContext";
 import Status from "@/components/forge-ui/status";
 import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
 import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
@@ -126,7 +126,7 @@ export function SpeedInsightsPage() {
 
   return (
     <Page testId="console-speed-insights">
-      <PageHeader
+      <ConsolePageHeader
         density="compact"
         className="mb-0"
         title="Speed insights"

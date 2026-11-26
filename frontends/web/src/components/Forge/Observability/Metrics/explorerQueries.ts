@@ -11,7 +11,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { keepPreviousInOrgSegment } from "@/lib/orgScope";
 
-import { metricKeys, obsKeys, useObsReadApi } from "@/hooks/observability-queries";
+import { metricKeys, obsKeys } from "@/hooks/observability-queries";
 import { useDebounce } from "@/hooks/useDebounce";
 import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
@@ -49,7 +49,7 @@ export interface ExplorerPanelOptions {
  * and `isPlaceholderData` says it is stale.
  */
 export function useExplorerPanelQuery(scope: ObsScope | null, range: RangePreset, panel: Panel | null, options: ExplorerPanelOptions) {
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   return useQuery({
     queryKey: obsKeys.panel(scope, range, panel ?? EMPTY_PANEL, [], [], options.offsetKey ?? ""),
     queryFn: ({ signal }) => {

@@ -40,7 +40,7 @@ func saveTestSetup(t *testing.T) (context.Context, *db.Repo, *Service, string) {
 		ID: projectID, UserID: "test-user", Name: "Save Validation Project",
 		Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
-	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM())})), projectID
+	return ctx, repo, NewTestWorkflow(t, WithWorkflowDeps(Deps{Repo: repo, Triggers: &MockTriggers{}, Drafts: workflowdraftstest.New(t, repo), Projects: projectaccesstest.For(repo), Pools: store.NewMachinePoolExtStore(repo.ORM())})), projectID
 }
 
 func mustParse(t *testing.T, src string) *reliantv1.Workflow {

@@ -74,8 +74,8 @@ func newTerminatedRunFixture(t *testing.T) (continueFixture, *reconciliation.Rec
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
 	f.temporal.status = enums.WORKFLOW_EXECUTION_STATUS_TERMINATED
 
-	rec := reconciliation.New(reconciliation.Deps{Store: f.repo, RunEvents: runevents.NewStore(f.repo.ORM()), Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Daemons: store.NewDaemonExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: terminatedRunTemporal{f.temporal}, Config: reconciliation.DefaultConfig(), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.repo.ORM()), Announcer: f.repo}), Orphans: store.NewAgentMessageExtStore(f.repo.ORM())})
-	rec.SetQueuedDelivery(queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal}))
+	rec := reconciliation.New(reconciliation.Deps{Store: f.repo, RunEvents: runevents.NewStore(f.repo.ORM()), Chats: store.NewChatsWithActivityExtStore(f.repo.ORM()), ToolCalls: store.NewToolCallExtStore(f.repo.ORM()), Workflows: store.NewWorkflowExtStore(f.repo.ORM()), Daemons: store.NewDaemonExtStore(f.repo.ORM()), Questions: store.NewQuestionExtStore(f.repo.ORM()), Temporal: terminatedRunTemporal{f.temporal}, Config: reconciliation.DefaultConfig(), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(f.repo.ORM()), Announcer: f.repo.UpdateWriter()}), Orphans: store.NewAgentMessageExtStore(f.repo.ORM())})
+	rec.SetQueuedDelivery(queueddelivery.New(queueddelivery.Deps{Store: store.NewChatExtStore(f.repo.ORM()), Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal}))
 	return f, rec
 }
 

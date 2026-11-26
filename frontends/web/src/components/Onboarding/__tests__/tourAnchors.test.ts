@@ -66,7 +66,18 @@ const NAV_TOUR = new RegExp(`(?<![\\w-])tour\\s*:\\s*(${VALUE})`, "g");
  * signed-in tour both point at (demo DI phase 3). Pinned here before any
  * journey names them, so a rename fails now, not when a tour lands on it.
  */
-const SHELL_NAV_ANCHORS = ["forge-console-nav", "nav-drill-in", "nav-overview", "nav-observability", "nav-deployments", "nav-tests", "nav-security", "nav-configure"];
+const SHELL_NAV_ANCHORS = [
+  "forge-console-nav",
+  "nav-drill-in",
+  "nav-overview",
+  "nav-observability",
+  "nav-analytics",
+  "nav-deployments",
+  "nav-tests",
+  "nav-data",
+  "nav-security",
+  "nav-configure",
+];
 
 /** For each anchor attribute, every value a non-test source line sets it to. */
 const SET_VALUES: Record<string, string[]> = (() => {
@@ -142,7 +153,7 @@ describe("tour anchors", () => {
     expect(where).toContain("wf-outro-layout");
     expect(where).toContain("fg-console");
     // The forge journey's shell steps, over the shell nav's anchors.
-    for (const id of ["fg-nav", "fg-deployments", "fg-tests", "fg-security", "fg-configure"]) expect(where).toContain(id);
+    for (const id of ["fg-nav", "fg-deployments", "fg-analytics", "fg-tests", "fg-data", "fg-security", "fg-configure"]) expect(where).toContain(id);
     expect(where).toContain("tip");
     expect(where).toContain("demo-tip");
     expect(ANCHORS.length).toBeGreaterThan(20);

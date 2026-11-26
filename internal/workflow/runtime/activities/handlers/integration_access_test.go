@@ -142,7 +142,7 @@ func TestUnusableIntegrationsAreWithheldByTheResolver(t *testing.T) {
 	}
 
 	everything := map[string]bool{
-		"github": true, "slack": true, "gmail": true, "twilio": true, "sentry": true,
+		"github": true, "slack": true, "gmail": true, "twilio": true, "sentry": true, "growth": true,
 		"google_calendar": true, "google_sheets": true,
 	}
 	caps := resolve(tools.ToolAccess{LoadableAll: true, Preloaded: []string{"github__issue_get", tools.ToolFetch}}, everything)

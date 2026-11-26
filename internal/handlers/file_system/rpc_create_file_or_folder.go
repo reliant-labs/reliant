@@ -34,7 +34,7 @@ func (s *Service) CreateFileOrFolder(
 			"path": resolvedPath,
 		}
 		var cmdResp struct{}
-		if err := s.sendCommand(ctx, userID, scope.target, "fs.mkdir", cmdReq, &cmdResp, 30000); err != nil {
+		if err := s.sendCommand(ctx, userID, scope.target, "fs.mkdir", cmdReq, &cmdResp, fsCommandTimeoutMs); err != nil {
 			return nil, err
 		}
 	} else {
@@ -47,7 +47,7 @@ func (s *Service) CreateFileOrFolder(
 			BytesWritten int    `json:"bytes_written"`
 			ModTime      string `json:"mod_time"`
 		}
-		if err := s.sendCommand(ctx, userID, scope.target, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
+		if err := s.sendCommand(ctx, userID, scope.target, "fs.write_file", cmdReq, &cmdResp, fsCommandTimeoutMs); err != nil {
 			return nil, err
 		}
 	}

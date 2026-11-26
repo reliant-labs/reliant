@@ -656,6 +656,21 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"gmail__draft_create": {
+		Bindable: map[string]struct{}{
+			"bcc":         {},
+			"cc":          {},
+			"connection":  {},
+			"html":        {},
+			"in_reply_to": {},
+			"references":  {},
+			"subject":     {},
+			"text":        {},
+			"thread_id":   {},
+			"to":          {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"gmail__label_list": {
 		Bindable: map[string]struct{}{
 			"connection": {},
@@ -837,6 +852,34 @@ var generatedToolParams = map[string]ToolParams{
 			"spreadsheet_id":     {},
 			"value_input_option": {},
 			"values":             {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"growth__agent_run_create": {
+		Bindable: map[string]struct{}{
+			"connection":     {},
+			"ended_at":       {},
+			"output_summary": {},
+			"reason":         {},
+			"run_link":       {},
+			"started_at":     {},
+			"status":         {},
+			"workflow":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"growth__agent_run_list": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"page_size":  {},
+			"page_token": {},
+			"search":     {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"growth__inbox_status": {
+		Bindable: map[string]struct{}{
+			"connection": {},
 		},
 		Unbindable: map[string]string{},
 	},

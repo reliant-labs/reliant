@@ -1138,6 +1138,27 @@ func toFSFileNodes(nodes []*filetree.Node) []*fsFileNode {
 	return out
 }
 
+// maxTreeReplyReserve caps how much of a request's remaining time the walk
+// leaves for the reply: marshalling, the gateway stream, NATS, the API's
+// conversion and the browser's download of a tree that can hold
+// filetree.MaxTreeNodes nodes.
+const maxTreeReplyReserve = 2 * time.Second
+
+// treeWalkDeadline is when fs.get_tree stops walking: a fifth of the time the
+// request has left before its deadline (at most maxTreeReplyReserve) is kept
+// for the reply, so a partial tree arrives before the caller gives up rather
+// than a whole one after (filetree.Options.Deadline). handleDaemonCommand
+// bounds ctx by the command's budget, which the router has already cut to the
+// RPC's own deadline. Zero, meaning no deadline, when ctx has none.
+func treeWalkDeadline(ctx context.Context, now time.Time) time.Time {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return time.Time{}
+	}
+	reserve := min(max(deadline.Sub(now), 0)/5, maxTreeReplyReserve)
+	return deadline.Add(-reserve)
+}
+
 func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsGetTreeRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
@@ -1183,6 +1204,7 @@ func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 		Root:       basePath,
 		ShowHidden: req.ShowHidden,
 		Depth:      req.Depth,
+		Deadline:   treeWalkDeadline(ctx, time.Now()),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("read dir %s: %w", basePath, err)

@@ -65,7 +65,8 @@
 #              electron tests when electron/ changed; deeper dependents of a
 #              hub run in the release gate (MG_REACH=all for all). A change the rules cannot
 #              scope (go.mod, package.json, config) runs its whole Go and
-#              electron lane; a full web fallback runs tsc here, the vitest
+#              electron lane (a forge pin move alone selects by the forge
+#              packages it changes: dev-docs/testing-affected.md); a full web fallback runs tsc here, the vitest
 #              files the diff's own web modules reach (-web-full reached), and
 #              the whole vitest suite in the release gate. A Go
 #              test this change adds or edits that runs over the per-test budget
@@ -529,7 +530,9 @@ fi
 # change. `go build ./...` also linked every main package of the module (the
 # server, the CLI, a dozen generators): 41s with every package already
 # compiled, against 6s for this; the link check runs in the release gate's
-# build. A full Go lane (a pin moved) compiles ./... . go list -export compiles
+# build. A full Go lane (a pin moved) compiles ./... ; a forge pin move alone
+# is in go.build as every package whose build contains a changed forge
+# package (tools/test-affected/forgepin.go). go list -export compiles
 # each package for its export data and exits non-zero naming any that does not
 # compile, main packages included.
 build_check() {
