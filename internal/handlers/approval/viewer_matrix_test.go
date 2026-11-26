@@ -15,6 +15,6 @@ func TestApprovalServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM())}))
+	svc := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Approvals: store.NewApprovalExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM())}))
 	viewertest.RunService(t, f, svc, "reliant.v1.ApprovalService", nil)
 }

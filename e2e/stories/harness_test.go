@@ -456,11 +456,12 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	})
 	require.NoError(t, err, "question service")
 	approvalSvc, err := approval.New(approval.Deps{
-		Logger:  slog.Default(),
-		Config:  &typedconfig.Config{},
-		Repo:    s.Repo,
-		Chats:   store.NewChatExtStore(s.Repo.ORM()),
-		Signals: pause,
+		Logger:    slog.Default(),
+		Config:    &typedconfig.Config{},
+		Repo:      s.Repo,
+		Approvals: store.NewApprovalExtStore(s.Repo.ORM()),
+		Chats:     store.NewChatExtStore(s.Repo.ORM()),
+		Signals:   pause,
 	})
 	require.NoError(t, err, "approval service")
 	triggerSyncer, triggerFires := trigger.TemporalBackend(s.Temporal, triggers.NewStores(s.Repo), taskQueue, nil)

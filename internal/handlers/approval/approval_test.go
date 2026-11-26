@@ -52,7 +52,7 @@ func setupTestApprovalService(t *testing.T) (*Service, *db.Repo) {
 
 	repo := db.NewTestRepo(t)
 	// The harness stubs Signals: these tests resolve approvals no run waits on.
-	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM())}))
+	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Approvals: store.NewApprovalExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM())}))
 	return service, repo
 }
 
@@ -64,7 +64,7 @@ func setupTestApprovalServiceWithMockClient(t *testing.T) (*Service, *db.Repo, *
 	repo := db.NewTestRepo(t)
 	mockClient := &mockTemporalSignalClient{}
 	pauseService := workflowpkg.NewPauseService(workflowpkg.PauseServiceDeps{Temporal: mockClient, Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())})
-	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Signals: pauseService}))
+	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Approvals: store.NewApprovalExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM()), Signals: pauseService}))
 	return service, repo, mockClient
 }
 

@@ -70,7 +70,7 @@ func setupProposalService(t *testing.T) (*Service, *db.Repo, *mockTemporalSignal
 	t.Helper()
 	repo := db.NewTestRepo(t)
 	mockClient := &mockTemporalSignalClient{}
-	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Signals: workflowpkg.NewPauseService(workflowpkg.PauseServiceDeps{Temporal: mockClient, Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())}), Connections: proposalConnections()}))
+	service := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Approvals: store.NewApprovalExtStore(repo.ORM()), Chats: store.NewChatExtStore(repo.ORM()), Signals: workflowpkg.NewPauseService(workflowpkg.PauseServiceDeps{Temporal: mockClient, Store: repo, Workflows: store.NewWorkflowExtStore(repo.ORM())}), Connections: proposalConnections()}))
 	return service, repo, mockClient
 }
 
