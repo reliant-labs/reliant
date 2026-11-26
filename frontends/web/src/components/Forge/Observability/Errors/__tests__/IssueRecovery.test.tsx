@@ -8,7 +8,8 @@ import { describe, expect, it, vi } from "vitest";
 import { issueKeys } from "@/hooks/observability-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { quotaPausedError } from "@/services/controlPlane/observability/quota";
 import { createFixtureApi } from "../../__fixtures__/fixtureApi";
 import { ObsQuotaBanner } from "../../ObsStates";
@@ -22,12 +23,12 @@ function rig(api: ObservabilityApi) {
   client.setDefaultOptions({ queries: { ...client.getDefaultOptions().queries, gcTime: Infinity } });
   render(
     <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={api}>
+      <ObservabilityFixtures api={api}>
         <ObsQuotaProvider>
           <ObsQuotaBanner />
           <IssueDetail issueId="iss-orders-deadline" scope={{ orgId: "org-fixture", envIds: ["env-prod"], filters: [] }} subject="production" range="1h" navigate={vi.fn()} onBack={vi.fn()} />
         </ObsQuotaProvider>
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>
   );
   return client;

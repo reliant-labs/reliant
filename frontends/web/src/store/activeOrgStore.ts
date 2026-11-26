@@ -245,6 +245,9 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // profiles, signals, filter values, metrics, workloads, release health and
   // each frontend's replay switch, every one scoped by its request's org.
   "controlplane.v1.ObservabilityService",
+  // IssuesService's reads on generated keys: the inbox (scoped by its
+  // request's org), an issue, its events and its timeline.
+  "controlplane.v1.IssuesService",
   // The machine → org map (services/controlPlane/machineOrgs.ts).
   "controlPlane",
   "orgs-members",

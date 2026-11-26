@@ -16,7 +16,6 @@ import Button from "@/components/forge-ui/button";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
 import { useIssue, useIssueEvents, useIssueTimeline } from "@/hooks/observability-queries";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue, IssueDetail as IssueDetailModel, IssueEvent, IssueFrame, IssueVersionBreakdown } from "@/services/controlPlane/observability/issuesTypes";
@@ -158,9 +157,8 @@ function IssueBody({
   const { issue } = detail;
   const now = Date.now();
   // Captured at render: the chat's first send happens after this view has unmounted.
-  const api = useObservabilityApi();
   const queryClient = useQueryClient();
-  const onChatCreated = useMemo(() => linkChatToIssue(api, queryClient, issue.id), [api, queryClient, issue.id]);
+  const onChatCreated = useMemo(() => linkChatToIssue(queryClient, issue.id), [queryClient, issue.id]);
   const askSubject = useMemo(() => issueAskSubject(issue, detail), [issue, detail]);
   // The timeline the Discussion reads (one query): a chat already started from this issue leads.
   const timeline = useIssueTimeline(issue.id);
