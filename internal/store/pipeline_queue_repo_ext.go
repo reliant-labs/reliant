@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -363,6 +364,30 @@ func MarkQueueBatchLanded(ctx context.Context, db orm.Context, id, landedSHA str
 	}
 	if out == nil {
 		return nil, fmt.Errorf("batch %s is not passed, holds no entry, or holds an entry that has not landed: %w", id, core.ErrPipelineVersionConflict)
+	}
+	return out, nil
+}
+
+// PatchQueueBatchVerdict merges patch, a JSON object, into the batch's
+// verdict_json at the top level (jsonb ||: patch's keys replace the stored
+// ones of the same name, every other key is kept), in whatever state the
+// batch is. It is how the lander and the display record what they did
+// (`unenforced`, `landing`, `integrity`, `display`) beside the scheduler's
+// verdict without rewriting it. A batch that does not exist is
+// core.ErrPipelineVersionConflict.
+func PatchQueueBatchVerdict(ctx context.Context, db orm.Context, id string, patch json.RawMessage) (*core.QueueBatch, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(patch, &obj); err != nil || obj == nil {
+		return nil, fmt.Errorf("patch batch %s verdict: the patch must be a JSON object", id)
+	}
+	out, err := scanQueueBatch(ctx, db.Bun().NewRaw(`UPDATE queue_batches
+		SET verdict_json = COALESCE(verdict_json, '{}'::jsonb) || ?::jsonb, updated_at = now()
+		WHERE id = ? RETURNING `+queueBatchColumns, string(patch), id))
+	if err != nil {
+		return nil, fmt.Errorf("patch batch %s verdict: %w", id, err)
+	}
+	if out == nil {
+		return nil, fmt.Errorf("batch %s: %w", id, core.ErrPipelineVersionConflict)
 	}
 	return out, nil
 }
