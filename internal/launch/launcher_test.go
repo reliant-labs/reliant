@@ -833,6 +833,25 @@ func TestLoadChatTriggerReturnsTheLaunchEvent(t *testing.T) {
 	assert.Equal(t, "chat.start", legacy.Kind, "a chat with no event reads as an interactive start")
 }
 
+func TestPinnedLaunchTriggerInfoUsesOnlyTheMatchingSnapshot(t *testing.T) {
+	const path = "control-plane/.reliant/workflows/rc-train.yaml"
+	const hash = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+	row := &core.TriggerEvent{Kind: core.TriggerEventKindSchedule, Definition: &core.TriggerEventDefinition{
+		Path: path, Source: "project", ContentHash: hash, CatalogPin: "recorded-pin",
+	}}
+	for _, pin := range []string{"", "a-later-pin"} {
+		assert.Nil(t, pinnedLaunchTriggerInfo(row, pin).LaunchDefinition)
+	}
+	got := pinnedLaunchTriggerInfo(row, "recorded-pin")
+	require.NotNil(t, got.LaunchDefinition)
+	assert.Equal(t, path, got.LaunchDefinition.Path)
+	assert.Equal(t, hash, got.LaunchDefinition.ContentHash)
+	assert.Nil(t, TriggerInfoFromEvent(row).LaunchDefinition, "a later chat turn must not inherit the original definition")
+	row.Definition.ContentHash = "not-a-sha256"
+	assert.Nil(t, pinnedLaunchTriggerInfo(row, "recorded-pin").LaunchDefinition)
+	assert.Equal(t, hash, got.LaunchDefinition.ContentHash, "the serialized launch has a copy, not a mutable pointer to the event")
+}
+
 // A pinned daemon has to reach BOTH the chat row (so later sends keep using
 // it) and the run's inputs (which the runtime turns into its daemon selector).
 func TestLaunchPinsSpecDaemonOnNewChat(t *testing.T) {

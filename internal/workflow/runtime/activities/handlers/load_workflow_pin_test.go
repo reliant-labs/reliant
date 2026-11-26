@@ -40,9 +40,9 @@ func TestLoadWorkflowActivity_PinnedRunLoadsTheCatalogItStartedWith(t *testing.T
 		CreatedAt: now, UpdatedAt: now, LastActive: now,
 	}))
 
-	push := func(daemonID string, at time.Time, version string) {
+	push := func(daemonID string, at time.Time, version string) string {
 		t.Helper()
-		release := "name: release\ndescription: " + version + "\napiVersion: v2\nentry: [s]\nnodes:\n  - id: s\n    type: workflow\n    ref: step\n    presets: {agent: impl}\n"
+		release := "# original author comment, absent from re-marshaled YAML\nname: release\ndescription: " + version + "\napiVersion: v2\nentry: [s]\nnodes:\n  - id: s\n    type: workflow\n    ref: step\n    presets: {agent: impl}\n"
 		step := "name: step\ndescription: " + version + "\napiVersion: v2\nentry: [x]\nnodes:\n  - id: x\n    type: save_message\n    args: {role: assistant, content: hi}\n"
 		wj, err := config.EncodeCatalogJSON([]config.StoredWorkflow{
 			{Slug: "release", Name: "release", RelativePath: ".reliant/workflows/release.yaml", YAMLContent: release},
@@ -60,8 +60,9 @@ func TestLoadWorkflowActivity_PinnedRunLoadsTheCatalogItStartedWith(t *testing.T
 		}, true, nil)
 
 		require.NoError(t, err)
+		return release
 	}
-	push(cicd, now.Add(-time.Hour), "cicd-v1")
+	original := push(cicd, now.Add(-time.Hour), "cicd-v1")
 	push(laptop, now.Add(-time.Minute), "laptop")
 
 	chatID := "chat-" + uuid.NewString()
@@ -76,6 +77,10 @@ func TestLoadWorkflowActivity_PinnedRunLoadsTheCatalogItStartedWith(t *testing.T
 	require.NoError(t, err)
 	require.NotEmpty(t, root.CatalogPin, "a root load pins its catalog")
 	assert.Contains(t, string(root.YAML), "description: cicd-v1")
+	require.NotNil(t, root.ProjectDefinition)
+	assert.Equal(t, ".reliant/workflows/release.yaml", root.ProjectDefinition.Path)
+	assert.Equal(t, config.DefinitionHash([]byte(original)), root.ProjectDefinition.ContentHash)
+	assert.NotEqual(t, config.DefinitionHash(root.YAML), root.ProjectDefinition.ContentHash, "do not hash the re-marshaled YAML")
 	again, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "release"})
 	require.NoError(t, err)
 	assert.Equal(t, root.CatalogPin, again.CatalogPin, "an unchanged catalog shares its pin")
@@ -107,6 +112,10 @@ func TestLoadWorkflowActivity_PinnedRunLoadsTheCatalogItStartedWith(t *testing.T
 	require.NoError(t, err)
 	assert.Contains(t, string(fresh.YAML), "description: cicd-v2", "a new run starts from the current catalog")
 	assert.NotEqual(t, root.CatalogPin, fresh.CatalogPin)
+	assert.NotEqual(t, root.ProjectDefinition, fresh.ProjectDefinition)
+	pinned, err := activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "release", CatalogPin: root.CatalogPin})
+	require.NoError(t, err)
+	assert.Equal(t, root.ProjectDefinition, pinned.ProjectDefinition, "the later sync cannot change the loaded definition evidence")
 
 	_, err = activity.Execute(ctx, LoadWorkflowInput{ChatID: chatID, WorkflowName: "step", CatalogPin: "0000unknown"})
 	require.Error(t, err, "a pin that is gone fails closed")

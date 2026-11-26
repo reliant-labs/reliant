@@ -73,5 +73,27 @@ func TestActivationRunsTheProjectWorkflowAndShowsWhere(t *testing.T) {
 	src = one.Msg.GetTrigger().GetDefinitionSource()
 	require.NotNil(t, src)
 	assert.Empty(t, src.GetDaemonId())
+	assert.Equal(t, config.DefinitionHash([]byte(projectYAML)), src.GetContentHash())
 	assert.Contains(t, strings.Join(src.GetWarnings(), "\n"), "has never synced this project")
+
+	// Advance the union from a different machine, without moving the one
+	// configured for the original activation. Compare raw source, including
+	// a trailing newline that does not change the parsed workflow.
+	freshYAML := projectYAML + "\n"
+	wj, err = config.EncodeCatalogJSON([]config.StoredWorkflow{{Slug: "triage", Name: "triage", RelativePath: path, YAMLContent: freshYAML}})
+	require.NoError(t, err)
+	_, err = env.repo.SyncProjectConfigSnapshot(ctx, &db.ProjectConfigRecord{
+		ProjectID: env.projectID, DaemonID: fresh, ProjectWorkflowsJSON: wj, PushedAt: time.Now().UTC().Add(time.Second),
+	}, true, nil)
+	require.NoError(t, err)
+	for _, activation := range []struct{ id, machine, hash string }{
+		{got.GetId(), env.daemonID, config.DefinitionHash([]byte(projectYAML))},
+		{other.GetId(), fresh, config.DefinitionHash([]byte(freshYAML))},
+	} {
+		resp, err := env.svc.GetTrigger(env.ctx, connect.NewRequest(&reliantv1.GetTriggerRequest{Id: activation.id}))
+		require.NoError(t, err)
+		src := resp.Msg.GetTrigger().GetDefinitionSource()
+		assert.Equal(t, activation.machine, src.GetDaemonId())
+		assert.Equal(t, activation.hash, src.GetContentHash())
+	}
 }

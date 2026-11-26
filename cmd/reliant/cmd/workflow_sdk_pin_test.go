@@ -274,6 +274,21 @@ func TestTriggerReadCommandsOutput(t *testing.T) {
 	assert.Contains(t, stdout, "  reliant trigger events trigger-2\n")
 }
 
+func TestTriggerListJSONShowsConfiguredDefinition(t *testing.T) {
+	h, trig := newTriggerHarness(t)
+	const path = "control-plane/.reliant/workflows/rc-train.yaml"
+	hash := strings.Repeat("a", 64)
+	trig.triggers[0].DefinitionSource = &reliantv1.TriggerDefinitionSource{
+		Kind: "project", Path: path, DaemonId: "cicd-id", ContentHash: hash,
+	}
+	stdout, stderr, err := h.run(t, "", "trigger", "list", "--all", "--json")
+	require.NoError(t, err, stderr)
+	assert.Contains(t, stdout, `"definition_source"`)
+	assert.Contains(t, stdout, `"content_hash"`)
+	assert.Contains(t, stdout, path)
+	assert.Contains(t, stdout, hash)
+}
+
 func TestTriggerLookupFailuresKeepTheirWording(t *testing.T) {
 	h, trig := newTriggerHarness(t)
 

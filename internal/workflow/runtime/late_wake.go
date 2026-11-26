@@ -5,6 +5,8 @@ import (
 	"maps"
 
 	"go.temporal.io/sdk/workflow"
+
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 )
 
 // A user message that reaches a thread while its run is finishing must never
@@ -175,6 +177,13 @@ func lateWakeSuccessorInput(input WorkflowInput) WorkflowInput {
 	inputs := maps.Clone(input.Inputs)
 	delete(inputs, InputKeyLaunchRun)
 	DropActingIdentity(inputs)
+	trigger := input.Trigger
+	if trigger != nil && trigger.LaunchDefinition != nil {
+		copy := *trigger
+		copy.LaunchDefinition = nil
+		trigger = &copy
+		inputs[wfcel.TriggerInputKey] = copy.CELValue()
+	}
 	// A fresh run loads the definitions as they are now: it pins anew. A
 	// successor that continues the tree (stoppedAgentsSuccessorInput) keeps
 	// the pin through its ResumeInput.
@@ -188,7 +197,7 @@ func lateWakeSuccessorInput(input WorkflowInput) WorkflowInput {
 		WorkflowName: input.WorkflowName,
 		Inputs:       inputs,
 		ExecContext:  execCtx,
-		Trigger:      input.Trigger,
+		Trigger:      trigger,
 	}
 }
 
