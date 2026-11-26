@@ -321,6 +321,12 @@ const (
 	MaxAssetBytes       int64 = 25 << 20
 	MaxCopiedAssetBytes int64 = 64 << 20
 	MaxOrgAssetBytes    int64 = 2 << 30
+
+	// AssetUploadTTL is the longest an upload's presigned PUT stays valid.
+	// A PENDING asset counts against the quota, and can be confirmed, until
+	// AssetUploadTTL plus a few minutes' grace after its creation; then it
+	// has expired, and the org's next upload or confirm deletes it.
+	AssetUploadTTL = 15 * time.Minute
 )
 
 // ListStrategiesInput is the input to Service.ListStrategies.
@@ -463,6 +469,11 @@ type GetAssetDownloadInput struct {
 	AssetID string
 }
 
+// DeleteAssetInput is the input to Service.DeleteAsset.
+type DeleteAssetInput struct {
+	AssetID string
+}
+
 // AttachFromAttachmentInput is the input to Service.AttachFromAttachment:
 // a chat attachment of the actor's, and exactly one of ItemID and
 // CampaignID.
@@ -593,6 +604,9 @@ type PresignedRequest struct {
 type PutOptions struct {
 	ContentType string
 	Size        int64
+	// TTL, for PresignPut, is the longest the URL may stay valid: its
+	// ExpiresAt is at most now + TTL. Put ignores it.
+	TTL time.Duration
 }
 
 // GetOptions shape a presigned read: inline (shown in the browser) or an

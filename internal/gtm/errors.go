@@ -100,6 +100,10 @@ var (
 	// (AlreadyExists).
 	ErrChannelExists = svcerr.AlreadyExists("a channel with this key already exists")
 
+	// ErrTooManyChannels is a channel past MaxChannels for the org
+	// (ResourceExhausted).
+	ErrTooManyChannels = svcerr.ResourceExhausted("the org has the most channels allowed")
+
 	// ErrChannelNotSendable is a send of an item whose channel is not an
 	// ACTIVE, INTEGRATED gmail channel (FailedPrecondition).
 	ErrChannelNotSendable = svcerr.FailedPrecondition("the item's channel cannot send email: it must be an active, integrated gmail channel")
@@ -131,6 +135,11 @@ var (
 	// ErrAssetNotUploaded is a confirm before the bytes were PUT
 	// (FailedPrecondition); the asset stays PENDING.
 	ErrAssetNotUploaded = svcerr.FailedPrecondition("the file has not been uploaded yet")
+
+	// ErrAssetUploadExpired is a confirm of a PENDING asset past its upload
+	// window (FailedPrecondition); the asset is deleted, and the upload
+	// starts again with CreateAssetUpload.
+	ErrAssetUploadExpired = svcerr.FailedPrecondition("the upload expired; start it again")
 
 	// ErrAssetNotReady is a download of an asset that is not READY
 	// (FailedPrecondition).

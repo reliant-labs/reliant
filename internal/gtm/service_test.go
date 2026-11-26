@@ -80,6 +80,7 @@ func newFixture(t *testing.T) *fixture {
 			return ConnectionConnected, nil
 		}},
 	}
+	f.blobs.now = func() time.Time { return f.now }
 	f.svc = New(Deps{
 		Store:       f.store,
 		Gate:        allowGate(orgA, orgB),

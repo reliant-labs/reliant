@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -186,10 +187,11 @@ func (f *fakeStore) GetAsset(_ context.Context, orgID, id string) (*store.GtmAss
 	return &c, nil
 }
 
-func (f *fakeStore) SumAssetBytes(_ context.Context, orgID string) (int64, error) {
+func (f *fakeStore) SumAssetBytes(_ context.Context, orgID string, pendingAfter time.Time) (int64, error) {
 	var n int64
 	for _, r := range f.r2().assets {
-		if r.OrgID == orgID && r.SizeBytes != nil {
+		live := r.Status != string(AssetPending) || r.CreatedAt.After(pendingAfter)
+		if r.OrgID == orgID && r.SizeBytes != nil && live {
 			n += *r.SizeBytes
 		}
 	}
@@ -205,13 +207,37 @@ func (f *fakeStore) CreateAsset(_ context.Context, row *store.GtmAsset) error {
 	return nil
 }
 
-func (f *fakeStore) MarkAssetReady(_ context.Context, orgID, id, contentType string, size int64, sum string) error {
+func (f *fakeStore) ListExpiredAssets(_ context.Context, orgID string, createdBefore time.Time, limit int) ([]*store.GtmAsset, error) {
+	var out []*store.GtmAsset
+	for _, r := range f.r2().assets {
+		if r.OrgID == orgID && r.Status == string(AssetPending) && !r.CreatedAt.After(createdBefore) {
+			c := *r
+			out = append(out, &c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
+	}
+	return out, nil
+}
+
+func (f *fakeStore) MarkAssetReady(_ context.Context, orgID, id, contentType string, size int64, sum string, createdAfter time.Time) error {
 	r, ok := f.r2().assets[id]
-	if !ok || r.OrgID != orgID || r.Status != string(AssetPending) {
+	if !ok || r.OrgID != orgID || r.Status != string(AssetPending) || !r.CreatedAt.After(createdAfter) {
 		return ErrAssetNotPending
 	}
 	r.Status, r.ContentType, r.SizeBytes, r.Sha256 = string(AssetReady), contentType, &size, &sum
 	return nil
+}
+
+func (f *fakeStore) DeletePendingAsset(_ context.Context, orgID, id string, createdBefore time.Time) (bool, error) {
+	r, ok := f.r2().assets[id]
+	if !ok || r.OrgID != orgID || r.Status != string(AssetPending) || (!createdBefore.IsZero() && r.CreatedAt.After(createdBefore)) {
+		return false, nil
+	}
+	delete(f.r2().assets, id)
+	return true, nil
 }
 
 func (f *fakeStore) DeleteAsset(_ context.Context, orgID, id string) error {

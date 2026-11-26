@@ -197,6 +197,13 @@ func (s *service) CreateChannel(ctx context.Context, actor Actor, in CreateChann
 		if err := s.ensureChannels(ctx, actor.OrgID); err != nil {
 			return err
 		}
+		n, err := s.store.CountChannels(ctx, actor.OrgID)
+		if err != nil {
+			return err
+		}
+		if n >= MaxChannels {
+			return ErrTooManyChannels
+		}
 		r := *row
 		if err := s.store.CreateChannel(ctx, &r); err != nil {
 			return err
