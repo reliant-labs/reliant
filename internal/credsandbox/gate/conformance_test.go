@@ -62,10 +62,16 @@ type conformanceCase struct {
 	// denial marks a boundary case: against a leaky boundary it must fail.
 	denial bool
 	// needs says why the case cannot run on this host ("" when it can).
-	needs  func(f *hostFixture) string
-	script string // run as `sh -c script`, with the fixture's GATE_T_* environment
-	limits func(*Limits)
-	check  func(f *hostFixture, res Result, out string) error
+	needs func(f *hostFixture) string
+	// leakNeeds says why the LEAKY control cannot leak this way on this host
+	// ("" when it can): a host with no IPv6 gives a leaky boundary no IPv6 to
+	// leak, so the case passing there proves nothing about the case. It is
+	// consulted only by TestDenialCasesCatchALeakyBoundary; the real backends
+	// run the case everywhere.
+	leakNeeds func(f *hostFixture) string
+	script    string // run as `sh -c script`, with the fixture's GATE_T_* environment
+	limits    func(*Limits)
+	check     func(f *hostFixture, res Result, out string) error
 }
 
 func conformanceCases() []conformanceCase {
@@ -222,8 +228,9 @@ URLS="$GATE_T_HOST_URLS http://$gw:$GATE_T_HOST_PORT/"
 			},
 		},
 		{
-			name:   "IPv6 has no address or route out",
-			denial: true,
+			name:      "IPv6 has no address or route out",
+			denial:    true,
+			leakNeeds: func(f *hostFixture) string { return f.noIPv6 },
 			script: `echo "disable_ipv6=$(cat /proc/sys/net/ipv6/conf/eth0/disable_ipv6 2>/dev/null)"
 echo "global-v6: $(ip -6 addr show scope global 2>/dev/null | grep -c inet6)"
 echo "default-v6: $(ip -6 route show default 2>/dev/null | grep -c default)"`,
@@ -283,6 +290,7 @@ type hostFixture struct {
 	public       string
 
 	noPeer, noPublic string // why the peer or public egress is not available here
+	noIPv6           string // why the host itself has no IPv6 out ("" when it has)
 }
 
 func (f *hostFixture) env() map[string]string {
@@ -437,6 +445,7 @@ func plantHost(t *testing.T) *hostFixture {
 	if !hostReaches204(f.public) {
 		f.noPublic = "this host has no public egress to " + f.public
 	}
+	f.noIPv6 = hostIPv6Out()
 	return f
 }
 
@@ -699,9 +708,16 @@ func TestDenialCasesCatchALeakyBoundary(t *testing.T) {
 	b := leakyBackend{image: image, credDir: filepath.Dir(f.credPath), env: f.engineEnv()}
 	var denials []conformanceCase
 	for _, c := range conformanceCases() {
-		if c.denial {
-			denials = append(denials, c)
+		if !c.denial {
+			continue
 		}
+		if c.leakNeeds != nil {
+			if why := c.leakNeeds(f); why != "" {
+				t.Logf("%s: not checked against the leaky control: %s", c.name, why)
+				continue
+			}
+		}
+		denials = append(denials, c)
 	}
 	runCases(t, b, f, image, nil, denials, func(t *testing.T, failure error) {
 		if failure == nil {
@@ -800,4 +816,37 @@ func TestHostCanaryIsInItsInitialEnviron(t *testing.T) {
 func firstLine(s string) string {
 	line, _, _ := strings.Cut(s, "\n")
 	return line
+}
+
+// hostIPv6Out reports why this host has no IPv6 path out ("" when it has
+// one): no global-scope IPv6 address, or no IPv6 default route. GitHub's
+// hosted runners have neither, which is why the leaky control could not leak
+// over IPv6 there (reliant#3745).
+func hostIPv6Out() string {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return "cannot list interfaces: " + err.Error()
+	}
+	global := false
+	for _, ifc := range ifaces {
+		addrs, _ := ifc.Addrs()
+		for _, a := range addrs {
+			if ipn, ok := a.(*net.IPNet); ok && ipn.IP.To4() == nil && ipn.IP.IsGlobalUnicast() {
+				global = true
+			}
+		}
+	}
+	if !global {
+		return "the host has no global IPv6 address"
+	}
+	routes, err := os.ReadFile("/proc/net/ipv6_route")
+	if err != nil {
+		return "cannot read the host's IPv6 routes: " + err.Error()
+	}
+	for _, line := range strings.Split(string(routes), "\n") {
+		if strings.HasPrefix(line, "00000000000000000000000000000000 00 ") {
+			return ""
+		}
+	}
+	return "the host has no IPv6 default route"
 }
