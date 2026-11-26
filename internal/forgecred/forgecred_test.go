@@ -23,7 +23,10 @@ type fakeExchanger struct {
 	ttl    time.Duration
 	refuse map[string]error
 	// grant, when set, is the most the server hands out (it omits the rest).
-	grant   []string
+	grant []string
+	// grants, when set for a server, is the most that server hands out,
+	// overriding grant.
+	grants  map[string][]string
 	calls   []string
 	minted  int
 	lastAud string
@@ -41,17 +44,21 @@ func (f *fakeExchanger) Exchange(_ context.Context, server, bearer, audience str
 	return Exchanged{
 		Token:     "rlat_exchanged_" + strings.Repeat("x", f.minted) + "_from_" + bearer[len(bearer)-4:],
 		ExpiresAt: f.now().Add(f.ttl),
-		Scopes:    f.narrow(scopes),
+		Scopes:    f.narrow(server, scopes),
 	}, nil
 }
 
-func (f *fakeExchanger) narrow(asked []string) []string {
-	if f.grant == nil {
+func (f *fakeExchanger) narrow(server string, asked []string) []string {
+	grant := f.grant
+	if g, ok := f.grants[server]; ok {
+		grant = g
+	}
+	if grant == nil {
 		return asked
 	}
 	var out []string
 	for _, s := range asked {
-		if slices.Contains(f.grant, s) {
+		if slices.Contains(grant, s) {
 			out = append(out, s)
 		}
 	}
@@ -335,5 +342,75 @@ func TestMint_ExchangeNamesTheOrgAndTheCacheIsKeyedByIt(t *testing.T) {
 	}
 	if got := strings.Join(ex.orgs, ","); got != "org-a,org-b," {
 		t.Fatalf("exchange orgs = %q, want org-a,org-b,<none>", got)
+	}
+}
+
+// Bug 7a44dc10: the CLI login, tried first, could mint a token lacking a
+// scope forge asked for (vuln:read), and the helper returned it although the
+// daemon's session on the same machine grants the whole set. A partial grant
+// must not end the search.
+func TestMint_PrefersASessionThatGrantsEveryScopeOverAPartialGrant(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	sessions := []Session{
+		{Server: "https://api.example.com", Token: "rlat_cli_CCCC", Kind: "cli"},
+		{Server: "https://api.daemon.example.com", Token: "rlat_daemon_DDDD", Kind: "daemon"},
+	}
+	ex := &fakeExchanger{ttl: time.Hour, grants: map[string][]string{
+		"https://api.example.com": {"deploy:write"},
+	}}
+	h := newTestHelper(t, sessions, ex, &clock)
+	ask := cloudcred.Request{Endpoint: req.Endpoint, Scopes: []string{"deploy:write", "vuln:read"}}
+
+	tok, err := h.Mint(context.Background(), ask)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(tok.Token, "DDDD") || strings.Join(tok.Scopes, ",") != "deploy:write,vuln:read" {
+		t.Fatalf("got %+v, want the daemon's full grant, not the CLI login's partial one", tok)
+	}
+	if tok.Source != "Reliant session (daemon at https://api.daemon.example.com)" {
+		t.Errorf("source = %q", tok.Source)
+	}
+	// The full grant is cached; the next command reuses it without asking either session.
+	calls := len(ex.calls)
+	if again, err := h.Mint(context.Background(), ask); err != nil || again.Token != tok.Token || len(ex.calls) != calls {
+		t.Fatalf("the full grant must be reused from the cache (%v, calls %d→%d)", err, calls, len(ex.calls))
+	}
+}
+
+// When no session grants everything, the widest partial grant is returned —
+// forge tells it is partial by the response's scopes — and it is not cached.
+func TestMint_ReturnsTheWidestPartialGrantOnlyWhenNoSessionGrantsAll(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	sessions := []Session{
+		{Server: "https://api.a.com", Token: "rlat_a_AAAA", Kind: "cli"},
+		{Server: "https://api.b.com", Token: "rlat_b_BBBB", Kind: "daemon"},
+		{Server: "https://api.c.com", Token: "rlat_c_CCCC", Kind: "daemon"},
+		{Server: "https://api.other.com", Token: "rlat_o_OOOO", Kind: "cli"},
+	}
+	ex := &fakeExchanger{ttl: time.Hour, grants: map[string][]string{
+		"https://api.a.com": {"deploy:write"},
+		"https://api.b.com": {"deploy:write", "sbom:write"},
+		"https://api.c.com": {"sbom:write", "vuln:read"},
+	}, refuse: map[string]error{
+		"https://api.other.com": connect.NewError(connect.CodeFailedPrecondition, errors.New("not this control plane")),
+	}}
+	h := newTestHelper(t, sessions, ex, &clock)
+	ask := cloudcred.Request{Endpoint: req.Endpoint, Scopes: []string{"deploy:write", "sbom:write", "vuln:read"}}
+
+	tok, err := h.Mint(context.Background(), ask)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// b and c both grant two of three; the earlier, more preferred session wins the tie.
+	if !strings.HasSuffix(tok.Token, "BBBB") || strings.Join(tok.Scopes, ",") != "deploy:write,sbom:write" {
+		t.Fatalf("got %+v, want the widest partial grant (b's)", tok)
+	}
+	if len(ex.calls) != 4 {
+		t.Fatalf("every session must be asked before settling for a partial grant, asked %v", ex.calls)
+	}
+	// Not cached: the next command asks again.
+	if _, err := h.Mint(context.Background(), ask); err != nil || len(ex.calls) != 8 {
+		t.Fatalf("a partial grant must not be cached (%v, calls=%d)", err, len(ex.calls))
 	}
 }

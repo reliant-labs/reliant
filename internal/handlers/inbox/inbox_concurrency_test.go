@@ -33,13 +33,14 @@ type inflightRepo struct {
 	items     *MockItems
 	firings   *MockFirings
 	notices   *MockNotices
+	regs      *MockRegistrations
 	storage   *MockStorage
 	now, peak atomic.Int32
 }
 
 // deps is the service's Deps over r: its repository and its recovery list.
 func (r *inflightRepo) deps() Deps {
-	return Deps{Repo: r, Chats: r.chats, ProjectRows: r.MockProjectReader, Items: r.items, Firings: r.firings, Notices: r.notices, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
+	return Deps{Repo: r, Chats: r.chats, ProjectRows: r.MockProjectReader, Items: r.items, Firings: r.firings, Notices: r.notices, Registrations: r.regs, Storage: r.storage, Recoveries: r.rec, Marks: &MockMarkDecisionStore{}}
 }
 
 func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
@@ -58,7 +59,7 @@ func (r *inflightRepo) enter(ctx context.Context, hold time.Duration) {
 }
 
 func newInflightRepo(hold time.Duration) *inflightRepo {
-	r := &inflightRepo{MockRepository: &MockRepository{}, MockProjectReader: &MockProjectReader{}, chats: &MockChats{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, storage: &MockStorage{}}
+	r := &inflightRepo{MockRepository: &MockRepository{}, MockProjectReader: &MockProjectReader{}, chats: &MockChats{}, rec: &MockRecoveries{}, items: &MockItems{}, firings: &MockFirings{}, notices: &MockNotices{}, regs: &MockRegistrations{}, storage: &MockStorage{}}
 	m := r.MockRepository
 	// The org account notices: nothing paused, nothing on personal accounts.
 	r.notices.HasNoOrgAccountPausesFunc = func(context.Context) (bool, error) { return false, nil }
@@ -92,9 +93,11 @@ func newInflightRepo(hold time.Duration) *inflightRepo {
 		return nil, nil
 	}
 	r.firings.RecentTriggerOutcomesFunc = firings
-	r.firings.FiringsSinceLastSuccessFunc = firings
-	r.firings.FiringsSinceLastUnmanagedSuccessFunc = firings
-	m.ListTriggerRegistrationsFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
+	r.firings.InboxEpisodeFailuresFunc = firings
+	r.firings.InboxEpisodesFunc = func(ctx context.Context, userID string, ids []string, per, _ int) (map[string][]*core.TriggerEventWithRun, error) {
+		return firings(ctx, userID, ids, per)
+	}
+	r.regs.ListTriggerRegistrationsForUserFunc = func(ctx context.Context, _ string, _ []string) (map[string]*core.TriggerRegistration, error) {
 		r.enter(ctx, hold)
 		return nil, nil
 	}
@@ -164,7 +167,7 @@ func TestListInbox_FiringReadsDoNotQueueBehindTheOtherReads(t *testing.T) {
 		return nil, nil
 	}
 	repo.firings.RecentTriggerOutcomesFunc = firing
-	repo.firings.FiringsSinceLastSuccessFunc = firing
+	repo.firings.InboxEpisodeFailuresFunc = firing
 	repo.items.ListInboxPendingFunc = func(ctx context.Context, _ string) ([]*core.InboxPending, error) {
 		waitForBoth(ctx)
 		return nil, nil
@@ -239,7 +242,7 @@ func TestListInbox_ARequiredReadFailingFailsTheRequest(t *testing.T) {
 			r.items.ListInboxPendingFunc = func(context.Context, string) ([]*core.InboxPending, error) { return nil, errors.New("boom") }
 		}},
 		{"automation health", func(r *inflightRepo) {
-			r.firings.FiringsSinceLastUnmanagedSuccessFunc = func(context.Context, string, []string, int) (map[string][]*core.TriggerEventWithRun, error) {
+			r.firings.InboxEpisodesFunc = func(context.Context, string, []string, int, int) (map[string][]*core.TriggerEventWithRun, error) {
 				return nil, errors.New("boom")
 			}
 		}},

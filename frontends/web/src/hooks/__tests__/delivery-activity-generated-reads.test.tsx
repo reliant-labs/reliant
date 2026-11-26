@@ -170,7 +170,7 @@ describe("the shop pack's delivery handlers", () => {
         return { promotions: [], truncated: false };
       },
     } as unknown as ObservabilityApi;
-    const client = createClient(DeliveryInsightsService, mockTransport(deliveryHandlers(fixtures, { now: () => now }) as never));
+    const client = createClient(DeliveryInsightsService, mockTransport(deliveryHandlers(fixtures, { clock: () => now }) as never));
     await client.listReleases(releasesRequest({ ...SCOPE, window: relativeWindow(DAY) }));
     expect(seen).toEqual([{ startMs: now - DAY, endMs: now }]);
   });

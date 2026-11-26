@@ -39,7 +39,7 @@ func (s *Service) GetFileContent(
 		Size          int64  `json:"size"`
 		ViewerGuarded bool   `json:"viewer_guarded"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_file", cmdReq, &cmdResp, fsCommandTimeoutMs); err != nil {
 		return nil, err
 	}
 	if err := requireViewerGuard(cmdResp.ViewerGuarded); err != nil {

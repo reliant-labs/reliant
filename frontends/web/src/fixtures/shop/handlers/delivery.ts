@@ -6,7 +6,7 @@
  * the wire, so the console's real client
  * (services/controlPlane/observability/deliveryApi.ts) decodes it. Release
  * health is ObservabilityService's (handlers/observability.ts). A relative
- * window resolves against `now` (the pack clock by default).
+ * window resolves against `clock` (the pack clock by default).
  */
 
 import { mockService, type MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
@@ -18,7 +18,7 @@ import type { ObservabilityApi } from "@/services/controlPlane/observability/Obs
 import { createShopApi } from "../model/shopApi";
 import { completed } from "./defaults";
 import { demoNow } from "../shopStory";
-import { durOpt, ts, windowOf } from "./wire";
+import { durOpt, ts, windowOf, type PackClock } from "./wire";
 
 const wireRestore = (t: TimeToRestore) => ({
   definition: t.definition,
@@ -29,7 +29,7 @@ const wireRestore = (t: TimeToRestore) => ({
   ongoing: t.ongoing,
 });
 
-export function deliveryHandlers(fixtures: ObservabilityApi = createShopApi(), { now = demoNow }: { now?: () => number } = {}): MockHandlers {
+export function deliveryHandlers(fixtures: ObservabilityApi = createShopApi(), { clock = demoNow }: { clock?: PackClock } = {}): MockHandlers {
   return completed(DeliveryInsightsService, mockService(DeliveryInsightsService, {
     listReleases: async (req) => {
       const scope = req.scope;
@@ -37,7 +37,7 @@ export function deliveryHandlers(fixtures: ObservabilityApi = createShopApi(), {
         orgId: scope?.orgId ?? "",
         projectId: scope?.projectId,
         envIds: [...(scope?.envIds ?? [])],
-        window: windowOf(scope?.timeRange, now()) ?? { startMs: 0, endMs: 0 },
+        window: windowOf(scope?.timeRange, clock) ?? { startMs: 0, endMs: 0 },
         limit: req.limit,
       });
       return {
@@ -63,7 +63,7 @@ export function deliveryHandlers(fixtures: ObservabilityApi = createShopApi(), {
         orgId: scope?.orgId ?? "",
         projectId: scope?.projectId,
         envIds: [...(scope?.envIds ?? [])],
-        window: windowOf(scope?.timeRange, now()),
+        window: windowOf(scope?.timeRange, clock),
         failureWindowHours: req.failureWindowHours,
       });
       return {

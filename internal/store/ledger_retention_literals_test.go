@@ -46,6 +46,7 @@ func chatTypes(types ...reliantv1.ChatUpdateType) []int32 {
 }
 
 func TestChatCompactionClassesMatchTheReaders(t *testing.T) {
+	t.Parallel()
 	kept := intList(t, CompactChatUpdatesSQL, `c\.update_type NOT IN \(([^)]*)\)`)
 	if want := chatTypes(
 		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS,
@@ -74,6 +75,7 @@ func TestChatCompactionClassesMatchTheReaders(t *testing.T) {
 }
 
 func TestStepRetentionLiteralsMatchTheEnums(t *testing.T) {
+	t.Parallel()
 	if int32(reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED) != 3 ||
 		int32(reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED) != 1 ||
 		int32(reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_CANCELLED) != 4 {

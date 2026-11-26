@@ -38,7 +38,7 @@ import { OrgSwitcher } from "../../Orgs/OrgSwitcher";
 import { ProjectSelector, type ProjectSelection, type ProjectSelectorLeadItem } from "../../Projects/ProjectSelector";
 import { isForgeShell } from "../../../lib/shell";
 import { ProjectMark } from "../ProjectMark";
-import { SIDEBAR_ORG_TRIGGER, SidebarOrgLabel, SidebarOrgRow } from "./primitives";
+import { SIDEBAR_ORG_TRIGGER, SIDEBAR_PROJECT_TRIGGER, SidebarOrgLabel, SidebarOrgRow, SidebarProjectRow } from "./primitives";
 
 /**
  * The org row: the org switcher at full width (avatar, name, plan, ⇕), on the
@@ -154,7 +154,7 @@ export function ProjectSwitcherRow({ shell, pathname }: { shell: ShellProject; p
     shell.mode === "all" ? "All projects" : shell.mode === "many" ? `${shell.ids.length} projects` : (shell.name ?? "Choose a project");
 
   return (
-    <div className="flex shrink-0 px-2 pb-1 pt-1" data-testid="shell-switcher">
+    <SidebarProjectRow testId="shell-switcher">
       <ProjectSelector
         open={open}
         onOpenChange={(next) => {
@@ -183,7 +183,7 @@ export function ProjectSwitcherRow({ shell, pathname }: { shell: ShellProject; p
             data-testid="shell-project-switcher"
             data-mode={shell.mode}
             aria-label={`Project: ${label}. Switch project`}
-            className={cn(SIDEBAR_ORG_TRIGGER, "w-full gap-2 px-1.5")}
+            className={SIDEBAR_PROJECT_TRIGGER}
           >
             {shell.mode !== "one" ? (
               <Layers className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
@@ -199,6 +199,6 @@ export function ProjectSwitcherRow({ shell, pathname }: { shell: ShellProject; p
           </button>
         )}
       />
-    </div>
+    </SidebarProjectRow>
   );
 }

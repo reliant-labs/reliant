@@ -40,6 +40,7 @@ func accessGrants(t *testing.T, env *storetest.Env, userID, integrationID string
 }
 
 func TestReplaceIntegrationAccessIsExactAndMonotonic(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	t0 := time.Now().UTC().Truncate(time.Microsecond)
@@ -86,6 +87,7 @@ func TestReplaceIntegrationAccessIsExactAndMonotonic(t *testing.T) {
 }
 
 func TestRevokeAndPruneIntegrationAccess(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -136,6 +138,7 @@ func keys(m map[string]store.IntegrationEventAccess) []string {
 }
 
 func TestIntegrationAccessRefreshLease(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
@@ -178,6 +181,7 @@ func TestIntegrationAccessRefreshLease(t *testing.T) {
 }
 
 func TestListIntegrationTriggerOwners(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -217,6 +221,7 @@ func ledgerWrite(id, scope string, created time.Time) *core.IntegrationWrite {
 }
 
 func TestIntegrationWriteLedger(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	t0 := time.Now().UTC().Truncate(time.Microsecond)
@@ -287,6 +292,7 @@ func TestIntegrationWriteLedger(t *testing.T) {
 // inside one is committed on its own, so a rollback of the caller's work
 // cannot take it, and an event arriving first already sees it.
 func TestIntegrationWriteLedgerOutlivesTheCallersTransaction(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	ledger := writeledger.NewLedger(store.NewIntegrationWriteExtStore(env.Repo.ORM()))
@@ -320,6 +326,7 @@ func writeIDs(ws []*core.IntegrationWrite) []string {
 // GitHub: automations compare a sender with it. It is trusted only while
 // fresh, is the user's own, and goes with the grants when they are cleared.
 func TestGetIntegrationAccessSubject(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)

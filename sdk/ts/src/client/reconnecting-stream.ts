@@ -64,6 +64,24 @@ export const RESUME_REPLACE_AFTER_HIDDEN_MS = 10_000;
 // within one wake); replace the stream at most once per burst.
 export const RESUME_REPLACE_MIN_INTERVAL_MS = 5_000;
 
+// First-frame deadline. The watchdog above arms only on a connection's first
+// frame, and a stream RPC has no client deadline, so an attempt whose request
+// never left the page (an auth interceptor waiting on a stalled token
+// refresh), or whose connection died before the server answered, used to
+// wait forever while the page was visible. A healthy server sends its first
+// frame (a snapshot, a replay batch or caught_up) within a second or two; past
+// this much ACTIVE time (StreamEnvironment.activeNow) the attempt is replaced.
+// Each consecutive expiry doubles the budget, up to the cap, so a first frame
+// that is genuinely slow (a long chat's snapshot on a slow link) still lands.
+export const FIRST_FRAME_TIMEOUT_MS = 15_000;
+export const MAX_FIRST_FRAME_TIMEOUT_MS = 120_000;
+// How often an expired budget is looked at again while the page is hidden.
+const FIRST_FRAME_RECHECK_MS = 1_000;
+// A host resume signal (StreamEnvironment.resumeSignals) replaces an attempt
+// still waiting for its first frame only when it is at least this old: one
+// wake fires several signals, and the first one already opened a fresh attempt.
+export const STALLED_ATTEMPT_MIN_AGE_MS = 2_000;
+
 /**
  * Whether a stream failure means the network connection under it died (as
  * opposed to the server ending the stream with a status). Every request
@@ -137,6 +155,12 @@ export interface StreamTuning {
   liveness?: boolean;
   /** Credit a connection that lasted past SHORT_LIVED_CONNECTION_MS when it ends, not only while it is up. */
   creditLongConnectionOnEnd?: boolean;
+  /**
+   * Active time an attempt may wait for its first frame before it is replaced
+   * (FIRST_FRAME_TIMEOUT_MS; doubles per consecutive expiry). 0 disables it.
+   * Applies only with `liveness`.
+   */
+  firstFrameTimeoutMs?: number;
 }
 
 /** What a stream needs from its host, all optional. */
@@ -150,6 +174,21 @@ export interface StreamEnvironment {
    * onto that connection is stranded too; a transport can replace them now.
    */
   onConnectionLost?: () => void;
+  /**
+   * A clock, in milliseconds, that advances only while the page is visible
+   * and running. The first-frame deadline is measured on it, so time a phone
+   * spent locked does not count. Default: the wall clock, with an expired
+   * deadline acted on only while the page is visible.
+   */
+  activeNow?: () => number;
+  /**
+   * Resume signals the host sees and the WakeSource does not carry: a Page
+   * Lifecycle resume, a clock that jumped, another stream's connection
+   * failing. Each one replaces an attempt still waiting for its first frame
+   * (it likely rides the dead connection). Subscribed while the stream is
+   * open; returns the unsubscribe.
+   */
+  resumeSignals?: (listener: (reason: string) => void) => () => void;
 }
 
 /** What a stream reports about its connection. */
@@ -187,13 +226,24 @@ export abstract class ReconnectingStream<E> {
   private hiddenAt: number | null = null;
   private lastResumeReplaceAt = 0;
   private resumeCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  // The current attempt's first-frame deadline, when it was started (wall
+  // clock), and how many attempts in a row ran out of it.
+  private firstFrameTimer: ReturnType<typeof setTimeout> | null = null;
+  private attemptStartedAt = 0;
+  private firstFrameTimeouts = 0;
+  // True while this stream is reporting its own lost connection, so the
+  // host's echo of that report (resumeSignals) is not taken for news.
+  private reportingConnectionLost = false;
 
   private unsubscribeWake: (() => void) | null = null;
+  private unsubscribeResume: (() => void) | null = null;
 
   protected readonly log: Logger;
   private readonly lifecycle: StreamLifecycleCallbacks;
   private readonly wake: WakeSource;
   private readonly onConnectionLost: (() => void) | undefined;
+  private readonly activeNow: () => number;
+  private readonly resumeSignals: StreamEnvironment["resumeSignals"];
   private readonly tuning: Required<StreamTuning>;
 
   protected constructor(
@@ -205,6 +255,8 @@ export abstract class ReconnectingStream<E> {
     this.lifecycle = lifecycle;
     this.wake = env.wake ?? browserWakeSource();
     this.onConnectionLost = env.onConnectionLost;
+    this.activeNow = env.activeNow ?? (() => Date.now());
+    this.resumeSignals = env.resumeSignals;
     this.tuning = {
       baseDelayMs: BASE_RECONNECT_DELAY_MS,
       maxDelayMs: MAX_RECONNECT_DELAY_MS,
@@ -212,8 +264,20 @@ export abstract class ReconnectingStream<E> {
       maxReconnectAttempts: Number.POSITIVE_INFINITY,
       liveness: true,
       creditLongConnectionOnEnd: false,
+      firstFrameTimeoutMs: FIRST_FRAME_TIMEOUT_MS,
       ...env.tuning,
     };
+  }
+
+  /** Tell the host the connection under the stream is gone (once per report; see reportingConnectionLost). */
+  private reportConnectionLost(): void {
+    if (this.reportingConnectionLost) return;
+    this.reportingConnectionLost = true;
+    try {
+      this.onConnectionLost?.();
+    } finally {
+      this.reportingConnectionLost = false;
+    }
   }
 
   /**
@@ -322,7 +386,7 @@ export abstract class ReconnectingStream<E> {
       `Page resumed (${reason}) with a 'connected' stream — replacing it`,
       detail,
     );
-    this.onConnectionLost?.();
+    this.reportConnectionLost();
     this.isConnected_ = false;
     this.setStatus("disconnected");
     this.reconnectNow(reason);
@@ -339,7 +403,7 @@ export abstract class ReconnectingStream<E> {
         "Tab visible again but the stream has been silent — replacing the connection",
         { silentForMs: silentFor },
       );
-      this.onConnectionLost?.();
+      this.reportConnectionLost();
       this.isConnected_ = false;
       this.setStatus("disconnected");
       this.reconnectNow("visible");
@@ -353,6 +417,7 @@ export abstract class ReconnectingStream<E> {
       visibilityChange: this.handleVisibilityChange,
       pageShow: this.handlePageShow,
     });
+    this.unsubscribeResume = this.resumeSignals?.((reason) => this.replaceStalledAttempt(reason)) ?? null;
     this.wakeHandlersBound = true;
   }
 
@@ -360,6 +425,8 @@ export abstract class ReconnectingStream<E> {
     if (!this.wakeHandlersBound) return;
     this.unsubscribeWake?.();
     this.unsubscribeWake = null;
+    this.unsubscribeResume?.();
+    this.unsubscribeResume = null;
     this.hiddenAt = null;
     this.wakeHandlersBound = false;
   }
@@ -392,7 +459,7 @@ export abstract class ReconnectingStream<E> {
       // The socket is dead but `for await` will never unblock on its own.
       // reconnectNow() aborts it, which makes the orphaned loop's catch see a
       // superseded controller and bail out quietly.
-      this.onConnectionLost?.();
+      this.reportConnectionLost();
       this.isConnected_ = false;
       this.setStatus("disconnected");
       this.reconnectNow("stale");
@@ -404,6 +471,75 @@ export abstract class ReconnectingStream<E> {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = null;
     }
+  }
+
+  // --- First-frame deadline ------------------------------------------------
+  private firstFrameBudgetMs(): number {
+    const base = this.tuning.firstFrameTimeoutMs;
+    if (!this.tuning.liveness || base <= 0) return 0;
+    const exponent = Math.min(this.firstFrameTimeouts, MAX_RECONNECT_EXPONENT);
+    return Math.min(base * Math.pow(2, exponent), Math.max(base, MAX_FIRST_FRAME_TIMEOUT_MS));
+  }
+
+  private armFirstFrameDeadline(attempt: AbortController): void {
+    this.clearFirstFrameDeadline();
+    const budget = this.firstFrameBudgetMs();
+    if (budget <= 0) return;
+    const startedActive = this.activeNow();
+    const check = (): void => {
+      this.firstFrameTimer = null;
+      if (this.abortController !== attempt || this.isConnected_ || this.isIntentionallyClosed) return;
+      const waited = this.activeNow() - startedActive;
+      // A hidden page's attempt is the wake handlers' to replace when it
+      // comes back; only a visible page that waited out the budget acts.
+      if (waited < budget || !this.wake.isVisible()) {
+        this.firstFrameTimer = setTimeout(check, Math.max(FIRST_FRAME_RECHECK_MS, budget - waited));
+        return;
+      }
+      this.firstFrameTimeouts++;
+      this.log.warn("No first frame from the stream — replacing the connection attempt", {
+        waitedMs: waited,
+        budgetMs: budget,
+        ...this.describe(),
+      });
+      // Supersede the attempt before aborting it, so its loop bails out
+      // quietly; then retry as a failure before the first frame (backoff).
+      this.abortController = null;
+      attempt.abort();
+      this.connectAttemptInFlight = false;
+      this.setStatus("disconnected");
+      this.reportConnectionLost();
+      this.attemptReconnect();
+    };
+    this.firstFrameTimer = setTimeout(check, budget);
+  }
+
+  private clearFirstFrameDeadline(): void {
+    if (this.firstFrameTimer !== null) {
+      clearTimeout(this.firstFrameTimer);
+      this.firstFrameTimer = null;
+    }
+  }
+
+  /**
+   * The host saw the page resume or a connection die (resumeSignals). An
+   * attempt still waiting for its first frame was most likely opened on the
+   * connection that is gone, so open a fresh one now, without touching the
+   * backoff. A connected stream is left to the wake handlers and the
+   * watchdog; a signal this stream raised itself is ignored.
+   */
+  private replaceStalledAttempt(reason: string): void {
+    if (this.isIntentionallyClosed || this.reportingConnectionLost) return;
+    if (!this.connectAttemptInFlight || this.isConnected_) return;
+    const age = Date.now() - this.attemptStartedAt;
+    if (age < STALLED_ATTEMPT_MIN_AGE_MS) return;
+    this.log.warn("Resume signal while the stream waits for its first frame — replacing the attempt", {
+      reason,
+      waitedMs: age,
+    });
+    this.clearFirstFrameDeadline();
+    this.abortController?.abort();
+    void this.establishConnection();
   }
 
   /**
@@ -419,23 +555,36 @@ export abstract class ReconnectingStream<E> {
       this.reconnectTimer = null;
     }
 
-    // Abort the old connection. The old stream's catch block will detect
-    // that this.abortController has been replaced (by establishConnection)
-    // and bail out instead of calling attemptReconnect().
-    if (this.abortController) {
-      this.abortController.abort();
-    }
+    // Whether the connection being replaced is up and delivering frames
+    // (isConnected_ turns true only on a connection's first frame). Callers
+    // that found the connection dead (the watchdog, a resume) clear it first.
+    const replacingLiveConnection = this.isConnected_;
+    // Supersede before aborting, even if the replacement has to back off.
+    // Otherwise the old connection can deliver a queued frame or status
+    // while no new controller has been installed yet.
+    const previous = this.abortController;
+    this.abortController = null;
+    previous?.abort();
     this.isConnected_ = false;
+    this.connectAttemptInFlight = false;
     this.disarmWatchdog();
+    this.clearFirstFrameDeadline();
 
     // Only a user-driven wake (back online, tab visible) may collapse the
     // backoff — those are real signals that the world changed. Internal
-    // triggers (resubscribe, gap resync, stale watchdog) must NOT reset it:
-    // they fire in exactly the situation the backoff exists to damp, and
-    // zeroing it here is what let a resubscribe-per-cycle loop reconnect at
-    // full speed indefinitely.
+    // triggers (resubscribe, gap resync, stale watchdog) must NOT reset it
+    // while nothing is getting through: they fire in exactly the situation
+    // the backoff exists to damp, and zeroing it here is what let a
+    // resubscribe-per-cycle loop reconnect at full speed indefinitely.
+    //
+    // The exception is replacing a live connection on purpose (a gap resync,
+    // a scope change). That connection delivered frames, which is the proof
+    // the backoff waits for, so it is credited: the backoff restarts and the
+    // replacement opens at once. Making a gap resync wait out a backoff left
+    // after one earlier network failure held the chat stale for 2-30s per
+    // gap. Callers pace these themselves (ChatStream's gap resync interval).
     const isUserWake = reason === "online" || reason === "visible";
-    if (isUserWake) {
+    if (isUserWake || replacingLiveConnection) {
       this.reconnectAttempts = 0;
     }
 
@@ -471,10 +620,12 @@ export abstract class ReconnectingStream<E> {
     this.setStatus("connecting");
     this.connectAttemptInFlight = true;
     this.abortController = new AbortController();
+    this.attemptStartedAt = Date.now();
 
     // Capture this connection's abort controller so we can detect if it gets
     // replaced by a reconnect before our catch block runs.
     const myAbortController = this.abortController;
+    this.armFirstFrameDeadline(myAbortController);
     // Whether this attempt got as far as a first event. A refusal happens
     // during stream setup, before anything is sent.
     let delivered = false;
@@ -494,6 +645,8 @@ export abstract class ReconnectingStream<E> {
         if (!this.isConnected_) {
           this.isConnected_ = true;
           this.connectAttemptInFlight = false;
+          this.clearFirstFrameDeadline();
+          this.firstFrameTimeouts = 0;
           this.connectionOpenedAt = Date.now();
           this.setStatus("connected");
           // Deliberately does NOT reset reconnectAttempts. Reaching
@@ -520,6 +673,7 @@ export abstract class ReconnectingStream<E> {
       this.isConnected_ = false;
       this.connectAttemptInFlight = false;
       this.disarmWatchdog();
+      this.clearFirstFrameDeadline();
       this.setStatus("disconnected");
 
       if (!this.isIntentionallyClosed && this.reconnectAfterCleanEnd()) {
@@ -536,6 +690,7 @@ export abstract class ReconnectingStream<E> {
       this.isConnected_ = false;
       this.connectAttemptInFlight = false;
       this.disarmWatchdog();
+      this.clearFirstFrameDeadline();
 
       if (this.isIntentionallyClosed || myAbortController.signal.aborted) {
         this.log.info("Stream aborted (intentional)");
@@ -553,7 +708,7 @@ export abstract class ReconnectingStream<E> {
       // The connection under the stream died; reads in flight on it will not
       // be answered either. Let the transport replace them now.
       if (isConnectionLevelFailure(error)) {
-        this.onConnectionLost?.();
+        this.reportConnectionLost();
       }
       this.lifecycle.onError?.(errorMessage);
       this.setStatus("error");
@@ -630,6 +785,7 @@ export abstract class ReconnectingStream<E> {
     this.isConnected_ = false;
     this.connectAttemptInFlight = false;
     this.disarmWatchdog();
+    this.clearFirstFrameDeadline();
     this.unbindWakeHandlers();
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);

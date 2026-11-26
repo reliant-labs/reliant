@@ -91,7 +91,7 @@ func TestSpawnSend_ToRunningChild_QueuesHonestReceipt(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "  Status check  ", Message: "status check"})
@@ -119,7 +119,7 @@ func TestSpawnSend_RejectsBadSubject(t *testing.T) {
 	createTestChat(t, repo, chatID)
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	for name, tc := range map[string]struct{ subject, wantErr string }{
@@ -167,7 +167,7 @@ func TestSpawnSend_ChildToParent_RingsMailboxDoorbell(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
 	notifier := &recordingAgentMessageNotifier{}
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
 	// The CHILD is the caller here, messaging its parent.
 	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
 
@@ -199,7 +199,7 @@ func TestSpawnSend_RefusedSend_DoesNotRingDoorbell(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
 	notifier := &recordingAgentMessageNotifier{}
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "are you there?"})
@@ -220,7 +220,7 @@ func TestSpawnSend_NilNotifier_StillQueues(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "still queued"})
@@ -243,7 +243,7 @@ func TestSpawnSend_ParentAlias(t *testing.T) {
 	createTestChat(t, repo, chatID)
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 
 	resp := runSpawnSend(t, tool, rctx.NewToolContext(ctx, chatID, childID, nil, nil),
 		SpawnSendParams{AgentID: " Parent ", Subject: "Blocked", Message: "need the DB URL"})
@@ -272,7 +272,7 @@ func TestSpawnSend_ToFinishedAgent_FailsWithGuidance(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "are you still there?"})
@@ -300,7 +300,7 @@ func TestSpawnSend_ToFailedChild_ResumesIt(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusFailed)
 
 	notifier := &recordingAgentMessageNotifier{}
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "use the other provider and carry on"})
@@ -329,7 +329,7 @@ func TestSpawnSend_ToFailedChild_WithoutDoorbell_FailsWithGuidance(t *testing.T)
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusFailed)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "carry on"})
@@ -353,7 +353,7 @@ func TestSpawnSend_ToCancelledChild_FailsWithGuidance(t *testing.T) {
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCancelled)
 
 	notifier := &recordingAgentMessageNotifier{}
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: notifier})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Subject: "Status", Message: "carry on"})
@@ -380,7 +380,7 @@ func TestSpawnSend_ToSibling_Rejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: otherID, Subject: "Status", Message: "hello"})
@@ -400,7 +400,7 @@ func TestSpawnSend_ChildToParent_Allowed(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
+	tool := NewSpawnSendTool(SpawnSendDeps{Store: repo, Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), Tree: store.NewToolCallExtStore(repo.ORM()), Notifier: nil})
 	// Called FROM the child thread, addressed TO the parent.
 	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
 

@@ -3,6 +3,9 @@ import {
   CLOCK_JUMP_THRESHOLD_MS,
   PageActivity,
   RESUME_MIN_INACTIVE_MS,
+  pageActivity,
+  resetPageActivityForTests,
+  streamPageEnvironment,
   type ResumeEvent,
 } from "../pageActivity";
 
@@ -137,5 +140,24 @@ describe("PageActivity resume events", () => {
     activity.noteConnectionLost();
     expect(second).toHaveBeenCalledTimes(1);
     activity.stop();
+  });
+});
+
+describe("streamPageEnvironment", () => {
+  afterEach(() => resetPageActivityForTests());
+
+  it("hands the streams the shared page's resume signals, active clock and connection-lost report", () => {
+    resetPageActivityForTests();
+    const env = streamPageEnvironment();
+    const reasons: string[] = [];
+    const unsubscribe = env.resumeSignals((reason) => reasons.push(reason));
+
+    env.onConnectionLost();
+    expect(reasons).toEqual(["connection-lost"]);
+    expect(env.activeNow()).toBe(pageActivity().activeNow());
+
+    unsubscribe();
+    pageActivity().noteConnectionLost();
+    expect(reasons).toEqual(["connection-lost"]);
   });
 });

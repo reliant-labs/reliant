@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Music,
   Check,
+  Download,
 } from "lucide-react";
 import { MonacoEditor } from "../shared/MonacoEditor";
 import type { FileNode } from "./index";
@@ -39,6 +40,7 @@ import { AddToChatPopup } from "./AddToChatPopup";
 import { ImagePreviewModal } from "../Chat/ImagePreviewModal";
 import { FileIcon } from "./FileIcon";
 import { MarkdownFilePreview } from "./MarkdownFilePreview";
+import { downloadWorkspaceFile } from "./downloadWorkspaceFile";
 import { toast } from "sonner";
 import { useCurrentWorktree, useWorktreeById } from "../../hooks/worktree-queries";
 import { ADD_SELECTION_TO_CHAT } from "../../hooks/useShortcutHost";
@@ -96,6 +98,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const editorRef = useRef<any>(null);
   const monacoRef = useRef<any>(null);
@@ -1094,6 +1097,9 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
                 <p className="text-sm text-muted-foreground">
                   This file type cannot be previewed inline.
                 </p>
+                <p className="text-sm text-muted-foreground">
+                  Download it to open it on this device.
+                </p>
               </div>
             </div>
           </div>
@@ -1183,6 +1189,21 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
                 })}
               </div>
             )}
+            <Tooltip content="Download to this device" side="bottom" delay={300} triggerClassName="inline-flex">
+              <button
+                type="button"
+                onClick={() => {
+                  setDownloading(true);
+                  void downloadWorkspaceFile(file.path, file.name, effectiveWorktreeId).finally(() => setDownloading(false));
+                }}
+                disabled={downloading}
+                aria-label={`Download ${file.name}`}
+                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors text-muted-foreground hover:text-foreground hover:bg-foreground/5 disabled:opacity-60"
+              >
+                {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                <span className="text-xs">Download</span>
+              </button>
+            </Tooltip>
             {hasChanges && (
               <Tooltip content="Undo all changes and revert to saved version" side="bottom" delay={300} triggerClassName="inline-flex">
 <button

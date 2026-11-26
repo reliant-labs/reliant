@@ -116,14 +116,16 @@ type Graph struct {
 	// HasEmbed marks packages with any //go:embed directive.
 	HasEmbed map[string]bool
 	// TestDeps[P] is the set of module packages P's test binary contains (P
-	// included). A package with no tests has no entry.
+	// included), and the forge packages it contains (isForgePkg: a forge
+	// pin move selects by them, forgepin.go). A package with no tests has no
+	// entry.
 	TestDeps map[string]map[string]bool
 	// BuildDeps[P] is the same for P itself, for every package (tests or not):
 	// the packages `go build` of P compiles.
 	BuildDeps map[string]map[string]bool
-	// DirectImports[P] is the module packages P's own files, test files and
-	// external test files import by name: one hop, not the closure. The
-	// merge tier's -reach direct selects by it.
+	// DirectImports[P] is the module (and forge) packages P's own files, test
+	// files and external test files import by name: one hop, not the
+	// closure. The merge tier's -reach direct selects by it.
 	DirectImports map[string]map[string]bool
 	// Readers[P] is the repo paths P's Go sources name: what its tests may read.
 	Readers map[string][]string
@@ -136,6 +138,10 @@ type Graph struct {
 	// ElectronText holds the source of electron tests that name files outside
 	// electron/src (repo-relative path -> text).
 	ElectronText map[string]string
+	// ForgePin is the diff's forge pin move (forgepin.go), when go.mod or
+	// go.sum changed: plan reads it, since it is the diff's and not the
+	// module's, but Classify reads it here, beside the graph it selects in.
+	ForgePin *ForgePin
 }
 
 // LoadGraph reads the module's package graph with `go list` (default tags: what
@@ -170,7 +176,7 @@ func buildGraph(root, module string, tracked []string, list []listPkg) *Graph {
 			imp := map[string]bool{}
 			for _, list := range [][]string{p.Imports, p.TestImports, p.XTestImports} {
 				for _, i := range list {
-					if b := base(i); strings.HasPrefix(b, module) && b != p.ImportPath {
+					if b := base(i); graphDep(b, module) && b != p.ImportPath {
 						imp[b] = true
 					}
 				}
@@ -190,10 +196,14 @@ func buildGraph(root, module string, tracked []string, list []listPkg) *Graph {
 	return g
 }
 
+// graphDep reports whether the graph records an import path as a
+// dependency: a package of the module, or of forge.
+func graphDep(p, module string) bool { return strings.HasPrefix(p, module) || isForgePkg(p) }
+
 func depSet(p listPkg, module string) map[string]bool {
 	set := map[string]bool{strings.TrimSuffix(p.ImportPath, ".test"): true}
 	for _, d := range p.Deps {
-		if b := base(d); strings.HasPrefix(b, module) {
+		if b := base(d); graphDep(b, module) {
 			set[b] = true
 		}
 	}
