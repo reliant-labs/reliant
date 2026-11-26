@@ -56,7 +56,7 @@ function PoolBody({ data }: { data: GetMlPoolResponse }) {
           { label: "Busy", value: has(p.busyRatio) ? fmtPct(p.busyRatio) : <Uncollected label={p.gpusAllocated ? "not collected" : "none allocated"} />, sub: Number.isFinite(p.smActiveP50) ? `SM active p50 ${fmtPct(p.smActiveP50)}` : "SM active not collected" },
           { label: "Idle allocated", value: fmtInt(p.gpusIdleAllocated), tone: p.gpusIdleAllocated ? "warning" : undefined },
           { label: "Unhealthy nodes", value: fmtInt(p.nodesUnhealthy), tone: p.gpusFaulty ? "danger" : p.nodesUnhealthy ? "warning" : undefined, sub: `${p.gpusFaulty} faulty GPU${p.gpusFaulty === 1 ? "" : "s"}` },
-          has(p.usdPerDay) && has(p.usdPerGpuHour)
+          has(p.usdPerDay) && has(p.usdPerGpuHour) && p.usdPerGpuHour > 0
             ? { label: "Cost", value: `${fmtUsd(p.usdPerDay)}/day`, sub: `$${p.usdPerGpuHour.toFixed(2)}/GPU-h · ${p.capacityType === 3 ? "reserved" : p.capacityType === 2 ? "spot" : "on-demand"}` }
             : { label: "Cost", value: <Uncollected label="unknown" why={NO_PRICE_SHEET} />, sub: "no price sheet covers this pool" },
         ]}

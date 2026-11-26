@@ -363,7 +363,7 @@ function DevicesTable({ devices, util, findings }: { devices: readonly MlDevice[
       },
     },
   ];
-  return <MlTable rows={devices} columns={columns} rowKey={(d) => d.uuid} rowHref={(d) => mlHref("fleet", ["gpus", d.uuid])} testId="ml-node-devices-table" />;
+  return <MlTable rows={devices} columns={columns} rowKey={(d) => `${d.uuid}#${d.index}`} rowHref={(d) => mlHref("fleet", ["gpus", d.uuid])} testId="ml-node-devices-table" />;
 }
 
 function NvlinkMatrix({ data }: { data: GetMlNodeResponse }) {

@@ -4,60 +4,114 @@
       "cluster": {
         "id": "ml-fleet-e2e",
         "name": "ml-fleet-e2e",
-        "kubernetesVersion": "v1.31.5+k3s1",
+        "provider": "other",
+        "kubernetesVersion": "v1.35.5+k3s1",
         "lastSeenAt": "2026-11-26T12:00:00Z",
         "nodeCount": 4,
         "gpuCount": 32,
-        "health": "ML_HEALTH_DEGRADED"
+        "health": "ML_HEALTH_FAULTY"
       },
       "coverage": [
         {
           "key": "inventory",
           "title": "Node and accelerator inventory",
-          "state": "ML_COMPONENT_STATE_INSTALLED",
-          "component": "forge ML cluster collector",
-          "detail": "nodes every 60s, daemonsets and deployments every 300s; 4 GPU nodes reporting",
-          "namespace": "forge-observability"
+          "state": "ML_COMPONENT_STATE_ADOPTED",
+          "component": "fake-gpu-operator",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "5 nodes, 4 with accelerators"
         },
         {
           "key": "accelerator-metrics",
-          "title": "Accelerator metrics",
-          "state": "ML_COMPONENT_STATE_PARTIAL",
-          "component": "DCGM exporter (fake-gpu-operator)",
-          "detail": "utilisation and framebuffer memory collected; power, temperature, clocks, Xid and ECC not collected",
-          "namespace": "gpu-operator"
+          "title": "Utilisation",
+          "state": "ML_COMPONENT_STATE_ADOPTED",
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "collected: DCGM_FI_DEV_GPU_UTIL"
+        },
+        {
+          "key": "memory-metrics",
+          "title": "Memory",
+          "state": "ML_COMPONENT_STATE_ADOPTED",
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "collected: DCGM_FI_DEV_FB_USED, DCGM_FI_DEV_FB_FREE"
+        },
+        {
+          "key": "power-metrics",
+          "title": "Power",
+          "state": "ML_COMPONENT_STATE_MISSING",
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "not collected: no device reports DCGM_FI_DEV_POWER_USAGE"
+        },
+        {
+          "key": "thermal-metrics",
+          "title": "Temperature",
+          "state": "ML_COMPONENT_STATE_MISSING",
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "not collected: no device reports DCGM_FI_DEV_GPU_TEMP or DCGM_FI_DEV_MEMORY_TEMP"
+        },
+        {
+          "key": "clock-metrics",
+          "title": "Clocks and clock events",
+          "state": "ML_COMPONENT_STATE_MISSING",
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "not collected: no device reports DCGM_FI_DEV_SM_CLOCK or DCGM_FI_DEV_CLOCK_THROTTLE_REASONS or DCGM_FI_DEV_CLOCKS_EVENT_REASONS"
+        },
+        {
+          "key": "xid-errors",
+          "title": "Xid errors",
+          "state": "ML_COMPONENT_STATE_MISSING",
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "not collected: no device reports DCGM_FI_DEV_XID_ERRORS"
+        },
+        {
+          "key": "ecc-errors",
+          "title": "ECC errors",
+          "state": "ML_COMPONENT_STATE_MISSING",
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "not collected: no device reports DCGM_FI_DEV_ECC_DBE_VOL_TOTAL or DCGM_FI_DEV_ECC_SBE_VOL_TOTAL"
         },
         {
           "key": "profiling-counters",
-          "title": "Profiling counters",
+          "title": "Profiling counters (SM active, tensor)",
           "state": "ML_COMPONENT_STATE_MISSING",
-          "detail": "DCGM_FI_PROF_* (SM, tensor, DRAM active) not collected"
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "not collected: no device reports DCGM_FI_PROF_SM_ACTIVE or DCGM_FI_PROF_GR_ENGINE_ACTIVE or DCGM_FI_PROF_PIPE_TENSOR_ACTIVE"
+        },
+        {
+          "key": "node-health",
+          "title": "Node health (node-problem-detector)",
+          "state": "ML_COMPONENT_STATE_ADOPTED",
+          "component": "node-problem-detector",
+          "detail": "node-problem-detector conditions present"
         },
         {
           "key": "pod-attribution",
           "title": "Pod attribution",
           "state": "ML_COMPONENT_STATE_ADOPTED",
-          "component": "DCGM exporter (fake-gpu-operator)",
-          "detail": "pod, namespace and container labels on DCGM series",
-          "namespace": "gpu-operator"
-        },
-        {
-          "key": "node-health",
-          "title": "Node health",
-          "state": "ML_COMPONENT_STATE_PARTIAL",
-          "detail": "kubelet conditions collected; node-problem-detector not found"
-        },
-        {
-          "key": "events",
-          "title": "Kubernetes events",
-          "state": "ML_COMPONENT_STATE_INSTALLED",
-          "component": "forge ML cluster collector",
-          "detail": "events.k8s.io watch",
-          "namespace": "forge-observability"
+          "component": "fake-gpu-operator status-exporter",
+          "version": "0.2.1",
+          "namespace": "gpu-operator",
+          "detail": "devices carry pod/namespace labels"
         }
       ],
       "inventory": {
-        "nodeCount": 4,
+        "nodeCount": 5,
         "products": [
           {
             "name": "NVIDIA-A100-SXM4-80GB",
@@ -67,8 +121,8 @@
         ]
       },
       "discoveredAt": "2026-11-26T12:00:00Z",
-      "discoverCommand": "reliant forge ml discover --cluster ml-fleet-e2e",
-      "coverageRatio": 0.58
+      "discoverCommand": "forge ml discover",
+      "coverageRatio": 0.45454545454545453
     }
   ]
 }

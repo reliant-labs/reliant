@@ -138,6 +138,9 @@ function fmtUnitRaw(value: number, unit: string): string {
   switch (unit) {
     case "ratio":
       return fmtPct(value, value < 0.1 ? 1 : 0);
+    case "MiB":
+      // DCGM reports framebuffer in MiB (DCGM_FI_DEV_FB_*): 81920 MiB reads "80.0 GiB".
+      return fmtBytes(value * 1024 * 1024);
     case "percent":
       return `${value.toFixed(value < 10 ? 1 : 0)}%`;
     case "ms":

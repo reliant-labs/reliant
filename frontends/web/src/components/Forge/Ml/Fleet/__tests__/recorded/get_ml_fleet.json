@@ -2,24 +2,19 @@
   "summary": {
     "gpusTotal": 32,
     "gpusAllocated": 1,
-    "busyRatio": 0.7,
-    "gpusUnallocated": 31,
-    "usdPerDay": "NaN",
-    "idleUsdPerDay": "NaN",
-    "trainingGoodput": "NaN",
-    "cost24h": {
-      "gpuHours": 768
-    }
+    "busyRatio": 0.75,
+    "gpusUnallocated": 31
   },
   "clusters": [
     {
       "id": "ml-fleet-e2e",
       "name": "ml-fleet-e2e",
-      "kubernetesVersion": "v1.31.5+k3s1",
+      "provider": "other",
+      "kubernetesVersion": "v1.35.5+k3s1",
       "lastSeenAt": "2026-11-26T12:00:00Z",
       "nodeCount": 4,
       "gpuCount": 32,
-      "health": "ML_HEALTH_DEGRADED"
+      "health": "ML_HEALTH_FAULTY"
     }
   ],
   "pools": [
@@ -30,28 +25,12 @@
       "vendor": "nvidia",
       "product": "NVIDIA-A100-SXM4-80GB",
       "memoryGb": 80,
-      "nodeCount": 2,
-      "gpusTotal": 16,
+      "nodeCount": 4,
+      "gpusTotal": 32,
       "gpusAllocated": 1,
       "smActiveP50": "NaN",
-      "busyRatio": 0.7,
-      "nodesUnhealthy": 1,
-      "usdPerGpuHour": "NaN",
-      "usdPerDay": "NaN"
-    },
-    {
-      "id": "ml-fleet-e2e/NVIDIA-A100-SXM4-80GB",
-      "clusterId": "ml-fleet-e2e",
-      "name": "NVIDIA-A100-SXM4-80GB",
-      "vendor": "nvidia",
-      "product": "NVIDIA-A100-SXM4-80GB",
-      "memoryGb": 80,
-      "nodeCount": 2,
-      "gpusTotal": 16,
-      "smActiveP50": "NaN",
-      "busyRatio": "NaN",
-      "usdPerGpuHour": "NaN",
-      "usdPerDay": "NaN"
+      "busyRatio": 0.75,
+      "nodesUnhealthy": 1
     }
   ],
   "unhealthy": [
@@ -63,7 +42,8 @@
       },
       "score": 40,
       "health": "ML_HEALTH_FAULTY",
-      "reason": "GpuXidError: GPU Xid error reported",
+      "reason": "GpuXidError: Xid79",
+      "events24h": 1,
       "nodeId": "ml-fleet-e2e/k3d-ml-fleet-e2e-agent-0"
     }
   ],

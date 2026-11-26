@@ -1,26 +1,36 @@
 # Recorded ML fleet responses
 
-`realData.render.test.tsx` serves these files (protojson of
-`controlplane.v1.MlEarlyAccessService` responses) through a router transport
-and renders Fleet, Node, GPU and Setup over them.
+`realData.render.test.tsx` serves these files through a router transport and
+renders Fleet, Node, GPU and Setup over them. Each file is the protojson of a
+`controlplane.v1.MlEarlyAccessService` response.
 
-**They are hand-written stand-ins.** They follow the Phase B1 data contract
-for what control-plane's B1 handlers (`GetMlFleet`, `GetMlNode`,
-`GetMlDevice`, `GetMlStack`) answer for the k3d cluster `ml-fleet-e2e`: two k3d
-agents (`k3d-ml-fleet-e2e-agent-0/1`) and two KWOK nodes (`kwok-gpu-0/1`), each
-with 8 × `NVIDIA-A100-SXM4-80GB` from fake-gpu-operator 0.2.1. Agent 0 is
-unhealthy (a `GpuXidError` condition). One GPU on agent 1 runs at about 70%
-utilisation for pod `default/gpu-burn`. Only `DCGM_FI_DEV_GPU_UTIL`, `FB_USED`
-and `FB_FREE` are collected, so power, temperature, clocks, Xid, ECC, SM active
-and every cost field are not collected, and workloads, NVLink, InfiniBand,
-host, diagnostics and incarnations are empty.
+**They are real recordings.** control-plane's `e2e/ml_fleet` writes them.
+That e2e calls the real B1 handlers (`GetMlFleet`, `GetMlNode`, `GetMlDevice`,
+`GetMlStack`), which read real telemetry from the k3d cluster `ml-fleet-e2e`:
+2 k3d agents and 2 KWOK nodes, each with 8 × `NVIDIA-A100-SXM4-80GB` from
+fake-gpu-operator 0.2.1. Agent 0 carries a `GpuXidError` condition. The
+recording normalises node names and GPU UUIDs. Do not edit these files by hand.
 
-They will be replaced by the files control-plane's e2e records
-(`control-plane e2e/ml_fleet/testdata/recorded/`, written with `-update`) once
-that lands. Copy those files over these and keep the names the same:
-`get_ml_fleet.json`, `get_ml_node.json`, `get_ml_device.json` and
-`get_ml_stack.json`.
+Regenerate them in control-plane (needs docker and k3d), then copy them here:
 
-"Not collected" on the wire: a headline double the contract documents as
-"NaN when not collected" is sent as `"NaN"`. An absent double is 0, a real zero.
-An `MlFieldValue` uses `collection: ML_COLLECTION_NOT_COLLECTED`.
+```bash
+cd ../control-plane
+ML_FLEET_E2E=1 go test -tags e2e ./e2e/ml_fleet/ -run TestMLFleet -update
+for n in get_ml_fleet get_ml_node get_ml_device get_ml_stack; do
+  cp e2e/ml_fleet/testdata/recorded/$n.json \
+    ../reliant/frontends/web/src/components/Forge/Ml/Fleet/__tests__/recorded/
+done
+```
+
+To copy from the remote branch instead of a local checkout, use
+`git show FETCH_HEAD:e2e/ml_fleet/testdata/recorded/<name>.json`.
+
+The test builds the stale cluster, zero-GPU cluster and empty cases inline,
+as variants of these files.
+
+How "not collected" appears on the wire:
+
+- A headline double sends `"NaN"`.
+- An absent double means 0, a real zero. An absent `usd_*` field therefore
+  means no price sheet.
+- An `MlFieldValue` carries `collection: ML_COLLECTION_NOT_COLLECTED`.

@@ -98,7 +98,25 @@ export function fmtField(f: Pick<MlFieldValue, "value" | "text" | "unit" | "coll
   return fmtUnit(f.value, f.unit);
 }
 
-export const fieldOf = (fields: readonly MlFieldValue[], key: string) => fields.find((f) => f.key === key);
+/**
+ * The same field under the other neutral key spelling: the fixture world's
+ * short keys and control-plane B1's dotted ones (recorded from its k3d e2e)
+ * name one DCGM field each, so a page asks for either and finds it.
+ */
+const FIELD_ALIASES: Record<string, readonly string[]> = {
+  "gpu.temp": ["gpu.temperature"],
+  "gpu.memory_temp": ["gpu.memory_temperature"],
+  "gpu.fb_used": ["gpu.memory.used"],
+  "gpu.fb_free": ["gpu.memory.free"],
+  "gpu.sm_clock": ["gpu.clock.sm"],
+  "gpu.mem_clock": ["gpu.clock.memory"],
+  "gpu.clock_event_reasons": ["gpu.clock.event_reasons"],
+};
+
+export const fieldOf = (fields: readonly MlFieldValue[], key: string) => {
+  const keys = [key, ...(FIELD_ALIASES[key] ?? [])];
+  return keys.map((k) => fields.find((f) => f.key === k)).find(Boolean);
+};
 
 // ── Utilisation ───────────────────────────────────────────────────────────────
 

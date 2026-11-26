@@ -3,9 +3,9 @@
 import "@/components/Forge/Ml/__tests__/jsdomShims";
 
 /**
- * Fleet, Node, GPU and Setup over REAL-shaped answers: the protojson in
- * ./recorded (README.md there), what control-plane's B1 handlers answer for a
- * k3d cluster on fake-gpu-operator plus KWOK. Only utilisation and
+ * Fleet, Node, GPU and Setup over REAL answers: the protojson in ./recorded
+ * (README.md there), recorded by control-plane's e2e/ml_fleet through its B1
+ * handlers from a k3d cluster on fake-gpu-operator plus KWOK. Only utilisation and
  * framebuffer memory are collected, there is no price sheet, and node,
  * workload and NVLink detail is empty, so every unset number must read "not
  * collected" (never 0, NaN or "$0"). Also: no cluster reporting yet
@@ -44,11 +44,12 @@ import { MlGatedView } from "@/components/Forge/Ml/MlRoute";
 
 const CLUSTER = "ml-fleet-e2e";
 const BAD = "k3d-ml-fleet-e2e-agent-0";
+const NODE = (nodeJson as { node: { name: string } }).node.name;
 const BURN_GPU = (deviceJson as { device: { uuid: string } }).device.uuid;
 
 type Answer = "recorded" | "empty" | "not-entitled" | "stale";
 
-/** The recorded fleet plus a second cluster that stopped reporting an hour before, with no GPU nodes. */
+/** Synthetic variant of the real recording: the recorded fleet plus a second cluster that stopped reporting an hour before, with no GPU nodes. */
 function staleFleet(): JsonValue {
   const f = structuredClone(fleetJson) as { clusters: Record<string, unknown>[] };
   f.clusters.push({ id: "edge-cpu", name: "edge-cpu", lastSeenAt: "2026-11-26T11:00:00Z", nodeCount: 3, gpuCount: 0, health: "ML_HEALTH_UNKNOWN" });
@@ -98,25 +99,26 @@ describe("ML Fleet and Setup on real cluster data", () => {
     mount("fleet");
     const kpis = await screen.findByTestId("ml-fleet-kpis");
     expect(kpis).toHaveTextContent("32");
-    expect(kpis).toHaveTextContent("1 cluster · 2 pools");
+    expect(kpis).toHaveTextContent("1 cluster · 1 pool");
     expect(kpis).toHaveTextContent("no price sheet");
     const pools = screen.getByTestId("ml-fleet-pools-table");
     expect(pools).toHaveTextContent("a100");
-    expect(pools).toHaveTextContent("NVIDIA-A100-SXM4-80GB");
+    expect(pools).toHaveTextContent("A100-SXM4-80GB");
     expect(pools).toHaveTextContent(CLUSTER);
     expect(within(pools).getAllByText("not collected").length).toBeGreaterThan(0);
     const unhealthy = screen.getByTestId("ml-fleet-unhealthy");
     expect(unhealthy).toHaveTextContent(BAD);
-    expect(unhealthy).toHaveTextContent("GpuXidError");
+    expect(unhealthy).toHaveTextContent("GpuXidError: Xid79");
     noNumbersInvented(screen.getByTestId("ml-page-fleet"));
   });
 
-  it("node: 8 devices, power, temperature and Xid not collected, the condition named", async () => {
-    mount("fleet", [CLUSTER, BAD]);
+  it("node: 8 devices, power, temperature and Xid not collected, its conditions listed", async () => {
+    mount("fleet", [CLUSTER, NODE]);
     const table = await screen.findByTestId("ml-node-devices-table");
     expect(within(table).getAllByRole("row")).toHaveLength(9);
     expect(within(table).getAllByText("not collected").length).toBeGreaterThanOrEqual(8 * 3);
-    expect(screen.getByTestId("ml-node-conditions")).toHaveTextContent("GpuXidError");
+    expect(screen.getByTestId("ml-node-conditions")).toHaveTextContent("KubeletReady");
+    expect(within(table).getByText("gpu-train")).toBeInTheDocument();
     expect(screen.getByTestId("ml-node-kpis")).toHaveTextContent("not collected");
     noNumbersInvented(screen.getByTestId("ml-node-kpis"));
   });
@@ -124,22 +126,25 @@ describe("ML Fleet and Setup on real cluster data", () => {
   it("GPU: utilisation and memory collected; power, temperature and Xid not collected", async () => {
     mount("fleet", ["gpus", BURN_GPU]);
     await screen.findByTestId("ml-gpu-fields");
-    expect(screen.getByTestId("ml-field-gpu.util")).toHaveTextContent("70%");
-    expect(screen.getByTestId("ml-field-gpu.fb_used")).toHaveTextContent("52");
-    for (const key of ["gpu.power", "gpu.temp", "gpu.xid.last"]) expect(screen.getByTestId(`ml-field-${key}`)).toHaveTextContent("not collected");
+    expect(screen.getByTestId("ml-field-gpu.util")).toHaveTextContent("75%");
+    expect(screen.getByTestId("ml-field-gpu.memory.used")).toHaveTextContent("80.0 GiB");
+    for (const key of ["gpu.power", "gpu.temperature", "gpu.xid.last"]) expect(screen.getByTestId(`ml-field-${key}`)).toHaveTextContent("not collected");
     const kpis = screen.getByTestId("ml-gpu-kpis");
-    expect(kpis).toHaveTextContent("70%");
+    expect(kpis).toHaveTextContent("75%");
     expect(within(kpis).getAllByText(/not collected/).length).toBeGreaterThanOrEqual(3);
-    expect(screen.getByTestId("ml-gpu-identity")).toHaveTextContent("default/gpu-burn");
+    expect(screen.getByTestId("ml-gpu-identity")).toHaveTextContent("gpu-train");
     noNumbersInvented(kpis);
   });
 
-  it("setup: the cluster's coverage rows, gaps first, with what is not collected", async () => {
+  it("setup: one coverage row per field group; a running exporter's missing fields read not collected", async () => {
     mount("setup");
     const coverage = await screen.findByTestId(`ml-setup-coverage-${CLUSTER}`);
+    expect(within(coverage).getAllByRole("row")).toHaveLength(12);
     expect(coverage).toHaveTextContent("Profiling counters");
-    expect(coverage).toHaveTextContent("power, temperature, clocks, Xid and ECC not collected");
-    expect(screen.getByTestId(`ml-setup-discover-${CLUSTER}`)).toHaveTextContent(`reliant forge ml discover --cluster ${CLUSTER}`);
+    expect(coverage).toHaveTextContent("not collected: no device reports DCGM_FI_DEV_XID_ERRORS");
+    expect(within(coverage).getAllByText("Not collected")).toHaveLength(6);
+    expect(within(coverage).getAllByText("Adopted")).toHaveLength(5);
+    expect(screen.getByTestId(`ml-setup-discover-${CLUSTER}`)).toHaveTextContent("forge ml discover");
     noNumbersInvented(screen.getByTestId("ml-page-setup"));
   });
 
@@ -149,7 +154,7 @@ describe("ML Fleet and Setup on real cluster data", () => {
     expect(edge).toHaveTextContent("stale · last seen 1h ago");
     expect(edge).toHaveTextContent("3 nodes · no GPUs found");
     expect(screen.queryByTestId(`ml-fleet-cluster-${CLUSTER}`)).toBeNull();
-    expect(screen.getByTestId("ml-fleet-kpis")).toHaveTextContent("2 clusters · 2 pools");
+    expect(screen.getByTestId("ml-fleet-kpis")).toHaveTextContent("2 clusters · 1 pool");
   });
 
   it("no cluster reporting yet (observed_at unset): connect a cluster, never zeros", async () => {

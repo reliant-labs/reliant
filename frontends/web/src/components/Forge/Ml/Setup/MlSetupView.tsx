@@ -12,7 +12,7 @@
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 
-import type { GetMlStackResponse, MlClusterSetup, MlCoverageItem } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlComponentState, type GetMlStackResponse, type MlClusterSetup, type MlCoverageItem } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { CodeBlock, MlFrame, MlNoCluster, MlRead } from "../MlParts";
 import { componentStateOf, EmptyNote, FactList, FindingLink, fmtAgo, fmtPct, Grid, KpiStrip, MlTable, Panel, StackedBar, StatusDot, tsMs, useMl, useMlSearch, type MlColumn } from "../kit";
@@ -63,6 +63,8 @@ function ClusterSetup({ setup, nowMs }: { setup: MlClusterSetup; nowMs: number }
       key: "state",
       header: "State",
       render: (i) => {
+        // MISSING with a component named: the component runs, and does not report this area's fields.
+        if (i.state === MlComponentState.MISSING && i.component) return <StatusDot tone="warning" label="Not collected" />;
         const s = componentStateOf(i.state);
         return <StatusDot tone={s.tone} label={s.label} />;
       },

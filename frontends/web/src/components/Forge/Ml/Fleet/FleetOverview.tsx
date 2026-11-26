@@ -59,7 +59,8 @@ function OverviewBody({ data }: { data: GetMlFleetResponse }) {
   const nowMs = tsMs(data.observedAt) ?? Date.now();
   const worst = data.unhealthy[0];
   // Money is known only under a price sheet: unset (NaN) is "no price sheet", never $0.
-  const priced = has(s?.usdPerDay);
+  // An absent double arrives as 0, so a fleet with no priced pool is unpriced too.
+  const priced = has(s?.usdPerDay) && data.pools.some((p) => has(p.usdPerGpuHour) && p.usdPerGpuHour > 0);
   return (
     <div className="space-y-4">
       <KpiStrip
