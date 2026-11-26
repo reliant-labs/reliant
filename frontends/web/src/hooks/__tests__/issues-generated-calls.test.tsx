@@ -104,6 +104,21 @@ describe("the issue inbox on IssuesService's generated key", () => {
     expect(result.current.data?.pages[0]).toEqual({ issues: [], nextPageToken: "page-2" });
   });
 
+  it("asks a filter's probe about the range the list read, not the relative window resolved again", async () => {
+    const { arrivals, wrapper } = setup();
+    const { result } = renderHook(() => useIssues(SCOPE, { ...FILTERS, userId: "user-7" }), { wrapper });
+    await waitFor(() => expect(result.current.data?.pages).toHaveLength(1));
+    expect(arrivals).toHaveLength(2);
+    const [list, probe] = arrivals.map((a) => a.request);
+    expect(list!.userId).toBe("user-7");
+    expect(list!.scope?.timeRange?.relative).toBeDefined();
+    expect(probe!.userId).toMatch(/^probe-/);
+    expect(probe!.pageToken).toBe("");
+    expect(probe!.scope?.timeRange?.relative).toBeUndefined();
+    expect(msOf(probe!.scope?.timeRange?.start)).toBe(READ_AT - HOUR);
+    expect(msOf(probe!.scope?.timeRange?.end)).toBe(READ_AT);
+  });
+
   it("keeps one cache key as time moves, under the service's generated root", () => {
     const at = (now: number) => {
       const real = Date.now;
@@ -150,7 +165,7 @@ describe("the shop pack's IssuesService handlers", () => {
     const list = api.listIssues;
     api.listIssues = (req) => { seen.push(req.window); return list(req); };
     const now = Date.UTC(2026, 10, 10, 15, 0, 0);
-    const handlers = issuesHandlers(api, { now: () => now }) as Record<string, (req: unknown) => Promise<{ effectiveTimeRange?: { start?: { seconds: bigint }; end?: { seconds: bigint } } }>>;
+    const handlers = issuesHandlers(api, { clock: now }) as Record<string, (req: unknown) => Promise<{ effectiveTimeRange?: { start?: { seconds: bigint }; end?: { seconds: bigint } } }>>;
     const answer = await handlers[`${IssuesService.typeName}/ListIssues`]!(
       { scope: { orgId: "org-fixture", envIds: [], services: [], timeRange: { relative: { last: { seconds: BigInt(HOUR / 1000), nanos: 0 } } } }, statuses: [], sort: 0, pageSize: 0, pageToken: "" }
     );
@@ -164,7 +179,7 @@ describe("the shop pack's IssuesService handlers", () => {
     const calls: unknown[] = [];
     api.updateIssueStatus = async (req) => { calls.push(req); return (await api.getIssue({ issueId: req.issueId })).issue; };
     const handlers = issuesHandlers(api) as Record<string, (req: unknown) => Promise<unknown>>;
-    const { issue: some } = await api.getIssue({ issueId: (await api.listIssues({ orgId: "org-fixture", envIds: [], window: { startMs: 0, endMs: Date.now() }, statuses: [], sort: "last" })).issues[0]!.id });
+    const { issue: some } = await api.getIssue({ issueId: (await api.listIssues({ orgId: "org-fixture", envIds: [], window: { startMs: 0, endMs: Number.MAX_SAFE_INTEGER }, statuses: [], sort: "last" })).issues[0]!.id });
     await handlers[`${IssuesService.typeName}/UpdateIssueStatus`]!({ issueId: some.id, envId: some.envId, expectedVersion: 7, status: WireStatusChange.RESOLVED, resolveIn: { kind: IssueResolveKind.VERSION, version: "1.2.3" } });
     expect(calls[0]).toEqual({ issueId: some.id, envId: some.envId, expectedVersion: 7, change: { status: "resolved", resolveIn: { kind: "version", version: "1.2.3" } } });
   });

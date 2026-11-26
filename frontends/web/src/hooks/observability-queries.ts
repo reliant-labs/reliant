@@ -194,6 +194,19 @@ export function invalidateObsScope(client: QueryClient, scope: ObsScope | null):
 }
 
 /**
+ * Every observability read, whatever its scope: the hand-written ones under
+ * `["observability"]` and ObservabilityService's generated ones (workloads, a
+ * workload, the overview, …), which that prefix no longer covers. For a write
+ * that changes what all of them show (a workload restart).
+ */
+export function invalidateAllObservability(client: QueryClient): Promise<void> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: ["observability"] }),
+    client.invalidateQueries({ queryKey: observabilityServiceKeys.all }),
+  ]).then(() => undefined);
+}
+
+/**
  * The call options of every read on a generated hook: the read marked, at the
  * moment it starts, as a poll, a prefetch or a person's read, for the
  * control-plane transport's read stage (obsInterceptors.ts). The runtime calls
@@ -1143,6 +1156,9 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
       // Marked (poll, prefetch or a person's read) before the first await, where runAsPoll's mark holds.
       const call = obsCall({ signal: context.signal });
       const issues = issuesClient(context);
+      const response = await issues.listIssues(listIssuesRequest(input, pageParam ?? undefined), call);
+      // A control plane that does not echo the range it read: the next page asks for page one's range again.
+      const range = response.effectiveTimeRange ?? pageParam?.range ?? relative;
       // An issue row names no user, so whether the server applied user_id is
       // asked, not inferred: the same first page for a user nobody is. A server
       // that knows the filter answers it with nothing; one that ignores it
@@ -1150,17 +1166,17 @@ export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
       // Each probe asks about one filter alone, the other probed filters
       // removed: a server that applies user_id but ignores browser would answer
       // a combined probe with nothing (the random user matches no one) and pass
-      // off a user-filtered list as a browser-filtered one.
+      // off a user-filtered list as a browser-filtered one. A probe reads the
+      // range the list just read (its effective_time_range), not "the last
+      // hour" resolved again: its answer must be about the rows on screen.
       const probed = pageParam ? [] : ISSUE_PROBED_FILTERS.filter(({ key }) => !!filters[key]);
       const unprobed = Object.fromEntries(ISSUE_PROBED_FILTERS.map(({ key }) => [key, undefined]));
-      const [response, ...probes] = await Promise.all([
-        issues.listIssues(listIssuesRequest(input, pageParam ?? undefined), call),
-        ...probed.map(({ key }) => issues.listIssues(listIssuesRequest({ ...input, ...unprobed, [key]: issueFilterProbe(), pageSize: 1 }), call)),
-      ]);
+      const probes = await Promise.all(
+        probed.map(({ key }) => issues.listIssues(listIssuesRequest({ ...input, ...unprobed, [key]: issueFilterProbe(), pageSize: 1 }, { token: "", range }), call))
+      );
       const ignored = probed.find((_, i) => probes[i].issues.length > 0);
       if (ignored) throw new FilterUnsupportedError(ignored.label, "issues");
-      // A control plane that does not echo the range it read: the next page asks for page one's range again.
-      return { response, range: response.effectiveTimeRange ?? pageParam?.range ?? relative };
+      return { response, range };
     },
     initialPageParam: null as IssuePageParam | null,
     getNextPageParam: (last) => (last.response.nextPageToken ? { token: last.response.nextPageToken, range: last.range } : undefined),

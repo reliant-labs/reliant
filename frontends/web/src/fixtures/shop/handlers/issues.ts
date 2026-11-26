@@ -12,7 +12,7 @@
  * still decode each write into the model and ask `fixtures`, so a test's fake
  * answers the generated writes the console sends (test/observabilityFixtures.tsx).
  *
- * A relative window resolves against `now` (the pack's clock by default), and
+ * A relative window resolves against `clock` (the pack's by default), and
  * ListIssues echoes the range it read as effective_time_range, as the server
  * does, so the console pages "the last hour" on one range.
  */
@@ -45,7 +45,7 @@ import type {
 import { createShopApi } from "../model/shopApi";
 import { demoNow } from "../shopStory";
 import { completed } from "./defaults";
-import { int64, msOf, ts, tsOpt, windowOf } from "./wire";
+import { int64, msOf, ts, tsOpt, windowOf, type PackClock } from "./wire";
 
 const WIRE_STATUS: Record<IssueStatus, WireStatus> = {
   new: WireStatus.NEW,
@@ -137,11 +137,11 @@ function statusChangeOf(req: WireStatusUpdate): IssueStatusChange {
   }
 }
 
-export function issuesHandlers(fixtures: ObservabilityApi = createShopApi(), { now = demoNow }: { now?: () => number } = {}): MockHandlers {
+export function issuesHandlers(fixtures: ObservabilityApi = createShopApi(), { clock = demoNow }: { clock?: PackClock } = {}): MockHandlers {
   return completed(IssuesService, mockService(IssuesService, {
     listIssues: async (req) => {
       const scope = req.scope;
-      const window = windowOf(scope?.timeRange, now()) ?? { startMs: 0, endMs: 0 };
+      const window = windowOf(scope?.timeRange, clock) ?? { startMs: 0, endMs: 0 };
       const res = await fixtures.listIssues({
         orgId: scope?.orgId ?? "",
         projectId: scope?.projectId,
@@ -163,7 +163,7 @@ export function issuesHandlers(fixtures: ObservabilityApi = createShopApi(), { n
       return { issues: res.issues.map(wireIssue), nextPageToken: res.nextPageToken, effectiveTimeRange: { start: ts(window.startMs), end: ts(window.endMs) } };
     },
     getIssue: async (req) => {
-      const d = await fixtures.getIssue({ issueId: req.issueId, window: windowOf(req.timeRange, now()) });
+      const d = await fixtures.getIssue({ issueId: req.issueId, window: windowOf(req.timeRange, clock) });
       return {
         issue: wireIssue(d.issue),
         latestEvent: d.latestEvent ? wireIssueEvent(d.latestEvent) : undefined,
