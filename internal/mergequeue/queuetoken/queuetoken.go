@@ -147,9 +147,19 @@ func (s *Source) mint(ctx context.Context, repo *core.PipelineRepo) (Token, erro
 	if repo.CreatedByUserID == "" {
 		return Token{}, fmt.Errorf("queuetoken: %s has no enrolling user to mint the Reliant App's token for", repo.Repository)
 	}
-	tok, err := s.minter.MintInstallationToken(ctx, gitcredentialclient.InstallationRequest{
+	req := gitcredentialclient.InstallationRequest{
 		ExternalUserID: repo.CreatedByUserID, Owner: gh.Owner, Repo: gh.Name, Permissions: botPermissions,
-	})
+	}
+	tok, err := s.minter.MintInstallationToken(ctx, req)
+	if errors.Is(err, gitcredentialclient.ErrAppPermissions) {
+		// An installation that never granted checks: land without the
+		// display check rather than not land (control-plane's default set,
+		// contents, pull_requests and issues, is what merging needs).
+		s.logger.WarnContext(ctx, "merge queue's Reliant App token has no checks permission: landing without the display check",
+			"repository", repo.Repository)
+		req.Permissions = nil
+		tok, err = s.minter.MintInstallationToken(ctx, req)
+	}
 	if err != nil {
 		return Token{}, fmt.Errorf("queuetoken: Reliant App token for %s: %w", repo.Repository, err)
 	}

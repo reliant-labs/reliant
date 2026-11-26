@@ -16,7 +16,9 @@ const callerSecret = "queue-caller-secret-at-least-32-bytes!!"
 
 // minter answers a scripted queue mint and counts both kinds.
 type minter struct {
-	queueErr      error
+	queueErr error
+	// noChecks refuses a bot mint that asks for checks.
+	noChecks      bool
 	queueCalls    int
 	botCalls      int
 	lastBot       gitcredentialclient.InstallationRequest
@@ -36,6 +38,9 @@ func (m *minter) MintQueueInstallationToken(_ context.Context, req gitcredential
 func (m *minter) MintInstallationToken(_ context.Context, req gitcredentialclient.InstallationRequest) (gitcredentialclient.InstallationToken, error) {
 	m.botCalls++
 	m.lastBot = req
+	if m.noChecks && req.Permissions["checks"] != "" {
+		return gitcredentialclient.InstallationToken{}, gitcredentialclient.ErrAppPermissions
+	}
 	return gitcredentialclient.InstallationToken{Token: gitcredentialclient.NewToken("ghs_bot", nil), BotLogin: "reliant-labs[bot]", ExpiresAt: m.expires}, nil
 }
 
@@ -122,5 +127,13 @@ func TestClientsLandAsTheTokensIdentity(t *testing.T) {
 	gh, id, err := c.Client(t.Context(), repo)
 	if err != nil || gh == nil || !id.Unenforced || id.Login != "reliant-labs[bot]" {
 		t.Fatalf("client = %v %+v %v", gh, id, err)
+	}
+}
+
+func TestFallbackWithoutChecksPermissionStillLands(t *testing.T) {
+	m := &minter{noChecks: true, expires: time.Now().Add(time.Hour)}
+	tok, err := source(t, m, "", nil).Token(t.Context(), repo)
+	if err != nil || !tok.Unenforced || m.botCalls != 2 || m.lastBot.Permissions != nil {
+		t.Fatalf("token = %+v (%v), minter %+v", tok, err, m)
 	}
 }
