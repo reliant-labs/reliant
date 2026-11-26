@@ -25,13 +25,18 @@ type localGit struct {
 }
 
 func (g localGit) run(ctx context.Context, workDir, stdin string, args ...string) (stdout string, code int, err error) {
+	return g.runEnv(ctx, workDir, stdin, nil, args...)
+}
+
+// runEnv is run with extra environment (GIT_INDEX_FILE, say).
+func (g localGit) runEnv(ctx context.Context, workDir, stdin string, extra []string, args ...string) (stdout string, code int, err error) {
 	full := args
 	if workDir == "" {
 		full = append([]string{"--git-dir=" + g.dir}, args...)
 	}
 	cmd := exec.CommandContext(ctx, "git", full...)
 	cmd.Dir = workDir
-	cmd.Env = gitport.HermeticEnv(g.id)
+	cmd.Env = append(gitport.HermeticEnv(g.id), extra...)
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
@@ -86,45 +91,73 @@ func (g localGit) commitTree(ctx context.Context, tree string, parents []string,
 	return strings.TrimSpace(out), err
 }
 
-// checkout is a linked worktree of the port's repository at a commit.
+// checkout is a standalone copy of a commit's files, for the regen command.
+//
+// It is deliberately NOT a linked worktree of the port's repository (review
+// B1 on #3794): a linked worktree's .git points into the shared git directory,
+// which the regen command could then rewrite (refs, objects, config) and so
+// alter the batch built from it. The copy lives in its own temp directory,
+// away from the git directory, with a private throwaway repository of its own
+// (some generators ask git about the tree). The tree regen leaves is read by
+// this process, through a private index, never by the command.
 type checkout struct {
 	g      localGit
 	parent string
 	dir    string
+	index  string // the private index tree() reads the copy through
 }
 
-// newCheckout checks commit out into a new directory beside the git
-// directory, so a sandbox that carries the command's own temp directory into
-// its private /tmp carries the repository the checkout points at too.
+// newCheckout copies commit's files into a new directory under the system
+// temp directory.
 func (g localGit) newCheckout(ctx context.Context, commit string) (*checkout, error) {
-	parent, err := os.MkdirTemp(filepath.Dir(g.dir), "regen-")
+	parent, err := os.MkdirTemp("", "reliant-regen-")
 	if err != nil {
 		return nil, fmt.Errorf("candidate: regen checkout: %w", err)
 	}
-	c := &checkout{g: g, parent: parent, dir: filepath.Join(parent, "src")}
-	if _, _, err := g.run(ctx, "", "", "worktree", "add", "--detach", "--quiet", c.dir, commit); err != nil {
+	c := &checkout{g: g, parent: parent, dir: filepath.Join(parent, "src"), index: filepath.Join(parent, "index")}
+	fail := func(err error) (*checkout, error) {
 		c.remove(ctx)
 		return nil, err
+	}
+	if err := os.Mkdir(c.dir, 0o755); err != nil {
+		return fail(fmt.Errorf("candidate: regen checkout: %w", err))
+	}
+	idx := []string{"GIT_INDEX_FILE=" + c.index}
+	if _, _, err := g.runEnv(ctx, "", "", idx, "--work-tree="+c.dir, "read-tree", commit); err != nil {
+		return fail(err)
+	}
+	if _, _, err := g.runEnv(ctx, "", "", idx, "--work-tree="+c.dir, "checkout-index", "--all", "--force"); err != nil {
+		return fail(err)
+	}
+	// A private repository for the command, holding only this copy.
+	priv := localGit{dir: filepath.Join(c.dir, ".git"), id: g.id}
+	for _, args := range [][]string{
+		{"init", "--quiet"},
+		{"add", "--all"},
+		{"commit", "--quiet", "--no-verify", "--allow-empty", "-m", "regen base"},
+	} {
+		if _, _, err := priv.run(ctx, c.dir, "", args...); err != nil {
+			return fail(err)
+		}
 	}
 	return c, nil
 }
 
-// tree records the checkout's files, as `git add -A` sees them (ignored files
-// are not part of a tree), and returns the tree.
+// tree records the copy's files, as `git add -A` sees them (ignored files are
+// not part of a tree, and the copy's own .git never is), into the port's
+// repository through the private index, and returns the tree.
 func (c *checkout) tree(ctx context.Context) (string, error) {
-	if _, _, err := c.g.run(ctx, c.dir, "", "add", "-A"); err != nil {
+	idx := []string{"GIT_INDEX_FILE=" + c.index}
+	if _, _, err := c.g.runEnv(ctx, "", "", idx, "--work-tree="+c.dir, "add", "--all"); err != nil {
 		return "", err
 	}
-	out, _, err := c.g.run(ctx, c.dir, "", "write-tree")
+	out, _, err := c.g.runEnv(ctx, "", "", idx, "write-tree")
 	return strings.TrimSpace(out), err
 }
 
 func (c *checkout) remove(ctx context.Context) {
-	// Cleanup runs even when the build's context is done.
-	ctx = context.WithoutCancel(ctx)
-	_, _, _ = c.g.run(ctx, "", "", "worktree", "remove", "--force", c.dir)
+	_ = ctx
 	_ = os.RemoveAll(c.parent)
-	_, _, _ = c.g.run(ctx, "", "", "worktree", "prune")
 }
 
 func uniqueSorted(in []string) []string {
