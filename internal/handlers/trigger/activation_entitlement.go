@@ -15,10 +15,11 @@ import (
 const activationEntitlementTimeout = 5 * time.Second
 
 // gatedToolHidden returns whether the approval card for user's activation
-// must treat a feature-gated tool as nonexistent: the owner is not entitled
-// to its feature in the activation's org (orgOf, asked only when a gated
-// tool is reached, at most once). It fails closed: no gate, no org, a refusal
-// or an error hides the tool. Each feature is asked at most once.
+// must treat a tool as nonexistent: it is feature-gated and the owner is not
+// entitled to its feature in the activation's org. A name that is not gated
+// is answered from the gated map alone, so the gate (and orgOf) is asked only
+// for a gated name the caller passes, and each feature at most once. It fails
+// closed: no gate, no org, a refusal or an error hides the tool.
 func (s *Service) gatedToolHidden(ctx context.Context, user string, orgOf func() string) func(name string) bool {
 	answers := map[featuregate.Feature]bool{}
 	org, orgResolved := "", false

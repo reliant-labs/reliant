@@ -479,11 +479,13 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						// A feature-gated tool the owner is not entitled to does
 						// not exist for this card: it is not a known tool, and a
 						// tag, glob or "*" does not expand to it. Named exactly,
-						// it reads as any unknown name does.
-						known := map[string]bool{}
+						// it reads as any unknown name does. hidden is asked only
+						// of the names the declaration reaches or binds.
+						registered := map[string]bool{}
 						for _, entry := range tools.GetToolRegistry() {
-							known[entry.Name] = !hidden(entry.Name)
+							registered[entry.Name] = true
 						}
+						known := func(name string) bool { return registered[name] && !hidden(name) }
 						declared := map[string]bool{}
 						for _, d := range declarations {
 							declared[d] = true
@@ -494,7 +496,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						sort.Strings(allowed)
 						nonCatalog := false
 						for _, name := range allowed {
-							if !known[name] {
+							if !known(name) {
 								nonCatalog = true
 							}
 						}
@@ -523,7 +525,7 @@ func (s *Service) activationSnapshot(ctx context.Context, user string, def *pb.T
 						}
 						sort.Strings(boundTools)
 						for _, name := range boundTools {
-							if known[name] {
+							if known(name) {
 								snap.Summary = append(snap.Summary, "Fixed tool binding: "+name+"; "+targetDisclosure(tc.GetTools()[name].GetFields(), values, k, tainted))
 							}
 						}

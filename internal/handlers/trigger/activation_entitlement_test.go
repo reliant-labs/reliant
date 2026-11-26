@@ -67,6 +67,12 @@ func TestActivationCardNamesGatedToolsOnlyToEntitledOwners(t *testing.T) {
 		})
 	}
 
+	t.Run("a declaration that reaches no gated tool never asks", func(t *testing.T) {
+		gate := &featuregate.MockGate{}
+		gatedCardSummary(t, gate, "        preloaded_tools: [fetch]\n        loadable_tools: [view]\n")
+		assert.Zero(t, gate.CallCount("Allowed"))
+	})
+
 	t.Run("a tool bound by name reads as an unknown one", func(t *testing.T) {
 		const bound = "        preloaded_tools: [fetch]\n        loadable_tools: []\n        tools:\n          websearch: {query: x}\n"
 		assert.NotContains(t, gatedCardSummary(t, nil, bound), "Fixed tool binding: "+tools.ToolWebSearch)
