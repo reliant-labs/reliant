@@ -42,7 +42,7 @@ function AgentHelpDisclosure({ tipKey }: { tipKey: DemoTipKey }) {
       <button ref={trigger} type="button" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(true)} onFocus={() => setOpen(true)} className="touch-target inline-flex cursor-pointer items-center rounded px-1 font-medium text-primary-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">How an agent helps</button>
       {open && createPortal(
         <div ref={panel} id={id} role="note" className="fixed z-[200] max-h-48 overflow-y-auto rounded-lg border border-border bg-popover p-3 text-xs text-ink-muted shadow-xl" style={{ width, left: Math.max(12, Math.min(rect?.left ?? 12, window.innerWidth - width - 12)), bottom: Math.max(12, window.innerHeight - (rect?.top ?? window.innerHeight - 12) + 4) }}>
-          <p>{tip.help}</p><code className="mt-2 block [overflow-wrap:anywhere] font-mono">{tip.command}</code>
+          <p>{tip.help}</p>{tip.command && <code className="mt-2 block [overflow-wrap:anywhere] font-mono">{tip.command}</code>}
         </div>, document.body,
       )}
     </div>
