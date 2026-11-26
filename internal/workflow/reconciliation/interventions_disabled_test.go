@@ -257,7 +257,7 @@ func TestReconciler_InterventionsDisabled_LostWorkflowStillRepaired(t *testing.T
 func TestDefaultConfig_InterventionsOff(t *testing.T) {
 	assert.False(t, DefaultConfig().Interventions,
 		"interventions default off: see dev-docs/incidents/2026-09-29-reconciler-false-wedge.md")
-	assert.False(t, New(Deps{Store: nil, Questions: nil, Temporal: nil, Config: nil}).interventions)
-	assert.True(t, New(Deps{Store: nil, Questions: nil, Temporal: nil, Config: &ReconcilerConfig{Interventions: true}}).interventions,
+	assert.False(t, New(Deps{Store: nil, RunEvents: nil, Questions: nil, Temporal: nil, Config: nil}).interventions)
+	assert.True(t, New(Deps{Store: nil, RunEvents: nil, Questions: nil, Temporal: nil, Config: &ReconcilerConfig{Interventions: true}}).interventions,
 		"the switch must be carried from config onto the reconciler")
 }
