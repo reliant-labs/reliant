@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"github.com/reliant-labs/reliant/internal/chatviews"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -78,6 +79,11 @@ func (r Reads) GetDaemon(ctx context.Context, id string) (*core.Daemon, error) {
 type Repo struct {
 	*db.Repo
 	Reads
+}
+
+// GetChat retains the computed chat read moved out of the facade on main.
+func (r Repo) GetChat(ctx context.Context, id string) (*db.Chat, error) {
+	return chatviews.Of(r.Repo).GetChat(ctx, id)
 }
 
 // WithRepo returns repo with its row reads. A nil repo yields a Repo whose
