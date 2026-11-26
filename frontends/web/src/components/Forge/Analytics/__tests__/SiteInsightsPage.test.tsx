@@ -2,8 +2,8 @@
 
 /**
  * Site insights' frame: the view its path names, the tabs (which keep the
- * site), and the audit views' "coming soon" until their flag flips. The Speed
- * view's data is speedInsightsModel's and the shop fixture's tests'.
+ * site), the SEO view (R4), and Accessibility's "coming soon" until its flag
+ * flips. The views' own data is their models' and the shop fixture's tests'.
  */
 
 import type React from "react";
@@ -17,6 +17,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
   useNavigate: () => vi.fn(),
 }));
 vi.mock("../SpeedInsightsPage", () => ({ SpeedInsightsView: () => <div data-testid="speed-view" /> }));
+vi.mock("../SeoInsightsView", () => ({ SeoInsightsView: () => <div data-testid="seo-view" /> }));
 
 const { SiteInsightsPage, SITE_AUDIT_VIEWS_READY, siteInsightsViewOf } = await import("../SiteInsightsPage");
 const { ForgeConsoleContext } = await import("@/components/Forge/Console/consoleContextValue");
@@ -43,15 +44,21 @@ describe("SiteInsightsPage", () => {
     expect(screen.getByTestId("speed-view")).toBeInTheDocument();
   });
 
-  it("says what SEO and Accessibility will show until their flag flips, under tabs that keep the site", () => {
-    expect(SITE_AUDIT_VIEWS_READY).toEqual({ seo: false, accessibility: false });
+  it("shows the SEO view now that its flag is set", () => {
+    expect(SITE_AUDIT_VIEWS_READY).toEqual({ seo: true, accessibility: false });
     renderAt({ kind: "site-insights", view: "seo" }, "shop-web");
-    expect(screen.getByTestId("site-insights-seo-coming-soon")).toBeInTheDocument();
+    expect(screen.getByTestId("seo-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("site-insights-seo-coming-soon")).toBeNull();
+  });
+
+  it("says what Accessibility will show until its flag flips, under tabs that keep the site", () => {
+    renderAt({ kind: "site-insights", view: "accessibility" }, "shop-web");
+    expect(screen.getByTestId("site-insights-accessibility-coming-soon")).toBeInTheDocument();
     expect(screen.queryByTestId("speed-view")).toBeNull();
     expect(screen.getByRole("heading", { name: "Site insights" })).toBeInTheDocument();
-    expect(screen.getByTestId("site-insights-tab-seo")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByTestId("site-insights-tab-accessibility")).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("site-insights-tab-speed")).not.toHaveAttribute("aria-current");
     expect(screen.getByTestId("site-insights-tab-speed").getAttribute("href")).toBe("/forge/p/shop/site-insights?env=prod&site=shop-web");
-    expect(screen.getByTestId("site-insights-tab-accessibility").getAttribute("href")).toBe("/forge/p/shop/site-insights/accessibility?env=prod&site=shop-web");
+    expect(screen.getByTestId("site-insights-tab-seo").getAttribute("href")).toBe("/forge/p/shop/site-insights/seo?env=prod&site=shop-web");
   });
 });

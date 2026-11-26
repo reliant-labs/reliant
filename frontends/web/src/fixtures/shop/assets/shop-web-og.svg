@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="shop: everyday goods, delivered">
+  <!-- The shop fixture pack's og:image thumbnail (Site insights › SEO link previews). Sample art, not a brand. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f4efe6"/>
+      <stop offset="1" stop-color="#e6dccb"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g fill="#2f3a32">
+    <rect x="760" y="170" width="300" height="300" rx="36" fill="#c96f4a"/>
+    <rect x="800" y="120" width="220" height="90" rx="45" fill="none" stroke="#2f3a32" stroke-width="18"/>
+    <circle cx="850" cy="320" r="26" fill="#f4efe6"/>
+    <circle cx="970" cy="320" r="26" fill="#f4efe6"/>
+    <path d="M840 380 Q910 440 980 380" fill="none" stroke="#f4efe6" stroke-width="16" stroke-linecap="round"/>
+  </g>
+  <text x="110" y="290" font-family="Georgia, serif" font-size="120" font-weight="700" fill="#2f3a32">shop</text>
+  <text x="114" y="370" font-family="Helvetica, Arial, sans-serif" font-size="44" fill="#4b5a4f">Everyday goods, delivered.</text>
+  <text x="114" y="520" font-family="Helvetica, Arial, sans-serif" font-size="30" fill="#6b7a6f">shop.example.com</text>
+</svg>
