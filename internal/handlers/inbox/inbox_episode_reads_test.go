@@ -80,7 +80,8 @@ func listWith(t *testing.T, f *inboxFixture, svc *Service) *reliantv1.ListInboxR
 func TestListInbox_TrimmedEpisodeReadsListWhatEveryFiringDoes(t *testing.T) {
 	f := newInboxFixture(t)
 	rng := rand.New(rand.NewSource(20261125))
-	base := time.Now().UTC().Add(-48 * time.Hour)
+	// A fixed instant: the episodes depend only on the firings' order.
+	base := time.Date(2026, 1, 5, 9, 0, 0, 0, time.UTC)
 	n := 0
 	const triggersN, perTrigger = 12, 36
 	for ti := range triggersN {
@@ -150,6 +151,32 @@ func TestListInbox_TrimmedEpisodeReadsListWhatEveryFiringDoes(t *testing.T) {
 		}
 	}
 
+	// Row level: each trimmed episode is the full one, filtered, with the
+	// same boundary. Every non-skipped firing of the full episode (managed
+	// successes the filter passed over included) is returned, in order, and
+	// nothing from before its boundary is.
+	ext := store.NewTriggerEventExtStore(f.repo.ORM())
+	var ids []string
+	for i := range triggersN {
+		ids = append(ids, fmt.Sprintf("eq-%d", i))
+	}
+	ids = append(ids, "eq-long")
+	for trg := range edges {
+		ids = append(ids, trg)
+	}
+	fullEp, err := ext.FiringsSinceLastUnmanagedSuccess(f.ctx, f.userID, ids, triggers.EpisodeFirings)
+	require.NoError(t, err)
+	trimmedEp, err := ext.InboxEpisodes(f.ctx, f.userID, ids, triggers.EpisodeFirings, triggers.HealthWindow)
+	require.NoError(t, err)
+	fullDiag, err := ext.FiringsSinceLastSuccess(f.ctx, f.userID, ids, triggers.EpisodeFirings)
+	require.NoError(t, err)
+	trimmedDiag, err := ext.InboxEpisodeFailures(f.ctx, f.userID, ids, triggers.EpisodeFirings)
+	require.NoError(t, err)
+	for _, id := range ids {
+		assert.Equal(t, keptIDs(fullEp[id], triggers.HealthWindow), eventIDs(trimmedEp[id]), "%s: attention-filtered episode", id)
+		assert.Equal(t, keptIDs(fullDiag[id], 0), eventIDs(trimmedDiag[id]), "%s: diagnostic episode", id)
+	}
+
 	want := listWith(t, f, f.inboxWithFirings(t, legacyEpisodes{store.NewTriggerEventExtStore(f.repo.ORM())}))
 	got := listWith(t, f, f.inboxWithFirings(t, store.NewTriggerEventExtStore(f.repo.ORM())))
 	require.NotEmpty(t, inboxByKind(want.Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING),
@@ -168,6 +195,30 @@ func TestListInbox_TrimmedEpisodeReadsListWhatEveryFiringDoes(t *testing.T) {
 	}
 }
 
+// keptIDs is what inboxEpisodeSQL keeps of a full episode: every firing but
+// the skipped ones without a chat past the first window skipped firings.
+func keptIDs(firings []*core.TriggerEventWithRun, window int) []string {
+	var out []string
+	skipped := 0
+	for _, f := range firings {
+		if f.Event.Outcome == core.TriggerEventSkipped && f.Event.ChatID == nil {
+			if skipped++; skipped > window {
+				continue
+			}
+		}
+		out = append(out, f.Event.ID)
+	}
+	return out
+}
+
+func eventIDs(firings []*core.TriggerEventWithRun) []string {
+	var out []string
+	for _, f := range firings {
+		out = append(out, f.Event.ID)
+	}
+	return out
+}
+
 func repeat(s string, n int) []string {
 	out := make([]string, n)
 	for i := range out {
@@ -183,7 +234,7 @@ func repeat(s string, n int) []string {
 func TestListInbox_EpisodeReadsDoNotReturnEverySkippedFiring(t *testing.T) {
 	f := newInboxFixture(t)
 	f.trigger(t, "noisy")
-	base := time.Now().UTC().Add(-48 * time.Hour)
+	base := time.Date(2026, 1, 5, 9, 0, 0, 0, time.UTC)
 	f.launched(t, "noisy-fail-1", "noisy-fail-1", "noisy", base, db.Failed())
 	f.launched(t, "noisy-fail-2", "noisy-fail-2", "noisy", base.Add(time.Second), db.Failed())
 	const skipped = 300

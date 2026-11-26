@@ -713,6 +713,11 @@ ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 // window plus its failures and launches. Neither read shows a firing's
 // definition, so that is not read either.
 //
+// The success search (ls) and the episode walk (x) are triggerEpisodeSQL's,
+// with the same filters: the boundary, which managed successes the filter
+// passes over, and the ?2 cap are unchanged, so every firing kept is one
+// FiringsSinceLastUnmanagedSuccess (or FiringsSinceLastSuccess) returns.
+//
 // The rank is computed over the capped walk (p), never beside it: a window
 // function at the walk's own level would rank the whole history after the
 // boundary before LIMIT applied.
