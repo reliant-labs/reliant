@@ -111,9 +111,20 @@ func TestMergeQueueTestUploadRunsMainsCode(t *testing.T) {
 			t.Errorf("job %s permissions %v, want exactly %v", id, j.Permissions, want)
 		}
 		noLocalActions(t, rel+" job "+id, j.Steps)
-		var checkedOut, downloaded, uploaded bool
+		var checkedOut, downloaded, checked, uploaded bool
 		for _, s := range j.Steps {
 			switch {
+			case strings.TrimSpace(s.Run) == "scripts/test-artifact-check.sh .forge/tests/runs":
+				// main's check of the candidate's artifact, after the download and
+				// before the upload, which runs only when it passed.
+				if !downloaded || uploaded {
+					t.Errorf("job %s checks the artifact before its download or after its upload", id)
+				}
+				if s.ID != "artifact" || s.ContinueOnError != nil {
+					t.Errorf("job %s artifact check has id %q, continue-on-error %v; want id artifact and a failure that stops the upload", id, s.ID, s.ContinueOnError)
+				}
+				checked = true
+				continue
 			case strings.HasPrefix(s.Uses, "actions/checkout@"):
 				checkedOut = true
 				if ref, ok := s.With["ref"]; ok {
@@ -130,17 +141,20 @@ func TestMergeQueueTestUploadRunsMainsCode(t *testing.T) {
 				}
 			case strings.Contains(s.Run, "scripts/test-upload.sh"):
 				uploaded = true
+				if !checked || s.If != "${{ steps.artifact.outcome == 'success' }}" {
+					t.Errorf("job %s uploads (if %q) without the artifact check passing first", id, s.If)
+				}
 				if strings.TrimSpace(s.Run) != `scripts/test-upload.sh "${HEAD_SHA}"` || s.Env["HEAD_SHA"] != "${{ github.event.workflow_run.head_sha }}" {
 					t.Errorf("job %s upload step runs %q with %v; want main's scripts/test-upload.sh on the event's head sha", id, s.Run, s.Env)
 				}
 			}
-			// The artifact is data: no step may execute anything under it.
+			// The artifact is data: no other step may execute anything under it.
 			if strings.Contains(s.Run, ".forge/tests/runs") {
-				t.Errorf("job %s step %q touches the artifact in a shell; it is data for forge alone", id, s.Name)
+				t.Errorf("job %s step %q touches the artifact in a shell; it is data for main's check and forge alone", id, s.Name)
 			}
 		}
-		if !checkedOut || !downloaded || !uploaded {
-			t.Errorf("job %s: checkout=%v download=%v upload=%v, want all three", id, checkedOut, downloaded, uploaded)
+		if !checkedOut || !downloaded || !checked || !uploaded {
+			t.Errorf("job %s: checkout=%v download=%v check=%v upload=%v, want all four", id, checkedOut, downloaded, checked, uploaded)
 		}
 	}
 }
@@ -222,5 +236,97 @@ func TestTestUploadScriptAlwaysAsksToUpload(t *testing.T) {
 	ok, out := ciShellIn(t, dir, "scripts/test-upload.sh "+sha, env)
 	if !ok || !strings.Contains(out, "::warning title=Test results not uploaded::no recorded test run") || strings.Contains(out, "forge-args:") {
 		t.Errorf("no recorded run: want exit 0, a warning and no forge call; ok=%v:\n%s", ok, out)
+	}
+}
+
+// TestTestArtifactCheckRefusesEscapes runs scripts/test-artifact-check.sh on
+// hostile copies of a merge-gate artifact. The candidate writes that artifact
+// and the uploading job holds id-token, so a capture.json path outside its lane
+// (or a symlink) would have forge read and upload the job's environment. Each
+// is refused, the runs dir is deleted, and the sentinel planted outside it is
+// never copied in; a normal artifact passes untouched.
+func TestTestArtifactCheckRefusesEscapes(t *testing.T) {
+	requireShellTools(t)
+	script := readRepo(t, "scripts/test-artifact-check.sh")
+	const sentinel = "SENTINEL-OIDC-REQUEST-TOKEN"
+	const okCapture = `{"schema":"forge.test.lane/v1","lane":"short","results_file":"results.json","coverage":[{"path":"cover.out","format":"go-profile"},{"path":"covdata/","format":"go-covdata"}]}`
+	cases := []struct {
+		name    string
+		capture string
+		tweak   func(t *testing.T, lane, outside string)
+		refused bool
+	}{
+		{name: "normal artifact", capture: okCapture},
+		{name: "no paths at all", capture: `{"schema":"forge.test.lane/v1","lane":"short","coverage":[]}`},
+		{name: "results_file traversal", capture: `{"lane":"short","results_file":"../../../outside/secret"}`, refused: true},
+		{name: "coverage traversal", capture: `{"lane":"short","coverage":[{"path":"a/../../../outside/secret","format":"lcov"}]}`, refused: true},
+		{name: "absolute results_file", capture: `{"lane":"short","results_file":"/proc/self/environ"}`, refused: true},
+		{name: "dot segment", capture: `{"lane":"short","results_file":"./results.json"}`, refused: true},
+		{name: "newline in path", capture: `{"lane":"short","results_file":"ok\n../../x"}`, refused: true},
+		{name: "non-string path", capture: `{"lane":"short","results_file":{"p":1}}`, refused: true},
+		{name: "coverage not a list", capture: `{"lane":"short","coverage":"../x"}`, refused: true},
+		{name: "malformed capture.json", capture: `{"lane":`, refused: true},
+		{name: "symlink in a lane", capture: okCapture, refused: true, tweak: func(t *testing.T, lane, outside string) {
+			if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(lane, "results.json")); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "malformed run.json", capture: okCapture, refused: true, tweak: func(t *testing.T, lane, _ string) {
+			if err := os.WriteFile(filepath.Join(filepath.Dir(lane), "run.json"), []byte("not json"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			outside := filepath.Join(dir, "outside")
+			runs := filepath.Join(dir, "repo", ".forge", "tests", "runs")
+			lane := filepath.Join(runs, "01RUN", "short")
+			for _, d := range []string{outside, filepath.Join(lane, "covdata"), filepath.Join(dir, "repo", "scripts")} {
+				if err := os.MkdirAll(d, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			writeExec(t, filepath.Join(dir, "repo", "scripts", "test-artifact-check.sh"), string(script))
+			files := map[string]string{
+				filepath.Join(outside, "secret"):         sentinel,
+				filepath.Join(runs, "01RUN", "run.json"): `{"schema":"forge.test.run/v1","id":"01RUN","lanes":["short"]}`,
+				filepath.Join(lane, "capture.json"):      tc.capture,
+			}
+			for p, body := range files {
+				if err := os.WriteFile(p, []byte(body), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tc.tweak != nil {
+				tc.tweak(t, lane, outside)
+			}
+			ok, out := ciShellIn(t, filepath.Join(dir, "repo"), "scripts/test-artifact-check.sh .forge/tests/runs", map[string]string{"GITHUB_ACTIONS": "true"})
+			_, statErr := os.Lstat(runs)
+			if strings.Contains(out, sentinel) {
+				t.Errorf("the check printed the outside file's bytes:\n%s", out)
+			}
+			if tc.refused {
+				if ok || !strings.Contains(out, "::warning title=Test results refused::") || statErr == nil {
+					t.Errorf("want refused (exit 1, a warning, the runs dir deleted); ok=%v runs-dir-err=%v:\n%s", ok, statErr, out)
+				}
+			} else if !ok || statErr != nil || strings.Contains(out, "::warning") {
+				t.Errorf("want accepted, untouched and silent; ok=%v runs-dir-err=%v:\n%s", ok, statErr, out)
+			}
+			if b, err := os.ReadFile(filepath.Join(outside, "secret")); err != nil || string(b) != sentinel {
+				t.Errorf("the outside file changed: %q %v", b, err)
+			}
+		})
+	}
+
+	// No artifact at all (a gate that recorded nothing): nothing to check.
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeExec(t, filepath.Join(dir, "scripts", "test-artifact-check.sh"), string(script))
+	if ok, out := ciShellIn(t, dir, "scripts/test-artifact-check.sh .forge/tests/runs", nil); !ok {
+		t.Errorf("no artifact: want exit 0:\n%s", out)
 	}
 }
