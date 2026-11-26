@@ -137,6 +137,11 @@ func emptyGHConfigIn(base string) string {
 	if err := os.MkdirAll(base, 0o700); err != nil {
 		return neutralGHConfigDir
 	}
+	// A read-only leaf is not enough: another user with write access to a
+	// parent could rename it and plant a login after our checks.
+	if !trustedGHConfigParent(base) {
+		return neutralGHConfigDir
+	}
 	if err := os.Mkdir(dir, 0o500); err != nil && !errors.Is(err, fs.ErrExist) {
 		return neutralGHConfigDir
 	}

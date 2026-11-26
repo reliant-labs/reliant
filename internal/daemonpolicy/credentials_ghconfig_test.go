@@ -12,12 +12,30 @@ import (
 	"testing"
 )
 
+func ghConfigTestBase(t *testing.T) string {
+	t.Helper()
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return base
+}
+
 // The empty gh config directory is one per user, reused by every call and
 // every process: it was a fresh /tmp/reliant-no-gh-* per process that nothing
 // removed.
 func TestEmptyGHConfig_IsOnePerUserDirectory(t *testing.T) {
-	base := t.TempDir()
+	base := ghConfigTestBase(t)
 	dir := emptyGHConfigIn(base)
+	if !trustedGHConfigParent(base) {
+		if dir != neutralGHConfigDir {
+			t.Fatalf("untrusted parent gave %q, want neutral path", dir)
+		}
+		return
+	}
 	if dir != filepath.Join(base, "no-gh") {
 		t.Fatalf("emptyGHConfigIn = %q, want %s", dir, filepath.Join(base, "no-gh"))
 	}
@@ -43,7 +61,10 @@ func TestEmptyGHConfig_RefusesAPlantedLoginAndRestoresTheMode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("directory modes are a read-only attribute on Windows")
 	}
-	base := t.TempDir()
+	base := ghConfigTestBase(t)
+	if !trustedGHConfigParent(base) {
+		t.Skip("host temp directory has an untrusted ancestor; cannot exercise reuse of a trusted directory")
+	}
 	dir := emptyGHConfigIn(base)
 	if err := os.Chmod(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -63,6 +84,46 @@ func TestEmptyGHConfig_RefusesAPlantedLoginAndRestoresTheMode(t *testing.T) {
 	if got := emptyGHConfigIn(base); got != neutralGHConfigDir {
 		t.Errorf("a directory holding a login gave %q, want %s", got, neutralGHConfigDir)
 	}
+}
+
+func TestEmptyGHConfig_RefusesUnsafeParents(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix ownership and permission checks")
+	}
+	for _, mode := range []os.FileMode{0o777, 0o770, 0o755} {
+		t.Run(fmt.Sprintf("base-%o", mode), func(t *testing.T) {
+			base := ghConfigTestBase(t)
+			if err := os.Chmod(base, mode); err != nil {
+				t.Fatal(err)
+			}
+			if got := emptyGHConfigIn(base); got != neutralGHConfigDir {
+				t.Fatalf("unsafe base gave %q, want neutral path", got)
+			}
+		})
+	}
+	t.Run("writable-ancestor", func(t *testing.T) {
+		parent := ghConfigTestBase(t)
+		base := filepath.Join(parent, "private")
+		if err := os.Mkdir(base, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(parent, 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if got := emptyGHConfigIn(base); got != neutralGHConfigDir {
+			t.Fatalf("replaceable ancestor gave %q, want neutral path", got)
+		}
+	})
+	t.Run("symlink", func(t *testing.T) {
+		parent := ghConfigTestBase(t)
+		link := filepath.Join(parent, "link")
+		if err := os.Symlink(ghConfigTestBase(t), link); err != nil {
+			t.Fatal(err)
+		}
+		if got := emptyGHConfigIn(link); got != neutralGHConfigDir {
+			t.Fatalf("symlink base gave %q, want neutral path", got)
+		}
+	})
 }
 
 const ghConfigHelperEnv = "RELIANT_DAEMONPOLICY_GHCONFIG_HELPER"
@@ -101,7 +162,12 @@ func TestCredentialsNone_LeavesNothingInTMPDIR(t *testing.T) {
 		if err != nil {
 			t.Fatalf("helper: %v\n%s", err, out)
 		}
-		if runtime.GOOS != "windows" && strings.Count(string(out), "GH_CONFIG_DIR="+want+"\n") != 2 {
+		// On a host with an untrusted ancestor (or without Unix ownership
+		// checks), the helper must fail closed rather than reuse the cache.
+		if !trustedGHConfigParent(filepath.Dir(want)) {
+			want = neutralGHConfigDir
+		}
+		if strings.Count(string(out), "GH_CONFIG_DIR="+want+"\n") != 2 {
 			t.Errorf("helper did not use %s for both calls:\n%s", want, out)
 		}
 	}
