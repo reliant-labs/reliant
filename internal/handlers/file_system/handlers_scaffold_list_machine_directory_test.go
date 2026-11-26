@@ -12,10 +12,12 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
+	"github.com/reliant-labs/forge/pkg/testkit"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	file_system "github.com/reliant-labs/reliant/internal/handlers/file_system"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // TestListMachineDirectory_Generated runs the canonical scaffold rows for ListMachineDirectory.
@@ -27,7 +29,16 @@ func TestListMachineDirectory_Generated(t *testing.T) {
 	// file_system.NewTestFileSystem (helpers_gen_test.go) returns the
 	// file_system *Service wired with stubbed dependencies. Override one
 	// with file_system.WithFileSystemDeps(...), or per-row via Case.Setup.
-	svc := file_system.NewTestFileSystem(t, file_system.WithFileSystemDeps(file_system.Deps{Placement: previewNoProjectRepo{}}))
+	// Every required dep is named (internal/architecture's
+	// TestEveryConstructionSetsEveryRequiredDepsField); all but Placement are
+	// the harness's own defaults, which these rows never reach.
+	svc := file_system.NewTestFileSystem(t, file_system.WithFileSystemDeps(file_system.Deps{
+		Logger:    testkit.DiscardLogger(),
+		Config:    config.Defaults(),
+		Router:    &file_system.MockRouter{},
+		Repo:      &file_system.MockRepository{},
+		Placement: previewNoProjectRepo{},
+	}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListMachineDirectoryRequest, pb.ListMachineDirectoryResponse]{
 		{
