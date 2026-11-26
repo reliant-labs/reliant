@@ -5,30 +5,73 @@
  * — one assertion per rung the reader can be on.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
+import { create } from "@bufbuild/protobuf";
+import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { GetObservabilityUsageResponseSchema, ObservabilityQuotaState } from "@/gen/controlplane/services/observability_billing/v1/observability_billing_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
 
 // This file pins the explicitly retained, read-only rollout fallback.
 vi.mock("@/hooks/observability-billing-queries", () => ({
   useObsBillingUsage: () => ({ isPending: false, error: new ConnectError("not deployed", Code.Unimplemented), refetch: vi.fn() }),
 }));
 
-import { createFixtureApi, fixtureUsage, FIXTURE_ORG } from "../__fixtures__/fixtureApi";
-import type { ObservabilityUsage } from "@/services/controlPlane/observability/types";
+import { fixtureUsage, FIXTURE_ORG } from "../__fixtures__/fixtureApi";
+import type { ObservabilityUsage, QuotaState } from "@/services/controlPlane/observability/types";
 import { usageNotice } from "../usageModel";
 import { LegacyUsageView as UsageView } from "../UsageView";
-import { renderWithApi } from "./obsTestUtils";
 
 vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsMocks.virtual());
 
 const GIB = 2 ** 30;
 
+const WIRE_STATE: Record<QuotaState, ObservabilityQuotaState> = {
+  ok: ObservabilityQuotaState.OK,
+  over_100: ObservabilityQuotaState.OVER_100,
+  over_150: ObservabilityQuotaState.OVER_150,
+  unknown: ObservabilityQuotaState.UNSPECIFIED,
+};
+const bytes = (n: number) => BigInt(Math.round(n));
+
+/** The fixture usage as ObservabilityBillingService.GetObservabilityUsage answers it. */
+function wireUsage(u: ObservabilityUsage) {
+  return create(GetObservabilityUsageResponseSchema, {
+    periodStart: timestampFromMs(u.periodStartMs),
+    periodEnd: timestampFromMs(u.periodEndMs),
+    measuredThrough: u.measuredThroughMs === null ? undefined : timestampFromMs(u.measuredThroughMs),
+    usedBytes: bytes(u.usedBytes),
+    allowanceBytes: bytes(u.allowanceBytes),
+    overageCents: bytes(u.overageCents),
+    projectedBytes: bytes(u.projectedBytes),
+    projectedOverageCents: bytes(u.projectedOverageCents),
+    rateCentsPerGb: u.rateCentsPerGb,
+    state: WIRE_STATE[u.state],
+    usageState: WIRE_STATE[u.usageState],
+    funded: u.funded,
+    exempt: u.exempt,
+    spendCapCents: bytes(u.spendCapCents),
+    spendCapReached: u.spendCapReached,
+    browserBytes: bytes(u.browserBytes),
+    browserBilledBytes: bytes(u.browserBilledBytes),
+    browserCapBytes: bytes(u.browserCapBytes),
+    metadataBytes: bytes(u.metadataBytes),
+    bySignal: u.bySignal.map((s) => ({ signal: s.signal, billedBytes: bytes(s.billedBytes), storedBytes: bytes(s.storedBytes), rows: bytes(s.rows) })),
+    byService: u.byService.map((s) => ({ service: s.service, signal: s.signal, billedBytes: bytes(s.billedBytes) })),
+  });
+}
+
+afterEach(() => setTransport(null));
+
 function renderUsage(usage: Partial<ObservabilityUsage> = {}, failWith?: Code) {
-  const onCall = vi.fn();
-  const api = createFixtureApi({ usage, onCall, failWith });
-  renderWithApi(api, <UsageView orgId={FIXTURE_ORG} subject="prod" />);
+  const onCall = vi.fn((_req: unknown) => {
+    if (failWith !== undefined) throw new ConnectError("fixture failure", failWith);
+    return wireUsage(fixtureUsage(Date.now(), usage));
+  });
+  renderWithTransport(<UsageView orgId={FIXTURE_ORG} subject="prod" />, { transport: mockTransport({ "ObservabilityBillingService.GetObservabilityUsage": onCall }) });
   return { onCall };
 }
 
@@ -55,7 +98,7 @@ describe("UsageView", () => {
     expect(screen.getByTestId("obs-usage-overage")).toHaveTextContent("$0.00");
     expect(screen.getByTestId("obs-usage-measured")).toHaveTextContent(/Measured through .*behind real time/);
     expect(screen.queryByTestId("obs-usage-notice")).not.toBeInTheDocument();
-    expect(onCall).toHaveBeenCalledWith("GetObservabilityUsage", { orgId: FIXTURE_ORG });
+    expect(onCall).toHaveBeenCalledWith(expect.objectContaining({ orgId: FIXTURE_ORG }));
   });
 
   it("names customer metadata and browser as their own lines, inside the signals", async () => {

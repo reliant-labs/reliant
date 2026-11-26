@@ -75,7 +75,7 @@ var toolHints = map[string]string{
 		"throughput with no workflow edit. A trigger on one machine, or on none, counts as a pool of one.",
 	"waiting": "What happens to waiting firings: `fifo` (the default) keeps every one, oldest first; `latest` keeps " +
 		"only the newest waiting firing per key, and each older one it replaces is recorded skipped with the detail " +
-		"\"superseded\" (never failed). Running runs are never touched.",
+		"\"superseded\" (never failed). Waiting never touches running runs; `cancel_running` does.",
 	"key": "With `waiting: latest` or `max_running_per_key`: a template over `trigger`, like a webhook dedupe_key, " +
 		"naming a group of firings, e.g. `'{{ trigger.payload.attributes.repository }}#{{ trigger.payload.pull_request.number }}'`. " +
 		"Under waiting: latest its waiting firings replace each other (unset: one group for the whole workflow); with " +
@@ -89,6 +89,13 @@ var toolHints = map[string]string{
 		"starts waiting, e.g. `\"'main-red' in trigger.payload.labels ? 10 : 0\"`. Waiting firings are admitted highest " +
 		"priority first, then in arrival order; running runs are never preempted. Unset, or a firing whose expression " +
 		"fails: 0. A low-priority firing can wait behind higher ones until it expires, a day after it arrived.",
+	"cancel_running": "Lets a newer firing of a key stop the run holding the key's slot instead of waiting behind it " +
+		"(requires `key` and `max_running_per_key: 1`). `never` (the default) leaves running runs alone; " +
+		"`on_new_key_event` cancels on every newer firing of the key; `on_new_head` cancels only when the firing carries " +
+		"a GitHub pull request head (`trigger.payload.data.pull_request.head.sha`) that differs from the running run's " +
+		"firing's, so a comment, or a firing on the same head, never cancels. The cancel is a user stop's: the run's " +
+		"`finally:` runs, its firing records run status cancelled and \"superseded by event <id>\", and the new firing " +
+		"takes the slot under `waiting`.",
 	"check": "A GitHub check run the engine owns, one per run an event trigger fires, written as the Reliant App: " +
 		"queued when the firing is recorded, in_progress when the first node starts, and concluded on every ending " +
 		"(success, failure, cancelled, timed_out; never neutral or skipped). `check: <name>` or {name, repository, " +

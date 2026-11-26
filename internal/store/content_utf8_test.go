@@ -10,6 +10,7 @@ import (
 )
 
 func TestNormalizeContentBlock_ReplacesInvalidUTF8(t *testing.T) {
+	t.Parallel()
 	invalid := "before\xe2..after"
 	block := &core.MessageContentBlock{
 		Content:          &invalid,
@@ -48,6 +49,7 @@ func TestNormalizeContentBlock_ReplacesInvalidUTF8(t *testing.T) {
 }
 
 func TestNormalizeContentBlock_LeavesValidPointersUntouched(t *testing.T) {
+	t.Parallel()
 	value := "valid"
 	block := &core.MessageContentBlock{Content: &value}
 
@@ -59,6 +61,7 @@ func TestNormalizeContentBlock_LeavesValidPointersUntouched(t *testing.T) {
 }
 
 func TestValidUTF8(t *testing.T) {
+	t.Parallel()
 	if got := validUTF8("before\xe2..after"); !utf8.ValidString(got) || !strings.Contains(got, "�") {
 		t.Fatalf("validUTF8 returned %q", got)
 	}
@@ -71,6 +74,7 @@ func TestValidUTF8(t *testing.T) {
 // sequence for encoding \"UTF8\": 0x00"); a NUL in a tool result ended a prod
 // sub-agent when save_message exhausted its retries on it (2026-10-19).
 func TestValidUTF8ReplacesNUL(t *testing.T) {
+	t.Parallel()
 	got := validUTF8("before\x00after\xe2..")
 	if strings.IndexByte(got, 0) >= 0 || !utf8.ValidString(got) {
 		t.Fatalf("validUTF8 returned %q, want no NUL and valid UTF-8", got)

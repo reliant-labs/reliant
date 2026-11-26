@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun/dialect/pgdialect"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -276,6 +278,92 @@ func CanLaunchTriggerCapacity(ctx context.Context, db orm.Context, eventID strin
 		}
 	}
 	return allowed, nil
+}
+
+// TriggerPullRequestHeadPath is where a GitHub integration firing carries its
+// pull request's head commit in trigger_events.payload: the payload is the
+// `trigger.payload` a workflow reads, so this is
+// trigger.payload.data.pull_request.head.sha. concurrency.cancel_running:
+// on_new_head compares it; the firer reads the new firing's from the same path.
+var TriggerPullRequestHeadPath = []string{"data", "pull_request", "head", "sha"}
+
+// TriggerCapacityKeyRun is a launched run that still holds a slot of its key,
+// as concurrency.cancel_running sees it: which run to cancel, and the pull
+// request head its firing carried ("" for none).
+type TriggerCapacityKeyRun struct {
+	EventID    string `bun:"id"`
+	ChatID     string `bun:"chat_id"`
+	WorkflowID string `bun:"capacity_workflow_id"`
+	FirstRunID string `bun:"capacity_first_run_id"`
+	HeadSHA    string `bun:"head_sha"`
+}
+
+// TriggerCapacitySupersededPrefix starts the outcome_detail of a launched
+// event whose run a newer firing of its key cancelled
+// (concurrency.cancel_running).
+const TriggerCapacitySupersededPrefix = "superseded by event "
+
+// ListTriggerCapacityKeyRuns returns the launched runs of scope whose
+// capacity_running_key is key and that enrolled before order, still holding
+// their slot (not released), oldest first. Under max_running_per_key: 1 that
+// is at most the one run a newer firing of the key would cancel. A run parked
+// on a provider still holds its key's slot (occupiedForKey), so it is listed.
+//
+// Served by trigger_events_capacity_occupied, like ListTriggerCapacityExecutions.
+func ListTriggerCapacityKeyRuns(ctx context.Context, db orm.Context, scope TriggerCapacityScope, key string, order int64) ([]TriggerCapacityKeyRun, error) {
+	if !scope.valid() || key == "" {
+		return nil, errors.New("invalid trigger capacity key")
+	}
+	var rows []TriggerCapacityKeyRun
+	err := db.Bun().NewRaw(`SELECT id, COALESCE(chat_id, '') AS chat_id,
+  COALESCE(capacity_workflow_id, '') AS capacity_workflow_id, COALESCE(capacity_first_run_id, '') AS capacity_first_run_id,
+  COALESCE(payload #>> ?::text[], '') AS head_sha
+FROM trigger_events
+WHERE user_id = ? AND capacity_project_id = ? AND capacity_workflow_ref = ?
+  AND capacity_order IS NOT NULL AND outcome = 'launched' AND NOT capacity_released
+  AND capacity_running_key = ? AND capacity_order < ?
+ORDER BY capacity_order`, pgdialect.Array(TriggerPullRequestHeadPath),
+		scope.UserID, scope.ProjectID, scope.WorkflowRef, key, order).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("list the running runs of a trigger capacity key: %w", err)
+	}
+	return rows, nil
+}
+
+// MarkTriggerCapacityRunSuperseded records on a launched event, once its run's
+// cancel has succeeded, which newer firing cancelled it: outcome_detail
+// becomes TriggerCapacitySupersededPrefix + byEventID. The first firing to
+// record it wins. A run that ended on its own (run_status completed or
+// failed) is never marked, so a run that finished before the cancel took is
+// not misdescribed; its own cancelled status, written as the cancel stopped
+// it, is no refusal. marked reports whether this call wrote it.
+func MarkTriggerCapacityRunSuperseded(ctx context.Context, db orm.Context, eventID, byEventID string) (marked bool, err error) {
+	if eventID == "" || byEventID == "" {
+		return false, errors.New("invalid trigger capacity supersede")
+	}
+	res, err := db.Bun().NewRaw(`UPDATE trigger_events SET outcome_detail = ?
+WHERE id = ? AND outcome = 'launched' AND (run_status IS NULL OR run_status = ?) AND outcome_detail = ''`,
+		TriggerCapacitySupersededPrefix+byEventID, eventID, core.TriggerRunCancelled).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("mark a superseded trigger capacity run: %w", err)
+	}
+	return oneRowTouched(res)
+}
+
+// SettleSupersededTriggerCapacityRun records run_status cancelled on the
+// launched event of a superseded run whose execution has closed, when the run
+// recorded no status itself: a run cancelled cooperatively writes its own
+// (the one it ended with stands), but a hard-terminated one runs no code.
+func SettleSupersededTriggerCapacityRun(ctx context.Context, db orm.Context, eventID string) error {
+	if eventID == "" {
+		return errors.New("invalid trigger capacity supersede")
+	}
+	_, err := db.Bun().NewRaw(`UPDATE trigger_events SET run_status = ?
+WHERE id = ? AND outcome = 'launched' AND run_status IS NULL`, core.TriggerRunCancelled, eventID).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("settle a superseded trigger capacity run: %w", err)
+	}
+	return nil
 }
 
 // TriggerCapacitySlot names the slot one run holds: its trigger event and the

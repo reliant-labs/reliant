@@ -21,6 +21,7 @@ import (
 // pool placed there (a trigger's) or with a live run placement there (a
 // workflow's), and a labels read counts every live run on the machine.
 func TestRunMachinePlacements(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 19, 9, 0, 0, 0, time.UTC)

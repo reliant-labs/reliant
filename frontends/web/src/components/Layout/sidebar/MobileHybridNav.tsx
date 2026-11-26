@@ -18,7 +18,7 @@
  * project controls (`org`, `project`), so the order lives here once.
  */
 
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { MessagesSquare, Search, SquarePen } from "lucide-react";
 
 import {
@@ -103,6 +103,21 @@ export function MobileHybridNav({
   onNavigate: (href: string, options?: NavigateOptions) => void;
 }) {
   const pathname = desktopPathOfMobile(phonePathname);
+  // Back from a drill-in shows the top level here, in place (reliant #3264):
+  // the desktop nav's Back goes to a desktop page (the Overview, Projects),
+  // which on a phone left the phone shell and took the drawer with it. It is
+  // kept for the screen it was pressed on; any row the person then opens,
+  // the area they left included, drills in again as before.
+  const [topLevelAt, setTopLevelAt] = useState<string | null>(null);
+  const topLevel = topLevelAt === phonePathname;
+  const showTopLevel = useCallback(() => setTopLevelAt(phonePathname), [phonePathname]);
+  const navigate = useCallback(
+    (...args: Parameters<typeof onNavigate>) => {
+      setTopLevelAt(null);
+      onNavigate(...args);
+    },
+    [onNavigate],
+  );
   const shell = useShellProject(pathname, search);
   const slots = useMemo<NavSlots>(
     () => ({
@@ -112,7 +127,7 @@ export function MobileHybridNav({
           depth={depth}
           icon={<SquarePen className="size-4" />}
           href={newChatPath()}
-          onClick={() => onNavigate(newChatPath())}
+          onClick={() => navigate(newChatPath())}
           testId="mobile-nav-new-chat"
         />
       ),
@@ -123,14 +138,14 @@ export function MobileHybridNav({
           depth={depth}
           icon={<MessagesSquare className="size-4" />}
           href={homePath()}
-          onClick={() => onNavigate(homePath())}
+          onClick={() => navigate(homePath())}
           current={isChatPage(pathname) && !atOrBelow(orgFreePath(pathname), newChatPath())}
           testId="mobile-nav-chats"
         />
       ),
-      inbox: () => <InboxNavItem href={inboxPath()} onOpen={() => onNavigate(inboxPath())} current={isAtOrBelow(pathname, inboxPath())} />,
+      inbox: () => <InboxNavItem href={inboxPath()} onOpen={() => navigate(inboxPath())} current={isAtOrBelow(pathname, inboxPath())} />,
     }),
-    [onNavigate, pathname],
+    [navigate, pathname],
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-hybrid-nav">
@@ -141,13 +156,13 @@ export function MobileHybridNav({
           icon={<Search className="size-4" />}
           label="Find"
           href={mobileSearchPath()}
-          onClick={() => onNavigate(mobileSearchPath())}
+          onClick={() => navigate(mobileSearchPath())}
           testId="mobile-nav-find"
         />
       </div>
       {project}
       {/* Flat: a drill-in replaces the list here, so its rows are drawn as top-level rows (owner, 2026-11-24). */}
-      <ShellNavBody config={hybridNav} shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={onNavigate} flat />
+      <ShellNavBody config={hybridNav} shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={navigate} flat onBack={showTopLevel} topLevel={topLevel} />
     </div>
   );
 }

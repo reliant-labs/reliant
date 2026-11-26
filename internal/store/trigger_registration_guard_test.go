@@ -14,6 +14,7 @@ import (
 // function: a registration with no trigger id, or no registration at all, is
 // refused before any SQL, so the generated store cannot write an orphan row.
 func TestUpsertTriggerRegistrationFailsClosedOnAMissingTriggerID(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	if err := store.UpsertTriggerRegistration(ctx, env.ORM, nil); err == nil {
