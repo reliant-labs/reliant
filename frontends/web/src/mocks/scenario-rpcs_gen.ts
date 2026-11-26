@@ -228,6 +228,30 @@ export type ScenarioRpcHandlers =
     "reliant.v1.ForgeService/GetDeployStatus"?: (req: import("@/gen/reliant/v1/forge_pb").GetForgeDeployStatusRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/forge_pb").GetForgeDeployStatusResponseSchema>>;
   }
 
+  // forge:section reliant.v1.GtmService
+  // forge:hash=cfcd6e7a646314c5fcc82d6342e21d2488246abd452f87b6cebb480efed0de54
+  & {
+    "reliant.v1.GtmService/GetGtmAccess"?: (req: import("@/gen/reliant/v1/gtm_pb").GetGtmAccessRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetGtmAccessResponseSchema>>;
+    "reliant.v1.GtmService/ListIdeas"?: (req: import("@/gen/reliant/v1/gtm_pb").ListIdeasRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListIdeasResponseSchema>>;
+    "reliant.v1.GtmService/GetIdea"?: (req: import("@/gen/reliant/v1/gtm_pb").GetIdeaRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetIdeaResponseSchema>>;
+    "reliant.v1.GtmService/CreateIdea"?: (req: import("@/gen/reliant/v1/gtm_pb").CreateIdeaRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").CreateIdeaResponseSchema>>;
+    "reliant.v1.GtmService/UpdateIdea"?: (req: import("@/gen/reliant/v1/gtm_pb").UpdateIdeaRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").UpdateIdeaResponseSchema>>;
+    "reliant.v1.GtmService/SetIdeaStatus"?: (req: import("@/gen/reliant/v1/gtm_pb").SetIdeaStatusRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").SetIdeaStatusResponseSchema>>;
+    "reliant.v1.GtmService/ListCampaigns"?: (req: import("@/gen/reliant/v1/gtm_pb").ListCampaignsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListCampaignsResponseSchema>>;
+    "reliant.v1.GtmService/GetCampaign"?: (req: import("@/gen/reliant/v1/gtm_pb").GetCampaignRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetCampaignResponseSchema>>;
+    "reliant.v1.GtmService/CreateCampaign"?: (req: import("@/gen/reliant/v1/gtm_pb").CreateCampaignRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").CreateCampaignResponseSchema>>;
+    "reliant.v1.GtmService/UpdateCampaign"?: (req: import("@/gen/reliant/v1/gtm_pb").UpdateCampaignRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").UpdateCampaignResponseSchema>>;
+    "reliant.v1.GtmService/ListItems"?: (req: import("@/gen/reliant/v1/gtm_pb").ListItemsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListItemsResponseSchema>>;
+    "reliant.v1.GtmService/GetItem"?: (req: import("@/gen/reliant/v1/gtm_pb").GetItemRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetItemResponseSchema>>;
+    "reliant.v1.GtmService/CreateItem"?: (req: import("@/gen/reliant/v1/gtm_pb").CreateItemRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").CreateItemResponseSchema>>;
+    "reliant.v1.GtmService/UpdateItem"?: (req: import("@/gen/reliant/v1/gtm_pb").UpdateItemRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").UpdateItemResponseSchema>>;
+    "reliant.v1.GtmService/GetPositioning"?: (req: import("@/gen/reliant/v1/gtm_pb").GetPositioningRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").GetPositioningResponseSchema>>;
+    "reliant.v1.GtmService/UpdatePositioning"?: (req: import("@/gen/reliant/v1/gtm_pb").UpdatePositioningRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").UpdatePositioningResponseSchema>>;
+    "reliant.v1.GtmService/ListClaims"?: (req: import("@/gen/reliant/v1/gtm_pb").ListClaimsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").ListClaimsResponseSchema>>;
+    "reliant.v1.GtmService/UpsertClaim"?: (req: import("@/gen/reliant/v1/gtm_pb").UpsertClaimRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").UpsertClaimResponseSchema>>;
+    "reliant.v1.GtmService/CheckClaims"?: (req: import("@/gen/reliant/v1/gtm_pb").CheckClaimsRequest) => UnaryReturn<MessageInitShape<typeof import("@/gen/reliant/v1/gtm_pb").CheckClaimsResponseSchema>>;
+  }
+
   // forge:section reliant.v1.InboxService
   // forge:hash=233796b504a2107440aa88448ad3ebe693419b1a43e81982f381cd19efa8ce11
   & {

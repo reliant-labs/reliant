@@ -62,6 +62,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
+	"github.com/reliant-labs/reliant/internal/handlers/gtm"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
@@ -1086,6 +1087,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
 		ChatTrace:          g.ChatTrace(),
+		Gtm:                g.Gtm(),
 	})
 }
 
@@ -2103,5 +2105,13 @@ func (g *Graph) newCallerControlPlane() (*CallerControlPlane, error) {
 func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 	return NewInternalControlPlane(InternalControlPlaneDeps{
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+// newGtm constructs the gtm handler (internal/handlers/gtm).
+func (g *Graph) newGtm() (*gtm.Service, error) {
+	return gtm.New(gtm.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
 	})
 }

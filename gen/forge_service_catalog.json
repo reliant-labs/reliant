@@ -49,6 +49,7 @@
         "Forge",
         "GitHubAccess",
         "GitHubAccessLoop",
+        "Gtm",
         "HTTPRoutes",
         "Inbox",
         "InputOptions",
@@ -232,6 +233,13 @@
         {
           "component": "Forge",
           "service": "reliant.v1.ForgeService",
+          "route_set": "UserRoutes",
+          "audience": "user",
+          "resolution": "declared_route_set"
+        },
+        {
+          "component": "Gtm",
+          "service": "reliant.v1.GtmService",
           "route_set": "UserRoutes",
           "audience": "user",
           "resolution": "declared_route_set"
@@ -18245,6 +18253,2844 @@
           "reliant.v1.ForgeReachability": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "ForgeReachability"
+          }
+        }
+      }
+    },
+    {
+      "name": "reliant.v1.GtmService",
+      "proto_file": "reliant/v1/gtm.proto",
+      "methods": [
+        {
+          "id": "reliant.v1.GtmService/CheckClaims",
+          "name": "CheckClaims",
+          "input": "reliant.v1.CheckClaimsRequest",
+          "output": "reliant.v1.CheckClaimsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/CreateCampaign",
+          "name": "CreateCampaign",
+          "input": "reliant.v1.CreateCampaignRequest",
+          "output": "reliant.v1.CreateCampaignResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/CreateIdea",
+          "name": "CreateIdea",
+          "input": "reliant.v1.CreateIdeaRequest",
+          "output": "reliant.v1.CreateIdeaResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/CreateItem",
+          "name": "CreateItem",
+          "input": "reliant.v1.CreateItemRequest",
+          "output": "reliant.v1.CreateItemResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/GetCampaign",
+          "name": "GetCampaign",
+          "input": "reliant.v1.GetCampaignRequest",
+          "output": "reliant.v1.GetCampaignResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/GetGtmAccess",
+          "name": "GetGtmAccess",
+          "input": "reliant.v1.GetGtmAccessRequest",
+          "output": "reliant.v1.GetGtmAccessResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/GetIdea",
+          "name": "GetIdea",
+          "input": "reliant.v1.GetIdeaRequest",
+          "output": "reliant.v1.GetIdeaResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/GetItem",
+          "name": "GetItem",
+          "input": "reliant.v1.GetItemRequest",
+          "output": "reliant.v1.GetItemResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/GetPositioning",
+          "name": "GetPositioning",
+          "input": "reliant.v1.GetPositioningRequest",
+          "output": "reliant.v1.GetPositioningResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/ListCampaigns",
+          "name": "ListCampaigns",
+          "input": "reliant.v1.ListCampaignsRequest",
+          "output": "reliant.v1.ListCampaignsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/ListClaims",
+          "name": "ListClaims",
+          "input": "reliant.v1.ListClaimsRequest",
+          "output": "reliant.v1.ListClaimsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/ListIdeas",
+          "name": "ListIdeas",
+          "input": "reliant.v1.ListIdeasRequest",
+          "output": "reliant.v1.ListIdeasResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/ListItems",
+          "name": "ListItems",
+          "input": "reliant.v1.ListItemsRequest",
+          "output": "reliant.v1.ListItemsResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "NO_SIDE_EFFECTS",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/SetIdeaStatus",
+          "name": "SetIdeaStatus",
+          "input": "reliant.v1.SetIdeaStatusRequest",
+          "output": "reliant.v1.SetIdeaStatusResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/UpdateCampaign",
+          "name": "UpdateCampaign",
+          "input": "reliant.v1.UpdateCampaignRequest",
+          "output": "reliant.v1.UpdateCampaignResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/UpdateIdea",
+          "name": "UpdateIdea",
+          "input": "reliant.v1.UpdateIdeaRequest",
+          "output": "reliant.v1.UpdateIdeaResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/UpdateItem",
+          "name": "UpdateItem",
+          "input": "reliant.v1.UpdateItemRequest",
+          "output": "reliant.v1.UpdateItemResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/UpdatePositioning",
+          "name": "UpdatePositioning",
+          "input": "reliant.v1.UpdatePositioningRequest",
+          "output": "reliant.v1.UpdatePositioningResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        },
+        {
+          "id": "reliant.v1.GtmService/UpsertClaim",
+          "name": "UpsertClaim",
+          "input": "reliant.v1.UpsertClaimRequest",
+          "output": "reliant.v1.UpsertClaimResponse",
+          "client_streaming": false,
+          "server_streaming": false,
+          "idempotency": "UNKNOWN",
+          "auth_required": true
+        }
+      ],
+      "descriptor": {
+        "Name": "GtmService",
+        "Package": "reliant.v1",
+        "GoPackage": "github.com/reliant-labs/reliant/gen/reliant/v1",
+        "PkgName": "reliantv1",
+        "Methods": [
+          {
+            "Name": "GetGtmAccess",
+            "InputType": "GetGtmAccessRequest",
+            "OutputType": "GetGtmAccessResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetGtmAccessRequest",
+            "OutputTypeFQ": "reliant.v1.GetGtmAccessResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only: whether GTM is enabled for the org"
+            }
+          },
+          {
+            "Name": "ListIdeas",
+            "InputType": "ListIdeasRequest",
+            "OutputType": "ListIdeasResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListIdeasRequest",
+            "OutputTypeFQ": "reliant.v1.ListIdeasResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only"
+            }
+          },
+          {
+            "Name": "GetIdea",
+            "InputType": "GetIdeaRequest",
+            "OutputType": "GetIdeaResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetIdeaRequest",
+            "OutputTypeFQ": "reliant.v1.GetIdeaResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only"
+            }
+          },
+          {
+            "Name": "CreateIdea",
+            "InputType": "CreateIdeaRequest",
+            "OutputType": "CreateIdeaResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.CreateIdeaRequest",
+            "OutputTypeFQ": "reliant.v1.CreateIdeaResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "create",
+              "TargetKind": "gtm_idea",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "UpdateIdea",
+            "InputType": "UpdateIdeaRequest",
+            "OutputType": "UpdateIdeaResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UpdateIdeaRequest",
+            "OutputTypeFQ": "reliant.v1.UpdateIdeaResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "update",
+              "TargetKind": "gtm_idea",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "SetIdeaStatus",
+            "InputType": "SetIdeaStatusRequest",
+            "OutputType": "SetIdeaStatusResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.SetIdeaStatusRequest",
+            "OutputTypeFQ": "reliant.v1.SetIdeaStatusResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "set_status",
+              "TargetKind": "gtm_idea",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListCampaigns",
+            "InputType": "ListCampaignsRequest",
+            "OutputType": "ListCampaignsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListCampaignsRequest",
+            "OutputTypeFQ": "reliant.v1.ListCampaignsResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only"
+            }
+          },
+          {
+            "Name": "GetCampaign",
+            "InputType": "GetCampaignRequest",
+            "OutputType": "GetCampaignResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetCampaignRequest",
+            "OutputTypeFQ": "reliant.v1.GetCampaignResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only"
+            }
+          },
+          {
+            "Name": "CreateCampaign",
+            "InputType": "CreateCampaignRequest",
+            "OutputType": "CreateCampaignResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.CreateCampaignRequest",
+            "OutputTypeFQ": "reliant.v1.CreateCampaignResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "create",
+              "TargetKind": "gtm_campaign",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "UpdateCampaign",
+            "InputType": "UpdateCampaignRequest",
+            "OutputType": "UpdateCampaignResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UpdateCampaignRequest",
+            "OutputTypeFQ": "reliant.v1.UpdateCampaignResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "update",
+              "TargetKind": "gtm_campaign",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListItems",
+            "InputType": "ListItemsRequest",
+            "OutputType": "ListItemsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListItemsRequest",
+            "OutputTypeFQ": "reliant.v1.ListItemsResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only"
+            }
+          },
+          {
+            "Name": "GetItem",
+            "InputType": "GetItemRequest",
+            "OutputType": "GetItemResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetItemRequest",
+            "OutputTypeFQ": "reliant.v1.GetItemResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only"
+            }
+          },
+          {
+            "Name": "CreateItem",
+            "InputType": "CreateItemRequest",
+            "OutputType": "CreateItemResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.CreateItemRequest",
+            "OutputTypeFQ": "reliant.v1.CreateItemResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "create",
+              "TargetKind": "gtm_item",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "UpdateItem",
+            "InputType": "UpdateItemRequest",
+            "OutputType": "UpdateItemResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UpdateItemRequest",
+            "OutputTypeFQ": "reliant.v1.UpdateItemResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "update",
+              "TargetKind": "gtm_item",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "GetPositioning",
+            "InputType": "GetPositioningRequest",
+            "OutputType": "GetPositioningResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.GetPositioningRequest",
+            "OutputTypeFQ": "reliant.v1.GetPositioningResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only"
+            }
+          },
+          {
+            "Name": "UpdatePositioning",
+            "InputType": "UpdatePositioningRequest",
+            "OutputType": "UpdatePositioningResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UpdatePositioningRequest",
+            "OutputTypeFQ": "reliant.v1.UpdatePositioningResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "update",
+              "TargetKind": "gtm_positioning",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "ListClaims",
+            "InputType": "ListClaimsRequest",
+            "OutputType": "ListClaimsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.ListClaimsRequest",
+            "OutputTypeFQ": "reliant.v1.ListClaimsResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only"
+            }
+          },
+          {
+            "Name": "UpsertClaim",
+            "InputType": "UpsertClaimRequest",
+            "OutputType": "UpsertClaimResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
+            "InputTypeFQ": "reliant.v1.UpsertClaimRequest",
+            "OutputTypeFQ": "reliant.v1.UpsertClaimResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": true,
+              "Declared": true,
+              "Verb": "upsert",
+              "TargetKind": "gtm_claim",
+              "Writer": "INTERCEPTOR"
+            }
+          },
+          {
+            "Name": "CheckClaims",
+            "InputType": "CheckClaimsRequest",
+            "OutputType": "CheckClaimsResponse",
+            "ClientStreaming": false,
+            "ServerStreaming": false,
+            "AuthRequired": true,
+            "Errors": null,
+            "NoSideEffects": true,
+            "Idempotency": "NO_SIDE_EFFECTS",
+            "InputTypeFQ": "reliant.v1.CheckClaimsRequest",
+            "OutputTypeFQ": "reliant.v1.CheckClaimsResponse",
+            "InputProtoFile": "reliant/v1/gtm.proto",
+            "OutputProtoFile": "reliant/v1/gtm.proto",
+            "Activity": {
+              "Mutating": false,
+              "Declared": true,
+              "None": "read-only check: stores nothing"
+            }
+          }
+        ],
+        "ProtoFile": "reliant/v1/gtm.proto",
+        "ModulePath": "github.com/reliant-labs/reliant",
+        "Messages": {
+          "CheckClaimsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "text",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "CheckClaimsResponse": [
+            {
+              "Name": "findings",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmClaimFinding"
+            },
+            {
+              "Name": "blocking",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "CreateCampaignRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "name",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "goal",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "period_start",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "period_end",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "CreateCampaignResponse": [
+            {
+              "Name": "campaign",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmCampaign"
+            }
+          ],
+          "CreateIdeaRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "title",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "body_md",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "evidence",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmEvidence"
+            },
+            {
+              "Name": "source_chat_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "campaign_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "CreateIdeaResponse": [
+            {
+              "Name": "idea",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmIdea"
+            }
+          ],
+          "CreateItemRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": false
+            },
+            {
+              "Name": "title",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "body_md",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "channel",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "campaign_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "idea_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "scheduled_at",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "email_to",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            },
+            {
+              "Name": "email_subject",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "CreateItemResponse": [
+            {
+              "Name": "item",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmItem"
+            }
+          ],
+          "GetCampaignRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetCampaignResponse": [
+            {
+              "Name": "campaign",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmCampaign"
+            },
+            {
+              "Name": "ideas",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmIdea"
+            },
+            {
+              "Name": "items",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmItem"
+            }
+          ],
+          "GetGtmAccessRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetGtmAccessResponse": [
+            {
+              "Name": "enabled",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ],
+          "GetIdeaRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetIdeaResponse": [
+            {
+              "Name": "idea",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmIdea"
+            }
+          ],
+          "GetItemRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetItemResponse": [
+            {
+              "Name": "item",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmItem"
+            }
+          ],
+          "GetPositioningRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "GetPositioningResponse": [
+            {
+              "Name": "positioning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmPositioning"
+            }
+          ],
+          "ListCampaignsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListCampaignsResponse": [
+            {
+              "Name": "campaigns",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmCampaign"
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListClaimsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "category",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "search",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListClaimsResponse": [
+            {
+              "Name": "claims",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmClaim"
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListIdeasRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "campaign_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListIdeasResponse": [
+            {
+              "Name": "ideas",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmIdea"
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListItemsRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "campaign_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "scheduled_from",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "scheduled_to",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "page_size",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "ListItemsResponse": [
+            {
+              "Name": "items",
+              "ProtoType": "[]message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmItem"
+            },
+            {
+              "Name": "next_page_token",
+              "ProtoType": "string",
+              "IsOptional": false
+            }
+          ],
+          "SetIdeaStatusRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expected_revision",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": false
+            }
+          ],
+          "SetIdeaStatusResponse": [
+            {
+              "Name": "idea",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmIdea"
+            }
+          ],
+          "UpdateCampaignRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expected_revision",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "name",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "goal",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "period_start",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "period_end",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "clear_period_start",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "clear_period_end",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "UpdateCampaignResponse": [
+            {
+              "Name": "campaign",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmCampaign"
+            }
+          ],
+          "UpdateIdeaRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expected_revision",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "title",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "body_md",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "evidence",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmEvidenceList"
+            },
+            {
+              "Name": "campaign_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "UpdateIdeaResponse": [
+            {
+              "Name": "idea",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmIdea"
+            }
+          ],
+          "UpdateItemRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expected_revision",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "title",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "body_md",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "channel",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "campaign_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "idea_id",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "scheduled_at",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "clear_scheduled_at",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "email_to",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmEmailRecipients"
+            },
+            {
+              "Name": "email_subject",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
+            }
+          ],
+          "UpdateItemResponse": [
+            {
+              "Name": "item",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmItem"
+            }
+          ],
+          "UpdatePositioningRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expected_revision",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "positioning_md",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "audiences",
+              "ProtoType": "[]string",
+              "IsOptional": false
+            }
+          ],
+          "UpdatePositioningResponse": [
+            {
+              "Name": "positioning",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmPositioning"
+            }
+          ],
+          "UpsertClaimRequest": [
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "id",
+              "ProtoType": "string",
+              "IsOptional": false
+            },
+            {
+              "Name": "expected_revision",
+              "ProtoType": "int32",
+              "IsOptional": false
+            },
+            {
+              "Name": "text",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "category",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "status",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "source_url",
+              "ProtoType": "string",
+              "IsOptional": true
+            },
+            {
+              "Name": "source_kind",
+              "ProtoType": "enum",
+              "IsOptional": true
+            },
+            {
+              "Name": "expires_or_recheck_at",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "google.protobuf.Timestamp"
+            },
+            {
+              "Name": "clear_expires_or_recheck_at",
+              "ProtoType": "bool",
+              "IsOptional": false
+            },
+            {
+              "Name": "notes",
+              "ProtoType": "string",
+              "IsOptional": true
+            }
+          ],
+          "UpsertClaimResponse": [
+            {
+              "Name": "claim",
+              "ProtoType": "message",
+              "IsOptional": false,
+              "MessageType": "reliant.v1.GtmClaim"
+            },
+            {
+              "Name": "created",
+              "ProtoType": "bool",
+              "IsOptional": false
+            }
+          ]
+        },
+        "Audience": "user",
+        "Schemas": {
+          "reliant.v1.CheckClaimsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "text",
+              "kind": "string",
+              "validate": {
+                "max_len": 200000
+              }
+            }
+          ],
+          "reliant.v1.CheckClaimsResponse": [
+            {
+              "name": "findings",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmClaimFinding",
+              "repeated": true
+            },
+            {
+              "name": "blocking",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.CreateCampaignRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "name",
+              "kind": "string",
+              "validate": {
+                "min_len": 1,
+                "max_len": 200
+              }
+            },
+            {
+              "name": "goal",
+              "kind": "string"
+            },
+            {
+              "name": "period_start",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "period_end",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmCampaignStatus",
+              "optional": true
+            }
+          ],
+          "reliant.v1.CreateCampaignResponse": [
+            {
+              "name": "campaign",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmCampaign"
+            }
+          ],
+          "reliant.v1.CreateIdeaRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmIdeaKind"
+            },
+            {
+              "name": "title",
+              "kind": "string",
+              "validate": {
+                "min_len": 1,
+                "max_len": 300
+              }
+            },
+            {
+              "name": "body_md",
+              "kind": "string"
+            },
+            {
+              "name": "evidence",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmEvidence",
+              "repeated": true
+            },
+            {
+              "name": "source_chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "campaign_id",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.CreateIdeaResponse": [
+            {
+              "name": "idea",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmIdea"
+            }
+          ],
+          "reliant.v1.CreateItemRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmItemKind"
+            },
+            {
+              "name": "title",
+              "kind": "string",
+              "validate": {
+                "min_len": 1,
+                "max_len": 300
+              }
+            },
+            {
+              "name": "body_md",
+              "kind": "string"
+            },
+            {
+              "name": "channel",
+              "kind": "string"
+            },
+            {
+              "name": "campaign_id",
+              "kind": "string"
+            },
+            {
+              "name": "idea_id",
+              "kind": "string"
+            },
+            {
+              "name": "scheduled_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "email_to",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "email_subject",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.CreateItemResponse": [
+            {
+              "name": "item",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmItem"
+            }
+          ],
+          "reliant.v1.GetCampaignRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.GetCampaignResponse": [
+            {
+              "name": "campaign",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmCampaign"
+            },
+            {
+              "name": "ideas",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmIdea",
+              "repeated": true
+            },
+            {
+              "name": "items",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmItem",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.GetGtmAccessRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.GetGtmAccessResponse": [
+            {
+              "name": "enabled",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.GetIdeaRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.GetIdeaResponse": [
+            {
+              "name": "idea",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmIdea"
+            }
+          ],
+          "reliant.v1.GetItemRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.GetItemResponse": [
+            {
+              "name": "item",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmItem"
+            }
+          ],
+          "reliant.v1.GetPositioningRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            }
+          ],
+          "reliant.v1.GetPositioningResponse": [
+            {
+              "name": "positioning",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmPositioning"
+            }
+          ],
+          "reliant.v1.GtmCampaign": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "name",
+              "kind": "string"
+            },
+            {
+              "name": "goal",
+              "kind": "string"
+            },
+            {
+              "name": "period_start",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "period_end",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmCampaignStatus"
+            },
+            {
+              "name": "revision",
+              "kind": "int32"
+            },
+            {
+              "name": "created_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "updated_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.GtmClaim": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "text",
+              "kind": "string"
+            },
+            {
+              "name": "text_norm",
+              "kind": "string"
+            },
+            {
+              "name": "category",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimCategory"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimStatus"
+            },
+            {
+              "name": "source_url",
+              "kind": "string"
+            },
+            {
+              "name": "source_kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimSourceKind"
+            },
+            {
+              "name": "verified_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "verified_by",
+              "kind": "string"
+            },
+            {
+              "name": "expires_or_recheck_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "notes",
+              "kind": "string"
+            },
+            {
+              "name": "revision",
+              "kind": "int32"
+            },
+            {
+              "name": "created_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "updated_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.GtmClaimFinding": [
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimFindingKind"
+            },
+            {
+              "name": "mention_kind",
+              "kind": "string"
+            },
+            {
+              "name": "mention",
+              "kind": "string"
+            },
+            {
+              "name": "context",
+              "kind": "string"
+            },
+            {
+              "name": "claim_id",
+              "kind": "string"
+            },
+            {
+              "name": "claim_text",
+              "kind": "string"
+            },
+            {
+              "name": "reason",
+              "kind": "string"
+            },
+            {
+              "name": "blocking",
+              "kind": "bool"
+            }
+          ],
+          "reliant.v1.GtmEmailRecipients": [
+            {
+              "name": "addresses",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.GtmEvidence": [
+            {
+              "name": "kind",
+              "kind": "string"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "url",
+              "kind": "string"
+            },
+            {
+              "name": "summary_md",
+              "kind": "string"
+            },
+            {
+              "name": "observed_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.GtmEvidenceList": [
+            {
+              "name": "evidence",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmEvidence",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.GtmIdea": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmIdeaKind"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "body_md",
+              "kind": "string"
+            },
+            {
+              "name": "evidence",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmEvidence",
+              "repeated": true
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmIdeaStatus"
+            },
+            {
+              "name": "source",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmIdeaSource"
+            },
+            {
+              "name": "source_chat_id",
+              "kind": "string"
+            },
+            {
+              "name": "created_by",
+              "kind": "string"
+            },
+            {
+              "name": "campaign_id",
+              "kind": "string"
+            },
+            {
+              "name": "revision",
+              "kind": "int32"
+            },
+            {
+              "name": "created_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "updated_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.GtmItem": [
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "campaign_id",
+              "kind": "string"
+            },
+            {
+              "name": "idea_id",
+              "kind": "string"
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmItemKind"
+            },
+            {
+              "name": "channel",
+              "kind": "string"
+            },
+            {
+              "name": "title",
+              "kind": "string"
+            },
+            {
+              "name": "body_md",
+              "kind": "string"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmItemStatus"
+            },
+            {
+              "name": "scheduled_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "email_to",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "email_subject",
+              "kind": "string"
+            },
+            {
+              "name": "gmail_message_id",
+              "kind": "string"
+            },
+            {
+              "name": "sent_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "sent_by",
+              "kind": "string"
+            },
+            {
+              "name": "approval_hash",
+              "kind": "string"
+            },
+            {
+              "name": "revision",
+              "kind": "int32"
+            },
+            {
+              "name": "created_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "updated_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.GtmPositioning": [
+            {
+              "name": "org_id",
+              "kind": "string"
+            },
+            {
+              "name": "positioning_md",
+              "kind": "string"
+            },
+            {
+              "name": "audiences",
+              "kind": "string",
+              "repeated": true
+            },
+            {
+              "name": "updated_by",
+              "kind": "string"
+            },
+            {
+              "name": "revision",
+              "kind": "int32"
+            },
+            {
+              "name": "updated_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            }
+          ],
+          "reliant.v1.ListCampaignsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmCampaignStatus",
+              "optional": true
+            },
+            {
+              "name": "page_size",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "200"
+              }
+            },
+            {
+              "name": "page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListCampaignsResponse": [
+            {
+              "name": "campaigns",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmCampaign",
+              "repeated": true
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListClaimsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimStatus",
+              "optional": true
+            },
+            {
+              "name": "category",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimCategory",
+              "optional": true
+            },
+            {
+              "name": "search",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "page_size",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "500"
+              }
+            },
+            {
+              "name": "page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListClaimsResponse": [
+            {
+              "name": "claims",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmClaim",
+              "repeated": true
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListIdeasRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmIdeaKind",
+              "optional": true
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmIdeaStatus",
+              "optional": true
+            },
+            {
+              "name": "campaign_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "page_size",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "200"
+              }
+            },
+            {
+              "name": "page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListIdeasResponse": [
+            {
+              "name": "ideas",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmIdea",
+              "repeated": true
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListItemsRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "campaign_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmItemKind",
+              "optional": true
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmItemStatus",
+              "optional": true
+            },
+            {
+              "name": "scheduled_from",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "scheduled_to",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "page_size",
+              "kind": "int32",
+              "validate": {
+                "gte": "0",
+                "lte": "500"
+              }
+            },
+            {
+              "name": "page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.ListItemsResponse": [
+            {
+              "name": "items",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmItem",
+              "repeated": true
+            },
+            {
+              "name": "next_page_token",
+              "kind": "string"
+            }
+          ],
+          "reliant.v1.SetIdeaStatusRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "expected_revision",
+              "kind": "int32",
+              "validate": {
+                "gt": "0"
+              }
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmIdeaStatus"
+            }
+          ],
+          "reliant.v1.SetIdeaStatusResponse": [
+            {
+              "name": "idea",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmIdea"
+            }
+          ],
+          "reliant.v1.UpdateCampaignRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "expected_revision",
+              "kind": "int32",
+              "validate": {
+                "gt": "0"
+              }
+            },
+            {
+              "name": "name",
+              "kind": "string",
+              "optional": true,
+              "validate": {
+                "min_len": 1,
+                "max_len": 200
+              }
+            },
+            {
+              "name": "goal",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "period_start",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "period_end",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "clear_period_start",
+              "kind": "bool"
+            },
+            {
+              "name": "clear_period_end",
+              "kind": "bool"
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmCampaignStatus",
+              "optional": true
+            }
+          ],
+          "reliant.v1.UpdateCampaignResponse": [
+            {
+              "name": "campaign",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmCampaign"
+            }
+          ],
+          "reliant.v1.UpdateIdeaRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "expected_revision",
+              "kind": "int32",
+              "validate": {
+                "gt": "0"
+              }
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmIdeaKind",
+              "optional": true
+            },
+            {
+              "name": "title",
+              "kind": "string",
+              "optional": true,
+              "validate": {
+                "min_len": 1,
+                "max_len": 300
+              }
+            },
+            {
+              "name": "body_md",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "evidence",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmEvidenceList"
+            },
+            {
+              "name": "campaign_id",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.UpdateIdeaResponse": [
+            {
+              "name": "idea",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmIdea"
+            }
+          ],
+          "reliant.v1.UpdateItemRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "expected_revision",
+              "kind": "int32",
+              "validate": {
+                "gt": "0"
+              }
+            },
+            {
+              "name": "kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmItemKind",
+              "optional": true
+            },
+            {
+              "name": "title",
+              "kind": "string",
+              "optional": true,
+              "validate": {
+                "min_len": 1,
+                "max_len": 300
+              }
+            },
+            {
+              "name": "body_md",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "channel",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "campaign_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "idea_id",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "scheduled_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "clear_scheduled_at",
+              "kind": "bool"
+            },
+            {
+              "name": "email_to",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmEmailRecipients"
+            },
+            {
+              "name": "email_subject",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmItemStatus",
+              "optional": true
+            }
+          ],
+          "reliant.v1.UpdateItemResponse": [
+            {
+              "name": "item",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmItem"
+            }
+          ],
+          "reliant.v1.UpdatePositioningRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "expected_revision",
+              "kind": "int32",
+              "validate": {
+                "gte": "0"
+              }
+            },
+            {
+              "name": "positioning_md",
+              "kind": "string"
+            },
+            {
+              "name": "audiences",
+              "kind": "string",
+              "repeated": true
+            }
+          ],
+          "reliant.v1.UpdatePositioningResponse": [
+            {
+              "name": "positioning",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmPositioning"
+            }
+          ],
+          "reliant.v1.UpsertClaimRequest": [
+            {
+              "name": "org_id",
+              "kind": "string",
+              "validate": {
+                "min_len": 1
+              }
+            },
+            {
+              "name": "id",
+              "kind": "string"
+            },
+            {
+              "name": "expected_revision",
+              "kind": "int32",
+              "validate": {
+                "gte": "0"
+              }
+            },
+            {
+              "name": "text",
+              "kind": "string",
+              "optional": true,
+              "validate": {
+                "min_len": 1,
+                "max_len": 500
+              }
+            },
+            {
+              "name": "category",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimCategory",
+              "optional": true
+            },
+            {
+              "name": "status",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimStatus",
+              "optional": true
+            },
+            {
+              "name": "source_url",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "source_kind",
+              "kind": "enum",
+              "type_name": "reliant.v1.GtmClaimSourceKind",
+              "optional": true
+            },
+            {
+              "name": "expires_or_recheck_at",
+              "kind": "message",
+              "type_name": "google.protobuf.Timestamp"
+            },
+            {
+              "name": "clear_expires_or_recheck_at",
+              "kind": "bool"
+            },
+            {
+              "name": "notes",
+              "kind": "string",
+              "optional": true
+            }
+          ],
+          "reliant.v1.UpsertClaimResponse": [
+            {
+              "name": "claim",
+              "kind": "message",
+              "type_name": "reliant.v1.GtmClaim"
+            },
+            {
+              "name": "created",
+              "kind": "bool"
+            }
+          ]
+        },
+        "SchemaFiles": {
+          "reliant.v1.CheckClaimsRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.CheckClaimsResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.CreateCampaignRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.CreateCampaignResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.CreateIdeaRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.CreateIdeaResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.CreateItemRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.CreateItemResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.GetCampaignRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.GetCampaignResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.GetGtmAccessRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.GetGtmAccessResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.GetIdeaRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.GetIdeaResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.GetItemRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.GetItemResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.GetPositioningRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.GetPositioningResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmCampaign": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmClaim": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmClaimFinding": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmEmailRecipients": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmEvidence": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmEvidenceList": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmIdea": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmItem": "reliant/v1/gtm.proto",
+          "reliant.v1.GtmPositioning": "reliant/v1/gtm.proto",
+          "reliant.v1.ListCampaignsRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.ListCampaignsResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.ListClaimsRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.ListClaimsResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.ListIdeasRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.ListIdeasResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.ListItemsRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.ListItemsResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.SetIdeaStatusRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.SetIdeaStatusResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.UpdateCampaignRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.UpdateCampaignResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.UpdateIdeaRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.UpdateIdeaResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.UpdateItemRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.UpdateItemResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.UpdatePositioningRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.UpdatePositioningResponse": "reliant/v1/gtm.proto",
+          "reliant.v1.UpsertClaimRequest": "reliant/v1/gtm.proto",
+          "reliant.v1.UpsertClaimResponse": "reliant/v1/gtm.proto"
+        },
+        "Enums": {
+          "reliant.v1.GtmCampaignStatus": [
+            "GTM_CAMPAIGN_STATUS_UNSPECIFIED",
+            "GTM_CAMPAIGN_STATUS_DRAFT",
+            "GTM_CAMPAIGN_STATUS_ACTIVE",
+            "GTM_CAMPAIGN_STATUS_DONE",
+            "GTM_CAMPAIGN_STATUS_ARCHIVED"
+          ],
+          "reliant.v1.GtmClaimCategory": [
+            "GTM_CLAIM_CATEGORY_UNSPECIFIED",
+            "GTM_CLAIM_CATEGORY_PRICING",
+            "GTM_CLAIM_CATEGORY_CAPABILITY",
+            "GTM_CLAIM_CATEGORY_LIMIT",
+            "GTM_CLAIM_CATEGORY_LICENSE",
+            "GTM_CLAIM_CATEGORY_TIMING",
+            "GTM_CLAIM_CATEGORY_COMPARISON"
+          ],
+          "reliant.v1.GtmClaimFindingKind": [
+            "GTM_CLAIM_FINDING_KIND_UNSPECIFIED",
+            "GTM_CLAIM_FINDING_KIND_MATCHED_VERIFIED",
+            "GTM_CLAIM_FINDING_KIND_MATCHED_UNVERIFIED",
+            "GTM_CLAIM_FINDING_KIND_UNMATCHED_RISKY"
+          ],
+          "reliant.v1.GtmClaimSourceKind": [
+            "GTM_CLAIM_SOURCE_KIND_UNSPECIFIED",
+            "GTM_CLAIM_SOURCE_KIND_DOCS",
+            "GTM_CLAIM_SOURCE_KIND_PRICING_CATALOG",
+            "GTM_CLAIM_SOURCE_KIND_CODE",
+            "GTM_CLAIM_SOURCE_KIND_PRIMARY_THIRD_PARTY"
+          ],
+          "reliant.v1.GtmClaimStatus": [
+            "GTM_CLAIM_STATUS_UNSPECIFIED",
+            "GTM_CLAIM_STATUS_VERIFIED",
+            "GTM_CLAIM_STATUS_UNVERIFIED",
+            "GTM_CLAIM_STATUS_RETIRED"
+          ],
+          "reliant.v1.GtmIdeaKind": [
+            "GTM_IDEA_KIND_UNSPECIFIED",
+            "GTM_IDEA_KIND_PRODUCT",
+            "GTM_IDEA_KIND_GTM",
+            "GTM_IDEA_KIND_CONTENT"
+          ],
+          "reliant.v1.GtmIdeaSource": [
+            "GTM_IDEA_SOURCE_UNSPECIFIED",
+            "GTM_IDEA_SOURCE_AGENT",
+            "GTM_IDEA_SOURCE_HUMAN"
+          ],
+          "reliant.v1.GtmIdeaStatus": [
+            "GTM_IDEA_STATUS_UNSPECIFIED",
+            "GTM_IDEA_STATUS_PROPOSED",
+            "GTM_IDEA_STATUS_ACCEPTED",
+            "GTM_IDEA_STATUS_DONE",
+            "GTM_IDEA_STATUS_REJECTED"
+          ],
+          "reliant.v1.GtmItemKind": [
+            "GTM_ITEM_KIND_UNSPECIFIED",
+            "GTM_ITEM_KIND_BLOG_POST",
+            "GTM_ITEM_KIND_SOCIAL_POST",
+            "GTM_ITEM_KIND_EMAIL",
+            "GTM_ITEM_KIND_LAUNCH",
+            "GTM_ITEM_KIND_OTHER"
+          ],
+          "reliant.v1.GtmItemStatus": [
+            "GTM_ITEM_STATUS_UNSPECIFIED",
+            "GTM_ITEM_STATUS_DRAFT",
+            "GTM_ITEM_STATUS_REVIEW",
+            "GTM_ITEM_STATUS_APPROVED",
+            "GTM_ITEM_STATUS_SCHEDULED",
+            "GTM_ITEM_STATUS_SENT",
+            "GTM_ITEM_STATUS_PUBLISHED",
+            "GTM_ITEM_STATUS_PAUSED"
+          ]
+        },
+        "EnumNumbers": {
+          "reliant.v1.GtmCampaignStatus": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.GtmClaimCategory": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "reliant.v1.GtmClaimFindingKind": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.GtmClaimSourceKind": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.GtmClaimStatus": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.GtmIdeaKind": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "reliant.v1.GtmIdeaSource": [
+            0,
+            1,
+            2
+          ],
+          "reliant.v1.GtmIdeaStatus": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "reliant.v1.GtmItemKind": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "reliant.v1.GtmItemStatus": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5,
+            6,
+            7
+          ]
+        },
+        "EnumGoRefs": {
+          "reliant.v1.GtmCampaignStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmCampaignStatus"
+          },
+          "reliant.v1.GtmClaimCategory": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmClaimCategory"
+          },
+          "reliant.v1.GtmClaimFindingKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmClaimFindingKind"
+          },
+          "reliant.v1.GtmClaimSourceKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmClaimSourceKind"
+          },
+          "reliant.v1.GtmClaimStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmClaimStatus"
+          },
+          "reliant.v1.GtmIdeaKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmIdeaKind"
+          },
+          "reliant.v1.GtmIdeaSource": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmIdeaSource"
+          },
+          "reliant.v1.GtmIdeaStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmIdeaStatus"
+          },
+          "reliant.v1.GtmItemKind": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmItemKind"
+          },
+          "reliant.v1.GtmItemStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "GtmItemStatus"
           }
         }
       }
@@ -56772,6 +59618,18 @@
       "source": {
         "path": "internal/app/providers_api.go",
         "symbol": "NewGitHubAccessLoop"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "Gtm",
+      "name": "Gtm",
+      "kind": "component",
+      "type": "*github.com/reliant-labs/reliant/internal/handlers/gtm.Service",
+      "source": {
+        "path": "internal/handlers/gtm/service.go",
+        "symbol": "New"
       },
       "methods": [],
       "implementation_candidates": []
