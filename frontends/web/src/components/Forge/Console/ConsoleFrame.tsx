@@ -21,7 +21,6 @@ import type { ReactNode } from "react";
 
 import Link from "@/components/forge-ui/link";
 import { PageMain, ShellPageHeader } from "@/components/Layout/shell/shellFrame";
-import { AppPageProjectPicker } from "@/components/Layout/sidebar/AppPageProjectPicker";
 
 import { LearnLink } from "@/lib/learnLinks";
 
@@ -32,6 +31,7 @@ import { useConsoleNavExtras } from "./consoleNavExtras";
 import { EnvScopeControl } from "./EnvScopeControl";
 import type { ScopeOption } from "./envScope";
 import { consolePath, pinnedEnvOf, withSearch, type ConsolePage } from "./paths";
+import { severalModeOf, useSeveralApps } from "./severalProjects";
 import { useRouteUsesEnvScope } from "./useConsoleNavModel";
 
 export interface ConsoleFrameProps {
@@ -55,6 +55,10 @@ export function ConsoleFrame({ project, page, env, dashboardTitle, scope, platfo
   const learn = learnSectionOf(page);
   // A page that opted out of the env scope (useConsoleNavModel.ts) gets no selector.
   const envScoped = useRouteUsesEnvScope();
+  // Several projects in the shell: a list page is about all of them (severalProjects.tsx), so the
+  // trail starts there, not at the focused app; a page about one object still names its app.
+  const several = useSeveralApps();
+  const across = several && severalModeOf(page) !== "one" ? (several.mode === "all" ? "All projects" : `${several.apps.length} projects`) : null;
 
   return (
     <div className="forge-ui forge-console flex h-full min-h-0 w-full flex-col" data-testid="forge-console-frame">
@@ -76,9 +80,7 @@ export function ConsoleFrame({ project, page, env, dashboardTitle, scope, platfo
           </>
         }
       >
-        {/* Several projects in the shell: which one's app this page shows. */}
-        <AppPageProjectPicker app={project} page={page} />
-        <ConsoleBreadcrumb project={project} env={env} crumbs={crumbs} />
+        <ConsoleBreadcrumb project={project} env={env} crumbs={crumbs} across={across} />
       </ShellPageHeader>
       <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4" data-testid="forge-console-page">
         {children}
@@ -87,12 +89,16 @@ export function ConsoleFrame({ project, page, env, dashboardTitle, scope, platfo
   );
 }
 
-/** The console's breadcrumb: the app (its Overview), then the page's trail. */
-export function ConsoleBreadcrumb({ project, env, crumbs }: { project: string; env: string; crumbs: Crumb[] }) {
+/**
+ * The console's breadcrumb: the app (its Overview), then the page's trail.
+ * `across` names the projects a page across several shows in the app's place
+ * (its Overview is theirs too: ProjectsOverview).
+ */
+export function ConsoleBreadcrumb({ project, env, crumbs, across }: { project: string; env: string; crumbs: Crumb[]; across?: string | null }) {
   return (
     <nav aria-label="Breadcrumb" className="flex min-w-0 flex-1 items-center gap-1.5 text-sm text-ink-muted">
       <Link href={withSearch(consolePath(project, { kind: "overview" }), { env })} className="truncate hover:text-ink">
-        {appDisplayName(project)}
+        {across ?? appDisplayName(project)}
       </Link>
       {crumbs.map((crumb, index) => (
         <span key={`${crumb.label}:${index}`} className="flex min-w-0 items-center gap-1.5 max-sm:hidden max-sm:last:inline-flex">
