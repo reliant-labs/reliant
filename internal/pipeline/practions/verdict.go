@@ -141,7 +141,11 @@ func (s *Service) Verdict(ctx context.Context, req *serveraction.Request) (*serv
 		paths = append(paths, path)
 	}
 	slices.Sort(paths)
-	findings, _ := json.Marshal(dec.Findings)
+	counted := dec.Findings
+	if counted == nil {
+		counted = []prpolicy.Finding{}
+	}
+	findings, _ := json.Marshal(counted)
 	round := 1
 	if v := latestOnHead(verdicts, head); v != nil {
 		round = v.Round + 1
