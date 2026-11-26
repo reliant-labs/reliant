@@ -32,8 +32,11 @@ type Deps struct {
 	// nil). store.ThreadExtStore satisfies it.
 	Senders Senders
 	// AmbientMemory commits a new thread's ambient-memory policy inside the
-	// creating transaction. Required for CreateThread (a read-only caller may
-	// leave it nil). store.ThreadExtStore satisfies it.
+	// creating transaction. When nil, New derives it from Repo; if Repo cannot
+	// supply the role or an ORM handle, calls fail closed. store.ThreadExtStore
+	// satisfies it.
+	//
+	// forge:optional-dep
 	AmbientMemory AmbientMemory
 	// Signaler wakes a thread's workflow when it is interrupted. Nil sends
 	// no signal: the interrupt still cancels the thread's running tools.

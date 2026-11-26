@@ -55,6 +55,11 @@ func Of(s any) Chats {
 // generated thread store over the database handle of s (a *db.Repo), or fails
 // when s has none.
 func AmbientMemory(s any) func(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	if r, ok := s.(interface {
+		ResolveThreadAmbientMemoryExclusion(context.Context, string, string, bool) (bool, error)
+	}); ok {
+		return r.ResolveThreadAmbientMemoryExclusion
+	}
 	if o, ok := s.(interface{ ORM() *orm.Client }); ok {
 		if c := o.ORM(); c != nil {
 			return store.NewThreadExtStore(c).ResolveThreadAmbientMemoryExclusion

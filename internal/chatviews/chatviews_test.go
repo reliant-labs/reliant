@@ -24,6 +24,21 @@ func TestOf_AStoreThatReadsChatsIsItsOwnReader(t *testing.T) {
 	require.Equal(t, "own", c.ID)
 }
 
+type ambientReader struct{}
+
+func (ambientReader) ResolveThreadAmbientMemoryExclusion(_ context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return chatID == "chat" && threadID == "thread" && requested, nil
+}
+
+func TestAmbientMemoryUsesTheProvidedReaderAndFailsClosedWithoutOne(t *testing.T) {
+	t.Parallel()
+	excluded, err := AmbientMemory(ambientReader{})(context.Background(), "chat", "thread", true)
+	require.NoError(t, err)
+	require.True(t, excluded)
+	_, err = AmbientMemory(struct{}{})(context.Background(), "chat", "thread", false)
+	require.ErrorIs(t, err, ErrNoChatReads)
+}
+
 // A store with no chat reads and no database handle fails loudly instead of
 // returning a nil chat.
 func TestOf_AStoreWithNoChatReadsFails(t *testing.T) {

@@ -208,7 +208,7 @@ func TestInboxApprovalIsTheOnlyApprovalTheDaemonActsOn(t *testing.T) {
 	})
 
 	// The person approves it in the Inbox.
-	decider, err := worktree_reclaim.New(worktree_reclaim.Deps{Logger: logger, Config: config.Defaults(), Repo: repo, Daemons: store.NewDaemonExtStore(repo.ORM()), Sender: daemonOnTheWire{daemonID: daemonID}})
+	decider, err := worktree_reclaim.New(worktree_reclaim.Deps{Logger: logger, Config: config.Defaults(), Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Daemons: store.NewDaemonExtStore(repo.ORM()), Sender: daemonOnTheWire{daemonID: daemonID}})
 	if err != nil {
 		t.Fatal(err)
 	}
