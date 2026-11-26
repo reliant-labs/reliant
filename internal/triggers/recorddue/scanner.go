@@ -21,8 +21,10 @@
 // SKIP LOCKED and held while their events are recorded, so two workers'
 // scans split the due rows rather than both firing them.
 //
-// Built by internal/app's NewRecordDueScanner only while pipeline.enabled is
-// on; with it off there is no scanner.
+// Built by hand by internal/app's NewRecordDueScanner, only while
+// pipeline.enabled is on: with it off there is no scanner.
+//
+//forge:provided
 package recorddue
 
 import (
@@ -37,31 +39,29 @@ import (
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
-// ScanInterval is how often a worker scans for due records. A var so a test
-// can shorten it.
-var ScanInterval = 15 * time.Second
+// scanInterval is how often a worker scans for due records.
+const scanInterval = 15 * time.Second
 
 // BatchSize bounds the due records one scan fires.
 const BatchSize = 100
 
-// Store is what the scan reads. *db.Repo satisfies it.
-type Store interface {
-	// WithDuePRPipelines calls fn with the due pr_pipeline rows (at most
-	// limit) and their records, the rows locked while fn runs; it does not
-	// call fn when none is due.
-	WithDuePRPipelines(ctx context.Context, now time.Time, limit int, fn func([]core.DuePRPipeline) error) error
-	ListEnabledTriggersOfKind(ctx context.Context, kind core.TriggerKind) ([]*core.Trigger, error)
-	GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error)
+// Deps is what a scanner needs.
+type Deps struct {
+	// Store reads the due records and the activations they fire.
+	Store Store
+	// Intake records each due record's event and starts its fire.
+	Intake Intake
+	// Scope, when set, decorates the context each scan runs in (membership
+	// and org policy, as the inbox relay's).
+	// forge:optional-dep
+	Scope func(context.Context) context.Context
 }
 
-// Intake records an arrived event and starts its fire. *triggers.Intake
-// satisfies it.
-type Intake interface {
-	Accept(ctx context.Context, trigger *core.Trigger, ev triggers.InboundEvent, opts triggers.AcceptOptions) (*triggers.AcceptResult, error)
-}
-
-// Scanner is the due scan.
-type Scanner struct {
+// scanner is the due scan. It is safe for one Run at a time; Scan may run
+// concurrently with another scanner's.
+//
+//forge:contract
+type scanner struct {
 	store    Store
 	intake   Intake
 	scope    func(context.Context) context.Context
@@ -69,15 +69,14 @@ type Scanner struct {
 	interval time.Duration
 }
 
-// New builds a scanner. scope, when set, decorates the context each scan
-// runs in (membership and org policy, as the inbox relay's).
-func New(store Store, intake Intake, scope func(context.Context) context.Context) *Scanner {
-	return &Scanner{store: store, intake: intake, scope: scope, now: time.Now, interval: ScanInterval}
+// New builds a scanner.
+func New(deps Deps) Service {
+	return &scanner{store: deps.Store, intake: deps.Intake, scope: deps.Scope, now: time.Now, interval: scanInterval}
 }
 
 // Run scans every interval until ctx ends. A failed scan is logged and the
 // next one retries.
-func (s *Scanner) Run(ctx context.Context) error {
+func (s *scanner) Run(ctx context.Context) error {
 	if s.scope != nil {
 		ctx = s.scope(ctx)
 	}
@@ -99,7 +98,7 @@ func (s *Scanner) Run(ctx context.Context) error {
 // time, and returns how many events it recorded. A trigger whose event
 // cannot be recorded is logged and skipped, so one broken activation cannot
 // keep the others from firing; the error is a scan that could not run.
-func (s *Scanner) Scan(ctx context.Context) (int, error) {
+func (s *scanner) Scan(ctx context.Context) (int, error) {
 	now := s.now().UTC()
 	fired := 0
 	err := s.store.WithDuePRPipelines(ctx, now, BatchSize, func(due []core.DuePRPipeline) error {
@@ -136,7 +135,7 @@ func (s *Scanner) Scan(ctx context.Context) (int, error) {
 
 // fire records one due record's event for one activation; false when it was
 // recorded before (an earlier scan of the same due time).
-func (s *Scanner) fire(ctx context.Context, t *core.Trigger, d core.DuePRPipeline) (bool, error) {
+func (s *scanner) fire(ctx context.Context, t *core.Trigger, d core.DuePRPipeline) (bool, error) {
 	if d.Row.NextActionAt == nil {
 		return false, nil
 	}

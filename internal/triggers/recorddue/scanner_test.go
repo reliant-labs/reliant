@@ -84,9 +84,9 @@ func (h *harness) activation(id, org string) {
 		id, storetest.SeedUserID, storetest.SeedProjectID, org)
 }
 
-func (h *harness) scanner() *recorddue.Scanner {
+func (h *harness) scanner() recorddue.Service {
 	intake := triggers.NewIntake(triggers.NewStores(h.env.Repo), h.starter, "test-queue")
-	return recorddue.New(h.env.Repo, intake, nil)
+	return recorddue.New(recorddue.Deps{Store: h.env.Repo, Intake: intake})
 }
 
 func (h *harness) events() []map[string]any {

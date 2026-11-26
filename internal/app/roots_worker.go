@@ -62,7 +62,7 @@ type Worker struct {
 	TriggerDeliveries *TriggerDeliveryRelay
 	// RecordDue fires record_due triggers from the due scan; nil while
 	// pipeline.enabled is off.
-	RecordDue *recorddue.Scanner
+	RecordDue recorddue.Service
 	// Checks writes the GitHub check runs workflows' `check:` blocks
 	// declare (workflowcheck), a background loop like Relay.
 	Checks *workflowcheck.Syncer

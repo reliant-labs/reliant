@@ -328,6 +328,8 @@ func StoredDefinition(t *reliantv1.Trigger) *reliantv1.TriggerDefinition {
 		def.Source = &reliantv1.TriggerDefinition_Integration{Integration: src.Integration}
 	case *reliantv1.Trigger_WorkflowEvent:
 		def.Source = &reliantv1.TriggerDefinition_WorkflowEvent{WorkflowEvent: src.WorkflowEvent}
+	case *reliantv1.Trigger_RecordDue:
+		def.Source = &reliantv1.TriggerDefinition_RecordDue{RecordDue: src.RecordDue}
 	}
 	return def
 }

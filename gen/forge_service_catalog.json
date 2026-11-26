@@ -47529,6 +47529,12 @@
               "oneof": "source"
             },
             {
+              "name": "record_due",
+              "kind": "message",
+              "type_name": "reliant.v1.RecordDueSource",
+              "oneof": "source"
+            },
+            {
               "name": "workflow_trigger",
               "kind": "string",
               "oneof": "source"
@@ -57564,7 +57570,7 @@
       "id": "RecordDueScanner",
       "name": "RecordDueScanner",
       "kind": "provider",
-      "type": "*github.com/reliant-labs/reliant/internal/triggers/recorddue.Scanner",
+      "type": "github.com/reliant-labs/reliant/internal/triggers/recorddue.Service",
       "source": {
         "path": "internal/app/providers_worker.go",
         "symbol": "NewRecordDueScanner"

@@ -1160,7 +1160,7 @@ type RecordDueScannerDeps struct {
 // record_due trigger fires.
 //
 //forge:root-only worker
-func NewRecordDueScanner(d RecordDueScannerDeps) (*recorddue.Scanner, error) {
+func NewRecordDueScanner(d RecordDueScannerDeps) (recorddue.Service, error) {
 	if !d.Pipeline.GetEnabled() {
 		return nil, nil
 	}
@@ -1173,9 +1173,9 @@ func NewRecordDueScanner(d RecordDueScannerDeps) (*recorddue.Scanner, error) {
 		membership = d.Membership
 	}
 	policies := d.Policies
-	return recorddue.New(repo, intake, func(ctx context.Context) context.Context {
+	return recorddue.NewInstrumented(recorddue.Deps{Store: repo, Intake: intake, Scope: func(ctx context.Context) context.Context {
 		return orgpolicy.WithResolver(authz.WithMembership(ctx, membership), policies)
-	}), nil
+	}}), nil
 }
 
 // WorkflowCheckSyncerDeps is the GitHub-writing checks configuration and the

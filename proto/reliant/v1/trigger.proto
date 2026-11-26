@@ -1107,6 +1107,11 @@ message TriggerDefinition {
     WebhookSource webhook = 21;
     IntegrationSource integration = 22;
     WorkflowEventSource workflow_event = 23;
+    // Accepted on the wire so Trigger and TriggerDefinition declare the same
+    // arms (a client sends a stored arm back as it read it), but refused on
+    // create and update: a record_due trigger is declared in a workflow's
+    // `triggers:` block and activated through workflow_trigger.
+    RecordDueSource record_due = 28;
     // Activate the named trigger the workflow declares (WorkflowTrigger.name)
     // instead of writing a source inline. The declaration supplies the
     // source, filter and inputs, and is re-read every time the trigger fires,

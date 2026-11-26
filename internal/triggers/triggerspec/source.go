@@ -65,6 +65,8 @@ func FromDefinition(def *reliantv1.TriggerDefinition) (*Source, error) {
 		return fromIntegration(src.Integration)
 	case *reliantv1.TriggerDefinition_WorkflowEvent:
 		return fromWorkflowEvent(src.WorkflowEvent)
+	case *reliantv1.TriggerDefinition_RecordDue:
+		return nil, &ConfigError{Field: "record_due", Reason: "only a workflow's declared trigger can be record_due; declare it in the workflow's triggers: block and enable that"}
 	case *reliantv1.TriggerDefinition_WorkflowTrigger:
 		return nil, &ConfigError{Field: "source", Reason: "workflow_trigger names a declaration; resolve it against the workflow first"}
 	case nil:

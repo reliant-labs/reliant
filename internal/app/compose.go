@@ -714,7 +714,7 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 	})
 }
 
-func (g *Graph) newRecordDueScanner() (*recorddue.Scanner, error) {
+func (g *Graph) newRecordDueScanner() (recorddue.Service, error) {
 	return NewRecordDueScanner(RecordDueScannerDeps{
 		DB: g.Database(), Temporal: g.TemporalClient(), Pipeline: g.ServerProcessConfig.GetPipeline(),
 		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),

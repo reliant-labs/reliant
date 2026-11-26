@@ -414,6 +414,7 @@ type (
 	TriggerDefinition                        = sdk.TriggerDefinition
 	TriggerDefinitionSource                  = sdk.TriggerDefinitionSource
 	TriggerDefinition_Integration            = sdk.TriggerDefinition_Integration
+	TriggerDefinition_RecordDue              = sdk.TriggerDefinition_RecordDue
 	TriggerDefinition_Schedule               = sdk.TriggerDefinition_Schedule
 	TriggerDefinition_Webhook                = sdk.TriggerDefinition_Webhook
 	TriggerDefinition_WorkflowEvent          = sdk.TriggerDefinition_WorkflowEvent

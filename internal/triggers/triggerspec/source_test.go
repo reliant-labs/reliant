@@ -64,3 +64,11 @@ func TestRecordDueAcceptsOnlyRegisteredTables(t *testing.T) {
 		assert.Equal(t, "record_due.table", ce.Field)
 	}
 }
+
+func TestRecordDueIsNeverAnAdHocSource(t *testing.T) {
+	_, err := FromDefinition(&reliantv1.TriggerDefinition{
+		Source: &reliantv1.TriggerDefinition_RecordDue{RecordDue: &reliantv1.RecordDueSource{Table: "pr_pipeline"}}})
+	var ce *ConfigError
+	require.ErrorAs(t, err, &ce)
+	assert.Equal(t, "record_due", ce.Field)
+}
