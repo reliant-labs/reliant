@@ -17,7 +17,9 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { keepPreviousInOrgSegment } from "@/lib/orgScope";
 
 import { FilterUnsupportedError, obsRetryDelay, rumRetry } from "@/services/controlPlane/observability/errors";
-import type { FrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
+import { useListFrontendReplay } from "@/hooks/controlplane/observability-service-hooks_gen";
+import { frontendReplayRequest, toFrontendReplayList } from "@/services/controlPlane/observability/frontendReplayApi";
+import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { RumScope, SessionList, SessionSummary, Timeline } from "@/services/controlPlane/observability/rumTypes";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
@@ -49,7 +51,6 @@ export const sessionKeys = {
   list: (scope: RumScope | null, filters: SessionFilters) => [...sessionKeys.root(), "list", ...scopeKey(scope), filters] as const,
   detail: (scope: RumScope | null, sessionId: string) => [...sessionKeys.root(), "detail", ...scopeKey(scope), sessionId] as const,
   timeline: (scope: RumScope | null, sessionId: string) => [...sessionKeys.root(), "timeline", ...scopeKey(scope), sessionId] as const,
-  frontendReplay: (scope: RumScope | null) => [...sessionKeys.root(), "frontend-replay", ...scopeKey(scope)] as const,
   replayEvidence: (scope: RumScope | null, envIds: readonly string[]) => [...sessionKeys.root(), "replay-evidence", ...scopeKey(scope), envIds] as const,
 };
 
@@ -137,17 +138,16 @@ export function useSessionTimeline(scope: RumScope | null, sessionId: string | u
  * (ObservabilityService.ListFrontendReplay), for the empty list to say which
  * frontend is off and why. It reads Postgres and the hosting hub, not
  * ClickHouse, so it goes around the quota guard: a quota pause must not hide
- * the reason the list is empty. Under sessionKeys.root(), so Refresh re-reads it.
+ * the reason the list is empty. A generated read; the panel's Refresh re-reads
+ * every one (listFrontendReplay.all) with the session reads.
  */
 export function useFrontendReplay(scope: RumScope | null, enabled = true) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: sessionKeys.frontendReplay(scope),
-    queryFn: ({ signal }): Promise<FrontendReplayList> =>
-      api.listFrontendReplay({ orgId: (scope as RumScope).orgId, projectId: scope?.projectId, envIds: scope?.envIds ?? [] }, { signal }),
+  return useListFrontendReplay(frontendReplayRequest({ orgId: scope?.orgId ?? "", projectId: scope?.projectId, envIds: scope?.envIds ?? [] }), {
+    select: toFrontendReplayList,
     enabled: !!scope?.orgId && enabled,
     staleTime: 60_000,
     retry: rumRetry, retryDelay: obsRetryDelay,
+    callOptions: () => obsCall(),
   });
 }
 
