@@ -49,7 +49,7 @@ func newMoveFixture(t *testing.T) *moveFixture {
 func (f *moveFixture) commit(ctx context.Context, c core.ProjectOrgMoveCommit) (*core.ProjectOrgMoveResult, error) {
 	return store.CommitProjectOrgMove(ctx, f.repo.ORM(), c, func(ctx context.Context, res *core.ProjectOrgMoveResult) error {
 		projectID := res.Move.ProjectID
-		return f.repo.EmitUserRefetch(ctx, res.Move.OwnerUserID, RefetchProjectOrgMoved, RefetchOpts{ProjectID: &projectID})
+		return f.repo.UpdateWriter().EmitUserRefetch(ctx, res.Move.OwnerUserID, RefetchProjectOrgMoved, RefetchOpts{ProjectID: &projectID})
 	})
 }
 

@@ -100,6 +100,67 @@ func machineCatalogColumn(ctx context.Context, db orm.Context, query, what, proj
 	return v, true, nil
 }
 
+// rowVersionSQL is the version of the row a catalog read reads: its tuple's
+// xmin and ctid, which together name one version of a row. Every UPDATE
+// writes a new tuple, at a new ctid, so any change to the row changes it
+// (and so does a VACUUM FULL, or a freeze, which only costs a cache miss);
+// two versions written by one transaction differ by ctid, since the first
+// cannot be pruned while that transaction runs. Reading it reads no column
+// of the row, so none of its TOASTed JSON is fetched or decompressed.
+//
+// It lets a reader that kept a column's value (db.Repo's catalog column
+// cache) ask "is this still the row I read?" for a few bytes, where reading
+// the column again moved hundreds of KB: ListInbox read each machine's
+// workflows in 84ms p50 (219ms p95), three times a call, and the project's
+// in 51ms (207ms p95), twice (prod, 2026-11-26).
+const rowVersionSQL = `xmin::text || '/' || ctid::text`
+
+// ProjectMachineCatalogVersion is the version of one machine's catalog row of
+// a project (rowVersionSQL); found is false when that machine has synced none.
+func ProjectMachineCatalogVersion(ctx context.Context, db orm.Context, projectID, daemonID string) (version string, found bool, err error) {
+	return rowVersion(ctx, db, `SELECT `+rowVersionSQL+` FROM project_machine_catalogs WHERE project_id = $1 AND daemon_id = $2`,
+		fmt.Sprintf("machine %s's catalog of project %s", daemonID, projectID), projectID, daemonID)
+}
+
+// GetProjectMachineWorkflowsJSONVersioned is GetProjectMachineWorkflowsJSON
+// with the version of the row it was read from, in the same statement.
+func GetProjectMachineWorkflowsJSONVersioned(ctx context.Context, db orm.Context, projectID, daemonID string) (workflows *string, version string, found bool, err error) {
+	return versionedColumn(ctx, db, `SELECT `+rowVersionSQL+`, workflows_json FROM project_machine_catalogs WHERE project_id = $1 AND daemon_id = $2`,
+		fmt.Sprintf("machine %s's workflows of project %s", daemonID, projectID), projectID, daemonID)
+}
+
+// GetProjectMachinePresetsJSONVersioned is GetProjectMachinePresetsJSON with
+// the version of the row it was read from, in the same statement.
+func GetProjectMachinePresetsJSONVersioned(ctx context.Context, db orm.Context, projectID, daemonID string) (presets *string, version string, found bool, err error) {
+	return versionedColumn(ctx, db, `SELECT `+rowVersionSQL+`, presets_json FROM project_machine_catalogs WHERE project_id = $1 AND daemon_id = $2`,
+		fmt.Sprintf("machine %s's presets of project %s", daemonID, projectID), projectID, daemonID)
+}
+
+func rowVersion(ctx context.Context, db orm.Context, query, what string, args ...any) (string, bool, error) {
+	var version string
+	err := db.QueryRow(ctx, query, args...).Scan(&version)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("failed to read the version of %s: %w", what, err)
+	}
+	return version, true, nil
+}
+
+func versionedColumn(ctx context.Context, db orm.Context, query, what string, args ...any) (*string, string, bool, error) {
+	var version string
+	var v *string
+	err := db.QueryRow(ctx, query, args...).Scan(&version, &v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "", false, nil
+	}
+	if err != nil {
+		return nil, "", false, fmt.Errorf("failed to read %s: %w", what, err)
+	}
+	return v, version, true, nil
+}
+
 // GetProjectMachineCatalogPushedAt is when one machine last pushed its
 // catalog of a project; found is false when it never has.
 func GetProjectMachineCatalogPushedAt(ctx context.Context, db orm.Context, projectID, daemonID string) (pushedAt time.Time, found bool, err error) {

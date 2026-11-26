@@ -625,7 +625,7 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		Repo:               repo,
 		SpawnQuestions:     store.NewQuestionExtStore(repo.ORM()),
 		SpawnTree:          store.NewToolCallExtStore(repo.ORM()),
-		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}),
+		SpawnMailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 		Scenarios:          store.NewWorkflowScenarioExtStore(repo.ORM()),
 		LaunchedRuns:       store.NewTriggerEventExtStore(repo.ORM()),
 		WorktreeChats:      store.NewChatExtStore(repo.ORM()),
@@ -1048,8 +1048,7 @@ type WorkflowEventRelayDeps struct {
 //
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
-	return workflowevent.NewRelay(store.NewRunEventExtStore(d.DB.ORM()), d.Temporal.Client, v2workflow.SharedTaskQueue).
-		WithRoutes(store.NewTriggerExtStore(d.DB.ORM())), nil
+	return workflowevent.NewRelay(store.NewRunEventExtStore(d.DB.ORM()), d.Temporal.Client, v2workflow.SharedTaskQueue), nil
 }
 
 type TriggerDeliveryRelayDeps struct {

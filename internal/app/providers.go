@@ -35,11 +35,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/certs"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/credentials/provideraccounts"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
@@ -494,6 +496,10 @@ func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
 type TemporalClient struct {
 	Client    client.Client
 	Namespace string
+	// DataConverter is a converter configured as Client's is (the same
+	// claim-check store), for a reader that decodes payloads Client hands
+	// back raw, such as a history event's. nil: the reader's own default.
+	DataConverter converter.DataConverter
 }
 
 // TemporalClientDeps is the server, and the boot context the first dial
@@ -555,7 +561,11 @@ func newTemporalClient(d TemporalClientDeps, dial dialTemporalFunc) (*TemporalCl
 		c = stopnudge.Wrap(c, d.NATS.Conn, stopSignals...)
 	}
 	logging.Info("Connected to external Temporal server", "host", host, "port", port)
-	return &TemporalClient{Client: c, Namespace: namespace}, nil
+	return &TemporalClient{
+		Client:        c,
+		Namespace:     namespace,
+		DataConverter: temporal.NewFlexibleDataConverter(temporal.WithPayloadStore(d.PayloadStore)),
+	}, nil
 }
 
 // Ready fails while the Temporal server does not answer its health check.
@@ -674,11 +684,13 @@ func NewVault(d VaultDeps) (vault.Service, error) {
 type PauseServiceDeps struct {
 	Temporal *TemporalClient
 	DB       *db.Repo
+	// Updates tells a chat's clients a run's executions changed.
+	Updates chatupdates.Service
 }
 
 // NewPauseService pauses and resumes runs through their workflows.
 func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
-	ps := v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: d.Temporal.Client, Store: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM())})
+	ps := v2workflow.NewPauseService(v2workflow.PauseServiceDeps{Temporal: d.Temporal.Client, Store: d.DB, Workflows: store.NewWorkflowExtStore(d.DB.ORM()), Updates: d.Updates})
 	ps.SetNamespace(d.Temporal.Namespace)
 	return ps, nil
 }

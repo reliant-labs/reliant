@@ -27,7 +27,8 @@ import { ArrowRight, BellRing, Bug, Network, Timer } from "lucide-react";
 import Link from "@/components/forge-ui/link";
 import PageHeader from "@/components/forge-ui/page_header";
 import Status from "@/components/forge-ui/status";
-import { useAlerts, useIssues, useObsReadApi, useObservabilityOrg, obsKeys } from "@/hooks/observability-queries";
+import { useAlerts, useIssues, useObservabilityOrg, obsKeys } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { cn } from "@/lib/utils";
 import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -268,7 +269,7 @@ function useWindow(range: RangePreset) {
 
 function SlowestEndpoints({ scope, range }: { scope: ObsScope | null; range: RangePreset }) {
   const { href, forgeProject } = useForgeConsole();
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   const window = useWindow(range);
   const catalog = useQuery({
     queryKey: [...obsKeys.all(scope), "obs-overview-catalog", window],
@@ -361,7 +362,7 @@ function FiringAlerts({ orgId, envIds, envName }: { orgId: string | null; envIds
 
 function GraphThumbnail({ scope, range }: { scope: ObsScope | null; range: RangePreset }) {
   const { href, forgeProject } = useForgeConsole();
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   const window = useWindow(range);
   const graph = useQuery({
     queryKey: [...obsKeys.all(scope), "obs-overview-graph", window],

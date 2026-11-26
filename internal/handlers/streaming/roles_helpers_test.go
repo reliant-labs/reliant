@@ -40,6 +40,10 @@ func withRoles(d Deps) Deps {
 	return d
 }
 
+func fixtureTriggerReads(repo Repository) TriggerReads {
+	return roleOf[TriggerReads](repo, func(r *db.Repo) TriggerReads { return store.NewTriggerEventExtStore(r.ORM()) })
+}
+
 func roleOf[T any](repo Repository, fromDB func(*db.Repo) T) T {
 	var zero T
 	if r, ok := repo.(*db.Repo); ok {

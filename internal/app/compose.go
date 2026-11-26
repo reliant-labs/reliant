@@ -485,6 +485,7 @@ func (g *Graph) newPauseService() (*v2workflow.PauseService, error) {
 	return NewPauseService(PauseServiceDeps{
 		Temporal: g.TemporalClient(),
 		DB:       g.Database(),
+		Updates:  g.chatUpdates(),
 	})
 }
 
@@ -1012,6 +1013,8 @@ func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 		Router:     g.APIDaemonRouter(),
 		DB:         g.Database(),
 		Activity:   g.DaemonStatePublisher(),
+		Reconciler: g.ServerProcessConfig.GetReconciler(),
+		Runs:       g.RunLifecycle(),
 	})
 }
 

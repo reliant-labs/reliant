@@ -18,17 +18,26 @@
  * call stubbed.
  */
 
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
+import {
+  caughtUpFrame,
+  heartbeatFrame,
+  scriptedServer,
+} from "../../../../../../sdk/ts/src/test/scripted-server";
+import { FIRST_FRAME_TIMEOUT_MS } from "@reliantlabs/sdk/client";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { setTransport } from "../../../lib/connect";
+import { resetPageActivityForTests } from "../../../lib/pageActivity";
 import { queryClient } from "../../../lib/query-client";
 import { mockTransport } from "../../../lib/test-utils";
+import { ChatContainer } from "../ChatContainer";
 import { ChatPresenter } from "../ChatPresenter";
 import type { Message } from "../../../api/client";
 import { useChatStore } from "../../../store/chatStore";
+import { useGlobalUpdatesStore } from "../../../store/globalUpdatesStore";
 import {
   clearAllMessagesCache,
   fanOutMessagesToThreadCaches,
@@ -114,6 +123,7 @@ vi.mock("../../workflow/WorkflowViewerPanel", () => ({
 }));
 
 const CHAT = "chat-1";
+const OTHER_CHAT = "chat-2";
 const SPAWN = "spawn-1";
 const OTHER_SPAWN = "spawn-2";
 
@@ -213,6 +223,9 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  cleanup();
+  useGlobalUpdatesStore.getState().disconnect();
+  resetPageActivityForTests();
   useChatStore.setState({ chatSyncPendingId: null });
   clearAllMessagesCache();
   vi.useRealTimers();
@@ -348,6 +361,113 @@ describe("ChatPresenter timeline catch-up overlay — the chat.open it ends", ()
       act(() => resetChatOpen());
       tracer.uninstall();
     }
+  });
+});
+
+describe("Mobile chat open through ChatContainer", () => {
+  let server: ReturnType<typeof scriptedServer>;
+  let tracer: ReturnType<typeof installRecordingTracer>;
+  const beginOpen = (chatId: string) => beginChatOpen(chatId, {}, "mobile_route");
+  const span = (chatId: string) => tracer.spans.find((s) => s.name === "chat.open" && s.attributes["chat.id"] === chatId);
+  const openChat = (chatId: string) => (
+    <QueryClientProvider client={queryClient}>
+      <SurfaceProvider surface="mobile">
+        <ChatContainer tabId={chatId} hideHeader />
+      </SurfaceProvider>
+    </QueryClientProvider>
+  );
+
+  beforeEach(() => {
+    server = scriptedServer({ ListApprovalsByChat: () => ({}), ListWorkflowExecutions: () => ({}) });
+    setTransport(server.transport);
+    useGlobalUpdatesStore.setState({ connectionStatus: "disconnected", lastSequence: 0 });
+    useChatStore.setState({ hasLoaded: false });
+    tracer = installRecordingTracer();
+  });
+
+  afterEach(() => {
+    act(() => resetChatOpen());
+    tracer.uninstall();
+  });
+
+  it("waits for the cold chat's caught_up even when the user feed has not started", async () => {
+    beginOpen(CHAT);
+    render(openChat(CHAT));
+    await advance(CATCH_UP_SHOW_DELAY_MS);
+
+    expect(useGlobalUpdatesStore.getState().connectionStatus).toBe("disconnected");
+    expect(frame()).toHaveAttribute("aria-busy", "true");
+    expect(span(CHAT)?.ended).toBe(false);
+
+    // A first frame proves the connection is live, not that replay is done.
+    server.chatStreams()[0].push(heartbeatFrame());
+    await advance(50);
+    expect(frame()).toHaveAttribute("aria-busy", "true");
+    expect(span(CHAT)?.ended).toBe(false);
+
+    server.chatStreams()[0].push(caughtUpFrame(0));
+    await advance(0);
+    await advance(50);
+    expect(frame()).not.toHaveAttribute("aria-busy");
+    expect(span(CHAT)?.attributes["interaction.outcome"]).toBe("ok");
+  });
+
+  it("stops covering the transcript when the chat's first frame times out, even with a healthy user feed", async () => {
+    useGlobalUpdatesStore.setState({ connectionStatus: "connected" });
+    beginOpen(CHAT);
+    render(openChat(CHAT));
+    await advance(CATCH_UP_SHOW_DELAY_MS);
+    expect(frame()).toHaveAttribute("aria-busy", "true");
+
+    await advance(FIRST_FRAME_TIMEOUT_MS - CATCH_UP_SHOW_DELAY_MS);
+    await advance(50);
+    expect(useGlobalUpdatesStore.getState().connectionStatus).toBe("connected");
+    expect(frame()).not.toHaveAttribute("aria-busy");
+    expect(span(CHAT)?.attributes).toMatchObject({
+      "interaction.outcome": "error",
+      "chat.open.error": "disconnected",
+    });
+
+    // The existing reconnect still runs, and only caught_up clears pending sync.
+    await advance(2_000);
+    await advance(CATCH_UP_SHOW_DELAY_MS);
+    expect(frame()).toHaveAttribute("aria-busy", "true");
+    server.chatStreams()[1].push(caughtUpFrame(0));
+    await advance(0);
+    expect(frame()).not.toHaveAttribute("aria-busy");
+  });
+
+  it("does not apply a superseded chat's status or a late frame to the next chat", async () => {
+    useGlobalUpdatesStore.setState({ connectionStatus: "connected" });
+    beginOpen(CHAT);
+    const view = render(openChat(CHAT));
+    await advance(0);
+    // End the first connection cleanly to enter backoff without triggering
+    // the telemetry error callback or changing the user feed's connection.
+    server.chatStreams()[0].end();
+    await advance(0);
+    await advance(2_000);
+    const oldRetry = server.chatStreams()[1];
+    expect(oldRetry?.request).toMatchObject({ chatId: CHAT });
+
+    // Queue a frame on the old connection, then switch before it is consumed.
+    // The old retry is superseded even if the new chat is still in backoff.
+    act(() => {
+      oldRetry.push(caughtUpFrame(100));
+      beginOpen(OTHER_CHAT);
+    });
+    view.rerender(openChat(OTHER_CHAT));
+    await advance(CATCH_UP_SHOW_DELAY_MS);
+
+    expect(oldRetry.signal?.aborted).toBe(true);
+    expect(useGlobalUpdatesStore.getState().chatConnectionStatus).toBe("disconnected");
+    expect(useChatStore.getState().chatSyncPendingId).toBe(OTHER_CHAT);
+    expect(frame()).not.toHaveAttribute("aria-busy");
+
+    await advance(3_000);
+    expect(server.chatStreams().at(-1)?.request).toMatchObject({ chatId: OTHER_CHAT, sinceSeq: 0n });
+    await advance(CATCH_UP_SHOW_DELAY_MS);
+    expect(frame()).toHaveAttribute("aria-busy", "true");
   });
 });
 
