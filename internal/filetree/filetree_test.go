@@ -285,8 +285,8 @@ func TestWalk_Deadline(t *testing.T) {
 		write(t, filepath.Join(root, "a", "inner", "deep.txt"), "x")
 		write(t, filepath.Join(root, "b", "y.txt"), "y")
 
-		deadline := time.Now().Add(time.Hour)
-		stubClock(t, deadline, 1) // in time for "a", out of time from "a/inner" on
+		deadline := time.Unix(1000, 0)
+		stubClock(t, deadline, 4) // root pre/post read, then "a" dispatch/pre-read
 
 		res, err := Walk(Options{Root: root, Depth: MaxDepth, Deadline: deadline})
 		if err != nil {
@@ -312,7 +312,9 @@ func TestWalk_Deadline(t *testing.T) {
 		write(t, filepath.Join(root, "a", "x.txt"), "x")
 		mkdir(t, filepath.Join(root, "empty"))
 
-		res, err := Walk(Options{Root: root, Depth: MaxDepth, Deadline: time.Now().Add(time.Hour)})
+		deadline := time.Unix(1000, 0)
+		stubClock(t, deadline, 100)
+		res, err := Walk(Options{Root: root, Depth: MaxDepth, Deadline: deadline})
 		if err != nil {
 			t.Fatal(err)
 		}
