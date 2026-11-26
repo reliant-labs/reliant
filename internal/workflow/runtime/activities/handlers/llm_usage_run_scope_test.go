@@ -23,7 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llmusage/llmusagetest"
 	"github.com/reliant-labs/reliant/internal/models/message"
-	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/observability/temporalobs"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -63,7 +63,7 @@ func (d *scopeDriver) StreamResponse(context.Context, []string, []message.Messag
 
 // scopedNodeInput is a workflow node's activity input as the runtime
 // dispatches it, the shape the worker's run-scope interceptor reads its run
-// from (observability.RunScopeOfActivityArgs).
+// from (temporalobs.RunScopeOfActivityArgs).
 type scopedNodeInput struct {
 	Runtime struct {
 		ChatID     string                      `json:"chat_id"`
@@ -85,7 +85,7 @@ func runScopedActivity(t *testing.T, in scopedNodeInput, fn func(ctx context.Con
 	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{
-		Interceptors: []interceptor.WorkerInterceptor{observability.NewRunScopeWorkerInterceptor(nil)},
+		Interceptors: []interceptor.WorkerInterceptor{temporalobs.NewRunScopeWorkerInterceptor(nil)},
 	}))
 	exec := func(ctx context.Context, _ scopedNodeInput) error { return fn(ctx) }
 	env.RegisterActivityWithOptions(exec, activity.RegisterOptions{Name: "ScopedLedgerNode"})
@@ -220,7 +220,7 @@ func TestCallLLM_LedgerRowCarriesTheTurnsRunScope(t *testing.T) {
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	h.env.SetWorkerOptions(temporaltest.WorkerOptions(worker.Options{
-		Interceptors: []interceptor.WorkerInterceptor{observability.NewRunScopeWorkerInterceptor(nil)},
+		Interceptors: []interceptor.WorkerInterceptor{temporalobs.NewRunScopeWorkerInterceptor(nil)},
 	}))
 	ctx := context.Background()
 	project := h.CreateTestProject(ctx, "proj-turn-scope", "user-turn-scope")

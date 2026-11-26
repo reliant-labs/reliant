@@ -15,7 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/dbconn"
-	"github.com/reliant-labs/reliant/internal/errclass"
+	"github.com/reliant-labs/reliant/internal/errclass/temporalclass"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -34,7 +34,7 @@ func TestPreflightVerdict_IsNonRetryable(t *testing.T) {
 	assert.True(t, appErr.NonRetryable())
 	assert.Equal(t, PreflightDaemonCheckFailedErrType, appErr.Type())
 	assert.Equal(t, "This chat's machine was removed", appErr.Message(), "the user-facing text is unchanged")
-	assert.Equal(t, temporal.ApplicationErrorCategoryBenign, errclass.TemporalCategory(err),
+	assert.Equal(t, temporal.ApplicationErrorCategoryBenign, temporalclass.Category(err),
 		"a user error still crosses the activity boundary as benign")
 }
 

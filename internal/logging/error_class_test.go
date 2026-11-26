@@ -16,6 +16,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/temporal"
+
+	_ "github.com/reliant-labs/reliant/internal/errclass/temporalclass" // registers the Temporal verdicts the process logger relies on
 )
 
 // error_class_test.go — a user error is written, counted, and pages nobody.

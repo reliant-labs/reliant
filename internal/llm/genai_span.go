@@ -54,7 +54,7 @@ func StartGenAISpan(ctx context.Context, provider string, model models.Model, st
 	// so a dashboard can read tokens by workflow without joining to the
 	// workflow's span, which a continue-as-new or a resume puts on another
 	// trace. The worker puts the scope on the activity's ctx
-	// (observability.NewRunScopeWorkerInterceptor); outside a run it is empty.
+	// (temporalobs.NewRunScopeWorkerInterceptor); outside a run it is empty.
 	ctx = genai.WithScope(ctx, telemetry.RunScopeFromContext(ctx).GenAIAttributes()...)
 	ctx, span := genai.StartChat(ctx, genai.Chat{
 		Provider:   provider,
