@@ -41,7 +41,7 @@ func CheckScript(cfg config.Resolved, baseRef string) string {
 	} else {
 		stage(&b, "lint", shellQuote(stageCommand(cfg.Gate.Stage(config.StageLint))))
 		b.WriteString(goPackages)
-		b.WriteString(`if [ -f go.mod ]; then test_cmd=${pkgs:+go test -short $pkgs}; else test_cmd=; fi` + "\n")
+		b.WriteString(`if [ -f go.mod ] && [ -s "$t/packages" ]; then test_cmd=run_go_tests; else test_cmd=; fi` + "\n")
 		stage(&b, "test", `"$test_cmd"`)
 		fmt.Fprintf(&b, "if [ -f go.mod ]; then build_cmd='go build ./...'; else build_cmd=%s; fi\n",
 			shellQuote(stageCommand(cfg.Gate.Stage(config.StageBuild))))
@@ -93,7 +93,12 @@ run_stage() {
 }
 `
 
-// goPackages sets $pkgs to the changed Go packages that still exist, as
-// ./dir arguments.
-const goPackages = `pkgs=$(grep '\.go$' "$t/changed" | while read -r f; do d=$(dirname "$f"); ls "$d"/*.go >/dev/null 2>&1 && printf './%s\n' "$d"; done | sort -u | tr '\n' ' ')
+// goPackages records existing changed Go directories, then passes them as
+// literal arguments. Paths must never become shell source for run_stage's eval.
+const goPackages = `grep '\.go$' "$t/changed" | while IFS= read -r f; do d=$(dirname "$f"); ls "$d"/*.go >/dev/null 2>&1 && printf './%s\n' "$d"; done | sort -u >"$t/packages"
+run_go_tests() {
+  set --
+  while IFS= read -r pkg; do set -- "$@" "$pkg"; done <"$t/packages"
+  go test -short "$@"
+}
 `

@@ -49,6 +49,35 @@ func runCheck(t *testing.T, cfg config.Resolved, files map[string]string) map[st
 	return map[string]any{"exit_code": float64(exit), "stdout": stdout.String(), "stderr": stderr.String()}
 }
 
+func TestCheckScriptGoPackagePathsAreLiteralArguments(t *testing.T) {
+	dir := t.TempDir()
+	pkg := "pkg; touch injected; #"
+	if err := os.Mkdir(filepath.Join(dir, pkg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, pkg, "x.go"), []byte("package example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Feed the changed-path reader directly so git's display quoting cannot
+	// mask shell metacharacters. The fake go also verifies argument boundaries.
+	script := checkPrelude + "printf '%s\\n' " + shellQuote(pkg+"/x.go") + ` >"$t/changed"
+go() {
+  [ "$#" = 3 ] && [ "$1" = test ] && [ "$2" = -short ] && [ "$3" = ` + shellQuote("./"+pkg) + ` ]
+}
+` + goPackages + `run_stage test run_go_tests
+exit "$failed"
+`
+	cmd := exec.Command("sh", "-c", script)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if _, statErr := os.Stat(filepath.Join(dir, "injected")); !os.IsNotExist(statErr) {
+		t.Fatalf("changed path executed shell syntax: %v", statErr)
+	}
+	if err != nil {
+		t.Fatalf("package path was not passed as one literal argument: %v\n%s", err, out)
+	}
+}
+
 func TestCheckScriptReportsAFailingCheckWithItsOutput(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.Check = &config.Check{Run: `printf 'a "quoted"\tline\\ with\nboom\n'; exit 3`}
