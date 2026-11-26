@@ -287,6 +287,13 @@ func TestDeliveryInboxLegacyResponseAndCallerRetry(t *testing.T) {
 	assert.Equal(t, false, answer["duplicate"])
 	assert.Equal(t, true, duplicate["duplicate"])
 	assert.NotContains(t, answer, "delivery_id")
+	// The reply names the chat the worker will launch, and a duplicate
+	// delivery names the first event's.
+	stored, err := f.Repo.GetTriggerEventByDedupe(t.Context(), core.TriggerEventKindWebhook, "plain:key:retry")
+	require.NoError(t, err)
+	assert.Equal(t, triggers.EventChatID(stored.Kind, stored.DedupeKey), answer["chat_id"])
+	assert.Equal(t, answer["chat_id"], duplicate["chat_id"])
+	assert.NotContains(t, answer, "run_id")
 	for range 2 {
 		require.Equal(t, http.StatusAccepted, f.hook("", "").Code)
 	}

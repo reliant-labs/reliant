@@ -96,6 +96,10 @@ type AcceptResult struct {
 	// ChatID is the chat the event launched, or will launch while it is
 	// pending (EventChatID); empty when the event settled without a run.
 	ChatID string
+	// RunID is the run the accept itself launched. The receiver only starts
+	// the fire and the worker launches, so Intake leaves it empty: it is for a
+	// launch that completed within the accept, and a reply carries it only then.
+	RunID string
 }
 
 // Intake records arrived events and starts their fires.
@@ -290,14 +294,21 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	return in.startRecordedEvent(ctx, trigger.ID, row, !created, opts.Manual), nil
 }
 
-func (in *Intake) startRecordedEvent(ctx context.Context, triggerID string, row *core.TriggerEvent, duplicate, manual bool) *AcceptResult {
-	res := &AcceptResult{EventID: row.ID, Outcome: row.Outcome, Detail: row.OutcomeDetail, Duplicate: duplicate}
+// RecordedEventChatID is the chat a recorded event launched, or will launch
+// while it is pending; empty for an event that settled without a run (skipped
+// or failed), whose chat id would name a chat that never exists.
+func RecordedEventChatID(row *core.TriggerEvent) string {
 	switch {
 	case row.ChatID != nil:
-		res.ChatID = *row.ChatID
+		return *row.ChatID
 	case row.Outcome == core.TriggerEventPending:
-		res.ChatID = EventChatID(row.Kind, row.DedupeKey)
+		return EventChatID(row.Kind, row.DedupeKey)
 	}
+	return ""
+}
+
+func (in *Intake) startRecordedEvent(ctx context.Context, triggerID string, row *core.TriggerEvent, duplicate, manual bool) *AcceptResult {
+	res := &AcceptResult{EventID: row.ID, Outcome: row.Outcome, Detail: row.OutcomeDetail, Duplicate: duplicate, ChatID: RecordedEventChatID(row)}
 	if row.Outcome == core.TriggerEventPending {
 		// A crash after the write is repaired by the redriver. Re-delivery
 		// names the same event and does not create a second launch intent.

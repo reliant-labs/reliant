@@ -73,6 +73,8 @@ On Reliant's hosted platform, enabling it connects the automation to your organi
 
 By default the `202` body contains `event_id`, `outcome`, and `duplicate`. The event has been recorded and evaluated, but a run may not have started.
 
+It also contains `chat_id`, the id of the chat the run uses, as soon as the event is accepted, even while the run is still queued. A duplicate delivery returns the first delivery's `chat_id`. An event that launched nothing (`skipped` or `failed`) has no `chat_id`. `run_id` is present only when the run was launched within the request; the default reply leaves it out. Both ids belong to the event your own request recorded.
+
 Send `Prefer: respond-async` if you only need to know the delivery was stored and want filtering and dispatch to happen in the background. A `202` with `Preference-Applied: respond-async` returns `{"delivery_id":"…","status":"pending"}`. The delivery ID is a receipt, not a trigger event ID; check the automation's history for the eventual result.
 
 For either mode, the first non-empty header among `Idempotency-Key`, `X-Idempotency-Key`, and `X-Delivery-Id` identifies the delivery. `X-Request-Id` is ignored for deduplication: it identifies a request, not an event, and proxies can assign a new value on each retry.

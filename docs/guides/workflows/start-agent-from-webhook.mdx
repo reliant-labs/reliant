@@ -122,10 +122,10 @@ By the end of this guide your CI can start an agent with one HTTP request: when 
 
     ```text
     HTTP/2 202
-    {"duplicate":false,"event_id":"22c50c1d-c114-49fe-b599-8a1d6a5e87cf","outcome":"pending"}
+    {"chat_id":"5b0c2f0e-6a43-5d52-9a7b-2f6f5d2f6c11","duplicate":false,"event_id":"22c50c1d-c114-49fe-b599-8a1d6a5e87cf","outcome":"pending"}
     ```
 
-    `202` means the delivery was recorded; the run starts asynchronously. Sending the same `Idempotency-Key` again returns `"duplicate":true` and starts nothing. A body the filter rejects returns `202` with `"outcome":"skipped"`.
+    `202` means the delivery was recorded; the run starts asynchronously. Sending the same `Idempotency-Key` again returns `"duplicate":true` and starts nothing. A body the filter rejects returns `202` with `"outcome":"skipped"` and no `chat_id`.
   </Step>
   <Step title="Verify the run started">
     ```bash terminal
