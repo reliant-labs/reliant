@@ -68,7 +68,7 @@ func TestTheWarmCacheIsOnlyForAnOptedInNotIsolatedGate(t *testing.T) {
 	}{
 		{"off by default", runc, false, true, ""},
 		{"asked without the unisolated opt-in", runc, true, false, ""},
-		{"opted in, on runc", runc, true, true, "reliant-gate-cache-acme-widgets"},
+		{"opted in, on runc", runc, true, true, "reliant-gate-cache-acme-widgets-d782c8744023"},
 		{"opted in, but isolated", sysbox, true, true, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,19 +88,27 @@ func TestTheRunnerPassesTheCacheVolumeToTheBackend(t *testing.T) {
 		cmdStage(config.StageBuild, "true"), offStage(config.StageSBOMScan))
 	req.WarmCache, req.AllowNotIsolated = true, true
 	runGate(t, f, r, req)
-	if len(f.specs) != 1 || f.specs[0].CacheVolume != "reliant-gate-cache-acme-widgets" {
+	if len(f.specs) != 1 || f.specs[0].CacheVolume != "reliant-gate-cache-acme-widgets-d782c8744023" {
 		t.Fatalf("specs %+v", f.specs)
 	}
 }
 
 func TestCacheVolumeName(t *testing.T) {
 	for repo, want := range map[string]string{
-		"reliant-labs/reliant":       "reliant-gate-cache-reliant-labs-reliant",
-		"Reliant-Labs/Control_Plane": "reliant-gate-cache-reliant-labs-control_plane",
-		"a/b.c":                      "reliant-gate-cache-a-b.c",
+		"reliant-labs/reliant":       "reliant-gate-cache-reliant-labs-reliant-7bf4989553b3",
+		"Reliant-Labs/Control_Plane": "reliant-gate-cache-reliant-labs-control_plane-cca132ff50d9",
+		"a/b.c":                      "reliant-gate-cache-a-b.c-c06205148f78",
 	} {
 		if got := CacheVolumeName(repo); got != want {
 			t.Errorf("CacheVolumeName(%q) = %q, want %q", repo, got, want)
 		}
+	}
+	// The readable part is ambiguous; the hash keeps the names apart.
+	if a, b := CacheVolumeName("a/b-c"), CacheVolumeName("a-b/c"); a == b {
+		t.Fatalf("a/b-c and a-b/c share the cache volume %s", a)
+	}
+	// GitHub names are case-insensitive: one repository, one cache.
+	if a, b := CacheVolumeName("Acme/Widgets"), CacheVolumeName("acme/widgets"); a != b {
+		t.Fatalf("one repository, two caches: %s and %s", a, b)
 	}
 }

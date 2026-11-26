@@ -2,10 +2,13 @@
 package gaterun
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
@@ -257,22 +260,17 @@ var reservedEnv = map[string]bool{
 	"RELIANT_GATE_STAGE": true, "RELIANT_GATE_ARTIFACTS": true, EnvDockerSkips: true,
 }
 
-// CacheVolumeName is repo's warm cache volume: "reliant-gate-cache-" and
-// repo ("owner/name") lowercased with '/' as '-'. repo must be a valid
-// StartRequest repo.
+// CacheVolumeName is repo's warm cache volume: "reliant-gate-cache-", repo
+// ("owner/name") lowercased with '/' as '-' for a person to read, then "-"
+// and the first 12 hex digits of the SHA-256 of the lowercased repo. The
+// readable part alone is not one-to-one ("a/b-c" and "a-b/c" read alike),
+// so the hash is what keeps two repositories from sharing one cache. Case
+// is folded first because GitHub names are case-insensitive. repo must be a
+// valid StartRequest repo.
 func CacheVolumeName(repo string) string {
-	b := make([]byte, 0, len(repo))
-	for _, c := range []byte(repo) {
-		switch {
-		case c >= 'A' && c <= 'Z':
-			b = append(b, c+'a'-'A')
-		case c == '/':
-			b = append(b, '-')
-		default:
-			b = append(b, c)
-		}
-	}
-	return "reliant-gate-cache-" + string(b)
+	lower := strings.ToLower(repo)
+	sum := sha256.Sum256([]byte(lower))
+	return "reliant-gate-cache-" + strings.ReplaceAll(lower, "/", "-") + "-" + hex.EncodeToString(sum[:6])
 }
 
 var envNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)

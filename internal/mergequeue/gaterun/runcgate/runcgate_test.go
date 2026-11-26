@@ -82,6 +82,9 @@ type fakeDocker struct {
 	startBlocks bool
 	state       containerState
 	extraEnv    string
+	// cacheLabels is the cache volume's labels as `volume inspect` reports
+	// them; "" is the labels the backend gives a cache it created.
+	cacheLabels string
 }
 
 func (d *fakeDocker) run(ctx context.Context, _ io.Reader, stdout, _ io.Writer, args ...string) (int, error) {
@@ -99,6 +102,12 @@ func (d *fakeDocker) run(ctx context.Context, _ io.Reader, stdout, _ io.Writer, 
 		}
 		b, _ := json.Marshal(env)
 		_, _ = stdout.Write(b)
+	case strings.HasPrefix(cmd, "volume inspect --format {{json .Labels}}"):
+		labels := d.cacheLabels
+		if labels == "" {
+			labels = `{"reliant.gate.backend":"runc","reliant.gate.cache":"` + args[len(args)-1] + `"}`
+		}
+		_, _ = io.WriteString(stdout, labels)
 	case strings.HasPrefix(cmd, "inspect --format {{json .State}}"):
 		b, _ := json.Marshal(d.state)
 		_, _ = stdout.Write(b)
@@ -275,5 +284,20 @@ func TestRunWithoutACacheVolumeCreatesNone(t *testing.T) {
 	// The tree is copied owned by the image's (non-root) user.
 	if !d.called("cp -a /tmp/src/. reliant-gate-gate-b1-1:/gate/src") {
 		t.Fatalf("the tree was not copied with -a: %v", d.calls)
+	}
+}
+
+func TestRunRefusesACacheVolumeItDidNotCreate(t *testing.T) {
+	for _, labels := range []string{`null`, `{"reliant.gate.cache":"reliant-gate-cache-other","reliant.gate.backend":"runc"}`, `{"reliant.gate.cache":"reliant-gate-cache-acme-widgets"}`} {
+		d := &fakeDocker{cacheLabels: labels, state: containerState{Status: "exited"}}
+		s := spec()
+		s.CacheVolume = "reliant-gate-cache-acme-widgets"
+		_, err := (&Backend{run: d.run}).Run(context.Background(), s)
+		if !errors.Is(err, ErrCacheForeign) {
+			t.Fatalf("labels %s: %v, want the foreign cache refused", labels, err)
+		}
+		if d.called("create --name") || d.called("start") {
+			t.Fatalf("labels %s: a gate was created over a foreign cache: %v", labels, d.calls)
+		}
 	}
 }
