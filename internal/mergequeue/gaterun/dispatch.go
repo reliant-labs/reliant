@@ -94,6 +94,7 @@ func (d *dispatcher) Dispatch(ctx context.Context, req GateRequest) (GateResult,
 	if err != nil {
 		return GateResult{}, err
 	}
+	members = PreferMember(members, req.PreferMachine)
 	start.MaxConcurrent = maxPer
 	payload, err := json.Marshal(start)
 	if err != nil {
@@ -293,6 +294,23 @@ func (d *dispatcher) cancel(ctx context.Context, userID, daemonID, gateID string
 	defer done()
 	payload, _ := json.Marshal(StatusRequest{GateID: gateID})
 	_, _ = d.deps.Daemons.SendDaemonCommandToDaemon(cctx, userID, daemonID, CommandCancel, payload, int32(statusTimeout.Milliseconds()))
+}
+
+// PreferMember is members with the one whose daemon id is daemonID moved to
+// the front, the others in their order. "" or an id not among them returns
+// members unchanged.
+func PreferMember(members []machinepool.Member, daemonID string) []machinepool.Member {
+	if daemonID == "" {
+		return members
+	}
+	i := slices.IndexFunc(members, func(m machinepool.Member) bool { return m.DaemonID == daemonID })
+	if i <= 0 {
+		return members
+	}
+	out := make([]machinepool.Member, 0, len(members))
+	out = append(out, members[i])
+	out = append(out, members[:i]...)
+	return append(out, members[i+1:]...)
 }
 
 func memberName(m machinepool.Member) string {

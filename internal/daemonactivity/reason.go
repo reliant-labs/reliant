@@ -186,6 +186,12 @@ var userActionCommands = map[string]bool{
 	"pipeline.gate.cancel": true,
 	"pipeline.gate.start":  true,
 	"pipeline.gate.status": true,
+	// The merge queue's code operations (internal/mergequeue/buildjob), the
+	// same way: a build, paths or config job the queue asked for, polled
+	// only while it runs.
+	"pipeline.job.cancel": true,
+	"pipeline.job.start":  true,
+	"pipeline.job.status": true,
 }
 
 // backgroundCommands are daemon commands that never keep a machine awake:

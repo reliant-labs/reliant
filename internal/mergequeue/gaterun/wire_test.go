@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -97,5 +98,24 @@ func TestPlanFromGate(t *testing.T) {
 	}
 	if got := GateID(strings.Repeat("x", 80), 12); len(got) != 63 || !strings.HasSuffix(got, "-12") {
 		t.Fatalf("long gate id %q", got)
+	}
+}
+
+func TestPreferMemberMovesTheBuilderFirst(t *testing.T) {
+	ms := []machinepool.Member{{DaemonID: "a"}, {DaemonID: "b"}, {DaemonID: "c"}}
+	ids := func(ms []machinepool.Member) string {
+		var s []string
+		for _, m := range ms {
+			s = append(s, m.DaemonID)
+		}
+		return strings.Join(s, ",")
+	}
+	for prefer, want := range map[string]string{"": "a,b,c", "a": "a,b,c", "c": "c,a,b", "b": "b,a,c", "gone": "a,b,c"} {
+		if got := ids(PreferMember(ms, prefer)); got != want {
+			t.Errorf("prefer %q: %s, want %s", prefer, got, want)
+		}
+	}
+	if ids(ms) != "a,b,c" {
+		t.Fatal("PreferMember changed its input")
 	}
 }
