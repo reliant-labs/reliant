@@ -7,7 +7,8 @@
  */
 
 import { useState, type ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -19,59 +20,64 @@ import {
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 
-vi.mock("../../../store/projectStore", () => ({
-  useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: { id: "p1", name: "reliant" } }),
-}));
-
-// No org resolved: the org card renders nothing, so these tests need no
-// QueryClient (its own tests are in MobileOrgSwitcher.test.tsx).
-vi.mock("../../../hooks/useOrgs", () => ({
+// Data hooks only: the column itself (Layout/sidebar/MobileHybridNav →
+// ShellNavColumn, the org row, Find, the project switcher, the rows and the
+// phone's inline chat list) is the real one, so this pins what the phone
+// draws, not a stand-in.
+vi.mock("../../../hooks/useOrgs", async (original) => ({
+  ...(await original<typeof import("../../../hooks/useOrgs")>()),
+  // No org resolved: the org row is the brand, and opens nothing.
   useActiveOrg: () => ({ orgs: [], active: null, canSwitch: false, select: vi.fn() }),
 }));
-
-// The nav itself (the one hybrid model) is covered in
-// Layout/sidebar/__tests__/MobileHybridNav.test.tsx; here it is a stand-in
-// with the org and project the drawer hands it (drawn in its order: org,
-// Find, project), a destination and a drill-in, to pin the drawer's own mechanics.
-vi.mock("../../Layout/sidebar/MobileHybridNav", () => ({
-  MobileHybridNav: ({
-    onNavigate,
-    org,
-    project,
-  }: {
-    onNavigate: (href: string, options?: { drill?: boolean }) => void;
-    org?: ReactNode;
-    project?: ReactNode;
-  }) => (
-    <div data-testid="mobile-hybrid-nav">
-      {org}
-      <span data-testid="mobile-nav-find">Find</span>
-      {project}
-      <a
-        href="/m/daemons"
-        onClick={(event) => {
-          event.preventDefault();
-          onNavigate("/m/daemons");
-        }}
-      >
-        Sandboxes
-      </a>
-      <a
-        href="/m/inbox"
-        onClick={(event) => {
-          event.preventDefault();
-          onNavigate("/m/inbox", { drill: true });
-        }}
-      >
-        Drill in
-      </a>
-    </div>
-  ),
+const projects = vi.hoisted(() => [
+  { id: "p1", name: "reliant", path: "/p/reliant", last_active: "2024-01-02T00:00:00.000Z", is_git_repo: true, is_forge: false },
+]);
+vi.mock("../../../hooks/project-queries", async (original) => ({
+  ...(await original<typeof import("../../../hooks/project-queries")>()),
+  useProjects: () => ({ projects, isLoading: false }),
+}));
+vi.mock("../../../hooks/project-catalog-queries", async (original) => ({
+  ...(await original<typeof import("../../../hooks/project-catalog-queries")>()),
+  useProjectCatalog: () => ({ catalog: undefined, isLoading: false, error: null }),
+}));
+const chats = vi.hoisted(() => [
+  {
+    id: "c1",
+    title: "Fix the drawer",
+    projectId: "p1",
+    worktreeId: "",
+    createdAt: "2024-01-01T00:00:00.000Z",
+    updatedAt: "2024-01-01T00:00:00.000Z",
+    lastMessageAt: "2024-01-01T00:00:00.000Z",
+    unread: false,
+    activity: 0,
+    workingThreads: 0,
+    state: 1,
+  },
+]);
+vi.mock("../../../hooks/chat-queries", async (original) => ({
+  ...(await original<typeof import("../../../hooks/chat-queries")>()),
+  useChatListWithWorkspaces: () => ({ data: { chats, mainWorktrees: [], lastUserUpdateSequence: 0 }, isPending: false, isError: false }),
+  useChat: () => ({ data: undefined }),
+}));
+vi.mock("../../../hooks/inbox-queries", async (original) => ({
+  ...(await original<typeof import("../../../hooks/inbox-queries")>()),
+  useInboxCounts: () => ({ data: { blockingCount: 0, hasInformational: false }, isError: false }),
+  useInboxProjectId: () => undefined,
 }));
 
 const { MobileNavDrawer } = await import("../MobileNavDrawer");
+
+beforeEach(() => setTransport(mockTransport({})));
+afterEach(() => setTransport(null));
+
+function withQueries(children: ReactNode) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+}
 
 function Screen({ path }: { path: string }) {
   return (
@@ -92,7 +98,7 @@ function buildTree(onClose: () => void, isOpenGetter: () => boolean) {
     ),
   });
 
-  const paths = ["/m/chats", "/m/new", "/m/daemons", "/m/github", "/m/account", "/m/inbox"];
+  const paths = ["/m/chats", "/m/chats/$chatId", "/m/new", "/m/search", "/m/settings", "/m/inbox", "/inbox", "/settings"];
 
   return rootRoute.addChildren(
     paths.map((path) =>
@@ -110,7 +116,7 @@ function renderAt(path: string, isOpen: boolean, onClose: () => void) {
     routeTree: buildTree(onClose, () => isOpen),
     history: createMemoryHistory({ initialEntries: [path] }),
   });
-  render(<RouterProvider router={router} />);
+  render(withQueries(<RouterProvider router={router} />));
   return router;
 }
 
@@ -120,27 +126,67 @@ describe("MobileNavDrawer", () => {
     expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   });
 
-  it("hands the one nav model the project, drawn under Find as on the desktop", async () => {
-    renderAt("/m/chats", true, vi.fn());
+  // The owner's bug: on chats the phone drew an old nav ("Menu" bar, an org
+  // card, a "Find" row, a "Project" card), on other tabs the shell's.
+  it.each(["/m/chats", "/m/inbox", "/m/settings"])("is the shell's nav column on %s, never the old nav", async (path) => {
+    renderAt(path, true, vi.fn());
     const dialog = await screen.findByRole("dialog", { name: "Navigation" });
-    const nav = within(dialog).getByTestId("mobile-hybrid-nav");
-    const project = screen.getByRole("link", { name: /Project/ });
-    expect(project).toHaveAttribute("href", "/m/projects");
-    expect(screen.getByText("reliant")).toBeInTheDocument();
-    // Inside the nav, after Find (U6, owner: org, then Find, then the project).
-    expect(nav.contains(project)).toBe(true);
-    expect(within(nav).getByTestId("mobile-nav-find").compareDocumentPosition(project) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const column = dialog.querySelector('[data-onboarding="left-sidebar"]');
+    expect(column).not.toBeNull();
+    expect(within(dialog).getByTestId("shell-switcher")).toBeInTheDocument();
+    expect(within(dialog).getByTestId("nav-find")).toBeInTheDocument();
+    expect(column!.contains(within(dialog).getByTestId("shell-switcher"))).toBe(true);
+    expect(within(dialog).queryByTestId("mobile-nav-project")).toBeNull();
+    expect(within(dialog).queryByTestId("mobile-org-switcher")).toBeNull();
+    expect(within(dialog).queryByText("Menu")).toBeNull();
+  });
+
+  it("lists the chats inline on /m/chats, as the shell's drawer does under Agents", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const router = renderAt("/m/chats", true, onClose);
+    const dialog = await screen.findByRole("dialog", { name: "Navigation" });
+    expect(within(dialog).getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    const list = within(dialog).getByTestId("mobile-nav-chat-list");
+    expect(list).toHaveAttribute("data-place", "fill");
+    // Not the old single "Chats" row to a screen of its own.
+    expect(within(dialog).queryByTestId("mobile-nav-chats")).toBeNull();
+    await user.click(within(list).getByRole("button", { name: /Fix the drawer/ }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/m/chats/c1"));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("opens the phone's Search screen from Find, and closes", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const router = renderAt("/m/inbox", true, onClose);
+    const dialog = await screen.findByRole("dialog", { name: "Navigation" });
+    await user.click(within(dialog).getByTestId("nav-find"));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/m/search"));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("closes on a project pick, even one that leaves the route as it is", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderAt("/m/inbox", true, onClose);
+    const dialog = await screen.findByRole("dialog", { name: "Navigation" });
+    await user.click(within(dialog).getByTestId("shell-project-switcher"));
+    await user.click(await screen.findByTestId("shell-switcher-all-projects"));
+    expect(onClose).toHaveBeenCalled();
   });
 
   it("stays open through a drill-in, and closes on a destination", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    const router = renderAt("/m/chats", true, onClose);
-    await screen.findByRole("dialog", { name: "Navigation" });
-    await user.click(screen.getByRole("link", { name: "Drill in" }));
-    await waitFor(() => expect(router.state.location.pathname).toBe("/m/inbox"));
+    const router = renderAt("/m/inbox", true, onClose);
+    const dialog = await screen.findByRole("dialog", { name: "Navigation" });
+    // Agents › drills in: the drawer stays open on its rows.
+    await user.click(within(dialog).getByTestId("nav-agents"));
+    await waitFor(() => expect(router.state.location.pathname).not.toBe("/m/inbox"));
     expect(onClose).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("link", { name: "Sandboxes" }));
+    // A row (Settings) is a destination.
+    await user.click(within(dialog).getByTestId("sidebar-settings-button"));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
@@ -168,7 +214,7 @@ describe("MobileNavDrawer", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("calls onClose via the explicit close button", async () => {
+  it("calls onClose via the screen reader's close button", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
     renderAt("/m/chats", true, onClose);
@@ -179,13 +225,13 @@ describe("MobileNavDrawer", () => {
   it("calls onClose when navigating to a different route", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
-    renderAt("/m/chats", true, onClose);
+    renderAt("/m/inbox", true, onClose);
     await screen.findByRole("dialog", { name: "Navigation" });
 
-    await user.click(screen.getByRole("link", { name: /Sandboxes/ }));
+    // A navigation the drawer did not start (the screen's own link).
+    await user.click(screen.getByRole("link", { name: "go to chats" }));
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
-
   it("traps focus: Tab from the last element wraps to the first", async () => {
     const user = userEvent.setup();
     renderAt("/m/chats", true, vi.fn());
@@ -265,7 +311,7 @@ describe("MobileNavDrawer", () => {
       routeTree: rootRoute.addChildren([indexRoute]),
       history: createMemoryHistory({ initialEntries: ["/"] }),
     });
-    render(<RouterProvider router={router} />);
+    render(withQueries(<RouterProvider router={router} />));
 
     const trigger = await screen.findByRole("button", { name: "open menu" });
     trigger.focus();

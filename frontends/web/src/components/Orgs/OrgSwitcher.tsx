@@ -40,11 +40,14 @@ import { useOrgPlanLabel } from "./orgPlan";
 export function OrgSwitcher({
   variant = "sidebar",
   fallback = null,
+  onSwitched,
 }: {
   /** `sidebar-switcher`: the project shell's `[Org ▾] / [Project ▾]` row, the org half sized to its name. */
   variant?: "sidebar" | "sidebar-top" | "sidebar-switcher" | "sidebar-header" | "list";
   /** What to render with no org (no control plane, or a person in none). */
   fallback?: ReactNode;
+  /** Runs after a pick moved the tab to another org (the phone's drawer leaves the old org's chat). */
+  onSwitched?: (orgId: string) => void;
 }) {
   const { orgs, active, canSwitch, select } = useActiveOrg();
   if (!active) return fallback;
@@ -53,7 +56,10 @@ export function OrgSwitcher({
     <SidebarOrgSwitcher
       orgs={orgs}
       active={active}
-      onSelect={select}
+      onSelect={(orgId) => {
+        select(orgId);
+        if (orgId !== active.id) onSwitched?.(orgId);
+      }}
       top={variant === "sidebar-top" || variant === "sidebar-switcher"}
       compact={variant === "sidebar-switcher"}
       header={variant === "sidebar-header"}

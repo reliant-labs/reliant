@@ -12,22 +12,24 @@
  * Rendered as a portal so it can sit above `MobileShell`'s `overflow-hidden`
  * flex column regardless of which screen is mounted below it.
  *
- * Its destinations are the ONE nav model (U6e, owner: drilling in on a phone
- * brought back an old nav): the hybrid config the desktop nav draws, drill-ins
- * included (Layout/sidebar/MobileHybridNav). Drilling into Agents or
- * Observability keeps the drawer open on the area's rows; a destination closes it.
+ * Its body is the shell's nav column (U6e, owner: "the mobile left nav, on
+ * chats, is the old nav"): the same ShellNavColumn the narrow window's drawer
+ * draws, header and all (the org row, Find, the project switcher), with the
+ * hybrid config, drill-ins included (Layout/sidebar/MobileHybridNav). Drilling
+ * into Agents or Observability keeps the drawer open on the area's rows; a
+ * destination closes it.
+ *
+ * It sits BELOW the column's own popovers (the org menu, the project
+ * switcher, z-50, portalled to the body): `z-40`, over the routed screen,
+ * which MobileShell isolates so no z-index inside a screen reaches it.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { dialogOpener } from "../../lib/dialogOpener";
-import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { FolderOpen, X } from "lucide-react";
-import { useProjectStore } from "../../store/projectStore";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
 import { MobileInstallMenuItem } from "./MobileInstallMenuItem";
-import { MobileOrgSwitcher } from "./MobileOrgSwitcher";
-import { mobileProjectsPath } from "@/lib/paths";
 import { MobileHybridNav } from "../Layout/sidebar/MobileHybridNav";
 import type { NavigateOptions } from "../Layout/sidebar/NavRenderer";
 import { holdNavDrawerOpen, navDrawerHeld, releaseNavDrawerHold } from "../Layout/sidebar/navDrawerHold";
@@ -52,7 +54,6 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const search = useRouterState({ select: (s) => s.location.search }) as Record<string, unknown>;
   const navigate = useNavigate();
-  const currentProject = useProjectStore((s) => s.currentProject);
   const panelRef = useRef<HTMLDivElement>(null);
   // The control that opened the drawer (usually the hamburger button; see
   // `dialogOpener` for why not simply the focused element), so closing it (by
@@ -89,6 +90,11 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
         return;
       }
       if (e.key !== "Tab" || e.defaultPrevented || !panel) return;
+      // A layer the column opened over the drawer (the org menu, the project
+      // switcher) keeps its own Tab order: it is portalled outside the panel.
+      const active = document.activeElement as HTMLElement | null;
+      const layer = active?.closest?.('[role="menu"], [role="listbox"], [role="dialog"]');
+      if (layer && layer !== panel && !panel.contains(layer)) return;
 
       // The trap moves focus itself on every Tab rather than only wrapping at
       // the ends: Safari's default Tab order skips links, so letting the
@@ -142,7 +148,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
   if (!isOpen) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex">
+    <div className="fixed inset-0 z-40 flex">
       <div
         className={cn(
           "absolute inset-0 bg-scrim transition-opacity duration-200",
@@ -166,58 +172,23 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
-        <div className="flex min-h-[56px] shrink-0 items-center justify-between px-2 pl-4">
-          <span className="text-section">Menu</span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close menu"
-            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* The one nav model, drill-ins and all; it scrolls inside itself
-            (`overscroll-contain`, so a scroll that reaches its end never
-            chains to the page behind the drawer). Its rows are touch
-            targets here: 44px, not the desktop's 32px row height. */}
+        {/* The shell's nav column, as the narrow window's drawer draws it; it
+            scrolls inside itself (`overscroll-contain`, so a scroll that
+            reaches its end never chains to the page behind the drawer). Its
+            rows are touch targets here: 44px, not the desktop's 32px row height. */}
         <div className="flex min-h-0 flex-1 flex-col overscroll-contain [--row-h:2.75rem]">
-          <MobileHybridNav
-            pathname={pathname}
-            search={search}
-            onNavigate={onNavigate}
-            // The desktop header's order (U6, owner): the org, then Find (MobileHybridNav), then the project.
-            org={
-              // Nothing with no org to name: no empty gap above Find.
-              <div className="shrink-0 px-3 pb-2 empty:hidden">
-                <MobileOrgSwitcher onSwitched={onClose} />
-              </div>
-            }
-            project={
-              <div className="shrink-0 px-3 pb-2">
-                <Link
-                  to={mobileProjectsPath()}
-                  data-testid="mobile-nav-project"
-                  className="flex min-h-[52px] w-full items-center gap-3 rounded-lg px-3 elevation-1 active:bg-foreground/5"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary-ink">
-                    <FolderOpen className="h-4 w-4" />
-                  </span>
-                  {/* The rows' scale (text-ui), so the header and the rows under it read as one nav. */}
-                  <div className="min-w-0 flex-1">
-                    <div className="text-meta text-muted-foreground">Project</div>
-                    <div className="truncate text-ui font-medium text-foreground">{currentProject?.name ?? "Select a project"}</div>
-                  </div>
-                </Link>
-              </div>
-            }
-          />
+          <MobileHybridNav pathname={pathname} search={search} onNavigate={onNavigate} onClose={onClose} />
         </div>
 
         <div className="shrink-0 px-3 pb-2">
           <MobileInstallMenuItem />
         </div>
+
+        {/* No visible close control, as in the shell's drawer (the scrim and Escape close it);
+            a screen reader, with neither, reaches this one. Last, so opening focuses the org row. */}
+        <button type="button" onClick={onClose} className="sr-only">
+          Close menu
+        </button>
       </div>
     </div>,
     document.body,
