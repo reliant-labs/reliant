@@ -107,8 +107,9 @@ func daemonHost(cfg *config.DaemonConfig) daemonruntime.Host {
 			UserMaxConcurrent: int(cfg.GetEgressUserMaxConcurrent()),
 			HostMaxConcurrent: int(cfg.GetEgressHostMaxConcurrent()),
 		},
-		GateImage:     cfg.GetGateImage(),
-		GateVulnDBDir: cfg.GetGateVulnDbDir(),
+		GateImage:          cfg.GetGateImage(),
+		GateVulnDBDir:      cfg.GetGateVulnDbDir(),
+		GateTrustedGoCache: cfg.GetGateTrustedGoCache(),
 	}
 }
 

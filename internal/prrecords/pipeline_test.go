@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/integrations/ghcontents"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -61,17 +61,17 @@ func recorded(t *testing.T, event, file string, edit func(map[string]any)) []Eve
 type fakeContents struct {
 	files map[string]string // ref -> file
 	err   error
-	reqs  []ghcontents.Request
+	reqs  []ContentsRequest
 }
 
-func (f *fakeContents) Read(_ context.Context, req ghcontents.Request) ([]byte, error) {
+func (f *fakeContents) Read(_ context.Context, req ContentsRequest) ([]byte, error) {
 	f.reqs = append(f.reqs, req)
 	if f.err != nil {
 		return nil, f.err
 	}
 	data, ok := f.files[req.Ref]
 	if !ok {
-		return nil, ghcontents.ErrNotFound
+		return nil, ErrContentsNotFound
 	}
 	return []byte(data), nil
 }
@@ -81,8 +81,12 @@ type pipelineHarness struct {
 	env      *storetest.Env
 	p        *projector
 	contents *fakeContents
-	now      time.Time
-	key      int
+	// refresher reads what the projector left pending, after each apply,
+	// as the worker's loop does; later is how far its clock runs ahead.
+	refresher *ConfigRefresher
+	later     time.Duration
+	now       time.Time
+	key       int
 }
 
 func newPipelineHarness(t *testing.T) *pipelineHarness {
@@ -90,9 +94,34 @@ func newPipelineHarness(t *testing.T) *pipelineHarness {
 	env := storetest.New(t)
 	h := &pipelineHarness{t: t, env: env, contents: &fakeContents{files: map[string]string{}},
 		now: time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC)}
-	h.p = New(Deps{Store: store.NewPrRecordExtStore(env.ORM), Scope: NewScope(nil), Pipeline: env.Repo, Contents: h.contents}).(*projector)
+	h.p = New(Deps{Store: store.NewPrRecordExtStore(env.ORM), Scope: NewScope(nil), Pipeline: env.Repo}).(*projector)
 	h.p.now = func() time.Time { return h.now }
+	h.refresher = h.newRefresher(h.contents)
 	return h
+}
+
+// newRefresher is a refresher reading through contents (nil for none),
+// whose clock is the wall clock plus h.later (the database stamps a
+// pending read with its own now()).
+func (h *pipelineHarness) newRefresher(contents Contents) *ConfigRefresher {
+	h.t.Helper()
+	d := ConfigRefresherDeps{Store: h.env.Repo, Now: func() time.Time { return time.Now().Add(h.later) }}
+	if contents != nil {
+		d.Contents = contents
+	}
+	r, err := NewConfigRefresher(d)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	return r
+}
+
+// drain runs the refresher once.
+func (h *pipelineHarness) drain() {
+	h.t.Helper()
+	if _, err := h.refresher.Drain(context.Background()); err != nil {
+		h.t.Fatal(err)
+	}
 }
 
 // enrol enrols acme/app (repository 123456) in mode.
@@ -121,6 +150,7 @@ func (h *pipelineHarness) apply(events []Event) {
 	if err := h.p.Apply(context.Background(), Delivery{Provider: ProviderGitHub, Key: fmt.Sprintf("d-%d", h.key), Events: events}); err != nil {
 		h.t.Fatal(err)
 	}
+	h.drain()
 }
 
 func (h *pipelineHarness) record() *core.PRRecord {
@@ -421,21 +451,86 @@ func TestPipelineProjectionRecordsTheBaseBranchConfig(t *testing.T) {
 	}
 }
 
-func TestPipelineProjectionWithoutAnAppRecordsWhy(t *testing.T) {
+// The projector runs in webhook delivery and never waits on a daemon: a
+// push only leaves the read pending, with its sender, for the refresher.
+func TestPipelineProjectionLeavesTheConfigReadPending(t *testing.T) {
 	t.Parallel()
 	h := newPipelineHarness(t)
-	h.p.contents = nil
+	h.enrol(core.PipelineRepoModeShadow)
+	h.contents.files[recordedPushSHA] = "version: 1\ngate: {run: task test}\n"
+	h.key++
+	if err := h.p.Apply(context.Background(), Delivery{Provider: ProviderGitHub, Key: "pending", Events: recorded(t, "push", "push.json", nil)}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := h.env.Repo.GetPipelineRepoByRepository(context.Background(), ProviderGitHub, recordedRepositoryID)
+	if err != nil || r.ConfigSHA != "" || r.ConfigPending.SHA != recordedPushSHA || r.ConfigPending.SenderID != "1" ||
+		r.ConfigPending.SenderLogin != "octocat" || r.ConfigPending.At == nil || len(h.contents.reqs) != 0 {
+		t.Fatalf("pending, unread: %+v %v (%d reads)", r, err, len(h.contents.reqs))
+	}
+	h.drain()
+	r, _ = h.env.Repo.GetPipelineRepoByRepository(context.Background(), ProviderGitHub, recordedRepositoryID)
+	if r.ConfigSHA != recordedPushSHA || r.ConfigPending.SHA != "" || r.ConfigPending.At != nil || r.ConfigPending.Attempts != 0 {
+		t.Fatalf("read and cleared: %+v", r)
+	}
+	// The same push again is already recorded: nothing pends.
+	h.apply(recorded(t, "push", "push.json", nil))
+	if len(h.contents.reqs) != 1 {
+		t.Fatalf("read again: %d", len(h.contents.reqs))
+	}
+}
+
+// With no reader, or a read that reaches no daemon, the reason is recorded
+// as the config error and the read stays pending, retried after a backoff
+// that grows; once a member reads it, it is recorded and the error cleared.
+func TestPipelineConfigReadWithNoReaderIsRetried(t *testing.T) {
+	t.Parallel()
+	h := newPipelineHarness(t)
+	h.refresher = h.newRefresher(nil)
 	h.enrol(core.PipelineRepoModeShadow)
 	h.apply(recorded(t, "push", "push.json", nil))
-	r, err := h.env.Repo.GetPipelineRepoByRepository(context.Background(), ProviderGitHub, recordedRepositoryID)
-	if err != nil || r.ConfigSHA != "" || r.ConfigErrorSHA != recordedPushSHA || r.ConfigError == "" {
-		t.Fatalf("%+v %v", r, err)
+	get := func() *core.PipelineRepo {
+		r, err := h.env.Repo.GetPipelineRepoByRepository(context.Background(), ProviderGitHub, recordedRepositoryID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
 	}
-	// A read that fails for another reason is recorded too.
-	h.p.contents = &fakeContents{err: errors.New("rate limited")}
-	h.apply(recorded(t, "push", "push.json", func(doc map[string]any) { doc["after"] = "eeee000000000000000000000000000000000009" }))
-	if r, _ = h.env.Repo.GetPipelineRepoByRepository(context.Background(), ProviderGitHub, recordedRepositoryID); r.ConfigErrorSHA != "eeee000000000000000000000000000000000009" {
-		t.Fatalf("%+v", r)
+	r := get()
+	if r.ConfigSHA != "" || r.ConfigErrorSHA != recordedPushSHA || !strings.Contains(r.ConfigError, "no gate pool reader") ||
+		r.ConfigPending.SHA != recordedPushSHA || r.ConfigPending.Attempts != 1 || r.ConfigPending.RetryAt == nil {
+		t.Fatalf("no reader: %+v", r)
+	}
+	firstRetry := *r.ConfigPending.RetryAt
+
+	// Not due yet: nothing is read.
+	failing := &fakeContents{err: errors.New("jobrun: no gate pool member is available")}
+	h.refresher = h.newRefresher(failing)
+	h.drain()
+	if len(failing.reqs) != 0 {
+		t.Fatalf("read before its retry: %+v", failing.reqs)
+	}
+	// Due: read, fails, deferred longer.
+	h.later = time.Minute
+	h.drain()
+	if r = get(); len(failing.reqs) != 1 || r.ConfigPending.Attempts != 2 || !r.ConfigPending.RetryAt.After(firstRetry.Add(time.Minute)) ||
+		!strings.Contains(r.ConfigError, "no gate pool member") {
+		t.Fatalf("deferred again: %d reads, %+v", len(failing.reqs), r)
+	}
+
+	h.later = 3 * time.Minute
+	h.contents.files[recordedPushSHA] = "version: 1\ngate: {run: task test}\n"
+	h.refresher = h.newRefresher(h.contents)
+	h.drain()
+	if r = get(); r.ConfigSHA != recordedPushSHA || r.ConfigError != "" || r.ConfigPending.SHA != "" {
+		t.Fatalf("recorded once read: %+v", r)
+	}
+}
+
+func TestConfigReadBackoffGrowsToAnHour(t *testing.T) {
+	for attempt, want := range map[int]time.Duration{1: 30 * time.Second, 2: time.Minute, 3: 2 * time.Minute, 20: time.Hour} {
+		if got := configReadBackoff(attempt); got != want {
+			t.Errorf("attempt %d: %s, want %s", attempt, got, want)
+		}
 	}
 }
 

@@ -250,17 +250,23 @@ export function sectionMachines<T>(
  * it can. `daemonId` is the machine the chat will run on (the explicit pick,
  * or what the default resolves to); undefined when unknown, which the server
  * resolves itself.
+ *
+ * `canClone` is whether the project can be added to another machine at all
+ * (canSetUpElsewhere): a plain folder cannot, so its reason names the other
+ * ways forward instead of an add it has no way to do.
  */
 export function startBlockedReason({
   placement,
   daemonId,
   projectName,
   machineName,
+  canClone = true,
 }: {
   placement: ProjectPlacement;
   daemonId: string | undefined;
   projectName: string;
   machineName: string;
+  canClone?: boolean;
 }): string | null {
   if (!daemonId || !placement.known) return null;
   switch (placement.stateOn(daemonId)) {
@@ -276,7 +282,9 @@ export function startBlockedReason({
       return `Setting up ${projectName} on ${machineName} failed${why} Try again, or pick a machine it's on.`;
     }
     case "absent":
-      return `${projectName} isn't set up on ${machineName}. Set it up there, or pick a machine it's on.`;
+      return canClone
+        ? `${projectName} isn't on ${machineName} yet. Add it there, or pick a machine it's on.`
+        : `${projectName} is a folder on another machine, so it can't be copied to ${machineName}. Pick a machine it's on, or choose a folder already on ${machineName}.`;
   }
 }
 

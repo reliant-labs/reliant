@@ -17,7 +17,164 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/pipeline.proto.
  */
 export const file_reliant_v1_pipeline: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL3BpcGVsaW5lLnByb3RvEgpyZWxpYW50LnYxImIKFkVucm9sUmVwb3NpdG9yeVJlcXVlc3QSGgoKcHJvamVjdF9pZBgBIAEoCUIGukgDyAEBEhAKCHByb3ZpZGVyGAIgASgJEhoKCnJlcG9zaXRvcnkYAyABKAlCBrpIA8gBASJNChdFbnJvbFJlcG9zaXRvcnlSZXNwb25zZRIyCgpyZXBvc2l0b3J5GAEgASgLMh4ucmVsaWFudC52MS5QaXBlbGluZVJlcG9zaXRvcnkicQoWU2V0UGlwZWxpbmVNb2RlUmVxdWVzdBIXCgdyZXBvX2lkGAEgASgJQga6SAPIAQESJAoEbW9kZRgCIAEoCUIWukgTchFSA29mZlIGc2hhZG93UgJvbhIYChBleHBlY3RlZF92ZXJzaW9uGAMgASgDIk0KF1NldFBpcGVsaW5lTW9kZVJlc3BvbnNlEjIKCnJlcG9zaXRvcnkYASABKAsyHi5yZWxpYW50LnYxLlBpcGVsaW5lUmVwb3NpdG9yeSI+ChdHZXRQaXBlbGluZVN0YXRlUmVxdWVzdBIPCgdyZXBvX2lkGAEgASgJEhIKCnJlcG9zaXRvcnkYAiABKAki7gEKGEdldFBpcGVsaW5lU3RhdGVSZXNwb25zZRIyCgpyZXBvc2l0b3J5GAEgASgLMh4ucmVsaWFudC52MS5QaXBlbGluZVJlcG9zaXRvcnkSMQoJcHJfc3RhdGVzGAIgAygLMh4ucmVsaWFudC52MS5QaXBlbGluZVN0YXRlQ291bnQSNgoObGF0ZXN0X2JhdGNoZXMYAyADKAsyHi5yZWxpYW50LnYxLlBpcGVsaW5lUXVldWVCYXRjaBIzCgttYWluX2hlYWx0aBgEIAEoCzIeLnJlbGlhbnQudjEuUGlwZWxpbmVNYWluSGVhbHRoIisKEExpc3RRdWV1ZVJlcXVlc3QSFwoHcmVwb19pZBgBIAEoCUIGukgDyAEBInsKEUxpc3RRdWV1ZVJlc3BvbnNlEi8KB2VudHJpZXMYASADKAsyHi5yZWxpYW50LnYxLlBpcGVsaW5lUXVldWVFbnRyeRI1Cg1jdXJyZW50X2JhdGNoGAIgASgLMh4ucmVsaWFudC52MS5QaXBlbGluZVF1ZXVlQmF0Y2gi7wIKElBpcGVsaW5lUmVwb3NpdG9yeRIKCgJpZBgBIAEoCRIOCgZvcmdfaWQYAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCRIQCghwcm92aWRlchgEIAEoCRITCgthY2NvdW50X2tleRgFIAEoCRIVCg1yZXBvc2l0b3J5X2lkGAYgASgJEhIKCnJlcG9zaXRvcnkYByABKAkSEwoLYmFzZV9icmFuY2gYCCABKAkSDAoEbW9kZRgJIAEoCRISCgpjb25maWdfc2hhGAogASgJEhMKC3F1ZXVlX3N0YXRlGAsgASgJEhoKEmNyZWF0ZWRfYnlfdXNlcl9pZBgMIAEoCRIuCgpjcmVhdGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgd2ZXJzaW9uGA8gASgDIjIKElBpcGVsaW5lU3RhdGVDb3VudBINCgVzdGF0ZRgBIAEoCRINCgVjb3VudBgCIAEoBSK5AQoSUGlwZWxpbmVRdWV1ZUVudHJ5EgoKAmlkGAEgASgJEhEKCXJlY29yZF9pZBgCIAEoCRIOCgZudW1iZXIYAyABKAUSEAoIaGVhZF9zaGEYBCABKAkSEAoIcHJpb3JpdHkYBSABKAUSLwoLZW5xdWV1ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhAKCGJhdGNoX2lkGAcgASgJEg0KBXN0YXRlGAggASgJIpwCChJQaXBlbGluZVF1ZXVlQmF0Y2gSCgoCaWQYASABKAkSEAoIYmFzZV9zaGEYAiABKAkSFQoNY2FuZGlkYXRlX3NoYRgDIAEoCRIMCgRraW5kGAQgASgJEg0KBXN0YXRlGAUgASgJEg8KB2F0dGVtcHQYBiABKAUSGQoRaXNvbGF0aW9uX2JhY2tlbmQYByABKAkSEwoLZ2F0ZV9ydW5uZXIYCCABKAkSEgoKbGFuZGVkX3NoYRgJIAEoCRIuCgpzdGFydGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgtmaW5pc2hlZF9hdBgLIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAimAEKElBpcGVsaW5lTWFpbkhlYWx0aBILCgNzaGEYASABKAkSDgoGc291cmNlGAIgASgJEg8KB3ZlcmRpY3QYAyABKAkSEQoJc2lnbmF0dXJlGAQgASgJEhAKCGJhdGNoX2lkGAUgASgJEi8KC29ic2VydmVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcDK3BAoPUGlwZWxpbmVTZXJ2aWNlEsEBCg9FbnJvbFJlcG9zaXRvcnkSIi5yZWxpYW50LnYxLkVucm9sUmVwb3NpdG9yeVJlcXVlc3QaIy5yZWxpYW50LnYxLkVucm9sUmVwb3NpdG9yeVJlc3BvbnNlImWQAgKiuxheOlwKBWVucm9sEkcKDXBpcGVsaW5lX3JlcG8SFnJlc3BvbnNlLnJlcG9zaXRvcnkuaWQaHnJlc3BvbnNlLnJlcG9zaXRvcnkucmVwb3NpdG9yeSoKcHJvamVjdF9pZBKsAQoPU2V0UGlwZWxpbmVNb2RlEiIucmVsaWFudC52MS5TZXRQaXBlbGluZU1vZGVSZXF1ZXN0GiMucmVsaWFudC52MS5TZXRQaXBlbGluZU1vZGVSZXNwb25zZSJQorsYTDpKCghzZXRfbW9kZRI4Cg1waXBlbGluZV9yZXBvEgdyZXBvX2lkGh5yZXNwb25zZS5yZXBvc2l0b3J5LnJlcG9zaXRvcnkqBG1vZGUSYgoQR2V0UGlwZWxpbmVTdGF0ZRIjLnJlbGlhbnQudjEuR2V0UGlwZWxpbmVTdGF0ZVJlcXVlc3QaJC5yZWxpYW50LnYxLkdldFBpcGVsaW5lU3RhdGVSZXNwb25zZSIDkAIBEk0KCUxpc3RRdWV1ZRIcLnJlbGlhbnQudjEuTGlzdFF1ZXVlUmVxdWVzdBodLnJlbGlhbnQudjEuTGlzdFF1ZXVlUmVzcG9uc2UiA5ACAUI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("ChlyZWxpYW50L3YxL3BpcGVsaW5lLnByb3RvEgpyZWxpYW50LnYxIncKG0xpc3RDYXBhYmlsaXR5R3JhbnRzUmVxdWVzdBIXCgp0cmlnZ2VyX2lkGAEgASgJSACIAQESHAoPaW5jbHVkZV9yZXZva2VkGAIgASgISAGIAQFCDQoLX3RyaWdnZXJfaWRCEgoQX2luY2x1ZGVfcmV2b2tlZCJTChxMaXN0Q2FwYWJpbGl0eUdyYW50c1Jlc3BvbnNlEjMKBmdyYW50cxgBIAMoCzIjLnJlbGlhbnQudjEuUGlwZWxpbmVDYXBhYmlsaXR5R3JhbnQiOAocUmV2b2tlQ2FwYWJpbGl0eUdyYW50UmVxdWVzdBIYCghncmFudF9pZBgBIAEoCUIGukgDyAEBIlMKHVJldm9rZUNhcGFiaWxpdHlHcmFudFJlc3BvbnNlEjIKBWdyYW50GAEgASgLMiMucmVsaWFudC52MS5QaXBlbGluZUNhcGFiaWxpdHlHcmFudCKkAgoXUGlwZWxpbmVDYXBhYmlsaXR5R3JhbnQSCgoCaWQYASABKAkSEgoKdHJpZ2dlcl9pZBgCIAEoCRIXCg9tYWNoaW5lX3Bvb2xfaWQYAyABKAkSDwoHcmVwb19pZBgEIAEoCRISCgpjYXBhYmlsaXR5GAUgASgJEhoKEmdyYW50ZWRfYnlfdXNlcl9pZBgGIAEoCRITCgthcHByb3ZhbF9pZBgHIAEoCRIuCgpncmFudGVkX2F0GAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpyZXZva2VkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIaChJyZXZva2VkX2J5X3VzZXJfaWQYCiABKAkiYgoWRW5yb2xSZXBvc2l0b3J5UmVxdWVzdBIaCgpwcm9qZWN0X2lkGAEgASgJQga6SAPIAQESEAoIcHJvdmlkZXIYAiABKAkSGgoKcmVwb3NpdG9yeRgDIAEoCUIGukgDyAEBIk0KF0Vucm9sUmVwb3NpdG9yeVJlc3BvbnNlEjIKCnJlcG9zaXRvcnkYASABKAsyHi5yZWxpYW50LnYxLlBpcGVsaW5lUmVwb3NpdG9yeSJxChZTZXRQaXBlbGluZU1vZGVSZXF1ZXN0EhcKB3JlcG9faWQYASABKAlCBrpIA8gBARIkCgRtb2RlGAIgASgJQha6SBNyEVIDb2ZmUgZzaGFkb3dSAm9uEhgKEGV4cGVjdGVkX3ZlcnNpb24YAyABKAMiTQoXU2V0UGlwZWxpbmVNb2RlUmVzcG9uc2USMgoKcmVwb3NpdG9yeRgBIAEoCzIeLnJlbGlhbnQudjEuUGlwZWxpbmVSZXBvc2l0b3J5Ij4KF0dldFBpcGVsaW5lU3RhdGVSZXF1ZXN0Eg8KB3JlcG9faWQYASABKAkSEgoKcmVwb3NpdG9yeRgCIAEoCSLuAQoYR2V0UGlwZWxpbmVTdGF0ZVJlc3BvbnNlEjIKCnJlcG9zaXRvcnkYASABKAsyHi5yZWxpYW50LnYxLlBpcGVsaW5lUmVwb3NpdG9yeRIxCglwcl9zdGF0ZXMYAiADKAsyHi5yZWxpYW50LnYxLlBpcGVsaW5lU3RhdGVDb3VudBI2Cg5sYXRlc3RfYmF0Y2hlcxgDIAMoCzIeLnJlbGlhbnQudjEuUGlwZWxpbmVRdWV1ZUJhdGNoEjMKC21haW5faGVhbHRoGAQgASgLMh4ucmVsaWFudC52MS5QaXBlbGluZU1haW5IZWFsdGgiKwoQTGlzdFF1ZXVlUmVxdWVzdBIXCgdyZXBvX2lkGAEgASgJQga6SAPIAQEiewoRTGlzdFF1ZXVlUmVzcG9uc2USLwoHZW50cmllcxgBIAMoCzIeLnJlbGlhbnQudjEuUGlwZWxpbmVRdWV1ZUVudHJ5EjUKDWN1cnJlbnRfYmF0Y2gYAiABKAsyHi5yZWxpYW50LnYxLlBpcGVsaW5lUXVldWVCYXRjaCLvAgoSUGlwZWxpbmVSZXBvc2l0b3J5EgoKAmlkGAEgASgJEg4KBm9yZ19pZBgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJEhAKCHByb3ZpZGVyGAQgASgJEhMKC2FjY291bnRfa2V5GAUgASgJEhUKDXJlcG9zaXRvcnlfaWQYBiABKAkSEgoKcmVwb3NpdG9yeRgHIAEoCRITCgtiYXNlX2JyYW5jaBgIIAEoCRIMCgRtb2RlGAkgASgJEhIKCmNvbmZpZ19zaGEYCiABKAkSEwoLcXVldWVfc3RhdGUYCyABKAkSGgoSY3JlYXRlZF9ieV91c2VyX2lkGAwgASgJEi4KCmNyZWF0ZWRfYXQYDSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg8KB3ZlcnNpb24YDyABKAMiMgoSUGlwZWxpbmVTdGF0ZUNvdW50Eg0KBXN0YXRlGAEgASgJEg0KBWNvdW50GAIgASgFIrkBChJQaXBlbGluZVF1ZXVlRW50cnkSCgoCaWQYASABKAkSEQoJcmVjb3JkX2lkGAIgASgJEg4KBm51bWJlchgDIAEoBRIQCghoZWFkX3NoYRgEIAEoCRIQCghwcmlvcml0eRgFIAEoBRIvCgtlbnF1ZXVlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEAoIYmF0Y2hfaWQYByABKAkSDQoFc3RhdGUYCCABKAkinAIKElBpcGVsaW5lUXVldWVCYXRjaBIKCgJpZBgBIAEoCRIQCghiYXNlX3NoYRgCIAEoCRIVCg1jYW5kaWRhdGVfc2hhGAMgASgJEgwKBGtpbmQYBCABKAkSDQoFc3RhdGUYBSABKAkSDwoHYXR0ZW1wdBgGIAEoBRIZChFpc29sYXRpb25fYmFja2VuZBgHIAEoCRITCgtnYXRlX3J1bm5lchgIIAEoCRISCgpsYW5kZWRfc2hhGAkgASgJEi4KCnN0YXJ0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KC2ZpbmlzaGVkX2F0GAsgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKYAQoSUGlwZWxpbmVNYWluSGVhbHRoEgsKA3NoYRgBIAEoCRIOCgZzb3VyY2UYAiABKAkSDwoHdmVyZGljdBgDIAEoCRIRCglzaWduYXR1cmUYBCABKAkSEAoIYmF0Y2hfaWQYBSABKAkSLwoLb2JzZXJ2ZWRfYXQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wMusGCg9QaXBlbGluZVNlcnZpY2USwQEKD0Vucm9sUmVwb3NpdG9yeRIiLnJlbGlhbnQudjEuRW5yb2xSZXBvc2l0b3J5UmVxdWVzdBojLnJlbGlhbnQudjEuRW5yb2xSZXBvc2l0b3J5UmVzcG9uc2UiZZACAqK7GF46XAoFZW5yb2wSRwoNcGlwZWxpbmVfcmVwbxIWcmVzcG9uc2UucmVwb3NpdG9yeS5pZBoecmVzcG9uc2UucmVwb3NpdG9yeS5yZXBvc2l0b3J5Kgpwcm9qZWN0X2lkEqwBCg9TZXRQaXBlbGluZU1vZGUSIi5yZWxpYW50LnYxLlNldFBpcGVsaW5lTW9kZVJlcXVlc3QaIy5yZWxpYW50LnYxLlNldFBpcGVsaW5lTW9kZVJlc3BvbnNlIlCiuxhMOkoKCHNldF9tb2RlEjgKDXBpcGVsaW5lX3JlcG8SB3JlcG9faWQaHnJlc3BvbnNlLnJlcG9zaXRvcnkucmVwb3NpdG9yeSoEbW9kZRJiChBHZXRQaXBlbGluZVN0YXRlEiMucmVsaWFudC52MS5HZXRQaXBlbGluZVN0YXRlUmVxdWVzdBokLnJlbGlhbnQudjEuR2V0UGlwZWxpbmVTdGF0ZVJlc3BvbnNlIgOQAgESTQoJTGlzdFF1ZXVlEhwucmVsaWFudC52MS5MaXN0UXVldWVSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0UXVldWVSZXNwb25zZSIDkAIBEm4KFExpc3RDYXBhYmlsaXR5R3JhbnRzEicucmVsaWFudC52MS5MaXN0Q2FwYWJpbGl0eUdyYW50c1JlcXVlc3QaKC5yZWxpYW50LnYxLkxpc3RDYXBhYmlsaXR5R3JhbnRzUmVzcG9uc2UiA5ACARLBAQoVUmV2b2tlQ2FwYWJpbGl0eUdyYW50EigucmVsaWFudC52MS5SZXZva2VDYXBhYmlsaXR5R3JhbnRSZXF1ZXN0GikucmVsaWFudC52MS5SZXZva2VDYXBhYmlsaXR5R3JhbnRSZXNwb25zZSJTkAICorsYTDpKCgZyZXZva2USQAoZcGlwZWxpbmVfY2FwYWJpbGl0eV9ncmFudBIIZ3JhbnRfaWQaGXJlc3BvbnNlLmdyYW50LmNhcGFiaWxpdHlCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
+
+/**
+ * @generated from message reliant.v1.ListCapabilityGrantsRequest
+ */
+export type ListCapabilityGrantsRequest = Message<"reliant.v1.ListCapabilityGrantsRequest"> & {
+  /**
+   * trigger_id narrows the list to one activation's grants.
+   *
+   * @generated from field: optional string trigger_id = 1;
+   */
+  triggerId?: string | undefined;
+
+  /**
+   * include_revoked lists revoked grants too.
+   *
+   * @generated from field: optional bool include_revoked = 2;
+   */
+  includeRevoked?: boolean | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.ListCapabilityGrantsRequest.
+ * Use `create(ListCapabilityGrantsRequestSchema)` to create a new message.
+ */
+export const ListCapabilityGrantsRequestSchema: GenMessage<ListCapabilityGrantsRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_pipeline, 0);
+
+/**
+ * @generated from message reliant.v1.ListCapabilityGrantsResponse
+ */
+export type ListCapabilityGrantsResponse = Message<"reliant.v1.ListCapabilityGrantsResponse"> & {
+  /**
+   * @generated from field: repeated reliant.v1.PipelineCapabilityGrant grants = 1;
+   */
+  grants: PipelineCapabilityGrant[];
+};
+
+/**
+ * Describes the message reliant.v1.ListCapabilityGrantsResponse.
+ * Use `create(ListCapabilityGrantsResponseSchema)` to create a new message.
+ */
+export const ListCapabilityGrantsResponseSchema: GenMessage<ListCapabilityGrantsResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_pipeline, 1);
+
+/**
+ * @generated from message reliant.v1.RevokeCapabilityGrantRequest
+ */
+export type RevokeCapabilityGrantRequest = Message<"reliant.v1.RevokeCapabilityGrantRequest"> & {
+  /**
+   * @generated from field: string grant_id = 1;
+   */
+  grantId: string;
+};
+
+/**
+ * Describes the message reliant.v1.RevokeCapabilityGrantRequest.
+ * Use `create(RevokeCapabilityGrantRequestSchema)` to create a new message.
+ */
+export const RevokeCapabilityGrantRequestSchema: GenMessage<RevokeCapabilityGrantRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_pipeline, 2);
+
+/**
+ * @generated from message reliant.v1.RevokeCapabilityGrantResponse
+ */
+export type RevokeCapabilityGrantResponse = Message<"reliant.v1.RevokeCapabilityGrantResponse"> & {
+  /**
+   * @generated from field: reliant.v1.PipelineCapabilityGrant grant = 1;
+   */
+  grant?: PipelineCapabilityGrant | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.RevokeCapabilityGrantResponse.
+ * Use `create(RevokeCapabilityGrantResponseSchema)` to create a new message.
+ */
+export const RevokeCapabilityGrantResponseSchema: GenMessage<RevokeCapabilityGrantResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_pipeline, 3);
+
+/**
+ * PipelineCapabilityGrant is the owner's grant of one pipeline capability
+ * to one activation, on one machine pool.
+ *
+ * @generated from message reliant.v1.PipelineCapabilityGrant
+ */
+export type PipelineCapabilityGrant = Message<"reliant.v1.PipelineCapabilityGrant"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * trigger_id is the activation (the trigger) the grant is made to.
+   *
+   * @generated from field: string trigger_id = 2;
+   */
+  triggerId: string;
+
+  /**
+   * machine_pool_id is the pool the activation's runs must run on.
+   *
+   * @generated from field: string machine_pool_id = 3;
+   */
+  machinePoolId: string;
+
+  /**
+   * repo_id is the enrolled repository the grant is limited to; empty for
+   * every one.
+   *
+   * @generated from field: string repo_id = 4;
+   */
+  repoId: string;
+
+  /**
+   * capability is approve or land.
+   *
+   * @generated from field: string capability = 5;
+   */
+  capability: string;
+
+  /**
+   * granted_by_user_id is the owner who approved the card that made it.
+   *
+   * @generated from field: string granted_by_user_id = 6;
+   */
+  grantedByUserId: string;
+
+  /**
+   * approval_id is that card.
+   *
+   * @generated from field: string approval_id = 7;
+   */
+  approvalId: string;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp granted_at = 8;
+   */
+  grantedAt?: Timestamp | undefined;
+
+  /**
+   * revoked_at is unset while the grant is live.
+   *
+   * @generated from field: google.protobuf.Timestamp revoked_at = 9;
+   */
+  revokedAt?: Timestamp | undefined;
+
+  /**
+   * @generated from field: string revoked_by_user_id = 10;
+   */
+  revokedByUserId: string;
+};
+
+/**
+ * Describes the message reliant.v1.PipelineCapabilityGrant.
+ * Use `create(PipelineCapabilityGrantSchema)` to create a new message.
+ */
+export const PipelineCapabilityGrantSchema: GenMessage<PipelineCapabilityGrant> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_pipeline, 4);
 
 /**
  * @generated from message reliant.v1.EnrolRepositoryRequest
@@ -51,7 +208,7 @@ export type EnrolRepositoryRequest = Message<"reliant.v1.EnrolRepositoryRequest"
  * Use `create(EnrolRepositoryRequestSchema)` to create a new message.
  */
 export const EnrolRepositoryRequestSchema: GenMessage<EnrolRepositoryRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 0);
+  messageDesc(file_reliant_v1_pipeline, 5);
 
 /**
  * @generated from message reliant.v1.EnrolRepositoryResponse
@@ -68,7 +225,7 @@ export type EnrolRepositoryResponse = Message<"reliant.v1.EnrolRepositoryRespons
  * Use `create(EnrolRepositoryResponseSchema)` to create a new message.
  */
 export const EnrolRepositoryResponseSchema: GenMessage<EnrolRepositoryResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 1);
+  messageDesc(file_reliant_v1_pipeline, 6);
 
 /**
  * @generated from message reliant.v1.SetPipelineModeRequest
@@ -99,7 +256,7 @@ export type SetPipelineModeRequest = Message<"reliant.v1.SetPipelineModeRequest"
  * Use `create(SetPipelineModeRequestSchema)` to create a new message.
  */
 export const SetPipelineModeRequestSchema: GenMessage<SetPipelineModeRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 2);
+  messageDesc(file_reliant_v1_pipeline, 7);
 
 /**
  * @generated from message reliant.v1.SetPipelineModeResponse
@@ -116,7 +273,7 @@ export type SetPipelineModeResponse = Message<"reliant.v1.SetPipelineModeRespons
  * Use `create(SetPipelineModeResponseSchema)` to create a new message.
  */
 export const SetPipelineModeResponseSchema: GenMessage<SetPipelineModeResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 3);
+  messageDesc(file_reliant_v1_pipeline, 8);
 
 /**
  * @generated from message reliant.v1.GetPipelineStateRequest
@@ -143,7 +300,7 @@ export type GetPipelineStateRequest = Message<"reliant.v1.GetPipelineStateReques
  * Use `create(GetPipelineStateRequestSchema)` to create a new message.
  */
 export const GetPipelineStateRequestSchema: GenMessage<GetPipelineStateRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 4);
+  messageDesc(file_reliant_v1_pipeline, 9);
 
 /**
  * @generated from message reliant.v1.GetPipelineStateResponse
@@ -182,7 +339,7 @@ export type GetPipelineStateResponse = Message<"reliant.v1.GetPipelineStateRespo
  * Use `create(GetPipelineStateResponseSchema)` to create a new message.
  */
 export const GetPipelineStateResponseSchema: GenMessage<GetPipelineStateResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 5);
+  messageDesc(file_reliant_v1_pipeline, 10);
 
 /**
  * @generated from message reliant.v1.ListQueueRequest
@@ -199,7 +356,7 @@ export type ListQueueRequest = Message<"reliant.v1.ListQueueRequest"> & {
  * Use `create(ListQueueRequestSchema)` to create a new message.
  */
 export const ListQueueRequestSchema: GenMessage<ListQueueRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 6);
+  messageDesc(file_reliant_v1_pipeline, 11);
 
 /**
  * @generated from message reliant.v1.ListQueueResponse
@@ -226,7 +383,7 @@ export type ListQueueResponse = Message<"reliant.v1.ListQueueResponse"> & {
  * Use `create(ListQueueResponseSchema)` to create a new message.
  */
 export const ListQueueResponseSchema: GenMessage<ListQueueResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 7);
+  messageDesc(file_reliant_v1_pipeline, 12);
 
 /**
  * PipelineRepository is one enrolled repository.
@@ -331,7 +488,7 @@ export type PipelineRepository = Message<"reliant.v1.PipelineRepository"> & {
  * Use `create(PipelineRepositorySchema)` to create a new message.
  */
 export const PipelineRepositorySchema: GenMessage<PipelineRepository> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 8);
+  messageDesc(file_reliant_v1_pipeline, 13);
 
 /**
  * @generated from message reliant.v1.PipelineStateCount
@@ -353,7 +510,7 @@ export type PipelineStateCount = Message<"reliant.v1.PipelineStateCount"> & {
  * Use `create(PipelineStateCountSchema)` to create a new message.
  */
 export const PipelineStateCountSchema: GenMessage<PipelineStateCount> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 9);
+  messageDesc(file_reliant_v1_pipeline, 14);
 
 /**
  * PipelineQueueEntry is one approved pull request head in the queue.
@@ -413,7 +570,7 @@ export type PipelineQueueEntry = Message<"reliant.v1.PipelineQueueEntry"> & {
  * Use `create(PipelineQueueEntrySchema)` to create a new message.
  */
 export const PipelineQueueEntrySchema: GenMessage<PipelineQueueEntry> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 10);
+  messageDesc(file_reliant_v1_pipeline, 15);
 
 /**
  * PipelineQueueBatch is one candidate a gate judges.
@@ -487,7 +644,7 @@ export type PipelineQueueBatch = Message<"reliant.v1.PipelineQueueBatch"> & {
  * Use `create(PipelineQueueBatchSchema)` to create a new message.
  */
 export const PipelineQueueBatchSchema: GenMessage<PipelineQueueBatch> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 11);
+  messageDesc(file_reliant_v1_pipeline, 16);
 
 /**
  * PipelineMainHealth is one verdict on a commit of the base branch.
@@ -531,7 +688,7 @@ export type PipelineMainHealth = Message<"reliant.v1.PipelineMainHealth"> & {
  * Use `create(PipelineMainHealthSchema)` to create a new message.
  */
 export const PipelineMainHealthSchema: GenMessage<PipelineMainHealth> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_pipeline, 12);
+  messageDesc(file_reliant_v1_pipeline, 17);
 
 /**
  * PipelineService enrols a repository in Reliant's PR pipeline and merge
@@ -602,6 +759,33 @@ export const PipelineService: GenService<{
     methodKind: "unary";
     input: typeof ListQueueRequestSchema;
     output: typeof ListQueueResponseSchema;
+  },
+  /**
+   * ListCapabilityGrants lists the pipeline capability grants the caller
+   * made to their activations (internal/pipeline/grants), newest first: the
+   * live ones, or every one with include_revoked. A grant is made only by
+   * approving the card an activation's run raises
+   * (reliant/pipeline.request_grant@1), never by an rpc.
+   *
+   * @generated from rpc reliant.v1.PipelineService.ListCapabilityGrants
+   */
+  listCapabilityGrants: {
+    methodKind: "unary";
+    input: typeof ListCapabilityGrantsRequestSchema;
+    output: typeof ListCapabilityGrantsResponseSchema;
+  },
+  /**
+   * RevokeCapabilityGrant revokes one of the caller's grants at once: the
+   * next run of the activation no longer holds it. It needs no approval,
+   * since it only takes power away. Revoking a revoked grant returns it
+   * unchanged; another user's grant is NotFound.
+   *
+   * @generated from rpc reliant.v1.PipelineService.RevokeCapabilityGrant
+   */
+  revokeCapabilityGrant: {
+    methodKind: "unary";
+    input: typeof RevokeCapabilityGrantRequestSchema;
+    output: typeof RevokeCapabilityGrantResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_pipeline, 0);

@@ -33,7 +33,9 @@ const mocks = vi.hoisted(() => ({
   search: {} as Record<string, unknown>,
   exchangeGithubOAuthCode: vi.fn(),
   assign: vi.fn(),
+  replace: vi.fn(),
   navigate: vi.fn(),
+  session: { access_token: "t" } as { access_token: string } | null,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -47,12 +49,10 @@ vi.mock("@/services/controlPlane/git", () => ({
   },
 }));
 
-vi.mock("@/lib/supabase", () => ({
-  supabase: {
-    auth: {
-      getSession: async () => ({ data: { session: { access_token: "t" } } }),
-    },
-  },
+// Who is signed in, by the active provider (lib/auth/use-auth); the forge
+// provider's case is GitHubOAuthCallback.forgeAuth.test.tsx.
+vi.mock("@/lib/auth/use-auth", () => ({
+  restoredAuthIdentity: async () => (mocks.session ? { id: "u-1" } : null),
 }));
 
 vi.mock("@/lib/logger", () => ({
@@ -79,9 +79,10 @@ function landedAt(): string {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.search = {};
+  mocks.session = { access_token: "t" };
   Object.defineProperty(window, "location", {
     configurable: true,
-    value: { origin: "https://app.reliantlabs.io", assign: mocks.assign },
+    value: { origin: "https://app.reliantlabs.io", assign: mocks.assign, replace: mocks.replace },
   });
 });
 
@@ -131,6 +132,55 @@ describe("a flow the forge site started (lib/crossShellReturn)", () => {
     const landed = landedAt();
     expect(landed.startsWith("/")).toBe(true);
     expect(landed.startsWith("//")).toBe(false);
+  });
+});
+
+/** A state the way control-plane signs one: base64url(JSON) "." base64url(HMAC). */
+function signedState(payload: Record<string, unknown>): string {
+  const b64 = (v: string) => btoa(v).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${b64(JSON.stringify(payload))}.${b64("not-a-real-mac")}`;
+}
+
+describe("an org install of the App — ?installation_id&setup_action&state, state of kind org_install", () => {
+  // Settings › Organization GitHub (StartGitHubAppInstall) sent GitHub its own
+  // state; the settings page links it, and LinkGitHubAppInstallation checks
+  // the state, the caller and the installation. Nothing is exchanged here.
+  it("forwards installation_id and the state to /settings/org-github, replacing this entry", async () => {
+    const state = signedState({ k: "org_install", org: "org-a", uid: "u-1", n: "x", exp: 9999999999 });
+    mocks.search = { code: "ghcode", installation_id: "166627811", setup_action: "install", state };
+
+    render(<GitHubOAuthCallback />);
+
+    await waitFor(() => expect(mocks.replace).toHaveBeenCalledTimes(1));
+    const target = new URL(mocks.replace.mock.calls[0][0] as string, "https://app.reliantlabs.io");
+    expect(target.pathname).toBe("/settings/org-github");
+    expect(target.searchParams.get("installation_id")).toBe("166627811");
+    expect(target.searchParams.get("link_state")).toBe(state);
+    expect(mocks.exchangeGithubOAuthCode).not.toHaveBeenCalled();
+    expect(mocks.assign).not.toHaveBeenCalled();
+  });
+
+  it("in a browser with no Reliant session (a desktop install), says it is installed and links nothing here", async () => {
+    mocks.session = null;
+    mocks.search = { installation_id: "166627811", setup_action: "install", state: signedState({ k: "org_install", org: "org-a", uid: "u-1" }) };
+
+    render(<GitHubOAuthCallback />);
+
+    expect(await screen.findByText("GitHub App installed")).toBeInTheDocument();
+    expect(mocks.replace).not.toHaveBeenCalled();
+    expect(mocks.exchangeGithubOAuthCode).not.toHaveBeenCalled();
+  });
+
+  it("leaves a connect-flow state (no kind) to the exchange", async () => {
+    const state = signedState({ uid: "u-1", n: "x", exp: 9999999999, rt: "/settings" });
+    mocks.search = { code: "abc123", state };
+    mocks.exchangeGithubOAuthCode.mockResolvedValue({ ok: true, returnTo: "/settings" });
+
+    render(<GitHubOAuthCallback />);
+
+    await waitFor(() => expect(mocks.assign).toHaveBeenCalled());
+    expect(mocks.exchangeGithubOAuthCode).toHaveBeenCalledWith("abc123", state);
+    expect(mocks.replace).not.toHaveBeenCalled();
   });
 });
 
