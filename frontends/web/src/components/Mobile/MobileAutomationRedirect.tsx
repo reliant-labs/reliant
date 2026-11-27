@@ -28,7 +28,7 @@ export function MobileAutomationRedirect() {
 
   if (!triggerId || trigger.isError) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm text-muted-foreground">
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-ui text-muted-foreground">
         <p>{isTriggerNotFound(trigger.error) || !triggerId ? "This automation no longer exists." : "This automation could not be loaded."}</p>
         <button
           type="button"

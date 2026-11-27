@@ -106,7 +106,7 @@ func (s *startRunTool) Execute(rctx *rctx.ToolContext, params StartRunParams) (T
 		return NewTextErrorResponse("Could not check for an earlier start: " + err.Error()), nil
 	}
 
-	depth, err := agentStartRunDepth(rctx, s.repo, rctx.ChatID)
+	depth, err := agentStartRunDepth(rctx, s.launched, rctx.ChatID)
 	if err != nil {
 		return NewTextErrorResponse("Could not determine how deeply this run was started: " + err.Error()), nil
 	}
@@ -187,7 +187,7 @@ func currentToolCallID(rctx *rctx.ToolContext) string {
 // The walk is bounded by MaxAgentStartRunDepth+1 steps rather than trusting the
 // data to be acyclic, so a corrupt lineage reports "too deep" instead of
 // looping.
-func agentStartRunDepth(rctx *rctx.ToolContext, repo startRunLineageReader, chatID string) (int, error) {
+func agentStartRunDepth(rctx *rctx.ToolContext, repo LaunchedRunCounter, chatID string) (int, error) {
 	depth := 0
 	current := chatID
 	for depth <= MaxAgentStartRunDepth {

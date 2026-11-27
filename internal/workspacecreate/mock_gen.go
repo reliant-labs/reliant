@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockMachine
-// forge:hash=36fa15cb97ca0435b3f016e10046f55df574dce82207cbbbb6e4ab33951264fe
+// forge:hash=80f1cae44555cccdcf7eb0caff9d49af427e45ea25b04cfd0a4afe88343a5543
 
 // MockMachine is a test mock for the Machine interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMachine.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMachine.<Method>Func not set" error.
 type MockMachine struct {
 	contractkit.Recorder
 	SendFunc func(context.Context, string, any, any, int32) error
@@ -40,18 +41,45 @@ func (m *MockMachine) Send(ctx context.Context, commandType string, payload any,
 	return contractkit.MockNotSet("MockMachine", "Send")
 }
 
+// MockMachineSendCall is one recorded call of MockMachine.Send, one
+// field per parameter.
+type MockMachineSendCall struct {
+	Ctx         context.Context
+	CommandType string
+	Payload     any
+	Resp        any
+	TimeoutMs   int32
+}
+
+// SendCalls returns every recorded Send call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Send").
+func (m *MockMachine) SendCalls() []MockMachineSendCall {
+	var out []MockMachineSendCall
+	for _, c := range m.Recorder.Calls("Send") {
+		var r MockMachineSendCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.CommandType, _ = c.Args[1].(string)
+		r.Payload, _ = c.Args[2].(any)
+		r.Resp, _ = c.Args[3].(any)
+		r.TimeoutMs, _ = c.Args[4].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Machine = (*MockMachine)(nil)
 
 // forge:section MockStore
-// forge:hash=f0cd5d4ef9ed10b053282c3a7c682701479ea22935e159086f6825578c53bbc2
+// forge:hash=1b468235f3407c6b6c9bbc451883acc5fa2836fb292678a2a2de098f74c67d4c
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	CreateWorktreeFunc         func(context.Context, *db.Worktree) error
@@ -116,18 +144,147 @@ func (m *MockStore) SettleCheckoutTeardown(ctx context.Context, id string, state
 	return nil, contractkit.MockNotSet("MockStore", "SettleCheckoutTeardown")
 }
 
+// MockStoreCreateWorktreeCall is one recorded call of MockStore.CreateWorktree, one
+// field per parameter.
+type MockStoreCreateWorktreeCall struct {
+	Ctx      context.Context
+	Worktree *db.Worktree
+}
+
+// CreateWorktreeCalls returns every recorded CreateWorktree call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateWorktree").
+func (m *MockStore) CreateWorktreeCalls() []MockStoreCreateWorktreeCall {
+	var out []MockStoreCreateWorktreeCall
+	for _, c := range m.Recorder.Calls("CreateWorktree") {
+		var r MockStoreCreateWorktreeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Worktree, _ = c.Args[1].(*db.Worktree)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateWorktreeCall is one recorded call of MockStore.UpdateWorktree, one
+// field per parameter.
+type MockStoreUpdateWorktreeCall struct {
+	Ctx      context.Context
+	Worktree *db.Worktree
+}
+
+// UpdateWorktreeCalls returns every recorded UpdateWorktree call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateWorktree").
+func (m *MockStore) UpdateWorktreeCalls() []MockStoreUpdateWorktreeCall {
+	var out []MockStoreUpdateWorktreeCall
+	for _, c := range m.Recorder.Calls("UpdateWorktree") {
+		var r MockStoreUpdateWorktreeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Worktree, _ = c.Args[1].(*db.Worktree)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreArchiveWorktreeCall is one recorded call of MockStore.ArchiveWorktree, one
+// field per parameter.
+type MockStoreArchiveWorktreeCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// ArchiveWorktreeCalls returns every recorded ArchiveWorktree call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ArchiveWorktree").
+func (m *MockStore) ArchiveWorktreeCalls() []MockStoreArchiveWorktreeCall {
+	var out []MockStoreArchiveWorktreeCall
+	for _, c := range m.Recorder.Calls("ArchiveWorktree") {
+		var r MockStoreArchiveWorktreeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetLiveWorktreeByNameCall is one recorded call of MockStore.GetLiveWorktreeByName, one
+// field per parameter.
+type MockStoreGetLiveWorktreeByNameCall struct {
+	Ctx       context.Context
+	ProjectID string
+	Name      string
+}
+
+// GetLiveWorktreeByNameCalls returns every recorded GetLiveWorktreeByName call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetLiveWorktreeByName").
+func (m *MockStore) GetLiveWorktreeByNameCalls() []MockStoreGetLiveWorktreeByNameCall {
+	var out []MockStoreGetLiveWorktreeByNameCall
+	for _, c := range m.Recorder.Calls("GetLiveWorktreeByName") {
+		var r MockStoreGetLiveWorktreeByNameCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.Name, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListWorktreesByBranchCall is one recorded call of MockStore.ListWorktreesByBranch, one
+// field per parameter.
+type MockStoreListWorktreesByBranchCall struct {
+	Ctx       context.Context
+	ProjectID string
+	Branch    string
+}
+
+// ListWorktreesByBranchCalls returns every recorded ListWorktreesByBranch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorktreesByBranch").
+func (m *MockStore) ListWorktreesByBranchCalls() []MockStoreListWorktreesByBranchCall {
+	var out []MockStoreListWorktreesByBranchCall
+	for _, c := range m.Recorder.Calls("ListWorktreesByBranch") {
+		var r MockStoreListWorktreesByBranchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.Branch, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreSettleCheckoutTeardownCall is one recorded call of MockStore.SettleCheckoutTeardown, one
+// field per parameter.
+type MockStoreSettleCheckoutTeardownCall struct {
+	Ctx    context.Context
+	ID     string
+	State  string
+	Detail string
+}
+
+// SettleCheckoutTeardownCalls returns every recorded SettleCheckoutTeardown call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleCheckoutTeardown").
+func (m *MockStore) SettleCheckoutTeardownCalls() []MockStoreSettleCheckoutTeardownCall {
+	var out []MockStoreSettleCheckoutTeardownCall
+	for _, c := range m.Recorder.Calls("SettleCheckoutTeardown") {
+		var r MockStoreSettleCheckoutTeardownCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.State, _ = c.Args[2].(string)
+		r.Detail, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockFailedCreateStore
-// forge:hash=0489eaf60fac78efe9a257d84c919c120fc98aea5d5c5160896593461c916c1d
+// forge:hash=d9ec32f28b332fd9d74f81f57e0a6128fd4991270bd7d26863cd25d510478511
 
 // MockFailedCreateStore is a test mock for the FailedCreateStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockFailedCreateStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockFailedCreateStore.<Method>Func not set" error.
 type MockFailedCreateStore struct {
 	contractkit.Recorder
 	ListProjectDaemonsForDaemonFunc  func(context.Context, string) ([]*core.ProjectDaemon, error)
@@ -172,18 +329,105 @@ func (m *MockFailedCreateStore) MergeWorktreeCleanupMetadata(ctx context.Context
 	return contractkit.MockNotSet("MockFailedCreateStore", "MergeWorktreeCleanupMetadata")
 }
 
+// MockFailedCreateStoreListProjectDaemonsForDaemonCall is one recorded call of MockFailedCreateStore.ListProjectDaemonsForDaemon, one
+// field per parameter.
+type MockFailedCreateStoreListProjectDaemonsForDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+}
+
+// ListProjectDaemonsForDaemonCalls returns every recorded ListProjectDaemonsForDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProjectDaemonsForDaemon").
+func (m *MockFailedCreateStore) ListProjectDaemonsForDaemonCalls() []MockFailedCreateStoreListProjectDaemonsForDaemonCall {
+	var out []MockFailedCreateStoreListProjectDaemonsForDaemonCall
+	for _, c := range m.Recorder.Calls("ListProjectDaemonsForDaemon") {
+		var r MockFailedCreateStoreListProjectDaemonsForDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFailedCreateStoreListFailedWorktreesForDaemonCall is one recorded call of MockFailedCreateStore.ListFailedWorktreesForDaemon, one
+// field per parameter.
+type MockFailedCreateStoreListFailedWorktreesForDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+	Since    time.Time
+	Limit    int
+}
+
+// ListFailedWorktreesForDaemonCalls returns every recorded ListFailedWorktreesForDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListFailedWorktreesForDaemon").
+func (m *MockFailedCreateStore) ListFailedWorktreesForDaemonCalls() []MockFailedCreateStoreListFailedWorktreesForDaemonCall {
+	var out []MockFailedCreateStoreListFailedWorktreesForDaemonCall
+	for _, c := range m.Recorder.Calls("ListFailedWorktreesForDaemon") {
+		var r MockFailedCreateStoreListFailedWorktreesForDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.Since, _ = c.Args[2].(time.Time)
+		r.Limit, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFailedCreateStoreListReposByProjectCall is one recorded call of MockFailedCreateStore.ListReposByProject, one
+// field per parameter.
+type MockFailedCreateStoreListReposByProjectCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ListReposByProjectCalls returns every recorded ListReposByProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListReposByProject").
+func (m *MockFailedCreateStore) ListReposByProjectCalls() []MockFailedCreateStoreListReposByProjectCall {
+	var out []MockFailedCreateStoreListReposByProjectCall
+	for _, c := range m.Recorder.Calls("ListReposByProject") {
+		var r MockFailedCreateStoreListReposByProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFailedCreateStoreMergeWorktreeCleanupMetadataCall is one recorded call of MockFailedCreateStore.MergeWorktreeCleanupMetadata, one
+// field per parameter.
+type MockFailedCreateStoreMergeWorktreeCleanupMetadataCall struct {
+	Ctx context.Context
+	ID  string
+	Fn  func(m *db.CleanupMetadata, archived bool) bool
+}
+
+// MergeWorktreeCleanupMetadataCalls returns every recorded MergeWorktreeCleanupMetadata call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MergeWorktreeCleanupMetadata").
+func (m *MockFailedCreateStore) MergeWorktreeCleanupMetadataCalls() []MockFailedCreateStoreMergeWorktreeCleanupMetadataCall {
+	var out []MockFailedCreateStoreMergeWorktreeCleanupMetadataCall
+	for _, c := range m.Recorder.Calls("MergeWorktreeCleanupMetadata") {
+		var r MockFailedCreateStoreMergeWorktreeCleanupMetadataCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Fn, _ = c.Args[2].(func(m *db.CleanupMetadata, archived bool) bool)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ FailedCreateStore = (*MockFailedCreateStore)(nil)
 
 // forge:section MockFailedCreateRepo
-// forge:hash=bfa923da64143fa276fbf56a84099be3641be907a8a376131da496a9e951c754
+// forge:hash=66c222edca54164d5b4dd35ab261387cf580d872d006da3e7fbcfeb797594e01
 
 // MockFailedCreateRepo is a test mock for the FailedCreateRepo interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockFailedCreateRepo.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockFailedCreateRepo.<Method>Func not set" error.
 type MockFailedCreateRepo struct {
 	contractkit.Recorder
 	ListFailedWorktreesForDaemonFunc func(context.Context, string, time.Time, int) ([]*db.Worktree, error)
@@ -216,6 +460,72 @@ func (m *MockFailedCreateRepo) MergeWorktreeCleanupMetadata(ctx context.Context,
 		return m.MergeWorktreeCleanupMetadataFunc(ctx, id, fn)
 	}
 	return contractkit.MockNotSet("MockFailedCreateRepo", "MergeWorktreeCleanupMetadata")
+}
+
+// MockFailedCreateRepoListFailedWorktreesForDaemonCall is one recorded call of MockFailedCreateRepo.ListFailedWorktreesForDaemon, one
+// field per parameter.
+type MockFailedCreateRepoListFailedWorktreesForDaemonCall struct {
+	Ctx      context.Context
+	DaemonID string
+	Since    time.Time
+	Limit    int
+}
+
+// ListFailedWorktreesForDaemonCalls returns every recorded ListFailedWorktreesForDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListFailedWorktreesForDaemon").
+func (m *MockFailedCreateRepo) ListFailedWorktreesForDaemonCalls() []MockFailedCreateRepoListFailedWorktreesForDaemonCall {
+	var out []MockFailedCreateRepoListFailedWorktreesForDaemonCall
+	for _, c := range m.Recorder.Calls("ListFailedWorktreesForDaemon") {
+		var r MockFailedCreateRepoListFailedWorktreesForDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.DaemonID, _ = c.Args[1].(string)
+		r.Since, _ = c.Args[2].(time.Time)
+		r.Limit, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFailedCreateRepoListReposByProjectCall is one recorded call of MockFailedCreateRepo.ListReposByProject, one
+// field per parameter.
+type MockFailedCreateRepoListReposByProjectCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// ListReposByProjectCalls returns every recorded ListReposByProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListReposByProject").
+func (m *MockFailedCreateRepo) ListReposByProjectCalls() []MockFailedCreateRepoListReposByProjectCall {
+	var out []MockFailedCreateRepoListReposByProjectCall
+	for _, c := range m.Recorder.Calls("ListReposByProject") {
+		var r MockFailedCreateRepoListReposByProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFailedCreateRepoMergeWorktreeCleanupMetadataCall is one recorded call of MockFailedCreateRepo.MergeWorktreeCleanupMetadata, one
+// field per parameter.
+type MockFailedCreateRepoMergeWorktreeCleanupMetadataCall struct {
+	Ctx context.Context
+	ID  string
+	Fn  func(m *db.CleanupMetadata, archived bool) bool
+}
+
+// MergeWorktreeCleanupMetadataCalls returns every recorded MergeWorktreeCleanupMetadata call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MergeWorktreeCleanupMetadata").
+func (m *MockFailedCreateRepo) MergeWorktreeCleanupMetadataCalls() []MockFailedCreateRepoMergeWorktreeCleanupMetadataCall {
+	var out []MockFailedCreateRepoMergeWorktreeCleanupMetadataCall
+	for _, c := range m.Recorder.Calls("MergeWorktreeCleanupMetadata") {
+		var r MockFailedCreateRepoMergeWorktreeCleanupMetadataCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Fn, _ = c.Args[2].(func(m *db.CleanupMetadata, archived bool) bool)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

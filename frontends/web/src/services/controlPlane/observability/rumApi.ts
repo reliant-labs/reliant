@@ -143,9 +143,11 @@ function isGzip(bytes: Uint8Array): boolean {
 }
 
 async function gunzip(bytes: Uint8Array): Promise<Uint8Array> {
-  const stream = new ReadableStream<Uint8Array>({
+  // BufferSource is what DecompressionStream's writable side takes; decoded
+  // protobuf bytes are never SharedArrayBuffer-backed, the case it refuses.
+  const stream = new ReadableStream<BufferSource>({
     start(controller) {
-      controller.enqueue(bytes);
+      controller.enqueue(bytes as Uint8Array<ArrayBuffer>);
       controller.close();
     },
   }).pipeThrough(new DecompressionStream("gzip"));

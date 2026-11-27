@@ -16,10 +16,11 @@ export const file_reliant_config_v1_gtm_config: GenFile = /*@__PURE__*/
 
 /**
  * GtmConfig is who gets GTM (the go-to-market workspace) and how its
- * product-analytics read reaches the control plane. It is on the root
- * ReliantConfig because the API server (nav, GtmService) and the worker (the
- * agent's GTM tools) must give one answer from one setting; nothing else
- * reads it. internal/featuregate turns allowed_org_ids into the Gate every
+ * product-analytics read reaches the control plane. It is on
+ * ServerProcessConfig, which every server role loads, because the API server
+ * (nav, GtmService) and the worker (the agent's GTM tools) must give one
+ * answer from one setting; nothing else reads it, so no other role's env
+ * carries it (pkg/config's gateway reach test). internal/featuregate turns allowed_org_ids into the Gate every
  * GTM surface asks. The rules every config here follows are in config.proto's
  * header.
  *

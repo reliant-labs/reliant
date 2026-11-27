@@ -12,9 +12,9 @@ import (
 
 // EventStores is the generated stores behind the event, registration and
 // root-status reads of this package. They are forwarded one by one rather than
-// embedded: the stores also carry GetTrigger and GetTriggerEventByDedupe, which the
-// repository facade still serves for other areas, and two embedded copies
-// would make those selectors ambiguous.
+// embedded: the stores also carry GetTriggerEventByDedupe, which the repository
+// facade still serves for other areas, and two embedded copies would make
+// that selector ambiguous.
 type EventStores struct {
 	events        store.TriggerEventExtStore
 	registrations store.TriggerRegistrationExtStore
@@ -54,6 +54,10 @@ type TriggerStores struct {
 
 func (s TriggerStores) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
 	return s.triggers.SetTriggerWebhookTokenHash(ctx, id, hash)
+}
+
+func (s TriggerStores) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+	return s.triggers.GetTrigger(ctx, id)
 }
 
 func (s TriggerStores) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {

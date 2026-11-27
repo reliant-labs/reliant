@@ -61,6 +61,7 @@ type AutomationTakeoverServiceClient interface {
 	// withheld (param_names says which are set), and no secret, connection or
 	// event payload is returned.
 	// forge:custom — an org-wide read for admins, filtered to creators who left, with values withheld
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: liveOffer settles each dead pending offer it finds (s.settle)
 	ListOrphanedAutomations(context.Context, *connect.Request[v1.ListOrphanedAutomationsRequest]) (*connect.Response[v1.ListOrphanedAutomationsResponse], error)
 	// AdoptTrigger takes an orphaned trigger back for the org. Org admins
 	// only. With new_owner_user_id empty or the caller, the caller adopts it
@@ -80,6 +81,7 @@ type AutomationTakeoverServiceClient interface {
 	// ListTriggerOffers lists the live offers made to the caller, each with
 	// the offered trigger (param values withheld).
 	// forge:custom — only the caller's live offers; a dead one is settled as it is read
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: liveOffer settles each dead offer it finds (s.settle)
 	ListTriggerOffers(context.Context, *connect.Request[v1.ListTriggerOffersRequest]) (*connect.Response[v1.ListTriggerOffersResponse], error)
 	// RevokeTriggerOffer withdraws a pending offer (an org admin) or declines
 	// it (its offeree). Anyone else's is NOT_FOUND.
@@ -173,6 +175,7 @@ type AutomationTakeoverServiceHandler interface {
 	// withheld (param_names says which are set), and no secret, connection or
 	// event payload is returned.
 	// forge:custom — an org-wide read for admins, filtered to creators who left, with values withheld
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: liveOffer settles each dead pending offer it finds (s.settle)
 	ListOrphanedAutomations(context.Context, *connect.Request[v1.ListOrphanedAutomationsRequest]) (*connect.Response[v1.ListOrphanedAutomationsResponse], error)
 	// AdoptTrigger takes an orphaned trigger back for the org. Org admins
 	// only. With new_owner_user_id empty or the caller, the caller adopts it
@@ -192,6 +195,7 @@ type AutomationTakeoverServiceHandler interface {
 	// ListTriggerOffers lists the live offers made to the caller, each with
 	// the offered trigger (param values withheld).
 	// forge:custom — only the caller's live offers; a dead one is settled as it is read
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: liveOffer settles each dead offer it finds (s.settle)
 	ListTriggerOffers(context.Context, *connect.Request[v1.ListTriggerOffersRequest]) (*connect.Response[v1.ListTriggerOffersResponse], error)
 	// RevokeTriggerOffer withdraws a pending offer (an org admin) or declines
 	// it (its offeree). Anyone else's is NOT_FOUND.

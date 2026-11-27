@@ -251,7 +251,8 @@ func TestParseOrgIDs(t *testing.T) {
 	assert.Empty(t, featuregate.ParseOrgIDs(nil))
 }
 
-// GTM_ALLOWED_ORG_IDS reaches GtmConfig through the root config's loader,
+// GTM_ALLOWED_ORG_IDS reaches GtmConfig through the server roles' loader
+// (ServerProcessConfig),
 // which trims each comma-separated element and drops blank ones, as it does
 // ALLOWED_EMAIL_DOMAINS.
 func TestAllowedOrgIDsEnv(t *testing.T) {
@@ -265,9 +266,10 @@ func TestAllowedOrgIDsEnv(t *testing.T) {
 	} {
 		t.Run("GTM_ALLOWED_ORG_IDS="+raw, func(t *testing.T) {
 			t.Setenv("GTM_ALLOWED_ORG_IDS", raw)
+			t.Setenv("NATS_URL", "nats://127.0.0.1:4222") // required by every server role
 			cmd := &cobra.Command{}
-			config.RegisterFlags(cmd)
-			cfg, err := config.Load(cmd)
+			config.RegisterServerProcessConfigFlags(cmd)
+			cfg, err := config.LoadServerProcessConfig(cmd)
 			require.NoError(t, err)
 			if want == nil {
 				assert.Empty(t, cfg.GetGtm().GetAllowedOrgIds())
@@ -281,9 +283,10 @@ func TestAllowedOrgIDsEnv(t *testing.T) {
 // GTM_ANALYTICS_TOKEN, a secret, loads from the environment.
 func TestAnalyticsTokenEnv(t *testing.T) {
 	t.Setenv("GTM_ANALYTICS_TOKEN", "tok")
+	t.Setenv("NATS_URL", "nats://127.0.0.1:4222") // required by every server role
 	cmd := &cobra.Command{}
-	config.RegisterFlags(cmd)
-	cfg, err := config.Load(cmd)
+	config.RegisterServerProcessConfigFlags(cmd)
+	cfg, err := config.LoadServerProcessConfig(cmd)
 	require.NoError(t, err)
 	assert.Equal(t, "tok", cfg.GetGtm().GetAnalyticsToken())
 }

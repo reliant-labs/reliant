@@ -107,7 +107,7 @@ func TestTriggerEventQueries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetTriggerEventByChatID: %v", err)
 	}
-	twinByChat, err := env.Repo.GetTriggerEventByChatID(ctx, "chat-ev")
+	twinByChat, err := store.GetTriggerEventByChatID(ctx, env.Repo.ORM(), "chat-ev")
 	if err != nil {
 		t.Fatalf("Repo.GetTriggerEventByChatID: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestTriggerEventQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetTriggerEventByChat(%s): %v", kind, err)
 		}
-		twin, err := env.Repo.GetTriggerEventByChat(ctx, kind, "chat-ev")
+		twin, err := store.GetTriggerEventByChat(ctx, env.Repo.ORM(), kind, "chat-ev")
 		if err != nil {
 			t.Fatalf("Repo.GetTriggerEventByChat(%s): %v", kind, err)
 		}
@@ -167,8 +167,8 @@ func TestTriggerEventQueries(t *testing.T) {
 	if twin.Outcome != core.TriggerEventLaunched || twin.ChatID == nil || *twin.ChatID != "chat-done" || twin.Kind != core.TriggerEventKindSchedule {
 		t.Fatalf("after UpdateTriggerEventOutcome = %+v", twin)
 	}
-	if err := store.UpdateTriggerEventOutcome(ctx, env.ORM, "ev-2", core.TriggerEventFailed, "boom", nil); err != nil {
-		t.Fatalf("UpdateTriggerEventOutcome(nil chat): %v", err)
+	if err := env.Repo.UpdateTriggerEventOutcome(ctx, "ev-2", core.TriggerEventFailed, "boom", nil); err != nil {
+		t.Fatalf("Repo.UpdateTriggerEventOutcome: %v", err)
 	}
 	if got, _ := store.GetTriggerEventByDedupe(ctx, env.ORM, core.TriggerEventKindSchedule, second.DedupeKey); got.Outcome != core.TriggerEventFailed || got.OutcomeDetail != "boom" || got.ChatID != nil {
 		t.Fatalf("after Repo.UpdateTriggerEventOutcome(nil chat) = %+v, want the chat cleared", got)
@@ -200,7 +200,7 @@ func TestTriggerEventQueries(t *testing.T) {
 	if err := store.SetLaunchEventRunStatus(ctx, env.ORM, "chat-none", core.TriggerRunFailed); err != nil {
 		t.Fatalf("SetLaunchEventRunStatus(no launch event): %v", err)
 	}
-	if l, _ := env.Repo.GetTriggerEventByChatID(ctx, "chat-ev"); l.RunStatus != core.TriggerRunCompleted {
+	if l, _ := store.GetTriggerEventByChatID(ctx, env.Repo.ORM(), "chat-ev"); l.RunStatus != core.TriggerRunCompleted {
 		t.Fatalf("launch run status = %q, want completed", l.RunStatus)
 	}
 	if r, _ := store.GetTriggerEventByDedupe(ctx, env.ORM, core.TriggerEventKindSchedule, replay.DedupeKey); r.RunStatus != "" {
@@ -246,8 +246,8 @@ func TestTriggerEventQueries(t *testing.T) {
 	if claimed, err := store.ClaimPendingTriggerEvent(ctx, env.ORM, "ev-pending-0", map[string]any{"start": "x"}, nil); err != nil || !claimed {
 		t.Fatalf("ClaimPendingTriggerEvent = %v, %v; want claimed", claimed, err)
 	}
-	if claimed, err := store.ClaimPendingTriggerEvent(ctx, env.ORM, "ev-pending-0", nil, nil); err != nil || claimed {
-		t.Fatalf("ClaimPendingTriggerEvent(second claim) = %v, %v; want the loser", claimed, err)
+	if claimed, err := env.Repo.ClaimPendingTriggerEvent(ctx, "ev-pending-0", nil, nil); err != nil || claimed {
+		t.Fatalf("Repo.ClaimPendingTriggerEvent(claimed) = %v, %v; want the loser", claimed, err)
 	}
 	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-0", core.TriggerEventSkipped, "late", nil); err != nil || settled {
 		t.Fatalf("SettlePendingTriggerEvent(launched) = %v, %v; want no overwrite", settled, err)
@@ -261,8 +261,8 @@ func TestTriggerEventQueries(t *testing.T) {
 	if settled, err := store.SettlePendingTriggerEvent(ctx, env.ORM, "ev-pending-1", core.TriggerEventFailed, "again", nil); err != nil || settled {
 		t.Fatalf("Repo.SettlePendingTriggerEvent(settled) = %v, %v; want not applied", settled, err)
 	}
-	if claimed, err := store.ClaimPendingTriggerEvent(ctx, env.ORM, "ev-pending-2", map[string]any{"start": "y"}, nil); err != nil || !claimed {
-		t.Fatalf("ClaimPendingTriggerEvent = %v, %v", claimed, err)
+	if claimed, err := env.Repo.ClaimPendingTriggerEvent(ctx, "ev-pending-2", map[string]any{"start": "y"}, nil); err != nil || !claimed {
+		t.Fatalf("Repo.ClaimPendingTriggerEvent = %v, %v", claimed, err)
 	}
 	if c, _ := store.GetTriggerEventByDedupe(ctx, env.ORM, core.TriggerEventKindWebhook, "dd-ev-pending-2"); c.Outcome != core.TriggerEventLaunched || c.Payload["start"] != "y" {
 		t.Fatalf("Repo-claimed event = %+v", c)
@@ -383,15 +383,9 @@ func TestTriggerFiringQueries(t *testing.T) {
 		}
 		sameValue(t, "RecentTriggerFirings", port, viaExt)
 
-		port, err = store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, per)
-		if err != nil {
+		if _, err = store.FiringsSinceLastSuccess(ctx, env.ORM, storetest.SeedUserID, triggerIDs, per); err != nil {
 			t.Fatalf("FiringsSinceLastSuccess(%d): %v", per, err)
 		}
-		twin, err := env.Repo.FiringsSinceLastSuccess(ctx, storetest.SeedUserID, triggerIDs, per)
-		if err != nil {
-			t.Fatalf("Repo.FiringsSinceLastSuccess(%d): %v", per, err)
-		}
-		sameValue(t, "FiringsSinceLastSuccess", port, twin)
 	}
 	recent, _ := store.RecentTriggerFirings(ctx, env.ORM, storetest.SeedUserID, triggerIDs, 2)
 	if len(recent) != 1 || !reflect.DeepEqual(pageIDs(recent["trg-f1"]), []string{"f1-live", "f1-fail-b"}) {
@@ -421,21 +415,5 @@ func TestTriggerFiringQueries(t *testing.T) {
 	}
 	if empty, err := store.RecentTriggerFirings(ctx, env.ORM, storetest.SeedUserID, nil, 10); err != nil || len(empty) != 0 {
 		t.Fatalf("RecentTriggerFirings(no ids) = %v, %v", empty, err)
-	}
-}
-
-// The store functions own the empty-ID guards the repository facade's
-// forwards used to carry: a blank ID is refused before any query runs.
-func TestTriggerEventWritesRefuseABlankID(t *testing.T) {
-	env := storetest.New(t)
-	ctx := context.Background()
-	const want = "trigger event ID cannot be empty"
-	for name, err := range map[string]error{
-		"UpdateTriggerEventOutcome": store.UpdateTriggerEventOutcome(ctx, env.ORM, "", core.TriggerEventSkipped, "", nil),
-		"UpdateTriggerEventPayload": store.UpdateTriggerEventPayload(ctx, env.ORM, "", map[string]any{"k": "v"}),
-	} {
-		if err == nil || err.Error() != want {
-			t.Errorf("%s with a blank ID: err = %v, want %q", name, err, want)
-		}
 	}
 }

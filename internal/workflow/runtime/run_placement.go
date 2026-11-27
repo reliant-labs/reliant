@@ -47,6 +47,10 @@ const (
 // and the selector is then left unpinned.
 type RunPlacement struct {
 	DaemonID string `json:"daemon_id,omitempty"`
+	// Pool names the pool it was placed on, so a node's preflight can move
+	// a node routed here to another member (node_preflight.go). Empty for a
+	// placement recorded before it was kept.
+	Pool string `json:"pool,omitempty"`
 }
 
 // selector is the routing a placement gives: the placed machine as a
@@ -56,7 +60,7 @@ func (p *RunPlacement) selector() *DaemonSelectorValue {
 	if p == nil || p.DaemonID == "" {
 		return nil
 	}
-	return &DaemonSelectorValue{ID: p.DaemonID, Placed: true}
+	return &DaemonSelectorValue{ID: p.DaemonID, Placed: true, PlacedPool: p.Pool}
 }
 
 // placeDaemonSelector places ds, a selector that NeedsPlacement, for the
@@ -69,6 +73,20 @@ func placeDaemonSelector(ctx workflow.Context, chatID, workflowID, scope string,
 	if workflow.GetVersion(ctx, daemonPoolPlacementChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 		return nil, nil
 	}
+	return askPlacement(ctx, chatID, workflowID, scope, ds, nil)
+}
+
+// errPoolExhausted is a placement whose pool has members and every one is
+// excluded (machinepool.PlaceRunOutput.Exhausted): a node's preflight failed
+// on all of them.
+type errPoolExhausted struct{ reason string }
+
+func (e errPoolExhausted) Error() string { return e.reason }
+
+// askPlacement asks PlaceRunOnMachinePool for (workflowID, scope) until a
+// member takes it, excluding the members in exclude, waiting on a timer while
+// the pool says to wait. An exhausted pool is errPoolExhausted.
+func askPlacement(ctx workflow.Context, chatID, workflowID, scope string, ds *DaemonSelectorValue, exclude []string) (*RunPlacement, error) {
 	logger := workflow.GetLogger(ctx)
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: placeRunStartToClose,
@@ -83,6 +101,7 @@ func placeDaemonSelector(ctx workflow.Context, chatID, workflowID, scope string,
 		WorkflowID: workflowID,
 		Scope:      scope,
 		Pool:       ds.Pool,
+		Exclude:    exclude,
 	}
 
 	start := workflow.Now(ctx)
@@ -95,7 +114,10 @@ func placeDaemonSelector(ctx workflow.Context, chatID, workflowID, scope string,
 		if out.DaemonID != "" {
 			logger.Info("[Workflow Runtime] Placed on a machine",
 				"scope", scope, "pool", out.PoolName, "daemonID", out.DaemonID, "daemonName", out.DaemonName)
-			return &RunPlacement{DaemonID: out.DaemonID}, nil
+			return &RunPlacement{DaemonID: out.DaemonID, Pool: ds.Pool}, nil
+		}
+		if out.Exhausted {
+			return nil, errPoolExhausted{reason: out.Reason}
 		}
 		if !out.Waiting {
 			logger.Info("[Workflow Runtime] Placement pinned no machine; leaving the selector unpinned", "scope", scope)
@@ -199,6 +221,10 @@ func placeStructuralDaemon(ctx workflow.Context, chatID, workflowID, scope strin
 // spawned agents run on the same context and key by their own workflow id.
 type runPlacements struct {
 	byKey map[string]*placementEntry
+	// preflights is each node's preflight state (node_preflight.go): the
+	// machines it failed on and the one it moved to. Nil until a node with
+	// a preflight starts.
+	preflights map[string]*nodePreflightEntry
 }
 
 // placementEntry is one node's placement: done is set once it is decided, so

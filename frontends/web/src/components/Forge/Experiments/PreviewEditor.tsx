@@ -18,6 +18,7 @@ import { setChangePreviewRequest } from "@/services/controlPlane/changes/changes
 import type { Change, ChangePreviewInput } from "@/services/controlPlane/changes/changesTypes";
 
 import { FIELD } from "../controlStyles";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import type { ChangeWrite } from "./WhoGetsIt";
 
 interface Row extends ChangePreviewInput {
@@ -30,6 +31,7 @@ const rowsOf = (change: Change): Row[] => change.preview.map((e) => ({ rowKey: `
 export function PreviewEditor({ change, busy, onWrite }: { change: Change; busy: string | null; onWrite: ChangeWrite }) {
   const writes = useChangeWrites();
   const id = useId();
+  const lock = useObsReadOnly();
   const variants = change.declaration?.variants.map((v) => v.name) ?? [];
   const [rows, setRows] = useState<Row[]>(() => rowsOf(change));
   const [seen, setSeen] = useState(`${change.id}@${change.revision}`);
@@ -113,7 +115,7 @@ export function PreviewEditor({ change, busy, onWrite }: { change: Change; busy:
 
       {(dirty || (change.mode === "off" && rows.length > 0)) && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" size="sm" onClick={() => void save()} disabled={busy !== null} loading={busy === "Save preview list"} data-testid="preview-save">
+          <Button variant="outline" size="sm" onClick={() => void save()} disabled={busy !== null || lock.readOnly} title={lock.readOnly ? lock.reason : undefined} loading={busy === "Save preview list"} data-testid="preview-save">
             Save preview list
           </Button>
           {change.mode === "off" && (

@@ -227,21 +227,27 @@ func TestDetectRefusesTheDesktopAppsInstalls(t *testing.T) {
 	link := filepath.Join(root, "usr-local-bin-reliant")
 	require.NoError(t, os.Symlink(mac, link))
 
+	// The stamps and the managed-host predicate come before selfupdate's
+	// container probe, so these hold on any host.
+	for _, path := range []string{winCopy, nsisCopy} {
+		in, err := selfupdate.Detect(selfupdate.DetectOptions{Path: path})
+		require.NoError(t, err)
+		require.Equal(t, selfupdate.Stamped, in.Kind, "%s: %s", path, in.Reason)
+		require.Equal(t, OwnerDesktopApp, in.Owner)
+	}
+	in, err := selfupdate.Detect(selfupdate.DetectOptions{Path: own, Managed: ManagedHost(true)})
+	require.NoError(t, err)
+	require.Equal(t, selfupdate.Managed, in.Kind, "a cloud machine's binary is the platform's wherever it is")
+
+	// The path rules run only after it.
+	plainHost(t)
 	for path, want := range map[string]selfupdate.Kind{
-		mac: selfupdate.Bundle, deb: selfupdate.Bundle, link: selfupdate.Bundle,
-		winCopy: selfupdate.Stamped, nsisCopy: selfupdate.Stamped, own: selfupdate.SelfOwned,
+		mac: selfupdate.Bundle, deb: selfupdate.Bundle, link: selfupdate.Bundle, own: selfupdate.SelfOwned,
 	} {
 		in, err := selfupdate.Detect(selfupdate.DetectOptions{Path: path})
 		require.NoError(t, err)
 		require.Equal(t, want, in.Kind, "%s: %s", path, in.Reason)
-		if want == selfupdate.Stamped {
-			require.Equal(t, OwnerDesktopApp, in.Owner)
-		}
 	}
-
-	in, err := selfupdate.Detect(selfupdate.DetectOptions{Path: own, Managed: ManagedHost(true)})
-	require.NoError(t, err)
-	require.Equal(t, selfupdate.Managed, in.Kind, "a cloud machine's binary is the platform's wherever it is")
 }
 
 // The marker the desktop app writes names the owner Advice recognises.

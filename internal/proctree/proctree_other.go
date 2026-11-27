@@ -26,7 +26,7 @@ func (t *Tree) recreateCgroup(*exec.Cmd, error) {}
 
 // prepareGoTmp gives a command no GOTMPDIR of its own outside Linux: nothing
 // there proves when its processes are gone.
-func (t *Tree) prepareGoTmp(*exec.Cmd) {}
+func (t *Tree) prepareGoTmp(*exec.Cmd, uint64) {}
 
 func (t *Tree) closeFD() {}
 

@@ -4,6 +4,7 @@ package app
 
 import (
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	"github.com/reliant-labs/reliant/internal/workflowcheck"
@@ -19,7 +20,7 @@ import (
 //     re-dispatches them to a live replica rather than waiting out their
 //     heartbeat timeout (workersetup.Worker). It is also the node whose
 //     Ready ("polling") holds the process's readiness until it polls.
-//  2. workflow_event_relay, trigger_delivery_relay, workflow_check_syncer, account_usage_poller,
+//  2. workflow_event_relay, trigger_delivery_relay, merge_queue, workflow_check_syncer, account_usage_poller,
 //     write_ledger_prune, ledger_retention, project_purge: the background
 //     loops, which take no Temporal tasks; each ends with its context.
 //  3. account_recorder: after every loop, because the activities record into
@@ -59,6 +60,13 @@ type Worker struct {
 	TemporalWorker    *workersetup.Worker
 	Relay             *workflowevent.Relay
 	TriggerDeliveries *TriggerDeliveryRelay
+	// RecordDue fires record_due triggers from the due scan; nil while
+	// pipeline.enabled is off.
+	RecordDue recorddue.Service
+	// MergeQueue drives the Reliant merge queue of every enrolled
+	// repository this worker leads (internal/mergequeue); nil, and nothing
+	// runs, while pipeline.enabled is off. A background loop like Relay.
+	MergeQueue *MergeQueue
 	// Checks writes the GitHub check runs workflows' `check:` blocks
 	// declare (workflowcheck), a background loop like Relay.
 	Checks *workflowcheck.Syncer

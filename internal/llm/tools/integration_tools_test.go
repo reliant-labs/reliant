@@ -43,6 +43,27 @@ func TestExposedActionIsRegisteredAsATool(t *testing.T) {
 	assert.True(t, hasURL, "the manifest's params are the tool's schema")
 }
 
+func TestSheetsWriteToolSchemasKeepAllManifestParameters(t *testing.T) {
+	m, err := catalog.MustBuiltin().Manifest("google_sheets", 1)
+	require.NoError(t, err)
+	for _, a := range m.GetActions() {
+		if a.GetId() != "values.append" && a.GetId() != "values.update" {
+			continue
+		}
+		t.Run(a.GetId(), func(t *testing.T) {
+			tool := NewToolsFactory(nil).GetToolByName(manifest.ToolName(m, a), nil)
+			require.NotNil(t, tool)
+			schema := tool.ParamSchema()
+			require.NotNil(t, schema.Properties)
+			props := a.GetParams().AsMap()["properties"].(map[string]any)
+			for name := range props {
+				_, exists := schema.Properties.Get(name)
+				assert.True(t, exists, "manifest parameter %s must remain visible to models and workflow bindings", name)
+			}
+		})
+	}
+}
+
 func TestHTTPToolRequiresPermissionBecauseItMutates(t *testing.T) {
 	tool := NewToolsFactory(nil).GetToolByName("http__request", nil)
 	require.NotNil(t, tool)

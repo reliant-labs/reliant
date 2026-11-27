@@ -1,0 +1,26 @@
+name: low_risk_pass_enqueues_with_no_model
+description: "pr.next passes a low-risk head itself (rule no_model_low_risk) and answers enqueue: no reviewer, no fixer, straight to the queue."
+inputs:
+  repository: acme/app
+  number: 7
+events:
+  - node: decide
+    output:
+      is_error: false
+      data:
+        next: enqueue
+        head: 0123456789abcdef0123456789abcdef01234567
+        reason: "rule no_model_low_risk"
+        record_id: rec-7
+        repository: acme/app
+        number: 7
+        shadow: false
+        findings: []
+        blockers: []
+        evidence: {}
+  - node: enqueue
+    output: {is_error: false, data: {queued: true, reason: admitted}}
+expect:
+  outcome: completed
+  completed: [decide, enqueue]
+  not_reached: [review, verdict, wt, fix, push, pushed, close, escalate]

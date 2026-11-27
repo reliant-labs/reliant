@@ -133,13 +133,13 @@ export function LiveSecretsSection({
 
   const environmentId = target.kind === "lookup" ? target.environmentId : null;
 
-  const managed = useManagedSecrets(projectId, name, target);
+  const managed = useManagedSecrets(name, target);
   const versions = useManagedSecretVersions(projectId, name, environmentId, selectedSecret);
 
-  const setMutation = useSetManagedSecret(projectId, name, environmentId);
-  const deleteMutation = useDeleteManagedSecret(projectId, name, environmentId);
-  const undeleteMutation = useUndeleteManagedSecret(projectId, name, environmentId);
-  const destroyMutation = useDestroyManagedSecret(projectId, name, environmentId);
+  const setMutation = useSetManagedSecret(environmentId);
+  const deleteMutation = useDeleteManagedSecret(environmentId);
+  const undeleteMutation = useUndeleteManagedSecret(environmentId);
+  const destroyMutation = useDestroyManagedSecret(environmentId);
 
   const [modal, setModal] = useState<{ existing: { name: string; currentVersion: number } | null } | null>(
     null
@@ -152,7 +152,7 @@ export function LiveSecretsSection({
   // dialog on that refusal and retries the write once the user confirms. A
   // confirmed step-up also refreshes the listing, whose grant drives the
   // header's countdown.
-  const invalidate = useInvalidateManagedSecrets(projectId, name);
+  const invalidate = useInvalidateManagedSecrets(environmentId);
   const gate = useStepUpGate(environmentId, { onGranted: invalidate });
 
   /**

@@ -45,7 +45,7 @@ func TestRecordRootRunID(t *testing.T) {
 					return true, nil
 				},
 			}
-			a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: store, Runs: storeRuns})
+			a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: store, Triggers: &MockStatusTriggers{}, Runs: storeRuns})
 			env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 			record := func(ctx context.Context, in WorkflowStatusInput) error {
 				a.recordRootRunID(ctx, in)
