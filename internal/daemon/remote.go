@@ -9,7 +9,22 @@ import (
 
 // Timeouts (milliseconds) used for different operation categories.
 const (
-	timeoutFSStat    int32 = 5_000   // 5s for stat, list_dir
+	// timeoutFSMeta is stat, list_dir, mkdir and delete. RemoteClient is the
+	// worker's file tools (view, write, edit) reaching the run's machine, so
+	// these calls gate a tool call, not a UI poll: the stat in front of every
+	// write and edit decides whether the edit happens at all. They get the
+	// budget of the write that follows them.
+	//
+	// They were 5s. A stat is microseconds on disk, but its round trip is
+	// not: on a machine whose CPUs are saturated (load 50-100 on 48 cores,
+	// every heavy slot held) the request and its reply wait on a busy
+	// daemon and its stream, and in prod 34 of 31,552 fs.stat round trips
+	// in 48h hit the 5s wall, 38 more took 4-4.9s, and a retry moments
+	// later succeeded every time. Each wall hit failed an edit or write
+	// that a 30s read or patch on the same machine would have completed
+	// (obs d76eb00b, 948d47c3, 43ae8b5c). A machine that is not connected
+	// still fails at once (no responders), never by waiting this out.
+	timeoutFSMeta    int32 = 30_000  // 30s for stat, list_dir, mkdir, delete
 	timeoutFSDefault int32 = 30_000  // 30s for most FS ops
 	timeoutFSSearch  int32 = 60_000  // 60s for search/glob/find_replace
 	timeoutExecRun   int32 = 600_000 // 10min for synchronous command execution
@@ -210,7 +225,7 @@ type statFileRequest struct {
 
 func (r *RemoteClient) StatFile(ctx context.Context, path string) (*FileStat, error) {
 	var resp FileStat
-	if err := r.send(ctx, "fs.stat", statFileRequest{Path: path}, &resp, timeoutFSStat); err != nil {
+	if err := r.send(ctx, "fs.stat", statFileRequest{Path: path}, &resp, timeoutFSMeta); err != nil {
 		return nil, err
 	}
 	return &resp, nil
@@ -225,7 +240,7 @@ func (r *RemoteClient) ListDirectory(ctx context.Context, path string) ([]DirEnt
 		Path    string     `json:"path"`
 		Entries []DirEntry `json:"entries"`
 	}
-	if err := r.send(ctx, "fs.list_dir", listDirRequest{Path: path}, &resp, timeoutFSStat); err != nil {
+	if err := r.send(ctx, "fs.list_dir", listDirRequest{Path: path}, &resp, timeoutFSMeta); err != nil {
 		return nil, err
 	}
 	return resp.Entries, nil
@@ -276,7 +291,7 @@ type mkdirRequest struct {
 }
 
 func (r *RemoteClient) CreateDirectory(ctx context.Context, path string) error {
-	return r.send(ctx, "fs.mkdir", mkdirRequest{Path: path}, nil, timeoutFSStat)
+	return r.send(ctx, "fs.mkdir", mkdirRequest{Path: path}, nil, timeoutFSMeta)
 }
 
 type deletePathRequest struct {
@@ -284,7 +299,7 @@ type deletePathRequest struct {
 }
 
 func (r *RemoteClient) DeletePath(ctx context.Context, path string) error {
-	return r.send(ctx, "fs.delete", deletePathRequest{Path: path}, nil, timeoutFSStat)
+	return r.send(ctx, "fs.delete", deletePathRequest{Path: path}, nil, timeoutFSMeta)
 }
 
 // ---------------------------------------------------------------------------
