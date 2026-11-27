@@ -10,8 +10,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/mergequeue/candidate"
-	"github.com/reliant-labs/reliant/internal/mergequeue/gitport"
+	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
 )
 
 // built is a batch with a candidate to gate.
@@ -20,8 +19,12 @@ type built struct {
 	entries []*core.QueueEntry
 	// heads are what lands for each entry, by entry id: the reviewed head,
 	// or a regenerated entry's new head.
-	heads   map[string]string
-	trees   []string
+	heads map[string]string
+	trees []string
+	// machine is the gate pool member that built the candidate
+	// (buildjob BuildResult.Machine): its gate is tried there first, where
+	// the candidate is already fetched. In memory only.
+	machine string
 	verdict Verdict
 	result  GateResult
 	// rerunOfRed is the red batch this one reruns on the same tree: a pass
@@ -62,7 +65,7 @@ func (r *round) build(ctx context.Context, entries []*core.QueueEntry, kind core
 	v := r.newVerdict()
 
 	byNumber := map[int]*core.QueueEntry{}
-	cands := make([]candidate.Entry, 0, len(entries))
+	cands := make([]buildjob.Entry, 0, len(entries))
 	for _, e := range entries {
 		rec, err := r.record(ctx, e.RecordID)
 		if err != nil {
@@ -72,18 +75,25 @@ func (r *round) build(ctx context.Context, entries []*core.QueueEntry, kind core
 			return nil, r.abandon(ctx, batch, v, fmt.Errorf("entry %s: no PR record %s", e.ID, e.RecordID))
 		}
 		byNumber[rec.Number] = e
-		cands = append(cands, candidate.Entry{Repo: r.gh, Number: rec.Number, Head: e.HeadSHA, Title: rec.Title})
+		cands = append(cands, buildjob.Entry{Number: rec.Number, Head: e.HeadSHA, Title: rec.Title})
 	}
-	r.wouldPush = nil
-	cand, ejections, err := candidate.Build(ctx, candidate.Ports{
-		Git: r.wd.Git, GitHub: r.wd.GitHub, Remote: r.wd.Remote, Runner: r.s.deps.Regen,
-	}, r.base, cands, candidate.ConfigFor(batch.ID, r.cfg))
+	cand, err := r.s.deps.Builder.Build(ctx, r.repo, buildjob.BuildRequest{
+		Repository: r.repo.Repository, BatchID: batch.ID, Base: r.base, Entries: cands,
+		Generated: slices.Clone(r.cfg.Generated), Regen: r.cfg.Regen, Shadow: r.shadow,
+	})
 	if err != nil {
 		return nil, r.abandon(ctx, batch, v, fmt.Errorf("build batch %s: %w", batch.ID, err))
 	}
-	v.WouldPush = r.wouldPush
+	if err := checkBuild(r.base, cands, cand); err != nil {
+		return nil, r.abandon(ctx, batch, v, fmt.Errorf("build batch %s: %w", batch.ID, err))
+	}
+	if r.shadow {
+		for _, p := range cand.WouldPush {
+			v.WouldPush = append(v.WouldPush, WouldPush{Ref: p.Ref, SHA: p.SHA})
+		}
+	}
 
-	for _, ej := range ejections {
+	for _, ej := range cand.Ejections {
 		e := byNumber[ej.Entry.Number]
 		reason, cause, ok := ejectReason(ej.Reason)
 		if !ok {
@@ -104,7 +114,7 @@ func (r *round) build(ctx context.Context, entries []*core.QueueEntry, kind core
 		return nil, err
 	}
 
-	b := &built{batch: batch, heads: map[string]string{}, trees: cand.Trees, verdict: v}
+	b := &built{batch: batch, heads: map[string]string{}, trees: cand.Trees, machine: cand.Machine, verdict: v}
 	for _, ce := range cand.Included {
 		e := byNumber[ce.Number]
 		b.entries = append(b.entries, e)
@@ -155,7 +165,8 @@ func (r *round) abandon(ctx context.Context, batch *core.QueueBatch, v Verdict, 
 
 // recordGeneratedOnly writes the regenerated head's verdict: the reviewed
 // head's, under the rule generated_only (§3.2 step 2), so the PR at its new
-// head is admissible without another review.
+// head is admissible without another review. It carries the reviewed
+// verdict's activation and machine, which the land grant is judged on.
 func (r *round) recordGeneratedOnly(ctx context.Context, e *core.QueueEntry, newHead string) error {
 	st := r.s.deps.Store
 	reviewed, err := st.LatestPRHeadVerdict(ctx, e.RecordID, e.HeadSHA)
@@ -169,6 +180,9 @@ func (r *round) recordGeneratedOnly(ctx context.Context, e *core.QueueEntry, new
 		OrgID: r.repo.OrgID, ProjectID: r.repo.ProjectID, RecordID: e.RecordID, HeadSHA: newHead, Round: 1,
 		Verdict: core.PRHeadVerdictPass, Rule: core.PRVerdictRuleGeneratedOnly, RiskTier: reviewed.RiskTier,
 		RequiredDecisions: reviewed.RequiredDecisions, ReviewerPrincipal: QueuePrincipal,
+		// The reviewed head's activation and machine: the land grant of a
+		// regenerated head is the reviewing run's, never the queue's own.
+		TriggerID: reviewed.TriggerID, DaemonID: reviewed.DaemonID,
 	})
 	if errors.Is(err, core.ErrPipelineVerdictExists) {
 		return nil
@@ -190,6 +204,9 @@ func (r *round) gate(ctx context.Context, b *built, attempt int, avoid []string,
 		RepoID: r.repo.ID, BatchID: b.batch.ID, Attempt: attempt,
 		CandidateRef: strings.TrimPrefix(b.batch.CandidateRef, "refs/heads/"), CandidateSHA: b.batch.CandidateSHA,
 		BaseSHA: b.batch.BaseSHA, Gate: r.cfg.Gate, Shadow: r.shadow, AvoidMachines: avoid,
+	}
+	if !slices.Contains(avoid, b.machine) {
+		req.PreferMachine = b.machine
 	}
 	res, err := r.s.deps.Gate.Run(ctx, req)
 	if err != nil {
@@ -352,32 +369,123 @@ func (r *round) land(ctx context.Context, batch *core.QueueBatch, v Verdict) err
 		heads[rg.EntryID] = rg.NewHead
 	}
 	var active []*core.QueueEntry
+	started := false
 	for _, e := range entries {
 		if e.State == core.QueueEntryBatched || e.State == core.QueueEntryLanded {
 			active = append(active, e)
+		}
+		started = started || e.State == core.QueueEntryLanded
+	}
+	if !started {
+		// Before the first squash merge, every head's land grant again: one
+		// revoked since admission stops the whole batch. Once a merge is
+		// made, the lander finishes what the gate proved.
+		refused, err := r.landRefusals(ctx, active)
+		if err != nil {
+			return err
+		}
+		if len(refused) > 0 {
+			return r.abandonUngranted(ctx, batch, v, refused)
 		}
 	}
 	return r.s.lander.Land(ctx, LandRequest{Repo: r.repo, Batch: batch, Entries: active, Heads: heads, Trees: trees})
 }
 
-// shadowGit is the queue's git in shadow mode: it pushes only the candidate
-// refs (refs/heads/reliant-queue/*) and records every other push (a regen
-// commit to a PR's branch) instead of making it. Shadow makes no other
-// GitHub write.
-type shadowGit struct {
-	gitport.Port
-	round *round
+// landRefusals judges each entry's land grant on the verdict that admitted
+// it: its reviewed head's (a regenerated entry's generated_only verdict
+// carries the same activation and machine).
+func (r *round) landRefusals(ctx context.Context, entries []*core.QueueEntry) ([]LandRefusal, error) {
+	var out []LandRefusal
+	for _, e := range entries {
+		v, err := r.s.deps.Store.LatestPRHeadVerdict(ctx, e.RecordID, e.HeadSHA)
+		if err != nil {
+			return nil, err
+		}
+		if v == nil || v.Verdict != core.PRHeadVerdictPass {
+			out = append(out, LandRefusal{EntryID: e.ID, Head: e.HeadSHA, Reason: "no pass verdict on " + e.HeadSHA})
+			continue
+		}
+		ref, err := landGranted(ctx, r.s.deps.Authorizer, r.repo, v)
+		if err != nil {
+			return nil, err
+		}
+		if !ref.Admissible() {
+			out = append(out, LandRefusal{EntryID: e.ID, Head: e.HeadSHA, Reason: ref.Reason})
+		}
+	}
+	return out, nil
+}
+
+// abandonUngranted gives up a passed batch an entry of which may no longer
+// land: nothing merges, the refusals are recorded in its verdict, and its
+// entries wait again (where admission refuses the ungranted ones).
+func (r *round) abandonUngranted(ctx context.Context, batch *core.QueueBatch, v Verdict, refused []LandRefusal) error {
+	v.LandNotGranted = refused
+	v.Note = fmt.Sprintf("abandoned before landing: %d of its entries' approvers no longer hold land", len(refused))
+	if _, err := r.s.deps.Store.SetQueueBatchState(ctx, batch.ID, core.QueueBatchPassed, core.QueueBatchAbandoned,
+		core.QueueBatchUpdate{VerdictJSON: v.json()}); err != nil {
+		if errors.Is(err, core.ErrPipelineVersionConflict) {
+			return nil
+		}
+		return err
+	}
+	if _, err := r.s.deps.Store.RequeueQueueEntries(ctx, batch.ID); err != nil {
+		return err
+	}
+	r.s.logger.WarnContext(ctx, "merge queue batch abandoned before landing: a land grant was revoked",
+		"repo_id", r.repo.ID, "batch_id", batch.ID, "refused", len(refused), "reason", refused[0].Reason)
+	return nil
 }
 
 // QueueRefPrefix is the namespace of the queue's candidate refs, the one
-// GitHub write shadow mode makes.
+// GitHub write a shadow build makes.
 const QueueRefPrefix = "refs/heads/reliant-queue/"
 
-// Push implements gitport.Port.
-func (g *shadowGit) Push(ctx context.Context, url string, in gitport.PushInput) error {
-	if strings.HasPrefix(in.Ref, QueueRefPrefix) {
-		return g.Port.Push(ctx, url, in)
+// checkBuild holds a daemon's build report to the request: the daemon runs
+// on a user's machine, so its report is checked before the queue records
+// it. Every included or ejected entry is one the batch asked for, at the
+// head asked (a regenerated entry's new head is reported separately), the
+// candidate is on the batch's queue ref, and there is one tree per included
+// entry.
+func checkBuild(base string, asked []buildjob.Entry, res buildjob.BuildResult) error {
+	heads := map[int]string{}
+	for _, e := range asked {
+		heads[e.Number] = e.Head
 	}
-	g.round.wouldPush = append(g.round.wouldPush, WouldPush{Ref: in.Ref, SHA: in.SHA})
+	regen := map[int]string{}
+	for _, rg := range res.Regenerated {
+		if heads[rg.Entry.Number] != rg.Entry.Head {
+			return fmt.Errorf("the build regenerated #%d at %s, which the batch did not ask for", rg.Entry.Number, rg.Entry.Head)
+		}
+		regen[rg.Entry.Number] = rg.NewHead
+	}
+	seen := map[int]bool{}
+	for _, e := range res.Included {
+		want, ok := heads[e.Number]
+		if nn, regenerated := regen[e.Number]; regenerated {
+			want = nn
+		}
+		if !ok || e.Head != want || seen[e.Number] {
+			return fmt.Errorf("the build included #%d at %s, which the batch did not ask for", e.Number, e.Head)
+		}
+		seen[e.Number] = true
+	}
+	for _, ej := range res.Ejections {
+		if _, ok := heads[ej.Entry.Number]; !ok || seen[ej.Entry.Number] {
+			return fmt.Errorf("the build ejected #%d, which the batch did not ask for", ej.Entry.Number)
+		}
+		seen[ej.Entry.Number] = true
+	}
+	if len(res.Included) == 0 {
+		return nil
+	}
+	switch {
+	case res.Base != base:
+		return fmt.Errorf("the build started from %s, not %s", res.Base, base)
+	case res.Commit == "" || !strings.HasPrefix(res.Ref, QueueRefPrefix):
+		return fmt.Errorf("the build pushed %q to %q, outside the queue's refs", res.Commit, res.Ref)
+	case len(res.Trees) != len(res.Included):
+		return fmt.Errorf("the build reported %d trees for %d entries", len(res.Trees), len(res.Included))
+	}
 	return nil
 }

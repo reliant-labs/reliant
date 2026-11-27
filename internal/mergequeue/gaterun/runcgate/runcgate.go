@@ -10,8 +10,9 @@
 // shadow.
 //
 // It is as contained as runc allows without root on the host:
-//   - no host path is mounted except the grype database, read-only; the tree
-//     is copied into a per-gate volume, and the output is copied back out;
+//   - no host path is mounted except the grype database and the machine's
+//     trusted Go build cache, both read-only; the tree is copied into a
+//     per-gate volume, and the output is copied back out;
 //   - no host engine socket, no privileges, every capability dropped,
 //     no-new-privileges, a read-only root filesystem;
 //   - the environment is exactly the gate's (gaterun.GateEnv), checked after
@@ -41,7 +42,17 @@
 // missing docker engine together is a dedicated gate machine with sysbox,
 // where each gate gets isolation and a nested engine of its own.
 //
-//forge:exclude-contract: a per-machine gate backend implementing gaterun.Backend (the consumer's interface), driven through the docker CLI; its tests fake the CLI, so a generated mock buys nothing
+// The trusted Go build cache (Spec.TrustedGoCacheDir) is a different kind of
+// sharing. It is the machine's GOCACHE that only main's seeding writes,
+// bind-mounted read-only at gaterun.TrustedGoCacheMount; the gate image's
+// GOCACHEPROG (`forge cache prog --trusted`) reads it before the gate's own
+// GOCACHE and writes only to GOCACHE. A candidate cannot write the trusted
+// tier, so it can poison only its own overlay: unlike the warm cache volume,
+// this mount adds no cross-gate poisoning vector. It is mounted only when the
+// directory is absolute, a real directory (not a symlink) and neither group-
+// nor world-writable; otherwise the gate logs one line and runs without it.
+//
+//forge:exclude-contract: a per-machine gate backend implementing gatehost.Backend (the consumer's interface), driven through the docker CLI; its tests fake the CLI, so a generated mock buys nothing
 package runcgate
 
 import (
@@ -51,13 +62,17 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun/gatehost"
 )
 
 // Labels on everything a gate creates; the leftover contract with the
@@ -94,7 +109,7 @@ type Backend struct {
 // New returns the runc backend over the docker CLI.
 func New() *Backend { return &Backend{} }
 
-var _ gaterun.Backend = (*Backend)(nil)
+var _ gatehost.Backend = (*Backend)(nil)
 
 func (b *Backend) exec(ctx context.Context, stdin io.Reader, stdout, stderr io.Writer, args ...string) (int, error) {
 	if b.run != nil {
@@ -132,19 +147,19 @@ func (b *Backend) docker(ctx context.Context, args ...string) (string, error) {
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// Isolation implements gaterun.Backend.
+// Isolation implements gatehost.Backend.
 func (b *Backend) Isolation() gaterun.Isolation { return gaterun.IsolationRunc }
 
-// Detect implements gaterun.Backend: a docker engine answers.
-func (b *Backend) Detect(ctx context.Context) gaterun.Availability {
+// Detect implements gatehost.Backend: a docker engine answers.
+func (b *Backend) Detect(ctx context.Context) gatehost.Availability {
 	v, err := b.docker(ctx, "version", "--format", "{{.Server.Version}}")
 	if err != nil {
-		return gaterun.Availability{Reason: "no docker engine: " + err.Error()}
+		return gatehost.Availability{Reason: "no docker engine: " + err.Error()}
 	}
-	return gaterun.Availability{Available: true, Reason: "docker " + v}
+	return gatehost.Availability{Available: true, Reason: "docker " + v}
 }
 
-// Preflight implements gaterun.Backend: the engine has the runc runtime.
+// Preflight implements gatehost.Backend: the engine has the runc runtime.
 func (b *Backend) Preflight(ctx context.Context) error {
 	out, err := b.docker(ctx, "info", "--format", "{{json .Runtimes}}")
 	if err != nil {
@@ -165,7 +180,7 @@ var (
 	cacheVolumePattern = regexp.MustCompile(`^reliant-gate-cache-[a-z0-9_.-]{1,201}$`)
 )
 
-func validate(s gaterun.Spec) error {
+func validate(s gatehost.Spec) error {
 	bad := func(format string, a ...any) error {
 		return fmt.Errorf("%w: %s", ErrInvalidSpec, fmt.Sprintf(format, a...))
 	}
@@ -197,9 +212,9 @@ func names(runID string) (container, volume string) {
 }
 
 // createArgs is the `docker create` of one gate. Every value is explicit: no
-// host path but the read-only database, no inherited variable, no
-// privilege.
-func createArgs(s gaterun.Spec) []string {
+// host path but the read-only database and trusted Go cache (Run checks the
+// cache first), no inherited variable, no privilege.
+func createArgs(s gatehost.Spec) []string {
 	ctr, vol := names(s.RunID)
 	args := []string{
 		"create", "--name", ctr, "--runtime", "runc",
@@ -222,6 +237,9 @@ func createArgs(s gaterun.Spec) []string {
 	if s.VulnDBDir != "" {
 		args = append(args, "--mount", "type=bind,source="+s.VulnDBDir+",target="+gaterun.VulnDBMount+",readonly")
 	}
+	if s.TrustedGoCacheDir != "" {
+		args = append(args, "--mount", "type=bind,source="+s.TrustedGoCacheDir+",target="+gaterun.TrustedGoCacheMount+",readonly")
+	}
 	for _, kv := range s.Env {
 		args = append(args, "--env", kv)
 	}
@@ -229,48 +247,56 @@ func createArgs(s gaterun.Spec) []string {
 	return append(args, s.Command[1:]...)
 }
 
-// Run implements gaterun.Backend.
-func (b *Backend) Run(ctx context.Context, s gaterun.Spec) (gaterun.Result, error) {
+// Run implements gatehost.Backend.
+func (b *Backend) Run(ctx context.Context, s gatehost.Spec) (gatehost.Result, error) {
 	if err := validate(s); err != nil {
-		return gaterun.Result{}, err
+		return gatehost.Result{}, err
 	}
 	ctr, vol := names(s.RunID)
 	labels := []string{"--label", LabelRunID + "=" + s.RunID, "--label", LabelBackend + "=runc"}
 	if _, err := b.docker(ctx, append(append([]string{"volume", "create"}, labels...), vol)...); err != nil {
-		return gaterun.Result{}, err
+		return gatehost.Result{}, err
 	}
 	stdout, stderr := orDiscard(s.Stdout), orDiscard(s.Stderr)
 	if s.CacheVolume != "" {
 		if err := b.ensureCache(ctx, s.CacheVolume); err != nil {
-			return gaterun.Result{}, err
+			return gatehost.Result{}, err
 		}
 		_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: warm cache volume %s (%s) at %s\n", s.RunID, s.CacheVolume, b.volumeSize(ctx, s.CacheVolume), gaterun.CacheMount)
 		defer func() {
 			_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: warm cache volume %s is %s after the gate\n", s.RunID, s.CacheVolume, b.volumeSize(context.WithoutCancel(ctx), s.CacheVolume))
 		}()
 	}
+	if s.TrustedGoCacheDir != "" {
+		if err := checkTrustedGoCache(s.TrustedGoCacheDir); err != nil {
+			_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: trusted Go cache not mounted, the gate builds on its own cache: %v\n", s.RunID, err)
+			s.TrustedGoCacheDir = ""
+		} else {
+			_, _ = fmt.Fprintf(stdout, "reliant-gate: %s: trusted Go cache %s read-only at %s\n", s.RunID, s.TrustedGoCacheDir, gaterun.TrustedGoCacheMount)
+		}
+	}
 	if _, err := b.docker(ctx, createArgs(s)...); err != nil {
-		return gaterun.Result{}, err
+		return gatehost.Result{}, err
 	}
 	if err := b.checkEnv(ctx, ctr, s); err != nil {
-		return gaterun.Result{}, err
+		return gatehost.Result{}, err
 	}
 	// -a: the tree is owned by the image's user (the gate image runs as a
 	// non-root user), not by the host uid that fetched it, so the gate can
 	// write in its own checkout.
 	if _, err := b.docker(ctx, "cp", "-a", strings.TrimRight(s.SourceDir, "/")+"/.", ctr+":"+gaterun.SrcDir); err != nil {
-		return gaterun.Result{}, err
+		return gatehost.Result{}, err
 	}
 
 	wctx, cancel := context.WithTimeout(ctx, s.Limits.Wall)
 	defer cancel()
 	start := time.Now()
 	code, attachErr := b.exec(wctx, nil, stdout, stderr, "start", "--attach", ctr)
-	res := gaterun.Result{Class: gaterun.ClassUnproven, ExitCode: -1, Duration: time.Since(start)}
+	res := gatehost.Result{Class: gaterun.ClassUnproven, ExitCode: -1, Duration: time.Since(start)}
 	if wctx.Err() != nil {
 		b.kill(ctx, ctr)
 		if ctx.Err() != nil {
-			return gaterun.Result{}, ctx.Err()
+			return gatehost.Result{}, ctx.Err()
 		}
 		res.TimedOut, res.Reason = true, fmt.Sprintf("the gate ran past its %s wall limit", s.Limits.Wall)
 		return res, nil
@@ -292,6 +318,34 @@ func (b *Backend) Run(ctx context.Context, s gaterun.Spec) (gaterun.Result, erro
 		res.Class, res.ExitCode = gaterun.ClassifyExit(state.ExitCode), state.ExitCode
 	}
 	return res, nil
+}
+
+// checkTrustedGoCache says why dir must not be mounted as the trusted Go
+// cache, or nil. It must be an absolute, clean path that `--mount` cannot
+// misread (no comma), name a real directory rather than a symlink to one,
+// and be writable by its owner alone: a directory another user can write is
+// not a cache only main's seeding fills.
+func checkTrustedGoCache(dir string) error {
+	switch {
+	case !filepath.IsAbs(dir) || filepath.Clean(dir) != dir:
+		return fmt.Errorf("%q is not a clean absolute path", dir)
+	case strings.ContainsAny(dir, ",\"\n"):
+		return fmt.Errorf("%q holds a character a mount option cannot carry", dir)
+	}
+	fi, err := os.Lstat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return fmt.Errorf("%s does not exist", dir)
+	case err != nil:
+		return err
+	case fi.Mode()&fs.ModeSymlink != 0:
+		return fmt.Errorf("%s is a symlink", dir)
+	case !fi.IsDir():
+		return fmt.Errorf("%s is not a directory", dir)
+	case fi.Mode().Perm()&0o022 != 0:
+		return fmt.Errorf("%s is group- or world-writable (%s)", dir, fi.Mode().Perm())
+	}
+	return nil
 }
 
 type containerState struct {
@@ -358,7 +412,7 @@ func (b *Backend) volumeSize(ctx context.Context, name string) string {
 
 // checkEnv refuses a created container whose environment holds anything the
 // gate or its image did not declare.
-func (b *Backend) checkEnv(ctx context.Context, ctr string, s gaterun.Spec) error {
+func (b *Backend) checkEnv(ctx context.Context, ctr string, s gatehost.Spec) error {
 	allowed := map[string]bool{}
 	for _, kv := range s.Env {
 		allowed[kv] = true
@@ -397,7 +451,7 @@ func (b *Backend) kill(ctx context.Context, ctr string) {
 	_, _ = b.docker(kctx, "kill", ctr)
 }
 
-// CopyOut implements gaterun.Backend: `docker cp <ctr>:<path> -`, a tar
+// CopyOut implements gatehost.Backend: `docker cp <ctr>:<path> -`, a tar
 // stream, cut off past maxBytes.
 func (b *Backend) CopyOut(ctx context.Context, runID, path string, w io.Writer, maxBytes int64) error {
 	ctr, _ := names(runID)
@@ -416,7 +470,7 @@ func (b *Backend) CopyOut(ctx context.Context, runID, path string, w io.Writer, 
 	return nil
 }
 
-// Teardown implements gaterun.Backend: every container and volume labelled
+// Teardown implements gatehost.Backend: every container and volume labelled
 // with runID, in that order.
 func (b *Backend) Teardown(ctx context.Context, runID string) error {
 	filter := "label=" + LabelRunID + "=" + runID
