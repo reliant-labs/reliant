@@ -15,7 +15,7 @@ import { shortVersion } from "../Releases/releaseModel";
 import { testIdParts } from "../Tests/flakyModel";
 import type { ProductAnalyticsHub } from "./consoleNavModel";
 import { consoleNavEntries } from "./consoleNavRegistry";
-import { ANALYTICS_TAB_LABELS, AUTH_TAB_LABELS, consolePath, OBS_NAV_LABELS, OBS_NAV_VIEWS, withSearch, type ConsolePage, type ObsNavView } from "./paths";
+import { ANALYTICS_TAB_LABELS, AUTH_TAB_LABELS, consolePath, OBS_NAV_LABELS, OBS_NAV_VIEWS, SITE_INSIGHTS_VIEW_LABELS, withSearch, type ConsolePage, type ObsNavView } from "./paths";
 
 export type Crumb = { label: string; href?: string };
 
@@ -38,7 +38,7 @@ export const PAGE_SUBTITLES: Readonly<Record<string, string>> = {
   usage: "What your app's hosting costs this month, per environment",
   events: "The product events and metrics your app sends",
   analytics: "Who your users are, what they do, and where they come from",
-  "speed-insights": "How fast each page loads and responds for real visitors",
+  "site-insights": "How fast, findable and accessible each page of your site is for real visitors",
   storage: "Your app's object storage buckets: files, uploads and assets",
   experiments: "Turn things on for some people, and compare versions",
 };
@@ -93,7 +93,9 @@ export function consoleCrumbs(project: string, page: ConsolePage, env: string, d
     case "analytics":
       return [{ label: "Analytics", href: href({ kind: "analytics" }) }, { label: ANALYTICS_TAB_LABELS[page.tab ?? "overview"] }];
     case "speed-insights":
-      return [{ label: "Observability" }, { label: "Speed insights" }];
+      return consoleCrumbs(project, { kind: "site-insights" }, env, dashboardTitle);
+    case "site-insights":
+      return [{ label: "Observability" }, { label: "Site insights", href: href({ kind: "site-insights" }) }, { label: SITE_INSIGHTS_VIEW_LABELS[page.view ?? "speed"] }];
     case "extension":
       return [{ label: consoleNavEntries().find((entry) => entry.id === page.id)?.label ?? page.segment }];
     case "tests":

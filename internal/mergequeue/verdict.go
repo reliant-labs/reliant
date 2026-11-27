@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/mergequeue/candidate"
+	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
 )
 
 // Verdict is queue_batches.verdict_json: what the queue decided about a
@@ -51,8 +51,20 @@ type Verdict struct {
 	WouldPush []WouldPush `json:"would_push,omitempty"`
 	// Flaky are the tests that failed and then passed on the same tree.
 	Flaky []string `json:"flaky,omitempty"`
+	// LandNotGranted are the entries whose approver no longer held the
+	// land capability when the batch was about to land: the batch was
+	// abandoned and nothing merged.
+	LandNotGranted []LandRefusal `json:"land_not_granted,omitempty"`
 	// Note says, for a person, what happened.
 	Note string `json:"note,omitempty"`
+}
+
+// LandRefusal is an entry refused the land capability before its batch
+// landed, and why.
+type LandRefusal struct {
+	EntryID string `json:"entry_id"`
+	Head    string `json:"head"`
+	Reason  string `json:"reason"`
 }
 
 // GateAttempt is one earlier gate of a batch.
@@ -132,13 +144,13 @@ func ParseVerdict(raw json.RawMessage) Verdict {
 //	regen_failed       → conflict, cause regen_failed
 //	not_generated_only → conflict, cause not_generated_only
 //	head_moved         → head_moved
-func ejectReason(r candidate.Reason) (reason core.QueueEjectReason, cause string, ok bool) {
+func ejectReason(r buildjob.Reason) (reason core.QueueEjectReason, cause string, ok bool) {
 	switch r {
-	case candidate.ReasonBatchConflict:
+	case buildjob.ReasonBatchConflict:
 		return "", "", false
-	case candidate.ReasonHeadMoved:
+	case buildjob.ReasonHeadMoved:
 		return core.QueueEjectHeadMoved, "", true
-	case candidate.ReasonRegenFailed, candidate.ReasonNotGeneratedOnly:
+	case buildjob.ReasonRegenFailed, buildjob.ReasonNotGeneratedOnly:
 		return core.QueueEjectConflict, string(r), true
 	default:
 		return core.QueueEjectConflict, "", true

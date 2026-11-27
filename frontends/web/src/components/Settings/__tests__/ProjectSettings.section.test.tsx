@@ -188,7 +188,7 @@ describe("Settings → Projects", () => {
     renderWithQuery(<ProjectsSection />);
 
     const row = await screen.findByTestId("settings-project-row-p-cloud");
-    expect(row).toHaveTextContent("On a cloud machine");
+    expect(row).toHaveTextContent("On a sandbox");
     expect(row).not.toHaveTextContent("/home/workspace");
   });
 

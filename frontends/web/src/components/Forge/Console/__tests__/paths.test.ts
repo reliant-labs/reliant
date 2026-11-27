@@ -23,12 +23,21 @@ import {
   orgPageOf,
   orgPath,
   pageOfObsView,
+  pageOfTarget,
   pinnedEnvOf,
   withSearch,
   type ConsolePage,
   type LegacyEnvSearch,
   type OrgPage,
 } from "../paths";
+
+it("round-trips the deprecated Speed insights target before the route redirects it", () => {
+  const path = "/forge/p/shop/speed-insights";
+  const parsed = consolePageOf(path)!;
+  expect(parsed).toEqual({ project: "shop", page: { kind: "speed-insights" } });
+  expect(pageOfTarget(parsed.page)).toEqual({ kind: "speed-insights" });
+  expect(consolePath(parsed.project, pageOfTarget(parsed.page))).toBe(path);
+});
 
 const PAGES: ConsolePage[] = [
   { kind: "overview" },
