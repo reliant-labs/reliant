@@ -37,10 +37,8 @@ type marker struct{ error }
 // TestRegisteredRulesAreConsulted pins the seam: a registered rule's verdict
 // wins over svcerr, ClassNone defers, and registration order breaks ties.
 func TestRegisteredRulesAreConsulted(t *testing.T) {
-	saved := rules.Load()
-	t.Cleanup(func() { rules.Store(saved) })
-	rules.Store(nil)
-
+	// Keep this test non-parallel so registration cannot overlap parallel tests.
+	// Leave existing rules intact; these rules only recognise this test's marker.
 	plain := errors.New("plain")
 	assert.Equal(t, svcerr.ClassServer, Classify(plain))
 
