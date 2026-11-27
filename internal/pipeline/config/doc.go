@@ -59,11 +59,44 @@
 // approval (the project's release_approval setting unless the env says
 // otherwise).
 //
+// # Gate stages
+//
+// The gate is a fixed sequence of built-in stages (owner decision D13,
+// 2026-11-26): lint, test, build, sbom_scan, always in that order, and a
+// failed stage stops the later ones. `gate.stages.<name>` overrides one with
+// `{run: "<cmd>"}` or turns it off with the exact string `off`; any other
+// string is an error, so `off` is never read as a command. `gate: "<cmd>"`
+// and `gate.run` are the test stage's command, as they were before stages
+// existed; writing gate.run and gate.stages.test both is an error. A stage not
+// written keeps its default for the project's kind ([Project.DefaultStages]):
+//
+//	       lint                test                       build                          sbom_scan
+//	forge  reliant forge lint  task ci:full or task test  reliant forge env build <env>  built-in scan, <env>'s vuln_gate
+//	Go     go vet ./...        go test ./...              go build ./...                 built-in scan, default policy
+//	Node   npm run lint        npm test                   npm run build                  built-in scan, default policy
+//
+// <env> is the release chain's first env, never pushed to. The default
+// sbom_scan is not a command: it is forge's SBOM and scan of the build, run
+// by the gate runner (kind builtin_scan); a `run` override of it is a repo
+// command under the same 0/1/2 exit contract as every stage.
+//
+// [Resolved].Gate.Stages lists all four with a State and a Source. off is a
+// choice the file made (or runner checks, which runs no stage); turning a
+// stage off or back on is a recorded setting change (`gate.stage.<name>`,
+// see [StageChanges]), and every report shows it as off, never as passed.
+// unavailable is a default with nothing to run in this project, such as a
+// Node repository without a lint script: nobody chose it, so it is neither
+// off nor passed and reports render it as unavailable with its Reason. The
+// stage defaults depend on the repository's tree, so [Config.ResolveFor]
+// takes the [Project] that [DetectProject] reads; [Config.Resolve] resolves
+// for an undetected project, whose lint and build are unavailable.
+//
 // # Gate detection
 //
 // [DetectGate] proposes a gate command from a repository's tree for the
-// enrolment screen. It only proposes: the user confirms or edits the command,
-// and the screen writes pipeline.yaml as a PR.
+// enrolment screen, and [DetectProject] the facts the stage defaults follow.
+// They only propose: the user confirms or edits the command, and the screen
+// writes pipeline.yaml as a PR.
 //
 // # Editors
 //

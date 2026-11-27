@@ -8,12 +8,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/openai/openai-go/v3"
 
+	"github.com/reliant-labs/reliant/internal/llm/drivers/catalogcache"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -27,6 +29,14 @@ const (
 	availabilityTTL        = 5 * time.Minute
 	availabilityFailureTTL = 30 * time.Second
 	availabilityTimeout    = 4 * time.Second
+	// availabilityMaxStale is how long a report past its TTL is still served
+	// while a background fetch replaces it (catalogcache): long enough that a
+	// person coming back to a chat within a working day never waits on
+	// /codex/models. Every stale answer triggers the refresh, so it serves one
+	// resolution at most; a model the account stopped serving meanwhile is
+	// caught by the refusal itself, whose 400 "model is not supported" evicts
+	// the report (forgetCatalogOnRefusal).
+	availabilityMaxStale = 6 * time.Hour
 )
 
 // codexModelsResponse is the subset of GET /codex/models consumed (see
@@ -52,15 +62,19 @@ type codexModelsResponse struct {
 	} `json:"models"`
 }
 
-type availabilityEntry struct {
-	report    registry.ProviderAvailability
-	err       error
-	fetchedAt time.Time
-}
-
 var (
-	availabilityMu    sync.Mutex
-	availabilityCache = map[string]availabilityEntry{}
+	// availabilityCache holds each account's /codex/models report. Resolution
+	// reads it on the request path (SendMessage, StartChat, every call_llm),
+	// so a due report is served stale and replaced in the background rather
+	// than waited for: in prod (2026-11-26) the synchronous refetch was about
+	// half of all SendMessage calls, p50 443ms, p95 1.1s.
+	availabilityCache = catalogcache.New[registry.ProviderAvailability](catalogcache.Policy{
+		TTL:        availabilityTTL,
+		MaxStale:   availabilityMaxStale,
+		FailureTTL: availabilityFailureTTL,
+		Timeout:    availabilityTimeout,
+		Verdict:    func(err error) bool { return errors.Is(err, registry.ErrCredentialRejected) },
+	})
 
 	// unknownSlugsLogged dedups the "slug has no catalog entry" log: one line per
 	// slug per process, so a new Codex model surfaces as a catalog TODO without
@@ -78,7 +92,8 @@ func (c *CodexClient) availabilityKey() string {
 }
 
 // ReportAvailability implements registry.AvailabilityReporter from the account's
-// /codex/models catalog (cached per backend and credential):
+// /codex/models catalog (cached per backend and credential, stale-while-revalidate;
+// see availabilityCache):
 //
 //   - slug maps to our catalog id by api_model;
 //   - visibility "hide" means not offered;
@@ -95,36 +110,39 @@ func (c *CodexClient) availabilityKey() string {
 // registry.CredentialRejectedError (the provider is unavailable), anything
 // else an outage callers fail open on.
 func (c *CodexClient) ReportAvailability(ctx context.Context) (registry.ProviderAvailability, error) {
-	key := c.availabilityKey()
+	return availabilityCache.Get(ctx, c.availabilityKey(), c.fetchAvailability)
+}
 
-	availabilityMu.Lock()
-	if entry, ok := availabilityCache[key]; ok {
-		ttl := availabilityTTL
-		if entry.err != nil {
-			ttl = availabilityFailureTTL
-		}
-		if time.Since(entry.fetchedAt) < ttl {
-			availabilityMu.Unlock()
-			return entry.report, entry.err
-		}
-	}
-	availabilityMu.Unlock()
-
-	fetchCtx, cancel := context.WithTimeout(ctx, availabilityTimeout)
-	defer cancel()
+// fetchAvailability asks the backend for the account's catalog.
+func (c *CodexClient) fetchAvailability(ctx context.Context) (registry.ProviderAvailability, error) {
 	var raw json.RawMessage
-	err := c.client.Get(fetchCtx, codexModelsPath+"?client_version="+CodexVersion, nil, &raw)
-	var report registry.ProviderAvailability
-	if err != nil {
-		err = modelsRequestError(err)
-	} else {
-		report, err = parseCodexModels(raw)
+	if err := c.client.Get(ctx, codexModelsPath+"?client_version="+CodexVersion, nil, &raw); err != nil {
+		return registry.ProviderAvailability{}, modelsRequestError(err)
 	}
+	return parseCodexModels(raw)
+}
 
-	availabilityMu.Lock()
-	availabilityCache[key] = availabilityEntry{report: report, err: err, fetchedAt: time.Now()}
-	availabilityMu.Unlock()
-	return report, err
+// forgetCatalogOnRefusal evicts the account's cached catalog when the backend
+// refused a request for its model ("The '<model>' model is not supported when
+// using Codex with a ChatGPT account."): the cached report offered a model the
+// account no longer serves, so the next resolution asks the backend again and
+// moves off it rather than repeating the refusal until the report expires.
+func (c *CodexClient) forgetCatalogOnRefusal(err error) {
+	if !isModelRefusal(err) {
+		return
+	}
+	availabilityCache.Evict(c.availabilityKey())
+	logging.Info("codex refused a model its cached catalog offered; catalog evicted", "model", c.options.Model.APIModel)
+}
+
+// isModelRefusal reports whether err is the Codex backend's 400 for a model
+// the account does not serve.
+func isModelRefusal(err error) bool {
+	var apiErr *openai.Error
+	if err == nil || !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusBadRequest {
+		return false
+	}
+	return strings.Contains(err.Error(), "model is not supported")
 }
 
 // modelsRequestError classifies a failed GET /codex/models. A 400, 401 or 403

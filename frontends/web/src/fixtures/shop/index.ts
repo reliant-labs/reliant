@@ -28,6 +28,7 @@ import type { Transport } from "@connectrpc/connect";
 import { createMockTransport, type MockScenario } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 import { AppDatabaseService } from "@/gen/controlplane/services/app_database/v1/app_database_pb";
+import { ChangesService } from "@/gen/controlplane/services/changes/v1/changes_pb";
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { StorageBrowserService } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
@@ -37,6 +38,7 @@ import { CoverageSourceService } from "@/gen/reliant/v1/coverage_source_pb";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 
 import { createFixtureTransport, defineFixturePack, type CreateFixtureTransportOptions, type FixturePack } from "../transport";
+import { changesHandlers } from "./handlers/changes";
 import { configScenarioHandlers } from "./handlers/config";
 import { consoleScenarioHandlers } from "./handlers/console";
 import { coverageSourceHandlers } from "./handlers/coverageSource";
@@ -69,7 +71,7 @@ export const SHOP_SERVE = { now: demoNow, readOnly: true, readOnlyMessage: SHOP_
  * the ones whose handlers scope themselves. The id prefix reads and writes
  * exactly these (__tests__/scope.test.tsx holds the list to the handlers).
  */
-export const SHOP_PACK_SERVICES: readonly DescService[] = [...DEMO_DEFAULT_SERVICES, OrganizationService, UserService, VulnerabilityService, TestsService, CoverageSourceService];
+export const SHOP_PACK_SERVICES: readonly DescService[] = [...DEMO_DEFAULT_SERVICES, OrganizationService, UserService, VulnerabilityService, TestsService, CoverageSourceService, ChangesService];
 
 /** Who the story is told for, and how its ids are minted (ShopPackOptions). */
 export interface ShopScenarioOptions {
@@ -92,7 +94,7 @@ export function shopScenario(fixtures?: ObservabilityApi, { scope = DEMO_SCOPE, 
   // first (handlers/scope.ts), defaults included, which is why the pack composes its own
   // defaults rather than declaring them as the pack's `defaults`.
   // The id prefix is the outermost layer: a request loses it before the scope check reads it, and an answer gains it last.
-  const handlers = withSpeedInsights({ ...defaultHandlers(), ...consoleScenarioHandlers(scope), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...organizationScenarioHandlers(), ...observabilityHandlers(story), ...staticSiteScenarioHandlers(scope), ...securityHandlers(undefined, scope), ...testsHandlers(undefined, scope), ...coverageSourceHandlers(scope) });
+  const handlers = withSpeedInsights({ ...defaultHandlers(), ...consoleScenarioHandlers(scope), ...configScenarioHandlers(), ...inventoryScenarioHandlers(), ...storageScenarioHandlers(), ...organizationScenarioHandlers(), ...observabilityHandlers(story), ...staticSiteScenarioHandlers(scope), ...securityHandlers(undefined, scope), ...testsHandlers(undefined, scope), ...coverageSourceHandlers(scope), ...changesHandlers(undefined, scope) });
   const scoped = withMessageRequests(scopedToDemo(handlers, DEMO_DEFAULT_SERVICES, scope));
   return { name: "shop", handlers: withIdPrefix(scoped, SHOP_PACK_SERVICES, idPrefix, new Set([scope.app])) as unknown as MockScenario["handlers"] };
 }

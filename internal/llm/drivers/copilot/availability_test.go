@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 )
@@ -84,9 +83,7 @@ func TestParseModels_RecordedAccountPolicyAndLimits(t *testing.T) {
 func TestAccountModels_FailureIsCachedAndReturned(t *testing.T) {
 	token := "gho_test_failure_cache"
 	key := tokenKey(token)
-	availabilityMu.Lock()
-	availabilityCache[key] = availabilityEntry{err: errors.New("boom"), fetchedAt: time.Now()}
-	availabilityMu.Unlock()
+	availabilityCache.Store(key, accountCatalog{}, errors.New("boom"))
 	defer EvictAvailabilityCache(token)
 
 	if _, err := accountModels(context.Background(), token); err == nil {
@@ -97,13 +94,10 @@ func TestAccountModels_FailureIsCachedAndReturned(t *testing.T) {
 func TestReportAvailability_DisabledCarriesSettingsHint(t *testing.T) {
 	token := "gho_test_report"
 	key := tokenKey(token)
-	availabilityMu.Lock()
-	availabilityCache[key] = availabilityEntry{
-		enabled:   map[string]bool{"claude-opus-5": false, "gpt-5-mini": true},
-		limits:    map[string]int{"gpt-5-mini": 400000},
-		fetchedAt: time.Now(),
-	}
-	availabilityMu.Unlock()
+	availabilityCache.Store(key, accountCatalog{
+		enabled: map[string]bool{"claude-opus-5": false, "gpt-5-mini": true},
+		limits:  map[string]int{"gpt-5-mini": 400000},
+	}, nil)
 	defer EvictAvailabilityCache(token)
 
 	client := &CopilotClient{options: llm.DriverOptions{ApiKey: token}}

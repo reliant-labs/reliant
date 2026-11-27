@@ -12,7 +12,8 @@ next to every selection, so a surprising test is one line away from its cause.
 
 It is the first thing to run before pushing. It does not replace the full lane
 (`task test`): that is what the release gate runs, and what a `go.mod` bump
-needs.
+needs (a forge pin bump alone selects by the forge packages it changes; "A
+forge pin move", below).
 
 It is also the test step of the **merge gate** (`task ci:merge`), whose other
 half is the **release gate** (`task release:gate`) that runs everything on main
@@ -168,15 +169,45 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | `frontends/web/e2e/**` | nothing (Playwright is separate) |
 | `electron/**` | the electron lane |
 | `docs/**`, `**/*.md`, `.github/**`, `research/**`, lint config | nothing, unless a test names the file |
-| `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate) |
+| `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate), unless the diff is a forge pin move alone (next row) |
+| a forge pin move alone: `go.mod`'s forge require, forge's `go.sum` lines, `forge.yaml`'s `forge_version`, and nothing else in those three files | Go: the packages that contain (or, under `-reach direct`, import) a forge package whose build changed between the two forge versions, and what names the files; forge-generate and docs-generate: full, as before (below) |
 | `package.json`, lockfiles at the root | **web and electron: full** |
 | `frontends/web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `frontends/web/src/test/setup.ts` | **web: full** (the merge gate runs the reached files; above), the demo build, and the renderer's release build |
 | `buf*.yaml` (root) | forge-generate only: the code it generates is in the diff and selects its own tests, or the no-op check fails |
 | `Taskfile.yml` | **forge-generate and docs-generate: full** (the tasks they run); the test lanes do not run through the Taskfile |
-| `forge.yaml` (the forge pin) | Go and forge-generate: full |
+| `forge.yaml` (the forge pin) | Go and forge-generate: full (Go narrows on a forge pin move alone, above) |
 | `proto/**` that is not a `.proto` | **Go and web: full** |
 | a deleted web module | the vitest files that still reach it (the graph resolves specifiers against the base tree's files too); its importers changed too and select their own |
 | anything else | **everything: full** |
+
+**A forge pin move.** A forge bump (`task pin:forge`) moves go.mod's
+`github.com/reliant-labs/forge` require, that module's `go.sum` lines and
+`forge.yaml`'s `forge_version`. Running the whole Go lane for it took
+reliant#3645's merge gate 41 minutes, and ran reliant#3711 out of the merge
+queue's 45-minute timeout. So when those three files change in exactly those
+lines (`detectForgePin` in `tools/test-affected/forgepin.go`; a `go` or
+`toolchain` line, a `replace`, or any other module's require or `go.sum` line
+does not count), the planner fetches forge's source at both versions (`go mod
+download`, from the module cache when it is there) and marks a forge package
+changed when a file its build reads differs: a non-test source of its
+directory, a cgo or assembly file, or anything under a `//go:embed` pattern's
+literal prefix. A forge package that imports a changed one, within forge, is
+changed too. Each changed forge package is then a code change like one of this
+module's: the packages whose test binary contains it run (under `-reach
+direct`, the merge gate's, those that import it by name, plus the transitive
+ones within `MG_REACH_CAP`), and each selection names the forge package and
+the two versions. Anything else, or any failure to tell (a download that
+fails, forge's own `go` directive moving), keeps the Go lane full and says why
+in its reasons. forge-generate and docs-generate run in full regardless: the
+pinned forge regenerates, and its no-op check catches drift.
+
+What no selected test covers is still compiled. The merge gate's `build`
+phase compiles every package whose build contains a changed forge package
+(the plan's `go.build`), and its `testbuild` phase compiles every test
+package of the module whatever was selected (`scripts/test-build.sh`), so a
+forge API change that breaks a package with no selected test fails the merge
+gate. The release gate on main runs the whole Go lane for every pin bump, as
+for every change.
 
 **Lockfiles.** Every lane tests against the `node_modules` already on disk,
 so none of them notices a lockfile a frozen install would reject. When a diff

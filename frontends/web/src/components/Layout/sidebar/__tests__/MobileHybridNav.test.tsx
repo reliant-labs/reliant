@@ -1,9 +1,11 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The phone's nav is the one hybrid model (U6e, owner: drilling in on a phone
- * brought back the old nav): the same rows, the same route-derived drill-ins
- * with their "‹ Area" header, read from the phone's own screens.
+ * The phone's nav is the shell's nav column (U6e, owner: "the mobile left
+ * nav, on chats, is the old nav"): the same header, rows and route-derived
+ * drill-ins with their "‹ Area" header, read from the phone's own screens.
+ * The header's live controls are stand-ins here (the drawer's own test,
+ * Mobile/__tests__/MobileNavDrawer.test.tsx, draws them for real).
  */
 
 import { fireEvent, render, screen } from "@testing-library/react";
@@ -18,6 +20,7 @@ import {
   mobileChatWorkflowPath,
   mobileInboxPath,
   mobileRunsPath,
+  mobileSearchPath,
   mobileSettingsPath,
   mobileWorkflowPath,
   mobileWorkflowsPath,
@@ -45,10 +48,30 @@ vi.mock("../../../inbox/InboxNavItem", () => ({
   ),
 }));
 
+vi.mock("../ProjectSwitcher", () => ({
+  OrgHeaderRow: ({ onSwitched }: { onSwitched?: (orgId: string) => void }) => (
+    <button type="button" data-testid="org-row" onClick={() => onSwitched?.("org-2")}>
+      Org
+    </button>
+  ),
+  ProjectSwitcherRow: ({ onPicked }: { onPicked?: () => void }) => (
+    <button type="button" data-testid="shell-switcher" onClick={() => onPicked?.()}>
+      Project
+    </button>
+  ),
+}));
+vi.mock("../../../Mobile/MobileNavChatList", () => ({
+  MobileNavChatList: ({ place, onOpen }: { place: string; onOpen: (href: string) => void }) => (
+    <button type="button" data-testid="mobile-nav-chat-list" data-place={place} onClick={() => onOpen("/m/chats/c9")}>
+      Chats
+    </button>
+  ),
+}));
+
 const { MobileHybridNav, desktopPathOfMobile } = await import("../MobileHybridNav");
 
-const renderAt = (pathname: string, onNavigate = vi.fn()) => {
-  render(<MobileHybridNav pathname={pathname} search={{}} onNavigate={onNavigate} />);
+const renderAt = (pathname: string, onNavigate = vi.fn(), onClose = vi.fn()) => {
+  render(<MobileHybridNav pathname={pathname} search={{}} onNavigate={onNavigate} onClose={onClose} />);
   return onNavigate;
 };
 
@@ -71,20 +94,35 @@ describe("desktopPathOfMobile", () => {
 });
 
 describe("the phone's nav", () => {
-  it("draws the desktop header's order: the org, Find, the project, then the rows", () => {
-    render(
-      <MobileHybridNav
-        pathname={mobileInboxPath()}
-        search={{}}
-        onNavigate={vi.fn()}
-        org={<div data-testid="org-slot" />}
-        project={<div data-testid="project-slot" />}
-      />,
-    );
-    const order = ["org-slot", "mobile-nav-find", "project-slot", "nav-top"].map((id) => screen.getByTestId(id));
+  it("is the shell's column, in its header's order: the org, Find, the project, then the rows", () => {
+    renderAt(mobileInboxPath());
+    const column = document.querySelector('[data-onboarding="left-sidebar"]');
+    expect(column).not.toBeNull();
+    const order = ["org-row", "nav-find", "shell-switcher", "nav-top"].map((id) => screen.getByTestId(id));
     for (let i = 1; i < order.length; i++) {
+      expect(column!.contains(order[i])).toBe(true);
       expect(order[i - 1].compareDocumentPosition(order[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
+  });
+
+  it("opens the phone's Search screen from Find (there is no command palette on /m/*)", () => {
+    const onNavigate = renderAt(mobileInboxPath());
+    fireEvent.click(screen.getByTestId("nav-find"));
+    expect(onNavigate).toHaveBeenLastCalledWith(mobileSearchPath());
+  });
+
+  it("closes the drawer on a project pick, which may leave the route as it is", () => {
+    const onClose = vi.fn();
+    const onNavigate = renderAt(mobileInboxPath(), vi.fn(), onClose);
+    fireEvent.click(screen.getByTestId("shell-switcher"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(onNavigate).not.toHaveBeenCalled();
+  });
+
+  it("leaves the old org's chat for the new org's chat list on an org switch", () => {
+    const onNavigate = renderAt(mobileChatPath("c1"));
+    fireEvent.click(screen.getByTestId("org-row"));
+    expect(onNavigate).toHaveBeenLastCalledWith(mobileChatsPath());
   });
 
   it("is the hybrid top level off an area, Inbox lit on the phone's Inbox", () => {
@@ -97,14 +135,40 @@ describe("the phone's nav", () => {
     expect(screen.getByTestId("nav-usage-billing")).toBeInTheDocument();
   });
 
-  it("drills into Agents on the phone's chats, never the old nav, and its back header goes to the Overview", () => {
+  it("drills into Agents on the phone's chats with the chats inline, as the shell's drawer does", () => {
     const onNavigate = renderAt(mobileChatPath("c1"));
     expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
     expect(screen.queryByTestId("nav-ai-providers")).toBeNull();
     expect(screen.getByTestId("mobile-nav-new-chat")).toBeInTheDocument();
-    expect(screen.getByTestId("mobile-nav-chats")).toHaveAttribute("aria-current", "page");
+    // The list fills the drill-in's column (no single "Chats" row to a screen of its own).
+    expect(screen.getByTestId("mobile-nav-chat-list")).toHaveAttribute("data-place", "fill");
+    fireEvent.click(screen.getByTestId("mobile-nav-chat-list"));
+    expect(onNavigate).toHaveBeenLastCalledWith("/m/chats/c9");
+  });
+
+  // reliant #3264: Back navigated to backHref, a desktop page (the Overview),
+  // which on a phone left the phone shell and closed the drawer.
+  it("shows the top level in place on Back from a drill-in, without navigating", () => {
+    const onNavigate = renderAt(mobileChatsPath());
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
+    // The link still names the desktop page, for a new tab.
+    expect(screen.getByTestId("nav-back")).toHaveAttribute("href", consolePath("shopfront", { kind: "overview" }));
     fireEvent.click(screen.getByTestId("nav-back"));
-    expect(onNavigate).toHaveBeenLastCalledWith(consolePath("shopfront", { kind: "overview" }), { drill: true });
+    expect(onNavigate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("nav-drill-in")).toBeNull();
+    expect(screen.getByTestId("nav-top")).toBeInTheDocument();
+    // The top-level areas are reachable from the chat list now, the Inbox included.
+    expect(screen.getByTestId("sidebar-inbox-button")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-observability")).toBeInTheDocument();
+  });
+
+  it("drills into Agents again from the top level Back showed", () => {
+    const onNavigate = renderAt(mobileChatsPath());
+    fireEvent.click(screen.getByTestId("nav-back"));
+    fireEvent.click(screen.getByTestId("nav-agents"));
+    expect(onNavigate).toHaveBeenLastCalledWith(expect.any(String), { drill: true });
+    // The screen did not change (the chat list is Agents' page), and the drill-in is back.
+    expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
   });
 
   it("lists the Inbox in Agents' drill-in on the phone's chats, a destination that closes the drawer", () => {
@@ -126,7 +190,6 @@ describe("the phone's nav", () => {
     renderAt(phone);
     expect(screen.getByTestId("nav-drill-in")).toHaveAttribute("data-area", "agents");
     expect(screen.getByTestId(row)).toHaveAttribute("aria-current", "page");
-    expect(screen.getByTestId("mobile-nav-chats")).not.toHaveAttribute("aria-current");
   });
 
   it("drills into Observability, landing on its Overview, with the divider's rows showing", () => {

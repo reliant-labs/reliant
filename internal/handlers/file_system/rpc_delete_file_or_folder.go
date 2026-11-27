@@ -32,7 +32,7 @@ func (s *Service) DeleteFileOrFolder(
 	}
 
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.delete", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.delete", cmdReq, &cmdResp, fsCommandTimeoutMs); err != nil {
 		return nil, err
 	}
 

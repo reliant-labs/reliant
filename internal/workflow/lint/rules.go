@@ -66,6 +66,11 @@ func (c *checker) checkGraph(g graph, slotBound bool) {
 				c.checkChildBounded(path, n)
 			}
 			c.checkTurnBudget(path, n)
+		case model.NodeTypeReview:
+			if timed {
+				c.add(RuleTimeoutIgnored, path, "timeout: on a review node bounds nothing: it runs as a workflow node, which dispatches no activity of its own",
+					"remove it; a reviewer is bounded by max_turns (default 100)")
+			}
 		case model.NodeTypeLoop:
 			if timed {
 				c.add(RuleTimeoutIgnored, path, "timeout: on a loop node bounds nothing: the runtime applies a node's timeout to the activity the node dispatches, and a loop node dispatches none",

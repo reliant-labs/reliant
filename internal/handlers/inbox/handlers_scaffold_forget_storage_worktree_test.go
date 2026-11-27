@@ -21,6 +21,7 @@ func TestForgetStorageWorktree_Generated(t *testing.T) {
 
 	// The caller holds no such workspace.
 	svc := inbox.NewTestInbox(t, withDeps(inbox.Deps{
+		Registrations: &inbox.MockRegistrations{},
 		Storage: &inbox.MockStorage{
 			ListHeldWorktreesForUserFunc: func(context.Context, string) ([]*core.HeldWorktree, error) { return nil, nil },
 		},

@@ -133,11 +133,12 @@ func TestChatAttendance(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var store AttendanceStore
+			var trig AttendanceTriggers
 			if tc.store != nil {
-				store = tc.store
+				store, trig = tc.store, tc.store
 			}
-			assert.Equal(t, tc.want, chatAttended(context.Background(), store, tc.chat))
-			who := chatAttendance(context.Background(), store, tc.chat)
+			assert.Equal(t, tc.want, chatAttended(context.Background(), store, trig, tc.chat))
+			who := chatAttendance(context.Background(), store, trig, tc.chat)
 			assert.Equal(t, tc.want == verdictAttended, who.attended)
 			// A deleted trigger has no stamp to read: the org's sources only.
 			triggerGone := tc.chat.TriggerID == nil && tc.chat.LaunchKind != string(core.TriggerEventKindAgentStartRun)
@@ -147,7 +148,7 @@ func TestChatAttendance(t *testing.T) {
 	}
 	t.Run("no chat is the person's own", func(t *testing.T) {
 		assert.Equal(t, "", chatOrgID(nil))
-		assert.True(t, chatAttendance(context.Background(), nil, nil).attended)
+		assert.True(t, chatAttendance(context.Background(), nil, nil, nil).attended)
 	})
 }
 
@@ -214,7 +215,7 @@ func TestResolveCompactionModel_ReadsTheSpecsScope(t *testing.T) {
 	lookups := recordLookups(t, driversWith(apiKeyAccount("a", "alice@acme.com", 0)))
 	chat := &db.Chat{UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindSchedule), TriggerID: strPtr("t1")}
 	_, _, _ = resolveCompactionModelForCall(context.Background(), nil, llmCallSpec{UserID: chat.UserID, OrgID: chatOrgID(chat),
-		Attended: chatAttendance(context.Background(), &attendanceStore{}, chat).attended})
+		Attended: chatAttendance(context.Background(), &attendanceStore{}, &attendanceStore{}, chat).attended})
 	assert.Equal(t, []drivers.Scope{{UserID: "u1", OrgID: "o1", Attended: false}}, lookups.all())
 }
 
@@ -225,7 +226,7 @@ func TestGenerateTitle_ResolvesInTheChatsScope(t *testing.T) {
 	orig := drivers.GetDriver
 	drivers.GetDriver = captureDriverOptionsResolver(&capturedDriverOptions{})
 	t.Cleanup(func() { drivers.GetDriver = orig })
-	activity := NewGenerateTitleActivity(nil, nil)
+	activity := NewGenerateTitleActivity(nil, nil, nil)
 
 	chat := &db.Chat{ID: "c1", UserID: "u1", OrgID: strPtr("o1"), LaunchKind: string(core.TriggerEventKindChatStart)}
 	_, _ = activity.generateTitleForChat(context.Background(), chat, "rename the billing page")
@@ -290,7 +291,11 @@ func TestChatAttendance_UndecidedRunNeverSpendsThePersonsOwnAccount(t *testing.T
 		{"attended: the person took a turn", &attendanceStore{turns: map[string]time.Time{"c": time.Now()}}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			who := chatAttendance(context.Background(), tc.store, trigger)
+			var trig AttendanceTriggers
+			if as, ok := tc.store.(*attendanceStore); ok {
+				trig = as
+			}
+			who := chatAttendance(context.Background(), tc.store, trig, trigger)
 			scope := llmCallSpec{UserID: "u1", OrgID: "o1", Attended: who.attended, UnattendedAnySource: who.anySource}.scope()
 			avail, err := drivers.BuildAvailableDrivers(context.Background(), personalOnlyStore{}, scope)
 			require.NoError(t, err)
@@ -337,7 +342,7 @@ func TestChatAttendance_UnattendedRunFollowsTheTriggersStamp(t *testing.T) {
 		}, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			who := chatAttendance(context.Background(), tc.store, tc.chat)
+			who := chatAttendance(context.Background(), tc.store, tc.store, tc.chat)
 			assert.False(t, who.attended)
 			assert.Equal(t, tc.any, who.anySource)
 			scope := llmCallSpec{UserID: "u1", OrgID: "o1", Attended: who.attended, UnattendedAnySource: who.anySource}.scope()

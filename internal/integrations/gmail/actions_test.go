@@ -101,6 +101,158 @@ func TestSendRefusesBadParamsBeforeCallingGmail(t *testing.T) {
 	assert.Empty(t, f.requests(), "nothing was sent")
 }
 
+func decodeRaw(t *testing.T, raw any) parsed {
+	t.Helper()
+	s, ok := raw.(string)
+	require.True(t, ok)
+	decoded, err := base64.RawURLEncoding.DecodeString(s)
+	require.NoError(t, err)
+	return parse(t, decoded)
+}
+
+// draft.create saves to Drafts through drafts.create and never touches
+// messages.send.
+func TestDraftCreateSavesToDraftsAndSendsNothing(t *testing.T) {
+	f := newFakeGmail(t)
+	res := f.run("draft.create", map[string]any{
+		"to": []any{"Ann <ann@example.com>"}, "cc": []any{"cy@example.com"}, "bcc": []any{"audit@example.com"},
+		"subject": "Quarterly numbers", "text": "See attached.", "html": "<p>See attached.</p>",
+	})
+	require.False(t, res.IsError, res.Content)
+	assert.Equal(t, "r-draft0001", res.Data["draft_id"])
+	assert.Equal(t, "draftmsg0001", res.Data["message_id"])
+	assert.Equal(t, "thr-draft", res.Data["thread_id"])
+	assert.Equal(t, []any{"DRAFT"}, res.Data["label_ids"])
+	assert.Equal(t, "conn_gmail", res.ConnectionID)
+
+	reqs := f.requests()
+	require.Len(t, reqs, 1, "one call, and not a send")
+	r := reqs[0]
+	assert.Equal(t, "POST", r.Method)
+	assert.Equal(t, "/gmail/v1/users/me/drafts", r.Path)
+	assert.NotContains(t, r.Path, "send")
+	assert.Equal(t, "Bearer "+token, r.Header.Get("Authorization"))
+	assert.Empty(t, f.sent, "nothing was sent")
+	require.Len(t, f.drafts, 1)
+
+	require.Contains(t, r.Body, "message", "drafts.create takes the message under `message`")
+	assert.NotContains(t, r.Body, "raw", "raw sits inside message, not at the top level")
+	msg, ok := r.Body["message"].(map[string]any)
+	require.True(t, ok)
+	assert.NotContains(t, msg, "threadId", "a new draft names no thread")
+	p := decodeRaw(t, msg["raw"])
+	to, err := p.header.AddressList("To")
+	require.NoError(t, err)
+	assert.Equal(t, "ann@example.com", to[0].Address)
+	bcc, _ := p.header.AddressList("Bcc")
+	assert.Equal(t, "audit@example.com", bcc[0].Address)
+	assert.Equal(t, "Quarterly numbers", p.header.Get("Subject"))
+	assert.Equal(t, "See attached.", p.parts["text/plain"])
+	assert.Equal(t, "<p>See attached.</p>", p.parts["text/html"])
+}
+
+// A draft may have no recipient yet; the person adds one in Gmail.
+func TestDraftCreateWithoutRecipients(t *testing.T) {
+	f := newFakeGmail(t)
+	res := f.run("draft.create", map[string]any{"subject": "Notes for Ann", "text": "Fill in the details."})
+	require.False(t, res.IsError, res.Content)
+	assert.Equal(t, "r-draft0001", res.Data["draft_id"])
+
+	r := f.requests()[0]
+	assert.Equal(t, "/gmail/v1/users/me/drafts", r.Path)
+	p := decodeRaw(t, r.Body["message"].(map[string]any)["raw"])
+	assert.Empty(t, p.header.Get("To"))
+	assert.Equal(t, "Notes for Ann", p.header.Get("Subject"))
+	assert.Equal(t, "Fill in the details.", p.parts["text/plain"])
+
+	// An explicitly empty list is the same as none.
+	f.reset()
+	res = f.run("draft.create", map[string]any{"to": []any{}, "subject": "Still no recipient", "text": "x"})
+	require.False(t, res.IsError, res.Content)
+	assert.Equal(t, "/gmail/v1/users/me/drafts", f.requests()[0].Path)
+}
+
+// A reply draft sets threadId and the threading headers, and prefixes the
+// subject, exactly as message.send does.
+func TestDraftCreateReplyThreads(t *testing.T) {
+	f := newFakeGmail(t)
+	res := f.run("draft.create", map[string]any{
+		"to": []any{"ann@example.com"}, "subject": "Invoice 1234", "text": "Paid, thanks.",
+		"thread_id": "18c1f0e2a3b4c5d6", "in_reply_to": "<CAF+abc@mail.gmail.com>", "references": "<CAF+abc0@mail.gmail.com> <CAF+abc@mail.gmail.com>",
+	})
+	require.False(t, res.IsError, res.Content)
+	assert.Equal(t, "18c1f0e2a3b4c5d6", res.Data["thread_id"])
+
+	r := f.requests()[0]
+	assert.Equal(t, "/gmail/v1/users/me/drafts", r.Path)
+	msg := r.Body["message"].(map[string]any)
+	assert.Equal(t, "18c1f0e2a3b4c5d6", msg["threadId"])
+	p := decodeRaw(t, msg["raw"])
+	assert.Equal(t, "<CAF+abc@mail.gmail.com>", p.header.Get("In-Reply-To"))
+	assert.Equal(t, "<CAF+abc0@mail.gmail.com> <CAF+abc@mail.gmail.com>", p.header.Get("References"))
+	assert.Equal(t, "Re: Invoice 1234", p.header.Get("Subject"))
+
+	f.reset()
+	f.run("draft.create", map[string]any{"subject": "RE: Invoice 1234", "text": "x",
+		"thread_id": "18c1f0e2a3b4c5d6", "in_reply_to": "<CAF+abc@mail.gmail.com>"})
+	p = decodeRaw(t, f.requests()[0].Body["message"].(map[string]any)["raw"])
+	assert.Equal(t, "RE: Invoice 1234", p.header.Get("Subject"), "a subject that already says Re: is kept")
+}
+
+// A connection made before gmail.compose was requested gets Google's
+// insufficientPermissions: the reconnect message, not a retry.
+func TestDraftCreateWithoutComposeScopeSaysReconnect(t *testing.T) {
+	f := newFakeGmail(t)
+	f.lacksCompose = true
+	res := f.run("draft.create", map[string]any{"to": []any{"a@x.com"}, "subject": "s", "text": "t"})
+	require.True(t, res.IsError)
+	assert.Equal(t, 403, res.StatusCode)
+	assert.False(t, res.Retryable)
+	assert.Contains(t, res.Content, "reconnect Gmail and allow every permission")
+	assert.Equal(t, "/gmail/v1/users/me/drafts", f.requests()[0].Path)
+
+	// Google also reports it as ACCESS_TOKEN_SCOPE_INSUFFICIENT in error.details.
+	g := newFakeGmail(t)
+	g.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(403)
+		writeJSON(w, map[string]any{"error": map[string]any{"code": 403, "message": "Request had insufficient authentication scopes.", "status": "PERMISSION_DENIED",
+			"details": []any{map[string]any{"@type": "type.googleapis.com/google.rpc.ErrorInfo", "reason": "ACCESS_TOKEN_SCOPE_INSUFFICIENT", "domain": "googleapis.com"}}}})
+	})
+	res = g.run("draft.create", map[string]any{"subject": "s", "text": "t"})
+	require.True(t, res.IsError)
+	assert.False(t, res.Retryable)
+	assert.Contains(t, res.Content, "reconnect Gmail and allow every permission")
+}
+
+func TestDraftCreateRefusesBadParamsBeforeCallingGmail(t *testing.T) {
+	f := newFakeGmail(t)
+	for name, params := range map[string]map[string]any{
+		"header injection":       {"subject": "hi\r\nBcc: evil@attacker.example", "text": "t"},
+		"reply without thread":   {"subject": "s", "text": "t", "in_reply_to": "<a@b>"},
+		"no body":                {"to": []any{"a@x.com"}, "subject": "s"},
+		"no subject (schema)":    {"to": []any{"a@x.com"}, "text": "t"},
+		"unknown param (schema)": {"subject": "s", "text": "t", "from": "boss@x.com"},
+		"bad thread id (schema)": {"subject": "s", "text": "t", "thread_id": "../labels"},
+		"not an address":         {"to": []any{"definitely not an address"}, "subject": "s", "text": "t"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := f.try("draft.create", params)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid params")
+		})
+	}
+	assert.Empty(t, f.requests(), "nothing was saved")
+}
+
+// message.send still insists on a recipient: only drafts relax it.
+func TestSendStillRequiresARecipient(t *testing.T) {
+	f := newFakeGmail(t)
+	_, err := f.try("message.send", map[string]any{"subject": "s", "text": "t"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid params")
+	assert.Empty(t, f.requests())
+}
+
 func TestListPaginatesAndRepeatsLabelIDs(t *testing.T) {
 	f := newFakeGmail(t)
 	for _, id := range []string{"18c1a1", "18c1a2", "18c1a3", "18c1a4", "18c1a5"} {
@@ -236,7 +388,7 @@ func TestErrorsAreClassified(t *testing.T) {
 		{"backend", 503, "backendError", true, ""},
 	}
 	for _, tc := range cases {
-		for _, action := range []string{"message.list", "label.list", "message.get", "message.send"} {
+		for _, action := range []string{"message.list", "label.list", "message.get", "message.send", "draft.create"} {
 			t.Run(tc.name+"/"+action, func(t *testing.T) {
 				f := newFakeGmail(t)
 				f.srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -246,7 +398,7 @@ func TestErrorsAreClassified(t *testing.T) {
 				switch action {
 				case "message.get":
 					params["id"] = "abc123"
-				case "message.send":
+				case "message.send", "draft.create":
 					params = map[string]any{"to": []any{"a@x.com"}, "subject": "s", "text": "t"}
 				}
 				res := f.run(action, params)
@@ -263,13 +415,13 @@ func TestErrorsAreClassified(t *testing.T) {
 }
 
 func TestUnauthorizedSaysReconnect(t *testing.T) {
-	for _, action := range []string{"message.list", "message.get", "message.send"} {
+	for _, action := range []string{"message.list", "message.get", "message.send", "draft.create"} {
 		t.Run(action, func(t *testing.T) {
 			f := newFakeGmail(t)
 			f.unauthorized = true
 			var params map[string]any
 			switch action {
-			case "message.send":
+			case "message.send", "draft.create":
 				params = map[string]any{"to": []any{"a@x.com"}, "subject": "s", "text": "t"}
 			case "message.list":
 				params = map[string]any{}

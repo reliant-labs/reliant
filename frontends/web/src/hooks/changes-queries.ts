@@ -13,9 +13,10 @@
  * and hands its answer to rememberChange. A revision conflict refetches the
  * change: the page then shows what moved.
  *
- * Two reads stay hand-written over the generated keys: the list, which reads
- * every page in one query, and the readout, keyed by the change's open run
- * too (its request names no run: the server picks one).
+ * Three reads stay hand-written over the generated keys: the list, which
+ * reads every page in one query; the readout, keyed by the change's open run
+ * too (its request names no run: the server picks one); and the delivery
+ * status, keyed by the change's revision too (useChangesDelivery).
  */
 
 import { useMemo } from "react";
@@ -36,8 +37,8 @@ import { useRouteOrgIdOverride } from "@/lib/orgScope";
 import { currentOrgId } from "@/services/controlPlane/orgs";
 import { listChangeEventsRequest, listChangesRequest, type ListChangesInit } from "@/services/controlPlane/changes/changesRequests";
 import type { Change } from "@/services/controlPlane/changes/changesTypes";
-import { changeEventPageFrom, changeFrom, changeListFrom, readoutFrom } from "@/services/controlPlane/changes/changesWire";
-import { readoutErrorKind } from "@/services/controlPlane/changes/errors";
+import { changeEventPageFrom, changeFrom, changeListFrom, deliveryStatusFrom, readoutFrom } from "@/services/controlPlane/changes/changesWire";
+import { changeErrorKind, readoutErrorKind } from "@/services/controlPlane/changes/errors";
 
 /**
  * The one key not on ChangesService: the org the page is scoped by, when the
@@ -134,6 +135,36 @@ export function useChangeReadout(change: Change | undefined) {
   return useQuery({ ...read, queryKey: [...read.queryKey, change?.currentRun?.id ?? ""] });
 }
 
+/** How often the delivery status is read again while a target is still behind. */
+export const DELIVERY_POLL_MS = 15_000;
+
+/**
+ * Whether the environment's apps have been handed the snapshot that covers
+ * the change's revision (GetChangesDeliveryStatus). Keyed by that revision
+ * too, so every answer was read after the page saw it: the snapshot revision
+ * it names then covers it (changeModel.ts deliveryStateOf). Read again every
+ * DELIVERY_POLL_MS only while a target is behind and the tab is visible
+ * (React Query pauses an interval in the background), and on focus. A control
+ * plane without the rpc answers Unimplemented once, never retried.
+ */
+export function useChangesDelivery(change: Pick<Change, "environmentId" | "revision"> | undefined) {
+  const read = changesServiceQueries.getChangesDeliveryStatus(
+    { environmentId: change?.environmentId ?? "" },
+    {
+      enabled: !!change?.environmentId,
+      staleTime: 10_000,
+      retry: (failures, error) => changeErrorKind(error) !== "not-available" && failures < 2,
+      // Behind: a target holds an older snapshot than the environment renders (changeModel.ts "waiting").
+      refetchInterval: (query) => {
+        const status = query.state.data;
+        return status && status.targets.some((target) => target.revision < status.revision) ? DELIVERY_POLL_MS : false;
+      },
+      select: deliveryStatusFrom,
+    }
+  );
+  return useQuery({ ...read, queryKey: [...read.queryKey, change?.revision ?? 0] });
+}
+
 /** What every change write answers: the change at its new revision. */
 export interface ChangeReply {
   change?: ChangeMessage;
@@ -154,6 +185,7 @@ export function rememberChange(queryClient: QueryClient, change: ChangeMessage |
   queryClient.setQueryData(changesServiceQueries.getChange({ changeId: change.id }).queryKey, create(GetChangeResponseSchema, { change }));
   void queryClient.invalidateQueries({ queryKey: changesServiceKeys.listChanges.all });
   void queryClient.invalidateQueries({ queryKey: changesServiceKeys.listChangeEvents(listChangeEventsRequest(change.id)) });
+  void queryClient.invalidateQueries({ queryKey: changesServiceKeys.getChangesDeliveryStatus({ environmentId: change.environmentId }) });
 }
 
 export function useRememberChange() {

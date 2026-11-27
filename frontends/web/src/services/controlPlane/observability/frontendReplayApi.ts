@@ -19,13 +19,17 @@
  */
 
 import type { Transport } from "@connectrpc/connect";
+import type { MessageInitShape } from "@bufbuild/protobuf";
 import {
   FrontendReplaySource as WireSource,
   FrontendReplayState as WireState,
   ObservabilityService,
+  type ListFrontendReplayRequestSchema,
+  type ListFrontendReplayResponse,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
-import { obsClient } from "./obsClient";
+import { getControlPlaneClient } from "../client";
+import { obsCall } from "./obsInterceptors";
 
 /**
  *   on       its runtime config turns replay on and the environment ingests it.
@@ -81,11 +85,15 @@ const SOURCE_OF: Record<WireSource, FrontendReplaySource> = {
 };
 
 /** The scope's frontends and their replay state. */
+export function frontendReplayRequest(req: FrontendReplayRequest): MessageInitShape<typeof ListFrontendReplayRequestSchema> {
+  return { orgId: req.orgId, projectId: req.projectId || undefined, envIds: req.envIds };
+}
+
 export async function listFrontendReplay(req: FrontendReplayRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<FrontendReplayList> {
-  const res = await obsClient(ObservabilityService, transport).listFrontendReplay(
-    { orgId: req.orgId, projectId: req.projectId || undefined, envIds: req.envIds },
-    options
-  );
+  return toFrontendReplayList(await getControlPlaneClient(ObservabilityService, transport).listFrontendReplay(frontendReplayRequest(req), obsCall(options)));
+}
+
+export function toFrontendReplayList(res: ListFrontendReplayResponse): FrontendReplayList {
   return {
     frontends: res.frontends.map((f) => ({
       envId: f.envId,

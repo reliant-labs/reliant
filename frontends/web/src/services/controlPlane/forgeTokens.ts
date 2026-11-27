@@ -54,7 +54,7 @@ export interface ForgeTokenScopeGroup {
  * mcp:oauth and mcp:forge (accesstoken.OAuthClientScopes), which an
  * authorization server issues to an MCP client and a person never mints.
  *
- * The org permissions (deploy, secret, domain, vuln:read, tests, changes,
+ * The org permissions (deploy, secret, domain, vuln:read, sbom:write, tests, changes,
  * data access, identity, billing, administration, obs:write) are granted per
  * person in Settings ›
  * Members; the server refuses a scope the caller does not hold, and clips a
@@ -117,6 +117,14 @@ export const FORGE_TOKEN_SCOPE_GROUPS: readonly ForgeTokenScopeGroup[] = [
     scopes: [{ scope: "vuln:read", label: "Read vulnerability findings of releases and environments" }],
   },
   {
+    id: "sbom",
+    title: "SBOMs",
+    // forge pkg/accesstoken/scope.go ScopeSBOMWrite: a narrow upload scope,
+    // write-once per artifact, implying and implied by nothing.
+    description: "For the CI job that sends a release's SBOMs. A recorded SBOM is never replaced.",
+    scopes: [{ scope: "sbom:write", label: "Upload a release's SBOMs, and nothing else (it cannot read findings back)" }],
+  },
+  {
     id: "tests",
     title: "Tests",
     description:
@@ -131,6 +139,10 @@ export const FORGE_TOKEN_SCOPE_GROUPS: readonly ForgeTokenScopeGroup[] = [
     title: "Changes",
     description: "Remote config, gradual rollouts and A/B tests. Launching one shifts production traffic.",
     scopes: [
+      {
+        scope: "changes:read",
+        label: "Read an environment's changes snapshot, for an app not on Reliant hosting (changes:write and changes:launch include it)",
+      },
       { scope: "changes:write", label: "Draft, edit and stop changes (stopping is the kill switch)" },
       {
         scope: "changes:launch",

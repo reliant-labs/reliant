@@ -145,7 +145,9 @@ export interface ForgeConsoleComponents {
   /** Analytics (U6c): the built-in Product analytics dashboards as tabs, plus Events & metrics. */
   analytics: RouteComponent
   /** Site insights: speed (web vitals per page; it was Speed insights), SEO and accessibility. */
-  siteInsights: RouteComponent
+  siteInsights?: RouteComponent
+  /** @deprecated Use siteInsights. Renders only on the legacy /speed-insights route. */
+  speedInsights?: RouteComponent
   /** Experiments: the project's Forge Changes, and one change. */
   experiments: RouteComponent
   experiment: RouteComponent
@@ -466,14 +468,17 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     }),
     component: components.siteInsights,
   })
-  // Speed insights is Site insights' Speed view now: a bookmark, a docs link
-  // or an old share keeps working, with its search (device, pct, range).
+  // Legacy callers keep their Speed page on its original route and search
+  // contract. Only hosts supplying Site insights redirect old bookmarks to it.
   const speedInsightsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: SPEED_INSIGHTS_SEGMENT,
+    validateSearch: components.speedInsights ? forgeConsoleServicesSearchSchema : forgeConsoleSiteInsightsSearchSchema,
     beforeLoad: memberOnly(({ location }) => {
+      if (components.speedInsights || !components.siteInsights) return
       throw redirect({ href: `${location.pathname.replace(/\/speed-insights\/?$/, `/${SITE_INSIGHTS_SEGMENT}`)}${location.searchStr}`, replace: true })
     }),
+    component: components.speedInsights,
   })
   // Forge Changes: remote config, gradual rollouts and A/B tests
   // (components/Forge/Experiments). The nav row is behind the web config's

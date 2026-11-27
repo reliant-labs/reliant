@@ -77,7 +77,7 @@ reliant forge obs session 91b955b313a1a86644ea53730a92deab prod --json
 
 The schemas are `forge.obs.sessions/v1` and `forge.obs.session/v1`. `--fields` keeps only the dotted paths you name, and the document's `suggested` array holds the follow-up commands. Timeline entries carry `kind`, `offset_ms`, `trace_id`, `span_id` and, for errors, `issue_id` and `fingerprint`. `obs session` exits 0 when the session is found, 1 for a bad id or a session the environment does not have, and 2 when it could not be looked up. A long timeline continues with `--page-token`.
 
-Sessions are kept for 30 days, and the CLI reads a hosted timeline over at most 7 days of that range. Reads are scoped to your organization: a member of it, or a machine credential that acts for it and carries `obs:read`. See [`forge obs`](/hosting/observability/forge-obs) for the rest of the command family.
+Sessions are kept as long as session replays are: 14 days by default, or the `replay_days` you set (1 to 30). The CLI lists sessions over at most 30 days, and reads a hosted timeline over at most 7 days of that range. Reads are scoped to your organization: a member of it, or a machine credential that acts for it and carries `obs:read`. See [`forge obs`](/hosting/observability/forge-obs) for the rest of the command family.
 
 ## Replay is opt-in and masked
 

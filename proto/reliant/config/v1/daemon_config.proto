@@ -352,6 +352,61 @@ message DaemonConfig {
     flag: "auto-update"
     description: "Install new signed releases of reliant at quiet moments, restarting in place (a self-owned install only; off by default)"
   }];
+  // The image a merge-queue gate runs in on this machine
+  // (internal/mergequeue/gaterun): the repository's toolchain, plus forge for
+  // the sbom_scan stage. Empty: this machine refuses every gate. Only a
+  // machine in a gate pool (labelled pool=gate) is ever sent one.
+  string gate_image = 33 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_GATE_IMAGE"
+    description: "Image merge-queue gates run in on this machine (empty: refuse gates)"
+  }];
+  // The grype database directory (forge's layout, `forge vuln db pull`)
+  // mounted read-only into each gate for its sbom_scan stage. Empty: no
+  // database, so a scan is unscanned and the gate unproven.
+  string gate_vuln_db_dir = 34 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_GATE_VULN_DB_DIR"
+    description: "Grype database directory mounted read-only into merge-queue gates (empty: scans are unproven)"
+  }];
+
+  // The cpu.weight a command run under a heavy slot is lowered to while it
+  // runs, against the kernel's 100 for every other command the daemon runs,
+  // so the agents' shells and dev servers win the CPU they contend for with
+  // a build (internal/heavyjob; Linux, where the daemon's command cgroups
+  // have the cpu controller). 0 (unset) is 25; 100 or more lowers nothing.
+  int32 heavy_cpu_weight = 35 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_HEAVY_CPU_WEIGHT"
+      description: "cpu.weight of a heavy-slot command while it runs, against 100 for other commands (0: 25; 100 or more: not lowered)"
+    },
+    (buf.validate.field).int32 = {
+      gte: 0
+      lte: 10000
+    }
+  ];
+
+  // The memory.high a command run under a heavy slot is bounded by while it
+  // runs: past it the kernel reclaims and slows the command, and never
+  // OOM-kills it (internal/heavyjob; Linux, where the daemon's command
+  // cgroups have the memory controller). Unset derives it from the slot
+  // pool: 1.5x one slot's part of the machine's memory, at least 12 GiB.
+  // "off" sets none; otherwise a size, in bytes or with a binary suffix
+  // (16G, 16GiB, 512M).
+  string heavy_memory_high = 36 [(forge.v1.config) = {
+    env_var: "RELIANT_HEAVY_MEMORY_HIGH"
+    description: "memory.high of a heavy-slot command while it runs: off, or a size such as 16G (unset: 1.5x one slot's part of the memory, at least 12GiB)"
+  }];
+
+  // The machine's trusted Go build cache (a plain GOCACHE directory that
+  // only main's seeding writes), bind-mounted read-only into each gate at
+  // /gate/trusted-go-build, where the gate image's GOCACHEPROG reads it
+  // before the gate's own cache. Unset is /var/cache/workspace/go-build-trusted,
+  // mounted when it exists; "off" mounts nothing. A directory that is not a
+  // real, absolute directory, or is group- or world-writable, is not mounted
+  // (the gate logs why and runs on its own cache).
+  string gate_trusted_go_cache = 37 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_GATE_TRUSTED_GO_CACHE"
+    description: "Trusted Go build cache mounted read-only into merge-queue gates: off, or a directory (unset: /var/cache/workspace/go-build-trusted when it exists)"
+  }];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.

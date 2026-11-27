@@ -203,7 +203,7 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 		env.seedFiring(t, trig.Id, time.Now().UTC(), core.TriggerEventLaunched, &done)
 	}
 	counting := &triggerQueryCounter{Firings: store.NewTriggerEventExtStore(env.repo.ORM())}
-	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Firings: counting, Projects: projectaccesstest.For(env.repo), Syncer: env.backend, Fires: env.backend})))
+	svc := NewTestTrigger(t, WithTriggerDeps(realStores(env.repo, Deps{Repo: env.repo, Triggers: store.NewTriggerExtStore(env.repo.ORM()), FiringReads: store.NewTriggerEventExtStore(env.repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(env.repo.ORM()), Firings: counting, Projects: projectaccesstest.For(env.repo), Syncer: env.backend, Fires: env.backend})))
 	resp, err := svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Triggers, 6)

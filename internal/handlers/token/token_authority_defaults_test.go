@@ -25,7 +25,13 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 		// vulnerability findings and the test results of an environment. Org
 		// authority the control plane clips to the person's grants, like the
 		// rest; none acts as the person.
-		fat.ScopeChangesWrite, fat.ScopeChangesLaunch, fat.ScopeVulnRead, fat.ScopeTestsRead, fat.ScopeTestsWrite)
+		fat.ScopeChangesWrite, fat.ScopeChangesLaunch, fat.ScopeVulnRead, fat.ScopeTestsRead, fat.ScopeTestsWrite,
+		// forge #2834: reading an environment's Changes snapshot. A standard
+		// org permission (developer bundle and up), clipped like the rest.
+		fat.ScopeChangesRead,
+		// forge #2991: uploading a release's SBOMs. A standard org permission
+		// (ci bundle and up) that acts as no one, clipped like the rest.
+		fat.ScopeSBOMWrite)
 	if got := fat.SetOf(exchangeableScopes...); !reflect.DeepEqual(got, want) {
 		t.Fatalf("exchangeable = %s, want %s", got, want)
 	}

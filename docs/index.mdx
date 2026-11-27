@@ -6,20 +6,18 @@ description: "Reliant documentation: Forge, the open-source framework that deplo
 
 Reliant is four products. Each has one job, and they work best together: Forge builds and ships the app, Reliant Cloud runs it and watches it, Reliant Workflows put agents to work on the code and on what Cloud reports back, and Reliant Engine will put those workflows inside your own product. You can use any of them without the others.
 
-<CardGroup cols={2}>
-  <Card title="Forge" icon="hammer" href="/forge/overview">
-    Forge is guardrails for apps. It is an open-source (Apache-2.0) framework, CLI and MCP server that supercharges any agent harness: Claude Code, Codex, Cursor, a harness you wrote, or CI. It scaffolds Go services, React frontends and SQL migrations into the right places, lints for your architecture and for unsafe migrations, tests against a real Postgres, and builds each release once and promotes it by digest. Use it piece by piece in any repo, in any language, with no rewrite. Deploy any app with no account: in a Vite or Next.js app, or an app with its own Dockerfile, run `npx -y @reliantlabs/forge@latest env deploy prod --claimable` to get a live URL and a claim link that is good for 72 hours.
-  </Card>
-  <Card title="Reliant Cloud" icon="cloud" href="/hosting/overview">
-    Reliant Cloud is a hosting and delivery platform: GitLab meets Vercel meets Supabase, powered by Forge. It hosts your app with managed Postgres, static hosting with a CDN, custom domains with HTTPS, preview environments and managed secrets. It monitors what it runs with traces, logs, metrics, alerts, errors grouped into issues tied to the release that caused them, continuous profiling, and opt-in, masked session replay. It manages releases: each one is built once, promoted by digest, judged by its own health check, and kept above a rollback floor that a breaking migration sets. It scans dependencies and images for vulnerabilities, and builds profile-guided binaries from production profiles (`forge pgo pull`). Test reports, code coverage and flaky-test detection are coming, as is automatic weekly profile-guided optimization.
-  </Card>
-  <Card title="Reliant Workflows" icon="bot" href="/workflows/overview">
-    Reliant Workflows is an agent automation platform. A workflow is a YAML pipeline that mixes agents with deterministic steps, approvals and loops, runs on any model, and starts from a schedule, a webhook, a GitHub, Slack, Gmail or Twilio event, or a hosted alert. Workflows power Autopilot, which reviews and security-reviews every pull request, turns a labelled issue into a tested pull request, answers review comments, and investigates alerts into issues an agent can fix. Autopilot never merges or releases on its own today; built-in merge and release workflows are coming.
-  </Card>
-  <Card title="Reliant Engine (coming soon)" icon="cog" href="/getting-started/concepts#reliant-engine-coming-soon">
-    Reliant Engine is coming soon. It will let you embed Reliant Workflows in your own product, white-labelled, so your users run agent workflows inside your app without seeing Reliant. It is not available yet.
-  </Card>
-</CardGroup>
+- [Forge](/forge/overview): guardrails for apps. An open-source (Apache-2.0) framework, CLI and MCP server for any agent harness (Claude Code, Codex, Cursor or CI) that scaffolds Go services, React frontends and SQL migrations, lints and tests them, and builds each release once. Use it piece by piece in any repo, or deploy any app with no account
+- [Reliant Cloud](/hosting/overview): hosting and delivery, GitLab meets Vercel meets Supabase, powered by Forge. Managed Postgres, static hosting with a CDN, custom domains, preview environments, monitoring, and releases promoted by digest and judged by their own health check
+- [Reliant Workflows](/workflows/overview): an agent automation platform. YAML pipelines that mix agents with deterministic steps, approvals and loops, on any model, started by a schedule, a webhook or a GitHub, Slack, Gmail or Twilio event. They power Autopilot, which reviews pull requests, works labelled issues and investigates alerts
+- [Reliant Engine](/getting-started/concepts#reliant-engine-coming-soon) (coming soon): Reliant Workflows embedded in your own product, white-labelled, so your users run agent workflows without seeing Reliant
+
+## Get started
+
+- [Install Reliant](/getting-started/installation): macOS, Linux or Windows
+- [Reliant quick start](/getting-started/quick-start): chat and your first workflow in 5 minutes
+- [Forge quick start](/forge/quick-start): from a prompt to a deployed URL
+- [Key concepts](/getting-started/concepts): the essential terms, for Reliant and Forge
+- [Why Reliant](/getting-started/why-reliant): one platform from code to production
 
 ## Deploy with your agent
 
@@ -152,29 +150,3 @@ Workflows are YAML files that live in `.reliant/workflows/` inside your reposito
 ## Forge: what you get
 
 Forge gives every project, from the first commit, the things that usually get bolted on late: structured logs, traces and metrics on every boundary, a Postgres schema with generated data access, linters and tests, CI, and `dev`, `staging` and `prod` environments. Deploying is one command to Reliant Cloud, which runs your services, workers and jobs with a managed Postgres, publishes frontends as static sites behind a CDN, and supports custom domains. A landing page or docs site with no backend is a complete Forge project too. See the [Forge overview](/forge/overview) for the full picture and [Reliant Cloud](/hosting/overview) for what it runs; current plans and prices are on the [pricing page](https://reliantlabs.io/pricing).
-
-## Get started
-
-<CardGroup cols={3}>
-  <Card title="Install Reliant" icon="download" href="/getting-started/installation">
-    macOS, Linux, or Windows
-  </Card>
-  <Card title="Reliant quick start" icon="play" href="/getting-started/quick-start">
-    Chat + your first workflow in 5 minutes
-  </Card>
-  <Card title="Forge quick start" icon="rocket" href="/forge/quick-start">
-    A prompt to a deployed URL
-  </Card>
-  <Card title="Key Concepts" icon="graduation-cap" href="/getting-started/concepts">
-    The essential terms, for Reliant and Forge
-  </Card>
-  <Card title="Forge overview" icon="layers" href="/forge/overview">
-    What Forge is and what you get
-  </Card>
-  <Card title="Reliant Cloud & pricing" icon="cloud" href="/hosting/overview">
-    What Reliant Cloud runs
-  </Card>
-  <Card title="Why Reliant" icon="compass" href="/getting-started/why-reliant">
-    One platform from code to production
-  </Card>
-</CardGroup>

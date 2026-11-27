@@ -204,7 +204,7 @@ func TestToolCallIDIsolation_RedispatchInTheSameThreadIsStillNotReExecuted(t *te
 func (c *isolationChats) spawnReportFor(t *testing.T, chatID, child, parent, toolCallID, body string) error {
 	t.Helper()
 	var out EnqueueAgentMessageOutput
-	return c.h.ExecuteActivity(NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(c.h.Repo().ORM()), Announcer: c.h.Repo()})}).Execute, EnqueueAgentMessageInput{
+	return c.h.ExecuteActivity(NewEnqueueAgentMessageActivity(EnqueueAgentMessageDeps{Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(c.h.Repo().ORM()), Announcer: c.h.Repo().UpdateWriter()})}).Execute, EnqueueAgentMessageInput{
 		ChatID: chatID, FromThreadID: child, ToThreadID: parent,
 		Kind: int32(core.AgentMessageKindCompletion), Body: body, ToolCallID: toolCallID,
 	}, &out)

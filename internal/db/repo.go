@@ -153,6 +153,11 @@ type Repo struct {
 	// first use (pinnedCatalogs).
 	pinnedOnce sync.Once
 	pinned     *pinnedCatalogCache
+	// catalogColumnsCache is the live catalog columns this Repo has read,
+	// each checked against its row's version on every read; built on first
+	// use (catalogColumns).
+	catalogColumnsOnce  sync.Once
+	catalogColumnsCache *catalogColumnCache
 }
 
 // backoffBeforeRetry sleeps calculateBackoff(attempt) before RunTx retries.
@@ -1131,7 +1136,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 	}
 	previousState := chat.State
 	if chat.WorktreeID != nil {
-		if err := r.EmitUserRefetch(ctx, chat.UserID, RefetchWorktreeChanges, RefetchOpts{ProjectID: &chat.ProjectID, WorktreeID: chat.WorktreeID}); err != nil {
+		if err := r.UpdateWriter().EmitUserRefetch(ctx, chat.UserID, RefetchWorktreeChanges, RefetchOpts{ProjectID: &chat.ProjectID, WorktreeID: chat.WorktreeID}); err != nil {
 			logging.WarnContext(ctx, "Failed to notify worktree state change", "chatID", chatID, "error", err)
 		}
 	}
@@ -1310,31 +1315,11 @@ func (r *Repo) QueueChatForMachine(ctx context.Context, chatID string, machine *
 	return changed, err
 }
 
-// ListChatsQueuedForMachine lists non-archived chats holding a message
-// queued for their machine, oldest first, at most limit; userID "" lists
-// every user's.
-func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
-	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
-}
-
 // SetChatPausedForMachine records (or clears) that the daemon-offline breaker
 // paused the chat's run (as opposed to the user), and reports whether the
 // stored value changed — clearing it is how a resumer claims the chat.
 func (r *Repo) SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error) {
 	return store.SetChatPausedForMachine(ctx, r.ORM(), chatID, paused)
-}
-
-// ListChatsPausedForMachine lists non-archived chats the breaker paused
-// whose root run still reads paused, oldest first, at most limit; userID ""
-// lists every user's.
-func (r *Repo) ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error) {
-	return store.ListChatsPausedForMachine(ctx, r.ORM(), userID, limit)
-}
-
-// ListChatsWaitingForMachine lists a user's chats whose live root run is
-// parked waiting for a machine.
-func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error) {
-	return store.ListChatsWaitingForMachine(ctx, r.ORM(), userID)
 }
 
 // UpdateChatUnread sets the unread flag on a chat and emits the user update

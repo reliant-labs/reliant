@@ -61,7 +61,7 @@ func (s *Service) SearchFiles(
 		Matches   []daemonSearchMatch `json:"matches"`
 		Truncated bool                `json:"truncated"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.search", cmdReq, &cmdResp, 60000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.search", cmdReq, &cmdResp, fsScanTimeoutMs); err != nil {
 		return nil, err
 	}
 

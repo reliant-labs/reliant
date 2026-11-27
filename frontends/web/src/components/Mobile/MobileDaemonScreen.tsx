@@ -44,10 +44,10 @@ import { mobileMachinesPath } from "@/lib/paths";
 const POLL_INTERVAL_MS = 5_000;
 
 const MOBILE_SECONDARY_ACTION =
-  "flex min-h-[48px] items-center justify-center gap-2 rounded-lg border border-border px-5 text-sm font-medium text-foreground active:bg-foreground/5 disabled:opacity-60";
+  "flex min-h-[48px] items-center justify-center gap-2 rounded-lg border border-border px-5 text-ui font-medium text-foreground active:bg-foreground/5 disabled:opacity-60";
 
 const MOBILE_DANGER_ACTION =
-  "flex min-h-[48px] items-center justify-center gap-2 rounded-lg bg-destructive px-5 text-sm font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60";
+  "flex min-h-[48px] items-center justify-center gap-2 rounded-lg bg-destructive px-5 text-ui font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60";
 
 function fmtTimestamp(ts?: Timestamp): string {
   if (!ts) return "—";
@@ -63,8 +63,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
     // `last:border-b-0` keeps the divider between rows rather than across the
     // bottom of the card, where it would read as a stray line under the group.
     <div className="flex items-start justify-between gap-4 border-b border-border px-4 py-3 last:border-b-0">
-      <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
-      <span className="min-w-0 break-words text-right text-sm font-medium text-foreground">
+      <span className="shrink-0 text-ui text-muted-foreground">{label}</span>
+      <span className="min-w-0 break-words text-right text-ui font-medium text-foreground">
         {value || "—"}
       </span>
     </div>
@@ -147,7 +147,7 @@ function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
             type="button"
             onClick={() => setConfirmDelete(true)}
             disabled={busy}
-            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-destructive/40 px-5 text-sm font-medium text-destructive-ink active:bg-destructive/10 disabled:opacity-60"
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-destructive/40 px-5 text-ui font-medium text-destructive-ink active:bg-destructive/10 disabled:opacity-60"
           >
             <Trash2 className="h-4 w-4" />
             Delete
@@ -156,7 +156,7 @@ function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
           <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
             <div className="flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive-ink" />
-              <p className="text-sm text-destructive-ink">
+              <p className="text-ui text-destructive-ink">
                 Delete this machine? This action cannot be undone.
               </p>
             </div>
@@ -191,7 +191,7 @@ function LifecycleActions({ daemon }: { daemon: DaemonInfo }) {
       </div>
 
       {error && (
-        <p className="text-center text-xs text-destructive-ink">{error}</p>
+        <p className="text-center text-meta text-destructive-ink">{error}</p>
       )}
     </div>
   );
@@ -258,7 +258,7 @@ export function MobileDaemonScreen() {
           ) : (
             // Reachable by deep link to a deleted machine, or one owned by a
             // different account — not an error worth a stack trace.
-            <p className="text-sm text-muted-foreground">Machine not found</p>
+            <p className="text-ui text-muted-foreground">Machine not found</p>
           )}
         </div>
       </div>
@@ -280,14 +280,14 @@ export function MobileDaemonScreen() {
           <div className="flex items-center gap-2">
             <DaemonStatusPill daemon={daemon} />
             {sizeLabel(daemon) && (
-              <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary-ink">
+              <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-meta font-medium text-primary-ink">
                 {sizeLabel(daemon)}
               </span>
             )}
           </div>
 
           {statusMessage && (
-            <p className="text-sm text-muted-foreground">{statusMessage}</p>
+            <p className="text-ui text-muted-foreground">{statusMessage}</p>
           )}
 
           <LifecycleActions daemon={daemon} />

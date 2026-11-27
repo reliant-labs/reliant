@@ -1,18 +1,19 @@
 /**
- * The page's one observability read queue, end to end through obsClient and a
- * server that enforces control-plane's per-user cap of six concurrent reads:
+ * The page's one observability read queue, end to end through the control-plane
+ * transport's read stage (obsInterceptors.ts) and a server that enforces control-plane's per-user cap of six concurrent reads:
  * a burst of panels all load with no error, views that are not the dashboard
  * share the budget, a refusal is re-queued rather than surfaced, and the org's
  * hourly quota still surfaces.
  */
 
 import type { ReactNode } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityApiProvider, useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { OBS_READ_CONCURRENCY, resetObsReadScheduler, SERVER_READ_CAP } from "@/services/controlPlane/observability/readScheduler";
 import type { ObsScope, Panel } from "@/services/controlPlane/observability/types";
@@ -30,9 +31,14 @@ const server = vi.hoisted(() => ({
   serveMs: 500,
 }));
 
+// control-plane behind the app's observability read stage (obsInterceptors.ts), as on
+// the app's transport: every client the hooks make goes through it.
 vi.mock("../../services/controlPlane/client", async () => {
-  const { Code, ConnectError } = await import("@connectrpc/connect");
+  const { Code, ConnectError, createClient, createRouterTransport } = await import("@connectrpc/connect");
   const { BinaryWriter } = await import("@bufbuild/protobuf/wire");
+  const { ObservabilityService } = await import("@/gen/controlplane/services/observability/v1/observability_pb");
+  const { ObservabilityBillingService } = await import("@/gen/controlplane/services/observability_billing/v1/observability_billing_pb");
+  const { obsReadInterceptor } = await import("@/services/controlPlane/observability/obsInterceptors");
   const inFlight = () => {
     const error = new ConnectError("too many observability queries in flight; retry shortly", Code.ResourceExhausted, { "x-forge-error-reason": "in_flight_limit" });
     const duration = new BinaryWriter().tag(1, 0).int64(1).finish();
@@ -54,7 +60,7 @@ vi.mock("../../services/controlPlane/client", async () => {
       const timer = setTimeout(() => {
         server.live--;
         server.served++;
-        resolve(RESPONSE[name] ?? (name.startsWith("listMetrics:") ? { metrics: [], truncated: false } : {}));
+        resolve(name.startsWith("listMetrics:") ? { metrics: [], truncated: false } : {});
       }, server.serveMs);
       signal?.addEventListener("abort", () => {
         clearTimeout(timer);
@@ -63,46 +69,53 @@ vi.mock("../../services/controlPlane/client", async () => {
       });
     });
   };
-  const RESPONSE: Record<string, unknown> = {};
-  const client = new Proxy(
+  // Each call is named `<method>:<panel id>`, the panel id empty for every read but a panel's.
+  const impl = new Proxy(
     {},
-    { get: (_t, name: string) => (req: { id?: string }, options?: { signal?: AbortSignal }) => handle(`${name}:${req.id ?? ""}`, options?.signal) }
+    { get: (_t, name: string) => (req: { panel?: { id: string } }, ctx: { signal: AbortSignal }) => handle(`${name}:${req.panel?.id ?? ""}`, ctx.signal) }
   );
-  return { getControlPlaneClient: () => client };
+  const transport = createRouterTransport(
+    (router) => {
+      router.service(ObservabilityService, impl);
+      router.service(ObservabilityBillingService, impl);
+    },
+    { transport: { interceptors: [obsReadInterceptor()] } }
+  );
+  return { getControlPlaneClient: (service: Parameters<typeof createClient>[0]) => createClient(service, transport), controlPlaneTransport: transport };
 });
 
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
-import { useMetricCatalog, useObsReadApi, usePanelQuery } from "../observability-queries";
+import { useMetricCatalog, usePanelQuery } from "../observability-queries";
+import { getObservabilityUsage, queryPanel, searchLogs } from "@/services/controlPlane/observability/api";
+import { getServiceGraph } from "@/services/controlPlane/observability/graphApi";
 import { listMetricCatalog } from "@/services/controlPlane/observability/metricsApi";
-import { obsClient } from "@/services/controlPlane/observability/obsClient";
+import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
+import { resetObsQuotaStore } from "@/services/controlPlane/observability/quotaStore";
+import * as controlPlaneClient from "@/services/controlPlane/client";
+
+const { getControlPlaneClient } = controlPlaneClient;
+/** The mocked control plane itself: the generated hooks (useMetricCatalog) read it through the test's TransportScope. */
+const controlPlaneTransport = (controlPlaneClient as unknown as { controlPlaneTransport: import("@connectrpc/connect").Transport }).controlPlaneTransport;
 
 const SCOPE: ObsScope = { orgId: "org", envIds: [], filters: [] };
+const WINDOW = { startMs: 0, endMs: 3_600_000 };
 const panel = (id: string): Panel => ({ id, title: id, kind: "number", signal: "traces", series: [{ label: id, agg: "count" }] });
 
-/** An api whose queryPanel goes through the real obsClient, as production's does. */
+/** The production read functions, over the control plane above. */
 function realisticApi(): ObservabilityApi {
-  const client = () => obsClient(ObservabilityService) as unknown as Record<string, (req: unknown, options?: unknown) => Promise<unknown>>;
-  return {
-    currentOrgId: async () => "org",
-    queryPanel: async (req: { panel: Panel }, options?: { signal?: AbortSignal }) => {
-      const res = (await client().queryPanel({ id: req.panel.id }, options)) as Record<string, unknown>;
-      return { kind: "number", unit: "", stepSeconds: 0, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [], seriesMeta: [], seriesTotal: 0, warnings: [], compiledSql: [], ...res };
-    },
-    listMetricCatalog,
-    searchLogs: async () => (await client().searchLogs({ id: "logs" })) as never,
-    getServiceGraph: async () => (await client().getServiceGraph({ id: "graph" })) as never,
-    getObservabilityUsage: async () => (await client().getObservabilityUsage({ id: "usage" })) as never,
-  } as unknown as ObservabilityApi;
+  return { currentOrgId: async () => "org", queryPanel, listMetricCatalog, searchLogs, getServiceGraph, getObservabilityUsage } as unknown as ObservabilityApi;
 }
 
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+  // The generated hooks call their QueryClient's transport: here, the control plane above, as the app's would be.
+  const scope = createTransportScope({ id: "obs-read-queue", transport: controlPlaneTransport, queryClient: client });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
+    <TransportScopeProvider scope={scope}>
       <ObsQuotaProvider>
         <ObservabilityApiProvider api={realisticApi()}>{children}</ObservabilityApiProvider>
       </ObsQuotaProvider>
-    </QueryClientProvider>
+    </TransportScopeProvider>
   );
   return { client, wrapper };
 }
@@ -117,6 +130,7 @@ beforeEach(() => {
   vi.setSystemTime(new Date("2026-11-01T12:15:00Z"));
   vi.spyOn(Math, "random").mockReturnValue(0.5);
   resetObsReadScheduler();
+  resetObsQuotaStore();
   Object.assign(server, { cap: SERVER_READ_CAP, live: 0, peak: 0, refused: 0, served: 0, arrivals: [], verdict: () => "serve", serveMs: 500 });
 });
 afterEach(() => {
@@ -189,7 +203,7 @@ describe("other views share the budget", () => {
     const ids = Array.from({ length: 10 }, (_, i) => `p${i}`);
     const { result } = renderHook(
       () => {
-        const api = useObsReadApi();
+        const api = useObservabilityApi();
         return {
           panels: ids.map((id) => usePanelQuery(SCOPE, "1h", panel(id), [])),
           api,
@@ -197,12 +211,15 @@ describe("other views share the budget", () => {
       },
       { wrapper }
     );
-    const other = [result.current.api.searchLogs({} as never), result.current.api.getServiceGraph({} as never)];
-    const usage = result.current.api.getObservabilityUsage({} as never);
+    const other = [
+      result.current.api.searchLogs({ ...SCOPE, window: WINDOW, services: [], query: "", severities: [], limit: 50 } as never),
+      result.current.api.getServiceGraph({ ...SCOPE, window: WINDOW } as never),
+    ];
+    const usage = result.current.api.getObservabilityUsage("org");
     await advance(0);
 
     // The usage read is not behind the queue: it is already at the server.
-    expect(server.arrivals).toContain("getObservabilityUsage:usage");
+    expect(server.arrivals).toContain("getObservabilityUsage:");
     // The queue holds everything else to its width, whichever view asked.
     expect(server.arrivals.filter((a) => !a.startsWith("getObservabilityUsage"))).toHaveLength(OBS_READ_CONCURRENCY);
 
@@ -218,7 +235,7 @@ describe("abandoned non-panel reads", () => {
   it("removes an unmounted metric catalog from the queue before sending the current view", async () => {
     const { wrapper } = setup();
     const blockers = Array.from({ length: OBS_READ_CONCURRENCY }, () =>
-      obsClient(ObservabilityService).queryPanel({} as never)
+      getControlPlaneClient(ObservabilityService).queryPanel({}, obsCall())
     );
     await advance(0);
     expect(server.live).toBe(OBS_READ_CONCURRENCY);

@@ -204,10 +204,11 @@ export type ConsolePage =
   /**
    * Site insights (Analytics/SiteInsightsPage.tsx): Speed (web vitals per
    * page, from the browser runtime's RUM spans), SEO and Accessibility. The
-   * view is a path segment; omitted, Speed. It was Speed insights, whose kind
-   * is still a ConsoleTarget that resolves here.
+   * view is a path segment; omitted, Speed.
    */
   | { kind: "site-insights"; view?: SiteInsightsView }
+  /** @deprecated Use site-insights. The legacy page keeps its redirecting URL. */
+  | { kind: "speed-insights" }
   /** Auth (U6d): who can sign in, and how (Users/AuthPage.tsx). Omitted tab: users. */
   | { kind: "auth"; tab?: AuthTab }
   /** Tests › Overview: one branch's test health (Tests/TestsOverviewPage.tsx). */
@@ -323,9 +324,7 @@ export function isTestsPage(page: ConsolePage): boolean {
 export type ConsoleTarget =
   | ConsolePage
   | { kind: "dashboards" }
-  | { kind: "metrics" }
-  /** @deprecated Speed insights is Site insights' Speed view: name `{ kind: "site-insights" }`. */
-  | { kind: "speed-insights" };
+  | { kind: "metrics" };
 
 /** The page a target names. */
 export function pageOfTarget(target: ConsoleTarget): ConsolePage {
@@ -334,8 +333,6 @@ export function pageOfTarget(target: ConsoleTarget): ConsolePage {
       return { kind: "obs-view", view: "dashboards" };
     case "metrics":
       return { kind: "obs-view", view: "metrics" };
-    case "speed-insights":
-      return { kind: "site-insights" };
     default:
       return target;
   }
@@ -400,6 +397,8 @@ export function consolePath(project: string, target: ConsoleTarget, ctx?: PathCo
       return !page.tab || page.tab === ANALYTICS_TABS[0] ? `${base}/analytics` : `${base}/analytics/${page.tab}`;
     case "site-insights":
       return !page.view || page.view === SITE_INSIGHTS_VIEWS[0] ? `${base}/${SITE_INSIGHTS_SEGMENT}` : `${base}/${SITE_INSIGHTS_SEGMENT}/${page.view}`;
+    case "speed-insights":
+      return `${base}/${SPEED_INSIGHTS_SEGMENT}`;
     case "extension":
       return `${base}/${encodeURIComponent(page.segment)}`;
     case "experiments":
@@ -446,7 +445,7 @@ export const servicesChartsPath = (app: string, ctx?: PathContext) => withSearch
 /** Site insights: `speed` (the default), `seo` or `accessibility`. */
 export const siteInsightsPath = (app: string, view?: SiteInsightsView, ctx?: PathContext) => consolePath(app, { kind: "site-insights", view }, ctx);
 /** @deprecated Speed insights is Site insights' Speed view: use siteInsightsPath. */
-export const speedInsightsPath = (app: string, ctx?: PathContext) => siteInsightsPath(app, "speed", ctx);
+export const speedInsightsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "speed-insights" }, ctx);
 export const metricsPath = (app: string, ctx?: PathContext) => consolePath(app, { kind: "metrics" }, ctx);
 export const obsViewPath = (app: string, view: ObsNavView, ctx?: PathContext) => consolePath(app, { kind: "obs-view", view }, ctx);
 /** Auth (U6d): `users` (the old Users page; the default) or `sign-in`. */
@@ -560,9 +559,10 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
       case SITE_INSIGHTS_SEGMENT:
         if (!sub) return { kind: "site-insights" };
         return isSiteInsightsView(sub) && !dashKind ? { kind: "site-insights", view: sub } : null;
-      // The old name: its route redirects here, and until it does it is the same page.
+      // Keep the deprecated target round-trip intact for hosts that still render
+      // the legacy component. The main app's route redirects to Site insights.
       case SPEED_INSIGHTS_SEGMENT:
-        return sub ? null : { kind: "site-insights" };
+        return sub ? null : { kind: "speed-insights" };
       case SECURITY_SEGMENT:
         if (sub === SECURITY_PAGES.vulnerabilities && !dashKey) {
           return dashKind ? { kind: "vulnerability", advisory: safeDecode(dashKind) } : { kind: "vulnerabilities" };

@@ -74,6 +74,9 @@ const (
 	// FileSystemServiceCreateDirectoryProcedure is the fully-qualified name of the FileSystemService's
 	// CreateDirectory RPC.
 	FileSystemServiceCreateDirectoryProcedure = "/reliant.v1.FileSystemService/CreateDirectory"
+	// FileSystemServiceDownloadFileProcedure is the fully-qualified name of the FileSystemService's
+	// DownloadFile RPC.
+	FileSystemServiceDownloadFileProcedure = "/reliant.v1.FileSystemService/DownloadFile"
 )
 
 // FileSystemServiceClient is a client for the reliant.v1.FileSystemService service.
@@ -108,6 +111,12 @@ type FileSystemServiceClient interface {
 	// Used by the project picker in browser mode to make a "New folder" while
 	// choosing where to open/create a project on the remote daemon.
 	CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error)
+	// DownloadFile returns the whole content of a file of any kind (text,
+	// image, spreadsheet, archive, ...), for saving it on the user's device.
+	// It is scoped and guarded exactly like the viewer reads (GetFilePreview),
+	// and refuses a file over 25 MB with FailedPrecondition and the error
+	// reason "file_too_large_to_download".
+	DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error)
 }
 
 // NewFileSystemServiceClient constructs a client for the reliant.v1.FileSystemService service. By
@@ -199,6 +208,13 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(fileSystemServiceMethods.ByName("CreateDirectory")),
 			connect.WithClientOptions(opts...),
 		),
+		downloadFile: connect.NewClient[v1.DownloadFileRequest, v1.DownloadFileResponse](
+			httpClient,
+			baseURL+FileSystemServiceDownloadFileProcedure,
+			connect.WithSchema(fileSystemServiceMethods.ByName("DownloadFile")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -217,6 +233,7 @@ type fileSystemServiceClient struct {
 	replaceInFiles     *connect.Client[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse]
 	listDirectory      *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
 	createDirectory    *connect.Client[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse]
+	downloadFile       *connect.Client[v1.DownloadFileRequest, v1.DownloadFileResponse]
 }
 
 // GetFileTree calls reliant.v1.FileSystemService.GetFileTree.
@@ -284,6 +301,11 @@ func (c *fileSystemServiceClient) CreateDirectory(ctx context.Context, req *conn
 	return c.createDirectory.CallUnary(ctx, req)
 }
 
+// DownloadFile calls reliant.v1.FileSystemService.DownloadFile.
+func (c *fileSystemServiceClient) DownloadFile(ctx context.Context, req *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error) {
+	return c.downloadFile.CallUnary(ctx, req)
+}
+
 // FileSystemServiceHandler is an implementation of the reliant.v1.FileSystemService service.
 type FileSystemServiceHandler interface {
 	// GetFileTree returns the file tree structure for a project
@@ -316,6 +338,12 @@ type FileSystemServiceHandler interface {
 	// Used by the project picker in browser mode to make a "New folder" while
 	// choosing where to open/create a project on the remote daemon.
 	CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error)
+	// DownloadFile returns the whole content of a file of any kind (text,
+	// image, spreadsheet, archive, ...), for saving it on the user's device.
+	// It is scoped and guarded exactly like the viewer reads (GetFilePreview),
+	// and refuses a file over 25 MB with FailedPrecondition and the error
+	// reason "file_too_large_to_download".
+	DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error)
 }
 
 // NewFileSystemServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -403,6 +431,13 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		connect.WithSchema(fileSystemServiceMethods.ByName("CreateDirectory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	fileSystemServiceDownloadFileHandler := connect.NewUnaryHandler(
+		FileSystemServiceDownloadFileProcedure,
+		svc.DownloadFile,
+		connect.WithSchema(fileSystemServiceMethods.ByName("DownloadFile")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.FileSystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case FileSystemServiceGetFileTreeProcedure:
@@ -431,6 +466,8 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 			fileSystemServiceListDirectoryHandler.ServeHTTP(w, r)
 		case FileSystemServiceCreateDirectoryProcedure:
 			fileSystemServiceCreateDirectoryHandler.ServeHTTP(w, r)
+		case FileSystemServiceDownloadFileProcedure:
+			fileSystemServiceDownloadFileHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -490,4 +527,8 @@ func (UnimplementedFileSystemServiceHandler) ListDirectory(context.Context, *con
 
 func (UnimplementedFileSystemServiceHandler) CreateDirectory(context.Context, *connect.Request[v1.CreateDirectoryRequest]) (*connect.Response[v1.CreateDirectoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.CreateDirectory is not implemented"))
+}
+
+func (UnimplementedFileSystemServiceHandler) DownloadFile(context.Context, *connect.Request[v1.DownloadFileRequest]) (*connect.Response[v1.DownloadFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.FileSystemService.DownloadFile is not implemented"))
 }

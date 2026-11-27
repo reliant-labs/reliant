@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import { useForgeConsole } from "../Console/consoleContext";
+import { Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
 import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { Segmented, VariableSelect } from "../Observability/Dashboards/parts";
@@ -89,6 +90,15 @@ interface SpeedSearch {
   metric?: string;
 }
 
+/** @deprecated Use SiteInsightsPage for the full set of site views. */
+export function SpeedInsightsPage() {
+  return (
+    <Page testId="console-speed-insights">
+      <SpeedInsightsView />
+    </Page>
+  );
+}
+
 /** Site insights' Speed view: its header (with the tabs) and its body; SiteInsightsPage frames it. */
 export function SpeedInsightsView() {
   const { forgeProject, env, roster } = useForgeConsole();
@@ -106,8 +116,8 @@ export function SpeedInsightsView() {
   const envId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
   const scope = useSiteInsightsScope(forgeProject, envId);
 
-  const routesPanel = useMemo(() => speedPanel("routes", device, pct, range), [device, pct, range]);
-  const seriesPanel = useMemo(() => speedPanel("series", device, pct, range), [device, pct, range]);
+  const routesPanel = useMemo(() => speedPanel("routes", device, pct, range, forgeProject), [device, pct, range, forgeProject]);
+  const seriesPanel = useMemo(() => speedPanel("series", device, pct, range, forgeProject), [device, pct, range, forgeProject]);
   // Both devices' summaries: the toggle says how much each has, and an empty
   // device is told apart from an app that measured nothing at all.
   const desktop = useSiteSpeedSummary({ project: forgeProject, envId, services, range, device: "desktop", pct }).query;

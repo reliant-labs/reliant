@@ -8,8 +8,11 @@
  * refuses it.
  *
  * The family is the observability reads (services/controlPlane/observability:
- * the ObservabilityApi and DataBrowserApi defaults, obsClient, the billing and
- * cost hooks): none may reach the module transport. Reads outside the family
+ * the ObservabilityApi and DataBrowserApi defaults, the billing and cost
+ * hooks): none may reach the module transport. Nor does the app transport's
+ * observability read stage (obsInterceptors.ts) reach them: the sample app's
+ * reads spend none of the person's server slots or quota, so the person's
+ * exhausted quota never refuses them. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
  * page makes in any scope (the person's org list, their own user) are answered
@@ -52,6 +55,7 @@ import { createTransportScope, TransportScopeProvider } from "@/lib/transportSco
 import { controlPlaneDataBrowserApi, dataBrowserApiOf } from "@/services/controlPlane/observability/DataBrowserApiContext";
 import { controlPlaneObservabilityApi, observabilityApiOf } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
+import { obsQuotaStore, resetObsQuotaStore } from "@/services/controlPlane/observability/quotaStore";
 
 import { AskAgentModeProvider } from "../AskReliant/askAgentMode";
 import { DashboardsPage } from "../Dashboards/DashboardsPages";
@@ -124,6 +128,7 @@ beforeEach(() => {
 afterEach(() => {
   restore();
   appQueryClient.clear();
+  resetObsQuotaStore();
 });
 
 function renderScoped(ui: React.ReactNode) {
@@ -177,6 +182,13 @@ describe("the console's observability pages in a TransportScope", () => {
     renderScoped(panel("alerts"));
     expect(await screen.findByTestId("obs-alerts-firing", {}, { timeout: 15_000 })).toBeInTheDocument();
     expectFamilyOnScope("controlplane.v1.AlertingService/ListAlerts");
+  }, 30_000);
+
+  it("logs, while the person's own org is out of query quota", async () => {
+    obsQuotaStore().report({ limit: "queries", lane: "interactive", resetsAtMs: Date.now() + 3_600_000, soft: false });
+    renderScoped(panel("logs"));
+    expect(await screen.findAllByTestId("obs-log-row", {}, { timeout: 15_000 })).not.toHaveLength(0);
+    expectFamilyOnScope("controlplane.v1.ObservabilityService/SearchLogs");
   }, 30_000);
 
   it("dashboards", async () => {

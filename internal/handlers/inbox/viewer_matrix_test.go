@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/viewertest"
 )
 
@@ -14,6 +15,6 @@ func TestInboxServiceViewerMatrix(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	f := viewertest.New(t, repo)
-	svc := NewTestInbox(t, withDeps(Deps{Repo: repo, Orgs: f.Membership}))
+	svc := NewTestInbox(t, withDeps(Deps{Repo: repo, Registrations: store.NewTriggerRegistrationExtStore(repo.ORM()), Orgs: f.Membership}))
 	viewertest.RunService(t, f, svc, "reliant.v1.InboxService", nil)
 }

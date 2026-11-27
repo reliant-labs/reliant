@@ -6,8 +6,8 @@
  * control-plane lets a console user run SERVER_READ_CAP observability reads at
  * once per org (obsratelimit.DefaultMaxInFlight), waits a few seconds for a
  * slot, then refuses with `in_flight_limit`. Every read that takes one of those slots (see
- * obsClient's READ_SLOT_RPCS) goes through this queue, whichever view asked: a
- * dashboard of twenty panels, the metrics explorer, logs, traces, the service
+ * readSlots.ts' READ_SLOT_RPCS) goes through this queue, on the control-plane
+ * transport (obsInterceptors.ts), whichever view asked: a dashboard of twenty panels, the metrics explorer, logs, traces, the service
  * graph. It starts at most OBS_READ_CONCURRENCY at a time, first come first
  * served within a priority, and leaves the rest of the server's cap for other tabs and devices.
  *

@@ -656,6 +656,21 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"gmail__draft_create": {
+		Bindable: map[string]struct{}{
+			"bcc":         {},
+			"cc":          {},
+			"connection":  {},
+			"html":        {},
+			"in_reply_to": {},
+			"references":  {},
+			"subject":     {},
+			"text":        {},
+			"thread_id":   {},
+			"to":          {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"gmail__label_list": {
 		Bindable: map[string]struct{}{
 			"connection": {},
@@ -693,6 +708,178 @@ var generatedToolParams = map[string]ToolParams{
 			"text":        {},
 			"thread_id":   {},
 			"to":          {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_calendar__calendar_list": {
+		Bindable: map[string]struct{}{
+			"connection":      {},
+			"min_access_role": {},
+			"page_size":       {},
+			"show_hidden":     {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_calendar__event_create": {
+		Bindable: map[string]struct{}{
+			"add_google_meet": {},
+			"attendees":       {},
+			"calendar_id":     {},
+			"connection":      {},
+			"description":     {},
+			"end":             {},
+			"location":        {},
+			"send_updates":    {},
+			"start":           {},
+			"summary":         {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_calendar__event_delete": {
+		Bindable: map[string]struct{}{
+			"calendar_id":  {},
+			"connection":   {},
+			"event_id":     {},
+			"send_updates": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_calendar__event_get": {
+		Bindable: map[string]struct{}{
+			"calendar_id": {},
+			"connection":  {},
+			"event_id":    {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_calendar__event_list": {
+		Bindable: map[string]struct{}{
+			"calendar_id":   {},
+			"connection":    {},
+			"order_by":      {},
+			"page_size":     {},
+			"q":             {},
+			"single_events": {},
+			"time_max":      {},
+			"time_min":      {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_calendar__event_update": {
+		Bindable: map[string]struct{}{
+			"attendees":    {},
+			"calendar_id":  {},
+			"connection":   {},
+			"description":  {},
+			"end":          {},
+			"event_id":     {},
+			"location":     {},
+			"send_updates": {},
+			"start":        {},
+			"summary":      {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_sheets__sheet_add": {
+		Bindable: map[string]struct{}{
+			"column_count":   {},
+			"connection":     {},
+			"row_count":      {},
+			"spreadsheet_id": {},
+			"title":          {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_sheets__spreadsheet_create": {
+		Bindable: map[string]struct{}{
+			"connection":  {},
+			"sheet_names": {},
+			"title":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_sheets__spreadsheet_get": {
+		Bindable: map[string]struct{}{
+			"connection":     {},
+			"spreadsheet_id": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_sheets__values_append": {
+		Bindable: map[string]struct{}{
+			"connection":         {},
+			"insert_data_option": {},
+			"range":              {},
+			"spreadsheet_id":     {},
+			"value_input_option": {},
+			"values":             {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_sheets__values_batch_get": {
+		Bindable: map[string]struct{}{
+			"connection":          {},
+			"major_dimension":     {},
+			"ranges":              {},
+			"spreadsheet_id":      {},
+			"value_render_option": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_sheets__values_clear": {
+		Bindable: map[string]struct{}{
+			"connection":     {},
+			"range":          {},
+			"spreadsheet_id": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_sheets__values_get": {
+		Bindable: map[string]struct{}{
+			"connection":          {},
+			"major_dimension":     {},
+			"range":               {},
+			"spreadsheet_id":      {},
+			"value_render_option": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"google_sheets__values_update": {
+		Bindable: map[string]struct{}{
+			"connection":         {},
+			"major_dimension":    {},
+			"range":              {},
+			"spreadsheet_id":     {},
+			"value_input_option": {},
+			"values":             {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"growth__agent_run_create": {
+		Bindable: map[string]struct{}{
+			"connection":     {},
+			"ended_at":       {},
+			"output_summary": {},
+			"reason":         {},
+			"run_link":       {},
+			"started_at":     {},
+			"status":         {},
+			"workflow":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"growth__agent_run_list": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"page_size":  {},
+			"page_token": {},
+			"search":     {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"growth__inbox_status": {
+		Bindable: map[string]struct{}{
+			"connection": {},
 		},
 		Unbindable: map[string]string{},
 	},

@@ -5,6 +5,9 @@
  * It opens the existing command palette (the keyboard host's, so it searches
  * the same commands and settings everywhere). F opens it from anywhere you are
  * not typing; the palette's own chord still works.
+ *
+ * A host with no keyboard host (the phone's drawer, on `/m/*`) hands it
+ * `onOpen` instead: there, Find opens the phone's own Search screen.
  */
 
 import { useEffect } from "react";
@@ -19,10 +22,10 @@ function typingIn(target: EventTarget | null): boolean {
   return !!element?.closest?.("input, textarea, select, [contenteditable=''], [contenteditable='true'], .monaco-editor");
 }
 
-export function FindBox() {
+export function FindBox({ onOpen }: { onOpen?: () => void } = {}) {
   const host = useShortcutHost();
   const paletteShortcut = useShortcutLabel("commandPalette");
-  const open = () => void host?.run("onCommandPalette");
+  const open = () => (onOpen ? onOpen() : void host?.run("onCommandPalette"));
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -30,11 +33,12 @@ export function FindBox() {
       if (event.key !== "f" && event.key !== "F") return;
       if (typingIn(event.target) || isInputFocused() || document.querySelector('[aria-modal="true"], [role="dialog"]')) return;
       event.preventDefault();
-      void host?.run("onCommandPalette");
+      if (onOpen) onOpen();
+      else void host?.run("onCommandPalette");
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [host]);
+  }, [host, onOpen]);
 
   return (
     <div className="shrink-0 px-2 py-1">
@@ -45,7 +49,7 @@ export function FindBox() {
         aria-label="Find"
         aria-keyshortcuts={paletteShortcut ? `F ${paletteShortcut}` : "F"}
         title={paletteShortcut ? `Find (F, or ${paletteShortcut})` : "Find (F)"}
-        className="flex h-8 w-full items-center gap-2 rounded-md border border-border bg-background px-2 text-left text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="flex h-[var(--row-h)] w-full items-center gap-2 rounded-md border border-border bg-background px-2 text-left text-ui text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <Search className="size-4 shrink-0" aria-hidden="true" />
         <span className="min-w-0 flex-1 truncate">Find…</span>

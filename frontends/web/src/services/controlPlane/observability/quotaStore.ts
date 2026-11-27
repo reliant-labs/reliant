@@ -4,10 +4,12 @@
  * The console-wide state of the org's query quota: ONE answer, said once.
  *
  * Any observability query that fails with a quota error reports here
- * (ObsQuotaProvider watches the query cache). Everything that spends quota
- * reads here: query functions refuse to leave the browser while the quota is
- * gone (`guard`), and every poll asks what its interval is now (`pollMs`).
- * The views read it to draw one banner instead of one error per panel.
+ * (ObsQuotaProvider watches the query cache, and the control-plane transport's
+ * quota guard sees every read's answer). Everything that spends quota reads
+ * here: a ClickHouse read refuses to leave the browser while the quota is gone
+ * (`guard`, run by obsInterceptors.ts on the transport), and every poll asks
+ * what its interval is now (`pollMs`). The views read it to draw one banner
+ * instead of one error per panel.
  *
  *   ok         reads and polls run as usual.
  *   soft       the server is refusing POLLS to keep a reserve for a person's
@@ -16,8 +18,10 @@
  *              answers at once with the quota error, so a panel mounting
  *              during the pause costs the server nothing.
  *
- * The store is plain TypeScript so a query function (outside React) can read
- * it; React reads it through useSyncExternalStore.
+ * The store is plain TypeScript so the transport (outside React) can read it;
+ * React reads it through useSyncExternalStore. There is ONE per page
+ * (`obsQuotaStore()`), as there is one read scheduler: the quota is the org's
+ * at the server, so every view and every client draws on the same answer.
  */
 
 import { quotaOf, quotaPausedError, type QuotaExhaustion, type QuotaLimit } from "./quota";
@@ -39,7 +43,8 @@ export class ObsQuotaStore {
 
   private readonly now: () => number;
 
-  constructor(now: () => number = Date.now) {
+  // Read through Date at each call, so a fake clock installed after the page's store was made still applies.
+  constructor(now: () => number = () => Date.now()) {
     this.now = now;
   }
 
@@ -104,14 +109,28 @@ export class ObsQuotaStore {
   }
 }
 
+let shared: ObsQuotaStore | null = null;
+
+/** The page's quota store, made on first use: what the transport's quota guard and ObsQuotaProvider share. */
+export function obsQuotaStore(): ObsQuotaStore {
+  shared ??= new ObsQuotaStore();
+  return shared;
+}
+
+/** Tests only: a fresh page. */
+export function resetObsQuotaStore(): void {
+  shared = null;
+}
+
 // ── Which reads are background polls ─────────────────────────────────────────
 
 let polling = false;
 
 /**
  * Runs `refetch` as a background poll. A query function that starts inside it
- * sees `isPollRead()` — synchronously, at its first line — and marks its
- * request `Forge-Poll`, so the server can tell a poll from a person's read.
+ * sees `isPollRead()` — synchronously, at its first line — and its read, made
+ * with obsCall (obsInterceptors.ts), carries `Forge-Poll`, so the server can
+ * tell a poll from a person's read.
  * The flag is set only for the synchronous start of the fetch, so a read a
  * person triggers can never be mistaken for a poll.
  */
@@ -128,14 +147,5 @@ export function isPollRead(): boolean {
   return polling;
 }
 
-/** What a query function tells the rpc layer about the read it is making. */
-export interface ReadOptions {
-  poll?: boolean;
-}
-
 /** The request header that marks a background poll (forge/pkg/middleware allows it cross-origin). */
 export const POLL_HEADER = "Forge-Poll";
-
-export function callOptions(opts: ReadOptions | undefined): { headers: Record<string, string> } | undefined {
-  return opts?.poll ? { headers: { [POLL_HEADER]: "1" } } : undefined;
-}

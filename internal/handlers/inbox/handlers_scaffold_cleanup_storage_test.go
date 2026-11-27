@@ -50,7 +50,8 @@ func TestCleanupStorage_Generated(t *testing.T) {
 	// The machine belongs to someone else. The sweeper is never reached, so
 	// it needs neither a store nor a sender.
 	wired := inbox.NewTestInbox(t, withDeps(inbox.Deps{
-		Repo: &inbox.MockRepository{},
+		Registrations: &inbox.MockRegistrations{},
+		Repo:          &inbox.MockRepository{},
 		Machines: &inbox.MockDaemonReader{
 			GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
 				return &db.Daemon{ID: id, UserID: "someone-else"}, nil

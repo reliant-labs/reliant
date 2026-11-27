@@ -24,6 +24,7 @@ import { ConnectError, Code } from "@connectrpc/connect";
 import { QueryClient, type FetchQueryOptions } from "@tanstack/react-query";
 import type { ConnectClientError } from "@reliantlabs/forge-web-runtime";
 import {
+  FileNodeSymlinkStatus,
   FileNodeType,
   FileSystemService,
   FileViewerKind,
@@ -149,9 +150,26 @@ function protoFileNodeToFrontend(proto: ProtoFileNode): FileNode {
     type: isDir ? "directory" : "file",
     children,
     hasChildren: isDir ? proto.hasChildren : undefined,
+    symlinkTarget: proto.symlinkTarget,
+    symlinkStatus: symlinkStatusFromProto(proto.symlinkStatus),
     size: proto.size !== undefined ? Number(proto.size) : undefined,
     modified: proto.modified,
   };
+}
+
+function symlinkStatusFromProto(status: FileNodeSymlinkStatus): FileNode["symlinkStatus"] {
+  switch (status) {
+    case FileNodeSymlinkStatus.RESOLVED:
+      return "resolved";
+    case FileNodeSymlinkStatus.BROKEN:
+      return "broken";
+    case FileNodeSymlinkStatus.LOOP:
+      return "loop";
+    case FileNodeSymlinkStatus.DENIED:
+      return "denied";
+    default:
+      return undefined;
+  }
 }
 
 function protoViewerKindToFrontend(kind: FileViewerKind): FileViewerKindValue {
@@ -371,7 +389,36 @@ export async function getFilePreviewBlob(path: string, worktreeId?: string): Pro
     worktreeId,
     chatId: await activeChatIdForAPI(),
   }, transientReadOptions));
-  return new Blob([response.content], { type: response.contentType });
+  // Decoded protobuf bytes are never SharedArrayBuffer-backed, which is all Blob refuses.
+  return new Blob([response.content as Uint8Array<ArrayBuffer>], { type: response.contentType });
+}
+
+export interface DownloadedFile {
+  blob: Blob;
+  filename: string;
+}
+
+/**
+ * Reads a whole file of any kind off the machine that holds it, for saving on
+ * this device. Not a cached read: every call is a fresh download, and the
+ * bytes are handed to the caller and never kept here. The server refuses a
+ * file over its cap (25 MB) with FailedPrecondition and the reason
+ * `file_too_large_to_download`.
+ */
+export async function downloadFile(path: string, worktreeId?: string): Promise<DownloadedFile> {
+  const projectId = requireProjectId();
+  const apiPath = await normalizeFilePathForAPI(path, worktreeId);
+  const response = await client.downloadFile({
+    projectId,
+    path: apiPath,
+    worktreeId,
+    chatId: await activeChatIdForAPI(),
+  });
+  return {
+    // Decoded protobuf bytes are never SharedArrayBuffer-backed, which is all Blob refuses.
+    blob: new Blob([response.content as Uint8Array<ArrayBuffer>], { type: response.contentType || "application/octet-stream" }),
+    filename: response.filename,
+  };
 }
 
 export function isBinaryFileError(error: unknown): boolean {

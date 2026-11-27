@@ -44,7 +44,7 @@ func (s *Service) GetFileMetadata(
 
 		ViewerGuarded bool `json:"viewer_guarded"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.stat", cmdReq, &cmdResp, fsCommandTimeoutMs); err != nil {
 		return nil, err
 	}
 	if err := requireViewerGuard(cmdResp.ViewerGuarded); err != nil {

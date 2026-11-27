@@ -2,15 +2,16 @@
 #
 # Fails when an npm dependency carries a license that is not on the ALLOWLIST.
 #
-# The npm twin of check-licenses.sh, and it exists because that script is
-# Go-only: it walks `go list -deps`, so a frontend's entire dependency tree —
+# The npm twin of the Go license gate (forge's license-check row under
+# forge.yaml ci.license, which replaced scripts/check-licenses.sh), and it
+# exists because that gate is Go-only: it walks `go list -deps`, so a frontend's entire dependency tree —
 # routinely larger than the Go one — went ungated. Measured when this was
 # written: 104 Go modules in control-plane against 729 npm packages in one of
 # its two frontends.
 #
 # Same bar as the Go gate, deliberately: allowlist not blocklist, an
 # unrecognized license FAILS rather than passing silently, and an exception is
-# per-package with a stated reason. See check-licenses.sh for the full
+# per-package with a stated reason. See forge.yaml ci.license for the full
 # rationale; the differences below are the ones npm forces.
 #
 # ── SCOPE: the PRODUCTION tree, resolved from the lockfile ──────────────

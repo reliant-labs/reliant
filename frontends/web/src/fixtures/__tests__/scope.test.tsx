@@ -8,7 +8,7 @@
  */
 
 import { afterEach, beforeAll, afterAll, describe, expect, it } from "vitest";
-import { createClient } from "@connectrpc/connect";
+import { createClient, createRouterTransport } from "@connectrpc/connect";
 import { render, screen } from "@testing-library/react";
 
 import { ActivityService } from "@/gen/controlplane/services/activity/v1/activity_pb";
@@ -18,6 +18,8 @@ import { useAskAgentMode } from "@/components/Forge/Observability/AskReliant/ask
 import { useObsReadOnly } from "@/components/Forge/Observability/obsReadOnly";
 import { SAMPLE_APP, SAMPLE_APP_LABEL } from "@/components/Forge/Sample/sampleApp";
 import { useTransportScope } from "@/lib/transportScope";
+import { setTransport } from "@/lib/connect";
+import { ProjectService } from "@/gen/reliant/v1/project_pb";
 import type { ProjectCatalog } from "@/services/projects/catalog";
 
 import { appScope, AppScopeProvider, resetSampleScopeForTests, SAMPLE_ROW, setSampleTourActive, useSampleTour, withSampleApp } from "../scope";
@@ -49,6 +51,28 @@ describe("appScope", () => {
       ["sample_env-staging", SAMPLE_APP, "staging"],
       ["sample_env-prod", SAMPLE_APP, "prod"],
     ]);
+  });
+
+  // Generated hooks follow the scope (scopedClient), the shell's among them: a
+  // service the pack does not own is the person's, and stays on the app's transport.
+  it("passes every call to a service the shop pack does not own to the app's transport", async () => {
+    expect(SHOP_PACK_SERVICES.map((service) => service.typeName)).not.toContain(ProjectService.typeName);
+    const seen: string[] = [];
+    const live = createRouterTransport((router) =>
+      router.service(ProjectService, {
+        listProjects: () => {
+          seen.push("ListProjects");
+          return {};
+        },
+      } as never)
+    );
+    const restore = setTransport(live);
+    try {
+      await createClient(ProjectService, appScope(SAMPLE_APP)!.transport).listProjects({});
+    } finally {
+      restore();
+    }
+    expect(seen).toEqual(["ListProjects"]);
   });
 });
 

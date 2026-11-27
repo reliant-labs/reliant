@@ -35,7 +35,7 @@ import { listDomains } from "@/services/forge/domains";
 import { getEnvironmentShape, getLiveView } from "@/services/forge/live";
 import { getProjectRelease, getPromotionRollout, listProjectReleases, listReleasePromotions } from "@/services/forge/releases";
 import { envPromotionRows } from "@/components/Forge/Releases/envPromotionsModel";
-import { listSecrets } from "@/services/forge/secretStore";
+import { listingOf } from "@/services/forge/secretStore";
 
 import { DEMO_DOMAINS, DEMO_ENVS, DEMO_PROJECT, DEMO_RELEASES, DEMO_SECRETS, DEMO_WORKLOADS, consoleScenarioHandlers } from "../handlers/console";
 import { DEMO_DEFAULT_SERVICES } from "../handlers/defaults";
@@ -188,11 +188,12 @@ describe("the console's sample data, on the demo's transport", () => {
   });
 
   it("Secrets: names per environment, never a value", async () => {
-    const prod = await listSecrets(transport, "env-prod");
+    const secretsClient = createClient(SecretStoreService, transport);
+    const prod = listingOf(await secretsClient.listSecrets({ environmentId: "env-prod" }));
     expect(prod.secrets.map((s) => s.name)).toEqual([...DEMO_SECRETS.map((s) => s.name)].sort());
     expect(prod.protected).toBe(true);
     // dev is missing the webhook secret and the mail key: the matrix shows the gap.
-    const dev = await listSecrets(transport, "env-dev");
+    const dev = listingOf(await secretsClient.listSecrets({ environmentId: "env-dev" }));
     expect(dev.secrets.map((s) => s.name)).not.toContain("PAYMENTS_WEBHOOK_SECRET");
 
     const client = createClient(SecretStoreService, (await import("@/lib/connect")).transport);

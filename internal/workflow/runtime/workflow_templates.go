@@ -246,7 +246,11 @@ func parseResolvedWorkflow(resolved map[string]interface{}) (*reliantv1.Workflow
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal resolved workflow to YAML: %w", err)
 	}
-	return wfyaml.ParseWorkflow(yamlData)
+	wf, err := wfyaml.ParseWorkflow(yamlData)
+	if err != nil {
+		return nil, err
+	}
+	return LowerForExecution(wf)
 }
 
 // ResolveAndParseWorkflow resolves all templates in raw workflow YAML using

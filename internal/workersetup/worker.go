@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/reliant-labs/reliant/internal/serveraction"
 )
 
 // temporalWorker is the part of the SDK's worker.Worker the component drives.
@@ -52,7 +54,17 @@ type Worker struct {
 	// background runs beside the worker once it has started, until Run
 	// returns (the org key notice sweep).
 	background []func(context.Context)
+
+	// serverActions is the dispatcher the Action activity runs server
+	// actions (uses: reliant/...) through.
+	serverActions *serveraction.Dispatcher
 }
+
+// ServerActions is the dispatcher this worker's Action activity runs Reliant
+// server actions through, as NewWorker built it from Config.ServerActions.
+// It lets the process's wiring tests follow pipeline.enabled from the
+// deployed config to the dispatcher that refuses or runs each call.
+func (w *Worker) ServerActions() *serveraction.Dispatcher { return w.serverActions }
 
 // newWorker wraps w, whose fatal errors arrive on fatal.
 func newWorker(w temporalWorker, fatal <-chan error) *Worker {

@@ -78,6 +78,14 @@ type QuestionCreateActivity struct {
 	writer    QuestionWriter
 	questions QuestionsByStep
 	runEvents runevents.Store
+	updates   UserRefetcher
+}
+
+// WithUpdates sets what tells the owner's inbox an async question arrived; nil
+// announces nothing.
+func (a *QuestionCreateActivity) WithUpdates(u UserRefetcher) *QuestionCreateActivity {
+	a.updates = u
+	return a
 }
 
 // NewQuestionCreateActivity creates a new QuestionCreateActivity
@@ -226,8 +234,8 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		// in the user's inbox, which no activity change announces, so the
 		// inbox is told to re-read.
 		if input.Async {
-			if chat, err := chatviews.Of(a.repo).GetChat(txCtx, input.ChatID); err == nil && chat != nil {
-				if err := a.repo.EmitUserRefetch(txCtx, chat.UserID, db.RefetchInbox, db.RefetchOpts{ChatID: &input.ChatID}); err != nil {
+			if chat, err := chatviews.Of(a.repo).GetChat(txCtx, input.ChatID); err == nil && chat != nil && a.updates != nil {
+				if err := a.updates.EmitUserRefetch(txCtx, chat.UserID, db.RefetchInbox, db.RefetchOpts{ChatID: &input.ChatID}); err != nil {
 					logger.Warn("[QuestionCreate] Failed to announce an async question to the inbox", "error", err, "chatID", input.ChatID)
 				}
 			}

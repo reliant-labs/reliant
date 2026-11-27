@@ -24,7 +24,7 @@ func TestResolveOrphanedAgentMessages_ResolvesTerminalThreadBacklog(t *testing.T
 	repo := newMockRepo()
 	repo.orphanedMailboxThreads = []string{"dead-thread-1"}
 	repo.orphanedMailboxRows = map[string]int64{"dead-thread-1": 2}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestResolveOrphanedAgentMessages_LeavesLiveThreadsAlone(t *testing.T) {
 	// The query returns only terminal-thread rows; a live thread's queue is
 	// simply absent from it.
 	repo.orphanedMailboxThreads = nil
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -71,7 +71,7 @@ func TestResolveOrphanedAgentMessages_IdempotentAcrossPasses(t *testing.T) {
 	repo := newMockRepo()
 	repo.orphanedMailboxThreads = []string{"dead-thread-1"}
 	repo.orphanedMailboxRows = map[string]int64{"dead-thread-1": 0}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestResolveOrphanedAgentMessages_ContinuesPastPerThreadFailure(t *testing.T
 	repo := newMockRepo()
 	repo.orphanedMailboxThreads = []string{"dead-thread-1", "dead-thread-2"}
 	repo.orphanedMailboxResolveErr = errors.New("update failed")
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.NoError(t, err, "a per-thread failure is logged and skipped, not surfaced as a pass error")
@@ -107,7 +107,7 @@ func TestResolveOrphanedAgentMessages_LeavesAThreadWhoseRunIsStillOpen(t *testin
 	temporal := &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{
 		"main-thread": {resp: makeRunningDescribeResp("run-successor")},
 	}}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func TestResolveOrphanedAgentMessages_AsksAboutTheOwningWorkflowAndFailsClosed(t
 	temporal := &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{
 		owner: {resp: makeRunningDescribeResp("run-1")},
 	}}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: temporal, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ func TestResolveOrphanedAgentMessages_AsksAboutTheOwningWorkflowAndFailsClosed(t
 func TestResolveOrphanedAgentMessages_SurfacesListFailure(t *testing.T) {
 	repo := newMockRepo()
 	repo.orphanedMailboxErr = errors.New("query failed")
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.Error(t, err)
@@ -169,7 +169,7 @@ func TestReconcileRunningWorkflows_RunsOrphanedMailboxSweep(t *testing.T) {
 	repo.workflowsByStatus[db.Paused()] = nil
 	repo.orphanedMailboxThreads = []string{"dead-thread-1"}
 	repo.orphanedMailboxRows = map[string]int64{"dead-thread-1": 1}
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	assert.Empty(t, errs)
@@ -200,7 +200,7 @@ func TestResolveOrphanedAgentMessages_LeavesAStoppedSubAgentsMailForItsResume(t 
 	repo.orphanedMailboxThreads = []string{"orphan", "stopped", "stopped-under-stopped"}
 	repo.orphanedMailboxRows = map[string]int64{"orphan": 1, "stopped": 1, "stopped-under-stopped": 1}
 	// Temporal knows none of the spawn rows: they are not executions.
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{}}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{}}, Config: DefaultConfig(), Mailbox: repo, Orphans: repo})
 
 	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.NoError(t, err)

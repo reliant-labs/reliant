@@ -36,9 +36,10 @@ import { lazy, Suspense, useCallback } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import PageHeader from "@/components/forge-ui/page_header";
+import type { RosterEnv } from "@/services/forge/roster";
 
 import { ConsoleFrame } from "../Console/ConsoleFrame";
-import { DEFAULT_ENV, ENV_ALL } from "../Console/envScope";
+import { DEFAULT_ENV, ENV_ALL, scopeOptions } from "../Console/envScope";
 import { isObsNavView, withSearch, type ConsolePage } from "../Console/paths";
 import ObservabilityPanel, { type ObsPlace } from "../Observability/ObservabilityPanel";
 import { OBS_VIEW_LABELS, viewOf, type ObsNavigate, type ObsSearch, type ObsView } from "../Observability/obsSearch";
@@ -58,7 +59,8 @@ const HowThisAppWasBuilt = lazy(() => import("./howBuilt/HowThisAppWasBuilt"));
 
 /** The fixture environments with what each declares (rules, routes, observability policy), for Alerts. */
 const ENVIRONMENTS = FIXTURE_ENVS.map((env) => ({ ...env, declared: FIXTURE_DECLARED[env.id] ?? null }));
-const SCOPE = { long: FIXTURE_ENVS.map((env) => ({ name: env.name, recorded: true })), previews: [] };
+/** The scope control's choices, in the app's order (prod first): the sample's environments are all recorded and deployed. */
+const SCOPE = scopeOptions(FIXTURE_ENVS.map((env): RosterEnv => ({ name: env.name, source: "backend", lifecycle: "deployed", live: null, forge: null })));
 const PLACE: ObsPlace = { kind: "project", project: FIXTURE_PROJECT, environments: ENVIRONMENTS };
 
 /** The console page a panel view stands for: the breadcrumb's page. */
