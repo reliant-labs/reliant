@@ -1,9 +1,10 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * SPEED INSIGHTS (U6e, owner: "Vercel's speed insights is nicer than ours"):
- * /forge/p/:app/speed-insights — how fast each page loads and responds for
- * real visitors, laid out after Vercel's:
+ * SITE INSIGHTS › SPEED (U6e, owner: "Vercel's speed insights is nicer than
+ * ours"; it was the Speed insights page): /forge/p/:app/site-insights, the
+ * page's default view (SiteInsightsPage.tsx) — how fast each page loads and
+ * responds for real visitors, laid out after Vercel's:
  *
  *   Real Experience Score   one 0–100 number, coloured, and its chart over
  *                           the window (or one vital's, picked by its card)
@@ -14,7 +15,8 @@
  *
  * Every choice is the URL's: `?device=desktop|mobile` (default desktop),
  * `?pct=p75|p90|p95|p99` (default p75), `?metric=score|lcp|…` (the chart),
- * `?range=`. The data and the score's formula: speedInsightsModel.ts.
+ * `?range=`, and the site, `?site=` (siteInsightsParts.tsx; every site when
+ * absent). The data and the score's formula: speedInsightsModel.ts.
  *
  * With no samples on either device: what the page will show and how to turn
  * it on (the runtime's telemetry, which a forge frontend scaffolds).
@@ -26,19 +28,16 @@ import { Gauge } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
 import Card from "@/components/forge-ui/card";
-import { ConsolePageHeader } from "../Console/severalSectionContext";
 import Status from "@/components/forge-ui/status";
 import { ProjectEmptyCta } from "@/components/EmptyState/ProjectEmptyCta";
 import { DeployWithAgentButton } from "@/components/Forge/Observability/AskReliant/AskReliant";
-import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
+import { usePanelQuery } from "@/hooks/observability-queries";
 import { cn } from "@/lib/utils";
-import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { Page } from "../Console/consolePageFrame";
 import { ENV_ALL } from "../Console/envScope";
-import { PAGE_SUBTITLES } from "../Console/consoleCrumbs";
 import { UPlotChart } from "../Observability/charts/UPlotChart";
 import { Segmented, VariableSelect } from "../Observability/Dashboards/parts";
 import { formatCount } from "../Observability/format";
@@ -72,8 +71,10 @@ import {
   type Vital,
   type VitalsRow,
 } from "./speedInsightsModel";
+import { SiteInsightsHeader, SitePicker, useSiteChoice } from "./siteInsightsParts";
+import { SITE_SPEED_DEFAULT_RANGE, useSiteInsightsScope, useSiteSpeedSummary } from "./useSiteSpeedSummary";
 
-const DEFAULT_RANGE: RangePreset = "7d";
+const DEFAULT_RANGE: RangePreset = SITE_SPEED_DEFAULT_RANGE;
 
 /** A rating's ink (text) and fill (bars, the score ring): semantic status tokens. */
 const INK: Record<Rating, string> = { good: "text-success-ink", ni: "text-warning-ink", poor: "text-danger-ink" };
@@ -89,8 +90,19 @@ interface SpeedSearch {
   metric?: string;
 }
 
+/** @deprecated Use SiteInsightsPage for the full set of site views. */
 export function SpeedInsightsPage() {
+  return (
+    <Page testId="console-speed-insights">
+      <SpeedInsightsView />
+    </Page>
+  );
+}
+
+/** Site insights' Speed view: its header (with the tabs) and its body; SiteInsightsPage frames it. */
+export function SpeedInsightsView() {
   const { forgeProject, env, roster } = useForgeConsole();
+  const { services } = useSiteChoice();
   const search = useSearch({ strict: false }) as SpeedSearch;
   const navigate = useNavigate();
   const range = search.range ?? DEFAULT_RANGE;
@@ -101,20 +113,17 @@ export function SpeedInsightsPage() {
   const set = (patch: Partial<Record<keyof SpeedSearch, string | undefined>>) =>
     void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, ...patch }), replace: true } as never);
 
-  const org = useObservabilityOrg();
   const envId = env === ENV_ALL ? undefined : roster.envs.find((candidate) => candidate.name === env)?.live?.id;
-  const scope = useMemo<ObsScope | null>(() => (org.orgId ? { orgId: org.orgId, projectId: forgeProject, envIds: envId ? [envId] : [], filters: [] } : null), [org.orgId, forgeProject, envId]);
+  const scope = useSiteInsightsScope(forgeProject, envId);
 
-  const desktopPanel = useMemo(() => speedPanel("summary", "desktop", pct, range), [pct, range]);
-  const mobilePanel = useMemo(() => speedPanel("summary", "mobile", pct, range), [pct, range]);
-  const routesPanel = useMemo(() => speedPanel("routes", device, pct, range), [device, pct, range]);
-  const seriesPanel = useMemo(() => speedPanel("series", device, pct, range), [device, pct, range]);
+  const routesPanel = useMemo(() => speedPanel("routes", device, pct, range, forgeProject), [device, pct, range, forgeProject]);
+  const seriesPanel = useMemo(() => speedPanel("series", device, pct, range, forgeProject), [device, pct, range, forgeProject]);
   // Both devices' summaries: the toggle says how much each has, and an empty
   // device is told apart from an app that measured nothing at all.
-  const desktop = usePanelQuery(scope, range, desktopPanel, []);
-  const mobile = usePanelQuery(scope, range, mobilePanel, []);
-  const routes = usePanelQuery(scope, range, routesPanel, []);
-  const series = usePanelQuery(scope, range, seriesPanel, []);
+  const desktop = useSiteSpeedSummary({ project: forgeProject, envId, services, range, device: "desktop", pct }).query;
+  const mobile = useSiteSpeedSummary({ project: forgeProject, envId, services, range, device: "mobile", pct }).query;
+  const routes = usePanelQuery(scope, range, routesPanel, services);
+  const series = usePanelQuery(scope, range, seriesPanel, services);
 
   const summaries: Record<Device, VitalsRow | undefined> = { desktop: vitalsRows(desktop.data)[0], mobile: vitalsRows(mobile.data)[0] };
   const viewsOf = (d: Device) => summaries[d]?.views ?? 0;
@@ -125,14 +134,12 @@ export function SpeedInsightsPage() {
   const nothingAtAll = !loading && !failed && viewsOf("desktop") === 0 && viewsOf("mobile") === 0 && !hasSamples(summaries.desktop) && !hasSamples(summaries.mobile);
 
   return (
-    <Page testId="console-speed-insights">
-      <ConsolePageHeader
-        density="compact"
-        className="mb-0"
-        title="Speed insights"
-        subtitle={PAGE_SUBTITLES["speed-insights"]}
+    <>
+      <SiteInsightsHeader
+        view="speed"
         controls={
           <>
+            <SitePicker scope={scope} range={range} />
             <Segmented<Device>
               label="Device"
               testId="speed-insights-device"
@@ -161,7 +168,7 @@ export function SpeedInsightsPage() {
         }
       />
       {loading ? (
-        <div className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Loading speed insights" />
+        <div className="h-64 animate-pulse rounded-xl border border-border bg-surface motion-reduce:animate-none" aria-label="Loading site speed" />
       ) : failed ? (
         <ObsError
           error={desktop.error ?? mobile.error}
@@ -199,7 +206,7 @@ export function SpeedInsightsPage() {
           </p>
         </>
       )}
-    </Page>
+    </>
   );
 }
 
@@ -414,10 +421,10 @@ function SpeedInsightsEmpty({ windowWords }: { windowWords: string }) {
       icon={<Gauge />}
       title={`No page has been measured in the ${windowWords}`}
       deploy={<DeployWithAgentButton env={null} />}
-      learn="speed-insights"
+      learn="site-insights"
     >
       <p>
-        Speed insights scores how real visitors experience every page of your frontend: how fast it loads (LCP, FCP), how quickly it responds to a tap or click (INP),
+        Site insights scores how real visitors experience every page of your frontend: how fast it loads (LCP, FCP), how quickly it responds to a tap or click (INP),
         how much it shifts as it loads (CLS) and how long the server takes to answer (TTFB), on desktop and on mobile.
       </p>
       <p>

@@ -24,6 +24,7 @@ import { ConnectError, Code } from "@connectrpc/connect";
 import { QueryClient, type FetchQueryOptions } from "@tanstack/react-query";
 import type { ConnectClientError } from "@reliantlabs/forge-web-runtime";
 import {
+  FileNodeSymlinkStatus,
   FileNodeType,
   FileSystemService,
   FileViewerKind,
@@ -149,9 +150,26 @@ function protoFileNodeToFrontend(proto: ProtoFileNode): FileNode {
     type: isDir ? "directory" : "file",
     children,
     hasChildren: isDir ? proto.hasChildren : undefined,
+    symlinkTarget: proto.symlinkTarget,
+    symlinkStatus: symlinkStatusFromProto(proto.symlinkStatus),
     size: proto.size !== undefined ? Number(proto.size) : undefined,
     modified: proto.modified,
   };
+}
+
+function symlinkStatusFromProto(status: FileNodeSymlinkStatus): FileNode["symlinkStatus"] {
+  switch (status) {
+    case FileNodeSymlinkStatus.RESOLVED:
+      return "resolved";
+    case FileNodeSymlinkStatus.BROKEN:
+      return "broken";
+    case FileNodeSymlinkStatus.LOOP:
+      return "loop";
+    case FileNodeSymlinkStatus.DENIED:
+      return "denied";
+    default:
+      return undefined;
+  }
 }
 
 function protoViewerKindToFrontend(kind: FileViewerKind): FileViewerKindValue {
