@@ -18408,7 +18408,7 @@
           "output": "reliant.v1.GetAssetDownloadResponse",
           "client_streaming": false,
           "server_streaming": false,
-          "idempotency": "NO_SIDE_EFFECTS",
+          "idempotency": "UNKNOWN",
           "auth_required": true
         },
         {
@@ -18973,8 +18973,7 @@
             "ServerStreaming": false,
             "AuthRequired": true,
             "Errors": null,
-            "NoSideEffects": true,
-            "Idempotency": "NO_SIDE_EFFECTS",
+            "Idempotency": "IDEMPOTENCY_UNKNOWN",
             "InputTypeFQ": "reliant.v1.GetAssetDownloadRequest",
             "OutputTypeFQ": "reliant.v1.GetAssetDownloadResponse",
             "InputProtoFile": "reliant/v1/gtm.proto",
@@ -18982,7 +18981,7 @@
             "Activity": {
               "Mutating": false,
               "Declared": true,
-              "None": "read-only: a short-lived download URL"
+              "None": "mints a short-lived download URL; changes no stored state"
             }
           },
           {
@@ -19858,7 +19857,7 @@
           ],
           "GetAssetDownloadResponse": [
             {
-              "Name": "url",
+              "Name": "download_url",
               "ProtoType": "string",
               "IsOptional": false
             },
@@ -20371,7 +20370,7 @@
               "IsOptional": false
             },
             {
-              "Name": "category",
+              "Name": "categories",
               "ProtoType": "[]enum",
               "IsOptional": false
             },
@@ -21484,7 +21483,7 @@
           ],
           "reliant.v1.GetAssetDownloadResponse": [
             {
-              "name": "url",
+              "name": "download_url",
               "kind": "string"
             },
             {
@@ -22813,7 +22812,7 @@
               }
             },
             {
-              "name": "category",
+              "name": "categories",
               "kind": "enum",
               "type_name": "reliant.v1.GtmStrategyCategory",
               "repeated": true

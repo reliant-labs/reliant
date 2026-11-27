@@ -64,6 +64,9 @@ const ROWS: Record<string, Row> = {
   },
   newChatPath: { build: () => paths.newChatPath(), url: "/new", template: "/new" },
   inboxPath: { build: () => paths.inboxPath(), url: "/inbox", template: "/inbox" },
+  gtmPath: { build: () => paths.gtmPath("ideas"), url: "/gtm/ideas", template: "/gtm/ideas" },
+  gtmIdeaPath: { build: () => paths.gtmIdeaPath("idea-1"), url: "/gtm/ideas/idea-1", template: "/gtm/ideas/$ideaId", params: { ideaId: "idea-1" } },
+  gtmLibraryPath: { build: () => paths.gtmLibraryPath("e-1"), url: "/gtm/strategy?view=library&entry=e-1" },
   usagePath: { build: () => paths.usagePath(), url: "/usage", template: "/usage" },
   usageBillingPath: { build: () => paths.usageBillingPath(), url: "/usage", template: "/usage" },
   connectorsPath: { build: () => paths.connectorsPath(), url: "/connectors", template: "/connectors" },
@@ -208,6 +211,9 @@ const ORG_URLS: Record<string, string> = {
   threadPath: "/o/acme/c/c-1/t/t-1",
   newChatPath: "/o/acme/new",
   inboxPath: "/o/acme/inbox",
+  gtmPath: "/o/acme/gtm/ideas",
+  gtmIdeaPath: "/o/acme/gtm/ideas/idea-1",
+  gtmLibraryPath: "/o/acme/gtm/strategy?view=library&entry=e-1",
   usagePath: "/o/acme/usage",
   usageBillingPath: "/o/acme/usage",
   connectorsPath: "/o/acme/connectors",
@@ -455,5 +461,10 @@ describe("the org segment", () => {
     expect(paths.consoleCheckoutSearch(undefined)).toBeUndefined();
     expect(paths.withMoreSearch("/forge/p/shop/releases?env=prod", { project: "p-1" })).toBe("/forge/p/shop/releases?env=prod&project=p-1");
     expect(paths.withMoreSearch("/forge/p/shop", { project: "p-1" })).toBe("/forge/p/shop?project=p-1");
+  });
+
+  it("builds the GTM strategy library's URL, open on one entry", () => {
+    expect(paths.gtmLibraryPath()).toBe(hrefOf({ to: "/gtm/strategy", search: { view: "library" } } as never));
+    expect(paths.gtmLibraryPath("founder-led-calls")).toBe(hrefOf({ to: "/gtm/strategy", search: { view: "library", entry: "founder-led-calls" } } as never));
   });
 });

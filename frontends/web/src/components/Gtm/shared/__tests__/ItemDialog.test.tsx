@@ -332,6 +332,27 @@ describe("ItemDialog", () => {
       expect(toasts.error).not.toHaveBeenCalled();
     });
 
+    it("download on a click: a fresh URL from GetAssetDownload, opened in a new tab; an image's thumbnail asks once", async () => {
+      const png = create(GtmAssetSchema, { id: "as-3", orgId: TEST_ORG, itemId: "item-1", filename: "hero.png", contentType: "image/png", sizeBytes: 2048n, status: GtmAssetStatus.READY });
+      let n = 0;
+      const get = vi.fn(() => ({ downloadUrl: `https://bucket.example/hero.png?sig=${++n}` }));
+      const tab = { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
+      const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
+      try {
+        renderGtm(<ItemDialog item={post} onClose={() => {}} />, { ...reads, "GtmService.ListAssets": { response: { assets: [png] } }, "GtmService.GetAssetDownload": get });
+        const img = await screen.findByRole("img", { name: "hero.png" });
+        expect(img).toHaveAttribute("src", "https://bucket.example/hero.png?sig=1");
+        expect(get).toHaveBeenCalledTimes(1);
+        fireEvent.click(screen.getByRole("button", { name: "Download hero.png" }));
+        await waitFor(() => expect(tab.location.href).toBe("https://bucket.example/hero.png?sig=2"));
+        expect(open).toHaveBeenCalledWith("", "_blank");
+        expect(tab.opener).toBeNull();
+        expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ orgId: TEST_ORG, assetId: "as-3" }));
+      } finally {
+        open.mockRestore();
+      }
+    });
+
     it("delete only after a confirm", async () => {
       const asset = create(GtmAssetSchema, { id: "as-2", orgId: TEST_ORG, itemId: "item-1", filename: "notes.txt", contentType: "text/plain", sizeBytes: 2048n, status: GtmAssetStatus.READY, source: GtmAssetSource.PERSON });
       const del = vi.fn(() => ({}));
