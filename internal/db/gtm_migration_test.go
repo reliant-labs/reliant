@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The gtm_* tables (20261127160000_create_gtm) hold their invariants
+// The gtm_* tables (20261127223026_create_gtm) hold their invariants
 // themselves: a row links only rows of its own org, a verified claim carries
 // its evidence, a sent item is email-type with its send record, an email-type
 // item is never SCHEDULED or PUBLISHED, a channel's mode matches its

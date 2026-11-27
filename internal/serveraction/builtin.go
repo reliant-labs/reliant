@@ -9,7 +9,36 @@ package serveraction
 // each with its Handler bound on the worker (app.WorkerServerActions). Every
 // one of them runs only while the server's pipeline.enabled switch is on.
 func builtinSpecs() []Spec {
-	return append(append(prSpecs(), queueSpecs()...), sweepSpecs()...)
+	return append(append(append(prSpecs(), queueSpecs()...), sweepSpecs()...), grantSpecs()...)
+}
+
+// PipelineRequestGrant asks the run's owner, with an approval card in the
+// run's chat, to grant pipeline capabilities to the run's activation on its
+// machine pool (internal/pipeline/grants.RequestGrant).
+const PipelineRequestGrant = "reliant/pipeline.request_grant@1"
+
+func grantSpecs() []Spec {
+	return []Spec{{
+		Name: PipelineRequestGrant,
+		Description: "Ask the owner, with an approval card in this chat, to grant this activation a pipeline capability " +
+			"(approve: its review verdicts count; land: the merge queue may merge what it approved) on its machine pool. " +
+			"Never granted without the owner's approval.",
+		Params: map[string]any{
+			"type": "object", "additionalProperties": false, "required": []any{"capabilities"},
+			"properties": map[string]any{
+				"capabilities": map[string]any{
+					"type": "array", "minItems": 1, "uniqueItems": true,
+					"items":       map[string]any{"type": "string", "enum": []any{"approve", "land"}},
+					"description": "The capabilities to ask for.",
+				},
+				"repo_id": map[string]any{"type": "string", "minLength": 1,
+					"description": "Limit the grant to one enrolled repository of the run's project (pipeline_repos.id); absent for every one."},
+				"reason": map[string]any{"type": "string", "maxLength": 500,
+					"description": "Why the activation needs it, shown on the card."},
+			},
+		},
+		Mutates: true,
+	}}
 }
 
 // SweepPR is the daily PR sweep (pipeline build plan M13;

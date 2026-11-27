@@ -56,7 +56,7 @@ const KNOWN_REFUSALS: Record<string, { why: string; surfaces?: string[]; except?
     except: [
       'projects', 'projects-project-page', 'billing', 'usage', 'hosting', 'shell-usage-billing', 'shell-settings (desktop)',
       'shell-inbox (desktop)', 'gtm-strategy', 'gtm-strategy-library', 'gtm-channels', 'gtm-ideas', 'gtm-campaigns', 'gtm-calendar', 'gtm-positioning', 'shell-apps', 'shell-connectors', 'shell-empty-cta', 'shell-daemonless-home (desktop)',
-      'observability-overview', 'settings-appearance',
+      'observability-overview', 'settings-appearance', 'settings-org-github',
     ],
     // The desktop daemonless home sends Alex to Projects; a project selected
     // before that redirect lands is touched, one run in a few.
@@ -637,6 +637,15 @@ const SURFACES: Surface[] = [
     on: ['desktop'],
     ready: (page) => page.getByText('Machine usage and allowance').first(),
   },
+  {
+    // Settings › Organization GitHub for an admin whose GitHub is connected:
+    // Acme's GitHub organization linked, and Alex's personal installation
+    // offered to link (handlers/github.ts).
+    name: 'settings-org-github',
+    path: '/settings/org-github',
+    on: ['desktop'],
+    ready: (page) => page.getByRole('button', { name: 'Link alex-demo' }),
+  },
   // The one shell (U6): the same destinations the shell hosts, named so they can be re-captured
   // as the shell changes. `ready` waits on page content, never on the sidebar.
   {
@@ -773,16 +782,16 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByTestId('obs-overview-slowest').getByText('CheckoutService/Checkout').first(),
   },
   {
-    // Speed insights: the Real Experience Score, the vitals, the routes (U6 7/16).
+    // Site insights › Speed: the Real Experience Score, the vitals, the routes (U6 7/16).
     name: 'shell-speed-insights',
-    path: '/forge/p/shop/speed-insights',
+    path: '/forge/p/shop/site-insights',
     on: ['desktop'],
     ready: (page) => page.getByTestId('speed-insights-routes').getByText('/checkout').first(),
   },
   {
     // The same page on its mobile device and P90 toggles, read from the URL.
     name: 'shell-speed-insights-mobile',
-    path: '/forge/p/shop/speed-insights?device=mobile&pct=p90',
+    path: '/forge/p/shop/site-insights?device=mobile&pct=p90',
     on: ['desktop'],
     ready: (page) => page.getByTestId('speed-insights-routes').getByText('/checkout').first(),
   },
@@ -970,7 +979,7 @@ const SURFACES: Surface[] = [
     name: 'shell-sandboxes-dashboard',
     path: '/forge/p/shop/observability/dashboards/release/sandboxes',
     on: ['desktop'],
-    ready: (page) => page.getByText('Self-hosted sandboxes: memory available').first(),
+    ready: (page) => page.getByText('Noisiest sandboxes', { exact: true }).first(),
     beforeShot: fitViewportToContent,
     harness: { overlays: ['sandboxes-dashboard'] },
   },

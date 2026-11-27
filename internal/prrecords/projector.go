@@ -23,15 +23,12 @@ type Deps struct {
 	Scope Scope
 	// Pipeline, when set, also keeps records for every repository enrolled
 	// in the PR pipeline (mode shadow or on), and projects their PR events
-	// into pr_pipeline and their base-branch pushes into the repository's
-	// config (pipeline.go). nil (pipeline.enabled off): neither, and the
+	// into pr_pipeline and their base-branch pushes into a pending read of
+	// the repository's config, which the worker's ConfigRefresher does
+	// (pipeline.go). nil (pipeline.enabled off): neither, and the
 	// projector is exactly the records projector.
 	// forge:optional-dep
 	Pipeline PipelineStore
-	// Contents reads .reliant/pipeline.yaml from the base branch. nil (no
-	// GitHub App to read as): a push records that as the config error.
-	// forge:optional-dep
-	Contents Contents
 }
 
 // projector applies deliveries to records. It is safe for concurrent use.
@@ -41,14 +38,13 @@ type projector struct {
 	store    Store
 	scope    Scope
 	pipeline PipelineStore
-	contents Contents
 	newID    func() string
 	now      func() time.Time
 }
 
 // New builds a projector that keeps records for deps.Scope.
 func New(deps Deps) Service {
-	return &projector{store: deps.Store, scope: deps.Scope, pipeline: deps.Pipeline, contents: deps.Contents,
+	return &projector{store: deps.Store, scope: deps.Scope, pipeline: deps.Pipeline,
 		newID: uuid.NewString, now: time.Now}
 }
 
