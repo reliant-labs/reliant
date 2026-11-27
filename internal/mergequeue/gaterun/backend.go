@@ -4,6 +4,7 @@ package gaterun
 import (
 	"context"
 	"io"
+	"strings"
 	"time"
 )
 
@@ -58,7 +59,34 @@ const (
 	// it). With Spec.CacheVolume it is the repository's warm cache volume;
 	// without, a directory on the per-gate work volume.
 	CacheMount = WorkMount + "/cache"
+	// TrustedGoCacheMount is where the machine's trusted Go build cache is
+	// mounted, read-only. The gate image's GOCACHEPROG
+	// (`forge cache prog --trusted /gate/trusted-go-build`) reads it before
+	// GOCACHE and writes only to GOCACHE; with nothing mounted there it runs
+	// on GOCACHE alone.
+	TrustedGoCacheMount = WorkMount + "/trusted-go-build"
 )
+
+// DefaultTrustedGoCacheDir is the machine's trusted Go build cache: a plain
+// GOCACHE directory that only main's seeding writes, as the daemon user.
+const DefaultTrustedGoCacheDir = "/var/cache/workspace/go-build-trusted"
+
+// TrustedGoCacheDir is the host directory a gate mounts at
+// TrustedGoCacheMount for the daemon's gate_trusted_go_cache setting: unset
+// is DefaultTrustedGoCacheDir, "off" is none (""), anything else is that
+// directory. The backend checks the directory before each gate and mounts
+// nothing when it is missing or unsafe, so the default needs no machine to
+// have one.
+func TrustedGoCacheDir(setting string) string {
+	switch s := strings.TrimSpace(setting); {
+	case s == "":
+		return DefaultTrustedGoCacheDir
+	case strings.EqualFold(s, "off"):
+		return ""
+	default:
+		return s
+	}
+}
 
 // Spec is one gate as a backend runs it.
 type Spec struct {
@@ -87,7 +115,15 @@ type Spec struct {
 	// build, acceptable only under that opt-in. An isolated backend never
 	// gets one.
 	CacheVolume string
-	Limits      Limits
+	// TrustedGoCacheDir is the machine's trusted Go build cache
+	// ([TrustedGoCacheDir]), mounted read-only at TrustedGoCacheMount; ""
+	// mounts none. The backend mounts it only when it is an absolute, real
+	// directory (not a symlink) that is neither group- nor world-writable,
+	// and otherwise logs why and runs the gate without it. Unlike
+	// CacheVolume it is safe for any gate: a candidate cannot write it, so
+	// it can poison only its own overlay (GOCACHE).
+	TrustedGoCacheDir string
+	Limits            Limits
 	// Stdout and Stderr receive the gate's own output; nil discards it.
 	Stdout, Stderr io.Writer
 }

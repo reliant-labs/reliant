@@ -247,8 +247,16 @@ type DaemonConfig struct {
 	// "off" sets none; otherwise a size, in bytes or with a binary suffix
 	// (16G, 16GiB, 512M).
 	HeavyMemoryHigh string `protobuf:"bytes,36,opt,name=heavy_memory_high,json=heavyMemoryHigh,proto3" json:"heavy_memory_high,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The machine's trusted Go build cache (a plain GOCACHE directory that
+	// only main's seeding writes), bind-mounted read-only into each gate at
+	// /gate/trusted-go-build, where the gate image's GOCACHEPROG reads it
+	// before the gate's own cache. Unset is /var/cache/workspace/go-build-trusted,
+	// mounted when it exists; "off" mounts nothing. A directory that is not a
+	// real, absolute directory, or is group- or world-writable, is not mounted
+	// (the gate logs why and runs on its own cache).
+	GateTrustedGoCache string `protobuf:"bytes,37,opt,name=gate_trusted_go_cache,json=gateTrustedGoCache,proto3" json:"gate_trusted_go_cache,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *DaemonConfig) Reset() {
@@ -519,6 +527,13 @@ func (x *DaemonConfig) GetHeavyMemoryHigh() string {
 	return ""
 }
 
+func (x *DaemonConfig) GetGateTrustedGoCache() string {
+	if x != nil {
+		return x.GateTrustedGoCache
+	}
+	return ""
+}
+
 // DaemonStatusConfig is `reliant daemon status`'s config.
 type DaemonStatusConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -711,7 +726,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xc5-\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xbc/\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -789,7 +804,9 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x10heavy_cpu_weight\x18# \x01(\x05B\x9d\x01\xbaH\a\x1a\x05\x18\x90N(\x00\x82\xce\x18\x8e\x01\n" +
 	"\x18RELIANT_HEAVY_CPU_WEIGHT*rcpu.weight of a heavy-slot command while it runs, against 100 for other commands (0: 25; 100 or more: not lowered)R\x0eheavyCpuWeight\x12\xd9\x01\n" +
 	"\x11heavy_memory_high\x18$ \x01(\tB\xac\x01\x82\xce\x18\xa7\x01\n" +
-	"\x19RELIANT_HEAVY_MEMORY_HIGH*\x89\x01memory.high of a heavy-slot command while it runs: off, or a size such as 16G (unset: 1.5x one slot's part of the memory, at least 12GiB)R\x0fheavyMemoryHigh:\x1c\xca\xc1\x18\x18\n" +
+	"\x19RELIANT_HEAVY_MEMORY_HIGH*\x89\x01memory.high of a heavy-slot command while it runs: off, or a size such as 16G (unset: 1.5x one slot's part of the memory, at least 12GiB)R\x0fheavyMemoryHigh\x12\xf4\x01\n" +
+	"\x15gate_trusted_go_cache\x18% \x01(\tB\xc0\x01\x82\xce\x18\xbb\x01\n" +
+	"$RELIANT_DAEMON_GATE_TRUSTED_GO_CACHE*\x92\x01Trusted Go build cache mounted read-only into merge-queue gates: off, or a directory (unset: /var/cache/workspace/go-build-trusted when it exists)R\x12gateTrustedGoCache:\x1c\xca\xc1\x18\x18\n" +
 	"\areliant\x12\x06daemon\x12\x05start\"x\n" +
 	"\x12DaemonStatusConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +

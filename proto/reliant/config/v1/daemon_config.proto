@@ -395,6 +395,18 @@ message DaemonConfig {
     env_var: "RELIANT_HEAVY_MEMORY_HIGH"
     description: "memory.high of a heavy-slot command while it runs: off, or a size such as 16G (unset: 1.5x one slot's part of the memory, at least 12GiB)"
   }];
+
+  // The machine's trusted Go build cache (a plain GOCACHE directory that
+  // only main's seeding writes), bind-mounted read-only into each gate at
+  // /gate/trusted-go-build, where the gate image's GOCACHEPROG reads it
+  // before the gate's own cache. Unset is /var/cache/workspace/go-build-trusted,
+  // mounted when it exists; "off" mounts nothing. A directory that is not a
+  // real, absolute directory, or is group- or world-writable, is not mounted
+  // (the gate logs why and runs on its own cache).
+  string gate_trusted_go_cache = 37 [(forge.v1.config) = {
+    env_var: "RELIANT_DAEMON_GATE_TRUSTED_GO_CACHE"
+    description: "Trusted Go build cache mounted read-only into merge-queue gates: off, or a directory (unset: /var/cache/workspace/go-build-trusted when it exists)"
+  }];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.
