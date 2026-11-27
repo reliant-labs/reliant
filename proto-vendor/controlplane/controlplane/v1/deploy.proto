@@ -1739,6 +1739,27 @@ message DeployPromotion {
   // outside pipeline applied it, and this row is the deploy marker it left.
   // Derived from the release, never sent by a client.
   bool record_only = 31;
+
+  // The per-release URL of each hosted static site this promotion pinned: the
+  // promoted release of that site, served on its own hostname on the preview
+  // domain (https://<slug>--<site>.<preview domain>; internal/releaseurl).
+  // Derived on read, never stored or sent by a client.
+  //
+  // Present only where the platform serves them: the env's site is named on
+  // the static base domain (an unclaimed site gets none), its env did not
+  // turn them off (forge.Frontend.release_urls = False), and the platform key
+  // is configured. A URL answers only while retention keeps that release: an
+  // older promotion's link may answer 404 "release not available". Every
+  // response from it is noindex.
+  repeated DeployReleaseURL release_urls = 32;
+}
+
+// DeployReleaseURL is one hosted static site's per-release URL.
+message DeployReleaseURL {
+  // The site: the frontend's name, as the env declares it.
+  string site = 1;
+  // The release's URL, https://<slug>--<site label>.<preview domain>/.
+  string url = 2;
 }
 
 // === Source of truth: provenance, bundles, applies, plans ===
