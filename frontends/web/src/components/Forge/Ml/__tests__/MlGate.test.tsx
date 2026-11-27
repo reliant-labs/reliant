@@ -16,6 +16,7 @@
  *     empty state, never invented rows.
  */
 
+import "@/components/Forge/Ml/__tests__/jsdomShims";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -42,22 +43,17 @@ function api(over: Partial<MlApi> & { entitlement?: OrgEntitlement } = {}): MlAp
   return {
     getMyOrgEntitlements: vi.fn(async () => [entitlement]),
     requestOrgEntitlement: vi.fn(async () => ({ entitlement: { ...entitlement, requestedAtMs: Date.UTC(2026, 10, 25) }, alreadyRequested: false, alreadyEnabled: false })),
-    getMachines: none,
-    getStack: none,
-    listFindings: none,
-    listRuns: none,
-    listModels: none,
-    listInferenceServices: none,
+    read: none as MlApi["read"],
     ...rest,
   };
 }
 
-function renderGate(mlApi: MlApi, view: Parameters<typeof MlGatedView>[0]["view"] = "machines") {
+function renderGate(mlApi: MlApi, view: Parameters<typeof MlGatedView>[0]["view"] = "fleet") {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const ui = () => (
     <QueryClientProvider client={client}>
       <MlApiProvider api={mlApi}>
-        <MlGatedView view={view} app="" onApp={() => {}} />
+        <MlGatedView view={view} />
       </MlApiProvider>
     </QueryClientProvider>
   );
@@ -85,7 +81,7 @@ describe("the ML gate", () => {
     renderGate(mlApi, "runs");
     expect(await screen.findByTestId("ml-access-page")).toHaveAttribute("data-requested", "false");
     expect(screen.getByRole("heading", { name: "Reach out to Reliant for access" })).toBeInTheDocument();
-    expect(screen.getByTestId("ml-access-demo")).toHaveAttribute("href", "https://demo.reliantlabs.io/forge/ml/machines");
+    expect(screen.getByTestId("ml-access-demo")).toHaveAttribute("href", "https://demo.reliantlabs.io/forge/ml/overview");
     expect(mlApi.getMyOrgEntitlements).toHaveBeenCalledWith("org-1", expect.anything());
     expect(tracked).toEqual([{ name: "ml_access_page_viewed", props: { org_id: "org-1", view: "runs", source: "entitlement", requested: false } }]);
   });
@@ -115,7 +111,7 @@ describe("the ML gate", () => {
   });
 
   it("turns a FEATURE_NOT_ENTITLED read into the access page", async () => {
-    renderGate(api({ entitlement: { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 }, getMachines: async () => ({ kind: "not-entitled" }) }));
+    renderGate(api({ entitlement: { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 }, read: (async () => ({ kind: "not-entitled" })) as MlApi["read"] }), "overview");
     expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
     await waitFor(() => expect(tracked.at(-1)?.props?.source).toBe("refused"));
   });
@@ -124,15 +120,15 @@ describe("the ML gate", () => {
     const server = { entitlement: ENABLED, refuse: false };
     const mlApi = api({
       getMyOrgEntitlements: vi.fn(async () => [server.entitlement]),
-      getStack: vi.fn(async () => (server.refuse ? { kind: "not-entitled" as const } : NO_DATA)),
+      read: vi.fn(async () => (server.refuse ? { kind: "not-entitled" as const } : NO_DATA)) as unknown as MlApi["read"],
     });
-    const { client } = renderGate(mlApi, "stack");
+    const { client } = renderGate(mlApi, "setup");
     expect(await screen.findByTestId("ml-no-data")).toBeInTheDocument();
 
     // Revoked: the next ML read refuses, and the entitlement re-read agrees.
     server.entitlement = DISABLED;
     server.refuse = true;
-    await act(() => client.invalidateQueries({ queryKey: mlKeys.stack("org-1") }));
+    await act(() => client.invalidateQueries({ queryKey: [...mlKeys.all("org-1"), "read"] }));
     expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
     await waitFor(() => expect(mlApi.getMyOrgEntitlements).toHaveBeenCalledTimes(2));
 
@@ -149,9 +145,9 @@ describe("the ML gate", () => {
     // org-a's entitlement says enabled, but its ML reads refuse: the latch holds for org-a.
     const mlApi = api({
       getMyOrgEntitlements: vi.fn(async () => [ENABLED]),
-      getStack: vi.fn(async ({ orgId }: { orgId: string }) => (orgId === "org-a" ? { kind: "not-entitled" as const } : NO_DATA)),
+      read: vi.fn(async (orgId: string) => (orgId === "org-a" ? { kind: "not-entitled" as const } : NO_DATA)) as unknown as MlApi["read"],
     });
-    const { switchOrg } = renderGate(mlApi, "stack");
+    const { switchOrg } = renderGate(mlApi, "setup");
     expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
     await waitFor(() => expect(mlApi.getMyOrgEntitlements).toHaveBeenCalledTimes(2));
     expect(screen.getByTestId("ml-access-page")).toBeInTheDocument();
@@ -165,10 +161,10 @@ describe("the ML gate", () => {
     const server = { refuse: true };
     const mlApi = api({
       entitlement: ENABLED,
-      getStack: vi.fn(async () => (server.refuse ? { kind: "not-entitled" as const } : NO_DATA)),
+      read: vi.fn(async () => (server.refuse ? { kind: "not-entitled" as const } : NO_DATA)) as unknown as MlApi["read"],
       requestOrgEntitlement: vi.fn(async () => ({ entitlement: ENABLED, alreadyRequested: false, alreadyEnabled: true })),
     });
-    renderGate(mlApi, "stack");
+    renderGate(mlApi, "setup");
     expect(await screen.findByTestId("ml-access-page")).toBeInTheDocument();
     await waitFor(() => expect(mlApi.getMyOrgEntitlements).toHaveBeenCalledTimes(2));
 
@@ -201,13 +197,13 @@ describe("the ML gate", () => {
   });
 
   it("shows the empty state, not rows, when the data does not exist yet", async () => {
-    renderGate(api({ entitlement: { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 } }), "stack");
+    renderGate(api({ entitlement: { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 } }), "setup");
     expect(await screen.findByTestId("ml-no-data")).toHaveTextContent("ML data appears here once a cluster is connected");
-    expect(screen.getByTestId("ml-page-stack")).toBeInTheDocument();
+    expect(screen.getByTestId("ml-page-setup")).toBeInTheDocument();
     expect(screen.queryByTestId("ml-access-page")).toBeNull();
   });
 
-  it("labels Runs, Models and Inference Early access in their header", async () => {
+  it("labels Training, Evals, Models and Inference Early access in their header", async () => {
     renderGate(api({ entitlement: { feature: "ml", enabled: true, requestedAtMs: null, grantedAtMs: 1 } }), "models");
     const page = await screen.findByTestId("ml-page-models");
     expect(page).toHaveTextContent("Early access");

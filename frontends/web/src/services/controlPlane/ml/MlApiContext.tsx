@@ -17,30 +17,14 @@ import { transport as appTransport } from "@/lib/connect";
 import { useTransport } from "@/lib/transportScope";
 
 import * as ml from "./mlApi";
-import type {
-  CallOptions,
-  EntitlementRequestResult,
-  MlClusterRequest,
-  MlFinding,
-  MlInferenceService,
-  MlMachines,
-  MlModel,
-  MlOutcome,
-  MlProjectRequest,
-  MlRun,
-  MlStackComponent,
-  OrgEntitlement,
-} from "./types";
+import type { MlMethod, MlRequest, MlResponse } from "./mlApi";
+import type { CallOptions, EntitlementRequestResult, MlOutcome, OrgEntitlement } from "./types";
 
 export interface MlApi {
   getMyOrgEntitlements(orgId: string, opts?: CallOptions): Promise<OrgEntitlement[]>;
   requestOrgEntitlement(orgId: string, feature: string, note?: string): Promise<EntitlementRequestResult>;
-  getMachines(req: MlClusterRequest, opts?: CallOptions): Promise<MlOutcome<MlMachines>>;
-  getStack(req: MlClusterRequest, opts?: CallOptions): Promise<MlOutcome<MlStackComponent[]>>;
-  listFindings(req: MlClusterRequest, opts?: CallOptions): Promise<MlOutcome<MlFinding[]>>;
-  listRuns(req: MlProjectRequest, opts?: CallOptions): Promise<MlOutcome<MlRun[]>>;
-  listModels(req: MlProjectRequest, opts?: CallOptions): Promise<MlOutcome<MlModel[]>>;
-  listInferenceServices(req: MlProjectRequest, opts?: CallOptions): Promise<MlOutcome<MlInferenceService[]>>;
+  /** Any MlEarlyAccessService rpc for `orgId`, by its client method name. */
+  read<M extends MlMethod>(orgId: string, method: M, req: MlRequest<M>, opts?: CallOptions): Promise<MlOutcome<MlResponse<M>>>;
 }
 
 /** The real client on `transport`: a TransportScope's, or undefined for the app's. */
@@ -48,12 +32,7 @@ function apiOn(transport: Transport | undefined): MlApi {
   return {
     getMyOrgEntitlements: (orgId, opts) => ml.getMyOrgEntitlements(orgId, opts, transport),
     requestOrgEntitlement: (orgId, feature, note) => ml.requestOrgEntitlement(orgId, feature, note, transport),
-    getMachines: (req, opts) => ml.getMachines(req, opts, transport),
-    getStack: (req, opts) => ml.getStack(req, opts, transport),
-    listFindings: (req, opts) => ml.listFindings(req, opts, transport),
-    listRuns: (req, opts) => ml.listRuns(req, opts, transport),
-    listModels: (req, opts) => ml.listModels(req, opts, transport),
-    listInferenceServices: (req, opts) => ml.listInferenceServices(req, opts, transport),
+    read: (orgId, method, req, opts) => ml.readMl(orgId, method, req, opts, transport),
   };
 }
 

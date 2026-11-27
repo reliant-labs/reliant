@@ -28,6 +28,13 @@
 //    - Experiments listing no change, the A/B test showing no results readout,
 //      or either saying Experiments aren't available (the shop pack answers
 //      ChangesService, fixtures/shop/handlers/changes.ts).
+//    - an ML page (`/forge/ml/<view>[/<drill-down>]`, the org's ML tab,
+//      Forge/Ml/MlRoute.tsx) not showing its view: the shop pack answers the
+//      org's entitlements with `ml` enabled, so the access page ("Reach out to
+//      Reliant for access", [data-testid=ml-access-page]), the no-org and
+//      gate-error states, a gate still loading, or a page with no h1 all fail,
+//      as does a page without the demo's action row (DemoScreenActions: its
+//      read-only line and telemetry notice, under the org console's bar there).
 //    Per page it also prints how often "Sample data isn't available" showed (an
 //    RPC the demo has no sample data for): a content gap, not a failure.
 //
@@ -38,12 +45,12 @@
 //    signed-in app's own items in its order (Layout/sidebar/navConfig/hybrid.ts,
 //    Forge/Demo/demoNavConfig.ts) plus the demo's own rows: Dashboards, Analytics,
 //    Deployments, Tests, Security and Configure are buttons that fold, and must
-//    hold their pages (navGroups below); Observability is a drill-in (navDrill):
-//    its row opens its Overview and its rows replace the nav under a "‹ Back"
-//    header; every other row (navRows: Home, Overview, Data, Storage, Auth,
-//    How it was built) is a link of its own. The pages the demo does not serve
+//    hold their pages (navGroups below); Observability and ML are drill-ins
+//    (navDrill): each row opens its area's first page and its rows replace the
+//    nav under a "‹ Back" header; every other row (navRows: Home, Overview,
+//    Data, Storage, Auth, How it was built) is a link of its own. The pages the demo does not serve
 //    (navAbsent: Usage) must have no item. Groups are unfolded, so every
-//    sub-item is clicked too; then the drill-in is entered, each of its rows
+//    sub-item is clicked too; then each drill-in is entered, each of its rows
 //    clicked, and left by its "‹ Back" header (which must land on the
 //    Overview). An item is dead, and the run fails, when the click does not
 //    move the URL to the item's href, or the page's heading and content do not
@@ -97,6 +104,21 @@ const experimentsPage = `${home}/experiments`;
 const experimentPage = `${home}/experiments/chg-express-checkout-prod`;
 // The demo's own pages, `?section=` of the demo console (demoPath.ts).
 const demoSection = (section) => `/forge/demo?section=${section}`;
+// The ML tab's views (Console/paths.ts ML_VIEWS, in nav order) and one drill-down
+// of each kind, by the shop pack's ML world's ids (fixtures/shop/model/ml).
+const mlViews = ["overview", "runs", "evals", "models", "inference", "fleet", "queues", "recommendations", "setup"];
+const mlPages = [
+  ...mlViews.map((view) => `/forge/ml/${view}`),
+  "/forge/ml/runs/llama-8b-support-v3",
+  "/forge/ml/runs/llama-8b-support-v3/phases/sft?tab=system",
+  "/forge/ml/runs/compare?compare=llama-8b-support-lr-sweep-t1,llama-8b-support-lr-sweep-t2,llama-8b-support-lr-sweep-t3",
+  "/forge/ml/evals/runs/eval_01JDVGATEV3SFT40K",
+  "/forge/ml/models/support-assistant/v2",
+  "/forge/ml/inference/support-assistant-prod",
+  "/forge/ml/fleet/pools/gke-us-central1-train/h100-train",
+  "/forge/ml/fleet/gke-us-central1-train/gke-train-h100-r4vb",
+];
+const isMlPage = (path) => path.startsWith("/forge/ml/");
 const pages = [
   "/",
   demoSection("built"),
@@ -123,6 +145,7 @@ const pages = [
   experimentPage,
   ...(auditedEnvs.length ? audited.map((surface) => `${surface.path}?env=${auditedEnvs[0]}`) : []),
   sampleImagePage,
+  ...mlPages,
 ];
 const viewports = [
   { name: "desktop", width: 1440, height: 900, mobile: false },
@@ -164,11 +187,14 @@ const navDrill = {
       `${home}/speed-insights`,
     ],
   },
+  // An org page, not one of the app's: its rows lead to /forge/ml/<view>.
+  ML: { row: "nav-ml", area: "ml", pages: mlViews.map((view) => `/forge/ml/${view}`) },
 };
 const navRows = [
   { label: "Home", to: (key) => key === demoSection("home") },
   { label: "Overview", to: (key) => key === home },
   { label: "Observability", to: (key) => key === `${home}/observability` },
+  { label: "ML", to: (key) => key === "/forge/ml/overview" },
   { label: "Data", to: (key) => key === `${home}/data` },
   { label: "Storage", to: (key) => key === `${home}/storage` },
   // Users became Auth (/users redirects there).
@@ -183,8 +209,8 @@ const navKey = (href) => {
   const section = url.pathname === "/forge/demo" ? url.searchParams.get("section") : null;
   return section ? demoSection(section) : url.pathname;
 };
-/** A nav item the nav pass clicks: a project page, or a demo page of its own. */
-const inScope = (key) => key.startsWith(home) || key.startsWith("/forge/demo?section=");
+/** A nav item the nav pass clicks: a project page, an ML page (the org's), or a demo page of its own. */
+const inScope = (key) => key.startsWith(home) || isMlPage(key) || key.startsWith("/forge/demo?section=");
 
 const systemChrome = "/usr/bin/google-chrome";
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ?? (fs.existsSync(systemChrome) ? systemChrome : undefined);
@@ -245,6 +271,18 @@ async function checkSampleImage(page) {
   } catch {
     problems.push(`the sample image's preview did not load: ${src}`);
   }
+  return problems;
+}
+
+/** An ML page shows its view, entitled: never the gate's states. Returns problems. */
+async function checkMl(page) {
+  const gate = { "ml-access-page": "the access page (the demo's org is entitled to ML)", "ml-no-org": "no organization", "ml-gate-error": "the entitlement check failed", "ml-gate-loading": "the gate is still loading" };
+  const problems = [];
+  for (const [id, what] of Object.entries(gate)) if (await page.locator(`[data-testid='${id}']`).count()) problems.push(`shows ${what} ([data-testid=${id}])`);
+  const heading = (await page.getByTestId("shell-main").locator("h1").first().textContent({ timeout: 2000 }).catch(() => null))?.trim();
+  if (!heading) problems.push("no page heading (h1): the view did not render");
+  // Under the org console's bar, not the app's: the demo's row (read-only line, telemetry notice, CTAs) must still be there.
+  if (!(await page.getByTestId("demo-screen-actions").count())) problems.push("no demo action row ([data-testid=demo-screen-actions]) under the page's bar");
   return problems;
 }
 
@@ -528,6 +566,7 @@ try {
       if (path === experimentsPage && !(await page.locator("[data-testid^='change-row-']").count())) problems.push("Experiments lists no change");
       if (path === experimentPage && !(await page.getByTestId("results-verdict").count())) problems.push("the A/B test shows no results readout");
     }
+    if (isMlPage(path)) problems.push(...(await checkMl(page)));
     if (process.env.SCREENSHOT_DIR) {
       fs.mkdirSync(process.env.SCREENSHOT_DIR, { recursive: true });
       const name = path === "/" ? "root" : path.replace(/^\//, "").replace(/\//g, "_");

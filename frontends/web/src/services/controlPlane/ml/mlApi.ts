@@ -5,19 +5,19 @@
  *
  *   getMyOrgEntitlements   OrganizationService: whether the org has "ml", and whether someone asked
  *   requestOrgEntitlement  OrganizationService: ask Reliant for a feature (idempotent per org)
- *   getMachines            MlEarlyAccessService.GetMlMachines
- *   getStack               MlEarlyAccessService.GetMlStack
- *   listFindings           MlEarlyAccessService.ListMlFindings
- *   listRuns               MlEarlyAccessService.ListMlRuns
- *   listModels             MlEarlyAccessService.ListMlModels
- *   listInferenceServices  MlEarlyAccessService.ListMlInferenceServices
+ *   read(method, req)      any MlEarlyAccessService rpc, by its client method name
+ *                          ("getMlRun", "listMlFindings", ...), typed by the generated client
  *
- * Each is one call over the generated client (proto-vendor/controlplane),
- * mapped by wire.ts. An ML read resolves to an MlOutcome: the data, "not
- * entitled" (FEATURE_NOT_ENTITLED) or "no data yet" (Unimplemented, also this
- * client's answer with no control plane configured); anything else rejects.
- * The entitlement calls reject on every failure: the gate decides what each
- * one means.
+ * Telemetry (metrics, logs, traces, profiles, events, alerts) is not here:
+ * the ML tab reads it from ObservabilityService and AlertingService
+ * (components/Forge/Ml/kit/telemetry.ts).
+ *
+ * Each is one call over the generated client (proto-vendor/controlplane). An
+ * ML read resolves to an MlOutcome holding the generated response message:
+ * the data, "not entitled" (FEATURE_NOT_ENTITLED) or "no data yet"
+ * (Unimplemented, also this client's answer with no control plane
+ * configured); anything else rejects. The entitlement calls reject on every
+ * failure: the gate decides what each one means.
  */
 
 import { Code, ConnectError, type Client, type Transport } from "@connectrpc/connect";
@@ -30,21 +30,17 @@ import { transport as appTransport } from "@/lib/connect";
 import { getControlPlaneClient } from "../client";
 import { CONTROL_PLANE_API_URL } from "../config";
 import { outcomeOfError } from "./errors";
-import type {
-  CallOptions,
-  EntitlementRequestResult,
-  MlClusterRequest,
-  MlFinding,
-  MlInferenceService,
-  MlMachines,
-  MlModel,
-  MlOutcome,
-  MlProjectRequest,
-  MlRun,
-  MlStackComponent,
-  OrgEntitlement,
-} from "./types";
-import { entitlementsOf, findingsOf, inferenceOf, machinesOf, modelsOf, requestResultOf, runsOf, stackOf } from "./wire";
+import type { CallOptions, EntitlementRequestResult, MlOutcome, OrgEntitlement } from "./types";
+import { entitlementsOf, requestResultOf } from "./wire";
+
+/** The generated MlEarlyAccessService client. */
+export type MlClient = Client<typeof MlEarlyAccessService>;
+/** An rpc, by its client method name: "getMlRun", "listMlFindings", ... */
+export type MlMethod = keyof MlClient;
+/** What an rpc takes, without the org (the caller's gate supplies it). */
+export type MlRequest<M extends MlMethod> = Omit<NonNullable<Parameters<MlClient[M]>[0]>, "orgId" | "$typeName">;
+/** What an rpc answers: its generated response message. */
+export type MlResponse<M extends MlMethod> = Awaited<ReturnType<MlClient[M]>>;
 
 /**
  * `transport` is the caller's TransportScope's (lib/transportScope.tsx). A
@@ -57,14 +53,6 @@ function client<T extends DescService>(service: T, transport?: Transport): Clien
   return getControlPlaneClient(service, transport);
 }
 
-async function outcome<T>(read: () => Promise<T>): Promise<MlOutcome<T>> {
-  try {
-    return { kind: "ok", data: await read() };
-  } catch (error) {
-    return outcomeOfError<T>(error);
-  }
-}
-
 export async function getMyOrgEntitlements(orgId: string, opts?: CallOptions, transport?: Transport): Promise<OrgEntitlement[]> {
   return entitlementsOf(await client(OrganizationService, transport).getMyOrgEntitlements({ orgId }, opts));
 }
@@ -74,26 +62,18 @@ export async function requestOrgEntitlement(orgId: string, feature: string, note
   return requestResultOf(res, feature, Date.now());
 }
 
-export function getMachines(req: MlClusterRequest, opts?: CallOptions, transport?: Transport): Promise<MlOutcome<MlMachines>> {
-  return outcome(async () => machinesOf(await client(MlEarlyAccessService, transport).getMlMachines(req, opts)));
-}
-
-export function getStack(req: MlClusterRequest, opts?: CallOptions, transport?: Transport): Promise<MlOutcome<MlStackComponent[]>> {
-  return outcome(async () => stackOf(await client(MlEarlyAccessService, transport).getMlStack(req, opts)));
-}
-
-export function listFindings(req: MlClusterRequest, opts?: CallOptions, transport?: Transport): Promise<MlOutcome<MlFinding[]>> {
-  return outcome(async () => findingsOf(await client(MlEarlyAccessService, transport).listMlFindings(req, opts)));
-}
-
-export function listRuns(req: MlProjectRequest, opts?: CallOptions, transport?: Transport): Promise<MlOutcome<MlRun[]>> {
-  return outcome(async () => runsOf(await client(MlEarlyAccessService, transport).listMlRuns(req, opts)));
-}
-
-export function listModels(req: MlProjectRequest, opts?: CallOptions, transport?: Transport): Promise<MlOutcome<MlModel[]>> {
-  return outcome(async () => modelsOf(await client(MlEarlyAccessService, transport).listMlModels(req, opts)));
-}
-
-export function listInferenceServices(req: MlProjectRequest, opts?: CallOptions, transport?: Transport): Promise<MlOutcome<MlInferenceService[]>> {
-  return outcome(async () => inferenceOf(await client(MlEarlyAccessService, transport).listMlInferenceServices(req, opts)));
+/** One MlEarlyAccessService rpc for `orgId`, as an outcome. */
+export async function readMl<M extends MlMethod>(
+  orgId: string,
+  method: M,
+  req: MlRequest<M>,
+  opts?: CallOptions,
+  transport?: Transport,
+): Promise<MlOutcome<MlResponse<M>>> {
+  try {
+    const call = client(MlEarlyAccessService, transport)[method] as unknown as (r: unknown, o?: CallOptions) => Promise<MlResponse<M>>;
+    return { kind: "ok", data: await call({ ...req, orgId }, opts) };
+  } catch (error) {
+    return outcomeOfError<MlResponse<M>>(error);
+  }
 }

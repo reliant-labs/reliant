@@ -16,7 +16,9 @@
  *   …?case=entitled                           the six pages on the shop's ML data
  *   …?case=revoked                            entitled, but every ML read answers FEATURE_NOT_ENTITLED
  *   …?case=no-data                            entitled, every ML read Unimplemented (today's real control plane)
- *   …&view=machines|stack|recommendations|runs|models|inference
+ *   …&view=overview|runs|evals|models|inference|fleet|queues|recommendations|setup
+ *   …&sub=llama-8b-support-v3/phases/sft   a drill-down under the view (its path segments)
+ *   …&q=tab=metrics%26attempt=3            the console URL's own search (tab, attempt, sel, ...)
  *   …&dark=1&scheme=pure-black
  */
 
@@ -70,13 +72,14 @@ const CASES = [
   { id: "no-data", label: "entitled, no data yet", overlay: failing("ml.no-data", MlEarlyAccessService, Code.Unimplemented) },
 ] as const;
 
-type PreviewSearch = { case?: string; view?: string; dark?: boolean | string | number; scheme?: string };
+type PreviewSearch = { case?: string; view?: string; sub?: string; q?: string; dark?: boolean | string | number; scheme?: string };
 
 export default function MlPreview() {
   const search = useSearch({ strict: false }) as PreviewSearch;
   const active = CASES.find((c) => c.id === search.case) ?? CASES[0];
   const view = isMlView(search.view) ? search.view : ML_VIEWS[0];
-  const path = orgPath({ kind: "ml", view }, { org: null });
+  const sub = (search.sub ?? "").split("/").filter(Boolean);
+  const path = `${orgPath({ kind: "ml", view, sub }, { org: null })}${search.q ? `?${search.q}` : ""}`;
   return (
     <ConsoleFixturePreview
       key={`${active.id}|${path}`}
@@ -98,7 +101,7 @@ function ViewPicker({ view }: { view: string }) {
     <select
       data-testid="preview-ml-view"
       value={view}
-      onChange={(e) => void navigate({ to: BASE, search: (prev: Record<string, unknown>) => ({ ...prev, view: e.target.value }), replace: true } as never)}
+      onChange={(e) => void navigate({ to: BASE, search: (prev: Record<string, unknown>) => ({ ...prev, view: e.target.value, sub: undefined, q: undefined }), replace: true } as never)}
       className="rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink"
     >
       {ML_VIEWS.map((v) => (

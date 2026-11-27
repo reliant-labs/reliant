@@ -9,8 +9,9 @@
  * and the telemetry notice sit in the shell's nav drawer (DemoDrawerActions, the
  * demo nav's `host-actions` slot: DemoNav). "How it was built" is a nav row of its own, not an action.
  *
- * The row sits under the page's bar (the console's ConsoleFrame header, on every
- * page of the demo), above the page's scroll region.
+ * The row sits under the page's bar (the console's ConsoleFrame header, or the
+ * org console's on the ML pages: one on every page of the demo), above the
+ * page's scroll region.
  *
  * It takes no z-index: dialogs, the tour's overlay and its modal cards all
  * paint over it.
@@ -107,8 +108,12 @@ function ThemeToggle() {
   );
 }
 
-/** The page's bar the row sits under: the console's (ConsoleFrame's ShellPageHeader), on the console's pages and the demo's own. */
-const PAGE_BAR = "[data-testid='forge-console-header']";
+/**
+ * The page's bar the row sits under: the console's (ConsoleFrame's ShellPageHeader), on the console's pages and the
+ * demo's own, or the org console's (OrgConsoleLayout), on the ML pages. The row, and the notice it discloses, is on
+ * every page a visitor can open.
+ */
+const PAGE_BAR = "[data-testid='forge-console-header'], [data-testid='forge-org-header']";
 
 export function DemoScreenActions() {
   const [host, setHost] = useState<HTMLElement | null>(null);

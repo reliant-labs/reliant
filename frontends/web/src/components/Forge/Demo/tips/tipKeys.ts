@@ -11,9 +11,13 @@
  *
  * A page with no tour is null: nothing shows, and an open card closes. The
  * pages the demo does not serve (DEMO_HIDDEN_PAGES) have none.
+ *
+ * ML is an org page, not one of the app's: `/forge/ml/<view>[/<drill-down>…]`
+ * (Console/paths.ts orgPageOf). Each view has a tip; a drill-down (a run, a
+ * model version, a GPU) shows its view's.
  */
 
-import { consolePageOf } from "../../Console/paths";
+import { consolePageOf, orgPageOf } from "../../Console/paths";
 import { FORGE_DEMO_PATH } from "../demoPath";
 import { PEOPLE_DASHBOARD_KEYS } from "../sections/demoLinks";
 
@@ -53,6 +57,15 @@ export const DEMO_TIP_KEYS = [
   "graph",
   "speed-insights",
   "workload",
+  "ml-overview",
+  "ml-runs",
+  "ml-evals",
+  "ml-models",
+  "ml-inference",
+  "ml-fleet",
+  "ml-queues",
+  "ml-recommendations",
+  "ml-setup",
 ] as const;
 
 export type DemoTipKey = (typeof DEMO_TIP_KEYS)[number];
@@ -84,6 +97,8 @@ export function demoTipKey(pathname: string, search: Record<string, unknown>): D
     if (search.section) return null;
     return obsTip(typeof search.view === "string" ? search.view : undefined, search);
   }
+  const org = orgPageOf(pathname);
+  if (org?.kind === "ml") return `ml-${org.view}`;
   const page = consolePageOf(pathname)?.page;
   if (!page) return null;
   switch (page.kind) {
@@ -175,6 +190,9 @@ export function demoDetailOf(search: Record<string, unknown>): string {
 export function isDemoSectionPage(pathname: string, search: Record<string, unknown>): boolean {
   if (demoDetailOf(search)) return false;
   if (pathname === FORGE_DEMO_PATH || pathname.startsWith(`${FORGE_DEMO_PATH}/`)) return !search.section;
+  // An ML view is a section; its drill-downs, and a row it has open (`?sel=`), are not.
+  const org = orgPageOf(pathname);
+  if (org?.kind === "ml") return !org.sub?.length && !search.sel;
   const page = consolePageOf(pathname)?.page;
   if (!page) return false;
   return !["workload", "release", "environment", "dashboard", "service", "vulnerability", "tests-run", "tests-flaky-test", "experiment"].includes(page.kind);

@@ -20,11 +20,18 @@
  * no ML either: the access page, whose request then falls back to email.
  *
  * In the demo shell the fixture pack answers every call, `ml` enabled
- * included, so the six pages render with no branch on the shell here.
+ * included, so the pages render with no branch on the shell here.
+ *
+ * MOUNTABLE ANYWHERE. Each view (./<Area>/Ml<Area>View.tsx) is a
+ * self-contained route component: it takes the drill-down segments under its
+ * path (`sub`), reads its own data through the gate's org (kit/useMl) and its
+ * own state from the URL search (kit/links useMlSearch). So a view can be
+ * mounted under another area of the console (Deployments, Observability,
+ * Inbox) by wrapping it in <MlGatedView>, with no change to the view.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { useParams } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Cpu, RefreshCw } from "lucide-react";
 
@@ -39,34 +46,39 @@ import { isMlView, ML_VIEWS, type MlView } from "../Console/paths";
 import { ObsLoadingRows, StateFrame } from "../Observability/ObsStates";
 import { MlAccessPage } from "./MlAccessPage";
 import { MlGateContext, type MlGate } from "./MlParts";
-import { MlInferencePage } from "./MlInferencePage";
-import { MlMachinesPage } from "./MlMachinesPage";
-import { MlModelsPage } from "./MlModelsPage";
-import { MlRecommendationsPage } from "./MlRecommendationsPage";
-import { MlRunsPage } from "./MlRunsPage";
-import { MlStackPage } from "./MlStackPage";
+import { MlEvalsView } from "./Evals/MlEvalsView";
+import { MlFleetView } from "./Fleet/MlFleetView";
+import { MlInferenceView } from "./Inference/MlInferenceView";
+import { MlModelsView } from "./Models/MlModelsView";
+import { MlOverviewView } from "./Overview/MlOverviewView";
+import { MlQueuesView } from "./Queues/MlQueuesView";
+import { MlRecommendationsView } from "./Recommendations/MlRecommendationsView";
+import { MlSetupView } from "./Setup/MlSetupView";
+import { MlTrainingView } from "./Training/MlTrainingView";
 
 export function MlRoute() {
-  const params = useParams({ strict: false }) as { view?: string };
+  const params = useParams({ strict: false }) as { view?: string; _splat?: string };
   const view: MlView = isMlView(params.view) ? params.view : ML_VIEWS[0];
-  const search = useSearch({ strict: false }) as { app?: string };
-  const navigate = useNavigate();
-  const onApp = useCallback(
-    (app: string | undefined) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, app }), replace: true } as never),
-    [navigate],
-  );
-  return <MlGatedView view={view} app={search.app ?? ""} onApp={onApp} />;
+  const sub = useMemo(() => (params._splat ?? "").split("/").filter(Boolean).map(safeDecode), [params._splat]);
+  return <MlGatedView view={view} sub={sub} />;
+}
+
+function safeDecode(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 export interface MlGatedViewProps {
   view: MlView;
-  /** The app Runs, Models and Inference narrow to; "" for every app. */
-  app: string;
-  onApp: (app: string | undefined) => void;
+  /** The drill-down under the view's path: `["llama-8b-support-v3", "phases", "sft"]`. */
+  sub?: readonly string[];
 }
 
 /** The gate and the page, free of the router: what tests and the preview render. */
-export function MlGatedView({ view, app, onApp }: MlGatedViewProps) {
+export function MlGatedView({ view, sub = NO_SUB }: MlGatedViewProps) {
   const org = useMlOrg();
   const orgId = org.orgId;
   const entitlement = useMlEntitlement(orgId);
@@ -140,10 +152,12 @@ export function MlGatedView({ view, app, onApp }: MlGatedViewProps) {
   }
   return (
     <MlGateContext.Provider value={gate}>
-      <MlPage view={view} app={app} onApp={onApp} />
+      <MlPage view={view} sub={sub} />
     </MlGateContext.Provider>
   );
 }
+
+const NO_SUB: readonly string[] = [];
 
 interface MlRefusal {
   orgId: string;
@@ -156,19 +170,26 @@ function refusalSettled(refusal: MlRefusal, ml: OrgEntitlement): boolean {
   return !ml.enabled || ml.grantedAtMs !== refusal.grantedAtMs;
 }
 
-function MlPage({ view, app, onApp }: MlGatedViewProps) {
+/** The view for `view`, given its drill-down. */
+export function MlPage({ view, sub = NO_SUB }: MlGatedViewProps) {
   switch (view) {
-    case "machines":
-      return <MlMachinesPage />;
-    case "stack":
-      return <MlStackPage />;
-    case "recommendations":
-      return <MlRecommendationsPage />;
+    case "overview":
+      return <MlOverviewView sub={sub} />;
     case "runs":
-      return <MlRunsPage app={app} onApp={onApp} />;
+      return <MlTrainingView sub={sub} />;
+    case "evals":
+      return <MlEvalsView sub={sub} />;
     case "models":
-      return <MlModelsPage app={app} onApp={onApp} />;
+      return <MlModelsView sub={sub} />;
     case "inference":
-      return <MlInferencePage app={app} onApp={onApp} />;
+      return <MlInferenceView sub={sub} />;
+    case "fleet":
+      return <MlFleetView sub={sub} />;
+    case "queues":
+      return <MlQueuesView sub={sub} />;
+    case "recommendations":
+      return <MlRecommendationsView sub={sub} />;
+    case "setup":
+      return <MlSetupView sub={sub} />;
   }
 }

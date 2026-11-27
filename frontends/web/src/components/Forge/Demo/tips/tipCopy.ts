@@ -7,7 +7,8 @@ export interface DemoTip {
   title: string;
   body: string;
   help: string;
-  command: string;
+  /** The command an agent runs for this page; none where there is no CLI for it yet (ML). */
+  command?: string;
   /** A single anchor for the optional explanation of this page, not a sequence of local stops. */
   target?: string;
 }
@@ -242,5 +243,51 @@ export const DEMO_TIPS: Record<DemoTipKey, DemoTip> = {
     help: "Your agent can read the same session as a timeline and follow its related requests.",
     command: "forge obs sessions prod",
     target: tid("obs-sessions-list"),
+  },
+  // ML: the org's training and inference workloads, read from the clusters they run on (Forge/Ml).
+  "ml-overview": {
+    title: "ML overview",
+    body: "Your GPUs, training runs and model servers on one page: what is running, what is wasting money and what is broken. Each figure opens the page behind it.",
+    help: "Your agent can read the same findings and runs to decide what to fix first.",
+  },
+  "ml-runs": {
+    title: "Training",
+    body: "Every training run with its progress, cost and how much of its GPU time was productive. Open a run to follow its loss, its restarts and the slow GPU holding it back, or select runs to compare them.",
+    help: "Your agent can compare runs and trace a slowdown to the node and GPU that caused it.",
+  },
+  "ml-evals": {
+    title: "Evals",
+    body: "Each candidate model scored against the one in production on the same tests, with the regressions that would stop it from shipping. Open an eval run for every task's result.",
+    help: "Your agent can read which tasks regressed and what changed between the two models.",
+  },
+  "ml-models": {
+    title: "Models",
+    body: "Every model version, where it came from, how it scored and where it serves. Open a version to follow it from its training run to the services running it.",
+    help: "Your agent can follow a version back to the run and data that produced it.",
+  },
+  "ml-inference": {
+    title: "Inference",
+    body: "The services that answer requests with a model: latency, errors, cost per token and whether each meets its target. Open a service for its replicas and the revisions it has rolled out.",
+    help: "Your agent can check a new revision against the old one before more traffic moves to it.",
+  },
+  "ml-fleet": {
+    title: "Fleet",
+    body: "Every GPU in your clusters, by pool and node: what is allocated, what is actually busy, what sits idle and costs money, and which devices are failing.",
+    help: "Your agent can find idle or faulty GPUs and the workloads they hold.",
+  },
+  "ml-queues": {
+    title: "Queues",
+    body: "Work waiting for GPUs: each team's quota and use, what is pending and why, and which jobs were bumped to make room for others.",
+    help: "Your agent can explain why a job is still waiting and what would let it start.",
+  },
+  "ml-recommendations": {
+    title: "Recommendations",
+    body: "What to fix first, ranked by the money and GPU time at stake, each with its evidence and the change that fixes it.",
+    help: "Your agent can open the proposed change as a pull request for you to review.",
+  },
+  "ml-setup": {
+    title: "ML setup",
+    body: "Which monitoring each cluster already runs, adopted as it is, and what is missing, with the fix for each gap. Nothing is installed where a component already exists.",
+    help: "Your agent can read what each cluster runs and propose the missing pieces.",
   },
 };

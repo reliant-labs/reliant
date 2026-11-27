@@ -16,6 +16,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouteOrgIdOverride } from "@/lib/orgScope";
 import { currentOrgId } from "@/services/controlPlane/orgs";
 import { mlRetry, mlRetryDelay } from "@/services/controlPlane/ml/errors";
+import type { MlMethod, MlRequest } from "@/services/controlPlane/ml/mlApi";
 import { useMlApi } from "@/services/controlPlane/ml/MlApiContext";
 import { ML_FEATURE, type OrgEntitlement } from "@/services/controlPlane/ml/types";
 
@@ -24,13 +25,14 @@ export const mlKeys = {
   org: () => ["ml", "org"] as const,
   all: (orgId: string) => ["ml", orgId] as const,
   entitlements: (orgId: string) => [...mlKeys.all(orgId), "entitlements"] as const,
-  machines: (orgId: string) => [...mlKeys.all(orgId), "machines"] as const,
-  stack: (orgId: string) => [...mlKeys.all(orgId), "stack"] as const,
-  findings: (orgId: string) => [...mlKeys.all(orgId), "findings"] as const,
-  runs: (orgId: string, project: string) => [...mlKeys.all(orgId), "runs", project] as const,
-  models: (orgId: string, project: string) => [...mlKeys.all(orgId), "models", project] as const,
-  inference: (orgId: string, project: string) => [...mlKeys.all(orgId), "inference", project] as const,
+  /** One rpc's answer to one request (the request is part of the key, so every distinct read caches apart). */
+  read: (orgId: string, method: string, req: unknown) => [...mlKeys.all(orgId), "read", method, requestKey(req)] as const,
 };
+
+/** A request as a cache key: JSON, with int64s (a Timestamp's seconds) as strings, which JSON cannot hold. */
+function requestKey(req: unknown): string {
+  return JSON.stringify(req, (_key, value: unknown) => (typeof value === "bigint" ? value.toString() : value));
+}
 
 const READ = { retry: mlRetry, retryDelay: mlRetryDelay, staleTime: 30_000 } as const;
 
@@ -85,39 +87,18 @@ export function useRequestMlAccess(orgId: string | null) {
   });
 }
 
-export function useMlMachines(orgId: string) {
-  const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.machines(orgId), queryFn: ({ signal }) => api.getMachines({ orgId }, { signal }), enabled: !!orgId, ...READ });
-}
-
-export function useMlStack(orgId: string) {
-  const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.stack(orgId), queryFn: ({ signal }) => api.getStack({ orgId }, { signal }), enabled: !!orgId, ...READ });
-}
-
-export function useMlFindings(orgId: string) {
-  const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.findings(orgId), queryFn: ({ signal }) => api.listFindings({ orgId }, { signal }), enabled: !!orgId, ...READ });
-}
-
-const projectReq = (orgId: string, project: string) => (project ? { orgId, project } : { orgId });
-
-export function useMlRuns(orgId: string, project = "") {
-  const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.runs(orgId, project), queryFn: ({ signal }) => api.listRuns(projectReq(orgId, project), { signal }), enabled: !!orgId, ...READ });
-}
-
-export function useMlModels(orgId: string, project = "") {
-  const api = useMlApi();
-  return useQuery({ queryKey: mlKeys.models(orgId, project), queryFn: ({ signal }) => api.listModels(projectReq(orgId, project), { signal }), enabled: !!orgId, ...READ });
-}
-
-export function useMlInference(orgId: string, project = "") {
+/**
+ * Any MlEarlyAccessService read for `orgId`, by its client method name
+ * (`useMlRead(orgId, "getMlRun", { run })`), as an MlOutcome over the
+ * generated response. Pass `enabled: false` to hold a read whose request is
+ * not known yet.
+ */
+export function useMlRead<M extends MlMethod>(orgId: string, method: M, req: MlRequest<M>, opts: { enabled?: boolean } = {}) {
   const api = useMlApi();
   return useQuery({
-    queryKey: mlKeys.inference(orgId, project),
-    queryFn: ({ signal }) => api.listInferenceServices(projectReq(orgId, project), { signal }),
-    enabled: !!orgId,
+    queryKey: mlKeys.read(orgId, method, req),
+    queryFn: ({ signal }) => api.read(orgId, method, req, { signal }),
+    enabled: !!orgId && (opts.enabled ?? true),
     ...READ,
   });
 }

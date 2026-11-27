@@ -246,6 +246,31 @@ export interface UPlotChartProps {
    * crosshair, no tooltip, and not a stop for the keyboard.
    */
   hover?: boolean;
+  /**
+   * Charts sharing a key share one cursor (uPlot's cursor sync, matched on
+   * the x value): hovering one moves the crosshair on all of them.
+   */
+  syncKey?: string;
+  /**
+   * The x values are not instants (training steps, tokens): the axis, the
+   * tooltip and the caption read them through this, and the x scale is
+   * linear, not time.
+   */
+  xFormat?: (x: number) => string;
+  /**
+   * The one-line summary of markers and bands under the plot ("6 releases ·
+   * 2 alerts"). Default: shown. Small multiples that share one legend turn
+   * it off; the caption read to screen readers still names them.
+   */
+  annotationSummary?: boolean;
+  /** The x axis's own labels, shorter than `xFormat`'s tooltip ("5k" against "step 5,000"). Default: `xFormat`. */
+  xAxisFormat?: (x: number) => string;
+  /**
+   * Drag across the plot to zoom the x axis into that stretch; double-click,
+   * or "Reset zoom", to return. Off by default: a sparkline or a preview
+   * whose every pixel is a link must not grab the drag.
+   */
+  zoom?: boolean;
 }
 
 const NO_BANDS: readonly ChartBand[] = [];
@@ -272,6 +297,11 @@ export function UPlotChart({
   window: requested,
   calendar: calendarProp,
   hover: hoverable = true,
+  syncKey,
+  xFormat,
+  annotationSummary: showAnnotationSummary = true,
+  xAxisFormat,
+  zoom = false,
 }: UPlotChartProps) {
   // Callers build these arrays afresh on every render, and the chart below is
   // rebuilt whenever one changes identity: a page re-render (a tour step, a
@@ -287,6 +317,20 @@ export function UPlotChart({
   const layoutKey = useRef("");
   const placedCallback = useRef(onExemplarsPlaced);
   placedCallback.current = onExemplarsPlaced;
+  const xFormatRef = useRef(xFormat);
+  xFormatRef.current = xFormat;
+  const linearX = xFormat !== undefined;
+  const xAxisFormatRef = useRef(xAxisFormat ?? xFormat);
+  xAxisFormatRef.current = xAxisFormat ?? xFormat;
+  // The x range the reader dragged to, or null for the whole extent.
+  const zoomRef = useRef<[number, number] | null>(null);
+  const [zoomed, setZoomed] = useState(false);
+  const resetZoom = useCallback(() => {
+    zoomRef.current = null;
+    setZoomed(false);
+    const chart = chartRef.current;
+    if (chart) chart.setScale("x", { min: extentRef.current[0], max: extentRef.current[1] });
+  }, []);
   const cursorCallback = useRef(onCursor);
   cursorCallback.current = onCursor;
   // Read through a ref: callers pass a fresh arrow each render, and the chart is not rebuilt for it.
@@ -314,6 +358,8 @@ export function UPlotChart({
     () => timeExtent(timestamps, markers, requestedStart === undefined || requestedEnd === undefined ? undefined : { startSec: requestedStart, endSec: requestedEnd }),
     [timestamps, markers, requestedStart, requestedEnd]
   );
+  const extentRef = useRef(extent);
+  extentRef.current = extent;
 
   // ── Hover: one highlighted sample, from the mouse (uPlot's cursor), a finger or the keys.
   const hasSample = useCallback((index: number) => series.some((s) => isPresent(s.values[index])), [series]);
@@ -423,7 +469,8 @@ export function UPlotChart({
       ...(calendar ? { tzDate: (ts: number) => uPlot.tzDate(new Date(ts * 1000), calendar.timezone) } : {}),
       cursor: {
         show: hoverable,
-        drag: { x: false, y: false },
+        drag: zoom && !compact ? { x: true, y: false, setScale: false } : { x: false, y: false },
+        ...(syncKey ? { sync: { key: syncKey, scales: ["x", null] as [string, null] } } : {}),
         // A sparkline is a vertical rule only; a full chart keeps its horizontal guide.
         y: !compact,
         // The crosshair sits on the sample it reads, not between two.
@@ -440,10 +487,10 @@ export function UPlotChart({
       // bucket starts 20 minutes ago.
       scales: {
         x: {
-          time: true,
+          time: !xFormatRef.current,
           // uPlot 1.6.32 expands a singleton by 1000 days BEFORE this
           // callback. Never trust its min/max; use the actual observations.
-          range: () => extent,
+          range: () => zoomRef.current ?? extent,
         },
         // An area is read against its baseline: start at zero, with headroom above.
         ...((area || barred) && !compact
@@ -452,6 +499,19 @@ export function UPlotChart({
       },
       bands: stacked && !barred ? stackBands(series, strokes) : undefined,
       hooks: {
+        // A zoomable chart only: a chart that does not zoom carries no select hook.
+        ...(zoom && !compact ? { setSelect: [
+          (u: uPlot) => {
+            if (u.select.width < 4) return;
+            const min = u.posToVal(u.select.left, "x");
+            const max = u.posToVal(u.select.left + u.select.width, "x");
+            u.setSelect({ left: 0, top: 0, width: 0, height: 0 }, false);
+            if (!(max > min)) return;
+            zoomRef.current = [min, max];
+            setZoomed(true);
+            u.setScale("x", { min, max });
+          },
+        ] } : {}),
         setCursor: [
           (u: uPlot) => {
             const idx = u.cursor.idx ?? null;
@@ -483,7 +543,13 @@ export function UPlotChart({
         : [
             // Time runs along the bottom with no vertical rules: only the
             // value axis draws its few horizontal guides, and no tick marks.
-            { stroke: palette.axis, font: palette.axisFont, grid: { show: false }, ticks: { show: false } },
+            {
+              stroke: palette.axis,
+              font: palette.axisFont,
+              grid: { show: false },
+              ticks: { show: false },
+              ...(xAxisFormatRef.current ? { space: 72, values: (_u: uPlot, splits: number[]) => splits.map((x) => xAxisFormatRef.current!(x)) } : {}),
+            },
             {
               stroke: palette.axis,
               font: palette.axisFont,
@@ -556,7 +622,7 @@ export function UPlotChart({
       chart?.destroy();
       if (chartRef.current === chart) chartRef.current = null;
     };
-  }, [data, series, timestamps.length, height, unit, valueText, hoverable, compact, themeVersion, markers, shown, legend, area, stacked, barred, exemplars, extent, calendar]);
+  }, [data, series, timestamps.length, height, unit, valueText, hoverable, compact, themeVersion, markers, shown, legend, area, stacked, barred, exemplars, extent, calendar, syncKey, linearX, zoom]);
 
   // Highlight without a rebuild: uPlot dims every other series in place.
   // Re-applied after a rebuild too (a new chart starts unfocused).
@@ -575,7 +641,7 @@ export function UPlotChart({
   const calendarNote = calendar ? `${bucket ? `${bucket} buckets` : "Buckets"}: ${calendar.timezone} calendar dates` : "";
   const caption = [describeSeries(series, unit, valueText), describeMarkers(markers), describeBands(shown), calendarNote && `${calendarNote}.`].filter(Boolean).join(" ");
   const sampleSec = hover ? timestamps[hover.index] : undefined;
-  const sampleTime = sampleSec === undefined ? "" : formatSampleTime(sampleSec, calendar);
+  const sampleTime = sampleSec === undefined ? "" : xFormat ? xFormat(sampleSec) : formatSampleTime(sampleSec, calendar);
   const rows = useMemo(
     () => (hover ? sampleRows(series, hover.index, unit, (i) => tokenColor(series[i]!.color ?? (series[i]!.tone ? TONE_VAR[series[i]!.tone!] : chartToken(i))), valueText) : []),
     [hover, series, unit, valueText]
@@ -585,13 +651,23 @@ export function UPlotChart({
   return (
     <figure
       ref={figureRef}
-      className={cn("obs-uplot", exemplars && "relative", className)}
+      className={cn("obs-uplot", (exemplars || zoom) && "relative", className)}
       aria-label={label}
       role="group"
       {...(interactive ? { ...hoverBind, "aria-describedby": `${captionId} ${hintId}` } : {})}
       data-testid="chart-figure"
     >
-      <div ref={hostRef} aria-hidden="true" style={{ minHeight: height, ...plotStyle }} />
+      <div ref={hostRef} aria-hidden="true" style={{ minHeight: height, ...plotStyle }} onDoubleClick={zoomed ? resetZoom : undefined} />
+      {zoomed && (
+        <button
+          type="button"
+          onClick={resetZoom}
+          className="absolute right-1 top-0 z-10 rounded-md border border-border bg-surface px-1.5 text-meta text-ink-muted hover:text-ink"
+          data-testid="chart-reset-zoom"
+        >
+          Reset zoom
+        </button>
+      )}
       {exemplars && layout && layout.dots.length > 0 && (
         <div
           className="pointer-events-none absolute"
@@ -627,7 +703,7 @@ export function UPlotChart({
           {calendarNote}
         </p>
       )}
-      {!compact && annotationSummary && (
+      {!compact && showAnnotationSummary && annotationSummary && (
         <p className="min-w-0 truncate text-xs text-ink-muted" title={`${describeMarkers(markers)} ${describeBands(shown)}`} data-testid="chart-annotations" aria-hidden="true">
           {annotationSummary}
         </p>

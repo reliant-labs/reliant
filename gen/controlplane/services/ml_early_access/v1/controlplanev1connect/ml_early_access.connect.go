@@ -33,53 +33,190 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// MlEarlyAccessServiceGetMlFleetProcedure is the fully-qualified name of the MlEarlyAccessService's
+	// GetMlFleet RPC.
+	MlEarlyAccessServiceGetMlFleetProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlFleet"
+	// MlEarlyAccessServiceGetMlPoolProcedure is the fully-qualified name of the MlEarlyAccessService's
+	// GetMlPool RPC.
+	MlEarlyAccessServiceGetMlPoolProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlPool"
+	// MlEarlyAccessServiceGetMlNodeProcedure is the fully-qualified name of the MlEarlyAccessService's
+	// GetMlNode RPC.
+	MlEarlyAccessServiceGetMlNodeProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlNode"
+	// MlEarlyAccessServiceGetMlDeviceProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's GetMlDevice RPC.
+	MlEarlyAccessServiceGetMlDeviceProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlDevice"
 	// MlEarlyAccessServiceGetMlMachinesProcedure is the fully-qualified name of the
 	// MlEarlyAccessService's GetMlMachines RPC.
 	MlEarlyAccessServiceGetMlMachinesProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlMachines"
 	// MlEarlyAccessServiceGetMlStackProcedure is the fully-qualified name of the MlEarlyAccessService's
 	// GetMlStack RPC.
 	MlEarlyAccessServiceGetMlStackProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlStack"
+	// MlEarlyAccessServiceGetMlQueuesProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's GetMlQueues RPC.
+	MlEarlyAccessServiceGetMlQueuesProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlQueues"
 	// MlEarlyAccessServiceListMlFindingsProcedure is the fully-qualified name of the
 	// MlEarlyAccessService's ListMlFindings RPC.
 	MlEarlyAccessServiceListMlFindingsProcedure = "/controlplane.v1.MlEarlyAccessService/ListMlFindings"
+	// MlEarlyAccessServiceListMlExperimentsProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's ListMlExperiments RPC.
+	MlEarlyAccessServiceListMlExperimentsProcedure = "/controlplane.v1.MlEarlyAccessService/ListMlExperiments"
 	// MlEarlyAccessServiceListMlRunsProcedure is the fully-qualified name of the MlEarlyAccessService's
 	// ListMlRuns RPC.
 	MlEarlyAccessServiceListMlRunsProcedure = "/controlplane.v1.MlEarlyAccessService/ListMlRuns"
+	// MlEarlyAccessServiceGetMlRunProcedure is the fully-qualified name of the MlEarlyAccessService's
+	// GetMlRun RPC.
+	MlEarlyAccessServiceGetMlRunProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlRun"
+	// MlEarlyAccessServiceGetMlLineageProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's GetMlLineage RPC.
+	MlEarlyAccessServiceGetMlLineageProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlLineage"
+	// MlEarlyAccessServiceListMlEvalSuitesProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's ListMlEvalSuites RPC.
+	MlEarlyAccessServiceListMlEvalSuitesProcedure = "/controlplane.v1.MlEarlyAccessService/ListMlEvalSuites"
+	// MlEarlyAccessServiceGetMlEvalMatrixProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's GetMlEvalMatrix RPC.
+	MlEarlyAccessServiceGetMlEvalMatrixProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlEvalMatrix"
+	// MlEarlyAccessServiceListMlEvalRunsProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's ListMlEvalRuns RPC.
+	MlEarlyAccessServiceListMlEvalRunsProcedure = "/controlplane.v1.MlEarlyAccessService/ListMlEvalRuns"
+	// MlEarlyAccessServiceGetMlEvalRunProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's GetMlEvalRun RPC.
+	MlEarlyAccessServiceGetMlEvalRunProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlEvalRun"
+	// MlEarlyAccessServiceListMlEvalSamplesProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's ListMlEvalSamples RPC.
+	MlEarlyAccessServiceListMlEvalSamplesProcedure = "/controlplane.v1.MlEarlyAccessService/ListMlEvalSamples"
 	// MlEarlyAccessServiceListMlModelsProcedure is the fully-qualified name of the
 	// MlEarlyAccessService's ListMlModels RPC.
 	MlEarlyAccessServiceListMlModelsProcedure = "/controlplane.v1.MlEarlyAccessService/ListMlModels"
+	// MlEarlyAccessServiceGetMlModelProcedure is the fully-qualified name of the MlEarlyAccessService's
+	// GetMlModel RPC.
+	MlEarlyAccessServiceGetMlModelProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlModel"
+	// MlEarlyAccessServiceGetMlModelVersionProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's GetMlModelVersion RPC.
+	MlEarlyAccessServiceGetMlModelVersionProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlModelVersion"
 	// MlEarlyAccessServiceListMlInferenceServicesProcedure is the fully-qualified name of the
 	// MlEarlyAccessService's ListMlInferenceServices RPC.
 	MlEarlyAccessServiceListMlInferenceServicesProcedure = "/controlplane.v1.MlEarlyAccessService/ListMlInferenceServices"
+	// MlEarlyAccessServiceGetMlInferenceServiceProcedure is the fully-qualified name of the
+	// MlEarlyAccessService's GetMlInferenceService RPC.
+	MlEarlyAccessServiceGetMlInferenceServiceProcedure = "/controlplane.v1.MlEarlyAccessService/GetMlInferenceService"
 )
 
 // MlEarlyAccessServiceClient is a client for the controlplane.v1.MlEarlyAccessService service.
 type MlEarlyAccessServiceClient interface {
-	// GetMlMachines reports the accelerator nodes of the org's connected
-	// clusters, by pool: allocation against utilisation, and health flags with
-	// their evidence.
+	// GetMlFleet summarises the accelerators of the org's connected clusters:
+	// allocation against use, health, idle-allocated devices and cost, by pool.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlFleet(context.Context, *connect.Request[v1.GetMlFleetRequest]) (*connect.Response[v1.GetMlFleetResponse], error)
+	// GetMlPool reports one node pool: its nodes with their devices, version
+	// skew, throttle reasons and allocation by namespace.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlPool(context.Context, *connect.Request[v1.GetMlPoolRequest]) (*connect.Response[v1.GetMlPoolResponse], error)
+	// GetMlNode reports one node: its devices with every collected device
+	// field, conditions (kubelet and node-problem-detector), the workloads it
+	// ran, its interconnect, host resources and diagnostics.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlNode(context.Context, *connect.Request[v1.GetMlNodeRequest]) (*connect.Response[v1.GetMlNodeResponse], error)
+	// GetMlDevice reports one accelerator by UUID: identity, every collected
+	// field, its health score with the inputs, the workloads that held it and
+	// the nodes it has been in.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlDevice(context.Context, *connect.Request[v1.GetMlDeviceRequest]) (*connect.Response[v1.GetMlDeviceResponse], error)
+	// Deprecated: the first early-access shape. Use GetMlFleet and GetMlPool.
+	// It answers as it always has (the ml gate, then Unimplemented).
+	//
+	// Deprecated: do not use.
 	GetMlMachines(context.Context, *connect.Request[v1.GetMlMachinesRequest]) (*connect.Response[v1.GetMlMachinesResponse], error)
-	// GetMlStack reports the ML components discovered in each connected
-	// cluster: adopted (found, theirs), installed by forge, or missing.
+	// GetMlStack reports, per connected cluster, the telemetry and ML
+	// components coverage checklist: adopted (found, theirs), installed by
+	// forge, or missing, with the inventory discovery found.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
 	GetMlStack(context.Context, *connect.Request[v1.GetMlStackRequest]) (*connect.Response[v1.GetMlStackResponse], error)
-	// ListMlFindings lists the recommendations engine's open findings, worst
-	// first, each with its evidence and the adopt-first fix.
+	// GetMlQueues reports scheduling: queues with quota and usage, pending
+	// workloads with the classified reason they wait, preemptions, and the
+	// pod-start stage breakdown of accelerator pods.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlQueues(context.Context, *connect.Request[v1.GetMlQueuesRequest]) (*connect.Response[v1.GetMlQueuesResponse], error)
+	// ListMlFindings lists the recommendations engine's findings, one per rule
+	// per scope with its subjects inside, each with its impact, evidence and
+	// the adopt-first fix.
 	//
 	// forge:custom — an early-access read with no table behind it yet.
 	ListMlFindings(context.Context, *connect.Request[v1.ListMlFindingsRequest]) (*connect.Response[v1.ListMlFindingsResponse], error)
-	// ListMlRuns lists training runs, newest first.
+	// ListMlExperiments lists experiments: named lines of work whose runs are
+	// compared with each other.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	ListMlExperiments(context.Context, *connect.Request[v1.ListMlExperimentsRequest]) (*connect.Response[v1.ListMlExperimentsResponse], error)
+	// ListMlRuns lists training runs, newest first, each with its phases and
+	// attempts (no ranks) for a list's mini-timeline.
 	//
 	// forge:custom — an early-access read with no table behind it yet.
 	ListMlRuns(context.Context, *connect.Request[v1.ListMlRunsRequest]) (*connect.Response[v1.ListMlRunsResponse], error)
-	// ListMlModels lists models and their versions, by OCI digest.
+	// GetMlRun reports one run in full: phases, attempts with their ranks,
+	// checkpoints, health checks, step-time breakdown, config with provenance,
+	// and cost by phase, attempt and category.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlRun(context.Context, *connect.Request[v1.GetMlRunRequest]) (*connect.Response[v1.GetMlRunResponse], error)
+	// GetMlLineage reads the lineage graph around a subject: datasets →
+	// phases → checkpoints → model versions → releases → inference services.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlLineage(context.Context, *connect.Request[v1.GetMlLineageRequest]) (*connect.Response[v1.GetMlLineageResponse], error)
+	// ListMlEvalSuites lists the eval suites with their tasks and gates.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	ListMlEvalSuites(context.Context, *connect.Request[v1.ListMlEvalSuitesRequest]) (*connect.Response[v1.ListMlEvalSuitesResponse], error)
+	// GetMlEvalMatrix reads one suite's subjects × tasks matrix against a
+	// baseline: scores, deltas, confidence and gate results.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlEvalMatrix(context.Context, *connect.Request[v1.GetMlEvalMatrixRequest]) (*connect.Response[v1.GetMlEvalMatrixResponse], error)
+	// ListMlEvalRuns lists eval runs, newest first.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	ListMlEvalRuns(context.Context, *connect.Request[v1.ListMlEvalRunsRequest]) (*connect.Response[v1.ListMlEvalRunsResponse], error)
+	// GetMlEvalRun reads one eval run: its config and per-task, per-slice
+	// results.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlEvalRun(context.Context, *connect.Request[v1.GetMlEvalRunRequest]) (*connect.Response[v1.GetMlEvalRunResponse], error)
+	// ListMlEvalSamples lists one task's per-example records of an eval run,
+	// paired with a baseline eval run's, with the paired win/loss statistics.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	ListMlEvalSamples(context.Context, *connect.Request[v1.ListMlEvalSamplesRequest]) (*connect.Response[v1.ListMlEvalSamplesResponse], error)
+	// ListMlModels lists models with their aliases and serving summary.
 	//
 	// forge:custom — an early-access read with no table behind it yet.
 	ListMlModels(context.Context, *connect.Request[v1.ListMlModelsRequest]) (*connect.Response[v1.ListMlModelsResponse], error)
-	// ListMlInferenceServices lists inference services with their serving SLIs
-	// and the release health verdict of their latest promotion.
+	// GetMlModel reads one model: its versions, aliases and their history,
+	// and the promotion gates per environment.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlModel(context.Context, *connect.Request[v1.GetMlModelRequest]) (*connect.Response[v1.GetMlModelResponse], error)
+	// GetMlModelVersion reads one version: its card, files, gate, where it
+	// serves, serving performance per hardware and pull performance.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlModelVersion(context.Context, *connect.Request[v1.GetMlModelVersionRequest]) (*connect.Response[v1.GetMlModelVersionResponse], error)
+	// ListMlInferenceServices lists inference services with their serving
+	// SLIs, cost per token and the verdict of their current revision.
 	//
 	// forge:custom — an early-access read with no table behind it yet.
 	ListMlInferenceServices(context.Context, *connect.Request[v1.ListMlInferenceServicesRequest]) (*connect.Response[v1.ListMlInferenceServicesResponse], error)
+	// GetMlInferenceService reads one service: revisions with verdicts and SLI
+	// deltas, replicas, cold start, traffic mix, cost, a running Changes
+	// comparison and online evals.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlInferenceService(context.Context, *connect.Request[v1.GetMlInferenceServiceRequest]) (*connect.Response[v1.GetMlInferenceServiceResponse], error)
 }
 
 // NewMlEarlyAccessServiceClient constructs a client for the controlplane.v1.MlEarlyAccessService
@@ -93,6 +230,34 @@ func NewMlEarlyAccessServiceClient(httpClient connect.HTTPClient, baseURL string
 	baseURL = strings.TrimRight(baseURL, "/")
 	mlEarlyAccessServiceMethods := v1.File_services_ml_early_access_v1_ml_early_access_proto.Services().ByName("MlEarlyAccessService").Methods()
 	return &mlEarlyAccessServiceClient{
+		getMlFleet: connect.NewClient[v1.GetMlFleetRequest, v1.GetMlFleetResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlFleetProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlFleet")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getMlPool: connect.NewClient[v1.GetMlPoolRequest, v1.GetMlPoolResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlPoolProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlPool")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getMlNode: connect.NewClient[v1.GetMlNodeRequest, v1.GetMlNodeResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlNodeProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlNode")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getMlDevice: connect.NewClient[v1.GetMlDeviceRequest, v1.GetMlDeviceResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlDeviceProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlDevice")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		getMlMachines: connect.NewClient[v1.GetMlMachinesRequest, v1.GetMlMachinesResponse](
 			httpClient,
 			baseURL+MlEarlyAccessServiceGetMlMachinesProcedure,
@@ -107,10 +272,24 @@ func NewMlEarlyAccessServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getMlQueues: connect.NewClient[v1.GetMlQueuesRequest, v1.GetMlQueuesResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlQueuesProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlQueues")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		listMlFindings: connect.NewClient[v1.ListMlFindingsRequest, v1.ListMlFindingsResponse](
 			httpClient,
 			baseURL+MlEarlyAccessServiceListMlFindingsProcedure,
 			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlFindings")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listMlExperiments: connect.NewClient[v1.ListMlExperimentsRequest, v1.ListMlExperimentsResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceListMlExperimentsProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlExperiments")),
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
@@ -121,10 +300,73 @@ func NewMlEarlyAccessServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getMlRun: connect.NewClient[v1.GetMlRunRequest, v1.GetMlRunResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlRunProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlRun")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getMlLineage: connect.NewClient[v1.GetMlLineageRequest, v1.GetMlLineageResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlLineageProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlLineage")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listMlEvalSuites: connect.NewClient[v1.ListMlEvalSuitesRequest, v1.ListMlEvalSuitesResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceListMlEvalSuitesProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlEvalSuites")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getMlEvalMatrix: connect.NewClient[v1.GetMlEvalMatrixRequest, v1.GetMlEvalMatrixResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlEvalMatrixProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlEvalMatrix")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listMlEvalRuns: connect.NewClient[v1.ListMlEvalRunsRequest, v1.ListMlEvalRunsResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceListMlEvalRunsProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlEvalRuns")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getMlEvalRun: connect.NewClient[v1.GetMlEvalRunRequest, v1.GetMlEvalRunResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlEvalRunProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlEvalRun")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		listMlEvalSamples: connect.NewClient[v1.ListMlEvalSamplesRequest, v1.ListMlEvalSamplesResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceListMlEvalSamplesProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlEvalSamples")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		listMlModels: connect.NewClient[v1.ListMlModelsRequest, v1.ListMlModelsResponse](
 			httpClient,
 			baseURL+MlEarlyAccessServiceListMlModelsProcedure,
 			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlModels")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getMlModel: connect.NewClient[v1.GetMlModelRequest, v1.GetMlModelResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlModelProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlModel")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getMlModelVersion: connect.NewClient[v1.GetMlModelVersionRequest, v1.GetMlModelVersionResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlModelVersionProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlModelVersion")),
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
@@ -135,20 +377,65 @@ func NewMlEarlyAccessServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getMlInferenceService: connect.NewClient[v1.GetMlInferenceServiceRequest, v1.GetMlInferenceServiceResponse](
+			httpClient,
+			baseURL+MlEarlyAccessServiceGetMlInferenceServiceProcedure,
+			connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlInferenceService")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // mlEarlyAccessServiceClient implements MlEarlyAccessServiceClient.
 type mlEarlyAccessServiceClient struct {
+	getMlFleet              *connect.Client[v1.GetMlFleetRequest, v1.GetMlFleetResponse]
+	getMlPool               *connect.Client[v1.GetMlPoolRequest, v1.GetMlPoolResponse]
+	getMlNode               *connect.Client[v1.GetMlNodeRequest, v1.GetMlNodeResponse]
+	getMlDevice             *connect.Client[v1.GetMlDeviceRequest, v1.GetMlDeviceResponse]
 	getMlMachines           *connect.Client[v1.GetMlMachinesRequest, v1.GetMlMachinesResponse]
 	getMlStack              *connect.Client[v1.GetMlStackRequest, v1.GetMlStackResponse]
+	getMlQueues             *connect.Client[v1.GetMlQueuesRequest, v1.GetMlQueuesResponse]
 	listMlFindings          *connect.Client[v1.ListMlFindingsRequest, v1.ListMlFindingsResponse]
+	listMlExperiments       *connect.Client[v1.ListMlExperimentsRequest, v1.ListMlExperimentsResponse]
 	listMlRuns              *connect.Client[v1.ListMlRunsRequest, v1.ListMlRunsResponse]
+	getMlRun                *connect.Client[v1.GetMlRunRequest, v1.GetMlRunResponse]
+	getMlLineage            *connect.Client[v1.GetMlLineageRequest, v1.GetMlLineageResponse]
+	listMlEvalSuites        *connect.Client[v1.ListMlEvalSuitesRequest, v1.ListMlEvalSuitesResponse]
+	getMlEvalMatrix         *connect.Client[v1.GetMlEvalMatrixRequest, v1.GetMlEvalMatrixResponse]
+	listMlEvalRuns          *connect.Client[v1.ListMlEvalRunsRequest, v1.ListMlEvalRunsResponse]
+	getMlEvalRun            *connect.Client[v1.GetMlEvalRunRequest, v1.GetMlEvalRunResponse]
+	listMlEvalSamples       *connect.Client[v1.ListMlEvalSamplesRequest, v1.ListMlEvalSamplesResponse]
 	listMlModels            *connect.Client[v1.ListMlModelsRequest, v1.ListMlModelsResponse]
+	getMlModel              *connect.Client[v1.GetMlModelRequest, v1.GetMlModelResponse]
+	getMlModelVersion       *connect.Client[v1.GetMlModelVersionRequest, v1.GetMlModelVersionResponse]
 	listMlInferenceServices *connect.Client[v1.ListMlInferenceServicesRequest, v1.ListMlInferenceServicesResponse]
+	getMlInferenceService   *connect.Client[v1.GetMlInferenceServiceRequest, v1.GetMlInferenceServiceResponse]
+}
+
+// GetMlFleet calls controlplane.v1.MlEarlyAccessService.GetMlFleet.
+func (c *mlEarlyAccessServiceClient) GetMlFleet(ctx context.Context, req *connect.Request[v1.GetMlFleetRequest]) (*connect.Response[v1.GetMlFleetResponse], error) {
+	return c.getMlFleet.CallUnary(ctx, req)
+}
+
+// GetMlPool calls controlplane.v1.MlEarlyAccessService.GetMlPool.
+func (c *mlEarlyAccessServiceClient) GetMlPool(ctx context.Context, req *connect.Request[v1.GetMlPoolRequest]) (*connect.Response[v1.GetMlPoolResponse], error) {
+	return c.getMlPool.CallUnary(ctx, req)
+}
+
+// GetMlNode calls controlplane.v1.MlEarlyAccessService.GetMlNode.
+func (c *mlEarlyAccessServiceClient) GetMlNode(ctx context.Context, req *connect.Request[v1.GetMlNodeRequest]) (*connect.Response[v1.GetMlNodeResponse], error) {
+	return c.getMlNode.CallUnary(ctx, req)
+}
+
+// GetMlDevice calls controlplane.v1.MlEarlyAccessService.GetMlDevice.
+func (c *mlEarlyAccessServiceClient) GetMlDevice(ctx context.Context, req *connect.Request[v1.GetMlDeviceRequest]) (*connect.Response[v1.GetMlDeviceResponse], error) {
+	return c.getMlDevice.CallUnary(ctx, req)
 }
 
 // GetMlMachines calls controlplane.v1.MlEarlyAccessService.GetMlMachines.
+//
+// Deprecated: do not use.
 func (c *mlEarlyAccessServiceClient) GetMlMachines(ctx context.Context, req *connect.Request[v1.GetMlMachinesRequest]) (*connect.Response[v1.GetMlMachinesResponse], error) {
 	return c.getMlMachines.CallUnary(ctx, req)
 }
@@ -158,9 +445,19 @@ func (c *mlEarlyAccessServiceClient) GetMlStack(ctx context.Context, req *connec
 	return c.getMlStack.CallUnary(ctx, req)
 }
 
+// GetMlQueues calls controlplane.v1.MlEarlyAccessService.GetMlQueues.
+func (c *mlEarlyAccessServiceClient) GetMlQueues(ctx context.Context, req *connect.Request[v1.GetMlQueuesRequest]) (*connect.Response[v1.GetMlQueuesResponse], error) {
+	return c.getMlQueues.CallUnary(ctx, req)
+}
+
 // ListMlFindings calls controlplane.v1.MlEarlyAccessService.ListMlFindings.
 func (c *mlEarlyAccessServiceClient) ListMlFindings(ctx context.Context, req *connect.Request[v1.ListMlFindingsRequest]) (*connect.Response[v1.ListMlFindingsResponse], error) {
 	return c.listMlFindings.CallUnary(ctx, req)
+}
+
+// ListMlExperiments calls controlplane.v1.MlEarlyAccessService.ListMlExperiments.
+func (c *mlEarlyAccessServiceClient) ListMlExperiments(ctx context.Context, req *connect.Request[v1.ListMlExperimentsRequest]) (*connect.Response[v1.ListMlExperimentsResponse], error) {
+	return c.listMlExperiments.CallUnary(ctx, req)
 }
 
 // ListMlRuns calls controlplane.v1.MlEarlyAccessService.ListMlRuns.
@@ -168,9 +465,54 @@ func (c *mlEarlyAccessServiceClient) ListMlRuns(ctx context.Context, req *connec
 	return c.listMlRuns.CallUnary(ctx, req)
 }
 
+// GetMlRun calls controlplane.v1.MlEarlyAccessService.GetMlRun.
+func (c *mlEarlyAccessServiceClient) GetMlRun(ctx context.Context, req *connect.Request[v1.GetMlRunRequest]) (*connect.Response[v1.GetMlRunResponse], error) {
+	return c.getMlRun.CallUnary(ctx, req)
+}
+
+// GetMlLineage calls controlplane.v1.MlEarlyAccessService.GetMlLineage.
+func (c *mlEarlyAccessServiceClient) GetMlLineage(ctx context.Context, req *connect.Request[v1.GetMlLineageRequest]) (*connect.Response[v1.GetMlLineageResponse], error) {
+	return c.getMlLineage.CallUnary(ctx, req)
+}
+
+// ListMlEvalSuites calls controlplane.v1.MlEarlyAccessService.ListMlEvalSuites.
+func (c *mlEarlyAccessServiceClient) ListMlEvalSuites(ctx context.Context, req *connect.Request[v1.ListMlEvalSuitesRequest]) (*connect.Response[v1.ListMlEvalSuitesResponse], error) {
+	return c.listMlEvalSuites.CallUnary(ctx, req)
+}
+
+// GetMlEvalMatrix calls controlplane.v1.MlEarlyAccessService.GetMlEvalMatrix.
+func (c *mlEarlyAccessServiceClient) GetMlEvalMatrix(ctx context.Context, req *connect.Request[v1.GetMlEvalMatrixRequest]) (*connect.Response[v1.GetMlEvalMatrixResponse], error) {
+	return c.getMlEvalMatrix.CallUnary(ctx, req)
+}
+
+// ListMlEvalRuns calls controlplane.v1.MlEarlyAccessService.ListMlEvalRuns.
+func (c *mlEarlyAccessServiceClient) ListMlEvalRuns(ctx context.Context, req *connect.Request[v1.ListMlEvalRunsRequest]) (*connect.Response[v1.ListMlEvalRunsResponse], error) {
+	return c.listMlEvalRuns.CallUnary(ctx, req)
+}
+
+// GetMlEvalRun calls controlplane.v1.MlEarlyAccessService.GetMlEvalRun.
+func (c *mlEarlyAccessServiceClient) GetMlEvalRun(ctx context.Context, req *connect.Request[v1.GetMlEvalRunRequest]) (*connect.Response[v1.GetMlEvalRunResponse], error) {
+	return c.getMlEvalRun.CallUnary(ctx, req)
+}
+
+// ListMlEvalSamples calls controlplane.v1.MlEarlyAccessService.ListMlEvalSamples.
+func (c *mlEarlyAccessServiceClient) ListMlEvalSamples(ctx context.Context, req *connect.Request[v1.ListMlEvalSamplesRequest]) (*connect.Response[v1.ListMlEvalSamplesResponse], error) {
+	return c.listMlEvalSamples.CallUnary(ctx, req)
+}
+
 // ListMlModels calls controlplane.v1.MlEarlyAccessService.ListMlModels.
 func (c *mlEarlyAccessServiceClient) ListMlModels(ctx context.Context, req *connect.Request[v1.ListMlModelsRequest]) (*connect.Response[v1.ListMlModelsResponse], error) {
 	return c.listMlModels.CallUnary(ctx, req)
+}
+
+// GetMlModel calls controlplane.v1.MlEarlyAccessService.GetMlModel.
+func (c *mlEarlyAccessServiceClient) GetMlModel(ctx context.Context, req *connect.Request[v1.GetMlModelRequest]) (*connect.Response[v1.GetMlModelResponse], error) {
+	return c.getMlModel.CallUnary(ctx, req)
+}
+
+// GetMlModelVersion calls controlplane.v1.MlEarlyAccessService.GetMlModelVersion.
+func (c *mlEarlyAccessServiceClient) GetMlModelVersion(ctx context.Context, req *connect.Request[v1.GetMlModelVersionRequest]) (*connect.Response[v1.GetMlModelVersionResponse], error) {
+	return c.getMlModelVersion.CallUnary(ctx, req)
 }
 
 // ListMlInferenceServices calls controlplane.v1.MlEarlyAccessService.ListMlInferenceServices.
@@ -178,34 +520,128 @@ func (c *mlEarlyAccessServiceClient) ListMlInferenceServices(ctx context.Context
 	return c.listMlInferenceServices.CallUnary(ctx, req)
 }
 
+// GetMlInferenceService calls controlplane.v1.MlEarlyAccessService.GetMlInferenceService.
+func (c *mlEarlyAccessServiceClient) GetMlInferenceService(ctx context.Context, req *connect.Request[v1.GetMlInferenceServiceRequest]) (*connect.Response[v1.GetMlInferenceServiceResponse], error) {
+	return c.getMlInferenceService.CallUnary(ctx, req)
+}
+
 // MlEarlyAccessServiceHandler is an implementation of the controlplane.v1.MlEarlyAccessService
 // service.
 type MlEarlyAccessServiceHandler interface {
-	// GetMlMachines reports the accelerator nodes of the org's connected
-	// clusters, by pool: allocation against utilisation, and health flags with
-	// their evidence.
+	// GetMlFleet summarises the accelerators of the org's connected clusters:
+	// allocation against use, health, idle-allocated devices and cost, by pool.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlFleet(context.Context, *connect.Request[v1.GetMlFleetRequest]) (*connect.Response[v1.GetMlFleetResponse], error)
+	// GetMlPool reports one node pool: its nodes with their devices, version
+	// skew, throttle reasons and allocation by namespace.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlPool(context.Context, *connect.Request[v1.GetMlPoolRequest]) (*connect.Response[v1.GetMlPoolResponse], error)
+	// GetMlNode reports one node: its devices with every collected device
+	// field, conditions (kubelet and node-problem-detector), the workloads it
+	// ran, its interconnect, host resources and diagnostics.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlNode(context.Context, *connect.Request[v1.GetMlNodeRequest]) (*connect.Response[v1.GetMlNodeResponse], error)
+	// GetMlDevice reports one accelerator by UUID: identity, every collected
+	// field, its health score with the inputs, the workloads that held it and
+	// the nodes it has been in.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlDevice(context.Context, *connect.Request[v1.GetMlDeviceRequest]) (*connect.Response[v1.GetMlDeviceResponse], error)
+	// Deprecated: the first early-access shape. Use GetMlFleet and GetMlPool.
+	// It answers as it always has (the ml gate, then Unimplemented).
+	//
+	// Deprecated: do not use.
 	GetMlMachines(context.Context, *connect.Request[v1.GetMlMachinesRequest]) (*connect.Response[v1.GetMlMachinesResponse], error)
-	// GetMlStack reports the ML components discovered in each connected
-	// cluster: adopted (found, theirs), installed by forge, or missing.
+	// GetMlStack reports, per connected cluster, the telemetry and ML
+	// components coverage checklist: adopted (found, theirs), installed by
+	// forge, or missing, with the inventory discovery found.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
 	GetMlStack(context.Context, *connect.Request[v1.GetMlStackRequest]) (*connect.Response[v1.GetMlStackResponse], error)
-	// ListMlFindings lists the recommendations engine's open findings, worst
-	// first, each with its evidence and the adopt-first fix.
+	// GetMlQueues reports scheduling: queues with quota and usage, pending
+	// workloads with the classified reason they wait, preemptions, and the
+	// pod-start stage breakdown of accelerator pods.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlQueues(context.Context, *connect.Request[v1.GetMlQueuesRequest]) (*connect.Response[v1.GetMlQueuesResponse], error)
+	// ListMlFindings lists the recommendations engine's findings, one per rule
+	// per scope with its subjects inside, each with its impact, evidence and
+	// the adopt-first fix.
 	//
 	// forge:custom — an early-access read with no table behind it yet.
 	ListMlFindings(context.Context, *connect.Request[v1.ListMlFindingsRequest]) (*connect.Response[v1.ListMlFindingsResponse], error)
-	// ListMlRuns lists training runs, newest first.
+	// ListMlExperiments lists experiments: named lines of work whose runs are
+	// compared with each other.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	ListMlExperiments(context.Context, *connect.Request[v1.ListMlExperimentsRequest]) (*connect.Response[v1.ListMlExperimentsResponse], error)
+	// ListMlRuns lists training runs, newest first, each with its phases and
+	// attempts (no ranks) for a list's mini-timeline.
 	//
 	// forge:custom — an early-access read with no table behind it yet.
 	ListMlRuns(context.Context, *connect.Request[v1.ListMlRunsRequest]) (*connect.Response[v1.ListMlRunsResponse], error)
-	// ListMlModels lists models and their versions, by OCI digest.
+	// GetMlRun reports one run in full: phases, attempts with their ranks,
+	// checkpoints, health checks, step-time breakdown, config with provenance,
+	// and cost by phase, attempt and category.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlRun(context.Context, *connect.Request[v1.GetMlRunRequest]) (*connect.Response[v1.GetMlRunResponse], error)
+	// GetMlLineage reads the lineage graph around a subject: datasets →
+	// phases → checkpoints → model versions → releases → inference services.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlLineage(context.Context, *connect.Request[v1.GetMlLineageRequest]) (*connect.Response[v1.GetMlLineageResponse], error)
+	// ListMlEvalSuites lists the eval suites with their tasks and gates.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	ListMlEvalSuites(context.Context, *connect.Request[v1.ListMlEvalSuitesRequest]) (*connect.Response[v1.ListMlEvalSuitesResponse], error)
+	// GetMlEvalMatrix reads one suite's subjects × tasks matrix against a
+	// baseline: scores, deltas, confidence and gate results.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlEvalMatrix(context.Context, *connect.Request[v1.GetMlEvalMatrixRequest]) (*connect.Response[v1.GetMlEvalMatrixResponse], error)
+	// ListMlEvalRuns lists eval runs, newest first.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	ListMlEvalRuns(context.Context, *connect.Request[v1.ListMlEvalRunsRequest]) (*connect.Response[v1.ListMlEvalRunsResponse], error)
+	// GetMlEvalRun reads one eval run: its config and per-task, per-slice
+	// results.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlEvalRun(context.Context, *connect.Request[v1.GetMlEvalRunRequest]) (*connect.Response[v1.GetMlEvalRunResponse], error)
+	// ListMlEvalSamples lists one task's per-example records of an eval run,
+	// paired with a baseline eval run's, with the paired win/loss statistics.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	ListMlEvalSamples(context.Context, *connect.Request[v1.ListMlEvalSamplesRequest]) (*connect.Response[v1.ListMlEvalSamplesResponse], error)
+	// ListMlModels lists models with their aliases and serving summary.
 	//
 	// forge:custom — an early-access read with no table behind it yet.
 	ListMlModels(context.Context, *connect.Request[v1.ListMlModelsRequest]) (*connect.Response[v1.ListMlModelsResponse], error)
-	// ListMlInferenceServices lists inference services with their serving SLIs
-	// and the release health verdict of their latest promotion.
+	// GetMlModel reads one model: its versions, aliases and their history,
+	// and the promotion gates per environment.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlModel(context.Context, *connect.Request[v1.GetMlModelRequest]) (*connect.Response[v1.GetMlModelResponse], error)
+	// GetMlModelVersion reads one version: its card, files, gate, where it
+	// serves, serving performance per hardware and pull performance.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlModelVersion(context.Context, *connect.Request[v1.GetMlModelVersionRequest]) (*connect.Response[v1.GetMlModelVersionResponse], error)
+	// ListMlInferenceServices lists inference services with their serving
+	// SLIs, cost per token and the verdict of their current revision.
 	//
 	// forge:custom — an early-access read with no table behind it yet.
 	ListMlInferenceServices(context.Context, *connect.Request[v1.ListMlInferenceServicesRequest]) (*connect.Response[v1.ListMlInferenceServicesResponse], error)
+	// GetMlInferenceService reads one service: revisions with verdicts and SLI
+	// deltas, replicas, cold start, traffic mix, cost, a running Changes
+	// comparison and online evals.
+	//
+	// forge:custom — an early-access read with no table behind it yet.
+	GetMlInferenceService(context.Context, *connect.Request[v1.GetMlInferenceServiceRequest]) (*connect.Response[v1.GetMlInferenceServiceResponse], error)
 }
 
 // NewMlEarlyAccessServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -215,6 +651,34 @@ type MlEarlyAccessServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewMlEarlyAccessServiceHandler(svc MlEarlyAccessServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	mlEarlyAccessServiceMethods := v1.File_services_ml_early_access_v1_ml_early_access_proto.Services().ByName("MlEarlyAccessService").Methods()
+	mlEarlyAccessServiceGetMlFleetHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlFleetProcedure,
+		svc.GetMlFleet,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlFleet")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceGetMlPoolHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlPoolProcedure,
+		svc.GetMlPool,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlPool")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceGetMlNodeHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlNodeProcedure,
+		svc.GetMlNode,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlNode")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceGetMlDeviceHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlDeviceProcedure,
+		svc.GetMlDevice,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlDevice")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	mlEarlyAccessServiceGetMlMachinesHandler := connect.NewUnaryHandler(
 		MlEarlyAccessServiceGetMlMachinesProcedure,
 		svc.GetMlMachines,
@@ -229,10 +693,24 @@ func NewMlEarlyAccessServiceHandler(svc MlEarlyAccessServiceHandler, opts ...con
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	mlEarlyAccessServiceGetMlQueuesHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlQueuesProcedure,
+		svc.GetMlQueues,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlQueues")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	mlEarlyAccessServiceListMlFindingsHandler := connect.NewUnaryHandler(
 		MlEarlyAccessServiceListMlFindingsProcedure,
 		svc.ListMlFindings,
 		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlFindings")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceListMlExperimentsHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceListMlExperimentsProcedure,
+		svc.ListMlExperiments,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlExperiments")),
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
@@ -243,10 +721,73 @@ func NewMlEarlyAccessServiceHandler(svc MlEarlyAccessServiceHandler, opts ...con
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	mlEarlyAccessServiceGetMlRunHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlRunProcedure,
+		svc.GetMlRun,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlRun")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceGetMlLineageHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlLineageProcedure,
+		svc.GetMlLineage,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlLineage")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceListMlEvalSuitesHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceListMlEvalSuitesProcedure,
+		svc.ListMlEvalSuites,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlEvalSuites")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceGetMlEvalMatrixHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlEvalMatrixProcedure,
+		svc.GetMlEvalMatrix,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlEvalMatrix")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceListMlEvalRunsHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceListMlEvalRunsProcedure,
+		svc.ListMlEvalRuns,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlEvalRuns")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceGetMlEvalRunHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlEvalRunProcedure,
+		svc.GetMlEvalRun,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlEvalRun")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceListMlEvalSamplesHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceListMlEvalSamplesProcedure,
+		svc.ListMlEvalSamples,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlEvalSamples")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	mlEarlyAccessServiceListMlModelsHandler := connect.NewUnaryHandler(
 		MlEarlyAccessServiceListMlModelsProcedure,
 		svc.ListMlModels,
 		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("ListMlModels")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceGetMlModelHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlModelProcedure,
+		svc.GetMlModel,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlModel")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	mlEarlyAccessServiceGetMlModelVersionHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlModelVersionProcedure,
+		svc.GetMlModelVersion,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlModelVersion")),
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
@@ -257,20 +798,59 @@ func NewMlEarlyAccessServiceHandler(svc MlEarlyAccessServiceHandler, opts ...con
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	mlEarlyAccessServiceGetMlInferenceServiceHandler := connect.NewUnaryHandler(
+		MlEarlyAccessServiceGetMlInferenceServiceProcedure,
+		svc.GetMlInferenceService,
+		connect.WithSchema(mlEarlyAccessServiceMethods.ByName("GetMlInferenceService")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.MlEarlyAccessService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case MlEarlyAccessServiceGetMlFleetProcedure:
+			mlEarlyAccessServiceGetMlFleetHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlPoolProcedure:
+			mlEarlyAccessServiceGetMlPoolHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlNodeProcedure:
+			mlEarlyAccessServiceGetMlNodeHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlDeviceProcedure:
+			mlEarlyAccessServiceGetMlDeviceHandler.ServeHTTP(w, r)
 		case MlEarlyAccessServiceGetMlMachinesProcedure:
 			mlEarlyAccessServiceGetMlMachinesHandler.ServeHTTP(w, r)
 		case MlEarlyAccessServiceGetMlStackProcedure:
 			mlEarlyAccessServiceGetMlStackHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlQueuesProcedure:
+			mlEarlyAccessServiceGetMlQueuesHandler.ServeHTTP(w, r)
 		case MlEarlyAccessServiceListMlFindingsProcedure:
 			mlEarlyAccessServiceListMlFindingsHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceListMlExperimentsProcedure:
+			mlEarlyAccessServiceListMlExperimentsHandler.ServeHTTP(w, r)
 		case MlEarlyAccessServiceListMlRunsProcedure:
 			mlEarlyAccessServiceListMlRunsHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlRunProcedure:
+			mlEarlyAccessServiceGetMlRunHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlLineageProcedure:
+			mlEarlyAccessServiceGetMlLineageHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceListMlEvalSuitesProcedure:
+			mlEarlyAccessServiceListMlEvalSuitesHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlEvalMatrixProcedure:
+			mlEarlyAccessServiceGetMlEvalMatrixHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceListMlEvalRunsProcedure:
+			mlEarlyAccessServiceListMlEvalRunsHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlEvalRunProcedure:
+			mlEarlyAccessServiceGetMlEvalRunHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceListMlEvalSamplesProcedure:
+			mlEarlyAccessServiceListMlEvalSamplesHandler.ServeHTTP(w, r)
 		case MlEarlyAccessServiceListMlModelsProcedure:
 			mlEarlyAccessServiceListMlModelsHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlModelProcedure:
+			mlEarlyAccessServiceGetMlModelHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlModelVersionProcedure:
+			mlEarlyAccessServiceGetMlModelVersionHandler.ServeHTTP(w, r)
 		case MlEarlyAccessServiceListMlInferenceServicesProcedure:
 			mlEarlyAccessServiceListMlInferenceServicesHandler.ServeHTTP(w, r)
+		case MlEarlyAccessServiceGetMlInferenceServiceProcedure:
+			mlEarlyAccessServiceGetMlInferenceServiceHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -280,6 +860,22 @@ func NewMlEarlyAccessServiceHandler(svc MlEarlyAccessServiceHandler, opts ...con
 // UnimplementedMlEarlyAccessServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedMlEarlyAccessServiceHandler struct{}
 
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlFleet(context.Context, *connect.Request[v1.GetMlFleetRequest]) (*connect.Response[v1.GetMlFleetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlFleet is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlPool(context.Context, *connect.Request[v1.GetMlPoolRequest]) (*connect.Response[v1.GetMlPoolResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlPool is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlNode(context.Context, *connect.Request[v1.GetMlNodeRequest]) (*connect.Response[v1.GetMlNodeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlNode is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlDevice(context.Context, *connect.Request[v1.GetMlDeviceRequest]) (*connect.Response[v1.GetMlDeviceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlDevice is not implemented"))
+}
+
 func (UnimplementedMlEarlyAccessServiceHandler) GetMlMachines(context.Context, *connect.Request[v1.GetMlMachinesRequest]) (*connect.Response[v1.GetMlMachinesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlMachines is not implemented"))
 }
@@ -288,18 +884,66 @@ func (UnimplementedMlEarlyAccessServiceHandler) GetMlStack(context.Context, *con
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlStack is not implemented"))
 }
 
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlQueues(context.Context, *connect.Request[v1.GetMlQueuesRequest]) (*connect.Response[v1.GetMlQueuesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlQueues is not implemented"))
+}
+
 func (UnimplementedMlEarlyAccessServiceHandler) ListMlFindings(context.Context, *connect.Request[v1.ListMlFindingsRequest]) (*connect.Response[v1.ListMlFindingsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.ListMlFindings is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) ListMlExperiments(context.Context, *connect.Request[v1.ListMlExperimentsRequest]) (*connect.Response[v1.ListMlExperimentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.ListMlExperiments is not implemented"))
 }
 
 func (UnimplementedMlEarlyAccessServiceHandler) ListMlRuns(context.Context, *connect.Request[v1.ListMlRunsRequest]) (*connect.Response[v1.ListMlRunsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.ListMlRuns is not implemented"))
 }
 
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlRun(context.Context, *connect.Request[v1.GetMlRunRequest]) (*connect.Response[v1.GetMlRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlRun is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlLineage(context.Context, *connect.Request[v1.GetMlLineageRequest]) (*connect.Response[v1.GetMlLineageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlLineage is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) ListMlEvalSuites(context.Context, *connect.Request[v1.ListMlEvalSuitesRequest]) (*connect.Response[v1.ListMlEvalSuitesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.ListMlEvalSuites is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlEvalMatrix(context.Context, *connect.Request[v1.GetMlEvalMatrixRequest]) (*connect.Response[v1.GetMlEvalMatrixResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlEvalMatrix is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) ListMlEvalRuns(context.Context, *connect.Request[v1.ListMlEvalRunsRequest]) (*connect.Response[v1.ListMlEvalRunsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.ListMlEvalRuns is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlEvalRun(context.Context, *connect.Request[v1.GetMlEvalRunRequest]) (*connect.Response[v1.GetMlEvalRunResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlEvalRun is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) ListMlEvalSamples(context.Context, *connect.Request[v1.ListMlEvalSamplesRequest]) (*connect.Response[v1.ListMlEvalSamplesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.ListMlEvalSamples is not implemented"))
+}
+
 func (UnimplementedMlEarlyAccessServiceHandler) ListMlModels(context.Context, *connect.Request[v1.ListMlModelsRequest]) (*connect.Response[v1.ListMlModelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.ListMlModels is not implemented"))
 }
 
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlModel(context.Context, *connect.Request[v1.GetMlModelRequest]) (*connect.Response[v1.GetMlModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlModel is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlModelVersion(context.Context, *connect.Request[v1.GetMlModelVersionRequest]) (*connect.Response[v1.GetMlModelVersionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlModelVersion is not implemented"))
+}
+
 func (UnimplementedMlEarlyAccessServiceHandler) ListMlInferenceServices(context.Context, *connect.Request[v1.ListMlInferenceServicesRequest]) (*connect.Response[v1.ListMlInferenceServicesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.ListMlInferenceServices is not implemented"))
+}
+
+func (UnimplementedMlEarlyAccessServiceHandler) GetMlInferenceService(context.Context, *connect.Request[v1.GetMlInferenceServiceRequest]) (*connect.Response[v1.GetMlInferenceServiceResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.MlEarlyAccessService.GetMlInferenceService is not implemented"))
 }
