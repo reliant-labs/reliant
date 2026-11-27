@@ -31,9 +31,9 @@ var (
 	ErrNoApproval = svcerr.PermissionDenied("sending a GTM email needs the owner's approval card for exactly this email, in an interactive chat; nothing was sent")
 
 	// ErrCardStale is an approved card whose hash no longer matches the item
-	// as stored: the email changed since the card was shown
-	// (FailedPrecondition).
-	ErrCardStale = svcerr.FailedPrecondition("the email changed since its approval card was shown; ask for a new card. Nothing was sent")
+	// as stored, or the account it would go out from: the email or its sender
+	// changed since the card was shown (FailedPrecondition).
+	ErrCardStale = svcerr.FailedPrecondition("the email or the account it goes out from changed since its approval card was shown; ask for a new card. Nothing was sent")
 )
 
 // Items is the part of gtm.Service the send path calls. gtm.Service
@@ -80,8 +80,8 @@ func NewApprover(items Items, accounts Accounts) *Approver {
 // The sender is resolved here and shown by address: the channel's pinned
 // connection, else the actor's default Gmail connection. One whose address
 // cannot be told is ErrNoGmailAccount, and no card is shown. The card shows
-// the stored recipients, subject and body, and its Hash is gtm.ApprovalHash
-// of the item.
+// the stored recipients, subject and body and the sender's address, and its
+// Hash is CardHash of the item and the sender.
 func (a *Approver) Prepare(ctx context.Context, actor gtm.Actor, req SendRequest, unattended bool) (Card, error) {
 	if unattended {
 		return Card{}, ErrUnattended
@@ -100,20 +100,24 @@ func (a *Approver) Prepare(ctx context.Context, actor gtm.Actor, req SendRequest
 //
 // It refuses an unattended run and a call with no approved card. Then it
 // re-reads the item and applies Prepare's checks again (a SENT item is
-// gtm.ErrAlreadySent, so a second send is refused), and refuses an item
-// whose content no longer hashes to the approved card (ErrCardStale).
-// Last it sends through gtm.Service.SendItemEmail with the APPROVED hash
-// (not one recomputed here), so the service's own ErrApprovalMismatch check
-// is a second, independent guard; that checks all of it once more under the
-// item's send hold, sends as actor and records SENT with the hash.
+// gtm.ErrAlreadySent, so a second send is refused), resolves the sender
+// again, and refuses with ErrCardStale unless the approved hash is the
+// CardHash of both as they are now: an email that changed, or a sender that
+// did (another default connection, a reconnect to another Google account, a
+// channel re-pointed to another connection), voids the card.
 //
-// The send is pinned to the account resolved now: run.ConnectionID is set
-// to it, and a run that names another is refused (gtm.ErrChannelNotSendable).
-// Residual risk: the card names the account resolved at Prepare. If the
-// item has no pinned channel connection and the person changes their default
-// Gmail connection after the card is raised and before Execute, the email
-// goes from the new default, which the card did not show. The hash binds the
-// email, not the sender.
+// Last it sends through gtm.Service.SendItemEmail with the item part of the
+// APPROVED hash (not one recomputed here), so the service's own
+// ErrApprovalMismatch check is a second, independent guard on the email;
+// that checks it all once more under the item's send hold, sends as actor
+// and records SENT with the item hash. The send is pinned to the account
+// resolved and checked here: run.ConnectionID is set to it, and a run that
+// names another is refused (gtm.ErrChannelNotSendable).
+//
+// The window left: a sender that changes after this resolution and before
+// the send's own credential lookup (milliseconds) is not caught here; the
+// pinned connection id then still decides the mailbox, so only a reconnect
+// of that same connection to another account inside that window could.
 //
 // Content cannot change without a new revision, so an edit after this read
 // moves the revision and SendItemEmail refuses it. A send that fails with
@@ -140,15 +144,16 @@ func (a *Approver) Execute(ctx context.Context, actor gtm.Actor, req SendRequest
 	if err != nil {
 		return gtm.Item{}, err
 	}
-	if subtle.ConstantTimeCompare([]byte(card.Hash), []byte(approved)) != 1 {
+	itemHash, _, ok := splitCardHash(approved)
+	if !ok || subtle.ConstantTimeCompare([]byte(card.Hash), []byte(approved)) != 1 {
 		return gtm.Item{}, ErrCardStale
 	}
-	return a.send(ctx, actor, req, run, from, approved)
+	return a.send(ctx, actor, req, run, from, itemHash)
 }
 
-// send is Execute's last step: SendItemEmail under the approved hash, pinned
-// to from's connection.
-func (a *Approver) send(ctx context.Context, actor gtm.Actor, req SendRequest, run gtm.EmailRun, from Account, approved string) (gtm.Item, error) {
+// send is Execute's last step: SendItemEmail under the approved card's item
+// hash, pinned to from's connection.
+func (a *Approver) send(ctx context.Context, actor gtm.Actor, req SendRequest, run gtm.EmailRun, from Account, itemHash string) (gtm.Item, error) {
 	if run.ConnectionID != "" && run.ConnectionID != from.ConnectionID {
 		return gtm.Item{}, gtm.ErrChannelNotSendable
 	}
@@ -156,7 +161,7 @@ func (a *Approver) send(ctx context.Context, actor gtm.Actor, req SendRequest, r
 	return a.items.SendItemEmail(ctx, actor, gtm.SendItemEmailInput{
 		ItemID:           req.ItemID,
 		ExpectedRevision: req.ExpectedRevision,
-		ApprovalHash:     approved,
+		ApprovalHash:     itemHash,
 		Run:              run,
 	})
 }

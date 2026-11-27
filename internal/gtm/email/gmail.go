@@ -23,26 +23,33 @@
 //
 // # The send_gtm_email tool (internal/llm/tools, PR-7)
 //
-// The tool is a thin AutomationApprovalTool over Approver, and must keep to
-// these rules:
+// The tool is a thin AutomationApprovalTool over Approver. It cannot import
+// this package's types (an import cycle through the Gmail poller), so it
+// calls Approver.PrepareSend and Approver.SendApproved (tool.go), which take
+// only gtm types and primitives, through an interface of its own. It must
+// keep to these rules:
 //
 //   - Its params are item_id and expected_revision only. Nothing the model
 //     sends names a mailbox, a connection, a hash or a run.
 //   - The actor is the resolved run caller (resolveRunCaller plus the chat's
 //     org) as gtm.Actor{Kind: gtm.ActorAgent, UserID, OrgID, ChatID}.
-//   - PrepareAutomation decodes the call as Run will, calls Prepare with its
-//     unattended flag, and returns ActivationPreview{Title: card.Title,
-//     Hash: card.Hash} with needsApproval TRUE. It never returns
-//     needsApproval false (a NoApproval preview): every send needs a card.
-//     Every error is returned as tools.RefuseActivation(err.Error(), err);
-//     the errors' text names ids and revisions only, never the email.
+//   - PrepareAutomation decodes the call as Run will, calls PrepareSend with
+//     its unattended flag, and returns ActivationPreview{Title: title, Hash:
+//     hash} with needsApproval TRUE. It never returns needsApproval false (a
+//     NoApproval preview): every send needs a card. Every error is returned
+//     as tools.RefuseActivation(err.Error(), err); the errors' text names ids
+//     and revisions only, never the email.
+//   - The hash is opaque: CardHash, the item's gtm.ApprovalHash, ".", and a
+//     hash of the sender the card shows. The tool passes it through as the
+//     preview hash unchanged and never parses or rebuilds it; the runtime
+//     hands the approved value back to Execute.
 //   - Execute builds gtm.EmailRun{RunID: the run (integrationRunID(chat,
 //     thread)), NodeID, ToolCallID: the runtime's ToolCall.ID for this call
 //     (ctxkeys.ToolCallContext.CurrentToolCallID), ConnectionID: ""} and
-//     calls Approver.Execute with the ctx the runtime handed it, which
-//     carries automationpolicy's Unattended flag and Approvals. The
-//     ToolCallID is never a model value: it is what keys the approved hash.
-//   - Errors from Execute are the tool's error response, as text.
+//     calls SendApproved with the ctx the runtime handed it, which carries
+//     automationpolicy's Unattended flag and Approvals. The ToolCallID is
+//     never a model value: it is what keys the approved hash.
+//   - Errors from SendApproved are the tool's error response, as text.
 //
 // forge:outbound-io
 //

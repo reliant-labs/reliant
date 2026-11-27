@@ -3,6 +3,9 @@
 package email
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/mail"
@@ -19,6 +22,45 @@ import (
 // registered; until then the runtime wiring spells the same literal.
 const ToolName = "send_gtm_email"
 
+// senderHashVersion opens the sender part of every CardHash; a change to its
+// format is a new version.
+const senderHashVersion = "gtm-sender-v1"
+
+// CardHash is what an approval card binds: gtm.ApprovalHash(it), the email,
+// then "." and the lowercase hex SHA-256 of the sender, from, as
+//
+//	"gtm-sender-v1", from.ConnectionID, from.Address
+//
+// each written as an 8-byte big-endian length followed by its bytes. It is
+// 129 characters: within the service's approval-hash limit (the item part,
+// 64, is all SendItemEmail is given) and the runtime's approval map, which
+// stores it as a plain string.
+//
+// The sender part is what the item hash cannot bind: a changed default
+// connection, a reconnect to another Google account, or a channel re-pointed
+// to another connection all change it, so a card approved for one sender
+// never sends from another.
+func CardHash(it gtm.Item, from Account) string {
+	return gtm.ApprovalHash(it) + "." + senderHash(from)
+}
+
+func senderHash(from Account) string {
+	h := sha256.New()
+	for _, field := range []string{senderHashVersion, from.ConnectionID, from.Address} {
+		var n [8]byte
+		binary.BigEndian.PutUint64(n[:], uint64(len(field)))
+		h.Write(n[:])
+		h.Write([]byte(field))
+	}
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// splitCardHash is a CardHash's item and sender parts.
+func splitCardHash(hash string) (item, sender string, ok bool) {
+	item, sender, ok = strings.Cut(hash, ".")
+	return item, sender, ok && item != "" && sender != ""
+}
+
 // Card is the approval card for sending one email item: what the owner sees
 // and the hash their approval binds.
 type Card struct {
@@ -26,8 +68,11 @@ type Card struct {
 	// the web client reads in lib/approvalCard.ts): a lead sentence, the
 	// To and Subject rows, the body, then the technical lines.
 	Title string
-	// Hash is gtm.ApprovalHash of the item the card shows: what
-	// SendItemEmail checks the approval against.
+	// Hash is what the owner's approval binds (CardHash): the item part,
+	// gtm.ApprovalHash, which SendItemEmail checks, then "." and the sender
+	// part, which Approver.Execute checks against the account it resolves
+	// for the send. It is opaque to the tool: the runtime stores it as the
+	// approved hash and hands it back to Execute unchanged.
 	Hash string
 	// ItemID and Revision are the item and the revision the card shows.
 	ItemID   string
@@ -58,12 +103,13 @@ const (
 //   - every recipient, and the sender, a bare ASCII address (no IDN for
 //     now), so a look-alike or invisible character cannot pass for another
 //     address;
-//   - a subject of one line with no control, format (unicode.Cf, which holds
+//   - a subject with visible text, of one line with no control, format (unicode.Cf, which holds
 //     the bidi overrides and zero-width characters) or line-separator
 //     characters, and no curly quotes, which would break the lead's quoting.
 //
 // The body is shown whole. Its invisible characters (Cf, line and paragraph
-// separators, controls other than tab) are shown escaped, as \u202E: the
+// separators, fillers such as U+3164, controls other than tab) are shown
+// escaped, as \u202E: the
 // card shows that they are there rather than letting them reorder or hide
 // what is around them. The hash binds the body's exact bytes either way.
 //
@@ -90,13 +136,13 @@ func BuildCard(it gtm.Item, ch *gtm.Channel, from Account) (Card, error) {
 	if checkAddress(from.Address) != nil {
 		return Card{}, ErrNoGmailAccount
 	}
-	hash := gtm.ApprovalHash(it)
+	hash := CardHash(it, from)
 	lines := []string{
 		fmt.Sprintf("Send email “%s” to %s?", clip(it.EmailSubject, leadSubjectLimit), recipients(len(it.EmailTo))),
 		"To: " + strings.Join(it.EmailTo, ", "),
 		"Subject: " + it.EmailSubject,
 		"From: " + fromRow(from, ch),
-		"Approval needed: Sending cannot be undone. The email goes out exactly as shown, once.",
+		"Approval needed: Sending cannot be undone. The email goes out once, exactly as shown, from the account shown. If the email or the account changes first, this approval no longer applies and nothing is sent.",
 	}
 	lines = append(lines, bodyLines(it.BodyMD)...)
 	lines = append(lines,
@@ -131,8 +177,10 @@ func channelName(ch *gtm.Channel) string {
 // checkSubject refuses a subject the card cannot show as it is sent.
 func checkSubject(subject string) error {
 	switch {
-	case strings.TrimSpace(subject) == "":
-		return &gtm.ValidationError{Field: "email_subject", Reason: "an email needs a subject"}
+	case strings.IndexFunc(subject, func(r rune) bool { return !blankLooking(r) }) < 0:
+		// Empty, or only characters that render as nothing (spaces, Hangul
+		// fillers, the braille blank): a subject that reads as no subject.
+		return &gtm.ValidationError{Field: "email_subject", Reason: "an email needs a subject with visible text"}
 	case strings.IndexFunc(subject, func(r rune) bool { return unicode.IsControl(r) || invisible(r) }) >= 0:
 		return &gtm.ValidationError{Field: "email_subject", Reason: "a subject is one line with no control, invisible or bidi characters"}
 	case strings.ContainsAny(subject, "“”"):
@@ -166,16 +214,42 @@ func invisible(r rune) bool {
 	return unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r)
 }
 
-// escapeInvisible shows each invisible character, and each control but tab,
-// as its escape (\u202E, \U000E0041).
+// filler reports a character that is not a format character yet renders as
+// nothing, or as a blank, wherever it stands: the combining grapheme joiner,
+// the Hangul fillers, the Khmer inherent vowels, the braille blank, and the
+// variation selectors.
+func filler(r rune) bool {
+	switch {
+	case r == 0x034F, r == 0x115F, r == 0x1160, r == 0x17B4, r == 0x17B5,
+		r == 0x2800, r == 0x3164, r == 0xFFA0:
+		return true
+	case r >= 0xFE00 && r <= 0xFE0F, r >= 0xE0100 && r <= 0xE01EF:
+		return true
+	}
+	return false
+}
+
+// blankLooking reports a character that shows no visible mark: white space,
+// an invisible character, a control or a filler.
+func blankLooking(r rune) bool {
+	return unicode.IsSpace(r) || invisible(r) || unicode.IsControl(r) || filler(r)
+}
+
+// shownEscaped reports a character the card shows as its escape.
+func shownEscaped(r rune) bool {
+	return invisible(r) || filler(r) || (unicode.IsControl(r) && r != '\t')
+}
+
+// escapeInvisible shows each invisible character, filler and control but
+// tab as its escape (\u202E, \U000E0041).
 func escapeInvisible(s string) string {
-	if strings.IndexFunc(s, func(r rune) bool { return invisible(r) || (unicode.IsControl(r) && r != '\t') }) < 0 {
+	if strings.IndexFunc(s, shownEscaped) < 0 {
 		return s
 	}
 	var b strings.Builder
 	for _, r := range s {
 		switch {
-		case !invisible(r) && !(unicode.IsControl(r) && r != '\t'):
+		case !shownEscaped(r):
 			b.WriteRune(r)
 		case r > 0xFFFF:
 			fmt.Fprintf(&b, "\\U%08X", r)

@@ -5,6 +5,7 @@ package email_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -163,20 +164,105 @@ func TestPrepare_RefusesWhenTheSenderCannotBeNamed(t *testing.T) {
 	})
 }
 
-// The residual risk, pinned down: the default changes between the card and
-// the approval. The send goes from the default resolved at Execute (and is
-// pinned to it for the send itself), which the card did not show.
-func TestExecute_DefaultChangedAfterTheCard(t *testing.T) {
-	sender := &recordingEmail{}
-	f := newFixture(t, approvedEmail(), sender)
-	card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
-	require.NoError(t, err)
-	assert.Contains(t, card.Title, "From: founder@example.com")
+// The card binds its sender: a sender that changes between the card and the
+// approval voids it, and nothing is sent or held.
+func TestExecute_SenderChangedAfterTheCardIsRefused(t *testing.T) {
+	for name, tc := range map[string]struct {
+		channels []store.GtmChannel
+		change   func(*fixture)
+	}{
+		"default connection changed": {nil, func(f *fixture) { f.conns.setDefault("conn-channel") }},
+		"reconnected to another account": {nil, func(f *fixture) {
+			addr := "someone-else@example.com"
+			f.conns.mu.Lock()
+			f.conns.user["conn-default"].SenderID = &addr
+			f.conns.mu.Unlock()
+		}},
+		"channel re-pointed": {[]store.GtmChannel{gmailChannel("ch-1", "conn-channel")}, func(f *fixture) {
+			f.items.mu.Lock()
+			ch := f.items.channels["ch-1"]
+			conn := "conn-org"
+			ch.ConnectionID = &conn
+			f.items.channels["ch-1"] = ch
+			f.items.mu.Unlock()
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			it := approvedEmail()
+			if len(tc.channels) > 0 {
+				it.ChannelID = "ch-1"
+			}
+			sender := &recordingEmail{}
+			f := newFixture(t, it, sender, tc.channels...)
+			card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
+			require.NoError(t, err)
 
-	f.conns.setDefault("conn-channel")
-	_, err = f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
+			tc.change(f)
+			_, err = f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
+			require.ErrorIs(t, err, email.ErrCardStale)
+			assert.Zero(t, sender.count())
+			assert.Empty(t, f.items.snapshot().ApprovalHash, "never held")
+
+			// A fresh card names the new sender and sends.
+			card, err = f.approver.Prepare(context.Background(), agent, sendReq, false)
+			require.NoError(t, err)
+			_, err = f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
+			require.NoError(t, err)
+			assert.Equal(t, 1, sender.count())
+		})
+	}
+}
+
+// An approved value that is not a whole card hash is no approval of this
+// card: the item hash alone, a sender hash alone, or garbage.
+func TestExecute_RefusesAnIncompleteCardHash(t *testing.T) {
+	card := email.CardHash(approvedEmail(), founder)
+	item, sender, _ := strings.Cut(card, ".")
+	for name, approved := range map[string]string{
+		"item part only":   item,
+		"sender part only": "." + sender,
+		"no sender part":   item + ".",
+		"other sender":     email.CardHash(approvedEmail(), email.Account{ConnectionID: "conn-channel", Address: "team@example.com"}),
+		"garbage":          "x.y",
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := &recordingEmail{}
+			f := newFixture(t, approvedEmail(), s)
+			_, err := f.approver.Execute(approvedCtx(approved), agent, sendReq, sendRun)
+			require.ErrorIs(t, err, email.ErrCardStale)
+			assert.Zero(t, s.count())
+		})
+	}
+}
+
+// fixedAccounts is Accounts answering with one account, whatever it is asked.
+type fixedAccounts struct{ account email.Account }
+
+func (a fixedAccounts) GmailAccount(context.Context, gtm.Actor, string) (email.Account, error) {
+	return a.account, nil
+}
+
+// An Accounts that resolves a channel's pinned connection to some other
+// connection is not believed: no card, no send.
+func TestPrepare_RefusesAnAccountOtherThanThePinnedConnection(t *testing.T) {
+	it := approvedEmail()
+	it.ChannelID = "ch-1"
+	sender := &recordingEmail{}
+	f := newFixture(t, it, sender, gmailChannel("ch-1", "conn-channel"))
+	approver := email.NewApprover(f.svc, fixedAccounts{email.Account{ConnectionID: "conn-default", Address: "founder@example.com"}})
+
+	_, err := approver.Prepare(context.Background(), agent, sendReq, false)
+	require.ErrorIs(t, err, email.ErrNoGmailAccount)
+	_, err = approver.Execute(approvedCtx(email.CardHash(it, founder)), agent, sendReq, sendRun)
+	require.ErrorIs(t, err, email.ErrNoGmailAccount)
+	assert.Zero(t, sender.count())
+
+	// The same Accounts with no pin in play is believed.
+	f2 := newFixture(t, approvedEmail(), &recordingEmail{})
+	_, err = email.NewApprover(f2.svc, fixedAccounts{founder}).Prepare(context.Background(), agent, sendReq, false)
 	require.NoError(t, err)
-	assert.Equal(t, "conn-channel", sender.runs[0].ConnectionID)
+	_, err = email.NewApprover(f2.svc, fixedAccounts{email.Account{Address: "founder@example.com"}}).Prepare(context.Background(), agent, sendReq, false)
+	require.ErrorIs(t, err, email.ErrNoGmailAccount, "an account with no connection id")
 }
 
 // A run that names a connection other than the one resolved for the send is
@@ -186,7 +272,7 @@ func TestExecute_RunCannotPickTheMailbox(t *testing.T) {
 	f := newFixture(t, approvedEmail(), sender)
 	run := sendRun
 	run.ConnectionID = "conn-channel"
-	_, err := f.approver.Execute(approvedCtx(gtm.ApprovalHash(approvedEmail())), agent, sendReq, run)
+	_, err := f.approver.Execute(approvedCtx(email.CardHash(approvedEmail(), founder)), agent, sendReq, run)
 	require.ErrorIs(t, err, gtm.ErrChannelNotSendable)
 	assert.Zero(t, sender.count())
 }
@@ -227,7 +313,7 @@ func TestExecute_PassesTheApprovedHash(t *testing.T) {
 	_, err = approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
 	require.NoError(t, err)
 	require.Len(t, items.sends, 1)
-	assert.Equal(t, card.Hash, items.sends[0].ApprovalHash)
+	assert.Equal(t, gtm.ApprovalHash(approvedEmail()), items.sends[0].ApprovalHash, "the item part of the approved hash")
 }
 
 // The service's ErrApprovalMismatch is a real second guard: a card for other
@@ -241,7 +327,7 @@ func TestExecute_ServiceRefusesAMismatchedApprovalTheApproverMissed(t *testing.T
 	items := &recordingItems{Service: f.svc, doctor: func(it *gtm.Item) { it.BodyMD = doctored.BodyMD }}
 	approver := email.NewApprover(items, email.NewConnectionAccounts(f.conns))
 
-	_, err := approver.Execute(approvedCtx(gtm.ApprovalHash(doctored)), agent, sendReq, sendRun)
+	_, err := approver.Execute(approvedCtx(email.CardHash(doctored, founder)), agent, sendReq, sendRun)
 	require.ErrorIs(t, err, gtm.ErrApprovalMismatch)
 	require.Len(t, items.sends, 1, "the approver's compare passed")
 	assert.Equal(t, gtm.ApprovalHash(doctored), items.sends[0].ApprovalHash)
