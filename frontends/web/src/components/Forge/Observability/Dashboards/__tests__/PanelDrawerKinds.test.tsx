@@ -6,8 +6,9 @@
  * the kind takes; a sql or postgres statement runs on Run, with its parameters
  * shown and the server's refusal shown verbatim; a postgres panel's schema
  * browser reads ListDashboardDatabases (AppDatabaseService's generated hook,
- * answered on the wire by the shop pack's handler over the test's api, in a
- * TransportScope); a text panel's Markdown is drawn as it is typed.
+ * answered on the wire by the shop pack's handler over the test's api, in the
+ * ObservabilityFixtures TransportScope renderWithApi binds the test's
+ * QueryClient to); a text panel's Markdown is drawn as it is typed.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -16,11 +17,7 @@ import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { QueryClient } from "@tanstack/react-query";
 
-import { dashboardsHandlers } from "@/fixtures/shop/handlers/dashboards";
-import { mockTransport } from "@/lib/test-utils";
-import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
-import { createTestQueryClient } from "@/test/renderWithQuery";
 import type { Panel } from "@/services/controlPlane/observability/types";
 
 import { createFixtureApi, FIXTURE_ENVS } from "../../__fixtures__/fixtureApi";
@@ -42,30 +39,26 @@ function renderDrawer(options: { api?: ObservabilityApi; panel?: Panel; envIds?:
   const onCall = vi.fn();
   const onSave = vi.fn();
   const api = options.api ?? createFixtureApi({ onCall });
-  const client = options.client ?? createTestQueryClient();
-  const scope = createTransportScope({ id: "panel-drawer", transport: mockTransport(dashboardsHandlers(api) as Parameters<typeof mockTransport>[0]), queryClient: client });
   renderWithApi(
     api,
-    <TransportScopeProvider scope={scope}>
-      <PanelDrawer
-        mode="add"
-        panel={options.panel ?? starter}
-        dashboardTitle="Checkout"
-        scope={{ orgId: "org", projectId: "shop", envIds: options.envIds ?? ["env-prod"], filters: [] }}
-        range="1h"
-        services={[]}
-        environments={FIXTURE_ENVS}
-        env="prod"
-        scopeLabel="prod"
-        version={3}
-        envScope="prod"
-        saving={false}
-        error={null}
-        onCancel={vi.fn()}
-        onSave={onSave}
-      />
-    </TransportScopeProvider>,
-    client
+    <PanelDrawer
+      mode="add"
+      panel={options.panel ?? starter}
+      dashboardTitle="Checkout"
+      scope={{ orgId: "org", projectId: "shop", envIds: options.envIds ?? ["env-prod"], filters: [] }}
+      range="1h"
+      services={[]}
+      environments={FIXTURE_ENVS}
+      env="prod"
+      scopeLabel="prod"
+      version={3}
+      envScope="prod"
+      saving={false}
+      error={null}
+      onCancel={vi.fn()}
+      onSave={onSave}
+    />,
+    options.client
   );
   return { onCall, onSave };
 }
