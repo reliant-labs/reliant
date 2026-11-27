@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# TypeScript solution-builder can skip content checks when restored build-info
+# frontends/web's `npm run typecheck`: `tsgo -b`, TypeScript 7's native
+# compiler (`npm run typecheck:tsc` is the same check on tsc 5.8). Its
+# solution builder, like tsc's, can skip content checks when restored build-info
 # is newer than the sources. Never import another checkout's incremental state.
 # Incremental state THIS checkout wrote is trusted (an edit or a checkout here
 # makes the sources newer than it), so only a first run, or state that came
 # from elsewhere (a copied installation), pays the cold --force check (~9 min
-# median on a loaded host); the owner stamp says whose state it is.
+# median with tsc on a loaded host, under a minute with tsgo); the owner stamp says whose state it is.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)/frontends/web"
 
-# Pool installations may start with cp -al. tsc writes its state in place, so
+# Pool installations may start with cp -al. The compiler writes its state in place, so
 # detach it before invoking the compiler, including when another gate runs.
 tmp=node_modules/.tmp
 if [ -d "$tmp" ]; then
