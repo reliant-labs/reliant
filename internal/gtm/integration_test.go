@@ -4,8 +4,10 @@ package gtm_test
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -14,12 +16,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cpv1 "github.com/reliant-labs/reliant/gen/controlplane/controlplane/v1"
+	deployv1 "github.com/reliant-labs/reliant/gen/controlplane/services/deploy/v1"
+	obsv1 "github.com/reliant-labs/reliant/gen/controlplane/services/observability/v1"
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/featuregate"
 	"github.com/reliant-labs/reliant/internal/gtm"
+	"github.com/reliant-labs/reliant/internal/gtm/analytics"
 	"github.com/reliant-labs/reliant/internal/gtm/email"
 	handlergtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -40,6 +46,10 @@ import (
 // NewWorkerGtmDomain, the analytics, email, connections and assets wiring) are
 // covered in internal/app's providers_gtm_test.go, and the gate's path into
 // the worker's call_llm in its feature_gate_wiring_test.go.
+//
+// The domain also reads product analytics as the worker wires it (the panel
+// query and the environment lookup over one token) against a fake control
+// plane, and the embedded idea bank (internal/gtm/library) as PR-5 serves it.
 //
 // Two people ask every surface the same questions: alice, a member of the
 // allowlisted org, and carol, a member of an org that is not. Only alice sees
@@ -80,6 +90,8 @@ type gtmStack struct {
 	factory  *tools.ToolsFactory
 	executor *toolexec.LocalToolExecutor
 	chats    map[string]string // user -> their chat, in their org
+	// cp is the fake control plane product analytics reads through.
+	cp *fakeControlPlane
 }
 
 func newGTMStack(t *testing.T) *gtmStack {
@@ -87,7 +99,19 @@ func newGTMStack(t *testing.T) *gtmStack {
 	env := storetest.New(t)
 	membership := orgs.New(members{alice: allowedOrg, carol: otherOrg})
 	gate := featuregate.NewStatic(&configv1.GtmConfig{AllowedOrgIds: []string{allowedOrg}}, membership)
-	svc := gtm.New(gtm.Deps{Store: gtm.NewStore(env.ORM), Gate: gate})
+	// Product analytics as the worker wires it (providers_gtm.go
+	// gtmAnalytics): the panel query and the environment lookup over one
+	// token, here against a fake control plane.
+	cp := &fakeControlPlane{envs: []*cpv1.DeployEnvironment{
+		{Id: "env-prod", Name: "prod"}, {Id: "env-staging", Name: "staging"},
+	}}
+	token := func() string { return analyticsToken }
+	reader := analytics.New(analytics.Deps{
+		CP:    cp,
+		Token: token,
+		Envs:  analytics.NewEnvResolver(analytics.EnvResolverDeps{CP: cp, Token: token}),
+	})
+	svc := gtm.New(gtm.Deps{Store: gtm.NewStore(env.ORM), Gate: gate, Analytics: reader})
 
 	handler, err := handlergtm.New(handlergtm.Deps{Logger: slog.Default(), Config: &config.Config{}, Service: svc})
 	require.NoError(t, err)
@@ -97,7 +121,7 @@ func newGTMStack(t *testing.T) *gtmStack {
 	approver := email.NewApprover(svc, email.NewConnectionAccounts(nil))
 	factory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: env.Repo, GTM: svc, GTMEmail: approver})
 
-	s := &gtmStack{env: env, gate: gate, handler: handler, factory: factory, executor: toolexec.NewLocalToolExecutor(factory), chats: map[string]string{}}
+	s := &gtmStack{env: env, gate: gate, handler: handler, factory: factory, executor: toolexec.NewLocalToolExecutor(factory), chats: map[string]string{}, cp: cp}
 	for user, org := range map[string]string{alice: allowedOrg, carol: otherOrg} {
 		s.chats[user] = s.newChat(t, user, org)
 	}
@@ -306,4 +330,167 @@ func TestGTMIntegration_SendEmailRefusedUnattended(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, needsApproval)
 	assert.Equal(t, email.ErrUnattended.Error(), tools.ActivationRefusalReason(err))
+}
+
+// analyticsToken is the GTM analytics token the fake control plane expects.
+const analyticsToken = "rlat_test_gtm_analytics"
+
+// fakeControlPlane is the control plane's ObservabilityService (QueryPanel)
+// and DeployService (ListEnvironments), as the analytics reader calls them.
+// It records what it was asked and answers a funnel with fixed counts.
+type fakeControlPlane struct {
+	envs []*cpv1.DeployEnvironment
+
+	mu      sync.Mutex
+	queries []*obsv1.QueryPanelRequest
+	lookups []*deployv1.ListDeployEnvironmentsRequest
+	auth    []string
+}
+
+func (f *fakeControlPlane) QueryPanel(_ context.Context, req *connect.Request[obsv1.QueryPanelRequest]) (*connect.Response[obsv1.QueryPanelResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.queries = append(f.queries, req.Msg)
+	f.auth = append(f.auth, req.Header().Get("Authorization"))
+	resp := &obsv1.QueryPanelResponse{Kind: "funnel"}
+	for i, e := range req.Msg.GetPanel().GetFunnel().GetSteps() {
+		resp.FunnelSteps = append(resp.FunnelSteps, &obsv1.FunnelStepResult{Event: e, Count: int64(100 - 40*i), RateFromFirst: float64(100-40*i) / 100})
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (f *fakeControlPlane) ListEnvironments(_ context.Context, req *connect.Request[deployv1.ListDeployEnvironmentsRequest]) (*connect.Response[deployv1.ListDeployEnvironmentsResponse], error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lookups = append(f.lookups, req.Msg)
+	f.auth = append(f.auth, req.Header().Get("Authorization"))
+	return connect.NewResponse(&deployv1.ListDeployEnvironmentsResponse{Environments: f.envs}), nil
+}
+
+func (f *fakeControlPlane) snapshot() (queries []*obsv1.QueryPanelRequest, lookups []*deployv1.ListDeployEnvironmentsRequest, auth []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]*obsv1.QueryPanelRequest(nil), f.queries...), append([]*deployv1.ListDeployEnvironmentsRequest(nil), f.lookups...), append([]string(nil), f.auth...)
+}
+
+// r4: the org says what kind of business it is; the embedded idea bank is
+// read diverse and filtered to fit it; an idea cites a bank entry and
+// answers that entry's tailor questions. carol's org reaches none of it.
+func TestGTMIntegration_BankFlow(t *testing.T) {
+	s := newGTMStack(t)
+	ctx := session(alice)
+
+	pos, err := s.handler.UpdatePositioning(ctx, connect.NewRequest(&pb.UpdatePositioningRequest{
+		OrgId: allowedOrg, ExpectedRevision: 0, PositioningMd: "Scheduling software for small clinics.",
+		BusinessType:   pb.GtmBusinessType_GTM_BUSINESS_TYPE_B2B_SAAS,
+		BusinessModels: []pb.GtmBusinessModel{pb.GtmBusinessModel_GTM_BUSINESS_MODEL_SUBSCRIPTION},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, pb.GtmBusinessType_GTM_BUSINESS_TYPE_B2B_SAAS, pos.Msg.GetPositioning().GetBusinessType())
+
+	yes := true
+	lib, err := s.handler.ListStrategyLibrary(ctx, connect.NewRequest(&pb.ListStrategyLibraryRequest{
+		OrgId: allowedOrg, Diverse: &yes, FitsMyBusiness: &yes, PageSize: 12,
+	}))
+	require.NoError(t, err)
+	entries := lib.Msg.GetEntries()
+	require.NotEmpty(t, entries)
+	assert.LessOrEqual(t, len(entries), 12)
+	assert.Empty(t, lib.Msg.GetNextPageToken(), "diverse mode does not page")
+	categories := map[pb.GtmStrategyCategory]bool{}
+	for _, e := range entries {
+		categories[e.GetCategory()] = true
+		types, models := e.GetBusinessTypes(), e.GetBusinessModels()
+		assert.True(t, len(types) == 0 || containsEnum(types, pb.GtmBusinessType_GTM_BUSINESS_TYPE_B2B_SAAS), "%s fits the org's type", e.GetKey())
+		assert.True(t, len(models) == 0 || containsEnum(models, pb.GtmBusinessModel_GTM_BUSINESS_MODEL_SUBSCRIPTION), "%s fits the org's models", e.GetKey())
+	}
+	assert.GreaterOrEqual(t, len(categories), 4, "diverse spreads across categories")
+
+	pick := entries[0]
+	require.NotEmpty(t, pick.GetTailorQuestions())
+	var answers []*pb.GtmTailorAnswer
+	for _, q := range pick.GetTailorQuestions() {
+		answers = append(answers, &pb.GtmTailorAnswer{Question: q, Answer: "For clinics: front-desk managers who book by phone today."})
+	}
+	created, err := s.handler.CreateIdea(ctx, connect.NewRequest(&pb.CreateIdeaRequest{
+		OrgId: allowedOrg, Kind: pb.GtmIdeaKind_GTM_IDEA_KIND_GTM, Title: "Tailored: " + pick.GetName(),
+		LibraryKey: pick.GetKey(), TailorAnswers: answers, SuggestedWorkflowMd: pick.GetSuggestedWorkflowMd(),
+	}))
+	require.NoError(t, err)
+	got, err := s.handler.GetIdea(ctx, connect.NewRequest(&pb.GetIdeaRequest{OrgId: allowedOrg, Id: created.Msg.GetIdea().GetId()}))
+	require.NoError(t, err)
+	assert.Equal(t, pick.GetKey(), got.Msg.GetIdea().GetLibraryKey())
+	require.Len(t, got.Msg.GetIdea().GetTailorAnswers(), len(answers))
+	assert.Equal(t, pick.GetTailorQuestions()[0], got.Msg.GetIdea().GetTailorAnswers()[0].GetQuestion())
+
+	// A key the bank does not have is refused, not stored.
+	_, err = s.handler.CreateIdea(ctx, connect.NewRequest(&pb.CreateIdeaRequest{
+		OrgId: allowedOrg, Kind: pb.GtmIdeaKind_GTM_IDEA_KIND_GTM, Title: "x", LibraryKey: "no-such-bank-key",
+	}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	// The agent reads the same bank: diverse, fitted to the business.
+	tool := s.call(alice, s.caps(t, alice, allowedOrg, tools.ToolListGtmStrategyLibrary), tools.ToolListGtmStrategyLibrary, `{"diverse":true,"limit":8}`)
+	require.True(t, tool.Success, tool.Content)
+	assert.Contains(t, tool.Content, `"key"`)
+
+	// carol's org has no bank at all.
+	_, err = s.handler.ListStrategyLibrary(session(carol), connect.NewRequest(&pb.ListStrategyLibraryRequest{OrgId: otherOrg, Diverse: &yes}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+}
+
+func containsEnum[E comparable](xs []E, x E) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
+}
+
+// read_product_analytics narrows to one deploy environment by name: the
+// name resolves through the control plane's DeployService to the org's
+// environment ids, the panel query is scoped to exactly those ids, and
+// both calls carry the GTM analytics token. A name that matches nothing is
+// refused before any query runs: a failed lookup never widens the read.
+func TestGTMIntegration_AnalyticsEnvironmentFilter(t *testing.T) {
+	s := newGTMStack(t)
+	caps := s.caps(t, alice, allowedOrg, tools.ToolReadProductAnalytics)
+	from := time.Now().UTC().Add(-7 * 24 * time.Hour).Format(time.RFC3339)
+	to := time.Now().UTC().Format(time.RFC3339)
+	input := func(env string) string {
+		b, err := json.Marshal(map[string]any{"template": "funnel", "events": []string{"signup", "first_run"}, "from": from, "to": to, "environment": env})
+		require.NoError(t, err)
+		return string(b)
+	}
+
+	got := s.call(alice, caps, tools.ToolReadProductAnalytics, input("prod"))
+	require.True(t, got.Success, got.Content)
+	assert.Contains(t, got.Content, `"environment":"prod"`)
+	assert.Contains(t, got.Content, "signup")
+
+	queries, lookups, auth := s.cp.snapshot()
+	require.Len(t, lookups, 1)
+	assert.Equal(t, allowedOrg, lookups[0].GetOrgId(), "environments are looked up in the run's org")
+	require.Len(t, queries, 1)
+	assert.Equal(t, allowedOrg, queries[0].GetScope().GetOrgId())
+	assert.Equal(t, []string{"env-prod"}, queries[0].GetScope().GetEnvIds(), "the query reads prod only")
+	for _, a := range auth {
+		assert.Equal(t, "Bearer "+analyticsToken, a, "every control-plane call carries the GTM analytics token")
+	}
+
+	// An unknown name: refused with the names there are, and no query.
+	got = s.call(alice, caps, tools.ToolReadProductAnalytics, input("nope"))
+	assert.True(t, got.IsError)
+	assert.Contains(t, got.Content, "staging")
+	queries, _, _ = s.cp.snapshot()
+	assert.Len(t, queries, 1, "a failed lookup never runs a query across every environment")
+
+	// No environment: every environment, labelled as such.
+	got = s.call(alice, caps, tools.ToolReadProductAnalytics, input(""))
+	require.True(t, got.Success, got.Content)
+	assert.Contains(t, got.Content, "all environments")
+	queries, _, _ = s.cp.snapshot()
+	require.Len(t, queries, 2)
+	assert.Empty(t, queries[1].GetScope().GetEnvIds())
 }
