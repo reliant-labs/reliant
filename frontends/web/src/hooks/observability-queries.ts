@@ -144,7 +144,7 @@ import type {
   TraceSummary,
 } from "@/services/controlPlane/observability/types";
 import { panelRunsQuery } from "@/services/controlPlane/observability/panelKinds";
-import { rangeMs, readRange, resolveWindow, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
+import { rangeMs, readRange, type RangePreset, type RangeRead } from "@/services/controlPlane/observability/window";
 import { keepPreviousInOrg, keyNamesOrg, useRouteOrgIdOverride } from "@/lib/orgScope";
 
 // Presentation never changes QueryPanel's computation: two dashboard tiles
