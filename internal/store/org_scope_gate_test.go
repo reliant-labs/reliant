@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/testkit"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -128,18 +129,14 @@ func TestAssignUnassignedOrg_TakesTheOrgLockOnlyWhenARowNeedsAnOrg(t *testing.T)
 	for _, def := range []string{"home", "other"} {
 		go func() { done <- env.Repo.AssignUnassignedOrg(ctx, user, def) }()
 	}
-	deadline := time.Now().Add(10 * time.Second)
-	for advisoryWaiters(t, env) < 2 {
+	testkit.Eventually(t, "both passes to queue on the org lock", func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("a pass with a chat to stamp ended without waiting for the org lock: %v", err)
 		default:
 		}
-		if time.Now().After(deadline) {
-			t.Fatal("both passes did not queue on the org lock")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+		return advisoryWaiters(t, env) >= 2
+	})
 	// These rows are committed after both probes but before either lock.
 	// The project-only chat uses its project's org regardless of which
 	// pass locks first. The draft gets exactly one of the two defaults.
@@ -180,5 +177,31 @@ func TestAssignUnassignedOrg_TakesTheOrgLockOnlyWhenARowNeedsAnOrg(t *testing.T)
 	}
 	if org := orgOf("workflows", "w-legacy"); org == nil || *org != "home" {
 		t.Fatalf("legacy run org = %v, want its chat's (home)", org)
+	}
+}
+
+// The partial index the backfill's runs probe and batch read exists in the
+// migrated schema exactly as they need it: keyed by chat_id (the join to
+// chats), holding only the runs with no org, and valid and ready (a failed
+// CREATE INDEX CONCURRENTLY leaves an invalid one behind).
+func TestWorkflowsUnassignedOrgIndex(t *testing.T) {
+	t.Parallel()
+	env := storetest.New(t)
+	var (
+		def          string
+		valid, ready bool
+	)
+	if err := env.SQL.QueryRowContext(context.Background(), `
+		SELECT pg_get_indexdef(i.indexrelid), i.indisvalid, i.indisready
+		  FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+		 WHERE c.relname = 'idx_workflows_unassigned_org'`).Scan(&def, &valid, &ready); err != nil {
+		t.Fatalf("idx_workflows_unassigned_org is not in the migrated schema: %v", err)
+	}
+	const wantDef = "CREATE INDEX idx_workflows_unassigned_org ON public.workflows USING btree (chat_id) WHERE (org_id IS NULL)"
+	if def != wantDef {
+		t.Fatalf("index definition:\n got %s\nwant %s", def, wantDef)
+	}
+	if !valid || !ready {
+		t.Fatalf("idx_workflows_unassigned_org: indisvalid=%v indisready=%v, want both true", valid, ready)
 	}
 }
