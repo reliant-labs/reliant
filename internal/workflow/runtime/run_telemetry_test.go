@@ -152,6 +152,9 @@ func TestRunTelemetry_RunIDSurvivesContinueAsNewAndResume(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
+			// A reader outside the run (the reconciler) decides the same id
+			// from the start input.
+			assert.Equal(t, tc.wantRunID, RootRunID(tc.input, "default-test-run-id"))
 			env := (&temporaltest.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
 			env.RegisterWorkflow(startRunTelemetryWorkflow)
 			env.ExecuteWorkflow(startRunTelemetryWorkflow, tc.input)

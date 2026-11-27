@@ -28,6 +28,21 @@ test("a return with checkout=cancelled settles as cancelled", () => {
   );
 });
 
+test("an app hosting checkout's return settles too", () => {
+  // The web app's hosting return URLs (usageBillingReturnUrls) carry the same
+  // marker on the hosting tab. Without it, the window loaded the app signed
+  // out after payment and waited to be closed by hand.
+  const hostingReturn = "https://app.reliantlabs.io/settings/billing?tab=hosting&checkout=success#app-hosting";
+  assert.strictEqual(classifyCheckoutReturn(hostingReturn, hostingReturn), "success");
+  assert.strictEqual(
+    classifyCheckoutReturn(
+      "https://app.reliantlabs.io/settings/billing?tab=hosting&checkout=cancelled#app-hosting",
+      hostingReturn,
+    ),
+    "cancelled",
+  );
+});
+
 test("Stripe's own internal navigations are not a return", () => {
   // Hosted checkout navigates itself repeatedly (3DS, payment method steps).
   // Settling on any of them would close the window mid-purchase.

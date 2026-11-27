@@ -15,7 +15,7 @@ import { scaffoldFixtures } from "../fixtures";
 import { BuiltTourStep } from "../BuiltTourStep";
 import { HowThisAppWasBuilt } from "../HowThisAppWasBuilt";
 import { shortForgeVersion } from "../forgeVersion";
-import { summarize } from "../ScaffoldPanel";
+import { GATING_LINTERS, summarize } from "../ScaffoldPanel";
 import { recordedOwnership, categoryOwnership } from "../ownership";
 
 const { cast, manifest } = scaffoldFixtures();
@@ -206,7 +206,7 @@ describe("what the copy claims is in the recorded run", () => {
   });
 
   it("the handler hands off to forge's CRUD code; CancelOrder is an Unimplemented stub", () => {
-    expect(excerpt("handler").code).toMatch(/crud\.HandleCreate/);
+    expect(excerpt("handler").code).toMatch(/crud\.Create\(/);
     expect(castText("forge scaffold")).toMatch(/handler stub\(s\).*CancelOrder/);
   });
 
@@ -219,6 +219,7 @@ describe("what the copy claims is in the recorded run", () => {
   it("the lint count is the cast's", () => {
     const s = summarize(manifest, cast);
     expect(s.gatingLinters).not.toBeNull();
-    expect(castText("forge lint --quiet")).toContain(`All ${s.gatingLinters} gating linters passed`);
+    expect(GATING_LINTERS.exec(castText("forge lint --quiet"))?.[1]).toBe(String(s.gatingLinters));
+    expect(GATING_LINTERS.exec("✅ All 27 gating linters passed; 2 advisory findings not shown (--quiet).")?.[1]).toBe("27");
   });
 });

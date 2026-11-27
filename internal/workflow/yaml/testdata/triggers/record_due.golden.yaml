@@ -1,0 +1,15 @@
+name: pr
+description: Decide what a PR in the pipeline needs next.
+inputs:
+    record:
+        type: string
+entry: [decide]
+triggers:
+    - name: due
+      record_due:
+        table: pr_pipeline
+      inputs:
+        record: '{{ trigger.record.id }}'
+nodes:
+    - id: decide
+      type: call_llm

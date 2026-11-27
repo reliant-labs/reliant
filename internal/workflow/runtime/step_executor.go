@@ -437,10 +437,24 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	// on, the run's requirements are then checked there once, before the
 	// first step there runs (preflight_requirements.go). A batch being
 	// settled runs nothing on the machine.
-	if machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult); machine && !settleInterrupted {
-		target := e.daemonSelector(node)
-		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), target, toolNames, toolsKnown)
-		if err := e.pauseCtrl.CheckPlacedRequirements(e.ctx, target); err != nil {
+	//
+	// A node that sets preflight has that machine check itself first
+	// (node_preflight.go), after the wake and before the requirements: a
+	// machine that fails is swapped for another member of its pool, and the
+	// requirements are checked on the machine that passed.
+	machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult)
+	preflight := node.GetPreflight() != nil
+	if (machine || preflight) && !settleInterrupted {
+		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), e.daemonSelector(node), toolNames, toolsKnown)
+	}
+	if preflight && !settleInterrupted {
+		if _, err := preflightNode(e.ctx, e.GetChatID(), e.GetWorkflowID(), e.nodePlacementScope(node), node, e.nodeDaemonSelector(node), e.daemonSelector(node)); err != nil {
+			e.logger.Warn("No machine passed the node's preflight", "error", err, "stepID", node.GetId())
+			return e.startFailedStepMsg(node, event, err.Error())
+		}
+	}
+	if machine && !settleInterrupted {
+		if err := e.pauseCtrl.CheckPlacedRequirements(e.ctx, e.daemonSelector(node)); err != nil {
 			e.logger.Warn("Placed machine does not meet the run's requirements", "error", err, "stepID", node.GetId())
 			return e.startFailedStepMsg(node, event, err.Error())
 		}
@@ -1043,6 +1057,7 @@ func (e *StepExecutor) startAction(
 
 	// Build structured input: pass the proto Node directly for proper protojson roundtrip
 	rtx := e.buildRuntimeContext(node)
+	rtx.ServerActionFrom = e.serverActionFrom(evalResult)
 	rtx.AssistantMessageID = preallocatedMessageID
 	rtx.CutOffMessageID = e.takeCutOffTurn(node.GetId())
 	rtx.SaveMessage = e.saveMessageRequest(node)
@@ -1580,6 +1595,13 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 // that declares a selector never falls back, even when it resolves to
 // nothing. nil means no selector.
 func (e *StepExecutor) daemonSelector(node *reliantv1.Node) *DaemonSelectorValue {
+	// A node its preflight moved off an unhealthy machine routes to the
+	// machine that passed (node_preflight.go).
+	if node.GetPreflight() != nil {
+		if moved, ok := runPlacementsFrom(e.ctx).movedSelector(e.GetWorkflowID(), e.nodePlacementScope(node)); ok {
+			return moved
+		}
+	}
 	if node.GetDaemon() == nil {
 		if e.execContext == nil {
 			return nil

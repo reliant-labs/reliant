@@ -40,7 +40,7 @@ type automationsStore struct {
 func newAutomationsStore(slug string, triggers ...*core.Trigger) *automationsStore {
 	s := &automationsStore{draftsStore: draftsRepo(callerDraftNoT(slug)), triggers: triggers}
 	s.Drafts.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
-	s.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return s.triggers, nil }
+	s.Triggers.ListTriggersForUserFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return s.triggers, nil }
 	s.Triggers.RemoveTriggerFunc = func(_ context.Context, id string) error {
 		s.deleted = append(s.deleted, id)
 		return nil

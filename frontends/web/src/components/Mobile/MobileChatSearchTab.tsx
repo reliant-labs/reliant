@@ -75,10 +75,10 @@ export function MobileChatSearchTab({ query }: { query: string }) {
           >
             <MobileRowIcon icon={MessageSquare} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-foreground">
+              <p className="truncate text-ui font-medium text-foreground">
                 {result.title || "Untitled chat"}
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-meta text-muted-foreground">
                 {relativeTime(result.updatedAt)}
               </p>
             </div>

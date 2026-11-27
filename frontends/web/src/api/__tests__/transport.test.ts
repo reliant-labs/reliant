@@ -222,6 +222,30 @@ describe('x-daemon-last-seen scoping', () => {
 })
 
 describe('per-procedure timeouts', () => {
+  it('keys every long-timeout entry by a method some service declares', async () => {
+    // The upload budget was keyed `Upload`, which matches no rpc, so
+    // UploadAttachment silently ran on the 10s default and mobile photo
+    // uploads aborted (2026-11-27).
+    const { LONG_TIMEOUT_METHODS } = await import('../transport')
+    const modules = import.meta.glob('../../gen/**/*_pb.ts', { eager: true })
+    const methods = new Set<string>()
+    for (const mod of Object.values(modules)) {
+      for (const value of Object.values(mod as Record<string, unknown>)) {
+        const svc = value as { kind?: string; methods?: { name: string }[] }
+        if (svc?.kind === 'service') svc.methods?.forEach((m) => methods.add(m.name))
+      }
+    }
+    expect(methods.size).toBeGreaterThan(100)
+    const unknown = Object.keys(LONG_TIMEOUT_METHODS).filter((name) => !methods.has(name))
+    expect(unknown, 'LONG_TIMEOUT_METHODS keys that name no rpc').toEqual([])
+  })
+
+  it('gives attachment uploads and downloads more than the 10s default', async () => {
+    const { timeoutForProcedure } = await import('../transport')
+    expect(timeoutForProcedure('reliant.v1.AttachmentService', 'UploadAttachment')).toBeGreaterThan(10_000)
+    expect(timeoutForProcedure('reliant.v1.AttachmentService', 'GetAttachment')).toBeGreaterThan(10_000)
+  })
+
   // Every forge call runs a `forge` subprocess on the daemon with a 15–110s
   // budget. At the 10s default the transport aborted them, the api-server saw
   // a cancelled request, and the UI rendered "no forge.yaml" for control-plane.

@@ -143,6 +143,7 @@ service WorktreeService {
     };
   }
   // forge:custom — authorizes through the project, and creates its main worktree when none exists
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it creates the project's main worktree row when it has none
   rpc ListWorktrees(ListWorktreesRequest) returns (ListWorktreesResponse) {}
   // ListArchivedWorktrees pages through the project's archived workspaces,
   // most recently archived first. Archived workspaces are never part of
@@ -259,13 +260,17 @@ service WorktreeService {
   }
 
   // Git Read Operations
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
   rpc GetWorktreeChanges(GetWorktreeChangesRequest) returns (GetWorktreeChangesResponse) {}
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
   rpc GetWorktreeGitStatus(GetWorktreeGitStatusRequest) returns (GetWorktreeGitStatusResponse) {}
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
   rpc GetWorktreeCommits(GetWorktreeCommitsRequest) returns (GetWorktreeCommitsResponse) {}
   // ListWorktreeRepoStatuses returns per-repo git status for every nested
   // repo in the worktree's project. Drives the right-sidebar grouped view.
   // Single-repo and zero-repo projects collapse to a single-element (or empty)
   // response so callers don't need a special case.
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
   rpc ListWorktreeRepoStatuses(ListWorktreeRepoStatusesRequest) returns (ListWorktreeRepoStatusesResponse) {}
 
   // Git Write Operations
@@ -327,6 +332,7 @@ service WorktreeService {
       }
     };
   }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read that also calls GitHub: it dispatches worktree.get_pr to the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
   rpc GetWorktreePR(GetWorktreePRRequest) returns (GetWorktreePRResponse) {}
   rpc CreateWorktreePR(CreateWorktreePRRequest) returns (CreateWorktreePRResponse) {
     option (forge.v1.method) = {

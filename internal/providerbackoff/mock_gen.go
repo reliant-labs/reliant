@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=2c59c57bdd59dd04ac700b03e8bae66a1abba45d584aef522cd61b3bf1776a3b
+// forge:hash=82d8d9c0e8e5ae6236876be0500ef49721639e1f4aa72023b2377cef9c7ccd7b
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	RecordProviderBackoffFunc      func(context.Context, string, string, int, int, int, string, time.Duration, time.Time) error
@@ -110,18 +111,211 @@ func (m *MockService) ListOrgCapacityWakeTargets(ctx context.Context, orgID stri
 	return nil, contractkit.MockNotSet("MockService", "ListOrgCapacityWakeTargets")
 }
 
+// MockServiceRecordProviderBackoffCall is one recorded call of MockService.RecordProviderBackoff, one
+// field per parameter.
+type MockServiceRecordProviderBackoffCall struct {
+	Ctx         context.Context
+	ChatID      string
+	ThreadID    string
+	Attempt     int
+	MaxAttempts int
+	StatusCode  int
+	Reason      string
+	Delay       time.Duration
+	Now         time.Time
+}
+
+// RecordProviderBackoffCalls returns every recorded RecordProviderBackoff call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordProviderBackoff").
+func (m *MockService) RecordProviderBackoffCalls() []MockServiceRecordProviderBackoffCall {
+	var out []MockServiceRecordProviderBackoffCall
+	for _, c := range m.Recorder.Calls("RecordProviderBackoff") {
+		var r MockServiceRecordProviderBackoffCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.ThreadID, _ = c.Args[2].(string)
+		r.Attempt, _ = c.Args[3].(int)
+		r.MaxAttempts, _ = c.Args[4].(int)
+		r.StatusCode, _ = c.Args[5].(int)
+		r.Reason, _ = c.Args[6].(string)
+		r.Delay, _ = c.Args[7].(time.Duration)
+		r.Now, _ = c.Args[8].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceClearProviderBackoffCall is one recorded call of MockService.ClearProviderBackoff, one
+// field per parameter.
+type MockServiceClearProviderBackoffCall struct {
+	Ctx      context.Context
+	ThreadID string
+	Now      time.Time
+}
+
+// ClearProviderBackoffCalls returns every recorded ClearProviderBackoff call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClearProviderBackoff").
+func (m *MockService) ClearProviderBackoffCalls() []MockServiceClearProviderBackoffCall {
+	var out []MockServiceClearProviderBackoffCall
+	for _, c := range m.Recorder.Calls("ClearProviderBackoff") {
+		var r MockServiceClearProviderBackoffCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		r.Now, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRecordUsageLimitWaitCall is one recorded call of MockService.RecordUsageLimitWait, one
+// field per parameter.
+type MockServiceRecordUsageLimitWaitCall struct {
+	Ctx      context.Context
+	ChatID   string
+	ThreadID string
+	Provider string
+	Probing  bool
+	ResumeAt time.Time
+	Now      time.Time
+}
+
+// RecordUsageLimitWaitCalls returns every recorded RecordUsageLimitWait call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordUsageLimitWait").
+func (m *MockService) RecordUsageLimitWaitCalls() []MockServiceRecordUsageLimitWaitCall {
+	var out []MockServiceRecordUsageLimitWaitCall
+	for _, c := range m.Recorder.Calls("RecordUsageLimitWait") {
+		var r MockServiceRecordUsageLimitWaitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.ThreadID, _ = c.Args[2].(string)
+		r.Provider, _ = c.Args[3].(string)
+		r.Probing, _ = c.Args[4].(bool)
+		r.ResumeAt, _ = c.Args[5].(time.Time)
+		r.Now, _ = c.Args[6].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceClearUsageLimitWaitCall is one recorded call of MockService.ClearUsageLimitWait, one
+// field per parameter.
+type MockServiceClearUsageLimitWaitCall struct {
+	Ctx      context.Context
+	ChatID   string
+	ThreadID string
+	Now      time.Time
+}
+
+// ClearUsageLimitWaitCalls returns every recorded ClearUsageLimitWait call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClearUsageLimitWait").
+func (m *MockService) ClearUsageLimitWaitCalls() []MockServiceClearUsageLimitWaitCall {
+	var out []MockServiceClearUsageLimitWaitCall
+	for _, c := range m.Recorder.Calls("ClearUsageLimitWait") {
+		var r MockServiceClearUsageLimitWaitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.ThreadID, _ = c.Args[2].(string)
+		r.Now, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceProviderBackoffByChatCall is one recorded call of MockService.ProviderBackoffByChat, one
+// field per parameter.
+type MockServiceProviderBackoffByChatCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ProviderBackoffByChatCalls returns every recorded ProviderBackoffByChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ProviderBackoffByChat").
+func (m *MockService) ProviderBackoffByChatCalls() []MockServiceProviderBackoffByChatCall {
+	var out []MockServiceProviderBackoffByChatCall
+	for _, c := range m.Recorder.Calls("ProviderBackoffByChat") {
+		var r MockServiceProviderBackoffByChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceChatsHeldOnUsageLimitCall is one recorded call of MockService.ChatsHeldOnUsageLimit, one
+// field per parameter.
+type MockServiceChatsHeldOnUsageLimitCall struct {
+	Ctx     context.Context
+	ChatIDs []string
+	Since   time.Time
+}
+
+// ChatsHeldOnUsageLimitCalls returns every recorded ChatsHeldOnUsageLimit call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ChatsHeldOnUsageLimit").
+func (m *MockService) ChatsHeldOnUsageLimitCalls() []MockServiceChatsHeldOnUsageLimitCall {
+	var out []MockServiceChatsHeldOnUsageLimitCall
+	for _, c := range m.Recorder.Calls("ChatsHeldOnUsageLimit") {
+		var r MockServiceChatsHeldOnUsageLimitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatIDs, _ = c.Args[1].([]string)
+		r.Since, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListCapacityWakeTargetsCall is one recorded call of MockService.ListCapacityWakeTargets, one
+// field per parameter.
+type MockServiceListCapacityWakeTargetsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListCapacityWakeTargetsCalls returns every recorded ListCapacityWakeTargets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListCapacityWakeTargets").
+func (m *MockService) ListCapacityWakeTargetsCalls() []MockServiceListCapacityWakeTargetsCall {
+	var out []MockServiceListCapacityWakeTargetsCall
+	for _, c := range m.Recorder.Calls("ListCapacityWakeTargets") {
+		var r MockServiceListCapacityWakeTargetsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListOrgCapacityWakeTargetsCall is one recorded call of MockService.ListOrgCapacityWakeTargets, one
+// field per parameter.
+type MockServiceListOrgCapacityWakeTargetsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgCapacityWakeTargetsCalls returns every recorded ListOrgCapacityWakeTargets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgCapacityWakeTargets").
+func (m *MockService) ListOrgCapacityWakeTargetsCalls() []MockServiceListOrgCapacityWakeTargetsCall {
+	var out []MockServiceListOrgCapacityWakeTargetsCall
+	for _, c := range m.Recorder.Calls("ListOrgCapacityWakeTargets") {
+		var r MockServiceListOrgCapacityWakeTargetsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockMarkers
-// forge:hash=1d5800e3ad14d54ef980ace3070d16da135069346925e7f362f020eccf348555
+// forge:hash=79e5167d68c836a1cec55e9095dbf27f5ecc854883164642a83b3dfedf780b82
 
 // MockMarkers is a test mock for the Markers interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMarkers.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMarkers.<Method>Func not set" error.
 type MockMarkers struct {
 	contractkit.Recorder
 	RecordProviderBackoffFunc      func(context.Context, string, string, int, int, int, string, time.Duration, time.Time) error
@@ -206,18 +400,211 @@ func (m *MockMarkers) ListOrgCapacityWakeTargets(ctx context.Context, orgID stri
 	return nil, contractkit.MockNotSet("MockMarkers", "ListOrgCapacityWakeTargets")
 }
 
+// MockMarkersRecordProviderBackoffCall is one recorded call of MockMarkers.RecordProviderBackoff, one
+// field per parameter.
+type MockMarkersRecordProviderBackoffCall struct {
+	Ctx         context.Context
+	ChatID      string
+	ThreadID    string
+	Attempt     int
+	MaxAttempts int
+	StatusCode  int
+	Reason      string
+	Delay       time.Duration
+	Now         time.Time
+}
+
+// RecordProviderBackoffCalls returns every recorded RecordProviderBackoff call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordProviderBackoff").
+func (m *MockMarkers) RecordProviderBackoffCalls() []MockMarkersRecordProviderBackoffCall {
+	var out []MockMarkersRecordProviderBackoffCall
+	for _, c := range m.Recorder.Calls("RecordProviderBackoff") {
+		var r MockMarkersRecordProviderBackoffCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.ThreadID, _ = c.Args[2].(string)
+		r.Attempt, _ = c.Args[3].(int)
+		r.MaxAttempts, _ = c.Args[4].(int)
+		r.StatusCode, _ = c.Args[5].(int)
+		r.Reason, _ = c.Args[6].(string)
+		r.Delay, _ = c.Args[7].(time.Duration)
+		r.Now, _ = c.Args[8].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMarkersClearProviderBackoffCall is one recorded call of MockMarkers.ClearProviderBackoff, one
+// field per parameter.
+type MockMarkersClearProviderBackoffCall struct {
+	Ctx      context.Context
+	ThreadID string
+	Now      time.Time
+}
+
+// ClearProviderBackoffCalls returns every recorded ClearProviderBackoff call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClearProviderBackoff").
+func (m *MockMarkers) ClearProviderBackoffCalls() []MockMarkersClearProviderBackoffCall {
+	var out []MockMarkersClearProviderBackoffCall
+	for _, c := range m.Recorder.Calls("ClearProviderBackoff") {
+		var r MockMarkersClearProviderBackoffCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		r.Now, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMarkersRecordUsageLimitWaitCall is one recorded call of MockMarkers.RecordUsageLimitWait, one
+// field per parameter.
+type MockMarkersRecordUsageLimitWaitCall struct {
+	Ctx      context.Context
+	ChatID   string
+	ThreadID string
+	Provider string
+	Reason   string
+	ResumeAt time.Time
+	Now      time.Time
+}
+
+// RecordUsageLimitWaitCalls returns every recorded RecordUsageLimitWait call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordUsageLimitWait").
+func (m *MockMarkers) RecordUsageLimitWaitCalls() []MockMarkersRecordUsageLimitWaitCall {
+	var out []MockMarkersRecordUsageLimitWaitCall
+	for _, c := range m.Recorder.Calls("RecordUsageLimitWait") {
+		var r MockMarkersRecordUsageLimitWaitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.ThreadID, _ = c.Args[2].(string)
+		r.Provider, _ = c.Args[3].(string)
+		r.Reason, _ = c.Args[4].(string)
+		r.ResumeAt, _ = c.Args[5].(time.Time)
+		r.Now, _ = c.Args[6].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMarkersClearUsageLimitWaitCall is one recorded call of MockMarkers.ClearUsageLimitWait, one
+// field per parameter.
+type MockMarkersClearUsageLimitWaitCall struct {
+	Ctx      context.Context
+	ChatID   string
+	ThreadID string
+	Now      time.Time
+}
+
+// ClearUsageLimitWaitCalls returns every recorded ClearUsageLimitWait call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClearUsageLimitWait").
+func (m *MockMarkers) ClearUsageLimitWaitCalls() []MockMarkersClearUsageLimitWaitCall {
+	var out []MockMarkersClearUsageLimitWaitCall
+	for _, c := range m.Recorder.Calls("ClearUsageLimitWait") {
+		var r MockMarkersClearUsageLimitWaitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.ThreadID, _ = c.Args[2].(string)
+		r.Now, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMarkersListChatProviderBackoffCall is one recorded call of MockMarkers.ListChatProviderBackoff, one
+// field per parameter.
+type MockMarkersListChatProviderBackoffCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ListChatProviderBackoffCalls returns every recorded ListChatProviderBackoff call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChatProviderBackoff").
+func (m *MockMarkers) ListChatProviderBackoffCalls() []MockMarkersListChatProviderBackoffCall {
+	var out []MockMarkersListChatProviderBackoffCall
+	for _, c := range m.Recorder.Calls("ListChatProviderBackoff") {
+		var r MockMarkersListChatProviderBackoffCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMarkersListChatsHeldOnUsageLimitCall is one recorded call of MockMarkers.ListChatsHeldOnUsageLimit, one
+// field per parameter.
+type MockMarkersListChatsHeldOnUsageLimitCall struct {
+	Ctx     context.Context
+	ChatIDs []string
+	Since   time.Time
+}
+
+// ListChatsHeldOnUsageLimitCalls returns every recorded ListChatsHeldOnUsageLimit call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChatsHeldOnUsageLimit").
+func (m *MockMarkers) ListChatsHeldOnUsageLimitCalls() []MockMarkersListChatsHeldOnUsageLimitCall {
+	var out []MockMarkersListChatsHeldOnUsageLimitCall
+	for _, c := range m.Recorder.Calls("ListChatsHeldOnUsageLimit") {
+		var r MockMarkersListChatsHeldOnUsageLimitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatIDs, _ = c.Args[1].([]string)
+		r.Since, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMarkersListCapacityWakeTargetsCall is one recorded call of MockMarkers.ListCapacityWakeTargets, one
+// field per parameter.
+type MockMarkersListCapacityWakeTargetsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListCapacityWakeTargetsCalls returns every recorded ListCapacityWakeTargets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListCapacityWakeTargets").
+func (m *MockMarkers) ListCapacityWakeTargetsCalls() []MockMarkersListCapacityWakeTargetsCall {
+	var out []MockMarkersListCapacityWakeTargetsCall
+	for _, c := range m.Recorder.Calls("ListCapacityWakeTargets") {
+		var r MockMarkersListCapacityWakeTargetsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMarkersListOrgCapacityWakeTargetsCall is one recorded call of MockMarkers.ListOrgCapacityWakeTargets, one
+// field per parameter.
+type MockMarkersListOrgCapacityWakeTargetsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgCapacityWakeTargetsCalls returns every recorded ListOrgCapacityWakeTargets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgCapacityWakeTargets").
+func (m *MockMarkers) ListOrgCapacityWakeTargetsCalls() []MockMarkersListOrgCapacityWakeTargetsCall {
+	var out []MockMarkersListOrgCapacityWakeTargetsCall
+	for _, c := range m.Recorder.Calls("ListOrgCapacityWakeTargets") {
+		var r MockMarkersListOrgCapacityWakeTargetsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Markers = (*MockMarkers)(nil)
 
 // forge:section MockTxRunner
-// forge:hash=1a0ee09450a8c0c0c820b797730ecbfabb88f624601078e98bcecc809d6c34d9
+// forge:hash=1a9a9ed41b954ef2ab28e8326f76baa309a556ade16a586f99462bed4c992c21
 
 // MockTxRunner is a test mock for the TxRunner interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTxRunner.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTxRunner.<Method>Func not set" error.
 type MockTxRunner struct {
 	contractkit.Recorder
 	RunTxFunc func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
@@ -232,18 +619,41 @@ func (m *MockTxRunner) RunTx(p0 context.Context, policy orm.TxPolicy, fn func(ct
 	return contractkit.MockNotSet("MockTxRunner", "RunTx")
 }
 
+// MockTxRunnerRunTxCall is one recorded call of MockTxRunner.RunTx, one
+// field per parameter.
+type MockTxRunnerRunTxCall struct {
+	Ctx    context.Context
+	Policy orm.TxPolicy
+	Fn     func(ctx context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockTxRunner) RunTxCalls() []MockTxRunnerRunTxCall {
+	var out []MockTxRunnerRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockTxRunnerRunTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Policy, _ = c.Args[1].(orm.TxPolicy)
+		r.Fn, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ TxRunner = (*MockTxRunner)(nil)
 
 // forge:section MockChatActivity
-// forge:hash=87c73535adeccd58e94a4529f9f5ba4913d6bfb972bade4b71d965f34ab137b4
+// forge:hash=988f32838f72945122261983e46b4e30846cee05590d681f5b53021e4d0553a6
 
 // MockChatActivity is a test mock for the ChatActivity interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChatActivity.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChatActivity.<Method>Func not set" error.
 type MockChatActivity struct {
 	contractkit.Recorder
 	EmitChatActivityIfChangedFunc func(context.Context, string) error
@@ -256,6 +666,26 @@ func (m *MockChatActivity) EmitChatActivityIfChanged(ctx context.Context, chatID
 		return m.EmitChatActivityIfChangedFunc(ctx, chatID)
 	}
 	return contractkit.MockNotSet("MockChatActivity", "EmitChatActivityIfChanged")
+}
+
+// MockChatActivityEmitChatActivityIfChangedCall is one recorded call of MockChatActivity.EmitChatActivityIfChanged, one
+// field per parameter.
+type MockChatActivityEmitChatActivityIfChangedCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// EmitChatActivityIfChangedCalls returns every recorded EmitChatActivityIfChanged call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EmitChatActivityIfChanged").
+func (m *MockChatActivity) EmitChatActivityIfChangedCalls() []MockChatActivityEmitChatActivityIfChangedCall {
+	var out []MockChatActivityEmitChatActivityIfChangedCall
+	for _, c := range m.Recorder.Calls("EmitChatActivityIfChanged") {
+		var r MockChatActivityEmitChatActivityIfChangedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

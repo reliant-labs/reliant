@@ -143,6 +143,8 @@ describe("TokenService hooks", () => {
     await waitForSettled(result);
   });
 
+  // GetGitToken mints a new credential on every call (forge:mutation in
+  // token.proto), so its hook is a mutation.
   it("useGetGitToken resolves a happy-path response", async () => {
     setTransport(
       mockTransport({
@@ -150,7 +152,8 @@ describe("TokenService hooks", () => {
       }),
     );
 
-    const { result } = renderHook(() => useGetGitToken({} as never), { wrapper });
+    const { result } = renderHook(() => useGetGitToken(), { wrapper });
+    await result.current.mutateAsync({} as never);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeDefined();
   });
