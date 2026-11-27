@@ -14,7 +14,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { ReleasesApiProvider, type ReleasesApi } from "@/services/forge/ReleasesApiContext";
 import { PROMOTIONS_PAGE, type ReleaseGate, type ReleasePromotion } from "@/services/forge/releases";
 
@@ -64,11 +64,11 @@ function renderCard(listPromotions: ReleasesApi["listPromotions"], over: Partial
   const client = createTestQueryClient();
   const ui = (env: { id: string; name: string }) => (
     <QueryClientProvider client={client}>
-      <ObservabilityApiProvider api={createWorkloadsFixtureApi()}>
+      <ObservabilityFixtures api={createWorkloadsFixtureApi()}>
         <ReleasesApiProvider api={api}>
           <EnvPromotions project="control-plane" env={env} releaseHref={(version) => `/releases/${version}?env=${env.name}`} releasesHref={`/releases?env=${env.name}`} />
         </ReleasesApiProvider>
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>
   );
   const result = render(ui(ENV));

@@ -176,7 +176,6 @@ electron/
 ├── electron-builder.common.js    # Shared build config
 ├── electron-builder.dev.js       # Build config (dev)
 ├── electron-builder.pr.js        # Build config (PR)
-├── electron-builder.alpha.js     # Build config (alpha)
 ├── package.json
 └── README.md
 ```

@@ -1,0 +1,111 @@
+---
+title: "Trace a slow or failing call back to the code that ran"
+sidebarTitle: "Runtime code context"
+description: "Forge ties production telemetry to source code: spans carry the file and function, slow and failing calls record redacted arguments, forge obs ops ranks the code, forge obs blast-radius maps a diff to live traffic, and release health judges the ops a release changed."
+keywords: ["forge obs ops", "forge obs blast-radius", "forge.forensics", "forge.slow", "code.file.path", "changed_op_errors", "browser rpc spans", "runtime context"]
+---
+
+{/* verified: 2026-11-27 · sources: forge v1.10.0 pkg/observe (component_chain.go, component_forensics.go, forensic_names.go), internal/generator/contract (observed.go, observed_forensics.go), internal/cli (obs_ops.go, obs_blast_radius.go, obs_check_changed_ops.go, obs_endpoints.go), pkg/releasehealth/changed_ops.go, web-runtime/src (rpc-span.ts, rpc-forensics.ts, interceptors.ts); skills observability/query/ops and observability/release-health; forge docs/proposals/runtime-context.md. Released: forge#2349, #2364, #2348, #2380 in forge v1.9.0 (web runtime 0.13.20 and later); control-plane#3022 in control-plane v1.25.0. */}
+
+When a request is slow or fails in production, the telemetry tells you which endpoint and how often, and then you go looking for the code. Forge closes that gap because it knows something a generic agent has to discover at runtime: every component boundary in a forge project is generated, so forge can stamp each boundary's span with where its code lives, record what the failing call was given, and join all of it back to the diff you are about to ship. This guide walks through what gets recorded, how to read it, and how an agent or a reviewer uses it. It needs forge v1.9.0 or later and a project whose components and RPCs forge generated.
+
+## What every component span now carries
+
+Forge wraps each method of a package's `Service` contract in a generated decorator (`middleware_gen.go`) that opens a span named `<package>.<Method>`, for example `billing.Charge`. Each such span carries three attributes that were worked out when the code was generated, so they cost nothing per call:
+
+| Attribute | Value |
+|---|---|
+| `forge.op` | the operation name, equal to the span's name |
+| `code.function.name` | `<import path>.<Interface>.<Method>` |
+| `code.file.path` | the project-relative file of the implementing method |
+
+There are no line numbers on purpose: they would change the generated file on every edit. The same operation naming covers the other two kinds of op `forge obs ops` knows about: a Connect RPC, named `<proto package>.<Service>/<Method>`, and any other server span, such as an HTTP route.
+
+## Slow means slow for that op
+
+A fixed latency threshold is wrong for most code, because a 200 ms call is a disaster in one method and routine in another. Each op keeps a rolling estimate of its own normal duration inside the process. A call is marked `forge.slow=true` when it takes more than five times that normal **and** more than 100 ms, and only once the op has seen 32 samples. Both numbers must be exceeded, so a method that normally takes 2 ms is never flagged for taking 15.
+
+The mark is for the platform's tail sampler. On Reliant hosting, the telemetry pipeline keeps traces that contain a `forge.slow` span (control plane v1.25.0 and later), under a cap on how many it keeps, so a slow request tends to survive sampling instead of being thrown away with the fast majority. The marking only applies to spans being recorded: a call that was not sampled pays for none of it.
+
+## Redacted forensics when a call fails or runs slow
+
+When a component call returns a server-fault error or is marked slow, its span gets one `forge.forensics` event with a `forensics.reason` of `error` or `slow`, and the call's arguments as `forensics.arg.<name>`. A canceled call, an expected close and a user-class error such as a validation failure record nothing, because nobody debugs those from arguments.
+
+The point is to see what shape of input triggered the failure without keeping what a person typed. Redaction is decided when forge generates the decorator and **denies by default**:
+
+| Argument | Recorded as |
+|---|---|
+| number, bool | the value |
+| string named like an ID (`id`, `user_id`, `customerID`, `uuid`) | the value, up to 128 bytes |
+| any other string, or bytes | `[len=42]`, the length only |
+| slice, array, map | `[count=3]`, the element count only |
+| time or duration | `[type=Time]`, the type only, never the value |
+| proto enum | the enum value's name |
+| proto message | its fields, walked under the same rules, down to three levels |
+| anything else | `[type=*pkg.Type]`, the type only |
+
+A name that suggests a secret tightens this further. A parameter whose name contains `token`, `secret`, `password`, `credential`, `session`, `cookie`, `apikey`, `privatekey` or `signingkey`, or one of whose words is `pin`, `otp`, `cvv`, `ssn`, `mfa` and similar, records only its length, even if it looks like an ID. `session_id` and `userPIN` are protected this way, while `spinner` and `shipping` are not caught by accident. A bool or an enum under a secret name keeps its value, since it can only be one of a few listed states, and a number named like a quantity (`max_tokens`, `session_count`) keeps its value too. A proto field marked `debug_redact` is omitted entirely, with no placeholder.
+
+An event holds at most 32 arguments, and says `forensics.truncated=true` if it dropped some. It is also rate limited per op per process, with a burst of five and one more allowed every minute, so a failing hot path cannot flood the trace store.
+
+You control it in two places. Put `// forge:no-capture <param>` above a contract method, or on its implementation, to drop a named parameter entirely (bare, it drops every parameter). Set `observability: {forensics: false}` in `forge.yaml` to generate no capture code at all; spans still carry their code location and the slow mark.
+
+## Rank the code that is running
+
+`forge obs ops` ranks every op in an environment by traffic, latency or errors, each with the file it lives in:
+
+```bash terminal
+forge obs ops prod --sort p95 --top 5
+forge obs ops prod --kind component --sort errors --since 6h --json
+forge obs ops prod --name billing.Charge --since 7d
+```
+
+`--sort` takes `calls`, `p95`, `errors` or `rate`, and `--kind` any of `rpc`, `endpoint` and `component`. Each op reports its calls, errors, error ratio, rate, and p50, p95 and p99, weighted for tail sampling so the numbers describe the traffic and not just the sampled traces. Its code location comes from the span's own `code.file.path` when the running build reports it, and otherwise from finding the op in your checkout by name. An op you ask for with `--name` that had no spans in the window is still listed, with zeros, so "no traffic" reads differently from "not asked". The JSON document is `forge.obs.ops/v1`, and it also names the slowest and failing traces for the top op.
+
+Run it before you edit a component. A method that is both hot and fragile deserves a different level of care than one nobody calls.
+
+## See what a diff touches before you ship it
+
+`forge obs blast-radius` takes a diff, works out which ops it can change, and attaches each op's production traffic:
+
+```bash terminal
+forge obs blast-radius prod                                  # this branch against origin/main
+forge obs blast-radius prod --base origin/main --head HEAD --json
+forge obs blast-radius                                       # no environment: the mapping alone
+```
+
+The mapping reads only your checkout. Every op in the answer says why it is included: the change is in the op's implementing method, in the RPC's handler, in a helper that the op's method reaches through the package's call graph (naming every op that reaches it), somewhere in the package but reached by no op, such as a constructor or a type (which counts against every op of the package), or in the proto declaration of the RPC or a message it takes or returns. Each op also lists the commits that changed it, with the pull request taken from a trailing `(#123)` in the subject. Files the mapping could not attribute are listed with their reason, such as generated code, a test file or a comment-only change, so nothing disappears silently.
+
+Traffic is read from the last seven days by default (`--since` changes it). If the telemetry read fails, the document says `telemetry.status` is `unavailable` with the reason and exits 0, because the mapping is still true. The JSON schema is `forge.obs.blast_radius/v1`, and it is the input a pull request reviewer, human or agent, can use to decide how much a change deserves scrutiny: a one-line fix in an op that carries most of your traffic is a different risk from a rewrite of an op nobody calls. The same mapping is available to an agent through the local Forge MCP server as the `blast_radius` tool.
+
+## Judge a release op by op
+
+A service-wide error rate hides a regression in one method on a busy service. A method that carries 1 percent of the traffic can become three times slower without moving the service's p95. So [`forge obs check`](/hosting/observability/forge-obs) also judges each op the release's commits changed, comparing the window before the promotion with the window after, on that op's own spans:
+
+| Finding | Fires when |
+|---|---|
+| `changed_op_errors` | the op's error rate rose by more than 0.05 and it had at least 5 errors afterward |
+| `changed_op_latency` | the op's p95 afterward is more than twice its p95 before |
+
+An op is compared only when it had at least 50 calls in both windows. Thinner ops are named together under `not_evaluated`, never guessed at. On a hosted environment, the after window counts only the judged release's version and the before window only one baseline version's, so an old version still in rotation cannot create a finding. Each finding names the op, the commit that changed it and the pull request when the subject carries one, and the document's `changed_ops` lists every changed op with both windows. Both findings warn by default. To make them gate a promotion, add them to `fail_on` in the environment's `release_health`, or pass `--fail-on`, and override a threshold with `--threshold`, for example `--threshold changed_op_max_p95_ratio=3`.
+
+When the mapping cannot run, because there is no checkout or the release's commits are not in it, `not_evaluated` says why and the check carries on. Changed ops never fail a check by being unreadable. The rest of how a release is judged is in [Querying with forge obs](/hosting/observability/forge-obs).
+
+## The browser's view of each RPC
+
+A fetch span in the browser is named by URL and knows nothing about Connect. In forge's web runtime (`@reliantlabs/forge-web-runtime` 0.13.20 or later, the transport that generated frontends use), every RPC also gets a client span named `<rpc.service>/<rpc.method>` with `rpc.system`, `rpc.service`, `rpc.method`, `forge.rpc.client=true` and, on failure, the Connect error code. It sits in the same trace as the server's span, because the request already carries the trace header, so a slow page shows the browser's wait and the server's work side by side. A server stream's span ends when the stream does, not when the headers arrive. A call the user cancelled by navigating away or unmounting a component is recorded with its code but is not an error and gets no forensics.
+
+A failed RPC gets one `forge.forensics` event with the request message classified by the same deny-by-default rules as the server's, so the browser and the server agree on every field name, and `debug_redact` fields are left out. It is recorded at most once per procedure and error code per page session.
+
+The rest of the join is in `forge obs endpoints`, which gains a client p95 column, the browser's view of each RPC, next to the server's. The span is recorded only while a telemetry provider is registered, so a server-rendered page, or a page with telemetry off, pays nothing. To turn the spans off, pass `rpcSpans: false` in the runtime's interceptor config. To keep the spans and drop only the failure forensics, set `RPC_FORENSICS` to `"false"` in the frontend's runtime config, which forge's generated `src/lib/otel_gen.ts` passes on as `rpcForensics: false`.
+
+## Where this does not reach
+
+Forge does not hook every function in a running binary. Go gives no safe way to do that without eBPF, so forge instruments the boundaries it generates: components with a contract, and RPCs. Code that is not behind a generated boundary appears in a trace only if something else instruments it. Continuous profiles fill part of that gap, because they are linked to spans by labels ([Continuous profiling](/hosting/observability/profiling)). A call that was not sampled leaves no span, so the slow mark and the forensics only help where the trace was kept, which is why the platform's sampler keeps slow ones.
+
+## Related topics
+
+- [Querying with forge obs](/hosting/observability/forge-obs): `obs check`, `endpoints`, traces and issues
+- [What every boundary records](/hosting/observability/signals): the spans, logs and metrics around each boundary
+- [Session timelines and replay](/hosting/observability/session-timelines): what the user did before a frontend error
+- [Forge MCP server](/hosting/observability/agents): the tools an agent uses to read all of this

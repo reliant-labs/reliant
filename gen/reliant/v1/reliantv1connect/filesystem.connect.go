@@ -134,12 +134,14 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceGetFileTreeProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileTree")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFileContent: connect.NewClient[v1.GetFileContentRequest, v1.GetFileContentResponse](
 			httpClient,
 			baseURL+FileSystemServiceGetFileContentProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileContent")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		saveFileContent: connect.NewClient[v1.SaveFileContentRequest, v1.SaveFileContentResponse](
@@ -152,18 +154,21 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceGetFileMetadataProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFileMetadata")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFilePreviewInfo: connect.NewClient[v1.GetFilePreviewInfoRequest, v1.GetFilePreviewInfoResponse](
 			httpClient,
 			baseURL+FileSystemServiceGetFilePreviewInfoProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreviewInfo")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getFilePreview: connect.NewClient[v1.GetFilePreviewRequest, v1.GetFilePreviewResponse](
 			httpClient,
 			baseURL+FileSystemServiceGetFilePreviewProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreview")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createFileOrFolder: connect.NewClient[v1.CreateFileOrFolderRequest, v1.CreateFileOrFolderResponse](
@@ -188,6 +193,7 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceSearchFilesProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("SearchFiles")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		replaceInFiles: connect.NewClient[v1.ReplaceInFilesRequest, v1.ReplaceInFilesResponse](
@@ -200,6 +206,7 @@ func NewFileSystemServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			httpClient,
 			baseURL+FileSystemServiceListDirectoryProcedure,
 			connect.WithSchema(fileSystemServiceMethods.ByName("ListDirectory")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createDirectory: connect.NewClient[v1.CreateDirectoryRequest, v1.CreateDirectoryResponse](
@@ -357,12 +364,14 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceGetFileTreeProcedure,
 		svc.GetFileTree,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileTree")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceGetFileContentHandler := connect.NewUnaryHandler(
 		FileSystemServiceGetFileContentProcedure,
 		svc.GetFileContent,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileContent")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceSaveFileContentHandler := connect.NewUnaryHandler(
@@ -375,18 +384,21 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceGetFileMetadataProcedure,
 		svc.GetFileMetadata,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFileMetadata")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceGetFilePreviewInfoHandler := connect.NewUnaryHandler(
 		FileSystemServiceGetFilePreviewInfoProcedure,
 		svc.GetFilePreviewInfo,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreviewInfo")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceGetFilePreviewHandler := connect.NewUnaryHandler(
 		FileSystemServiceGetFilePreviewProcedure,
 		svc.GetFilePreview,
 		connect.WithSchema(fileSystemServiceMethods.ByName("GetFilePreview")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceCreateFileOrFolderHandler := connect.NewUnaryHandler(
@@ -411,6 +423,7 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceSearchFilesProcedure,
 		svc.SearchFiles,
 		connect.WithSchema(fileSystemServiceMethods.ByName("SearchFiles")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceReplaceInFilesHandler := connect.NewUnaryHandler(
@@ -423,6 +436,7 @@ func NewFileSystemServiceHandler(svc FileSystemServiceHandler, opts ...connect.H
 		FileSystemServiceListDirectoryProcedure,
 		svc.ListDirectory,
 		connect.WithSchema(fileSystemServiceMethods.ByName("ListDirectory")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	fileSystemServiceCreateDirectoryHandler := connect.NewUnaryHandler(

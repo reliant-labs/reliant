@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockProvider
-// forge:hash=f013b7877db95c427a5830f23bd958e9408e3d99113dc2afbe1239fcf97302f6
+// forge:hash=ac7f8d6bf513eb8bf134ed4b79e5ecf08a73795624b3fbecc5299dce4b9ec340
 
 // MockProvider is a test mock for the Provider interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProvider.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProvider.<Method>Func not set" error.
 type MockProvider struct {
 	contractkit.Recorder
 	IDFunc     func() string
@@ -58,18 +59,75 @@ func (m *MockProvider) Parse(ctx context.Context, req *Request) (*Delivery, erro
 	return nil, contractkit.MockNotSet("MockProvider", "Parse")
 }
 
+// MockProviderIDCall is one recorded call of MockProvider.ID, one
+// field per parameter.
+type MockProviderIDCall struct {
+}
+
+// IDCalls returns every recorded ID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ID").
+func (m *MockProvider) IDCalls() []MockProviderIDCall {
+	var out []MockProviderIDCall
+	for range m.Recorder.Calls("ID") {
+		var r MockProviderIDCall
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProviderVerifyCall is one recorded call of MockProvider.Verify, one
+// field per parameter.
+type MockProviderVerifyCall struct {
+	Ctx context.Context
+	Req *Request
+}
+
+// VerifyCalls returns every recorded Verify call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Verify").
+func (m *MockProvider) VerifyCalls() []MockProviderVerifyCall {
+	var out []MockProviderVerifyCall
+	for _, c := range m.Recorder.Calls("Verify") {
+		var r MockProviderVerifyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(*Request)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProviderParseCall is one recorded call of MockProvider.Parse, one
+// field per parameter.
+type MockProviderParseCall struct {
+	Ctx context.Context
+	Req *Request
+}
+
+// ParseCalls returns every recorded Parse call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Parse").
+func (m *MockProvider) ParseCalls() []MockProviderParseCall {
+	var out []MockProviderParseCall
+	for _, c := range m.Recorder.Calls("Parse") {
+		var r MockProviderParseCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(*Request)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Provider = (*MockProvider)(nil)
 
 // forge:section MockConnectionSigned
-// forge:hash=900271812d9fe675bd76a3d1db3ee2cc2d244c8b54275269adbb3ce80f007758
+// forge:hash=1376596ff1195c6b94373fba15cd1017b5cd11166e11d9e9ed24d445dfd13382
 
 // MockConnectionSigned is a test mock for the ConnectionSigned interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockConnectionSigned.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockConnectionSigned.<Method>Func not set" error.
 type MockConnectionSigned struct {
 	contractkit.Recorder
 	SignedAccountFunc func(*Request) (string, error)
@@ -124,18 +182,113 @@ func (m *MockConnectionSigned) Parse(ctx context.Context, req *Request) (*Delive
 	return nil, contractkit.MockNotSet("MockConnectionSigned", "Parse")
 }
 
+// MockConnectionSignedSignedAccountCall is one recorded call of MockConnectionSigned.SignedAccount, one
+// field per parameter.
+type MockConnectionSignedSignedAccountCall struct {
+	Req *Request
+}
+
+// SignedAccountCalls returns every recorded SignedAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SignedAccount").
+func (m *MockConnectionSigned) SignedAccountCalls() []MockConnectionSignedSignedAccountCall {
+	var out []MockConnectionSignedSignedAccountCall
+	for _, c := range m.Recorder.Calls("SignedAccount") {
+		var r MockConnectionSignedSignedAccountCall
+		r.Req, _ = c.Args[0].(*Request)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockConnectionSignedVerifyWithCall is one recorded call of MockConnectionSigned.VerifyWith, one
+// field per parameter.
+type MockConnectionSignedVerifyWithCall struct {
+	Req    *Request
+	Secret vault.Secret
+}
+
+// VerifyWithCalls returns every recorded VerifyWith call, oldest first, with
+// its arguments typed. It reads the same log as Calls("VerifyWith").
+func (m *MockConnectionSigned) VerifyWithCalls() []MockConnectionSignedVerifyWithCall {
+	var out []MockConnectionSignedVerifyWithCall
+	for _, c := range m.Recorder.Calls("VerifyWith") {
+		var r MockConnectionSignedVerifyWithCall
+		r.Req, _ = c.Args[0].(*Request)
+		r.Secret, _ = c.Args[1].(vault.Secret)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockConnectionSignedIDCall is one recorded call of MockConnectionSigned.ID, one
+// field per parameter.
+type MockConnectionSignedIDCall struct {
+}
+
+// IDCalls returns every recorded ID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ID").
+func (m *MockConnectionSigned) IDCalls() []MockConnectionSignedIDCall {
+	var out []MockConnectionSignedIDCall
+	for range m.Recorder.Calls("ID") {
+		var r MockConnectionSignedIDCall
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockConnectionSignedVerifyCall is one recorded call of MockConnectionSigned.Verify, one
+// field per parameter.
+type MockConnectionSignedVerifyCall struct {
+	Ctx context.Context
+	Req *Request
+}
+
+// VerifyCalls returns every recorded Verify call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Verify").
+func (m *MockConnectionSigned) VerifyCalls() []MockConnectionSignedVerifyCall {
+	var out []MockConnectionSignedVerifyCall
+	for _, c := range m.Recorder.Calls("Verify") {
+		var r MockConnectionSignedVerifyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(*Request)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockConnectionSignedParseCall is one recorded call of MockConnectionSigned.Parse, one
+// field per parameter.
+type MockConnectionSignedParseCall struct {
+	Ctx context.Context
+	Req *Request
+}
+
+// ParseCalls returns every recorded Parse call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Parse").
+func (m *MockConnectionSigned) ParseCalls() []MockConnectionSignedParseCall {
+	var out []MockConnectionSignedParseCall
+	for _, c := range m.Recorder.Calls("Parse") {
+		var r MockConnectionSignedParseCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(*Request)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ConnectionSigned = (*MockConnectionSigned)(nil)
 
 // forge:section MockUserConfigured
-// forge:hash=5d7112064c7dceecf63e3f7cdceebd11585a8a3330affc8ca075aa7907e7fdbb
+// forge:hash=da91c91e9f4c57f8a81a92ce7a828fa2564fc9edf1949bcea5f1ec15430e6ab4
 
 // MockUserConfigured is a test mock for the UserConfigured interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockUserConfigured.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockUserConfigured.<Method>Func not set" error.
 type MockUserConfigured struct {
 	contractkit.Recorder
 	UserConfiguresWebhookFunc func() bool
@@ -148,6 +301,22 @@ func (m *MockUserConfigured) UserConfiguresWebhook() bool {
 		return m.UserConfiguresWebhookFunc()
 	}
 	return false
+}
+
+// MockUserConfiguredUserConfiguresWebhookCall is one recorded call of MockUserConfigured.UserConfiguresWebhook, one
+// field per parameter.
+type MockUserConfiguredUserConfiguresWebhookCall struct {
+}
+
+// UserConfiguresWebhookCalls returns every recorded UserConfiguresWebhook call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UserConfiguresWebhook").
+func (m *MockUserConfigured) UserConfiguresWebhookCalls() []MockUserConfiguredUserConfiguresWebhookCall {
+	var out []MockUserConfiguredUserConfiguresWebhookCall
+	for range m.Recorder.Calls("UserConfiguresWebhook") {
+		var r MockUserConfiguredUserConfiguresWebhookCall
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

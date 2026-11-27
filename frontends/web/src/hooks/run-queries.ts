@@ -349,6 +349,7 @@ const LAUNCH_EVENT_KINDS: Record<TriggerEventKind, string> = {
   [TriggerEventKind.WEBHOOK]: "webhook",
   [TriggerEventKind.INTEGRATION]: "integration",
   [TriggerEventKind.WORKFLOW_EVENT]: "workflow_event",
+  [TriggerEventKind.RECORD_DUE]: "record_due",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {

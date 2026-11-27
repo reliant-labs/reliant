@@ -299,7 +299,9 @@ service SettingsService {
   // ============================================
 
   // GetConfigHealth retrieves configuration errors and warnings
-  rpc GetConfigHealth(GetConfigHealthRequest) returns (GetConfigHealthResponse) {}
+  rpc GetConfigHealth(GetConfigHealthRequest) returns (GetConfigHealthResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ConfigSeverity indicates the severity of a configuration error
