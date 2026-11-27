@@ -253,10 +253,6 @@ type Client interface {
 	// ListCheckRuns lists the check runs on sha, newest first.
 	ListCheckRuns(ctx context.Context, repo Repo, sha string, opts ListCheckRuns) ([]CheckRun, error)
 
-	// GetContents reads one file at ref (a branch name, full ref or sha). A
-	// missing ref or path, or a path that is not a regular file, is
-	// [ErrNotFound].
-	GetContents(ctx context.Context, repo Repo, path, ref string) ([]byte, error)
 	// GetCommit reads a commit. A missing commit is [ErrNotFound].
 	GetCommit(ctx context.Context, repo Repo, sha string) (Commit, error)
 	// CreateCommit writes a commit object (no ref moves). A tree or parent

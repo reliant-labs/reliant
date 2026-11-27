@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/gocache"
+
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/version"
 )
@@ -36,13 +38,13 @@ import (
 // for a cutoff forge's contract allows.
 
 const (
-	// liveBuildFloor is the youngest Go-cache entry a trim may ever delete:
-	// forge's goCacheFloor.
-	liveBuildFloor = 2 * time.Hour
+	// liveBuildFloor is the youngest Go-cache entry a trim deletes at rest:
+	// forge/pkg/gocache's Floor, the one copy forge's trim reads too.
+	liveBuildFloor = gocache.Floor
 
 	// minLiveBuildFloor is the youngest Go-cache entry a trim may delete
-	// under budget pressure: forge's goCacheMinFloor.
-	minLiveBuildFloor = time.Hour + 5*time.Minute
+	// under budget pressure: forge/pkg/gocache's MinFloor.
+	minLiveBuildFloor = gocache.MinFloor
 
 	// floorViolationSlack absorbs the clock read between the pass starting
 	// and forge reading its own clock.

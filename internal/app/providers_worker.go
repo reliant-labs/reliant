@@ -46,7 +46,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
-	"github.com/reliant-labs/reliant/internal/integrations/ghcontents"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
@@ -395,6 +394,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 		Logger:           d.Logger,
 		Config:           d.Config,
 		Repo:             d.DB,
+		TriggerReads:     store.NewTriggerEventExtStore(d.DB.ORM()),
 		Chats:            chataccess.NewFromORM(d.DB.ORM()),
 		ChatRows:         store.NewChatExtStore(d.DB.ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(d.DB.ORM()),
@@ -545,7 +545,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 		Intake: triggers.NewIntake(triggers.NewStores(repo), temporalClient, v2workflow.SharedTaskQueue).
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
+			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -1083,7 +1083,7 @@ type WorkflowEventRelayDeps struct {
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
 	return workflowevent.NewRelay(store.NewRunEventExtStore(d.DB.ORM()), d.Temporal.Client, v2workflow.SharedTaskQueue).
-		WithRoutes(d.DB), nil
+		WithRoutes(store.NewTriggerExtStore(d.DB.ORM())), nil
 }
 
 type TriggerDeliveryRelayDeps struct {
@@ -1117,7 +1117,7 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	intake := triggers.NewIntake(triggers.NewStores(repo), d.Temporal.Client, v2workflow.SharedTaskQueue).
 		WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 		WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
-		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug))
+		WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), store.NewTriggerEventExtStore(repo.ORM()), d.Integrations.GitHubAppSlug))
 	var membership authz.Membership
 	if d.Membership != nil {
 		membership = d.Membership
@@ -1125,14 +1125,10 @@ func NewTriggerDeliveryRelay(d TriggerDeliveryRelayDeps) (*TriggerDeliveryRelay,
 	relay := webhook.NewRelay(webhook.NewStores(repo), intake, d.ConnectionVault, triggers.NewAutoPause(store.NewTriggerWritesExtStore(repo.ORM()), nil))
 	records := prrecords.Deps{Store: store.NewPrRecordExtStore(repo.ORM()), Scope: prrecords.NewScope(d.Integrations.PRRecordRepositories)}
 	if d.Pipeline.GetEnabled() {
+		// No Contents: a server role reads no repository contents (owner,
+		// 2026-11-27), so the projector records "no reader" as the config
+		// error until a gate pool daemon reads pipeline.yaml for it.
 		records.Pipeline = repo
-		tokens, err := gitTokens(d.ControlPlane)
-		if err != nil {
-			return nil, err
-		}
-		if tokens != nil {
-			records.Contents = ghcontents.NewInstrumented(ghcontents.Deps{Tokens: tokens})
-		}
 	}
 	if !records.Scope.Empty() || records.Pipeline != nil {
 		relay.WithDeliveryConsumer(webhook.PRRecordConsumer(prrecords.NewInstrumented(records)))

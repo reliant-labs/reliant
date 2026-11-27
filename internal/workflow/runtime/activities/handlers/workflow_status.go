@@ -116,6 +116,7 @@ type WorkflowStatusOutput struct {
 // This activity writes workflow status updates to chat_updates for UI notifications
 type WorkflowStatusActivity struct {
 	repo      WorkflowStatusStore
+	triggers  StatusTriggers
 	runs      RunRecords
 	workflows WorkflowRuns
 	attention AttentionRecorder
@@ -135,6 +136,7 @@ type WorkflowStatusActivity struct {
 func NewWorkflowStatusActivity(deps WorkflowStatusDeps) *WorkflowStatusActivity {
 	return &WorkflowStatusActivity{
 		repo:       deps.Repo,
+		triggers:   deps.Triggers,
 		runs:       deps.Runs,
 		workflows:  deps.Workflows,
 		attention:  deps.Attention,
@@ -154,7 +156,7 @@ func (a *WorkflowStatusActivity) Name() string {
 func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStatusInput) (WorkflowStatusOutput, error) {
 	// A worker built without a database cannot record a run's outcome: say so
 	// (Temporal retries the activity) rather than dereference a missing store.
-	if a.repo == nil || a.runs == nil || a.workflows == nil || a.runEvents == nil {
+	if a.repo == nil || a.triggers == nil || a.runs == nil || a.workflows == nil || a.runEvents == nil {
 		return WorkflowStatusOutput{}, errors.New("workflow status: the run record store is not configured")
 	}
 	// How the run ended, judged before the status write it lands with.
@@ -364,7 +366,7 @@ func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input W
 	}
 	// An unattended automation run stays silent unless its automation opted in.
 	if triggerID := automationTrigger(chat); triggerID != "" {
-		trigger, err := a.repo.GetTrigger(ctx, triggerID)
+		trigger, err := a.triggers.GetTrigger(ctx, triggerID)
 		return err == nil && trigger != nil && trigger.NotifyOnComplete
 	}
 	return false
@@ -391,7 +393,7 @@ func (a *WorkflowStatusActivity) failureNotifies(ctx context.Context, input Work
 	if triggerID == "" {
 		return true
 	}
-	firings, err := a.repo.FiringsSinceLastSuccess(ctx, chat.UserID, []string{triggerID}, triggers.EpisodeFirings)
+	firings, err := a.triggers.FiringsSinceLastSuccess(ctx, chat.UserID, []string{triggerID}, triggers.EpisodeFirings)
 	if err != nil {
 		logging.WarnContext(ctx, "[WorkflowStatus] Could not read trigger firings; notifying", "chat_id", input.ChatID, "error", err)
 		return true

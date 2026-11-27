@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"github.com/google/uuid"
@@ -89,7 +90,7 @@ func TestDispatch_ActivationFiresWithItsDeclaredInputs(t *testing.T) {
 	require.NoError(t, err)
 	launched := launchedChat(t, results, tr.ID)
 
-	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launched)
+	launchEv, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launched)
 	require.NoError(t, err)
 	start, _ := launchEv.Payload["start"].(map[string]any)
 	params, _ := start["params"].(map[string]any)
@@ -205,7 +206,7 @@ func TestDispatch_ActivationFilterAndInputsReadItsParams(t *testing.T) {
 	assert.Equal(t, core.TriggerEventLaunched, byTrigger[reviews.ID], "code-review is in this activation's own list")
 	assert.Equal(t, core.TriggerEventSkipped, byTrigger[builds.ID], "and not in the other's")
 
-	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launchedChat(t, results, reviews.ID))
+	launchEv, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launchedChat(t, results, reviews.ID))
 	require.NoError(t, err)
 	start, _ := launchEv.Payload["start"].(map[string]any)
 	params, _ := start["params"].(map[string]any)

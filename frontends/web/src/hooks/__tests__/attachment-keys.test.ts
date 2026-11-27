@@ -19,7 +19,7 @@ import { attachmentServiceKeys } from "../attachment-service-hooks_gen";
 
 // test/setup.ts stubs deleteAttachment for every attachment-store test; this
 // file is about the real one.
-const { deleteAttachment, fetchAttachmentBlob, uploadAttachment } =
+const { deleteAttachment, fetchAttachmentBlob, uploadAttachment, uploadBudgetMs } =
   await vi.importActual<typeof import("../attachment-queries")>("../attachment-queries");
 
 let getCalls: number;
@@ -98,5 +98,17 @@ describe("AttachmentService keys", () => {
     });
     const attachment = await uploadAttachment(file);
     expect(attachment).toMatchObject({ id: "att-new", filename: "shot.png", mime_type: "image/png", size: 3 });
+  });
+
+  // Prod, 2026-11-27: photo uploads from a phone were aborted at the client's
+  // fixed budget before the api-server saw a byte. The budget follows the size.
+  it("an upload's budget grows with the file, never below the 60s floor", () => {
+    expect(uploadBudgetMs(3)).toBe(60_000);
+    expect(uploadBudgetMs(300 * 1024)).toBe(60_000);
+    const fiveMb = uploadBudgetMs(5 * 1024 * 1024);
+    expect(fiveMb).toBeGreaterThan(60_000);
+    // 50 MB, the composer's cap: base64 on the wire at ~1 Mbps is minutes.
+    expect(uploadBudgetMs(50 * 1024 * 1024)).toBeGreaterThan(8 * 60_000);
+    expect(uploadBudgetMs(50 * 1024 * 1024)).toBeGreaterThan(fiveMb);
   });
 });

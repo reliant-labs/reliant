@@ -14,7 +14,9 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { createStorageFixtureApi } from "../__fixtures__/fixtureStorageApi";
+import { BucketRuntimeKind, StorageAccessPolicy } from "@/gen/controlplane/services/storage_browser/v1/storage_browser_pb";
+
+import { createStorageFixture } from "../__fixtures__/fixtureStorageService";
 import { readStorageAccess, writeStorageAccess } from "../storageAccess-model";
 import { callsOf, PROD, renderBrowser, STAGING } from "./storageTestUtils";
 
@@ -27,10 +29,10 @@ afterEach(() => window.sessionStorage.clear());
 
 describe("an audited environment", () => {
   it("does not browse direct GCS even when its physical name is known", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     api.listBrowsableBuckets = async () => ({
-      policy: "open",
-      buckets: [{ name: "direct", runtime: "gcs", publicRead: false, reachable: false, unreachableReason: "Direct GCS browsing is not enabled" }],
+      policy: StorageAccessPolicy.OPEN,
+      buckets: [{ name: "direct", runtime: BucketRuntimeKind.GCS, publicRead: false, reachable: false, unreachableReason: "Direct GCS browsing is not enabled" }],
     });
     renderBrowser(api, { bucket: "direct", object: "customer.txt" });
     expect(await screen.findByTestId("storage-unreachable")).toHaveTextContent("Direct GCS browsing is not enabled");
@@ -40,7 +42,7 @@ describe("an audited environment", () => {
   });
 
   it("asks for a reason, naming the environment, before reading anything", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     renderBrowser(api, { bucket: "uploads", prefix: "docs/" }, PROD);
     const dialog = await screen.findByRole("dialog");
     expect(dialog).toHaveTextContent("Reading prod's files is audited");
@@ -61,7 +63,7 @@ describe("an audited environment", () => {
 
   it("asks once per tab session, and sends the kept reason on every read, a download included", async () => {
     writeStorageAccess("env-prod", "Kept");
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const view = renderBrowser(api, { bucket: "uploads", prefix: "docs/", object: "docs/readme.txt" }, PROD);
     await screen.findByTestId("storage-preview-text");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -74,7 +76,7 @@ describe("an audited environment", () => {
   });
 
   it("waits, with a way back to the question, when the reader cancels", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     renderBrowser(api, { bucket: "uploads" }, PROD);
     await screen.findByRole("dialog");
     fireEvent.click(screen.getByTestId("storage-access-cancel"));
@@ -87,7 +89,7 @@ describe("an audited environment", () => {
 
   it("asks again when the server says the confirmation is missing, and does not count the refused read as the open", async () => {
     writeStorageAccess("env-prod", "Stale");
-    const api = createStorageFixtureApi({ fail: { method: "listObjects", code: Code.FailedPrecondition, reason: "confirmation_required" } });
+    const api = createStorageFixture({ fail: { method: "listObjects", code: Code.FailedPrecondition, reason: "confirmation_required" } });
     renderBrowser(api, { bucket: "uploads" }, PROD);
     expect(await screen.findByRole("dialog")).toHaveTextContent("Reading prod's files is audited");
     expect(readStorageAccess("env-prod")).toBeNull();
@@ -95,15 +97,15 @@ describe("an audited environment", () => {
   });
 
   it("recovers from a policy that became audited after the bucket list was read", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const realList = api.listObjects;
     let refused = false;
-    api.listObjects = async (req, options) => {
+    api.listObjects = async (req) => {
       if (!refused) {
         refused = true;
         throw new ConnectError("Confirm this environment", Code.FailedPrecondition, new Headers({ "x-forge-error-reason": "confirmation_required" }));
       }
-      return realList(req, options);
+      return realList(req);
     };
     renderBrowser(api, { bucket: "uploads" }, STAGING);
     await screen.findByRole("dialog");
@@ -116,12 +118,12 @@ describe("an audited environment", () => {
 
   it("keeps the files' reason apart from the data browser's", async () => {
     window.sessionStorage.setItem("forge.data.access.env-prod", JSON.stringify({ reason: "Reading rows" }));
-    renderBrowser(createStorageFixtureApi(), { bucket: "uploads" }, PROD);
+    renderBrowser(createStorageFixture(), { bucket: "uploads" }, PROD);
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
   it("never asks in an open environment", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     renderBrowser(api, { bucket: "uploads" }, STAGING);
     await screen.findByTestId("storage-table");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -131,7 +133,7 @@ describe("an audited environment", () => {
 
 describe("refusals", () => {
   it("explains a deny policy, and reads nothing", async () => {
-    const api = createStorageFixtureApi({ policy: { "env-staging": "deny" } });
+    const api = createStorageFixture({ policy: { "env-staging": "deny" } });
     renderBrowser(api, { bucket: "uploads" }, STAGING);
     const denied = await screen.findByTestId("storage-policy-deny");
     expect(denied).toHaveTextContent("staging doesn't allow browsing its files");
@@ -142,12 +144,12 @@ describe("refusals", () => {
   });
 
   it("refuses an unrecorded policy as deny", async () => {
-    renderBrowser(createStorageFixtureApi({ policy: { "env-staging": "unknown" } }), { bucket: "uploads" }, STAGING);
+    renderBrowser(createStorageFixture({ policy: { "env-staging": "unknown" } }), { bucket: "uploads" }, STAGING);
     expect(await screen.findByTestId("storage-policy-deny")).toHaveTextContent("staging has no recorded storage access policy");
   });
 
   it("explains the storage:read grant on PermissionDenied", async () => {
-    renderBrowser(createStorageFixtureApi({ fail: { method: "listBrowsableBuckets", code: Code.PermissionDenied } }), {}, STAGING);
+    renderBrowser(createStorageFixture({ fail: { method: "listBrowsableBuckets", code: Code.PermissionDenied } }), {}, STAGING);
     const error = await screen.findByTestId("storage-buckets-error");
     expect(error).toHaveAttribute("data-kind", "denied");
     expect(error).toHaveTextContent("You can't read staging's files");
@@ -155,14 +157,14 @@ describe("refusals", () => {
   });
 
   it("says an environment with no recorded release has buckets not known yet", async () => {
-    renderBrowser(createStorageFixtureApi({ fail: { method: "listBrowsableBuckets", code: Code.FailedPrecondition, reason: "shape_unknown" } }), {}, STAGING);
+    renderBrowser(createStorageFixture({ fail: { method: "listBrowsableBuckets", code: Code.FailedPrecondition, reason: "shape_unknown" } }), {}, STAGING);
     const error = await screen.findByTestId("storage-buckets-error");
     expect(error).toHaveAttribute("data-kind", "shape-unknown");
     expect(error).toHaveTextContent("reliant forge env deploy staging");
   });
 
   it("says a bucket the server cannot reach is unreachable", async () => {
-    const api = createStorageFixtureApi({ fail: { method: "listObjects", code: Code.FailedPrecondition, reason: "bucket_unreachable" } });
+    const api = createStorageFixture({ fail: { method: "listObjects", code: Code.FailedPrecondition, reason: "bucket_unreachable" } });
     renderBrowser(api, { bucket: "uploads" }, STAGING);
     const error = await screen.findByTestId("storage-list-error");
     expect(error).toHaveAttribute("data-kind", "unreachable");
@@ -170,7 +172,7 @@ describe("refusals", () => {
   });
 
   it("offers to try again after a rate limit, and does not retry on its own", async () => {
-    const api = createStorageFixtureApi({ fail: { method: "listObjects", code: Code.ResourceExhausted, reason: "rate_limited" } });
+    const api = createStorageFixture({ fail: { method: "listObjects", code: Code.ResourceExhausted, reason: "rate_limited" } });
     renderBrowser(api, { bucket: "uploads" }, STAGING);
     const error = await screen.findByTestId("storage-list-error");
     expect(error).toHaveAttribute("data-kind", "busy");
@@ -180,7 +182,7 @@ describe("refusals", () => {
   });
 
   it("says a preview over its cap is too large", async () => {
-    const api = createStorageFixtureApi({ fail: { method: "previewObject", code: Code.FailedPrecondition, reason: "too_large" } });
+    const api = createStorageFixture({ fail: { method: "previewObject", code: Code.FailedPrecondition, reason: "too_large" } });
     renderBrowser(api, { bucket: "uploads", object: "docs/readme.txt" }, STAGING);
     const error = await screen.findByTestId("storage-preview-error");
     expect(error).toHaveAttribute("data-kind", "too-large");
@@ -188,7 +190,7 @@ describe("refusals", () => {
   });
 
   it("shows a refused download beside the button, and mints nothing", async () => {
-    const api = createStorageFixtureApi({ fail: { method: "presignObjectDownload", code: Code.ResourceExhausted, reason: "rate_limited" } });
+    const api = createStorageFixture({ fail: { method: "presignObjectDownload", code: Code.ResourceExhausted, reason: "rate_limited" } });
     const view = renderBrowser(api, { bucket: "uploads", object: "reports/q1.pdf" }, STAGING);
     fireEvent.click(await screen.findByTestId("storage-download"));
     expect(await screen.findByTestId("storage-download-error")).toHaveAttribute("data-kind", "busy");
