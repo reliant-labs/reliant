@@ -473,7 +473,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const speedInsightsRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: SPEED_INSIGHTS_SEGMENT,
-    validateSearch: forgeConsoleSiteInsightsSearchSchema,
+    validateSearch: components.speedInsights ? forgeConsoleServicesSearchSchema : forgeConsoleSiteInsightsSearchSchema,
     beforeLoad: memberOnly(({ location }) => {
       if (components.speedInsights || !components.siteInsights) return
       throw redirect({ href: `${location.pathname.replace(/\/speed-insights\/?$/, `/${SITE_INSIGHTS_SEGMENT}`)}${location.searchStr}`, replace: true })
