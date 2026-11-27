@@ -170,8 +170,8 @@ importers:
         specifier: ^1.9.0
         version: 1.9.1
       '@reliantlabs/forge-web-runtime':
-        specifier: ^0.14.0
-        version: 0.14.0(@opentelemetry/api@1.9.1)
+        specifier: ^0.14.1
+        version: 0.14.1(@opentelemetry/api@1.9.1)
       dotenv:
         specifier: ^17.4.1
         version: 17.4.1
@@ -280,8 +280,8 @@ packages:
     resolution: {integrity: sha512-ODOov0sGMJMf3jPonOkgGqPknTsu+DdQ7kD++gz8aI+aFMOMHFbWAA2taqXXVTdP+OTOQR/znGvSpmkeI0WTYQ==}
     engines: {node: '>=14.18.0'}
 
-  '@reliantlabs/forge-web-runtime@0.14.0':
-    resolution: {integrity: sha512-MXruOUJjTDBYPFQ+kNww4KHSBVHu7b5tYMWbivIhrT3wFCtgT4MaBqK3CFtAXcgJxYe++ScHq/pfcYykptu7bA==}
+  '@reliantlabs/forge-web-runtime@0.14.1':
+    resolution: {integrity: sha512-DbOodiq+dHlTXJ2YACm57Ufz4ZXXM4zV+WWltZW/9GEwjtSQKlyZOQibhNYNtzf8Nz/yX5LuDn14MdiKVgRbxA==}
     engines: {node: '>=22'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.5.0
@@ -1410,7 +1410,7 @@ snapshots:
       tslib: 2.8.1
       webcrypto-core: 1.9.2
 
-  '@reliantlabs/forge-web-runtime@0.14.0(@opentelemetry/api@1.9.1)':
+  '@reliantlabs/forge-web-runtime@0.14.1(@opentelemetry/api@1.9.1)':
     dependencies:
       '@opentelemetry/api': 1.9.1
 
