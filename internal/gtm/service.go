@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/reliant-labs/reliant/internal/featuregate"
@@ -183,9 +184,33 @@ func checkRecipients(to []string) error {
 		return invalid("email_to", fmt.Sprintf("at most %d recipients", MaxEmailRecipients))
 	}
 	for _, addr := range to {
+		// net/mail accepts invisible and bidi format characters (U+202E,
+		// U+200B, U+2066, U+FEFF) that make an address read as another.
+		// Refused, and with them anything not ASCII: no IDN in the MVP.
+		for _, r := range addr {
+			if r > unicode.MaxASCII || unicode.Is(unicode.Cf, r) {
+				return invalid("email_to", fmt.Sprintf("%q is not a plain ASCII email address", addr))
+			}
+		}
 		a, err := mail.ParseAddress(addr)
 		if err != nil || a.Address != addr {
 			return invalid("email_to", fmt.Sprintf("%q is not a bare email address", addr))
+		}
+	}
+	return nil
+}
+
+// checkSubject is an email subject's rule: at most maxEmailSubjectLen
+// characters, with no format character (unicode.Cf: bidi overrides and
+// invisible ones, which make a subject read as other than what is sent) and
+// no control character (a line break would end the header).
+func checkSubject(subject string) error {
+	if err := checkLen("email_subject", subject, 0, maxEmailSubjectLen); err != nil {
+		return err
+	}
+	for _, r := range subject {
+		if unicode.Is(unicode.Cf, r) || unicode.IsControl(r) {
+			return invalid("email_subject", fmt.Sprintf("no invisible, format or control characters (%U)", r))
 		}
 	}
 	return nil

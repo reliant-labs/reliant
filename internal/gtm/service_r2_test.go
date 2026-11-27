@@ -34,6 +34,10 @@ type fakeBlobs struct {
 	gets       []GetOptions
 	failPut    error
 	failDelete error
+	// onOpen and onPut, when set, run as Open and Put start: a hook for a
+	// race.
+	onOpen func()
+	onPut  func(key string)
 	// now is the store's clock (t0 when nil); expiresIn, when set, is the
 	// presigned PUT's lifetime in place of opts.TTL.
 	now       func() time.Time
@@ -60,6 +64,9 @@ func (b *fakeBlobs) PresignPut(_ context.Context, key string, opts PutOptions) (
 }
 
 func (b *fakeBlobs) Open(_ context.Context, key string) (io.ReadCloser, error) {
+	if b.onOpen != nil {
+		b.onOpen()
+	}
 	data, ok := b.objects[key]
 	if !ok {
 		return nil, ErrObjectNotFound
@@ -68,6 +75,9 @@ func (b *fakeBlobs) Open(_ context.Context, key string) (io.ReadCloser, error) {
 }
 
 func (b *fakeBlobs) Put(_ context.Context, key string, r io.Reader, opts PutOptions) error {
+	if b.onPut != nil {
+		b.onPut(key)
+	}
 	if b.failPut != nil {
 		return b.failPut
 	}
@@ -90,6 +100,14 @@ func (b *fakeBlobs) Delete(_ context.Context, key string) error {
 	b.deletes = append(b.deletes, key)
 	delete(b.objects, key)
 	return nil
+}
+
+func (b *fakeBlobs) Stat(_ context.Context, key string) (int64, error) {
+	data, ok := b.objects[key]
+	if !ok {
+		return 0, ErrObjectNotFound
+	}
+	return int64(len(data)), nil
 }
 
 func (b *fakeBlobs) PresignGet(_ context.Context, key string, opts GetOptions) (PresignedRequest, error) {
@@ -185,6 +203,22 @@ func TestR2MethodsAreNotFoundWhenTheGateRefuses(t *testing.T) {
 			_, err := s.UseLibraryStrategy(ctx(), a, UseLibraryStrategyInput{LibraryKey: "k"})
 			return err
 		},
+		"ListLibraryImports": func(s Service, a Actor) error {
+			_, err := s.ListLibraryImports(ctx(), a, ListLibraryImportsInput{})
+			return err
+		},
+		"ListLibraryPruneRequests": func(s Service, a Actor) error {
+			_, err := s.ListLibraryPruneRequests(ctx(), a, ListLibraryPruneRequestsInput{})
+			return err
+		},
+		"ConfirmLibraryPrune": func(s Service, a Actor) error {
+			_, err := s.ConfirmLibraryPrune(ctx(), a, ConfirmLibraryPruneInput{RequestID: "x"})
+			return err
+		},
+		"CancelLibraryPrune": func(s Service, a Actor) error {
+			_, err := s.CancelLibraryPrune(ctx(), a, CancelLibraryPruneInput{RequestID: "x"})
+			return err
+		},
 	}
 	gateErr := errors.New("outage")
 	for rname, g := range map[string]Gate{
@@ -198,7 +232,7 @@ func TestR2MethodsAreNotFoundWhenTheGateRefuses(t *testing.T) {
 				err := call(svc, person)
 				require.ErrorIs(t, err, ErrNotFound)
 				assert.Equal(t, "not found", err.Error())
-				for _, m := range []string{"InTx", "CountChannels", "ListChannels", "GetStrategy", "ListStrategies", "GetAsset", "ListAssets", "ListLibrary", "GetLibraryEntry"} {
+				for _, m := range []string{"InTx", "CountChannels", "ListChannels", "GetStrategy", "ListStrategies", "GetAsset", "ListAssets", "ListLibrary", "GetLibraryEntry", "ListLibraryImports", "ListPruneRequests", "GetPruneRequest"} {
 					assert.Zero(t, st.CallCount(m), m)
 				}
 				assert.Empty(t, blobs.puts)
@@ -1073,7 +1107,7 @@ func TestAssets(t *testing.T) {
 		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: a.ID})
 		require.NoError(t, err, "a READY asset never expires")
 	})
-	t.Run("delete is a person's, and removes the objects then the row", func(t *testing.T) {
+	t.Run("delete is a person's, and removes the row then the objects", func(t *testing.T) {
 		f := newFixture(t)
 		it := f.itemAt(t, FormatShortPost, ItemDraft)
 		up := upload(t, f, it.ID, pngBytes, "image/png")
@@ -1084,25 +1118,71 @@ func TestAssets(t *testing.T) {
 		require.ErrorIs(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: "nope"}), ErrNotFound)
 		require.ErrorIs(t, f.svc.DeleteAsset(ctx(), Actor{UserID: "u-b", OrgID: orgB, Kind: ActorPerson}, DeleteAssetInput{AssetID: a.ID}), ErrNotFound, "another org's")
 
-		f.blobs.failDelete = errors.New("bucket 10.0.0.1 down")
-		err = f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: a.ID})
-		require.ErrorIs(t, err, ErrAssetStorageFailed)
-		assert.NotContains(t, err.Error(), "10.0.0.1")
-		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: a.ID})
-		require.NoError(t, err, "a storage failure keeps the row, to retry")
-
-		f.blobs.failDelete = nil
 		require.NoError(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: a.ID}))
 		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: a.ID})
 		require.ErrorIs(t, err, ErrNotFound)
 		assert.Subset(t, f.blobs.deletes, []string{stagingKey(a.ObjectKey), a.ObjectKey})
 		assert.Empty(t, f.blobs.objects)
 
+		// The row goes first: a storage failure after it orphans the bytes
+		// (logged), and the asset is gone all the same.
+		up = upload(t, f, it.ID, pngBytes, "image/png")
+		b, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
+		require.NoError(t, err)
+		f.blobs.failDelete = errors.New("bucket 10.0.0.1 down")
+		require.NoError(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: b.ID}))
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: b.ID})
+		require.ErrorIs(t, err, ErrNotFound)
+		f.blobs.failDelete = nil
+
 		pending, err := f.svc.CreateAssetUpload(ctx(), person, CreateAssetUploadInput{ItemID: it.ID, Filename: "f", ContentType: "image/png", SizeBytes: 10})
 		require.NoError(t, err)
 		require.NoError(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: pending.Asset.ID}), "a PENDING one too")
 		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: pending.Asset.ID})
 		require.ErrorIs(t, err, ErrNotFound)
+	})
+	t.Run("a delete racing a confirm leaves no bytes", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		up := upload(t, f, it.ID, pngBytes, "image/png")
+		// The person deletes the asset after confirm marked it READY and
+		// before its write lands: the delete's own object deletes run
+		// before the object exists.
+		f.blobs.onPut = func(key string) {
+			f.blobs.onPut = nil
+			require.Equal(t, up.Asset.ObjectKey, key)
+			require.NoError(t, f.svc.DeleteAsset(ctx(), person, DeleteAssetInput{AssetID: up.Asset.ID}))
+		}
+		_, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
+		require.ErrorIs(t, err, ErrNotFound)
+		assert.Empty(t, f.blobs.objects, "confirm saw the row gone and deleted what it wrote")
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: up.Asset.ID})
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+	t.Run("a confirm whose read outlasts the window is expired, not READY", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		up := upload(t, f, it.ID, pngBytes, "image/png")
+		f.advance(AssetUploadTTL + assetPendingGrace - time.Second)
+		// Live when confirm starts; the read takes the last second and more.
+		f.blobs.onOpen = func() { f.advance(2 * time.Second) }
+		_, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
+		require.ErrorIs(t, err, ErrAssetUploadExpired)
+		_, err = f.svc.GetAsset(ctx(), person, GetAssetInput{ID: up.Asset.ID})
+		require.ErrorIs(t, err, ErrNotFound)
+		assert.Empty(t, f.blobs.objects)
+		assert.Empty(t, f.blobs.writes, "nothing reached the asset's own key")
+	})
+	t.Run("a READY asset whose object is gone is not served", func(t *testing.T) {
+		f := newFixture(t)
+		it := f.itemAt(t, FormatShortPost, ItemDraft)
+		up := upload(t, f, it.ID, pngBytes, "image/png")
+		a, err := f.svc.ConfirmAssetUpload(ctx(), person, ConfirmAssetUploadInput{AssetID: up.Asset.ID})
+		require.NoError(t, err)
+		delete(f.blobs.objects, a.ObjectKey)
+		_, err = f.svc.GetAssetDownload(ctx(), person, GetAssetDownloadInput{AssetID: a.ID})
+		require.ErrorIs(t, err, ErrAssetNotReady)
+		assert.Empty(t, f.blobs.gets, "no URL is signed")
 	})
 	t.Run("attach a chat attachment of the actor's own", func(t *testing.T) {
 		f := newFixture(t)

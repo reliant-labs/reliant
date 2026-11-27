@@ -302,3 +302,115 @@ func (p pgStore) PruneLibrary(ctx context.Context, orgID string, keep []string) 
 	}
 	return n, nil
 }
+
+func (p pgStore) TouchLibraryEntries(ctx context.Context, orgID string, keys []string, sourceRevision, importedBy string, at time.Time) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	_, err := p.db.Bun().NewUpdate().Model((*store.GtmStrategyLibrary)(nil)).
+		Set("? = ?", bun.Ident(store.GtmStrategyLibraryFieldSourceRevision), sourceRevision).
+		Set("? = ?", bun.Ident(store.GtmStrategyLibraryFieldImportedBy), importedBy).
+		Set("? = ?", bun.Ident(store.GtmStrategyLibraryFieldImportedAt), at).
+		Where("? = ?", bun.Ident(store.GtmStrategyLibraryFieldOrgID), orgID).
+		Where("? IN (?)", bun.Ident(store.GtmStrategyLibraryFieldKey), bun.In(keys)).
+		Exec(ctx)
+	return classify(err, "touch gtm strategy library entries")
+}
+
+func (p pgStore) LibraryKeysNotIn(ctx context.Context, orgID string, keep []string) ([]string, error) {
+	var keys []string
+	q := p.db.Bun().NewSelect().Model((*store.GtmStrategyLibrary)(nil)).
+		Column(store.GtmStrategyLibraryFieldKey).
+		Where("? = ?", bun.Ident(store.GtmStrategyLibraryFieldOrgID), orgID)
+	if len(keep) > 0 {
+		q = q.Where("? NOT IN (?)", bun.Ident(store.GtmStrategyLibraryFieldKey), bun.In(keep))
+	}
+	if err := q.OrderExpr("? ASC", bun.Ident(store.GtmStrategyLibraryFieldKey)).Scan(ctx, &keys); err != nil {
+		return nil, fmt.Errorf("list gtm strategy library keys: %w", err)
+	}
+	return keys, nil
+}
+
+func (p pgStore) PruneLibraryKeys(ctx context.Context, orgID string, keys []string, importedAtOrBefore time.Time) (int64, error) {
+	if len(keys) == 0 {
+		return 0, nil
+	}
+	res, err := p.db.Bun().NewDelete().Model((*store.GtmStrategyLibrary)(nil)).
+		Where("? = ?", bun.Ident(store.GtmStrategyLibraryFieldOrgID), orgID).
+		Where("? IN (?)", bun.Ident(store.GtmStrategyLibraryFieldKey), bun.In(keys)).
+		Where("? <= ?", bun.Ident(store.GtmStrategyLibraryFieldImportedAt), importedAtOrBefore).
+		Exec(ctx)
+	if err != nil {
+		return 0, classify(err, "prune gtm strategy library keys")
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("prune gtm strategy library keys: %w", err)
+	}
+	return n, nil
+}
+
+// --- library audit and prune requests ---
+
+func (p pgStore) CreateLibraryImport(ctx context.Context, row *store.GtmLibraryImport) error {
+	return classify(store.CreateGtmLibraryImport(ctx, p.db, row), "create gtm library import")
+}
+
+func (p pgStore) ListLibraryImports(ctx context.Context, f LibraryImportFilter) ([]*store.GtmLibraryImport, error) {
+	rows, err := store.ListGtmLibraryImport(ctx, p.db, orm.WhereEq(store.GtmLibraryImportFieldOrgID, f.OrgID), newestFirst, pageOpts(f.Limit, f.Offset))
+	if err != nil {
+		return nil, fmt.Errorf("list gtm library imports: %w", err)
+	}
+	return rows, nil
+}
+
+func (p pgStore) CreatePruneRequest(ctx context.Context, row *store.GtmLibraryPruneRequest) error {
+	return classify(store.CreateGtmLibraryPruneRequest(ctx, p.db, row), "create gtm library prune request")
+}
+
+func (p pgStore) GetPruneRequest(ctx context.Context, orgID, id string) (*store.GtmLibraryPruneRequest, error) {
+	rows, err := store.ListGtmLibraryPruneRequest(ctx, p.db, byOrgID(orgID, id)...)
+	return one(rows, err, "gtm library prune request")
+}
+
+func (p pgStore) ListPruneRequests(ctx context.Context, f PruneRequestFilter) ([]*store.GtmLibraryPruneRequest, error) {
+	opts := []orm.QueryOption{orm.WhereEq(store.GtmLibraryPruneRequestFieldOrgID, f.OrgID)}
+	status, created := bun.Ident(store.GtmLibraryPruneRequestFieldStatus), bun.Ident(store.GtmLibraryPruneRequestFieldCreatedAt)
+	pending, cutoff := string(PruneRequestPending), f.ExpiredAtOrBefore
+	switch f.Status {
+	case "":
+	case PruneRequestPending:
+		opts = append(opts, func(q *bun.SelectQuery) { q.Where("? = ? AND ? > ?", status, pending, created, cutoff) })
+	case PruneRequestExpired:
+		expired := string(PruneRequestExpired)
+		opts = append(opts, func(q *bun.SelectQuery) {
+			q.Where("(? = ? OR (? = ? AND ? <= ?))", status, expired, status, pending, created, cutoff)
+		})
+	default:
+		opts = append(opts, orm.WhereEq(store.GtmLibraryPruneRequestFieldStatus, string(f.Status)))
+	}
+	opts = append(opts, newestFirst, pageOpts(f.Limit, f.Offset))
+	rows, err := store.ListGtmLibraryPruneRequest(ctx, p.db, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("list gtm library prune requests: %w", err)
+	}
+	return rows, nil
+}
+
+func (p pgStore) DecidePruneRequest(ctx context.Context, orgID, id string, status PruneRequestStatus, decidedBy string, at time.Time) error {
+	var by *string
+	var when *time.Time
+	if status != PruneRequestExpired {
+		by, when = &decidedBy, &at
+	}
+	res, err := p.db.Exec(ctx, `UPDATE gtm_library_prune_requests SET status = $1, decided_by = $2, decided_at = $3
+		WHERE org_id = $4 AND id = $5 AND status = $6`,
+		string(status), by, when, orgID, id, string(PruneRequestPending))
+	if err := execUpdated(res, err, "decide gtm library prune request"); err != nil {
+		if err == ErrRevisionConflict {
+			return ErrPruneRequestNotPending
+		}
+		return err
+	}
+	return nil
+}

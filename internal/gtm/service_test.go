@@ -718,6 +718,37 @@ func TestItemValidation(t *testing.T) {
 	_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatEmail, Title: "  "})
 	require.ErrorIs(t, err, ErrInvalidArgument)
 
+	// Invisible and bidi format characters make an address or a subject read
+	// as other than what is sent; net/mail alone accepts them.
+	for name, addr := range map[string]string{
+		"RLO":       "evil\u202e@example.com",
+		"ZWSP":      "a\u200b@example.com",
+		"LRI":       "\u2066a@example.com",
+		"BOM":       "\ufeffa@example.com",
+		"soft hyph": "pay\u00adpal@example.com",
+		"IDN":       "bob@exämple.com",
+		"non-ASCII": "bøb@example.com",
+	} {
+		_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatEmail, Title: "t", EmailTo: []string{addr}})
+		require.ErrorIs(t, err, ErrInvalidArgument, name)
+	}
+	for name, subject := range map[string]string{
+		"RLO":  "Invoice \u202efdp.exe",
+		"ZWSP": "Hel\u200blo",
+		"LRI":  "\u2066News\u2069",
+		"BOM":  "\ufeffNews",
+		"CRLF": "News\r\nBcc: x@example.com",
+	} {
+		_, err = f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatEmail, Title: "t", EmailTo: []string{"a@example.com"}, EmailSubject: subject})
+		require.ErrorIs(t, err, ErrInvalidArgument, name)
+	}
+	ok, err := f.svc.CreateItem(ctx(), agent, CreateItemInput{Format: FormatEmail, Title: "t", EmailTo: []string{"a.b+c@example.com"}, EmailSubject: "Café ☕ news, 日本語"})
+	require.NoError(t, err, "a non-ASCII subject is fine; only format and control characters are refused")
+	_, err = f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: ok.ID, ExpectedRevision: ok.Revision, EmailSubject: ptr("x\u202ey")})
+	require.ErrorIs(t, err, ErrInvalidArgument, "on update too")
+	_, err = f.svc.UpdateItem(ctx(), agent, UpdateItemInput{ID: ok.ID, ExpectedRevision: ok.Revision, EmailTo: &[]string{"a\u200b@example.com"}})
+	require.ErrorIs(t, err, ErrInvalidArgument, "on update too")
+
 	it := f.itemAt(t, FormatLongPost, ItemApproved)
 	_, err = f.svc.UpdateItem(ctx(), person, UpdateItemInput{ID: it.ID, ExpectedRevision: it.Revision, Status: ptr(ItemScheduled)})
 	require.ErrorIs(t, err, ErrInvalidArgument, "a scheduled item needs a date")
