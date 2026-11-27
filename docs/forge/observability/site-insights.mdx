@@ -1,16 +1,18 @@
 ---
-title: "Speed insights: web vitals for real visitors"
-sidebarTitle: "Speed insights"
-description: "Speed insights shows how fast each page of your frontend loads and responds for real visitors: LCP, INP, CLS and TTFB at p75, per page, from the browser telemetry forge already sends."
+title: "Site insights: how each page of your site does"
+sidebarTitle: "Site insights"
+description: "Site insights shows how fast each page of your frontend loads and responds for real visitors: LCP, INP, CLS and TTFB at p75, per page and per site, from the browser telemetry forge already sends. It was called Speed insights."
 ---
 
-{/* verified: 2026-11-20 · sources: frontends/web Forge/Analytics/SpeedInsightsPage.tsx (the one shell, on main 2026-11-21), forge web-runtime/src/telemetry.ts, docs/hosting/observability/{signals,where-it-goes,dashboards-and-alerts}.mdx */}
+{/* verified: 2026-11-26 · sources: frontends/web Forge/Analytics/SiteInsightsPage.tsx, SpeedInsightsPage.tsx and siteInsightsParts.tsx, forge web-runtime/src/telemetry.ts, docs/hosting/observability/{signals,where-it-goes,dashboards-and-alerts}.mdx */}
 
-Speed insights answers "is my site fast for the people using it?" It reports the web vitals your visitors' browsers measured, per page, so you can see which route is slow rather than only that the site feels slow. These are real-user measurements, not a lab test, so they include slow phones and bad networks.
+Site insights answers "is my site fast for the people using it?" It reports the web vitals your visitors' browsers measured, per page, so you can see which route is slow rather than only that the site feels slow. These are real-user measurements, not a lab test, so they include slow phones and bad networks.
+
+Site insights was called Speed insights. Its old address, `/speed-insights`, still opens it.
 
 ## Where to find it
 
-In the project sidebar, open **Observability** and then **Performance & issues**, where **Speed insights** sits beside Errors, Alerts, Traces and Sessions. The time control defaults to the last 7 days and offers 15 minutes, 1 hour, 6 hours, 24 hours, 7 days and 30 days. The environment control in the top bar scopes it to one environment or all of them.
+In the project sidebar, open **Observability** and then **Performance & issues**, where **Site insights** sits beside Errors, Alerts, Traces and Sessions. The page has three tabs: **Speed**, described here, then **SEO** and **Accessibility**, which say what they will show until those checks are available. The time control defaults to the last 7 days and offers 15 minutes, 1 hour, 6 hours, 24 hours, 7 days and 30 days. The environment control in the top bar scopes it to one environment or all of them. When more than one of your frontends sends measurements, a **site** control picks one of them, so a marketing site and an app frontend are read apart; it lists each frontend by its telemetry service name (`<project>-<frontend>`), busiest first.
 
 ## What you see
 

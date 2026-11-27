@@ -12,6 +12,8 @@
  *                       tells that side of the story)
  *   handlers/billing.ts BillingService and ObservabilityBillingService
  *   handlers/account.ts UserService (who is signed in)
+ *   handlers/github.ts  Alex's GitHub connection and the org's GitHub App
+ *                       installations
  *
  * A separate entry on purpose: ./index.ts (the console's pack, which the
  * forge tour's sample serves in the signed-in app) never imports this file,
@@ -26,6 +28,7 @@ import type { Transport } from "@connectrpc/connect";
 import type { MockHandlers } from "@reliantlabs/forge-web-runtime/mock-transport";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
+import { GitCredentialService } from "@/gen/controlplane/services/git_credential/v1/git_credential_pb";
 import { UserService } from "@/gen/controlplane/services/user/v1/user_pb";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 import { MCPService } from "@/gen/reliant/v1/mcp_pb";
@@ -37,6 +40,7 @@ import { WorktreeService } from "@/gen/reliant/v1/worktree_pb";
 import { createFixtureTransport, defineFixturePack, type FixturePack } from "../transport";
 import { accountScenarioHandlers } from "./handlers/account";
 import { billingScenarioHandlers } from "./handlers/billing";
+import { githubScenarioHandlers } from "./handlers/github";
 import { reliantScenarioHandlers } from "./handlers/reliant";
 import { streamingImpl } from "./handlers/reliant/streaming";
 import { createShopTransport, SHOP_SERVE, shopPack, type ShopPackOptions, type ShopTransportOptions } from "./index";
@@ -58,6 +62,10 @@ import { createShopTransport, SHOP_SERVE, shopPack, type ShopPackOptions, type S
  *   SettingsService/GetConfigHealth
  *                                  replaces a stale legacy Reliant LLM key as
  *                                  it reads (drivers.HealReliantKey)
+ *   GitCredentialService/GetGitCredential
+ *                                  renews an expiring GitHub App user token
+ *                                  and stores it as it reads
+ *                                  (gitcredential's svc.Get, s.current)
  *   UserService/GetCurrentUser,    write on read, per cp#3513's audit
  *   BillingService/GetCurrentUserWalletOverview,
  *   BillingService/GetCurrentUserReliantOverview
@@ -101,6 +109,7 @@ export const APP_LAYER_ANSWERS = [
   "reliant.v1.ForgeService/GetEnvStatus",
   "reliant.v1.ForgeService/GetEnvShape",
   "reliant.v1.MCPService/ListServers",
+  "controlplane.v1.GitCredentialService/GetGitCredential",
   "controlplane.v1.UserService/GetCurrentUser",
   "controlplane.v1.BillingService/GetCurrentUserWalletOverview",
   "controlplane.v1.BillingService/GetCurrentUserReliantOverview",
@@ -109,11 +118,11 @@ export const APP_LAYER_ANSWERS = [
 ] as const;
 
 /** The services APP_LAYER_ANSWERS names, so the transport checks each name against the proto. */
-const ANSWERED_SERVICES = [ProjectService, WorktreeService, SettingsService, ForgeService, MCPService, UserService, BillingService];
+const ANSWERED_SERVICES = [ProjectService, WorktreeService, SettingsService, ForgeService, MCPService, GitCredentialService, UserService, BillingService];
 
 /** The app layer's own answers, "pkg.Service/Method" keyed. */
 export function appLayerScenarioHandlers(): MockHandlers {
-  return { ...reliantScenarioHandlers(), ...billingScenarioHandlers(), ...accountScenarioHandlers() };
+  return { ...reliantScenarioHandlers(), ...billingScenarioHandlers(), ...accountScenarioHandlers(), ...githubScenarioHandlers() };
 }
 
 /**

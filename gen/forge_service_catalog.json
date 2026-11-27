@@ -16420,6 +16420,16 @@
             {
               "name": "has_children",
               "kind": "bool"
+            },
+            {
+              "name": "symlink_target",
+              "kind": "string",
+              "optional": true
+            },
+            {
+              "name": "symlink_status",
+              "kind": "enum",
+              "type_name": "reliant.v1.FileNodeSymlinkStatus"
             }
           ],
           "reliant.v1.FilePreviewInfo": [
@@ -16896,6 +16906,13 @@
           "reliant.v1.SearchResult": "reliant/v1/filesystem.proto"
         },
         "Enums": {
+          "reliant.v1.FileNodeSymlinkStatus": [
+            "FILE_NODE_SYMLINK_STATUS_UNSPECIFIED",
+            "FILE_NODE_SYMLINK_STATUS_RESOLVED",
+            "FILE_NODE_SYMLINK_STATUS_BROKEN",
+            "FILE_NODE_SYMLINK_STATUS_LOOP",
+            "FILE_NODE_SYMLINK_STATUS_DENIED"
+          ],
           "reliant.v1.FileNodeType": [
             "FILE_NODE_TYPE_UNSPECIFIED",
             "FILE_NODE_TYPE_FILE",
@@ -16912,6 +16929,13 @@
           ]
         },
         "EnumNumbers": {
+          "reliant.v1.FileNodeSymlinkStatus": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
           "reliant.v1.FileNodeType": [
             0,
             1,
@@ -16928,6 +16952,10 @@
           ]
         },
         "EnumGoRefs": {
+          "reliant.v1.FileNodeSymlinkStatus": {
+            "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
+            "GoName": "FileNodeSymlinkStatus"
+          },
           "reliant.v1.FileNodeType": {
             "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
             "GoName": "FileNodeType"

@@ -38,6 +38,7 @@ import { DetachOldMachineOffer, type OldMachine } from "../Projects/DetachOldMac
 import { NestedRepoStatus } from "../Projects/NestedRepoStatus";
 import { StaysOnMachineList } from "../Projects/StaysOnMachineList";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ProjectCheckoutState } from "@/gen/reliant/v1/filesystem_pb";
 import {
   choiceLeavesWorkspace,
   resolveChatMachine,
@@ -52,7 +53,8 @@ import { NewChatProjectChip } from "./NewChatProjectChip";
 import { ChatProjectChips } from "./ChatProjectChips";
 import { newChatAttachedProjectIds, useDraftChatProjects } from "@/hooks/useChatProjects";
 import { setNewChatAttachedProjects } from "../../store/newChatProjectsStore";
-import { projectCheckoutMissing } from "@/lib/daemon-errors";
+import { isProjectNotOnChosenMachine, projectCheckoutMissing } from "@/lib/daemon-errors";
+import { ProjectPlacementNotice } from "./ProjectPlacementNotice";
 import { AttachProjectFolderDialog } from "../Projects/AttachProjectFolderDialog";
 import { useCurrentMachineStore } from "../../store/currentMachineStore";
 import { MachinePicker } from "./MachinePicker";
@@ -71,7 +73,6 @@ import {
   Search,
   FolderPlus,
   CloudOff,
-  Loader2,
 } from "lucide-react";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
@@ -300,6 +301,7 @@ export function NewChatView({
           daemonId: runsOnDaemonId,
           projectName: currentProject.name,
           machineName: machineName(runsOnDaemonId),
+          canClone: canSetUpElsewhere(currentProject),
         })
       : null;
   const placementSettingUp = Boolean(runsOnDaemonId) && placement.stateOn(runsOnDaemonId ?? "") === "setting_up";
@@ -361,6 +363,25 @@ export function NewChatView({
     ? installRows.find((row) => row.project_id === currentProject?.id && row.daemon_id === runsOnDaemonId)
     : undefined;
   const moveOffer = movedOnto && currentProject && movedOnto.projectId === currentProject.id ? movedOnto : null;
+  // "Add to <machine>" (ProjectPlacementNotice, and the failed send's toast):
+  // the set-up above, then the machine pinned as the user's pick, since the
+  // default would otherwise move to a machine that already has the project.
+  // The composer opens on its own once the clone lands (the rows poll).
+  const addProjectTo = setUpProjectOn
+    ? async (daemonId: string) => {
+        try {
+          await setUpProjectOn(daemonId);
+        } catch (err) {
+          throw new Error(describeCloneError(err, machineName(daemonId)));
+        }
+        handleMachineChange(daemonId);
+      }
+    : undefined;
+  // A machine of the user's that has the project, to run the chat there instead.
+  const readyElsewhereId =
+    runsOnDaemonId && placementBlock
+      ? daemons.find((d) => d.daemonId !== runsOnDaemonId && placement.stateOn(d.daemonId) === "ready")?.daemonId
+      : undefined;
 
   const daemonWait = useDaemonWait({
     waiting: !machineReady && !daemonLoading,
@@ -519,13 +540,25 @@ export function NewChatView({
       console.error("Failed to create chat:", error);
       // An attached project not on the chat's machine: say which, and where.
       const missing = projectCheckoutMissing(error);
+      // The chat's own project not on its machine: the record the composer
+      // checks was stale. Re-read it (the placement note then holds the
+      // composer, with its action) and offer the same add from the toast.
+      const primaryMissing =
+        Boolean(currentProject) &&
+        (missing ? missing.projectId === currentProject?.id : isProjectNotOnChosenMachine(error));
+      const missingOn = (primaryMissing && (missing?.daemonId || runsOnDaemonId)) || undefined;
+      // A clone already landing there needs no second one.
+      const canAddOn = missingOn && missing?.state !== ProjectCheckoutState.CLONING ? missingOn : undefined;
+      if (primaryMissing) void installs.refetch();
       const missingAttached =
         missing && missing.projectId !== currentProject?.id
           ? getCachedProjects().find((p) => p.id === missing.projectId)
           : undefined;
       const errorMessage = missingAttached
         ? `${missingAttached.name} isn't set up on ${machineName(missing?.daemonId ?? "")}. Remove it, or add it again to set it up there.`
-        : error instanceof Error
+        : primaryMissing && currentProject
+          ? `${currentProject.name} isn't on ${missingOn ? machineName(missingOn) : "that machine"}.`
+          : error instanceof Error
           ? error.message
           : "An unexpected error occurred";
       // Hand the text back: the composer cleared it on send, and a chat that
@@ -539,6 +572,20 @@ export function NewChatView({
         description: attachmentIds?.length
           ? `${errorMessage} Your message is back in the box; attach your files again before sending.`
           : `${errorMessage} Your message is back in the box.`,
+        ...(canAddOn && addProjectTo
+          ? {
+              action: {
+                label: `Add to ${machineName(canAddOn)}`,
+                onClick: () => {
+                  addProjectTo(canAddOn).catch((err: unknown) => {
+                    toast.error(`Couldn't add ${currentProject?.name ?? "the project"} to ${machineName(canAddOn)}`, {
+                      description: err instanceof Error ? err.message : undefined,
+                    });
+                  });
+                },
+              },
+            }
+          : {}),
       });
       throw error;
     } finally {
@@ -877,20 +924,24 @@ export function NewChatView({
               )}
 
               {/* Why the composer is holding: the project is not on the
-                  chosen machine yet. The picker has the action. */}
-              {placementBlock && (
-                <p
-                  role="status"
-                  data-testid="new-chat-placement-note"
-                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  chosen machine yet. Its action adds it there. */}
+              {placementBlock && currentProject && runsOnDaemonId && (
+                <ProjectPlacementNotice
+                  projectName={currentProject.name}
+                  machineName={machineName(runsOnDaemonId)}
+                  state={placementSettingUp ? "setting_up" : placement.stateOn(runsOnDaemonId) === "failed" ? "failed" : "absent"}
+                  reason={placementBlock}
+                  onAdd={addProjectTo ? () => addProjectTo(runsOnDaemonId) : undefined}
+                  switchTo={
+                    readyElsewhereId
+                      ? { name: machineName(readyElsewhereId), onSwitch: () => handleMachineChange(readyElsewhereId) }
+                      : undefined
+                  }
+                  onUseFolder={() => setAttachDaemonId(runsOnDaemonId)}
                 >
-                  {placementSettingUp && (
-                    <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                  )}
-                  {placementBlock}
-                </p>
+                  <NestedRepoStatus repos={runsOnInstall?.nested_repos} />
+                </ProjectPlacementNotice>
               )}
-              {placementBlock && <NestedRepoStatus repos={runsOnInstall?.nested_repos} />}
 
               {/* The set-up started here landed: offer to detach the machine
                   it came from. An offer only, never done for the user. */}
