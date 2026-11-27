@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockAttachmentReader
-// forge:hash=94cef9f01ca02817a4e0963b89875491588396cf54f284502a2394ca7076078d
+// forge:hash=d2b08644b14d229539155c2b7636a5399ac2447735cbb4ab7df13cad67971fef
 
 // MockAttachmentReader is a test mock for the AttachmentReader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAttachmentReader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAttachmentReader.<Method>Func not set" error.
 type MockAttachmentReader struct {
 	contractkit.Recorder
 	GetAttachmentFunc func(context.Context, string) (*db.Attachment, error)
@@ -38,18 +39,39 @@ func (m *MockAttachmentReader) GetAttachment(ctx context.Context, id string) (*d
 	return nil, contractkit.MockNotSet("MockAttachmentReader", "GetAttachment")
 }
 
+// MockAttachmentReaderGetAttachmentCall is one recorded call of MockAttachmentReader.GetAttachment, one
+// field per parameter.
+type MockAttachmentReaderGetAttachmentCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetAttachmentCalls returns every recorded GetAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAttachment").
+func (m *MockAttachmentReader) GetAttachmentCalls() []MockAttachmentReaderGetAttachmentCall {
+	var out []MockAttachmentReaderGetAttachmentCall
+	for _, c := range m.Recorder.Calls("GetAttachment") {
+		var r MockAttachmentReaderGetAttachmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ AttachmentReader = (*MockAttachmentReader)(nil)
 
 // forge:section MockStore
-// forge:hash=de997b85a1801ab27d110bb8394424ae5ea68d6fb46b622d47898cbbf286073a
+// forge:hash=b82f9ab1baaf5e24cbbcd2d8dac01c76877477d888fa443c8f4c46e6d9cff1f3
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	ListContentBlocksFunc            func(context.Context, string) ([]*db.MessageContentBlock, error)
@@ -92,6 +114,86 @@ func (m *MockStore) GetAttachment(ctx context.Context, id string) (*db.Attachmen
 		return m.GetAttachmentFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "GetAttachment")
+}
+
+// MockStoreListContentBlocksCall is one recorded call of MockStore.ListContentBlocks, one
+// field per parameter.
+type MockStoreListContentBlocksCall struct {
+	Ctx       context.Context
+	MessageID string
+}
+
+// ListContentBlocksCalls returns every recorded ListContentBlocks call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListContentBlocks").
+func (m *MockStore) ListContentBlocksCalls() []MockStoreListContentBlocksCall {
+	var out []MockStoreListContentBlocksCall
+	for _, c := range m.Recorder.Calls("ListContentBlocks") {
+		var r MockStoreListContentBlocksCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.MessageID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListContentBlocksForMessagesCall is one recorded call of MockStore.ListContentBlocksForMessages, one
+// field per parameter.
+type MockStoreListContentBlocksForMessagesCall struct {
+	Ctx        context.Context
+	MessageIDs []string
+}
+
+// ListContentBlocksForMessagesCalls returns every recorded ListContentBlocksForMessages call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListContentBlocksForMessages").
+func (m *MockStore) ListContentBlocksForMessagesCalls() []MockStoreListContentBlocksForMessagesCall {
+	var out []MockStoreListContentBlocksForMessagesCall
+	for _, c := range m.Recorder.Calls("ListContentBlocksForMessages") {
+		var r MockStoreListContentBlocksForMessagesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.MessageIDs, _ = c.Args[1].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetContextWindowCall is one recorded call of MockStore.GetContextWindow, one
+// field per parameter.
+type MockStoreGetContextWindowCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetContextWindowCalls returns every recorded GetContextWindow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetContextWindow").
+func (m *MockStore) GetContextWindowCalls() []MockStoreGetContextWindowCall {
+	var out []MockStoreGetContextWindowCall
+	for _, c := range m.Recorder.Calls("GetContextWindow") {
+		var r MockStoreGetContextWindowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetAttachmentCall is one recorded call of MockStore.GetAttachment, one
+// field per parameter.
+type MockStoreGetAttachmentCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetAttachmentCalls returns every recorded GetAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAttachment").
+func (m *MockStore) GetAttachmentCalls() []MockStoreGetAttachmentCall {
+	var out []MockStoreGetAttachmentCall
+	for _, c := range m.Recorder.Calls("GetAttachment") {
+		var r MockStoreGetAttachmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

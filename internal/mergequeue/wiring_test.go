@@ -4,13 +4,18 @@ package mergequeue_test
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
+	"errors"
+	"log/slog"
+	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/dblock"
+	"github.com/reliant-labs/reliant/internal/mergequeue/buildjob"
+	pkgconfig "github.com/reliant-labs/reliant/pkg/config"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/mergequeue"
 	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
-	"github.com/reliant-labs/reliant/internal/mergequeue/ghport"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -28,9 +33,10 @@ func TestDispatchGateMapsTheGateRunner(t *testing.T) {
 	}}
 	res, err := mergequeue.DispatchGate{Dispatcher: d}.Run(ctx, mergequeue.GateRequest{
 		RepoID: "r", BatchID: "b", Attempt: 2, CandidateRef: "reliant-queue/b", CandidateSHA: "abc", BaseSHA: "def", Shadow: true,
-		Gate: config.ResolvedGate{AllowUnisolated: true},
+		Gate: config.ResolvedGate{AllowUnisolated: true}, PreferMachine: "builder-1",
 	})
-	if err != nil || got.RepoID != "r" || got.Attempt != 2 || got.CandidateRef != "reliant-queue/b" || got.BaseSHA != "def" || !got.Shadow || !got.AllowUnisolated {
+	if err != nil || got.RepoID != "r" || got.Attempt != 2 || got.CandidateRef != "reliant-queue/b" || got.BaseSHA != "def" || !got.Shadow || !got.AllowUnisolated ||
+		got.PreferMachine != "builder-1" {
 		t.Fatalf("request %+v, err %v", got, err)
 	}
 	var stages map[string]any
@@ -84,21 +90,45 @@ func TestOnModeLandsAnUnisolatedPassOnlyWhenTheRepoOptsIn(t *testing.T) {
 	}
 }
 
-func TestGitWorkdirsKeepsTheTokenOutOfTheRemote(t *testing.T) {
+// lyingBuilder reports a candidate pushed somewhere the queue never asked.
+type lyingBuilder struct{ localBuilder }
+
+func (b lyingBuilder) Build(ctx context.Context, repo *core.PipelineRepo, req buildjob.BuildRequest) (buildjob.BuildResult, error) {
+	res, err := b.localBuilder.Build(ctx, repo, req)
+	res.Ref = "refs/heads/main"
+	return res, err
+}
+
+// The build runs on a user's daemon, so the queue checks its report against
+// the request before gating or recording anything of it.
+func TestTheQueueRejectsABuildReportOutsideItsRefs(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
-	w := mergequeue.GitWorkdirs{Root: root, Access: func(context.Context, *core.PipelineRepo) (ghport.Client, string, error) {
-		return nil, "s3cret", nil
-	}}
-	wd, err := w.Open(context.Background(), &core.PipelineRepo{ID: "rid", Repository: "acme/widgets"})
+	f := newFixture(t, core.PipelineRepoModeShadow)
+	f.queue("a", 50, nil)
+	lie := lyingBuilder{f.wd}
+	locks, err := dblock.New(dblock.Deps{Logger: slog.Default(), Config: &pkgconfig.Config{}, Sessions: f.db.SessionPool()})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if wd.Remote != "https://github.com/acme/widgets.git" || wd.Git.Dir() != filepath.Join(root, "rid.git") {
-		t.Fatalf("workdir %+v", wd)
-	}
-	// A second open reuses the repository.
-	if _, err := w.Open(context.Background(), &core.PipelineRepo{ID: "rid", Repository: "acme/widgets"}); err != nil {
+	s, err := mergequeue.New(mergequeue.Deps{Store: f.db, Leader: mergequeue.AdvisoryLeader{Locks: locks}, Refs: f.wd, Builder: lie, Gate: f.gate, Authorizer: f.auth})
+	if err != nil {
 		t.Fatal(err)
+	}
+	rep, err := s.Tick(f.ctx, f.repo.ID)
+	if err == nil || !strings.Contains(err.Error(), "outside the queue's refs") || rep.Landing != "" {
+		t.Fatalf("report %+v, err %v", rep, err)
+	}
+	if b := f.batch(rep.Batches[0]); b.State != core.QueueBatchAbandoned {
+		t.Fatalf("the batch is %s, not abandoned", b.State)
+	}
+}
+
+func TestNoBuilderRefusesEveryJob(t *testing.T) {
+	t.Parallel()
+	if _, err := (mergequeue.NoBuilder{}).Build(context.Background(), nil, buildjob.BuildRequest{}); !errors.Is(err, mergequeue.ErrNoBuilder) {
+		t.Fatalf("build: %v", err)
+	}
+	if _, err := (mergequeue.NoBuilder{}).ChangedPaths(context.Background(), nil, buildjob.PathsRequest{}); !errors.Is(err, mergequeue.ErrNoBuilder) {
+		t.Fatalf("paths: %v", err)
 	}
 }

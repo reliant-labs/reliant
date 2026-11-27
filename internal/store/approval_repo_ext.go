@@ -166,6 +166,10 @@ type StaleApproval struct {
 // failed (2) or paused (3) run is resumable and keeps its approval, the rule
 // ListInboxPending lists by. idx_approvals_pending keeps the scan to the
 // pending rows.
+//
+// A capability-grant card (core.ApprovalKindPipelineCapabilityGrant) waits on
+// no run: approving it writes the grant (internal/pipeline/grants), whenever
+// the owner gets to it. So only its chat's deletion or archive closes it.
 const listStaleApprovalsSQL = `
 SELECT a.id, a.chat_id,
     CASE
@@ -182,8 +186,10 @@ WHERE a.status = 1
   AND (
       ch.id IS NULL
       OR ch.state = 3
-      OR (g.run_state = 3 AND g.run_stop_reason IN (1, 4))
-      OR (rw.state = 3 AND rw.stop_reason IN (1, 4))
+      OR (COALESCE(a.metadata, '') NOT LIKE '%"kind":"` + core.ApprovalKindPipelineCapabilityGrant + `"%' AND (
+          (g.run_state = 3 AND g.run_stop_reason IN (1, 4))
+          OR (rw.state = 3 AND rw.stop_reason IN (1, 4))
+      ))
   )
 ORDER BY a.created_at, a.id
 LIMIT ?0`

@@ -5,6 +5,9 @@
  * It opens the existing command palette (the keyboard host's, so it searches
  * the same commands and settings everywhere). F opens it from anywhere you are
  * not typing; the palette's own chord still works.
+ *
+ * A host with no keyboard host (the phone's drawer, on `/m/*`) hands it
+ * `onOpen` instead: there, Find opens the phone's own Search screen.
  */
 
 import { useEffect } from "react";
@@ -19,10 +22,10 @@ function typingIn(target: EventTarget | null): boolean {
   return !!element?.closest?.("input, textarea, select, [contenteditable=''], [contenteditable='true'], .monaco-editor");
 }
 
-export function FindBox() {
+export function FindBox({ onOpen }: { onOpen?: () => void } = {}) {
   const host = useShortcutHost();
   const paletteShortcut = useShortcutLabel("commandPalette");
-  const open = () => void host?.run("onCommandPalette");
+  const open = () => (onOpen ? onOpen() : void host?.run("onCommandPalette"));
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -30,11 +33,12 @@ export function FindBox() {
       if (event.key !== "f" && event.key !== "F") return;
       if (typingIn(event.target) || isInputFocused() || document.querySelector('[aria-modal="true"], [role="dialog"]')) return;
       event.preventDefault();
-      void host?.run("onCommandPalette");
+      if (onOpen) onOpen();
+      else void host?.run("onCommandPalette");
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [host]);
+  }, [host, onOpen]);
 
   return (
     <div className="shrink-0 px-2 py-1">
