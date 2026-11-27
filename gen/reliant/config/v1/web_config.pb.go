@@ -70,12 +70,14 @@ type ReliantWebConfig struct {
 	ControlPlaneApiUrl string `protobuf:"bytes,2,opt,name=control_plane_api_url,json=controlPlaneApiUrl,proto3" json:"control_plane_api_url,omitempty"`
 	GatewayUrl         string `protobuf:"bytes,3,opt,name=gateway_url,json=gatewayUrl,proto3" json:"gateway_url,omitempty"`
 	AppUrl             string `protobuf:"bytes,4,opt,name=app_url,json=appUrl,proto3" json:"app_url,omitempty"`
-	ForgeAppHost       string `protobuf:"bytes,23,opt,name=forge_app_host,json=forgeAppHost,proto3" json:"forge_app_host,omitempty"`
-	DemoTelemetry      string `protobuf:"bytes,25,opt,name=demo_telemetry,json=demoTelemetry,proto3" json:"demo_telemetry,omitempty"`
-	DemoTour           string `protobuf:"bytes,26,opt,name=demo_tour,json=demoTour,proto3" json:"demo_tour,omitempty"`
-	DemoDataSource     string `protobuf:"bytes,27,opt,name=demo_data_source,json=demoDataSource,proto3" json:"demo_data_source,omitempty"`
-	DemoDataUrl        string `protobuf:"bytes,28,opt,name=demo_data_url,json=demoDataUrl,proto3" json:"demo_data_url,omitempty"`
-	DisableTls         string `protobuf:"bytes,5,opt,name=disable_tls,json=disableTls,proto3" json:"disable_tls,omitempty"`
+	// 34: the next free number (24 and 11-15, 17 are reserved).
+	GtmAssetsOrigin string `protobuf:"bytes,34,opt,name=gtm_assets_origin,json=gtmAssetsOrigin,proto3" json:"gtm_assets_origin,omitempty"`
+	ForgeAppHost    string `protobuf:"bytes,23,opt,name=forge_app_host,json=forgeAppHost,proto3" json:"forge_app_host,omitempty"`
+	DemoTelemetry   string `protobuf:"bytes,25,opt,name=demo_telemetry,json=demoTelemetry,proto3" json:"demo_telemetry,omitempty"`
+	DemoTour        string `protobuf:"bytes,26,opt,name=demo_tour,json=demoTour,proto3" json:"demo_tour,omitempty"`
+	DemoDataSource  string `protobuf:"bytes,27,opt,name=demo_data_source,json=demoDataSource,proto3" json:"demo_data_source,omitempty"`
+	DemoDataUrl     string `protobuf:"bytes,28,opt,name=demo_data_url,json=demoDataUrl,proto3" json:"demo_data_url,omitempty"`
+	DisableTls      string `protobuf:"bytes,5,opt,name=disable_tls,json=disableTls,proto3" json:"disable_tls,omitempty"`
 	// ── Identity ──────────────────────────────────────────────────────────
 	AuthMode         string `protobuf:"bytes,6,opt,name=auth_mode,json=authMode,proto3" json:"auth_mode,omitempty"`
 	AuthProvider     string `protobuf:"bytes,33,opt,name=auth_provider,json=authProvider,proto3" json:"auth_provider,omitempty"`
@@ -155,6 +157,13 @@ func (x *ReliantWebConfig) GetGatewayUrl() string {
 func (x *ReliantWebConfig) GetAppUrl() string {
 	if x != nil {
 		return x.AppUrl
+	}
+	return ""
+}
+
+func (x *ReliantWebConfig) GetGtmAssetsOrigin() string {
+	if x != nil {
+		return x.GtmAssetsOrigin
 	}
 	return ""
 }
@@ -317,7 +326,7 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe0@\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xa1D\n" +
 	"\x10ReliantWebConfig\x12\xa0\x03\n" +
 	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
 	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
@@ -329,7 +338,9 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\vGATEWAY_URL*\xbf\x01Origin of the daemon gateway (ToolsDaemonService). The browser never dials it; the onboarding renders it into the `reliant daemon start` command, which cannot derive it for a loopback server.R\n" +
 	"gatewayUrl\x12\x98\x02\n" +
 	"\aapp_url\x18\x04 \x01(\tB\xfe\x01\x82\xce\x18\xf9\x01\n" +
-	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xef\x02\n" +
+	"\aAPP_URL*\xed\x01This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default.R\x06appUrl\x12\xbe\x03\n" +
+	"\x11gtm_assets_origin\x18\" \x01(\tB\x91\x03\x82\xce\x18\x8c\x03\n" +
+	"\x11GTM_ASSETS_ORIGIN*\xf6\x02Public origin (scheme://host[:port]) of the GTM assets bucket's presigned URLs: the S3 API a browser PUTs uploads to and loads previews from (GTM_ASSETS_PUBLIC_ENDPOINT's origin). Set: the runtime Content-Security-Policy allows it for connect-src and media-src (vite-plugin-csp.ts). Unset: GTM uploads and video previews to a bucket off this origin and loopback are blocked.R\x0fgtmAssetsOrigin\x12\xef\x02\n" +
 	"\x0eforge_app_host\x18\x17 \x01(\tB\xc8\x02\x82\xce\x18\xc3\x02\n" +
 	"\x0eFORGE_APP_HOST\x1a\x14forge.reliantlabs.io*\x9a\x02Hostname that serves the Forge by Reliant brand of this same bundle. Every host mounts the one shell (the same routes and pages); a document loaded on this host shows it with forge branding, every other host with Reliant's. Also the origin the public demo's links into the app open.R\fforgeAppHost\x12\x81\x03\n" +
 	"\x0edemo_telemetry\x18\x19 \x01(\tB\xd9\x02\x82\xce\x18\xd4\x02\n" +

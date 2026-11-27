@@ -142,7 +142,67 @@ describe("runtime connect-src (from config.js)", () => {
   });
 });
 
+describe("the GTM assets bucket origin (GTM_ASSETS_ORIGIN)", () => {
+  const BUCKET = "https://storage.googleapis.com";
+
+  it("allows the bucket for connect-src and media-src when it is set", () => {
+    const policy = runtimePolicy({ ...PROD_CONFIG, GTM_ASSETS_ORIGIN: BUCKET });
+
+    expect(directive(policy, "connect-src").split(" ")).toContain(BUCKET);
+    expect(directive(policy, "media-src").split(" ")).toContain(BUCKET);
+  });
+
+  it("gives the bucket no wss:// twin: it is not a backend", () => {
+    const policy = runtimePolicy({ ...PROD_CONFIG, GTM_ASSETS_ORIGIN: BUCKET });
+
+    expect(policy).not.toContain("wss://storage.googleapis.com");
+  });
+
+  it("keeps only the origin of a value with a path", () => {
+    const policy = runtimePolicy({ GTM_ASSETS_ORIGIN: "https://storage.googleapis.com/reliant-prod-gtm-assets/x" });
+
+    expect(directive(policy, "connect-src")).toContain(BUCKET);
+    expect(policy).not.toContain("reliant-prod-gtm-assets");
+  });
+
+  it("adds nothing when unset", () => {
+    const policy = runtimePolicy(PROD_CONFIG);
+
+    expect(policy).not.toContain("storage.googleapis.com");
+    expect(directive(policy, "media-src")).toBe("'self' blob: http://localhost:* http://127.0.0.1:*");
+  });
+
+  it("ignores a relative, junk or non-http value", () => {
+    for (const value of ["/bucket", "not-a-url", "javascript:alert(1)", "data:video/mp4,x", "ftp://files.example.com", 42, ""]) {
+      const policy = runtimePolicy({ ...PROD_CONFIG, GTM_ASSETS_ORIGIN: value });
+
+      expect(directive(policy, "media-src"), String(value)).toBe("'self' blob: http://localhost:* http://127.0.0.1:*");
+      expect(policy, String(value)).not.toMatch(/javascript|data:|ftp:|bucket|undefined|42/);
+      expect(policy, String(value)).not.toContain("  ");
+    }
+  });
+
+  it("lists the dev MinIO once, as a loopback origin", () => {
+    const media = directive(runtimePolicy({ GTM_ASSETS_ORIGIN: "http://localhost:21090" }), "media-src");
+
+    expect(media).toBe("'self' blob: http://localhost:21090 http://localhost:* http://127.0.0.1:*");
+  });
+
+  it("gives no other runtime key a media-src entry", () => {
+    const media = directive(runtimePolicy(PROD_CONFIG), "media-src");
+
+    expect(media).not.toContain("reliantapi.com");
+    expect(media).not.toContain("reliantlabs.io");
+  });
+});
+
 describe("buildCSP (the build-time policy)", () => {
+  it("has a media-src ceiling the runtime policy narrows", () => {
+    // Without one, media falls back to default-src 'self': no blob: preview and
+    // no presigned bucket video. https: and loopback http are the ceiling.
+    expect(directive(buildCSP([]), "media-src")).toBe("'self' blob: https: http://localhost:* http://127.0.0.1:*");
+  });
+
   it("names no endpoint: the build does not know its environment", () => {
     const connect = directive(buildCSP([]), "connect-src");
 
