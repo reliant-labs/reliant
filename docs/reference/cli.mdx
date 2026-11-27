@@ -1574,40 +1574,51 @@ Run forge as a Model Context Protocol server on stdio.
 
 Any MCP-capable harness (Claude Code, Codex, Cursor, ...) can then call forge's
 benefits, skill, lint and introspection verbs as tools, in ANY repo, with no
-memory file telling it how. The server says what forge is and what it does for
-the repo the agent is in, forge project or not, and sends the model to the
-benefits tool and the 'adopt' skill (the 'forge' skill in a forge project).
+memory file telling it how. The server says what forge is and sends the model
+to the 'adopt' skill (the 'forge' skill in a forge project); started with
+--tools all, it also says what forge does for the repo the agent is in and
+points at the benefits tool.
 
-Tools (each but explain_error takes an optional "dir": the repo to act on;
-default is the directory the server was started in, or -C):
+Tools, by group (each but explain_error and forge_tools takes an optional
+"dir": the repo to act on; default is the directory the server was started
+in, or -C). --tools picks the groups: core (the default), a comma list such
+as core,ops, or all. core is the smallest useful set; whenever a group is left
+out the server also lists forge_tools, which enables the rest in-session
+(notifications/tools/list_changed), so every tool stays reachable. --tools all
+lists every tool up front, as the server did before core became the default.
 
-  read-only   benefits       what forge does for this repo, with the first step
-                             and the agent time to each; any repo
-              capabilities   every verb, lint analyzer, marker and schema
-              schema         a published JSON Schema (env: the env document)
-              annotations    the entity-authoring vocabulary
-              libraries      forge/pkg and web-runtime APIs
-              audit          what THIS project currently is
-              shapes         where every rpc/message/table/handler is, with file:line
-              blast_radius   the ops a diff changes, with their traffic when an env is given
-              skill_list     the skill catalog
-              skill_search   find a skill by keyword
-              skill_load     print one skill
-              deploy_status  the claimable deploy of an env: URL, claim link, state
-              db_query       one read-only SQL statement against an env's app
-                             database (forge db query --json, same policy, audit
-                             and read-only role)
-              obs_status, obs_issues, obs_issue, obs_logs, obs_check
-                             an env's telemetry and release verdict (forge obs
-                             … --json); the hosted connector's tools, by name
-              explain_error  a forge failure's meaning and the exact next command
-  mutating    lint           forge lint --quiet [--scope PATH...]
-              generate       forge generate [--dry-run | --check]
-              deploy_claimable
-                             forge env deploy `<env>` --claimable: a live URL plus a
-                             claim link, no account; adopts a Vite/Next.js app with
-                             no forge.yaml in place first. Streams progress
-                             (notifications/progress) and stops on cancel
+  core      audit          what THIS project currently is
+            shapes         where every rpc/message/table/handler is, with file:line
+            skill_search   find a skill by keyword
+            skill_load     print one skill
+            lint *         forge lint --quiet [--scope PATH...]
+            generate *     forge generate [--dry-run | --check]
+  catalog   benefits       what forge does for this repo, with the first step
+                           and the agent time to each; any repo
+            why            the reasons to use forge, with their evidence
+            capabilities   every verb, lint analyzer, marker and schema
+            schema         a published JSON Schema (env: the env document)
+            annotations    the entity-authoring vocabulary
+            libraries      forge/pkg and web-runtime APIs
+            skill_list     the skill catalog
+  support   explain_error  a forge failure's meaning and the exact next command
+            report_bug *   file a defect in forge with the Reliant team
+  ops       blast_radius   the ops a diff changes, with their traffic when an env is given
+            db_query       one read-only SQL statement against an env's app
+                           database (forge db query --json, same policy, audit
+                           and read-only role)
+            obs_status, obs_issues, obs_issue, obs_logs, obs_check
+                           an env's telemetry and release verdict (forge obs
+                           … --json); the hosted connector's tools, by name
+  deploy    deploy_claimable *
+                           forge env deploy `<env>` --claimable: a live URL plus a
+                           claim link, no account; adopts a Vite/Next.js app with
+                           no forge.yaml in place first. Streams progress
+                           (notifications/progress) and stops on cancel
+            deploy_status  the claimable deploy of an env: URL, claim link, state
+
+  * not read-only: lint refreshes caches, generate writes generated files,
+    report_bug sends a report, deploy_claimable publishes.
 
 Each tool runs the same command in-process; it does not shell out to a forge
 binary, and it does not hand a project pinned to another forge over to that
@@ -1625,8 +1636,14 @@ Register it. With no install, the command is "npx -y @reliantlabs/forge mcp"
 docs/mcp.md has the config files in full.
 
 ```
-reliant forge agent mcp
+reliant forge agent mcp [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--tools` | `string` | `core` | tool groups to list: a comma-separated list of core, catalog, support, ops, deploy, or all for every tool up front (core, the default, is the smallest useful set; forge_tools enables the rest in-session) |
 
 ---
 
@@ -12380,7 +12397,7 @@ reliant forge lint [paths...] [flags]
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
 | `--conventions` | `bool` | - | Run forge convention rules (proto, Go tree, frontend env, hook-test rows that contradict their regenerated hook, and identity sign-in methods the login broker does not serve) |
 | `--create-nullability` | `bool` | - | Fail when a field's optional label disagrees between an entity message and its Create`<Entity>`Request — the flattened request drops write presence silently |
-| `--crud-ownership` | `bool` | - | Flag a table served by forge-generated CRUD on an authenticated rpc that declares no owner — no COMMENT ON TABLE forge:owner=`<column>`, no forge:owner column, no forge:public or forge:unscoped with a reason — so every signed-in caller can read and write every row (warns first; gates from the release after the one that ships it) |
+| `--crud-ownership` | `bool` | - | Flag a table served by forge-generated CRUD on an authenticated rpc that declares no owner — no COMMENT ON TABLE forge:owner=`<column>`, no forge:owner column, no forge:public or forge:unscoped with a reason — so every signed-in caller can read and write every row (warns first; gates from the release after the one that ships it). A table still exactly as forge scaffolded it warns "pending: choose an owner" until it is edited |
 | `--db-grants` | `bool` | - | Fail on a credential-shaped column (token, password, key, ciphertext, hash…) that carries neither forge:secret nor forge:readable `<reason>`: the read-only forge_ro role is refused it until someone decides |
 | `--fix` | `bool` | - | Apply the mechanical fixes in place (Go formatting, the tracing log rewrite, frontend prettier, eslint --fix), each Go rewrite type-checked and taken back if it breaks its package. Never golangci-lint fixes. Off by default: lint is a gate and reports |
 | `--fixture-drift` | `bool` | - | Execute every literal fixture statement in a scaffolded handlers_crud_test.go against the current schema — migrations applied to a shadow postgres, each statement run in a rolled-back transaction — and report postgres's own error for each one it rejects: a GENERATED column, a UNIQUE collision, a dangling foreign key, a CHECK a later migration added (warnings only) |
@@ -13363,9 +13380,10 @@ reliant forge machine storage gc [flags]
 
 Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes
 
-Trim the shared Go build cache and the golangci-lint cache — the Go-cache
-layer of every other pass, alone, with the whole budget to itself. The module
-cache is left to Go.
+Trim the shared Go build cache, every cache in the policy's go_caches (and
+each --go-cache), and the golangci-lint cache — the Go-cache layer of every
+other pass, alone, with the whole budget to itself. Each build cache is held
+to its own go_cache_gib. The module cache is left to Go.
 
 Entries used in the last 2h are never removed (a running build may be using
 them); past that, the cache is trimmed to go_cache_gib. Under agent load more
@@ -13388,6 +13406,7 @@ reliant forge machine storage gocache [flags]
 | `--apply` | `bool` | - | remove what the preview lists |
 | `--budget` | `duration` | `10m0s` | wall time for the pass; what it does not reach is resumed by the next one |
 | `--dry-run` | `bool` | - | preview only (the default) |
+| `--go-cache` | `stringArray` | `[]` | also trim this Go build cache (an absolute path; repeatable), like the policy's go_caches |
 
 ---
 
@@ -13624,40 +13643,51 @@ Run forge as a Model Context Protocol server on stdio.
 
 Any MCP-capable harness (Claude Code, Codex, Cursor, ...) can then call forge's
 benefits, skill, lint and introspection verbs as tools, in ANY repo, with no
-memory file telling it how. The server says what forge is and what it does for
-the repo the agent is in, forge project or not, and sends the model to the
-benefits tool and the 'adopt' skill (the 'forge' skill in a forge project).
+memory file telling it how. The server says what forge is and sends the model
+to the 'adopt' skill (the 'forge' skill in a forge project); started with
+--tools all, it also says what forge does for the repo the agent is in and
+points at the benefits tool.
 
-Tools (each but explain_error takes an optional "dir": the repo to act on;
-default is the directory the server was started in, or -C):
+Tools, by group (each but explain_error and forge_tools takes an optional
+"dir": the repo to act on; default is the directory the server was started
+in, or -C). --tools picks the groups: core (the default), a comma list such
+as core,ops, or all. core is the smallest useful set; whenever a group is left
+out the server also lists forge_tools, which enables the rest in-session
+(notifications/tools/list_changed), so every tool stays reachable. --tools all
+lists every tool up front, as the server did before core became the default.
 
-  read-only   benefits       what forge does for this repo, with the first step
-                             and the agent time to each; any repo
-              capabilities   every verb, lint analyzer, marker and schema
-              schema         a published JSON Schema (env: the env document)
-              annotations    the entity-authoring vocabulary
-              libraries      forge/pkg and web-runtime APIs
-              audit          what THIS project currently is
-              shapes         where every rpc/message/table/handler is, with file:line
-              blast_radius   the ops a diff changes, with their traffic when an env is given
-              skill_list     the skill catalog
-              skill_search   find a skill by keyword
-              skill_load     print one skill
-              deploy_status  the claimable deploy of an env: URL, claim link, state
-              db_query       one read-only SQL statement against an env's app
-                             database (forge db query --json, same policy, audit
-                             and read-only role)
-              obs_status, obs_issues, obs_issue, obs_logs, obs_check
-                             an env's telemetry and release verdict (forge obs
-                             … --json); the hosted connector's tools, by name
-              explain_error  a forge failure's meaning and the exact next command
-  mutating    lint           forge lint --quiet [--scope PATH...]
-              generate       forge generate [--dry-run | --check]
-              deploy_claimable
-                             forge env deploy `<env>` --claimable: a live URL plus a
-                             claim link, no account; adopts a Vite/Next.js app with
-                             no forge.yaml in place first. Streams progress
-                             (notifications/progress) and stops on cancel
+  core      audit          what THIS project currently is
+            shapes         where every rpc/message/table/handler is, with file:line
+            skill_search   find a skill by keyword
+            skill_load     print one skill
+            lint *         forge lint --quiet [--scope PATH...]
+            generate *     forge generate [--dry-run | --check]
+  catalog   benefits       what forge does for this repo, with the first step
+                           and the agent time to each; any repo
+            why            the reasons to use forge, with their evidence
+            capabilities   every verb, lint analyzer, marker and schema
+            schema         a published JSON Schema (env: the env document)
+            annotations    the entity-authoring vocabulary
+            libraries      forge/pkg and web-runtime APIs
+            skill_list     the skill catalog
+  support   explain_error  a forge failure's meaning and the exact next command
+            report_bug *   file a defect in forge with the Reliant team
+  ops       blast_radius   the ops a diff changes, with their traffic when an env is given
+            db_query       one read-only SQL statement against an env's app
+                           database (forge db query --json, same policy, audit
+                           and read-only role)
+            obs_status, obs_issues, obs_issue, obs_logs, obs_check
+                           an env's telemetry and release verdict (forge obs
+                           … --json); the hosted connector's tools, by name
+  deploy    deploy_claimable *
+                           forge env deploy `<env>` --claimable: a live URL plus a
+                           claim link, no account; adopts a Vite/Next.js app with
+                           no forge.yaml in place first. Streams progress
+                           (notifications/progress) and stops on cancel
+            deploy_status  the claimable deploy of an env: URL, claim link, state
+
+  * not read-only: lint refreshes caches, generate writes generated files,
+    report_bug sends a report, deploy_claimable publishes.
 
 Each tool runs the same command in-process; it does not shell out to a forge
 binary, and it does not hand a project pinned to another forge over to that
@@ -13675,8 +13705,14 @@ Register it. With no install, the command is "npx -y @reliantlabs/forge mcp"
 docs/mcp.md has the config files in full.
 
 ```
-reliant forge mcp
+reliant forge mcp [flags]
 ```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--tools` | `string` | `core` | tool groups to list: a comma-separated list of core, catalog, support, ops, deploy, or all for every tool up front (core, the default, is the smallest useful set; forge_tools enables the rest in-session) |
 
 ---
 
@@ -14250,6 +14286,18 @@ missing either is not judged. When
 the commits are not in this checkout, or the backend cannot read per-op
 figures, not_evaluated says so (changed_op: ...) and nothing else changes.
 
+A hosted static frontend is audited for search and accessibility after each
+promotion (Site insights), and the control plane compares the audit with the
+same env's audit of the previous release: seo_regressed (the site's or a
+route's SEO score dropped by more than seo_max_score_drop points, or a new
+error-severity SEO finding appeared: noindex, robots.txt disallowing /, a
+canonical to another host, an internal link answering 404) and
+a11y_regressed (the same for accessibility, a11y_max_score_drop, and a new
+critical axe violation). Both warn unless --fail-on (or the env's fail_on)
+names them; a warning never changes the exit status. A release with no
+previous audit has neither, and one whose audit has not finished lists
+site_audit in not_evaluated, which changes nothing else.
+
 JSON schema forge.obs.check/v1. --fields takes dotted paths of:
   baseline_alerts
   changed_ops
@@ -14356,7 +14404,7 @@ reliant forge obs check [env] [flags]
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
 | `--early-pass` | `duration` | `0s` | with --wait: PASS before the after window finishes, once at least this much of it is observed with the new version serving all traffic, enough requests, and nothing found (no finding of any policy, issue, alert or restart); 0 waits for the whole window |
 | `--explain` | `bool` | - | local env only: print the compiled statements instead of running them |
-| `--fail-on` | `string` | - | comma-separated finding codes that fail the release (default: the env's release_health.fail_on): error_rate, latency, new_issue, regressed_issue, alert_firing, workload_restarts, browser_errors, browser_failed_requests, browser_page_load, probe_failed, probe_latency, changed_op_errors, changed_op_latency |
+| `--fail-on` | `string` | - | comma-separated finding codes that fail the release (default: the env's release_health.fail_on): error_rate, latency, new_issue, regressed_issue, alert_firing, workload_restarts, browser_errors, browser_failed_requests, browser_page_load, probe_failed, probe_latency, changed_op_errors, changed_op_latency, seo_regressed, a11y_regressed |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--gate-json` | `string` | - | also write the verdict to `FILE` as a gate document, for `cli forge gate record --from FILE` |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
@@ -22775,9 +22823,10 @@ reliant forge storage gc [flags]
 
 Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes
 
-Trim the shared Go build cache and the golangci-lint cache — the Go-cache
-layer of every other pass, alone, with the whole budget to itself. The module
-cache is left to Go.
+Trim the shared Go build cache, every cache in the policy's go_caches (and
+each --go-cache), and the golangci-lint cache — the Go-cache layer of every
+other pass, alone, with the whole budget to itself. Each build cache is held
+to its own go_cache_gib. The module cache is left to Go.
 
 Entries used in the last 2h are never removed (a running build may be using
 them); past that, the cache is trimmed to go_cache_gib. Under agent load more
@@ -22800,6 +22849,7 @@ reliant forge storage gocache [flags]
 | `--apply` | `bool` | - | remove what the preview lists |
 | `--budget` | `duration` | `10m0s` | wall time for the pass; what it does not reach is resumed by the next one |
 | `--dry-run` | `bool` | - | preview only (the default) |
+| `--go-cache` | `stringArray` | `[]` | also trim this Go build cache (an absolute path; repeatable), like the policy's go_caches |
 
 ---
 
@@ -23265,9 +23315,14 @@ Run every test the change adds or edits three times (the flake gate)
 
 Finds the top-level Test and Fuzz functions the diff from --base to HEAD
 adds or edits (a +func line, or a hunk inside the function) and runs them
-three times, in one invocation of the project's own `go test`:
+three times, through the project's own `go test`:
 
   go test -json -short -count=3 -timeout 10m [-race] -run '^(TestA|TestB)$' ./pkg...
+
+A selection too large for one -run argument (over 8 KiB of names: a wide
+refactor) is split across several such invocations, a package's own names
+across several when they alone do not fit; only the selected tests ever run,
+and -timeout is a budget per package's test binary.
 
 --full adds -race. --cpu 1,2,4 runs each test once per GOMAXPROCS value
 instead of -count=3, which Go's test cache keeps. A command after -- replaces
