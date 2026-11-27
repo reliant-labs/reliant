@@ -171,6 +171,20 @@ vi.mock("@/hooks/dashboard-queries", () => ({
   }),
 }));
 
+// The projects the shell shows (severalProjects.tsx useSeveralApps): null is one
+// project; a test sets several. The Overview's aggregate page is a probe here,
+// covered on its own (aggregate/__tests__/aggregatePages.test.tsx).
+const several = vi.hoisted(() => ({ value: null as null | { mode: "many" | "all"; apps: { key: string; name: string; app: string }[] } }));
+vi.mock("../severalProjects", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../severalProjects")>()),
+  useSeveralApps: () => several.value,
+}));
+vi.mock("../ProjectsOverview", () => ({
+  ProjectsOverviewPage: ({ page, apps, mode }: { page: { kind: string }; apps: { app: string }[]; mode: string }) => (
+    <div data-testid="aggregate-probe" data-page={page.kind} data-apps={apps.map((app) => app.app).join(",")} data-mode={mode} />
+  ),
+}));
+
 // The org pages (slice D) are covered on their own; here they are stubs that
 // say which one rendered, so the routes' choices are what is under test.
 vi.mock("@/components/Forge/Org", async () => {
@@ -308,6 +322,7 @@ beforeEach(() => {
   roster.calls.length = 0;
   roster.prodHolds = [];
   roster.load = undefined;
+  several.value = null;
   window.localStorage.clear();
   vi.clearAllMocks();
 });
@@ -660,6 +675,35 @@ describe("the nav's model", () => {
     renderAt("/forge/p/alpha/observability/dashboards/workspace/checkout-latency?env=prod");
     expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "dashboard");
     await waitFor(() => expect(screen.getByRole("navigation", { name: /breadcrumb/i })).toHaveTextContent("Checkout latency"));
+  });
+});
+
+describe("several projects in the shell: a page's aggregate", () => {
+  const SEVERAL = { mode: "many" as const, apps: [{ key: "project-a", name: "Alpha", app: "alpha" }, { key: "project-b", name: "Beta", app: "barkshop" }] };
+
+  it("renders the Overview's registered aggregate page in place of the route's page", async () => {
+    several.value = SEVERAL;
+    renderAt("/forge/p/alpha?env=prod");
+    const aggregate = await screen.findByTestId("aggregate-probe");
+    expect(aggregate).toHaveAttribute("data-page", "overview");
+    expect(aggregate).toHaveAttribute("data-apps", "alpha,barkshop");
+    expect(aggregate).toHaveAttribute("data-mode", "many");
+    expect(screen.getByTestId("aggregate-host")).toHaveAttribute("data-page", "overview");
+    expect(screen.queryByTestId("page")).toBeNull();
+  });
+
+  it("renders the route's own page with one project", async () => {
+    renderAt("/forge/p/alpha?env=prod");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "overview");
+    expect(screen.queryByTestId("aggregate-host")).toBeNull();
+    expect(screen.queryByTestId("aggregate-probe")).toBeNull();
+  });
+
+  it("leaves a page with no aggregate page to its own way", async () => {
+    several.value = { ...SEVERAL, mode: "all" };
+    renderAt("/forge/p/alpha/storage?env=prod");
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "storage");
+    expect(screen.queryByTestId("aggregate-host")).toBeNull();
   });
 });
 

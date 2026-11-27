@@ -7,11 +7,16 @@
  * kept in the URL (`?only=<app>`), so Back, refresh and a shared link keep it.
  *
  * No page asks the reader to pick one project instead (owner, 2026-11-25):
- * every console page shows every project in scope, in one of three ways
+ * every console page shows every project in scope, in one of four ways
  * (severalModeOf):
  *
- *   self      the page aggregates itself: the Overview (ProjectsOverview),
- *             Services and Storage (a Project column), Dashboards (the
+ *   aggregate a dedicated aggregate page (owner, 2026-11-27;
+ *             aggregate/registry.ts): figures the backend computes over
+ *             every project in scope, and a row per project that opens its
+ *             own page. ConsoleLayout renders it in place of the route's
+ *             page. Today: the Overview (ProjectsOverview).
+ *   self      the page aggregates itself: Services and Storage (a Project
+ *             column), Dashboards (the
  *             org-wide list narrowed to the shell's apps), and Observability's
  *             Overview and views, which hand over to the org console's page
  *             (ToOrgObservability), where the shell's nav sends them too: one
@@ -29,15 +34,17 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 
 import { ProjectMark } from "../../Layout/ProjectMark";
-import { sectionsAppOf, useShellSeveral } from "../../Layout/sidebar/shellProject";
+import { deployedAppOf, sectionsAppOf, useShellSeveral } from "../../Layout/sidebar/shellProject";
+import { hasAggregatePage } from "./aggregate/registry";
 import { carriedObsSearch, orgPath, withSearch, type ConsolePage, type ObsNavView } from "./paths";
 
-export type SeveralMode = "self" | "sections" | "one";
+export type SeveralMode = "aggregate" | "self" | "sections" | "one";
 
 /** How `page` shows several projects (the module comment). */
 export function severalModeOf(page: ConsolePage): SeveralMode {
+  // A registered aggregate page wins over the page's own way.
+  if (hasAggregatePage(page)) return "aggregate";
   switch (page.kind) {
-    case "overview":
     case "services":
     case "storage":
       return "self";
@@ -65,6 +72,8 @@ export interface SeveralApp {
   name: string;
   /** Its forge app: the console segment every read takes. */
   app: string;
+  /** Whether that app is deployed (a live app of the project's own); unknown when absent. */
+  deployed?: boolean;
 }
 
 /** The projects the shell shows, when it shows several, each with its app; null in one-project mode. */
@@ -74,7 +83,7 @@ export function useSeveralApps(): { mode: "many" | "all"; apps: SeveralApp[] } |
     () =>
       rows.flatMap((row) => {
         const app = sectionsAppOf(row);
-        return app ? [{ key: row.key, name: row.name, app }] : [];
+        return app ? [{ key: row.key, name: row.name, app, deployed: deployedAppOf(row) !== null }] : [];
       }),
     [rows]
   );
