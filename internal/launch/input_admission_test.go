@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
@@ -56,7 +57,7 @@ func TestLaunchRefusesTextForABooleanInputBeforeCreatingARun(t *testing.T) {
 	require.True(t, errors.As(err, &validation), "got %T: %v", err, err)
 	assert.Contains(t, validation.Error(), `input 'asap' expects boolean, got string "true"`)
 	assert.Empty(t, starter.calls, "a refused launch starts nothing")
-	chats, err := repo.ListChats(ctx, db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
+	chats, err := store.ListChats(ctx, repo.ORM(), db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
 	require.NoError(t, err)
 	assert.Empty(t, chats, "a refused launch writes no run")
 
@@ -87,7 +88,7 @@ func TestLaunchRefusesOverflowingIntegerAfterDefaults(t *testing.T) {
 	require.Contains(t, validation.Error(), "expects integer")
 	require.Equal(t, float64(0x1p63), params["asap"].GetNumberValue())
 	require.Empty(t, starter.calls)
-	chats, err := repo.ListChats(ctx, db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
+	chats, err := store.ListChats(ctx, repo.ORM(), db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
 	require.NoError(t, err)
 	require.Empty(t, chats)
 }
@@ -148,7 +149,7 @@ func TestLaunchWrapsASingleValidItemForAListInput(t *testing.T) {
 	require.ErrorAs(t, err, &validation)
 	assert.Contains(t, validation.Error(), "input 'repos' expects an array of github.repository values, got string")
 	assert.Len(t, starter.calls, 1, "a refused launch starts nothing")
-	chats, err := repo.ListChats(ctx, db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
+	chats, err := store.ListChats(ctx, repo.ORM(), db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
 	require.NoError(t, err)
 	assert.Len(t, chats, 1, "a refused launch writes no run")
 }

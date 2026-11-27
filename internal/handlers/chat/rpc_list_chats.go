@@ -54,7 +54,7 @@ func (s *Service) ListChats(
 		SidebarOnly: true,
 	}
 
-	chats, err := s.deps.Repo.ListChats(ctx, filters)
+	chats, err := s.chatLists().ListChats(ctx, filters)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list chats"))
 	}

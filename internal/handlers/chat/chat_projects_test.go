@@ -299,7 +299,7 @@ func TestStartChatAttachesProjects(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 		assert.Empty(t, e.temporal.inputs, "a refused start launches nothing")
-		chats, err := e.repo.ListChats(e.ctx, db.ChatFilters{UserID: "test-user", ProjectID: &e.projectID})
+		chats, err := store.ListChats(e.ctx, e.repo.ORM(), db.ChatFilters{UserID: "test-user", ProjectID: &e.projectID})
 		require.NoError(t, err)
 		assert.Empty(t, chats, "a refused start writes no chat")
 	})

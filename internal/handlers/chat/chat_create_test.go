@@ -86,7 +86,7 @@ nodes:
 	require.Contains(t, connectErr.Message(), "workflow tree validation failed")
 	require.Contains(t, connectErr.Message(), "invalid-spawn-tree")
 
-	chats, listErr := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})
+	chats, listErr := store.ListChats(ctx, repo.ORM(), db.ChatFilters{ProjectID: &projectID})
 	require.NoError(t, listErr)
 	require.Len(t, chats, 0, "chat should not be created when workflow validation fails")
 }

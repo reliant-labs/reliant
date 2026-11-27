@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Story 06: invalid StartChat requests must surface a clean InvalidArgument
@@ -90,7 +91,7 @@ func TestStory06_StartChatValidationFailsClean(t *testing.T) {
 	}
 
 	// Nothing leaked: the project has zero chats (no dead chat rows).
-	chats, err := h.Stack.Repo.ListChats(h.Ctx, db.ChatFilters{
+	chats, err := store.ListChats(h.Ctx, h.Stack.Repo.ORM(), db.ChatFilters{
 		UserID:    h.UserID,
 		ProjectID: &h.ProjectID,
 		Limit:     100,

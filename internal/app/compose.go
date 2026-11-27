@@ -1228,6 +1228,8 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Chats:            chataccess.NewFromORM(g.Database().ORM()),
 		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		ChatLists:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		StepExecutions:   store.NewStepExecutionExtStore(g.Database().ORM()),
 		QuestionResolver: questions.NewFromRepo(g.Database()),
 		Workflows:        store.NewWorkflowExtStore(g.Database().ORM()),
 		Worktrees:        store.NewWorktreeExtStore(g.Database().ORM()),

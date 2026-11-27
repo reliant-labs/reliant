@@ -108,7 +108,7 @@ func (m *MockQuestions) ListPendingQuestionsByChat(ctx context.Context, chatID s
 var _ Questions = (*MockQuestions)(nil)
 
 // forge:section MockMessages
-// forge:hash=e538e6cd1aaecf6b2a3928c5d327dee1754d7f777e4873819637480758889ee8
+// forge:hash=74d7b26101cad06b69d44432e1e9d19636bbd2f39c94d3cf0260ced9fc25f8a9
 
 // MockMessages is a test mock for the Messages interface.
 //
@@ -120,6 +120,7 @@ type MockMessages struct {
 	contractkit.Recorder
 	FindMessageFunc        func(context.Context, string) (*core.Message, error)
 	LatestTurnInThreadFunc func(context.Context, string) (*core.Message, error)
+	ListMessagesByIDsFunc  func(context.Context, []string) ([]*core.Message, error)
 }
 
 // FindMessage records the call and delegates to FindMessageFunc when set.
@@ -140,11 +141,20 @@ func (m *MockMessages) LatestTurnInThread(ctx context.Context, threadID string) 
 	return nil, contractkit.MockNotSet("MockMessages", "LatestTurnInThread")
 }
 
+// ListMessagesByIDs records the call and delegates to ListMessagesByIDsFunc when set.
+func (m *MockMessages) ListMessagesByIDs(ctx context.Context, ids []string) ([]*core.Message, error) {
+	m.Recorder.Record("ListMessagesByIDs", ctx, ids)
+	if m.ListMessagesByIDsFunc != nil {
+		return m.ListMessagesByIDsFunc(ctx, ids)
+	}
+	return nil, contractkit.MockNotSet("MockMessages", "ListMessagesByIDs")
+}
+
 // Compile-time check.
 var _ Messages = (*MockMessages)(nil)
 
 // forge:section MockToolBlocks
-// forge:hash=1a3e1a2808c127b60d8073f54e217258115193b01b973afc64a73ba02ab42a8a
+// forge:hash=996be5a43290ac57526e3962f50aff7348790e9ad18cfa273da717d7fafde9cf
 
 // MockToolBlocks is a test mock for the ToolBlocks interface.
 //
@@ -154,8 +164,9 @@ var _ Messages = (*MockMessages)(nil)
 // "MockToolBlocks.<Method>Func not set" error.
 type MockToolBlocks struct {
 	contractkit.Recorder
-	FindToolBlockFunc  func(context.Context, string, reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
-	ListToolBlocksFunc func(context.Context, string, reliantv1.ContentBlockType) ([]*core.MessageContentBlock, error)
+	FindToolBlockFunc          func(context.Context, string, reliantv1.ContentBlockType) (*core.MessageContentBlock, error)
+	ListToolBlocksFunc         func(context.Context, string, reliantv1.ContentBlockType) ([]*core.MessageContentBlock, error)
+	ListContentBlocksByIDsFunc func(context.Context, []string) ([]*core.MessageContentBlock, error)
 }
 
 // FindToolBlock records the call and delegates to FindToolBlockFunc when set.
@@ -174,6 +185,15 @@ func (m *MockToolBlocks) ListToolBlocks(ctx context.Context, toolCallID string, 
 		return m.ListToolBlocksFunc(ctx, toolCallID, blockType)
 	}
 	return nil, contractkit.MockNotSet("MockToolBlocks", "ListToolBlocks")
+}
+
+// ListContentBlocksByIDs records the call and delegates to ListContentBlocksByIDsFunc when set.
+func (m *MockToolBlocks) ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*core.MessageContentBlock, error) {
+	m.Recorder.Record("ListContentBlocksByIDs", ctx, ids)
+	if m.ListContentBlocksByIDsFunc != nil {
+		return m.ListContentBlocksByIDsFunc(ctx, ids)
+	}
+	return nil, contractkit.MockNotSet("MockToolBlocks", "ListContentBlocksByIDs")
 }
 
 // Compile-time check.
@@ -226,7 +246,7 @@ func (m *MockSpawns) GetStoppedSpawnAgent(ctx context.Context, chatID string, th
 var _ Spawns = (*MockSpawns)(nil)
 
 // forge:section MockRepository
-// forge:hash=45f7282e968b50ee8cc0b2f9ffb77a5d0e656e46a25bc49adceafa1e3940ba57
+// forge:hash=5309433ea0e39863d953f84c9c7ef3f5ac83d004c80db02ebeb51f6d7a59c9d5
 
 // MockRepository is a test mock for the Repository interface.
 //
@@ -237,9 +257,6 @@ var _ Spawns = (*MockSpawns)(nil)
 type MockRepository struct {
 	contractkit.Recorder
 	AssignUnassignedOrgFunc                                  func(context.Context, string, string) error
-	ListChatsFunc                                            func(context.Context, db.ChatFilters) ([]*db.Chat, error)
-	SearchChatsFunc                                          func(context.Context, db.ChatSearchFilters) ([]*db.Chat, error)
-	ListArchivedChatsFunc                                    func(context.Context, string, *core.OrgScope, db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error)
 	DeleteChatFunc                                           func(context.Context, string) error
 	UpdateChatStateFunc                                      func(context.Context, string, db.ChatState, string) error
 	UpdateChatUnreadFunc                                     func(context.Context, string, bool, string) error
@@ -265,8 +282,6 @@ type MockRepository struct {
 	ListMessagesFunc                                         func(context.Context, string, db.MessageListOptions) ([]*db.Message, error)
 	ListContentBlocksForMessagesFunc                         func(context.Context, []string) ([]*db.MessageContentBlock, error)
 	GetToolCallFunc                                          func(context.Context, string) (*db.ToolCall, error)
-	ListContentBlocksByIDsFunc                               func(context.Context, []string) ([]*db.MessageContentBlock, error)
-	ListMessagesByIDsFunc                                    func(context.Context, []string) ([]*db.Message, error)
 	CreatePlanFunc                                           func(context.Context, *db.Plan) error
 	CreateTaskFunc                                           func(context.Context, *db.Task) error
 	ListPlansByChatIDFunc                                    func(context.Context, string) ([]*db.Plan, error)
@@ -274,7 +289,6 @@ type MockRepository struct {
 	CopyChatPlansFunc                                        func(context.Context, string, string) error
 	GetStepExecutionsForChatFunc                             func(context.Context, string) ([]*db.ChatStepExecution, error)
 	GetBasicStepExecutionsForChatFunc                        func(context.Context, string) ([]*db.ChatStepExecution, error)
-	ListStepExecutionRecordsForChatFunc                      func(context.Context, string, string, int) ([]*db.StepExecution, error)
 	GetLatestUpdateSequenceFunc                              func(context.Context, string) (int64, error)
 	GetChatCompactedThroughFunc                              func(context.Context, string) (int64, error)
 	GetUpdatesSinceFunc                                      func(context.Context, string, int64, int) ([]db.ChatUpdate, error)
@@ -371,33 +385,6 @@ func (m *MockRepository) AssignUnassignedOrg(ctx context.Context, userID string,
 		return m.AssignUnassignedOrgFunc(ctx, userID, orgID)
 	}
 	return contractkit.MockNotSet("MockRepository", "AssignUnassignedOrg")
-}
-
-// ListChats records the call and delegates to ListChatsFunc when set.
-func (m *MockRepository) ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error) {
-	m.Recorder.Record("ListChats", ctx, filters)
-	if m.ListChatsFunc != nil {
-		return m.ListChatsFunc(ctx, filters)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListChats")
-}
-
-// SearchChats records the call and delegates to SearchChatsFunc when set.
-func (m *MockRepository) SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error) {
-	m.Recorder.Record("SearchChats", ctx, filters)
-	if m.SearchChatsFunc != nil {
-		return m.SearchChatsFunc(ctx, filters)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "SearchChats")
-}
-
-// ListArchivedChats records the call and delegates to ListArchivedChatsFunc when set.
-func (m *MockRepository) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error) {
-	m.Recorder.Record("ListArchivedChats", ctx, userID, org, page)
-	if m.ListArchivedChatsFunc != nil {
-		return m.ListArchivedChatsFunc(ctx, userID, org, page)
-	}
-	return nil, false, contractkit.MockNotSet("MockRepository", "ListArchivedChats")
 }
 
 // DeleteChat records the call and delegates to DeleteChatFunc when set.
@@ -625,24 +612,6 @@ func (m *MockRepository) GetToolCall(ctx context.Context, id string) (*db.ToolCa
 	return nil, contractkit.MockNotSet("MockRepository", "GetToolCall")
 }
 
-// ListContentBlocksByIDs records the call and delegates to ListContentBlocksByIDsFunc when set.
-func (m *MockRepository) ListContentBlocksByIDs(ctx context.Context, ids []string) ([]*db.MessageContentBlock, error) {
-	m.Recorder.Record("ListContentBlocksByIDs", ctx, ids)
-	if m.ListContentBlocksByIDsFunc != nil {
-		return m.ListContentBlocksByIDsFunc(ctx, ids)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListContentBlocksByIDs")
-}
-
-// ListMessagesByIDs records the call and delegates to ListMessagesByIDsFunc when set.
-func (m *MockRepository) ListMessagesByIDs(ctx context.Context, ids []string) ([]*db.Message, error) {
-	m.Recorder.Record("ListMessagesByIDs", ctx, ids)
-	if m.ListMessagesByIDsFunc != nil {
-		return m.ListMessagesByIDsFunc(ctx, ids)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListMessagesByIDs")
-}
-
 // CreatePlan records the call and delegates to CreatePlanFunc when set.
 func (m *MockRepository) CreatePlan(ctx context.Context, plan *db.Plan) error {
 	m.Recorder.Record("CreatePlan", ctx, plan)
@@ -704,15 +673,6 @@ func (m *MockRepository) GetBasicStepExecutionsForChat(ctx context.Context, chat
 		return m.GetBasicStepExecutionsForChatFunc(ctx, chatID)
 	}
 	return nil, contractkit.MockNotSet("MockRepository", "GetBasicStepExecutionsForChat")
-}
-
-// ListStepExecutionRecordsForChat records the call and delegates to ListStepExecutionRecordsForChatFunc when set.
-func (m *MockRepository) ListStepExecutionRecordsForChat(ctx context.Context, chatID string, nodePath string, limit int) ([]*db.StepExecution, error) {
-	m.Recorder.Record("ListStepExecutionRecordsForChat", ctx, chatID, nodePath, limit)
-	if m.ListStepExecutionRecordsForChatFunc != nil {
-		return m.ListStepExecutionRecordsForChatFunc(ctx, chatID, nodePath, limit)
-	}
-	return nil, contractkit.MockNotSet("MockRepository", "ListStepExecutionRecordsForChat")
 }
 
 // GetLatestUpdateSequence records the call and delegates to GetLatestUpdateSequenceFunc when set.
@@ -1706,6 +1666,78 @@ func (m *MockQuestionResolver) ResolveQuestion(ctx context.Context, id string, r
 
 // Compile-time check.
 var _ QuestionResolver = (*MockQuestionResolver)(nil)
+
+// forge:section MockChatLists
+// forge:hash=4340918d973a442aefa2d4c211e83361c6e40b695d3d13f991bdc562f9aa3ced
+
+// MockChatLists is a test mock for the ChatLists interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockChatLists.<Method>Func not set" error.
+type MockChatLists struct {
+	contractkit.Recorder
+	ListChatsFunc         func(context.Context, db.ChatFilters) ([]*db.Chat, error)
+	SearchChatsFunc       func(context.Context, db.ChatSearchFilters) ([]*db.Chat, error)
+	ListArchivedChatsFunc func(context.Context, string, *core.OrgScope, db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error)
+}
+
+// ListChats records the call and delegates to ListChatsFunc when set.
+func (m *MockChatLists) ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error) {
+	m.Recorder.Record("ListChats", ctx, filters)
+	if m.ListChatsFunc != nil {
+		return m.ListChatsFunc(ctx, filters)
+	}
+	return nil, contractkit.MockNotSet("MockChatLists", "ListChats")
+}
+
+// SearchChats records the call and delegates to SearchChatsFunc when set.
+func (m *MockChatLists) SearchChats(ctx context.Context, filters db.ChatSearchFilters) ([]*db.Chat, error) {
+	m.Recorder.Record("SearchChats", ctx, filters)
+	if m.SearchChatsFunc != nil {
+		return m.SearchChatsFunc(ctx, filters)
+	}
+	return nil, contractkit.MockNotSet("MockChatLists", "SearchChats")
+}
+
+// ListArchivedChats records the call and delegates to ListArchivedChatsFunc when set.
+func (m *MockChatLists) ListArchivedChats(ctx context.Context, userID string, org *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error) {
+	m.Recorder.Record("ListArchivedChats", ctx, userID, org, page)
+	if m.ListArchivedChatsFunc != nil {
+		return m.ListArchivedChatsFunc(ctx, userID, org, page)
+	}
+	return nil, false, contractkit.MockNotSet("MockChatLists", "ListArchivedChats")
+}
+
+// Compile-time check.
+var _ ChatLists = (*MockChatLists)(nil)
+
+// forge:section MockStepExecutions
+// forge:hash=5841d8a2b4d3b9a3dd89e5ec9699fe9e751df443b047df19739e716750390c4f
+
+// MockStepExecutions is a test mock for the StepExecutions interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockStepExecutions.<Method>Func not set" error.
+type MockStepExecutions struct {
+	contractkit.Recorder
+	ListStepExecutionRecordsForChatFunc func(context.Context, string, string, int) ([]*db.StepExecution, error)
+}
+
+// ListStepExecutionRecordsForChat records the call and delegates to ListStepExecutionRecordsForChatFunc when set.
+func (m *MockStepExecutions) ListStepExecutionRecordsForChat(ctx context.Context, chatID string, nodePath string, limit int) ([]*db.StepExecution, error) {
+	m.Recorder.Record("ListStepExecutionRecordsForChat", ctx, chatID, nodePath, limit)
+	if m.ListStepExecutionRecordsForChatFunc != nil {
+		return m.ListStepExecutionRecordsForChatFunc(ctx, chatID, nodePath, limit)
+	}
+	return nil, contractkit.MockNotSet("MockStepExecutions", "ListStepExecutionRecordsForChat")
+}
+
+// Compile-time check.
+var _ StepExecutions = (*MockStepExecutions)(nil)
 
 // forge:section MockDirectory
 // forge:hash=83876a76b6d6a4cf6e2fbb6be01be521691ea4b970ac0f00e255c8f96d481f76

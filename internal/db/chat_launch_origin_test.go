@@ -91,7 +91,7 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 	})
 	t.Run("ListChats", func(t *testing.T) {
 		project := "test-project"
-		chats, err := repo.ListChats(ctx, ChatFilters{UserID: "test-user", ProjectID: &project, Limit: 100})
+		chats, err := store.ListChats(ctx, repo.ORM(), ChatFilters{UserID: "test-user", ProjectID: &project, Limit: 100})
 		require.NoError(t, err)
 		kinds := map[string]string{}
 		for _, c := range chats {
@@ -156,7 +156,7 @@ func TestListChatsExcludeAutomations(t *testing.T) {
 
 	list := func(excludeAutomations bool) map[string]bool {
 		project := "test-project"
-		chats, err := repo.ListChats(ctx, ChatFilters{
+		chats, err := store.ListChats(ctx, repo.ORM(), ChatFilters{
 			UserID: "test-user", ProjectID: &project, Limit: 100,
 			SidebarOnly: excludeAutomations,
 		})

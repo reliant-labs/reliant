@@ -49,7 +49,7 @@ func (s *Service) archiveWorktreeChat(ctx context.Context, chat *db.Chat) {
 }
 
 func (s *Service) archiveWorktreeChats(ctx context.Context, userID string, worktree *db.Worktree) {
-	chats, err := s.deps.Repo.ListChats(ctx, db.ChatFilters{
+	chats, err := s.deps.Chats.ListChats(ctx, db.ChatFilters{
 		UserID:          userID,
 		ProjectID:       &worktree.ProjectID,
 		ExcludeArchived: true,
@@ -69,7 +69,7 @@ func (s *Service) archiveWorktreeChats(ctx context.Context, userID string, workt
 
 func (s *Service) unarchiveWorktreeChats(ctx context.Context, userID string, worktree *db.Worktree) {
 	archivedState := db.ChatStateArchived
-	chats, err := s.deps.Repo.ListChats(ctx, db.ChatFilters{
+	chats, err := s.deps.Chats.ListChats(ctx, db.ChatFilters{
 		UserID:    userID,
 		ProjectID: &worktree.ProjectID,
 		State:     &archivedState,

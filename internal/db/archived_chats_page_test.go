@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The archived list pages by keyset on (updated_at, id): reading it page by
@@ -46,7 +47,7 @@ func TestListArchivedChatsPages(t *testing.T) {
 		State: 2, CreatedAt: base, UpdatedAt: base.Add(time.Hour), LastActive: base,
 	}))
 
-	all, more, err := repo.ListArchivedChats(ctx, "owner", nil, ArchivedChatPage{})
+	all, more, err := store.ListArchivedChats(ctx, repo.ORM(), "owner", nil, ArchivedChatPage{})
 	require.NoError(t, err)
 	assert.False(t, more, "an unpaged read lists everything")
 	require.Len(t, all, 7)
@@ -64,7 +65,7 @@ func TestListArchivedChatsPages(t *testing.T) {
 	page := ArchivedChatPage{Limit: 3}
 	for pages := 0; ; pages++ {
 		require.Less(t, pages, 5, "paging did not end")
-		chats, more, err := repo.ListArchivedChats(ctx, "owner", nil, page)
+		chats, more, err := store.ListArchivedChats(ctx, repo.ORM(), "owner", nil, page)
 		require.NoError(t, err)
 		require.LessOrEqual(t, len(chats), 3)
 		for _, c := range chats {
@@ -118,7 +119,7 @@ func TestListArchivedChatsPagesStayOwnerScoped(t *testing.T) {
 		var ids []string
 		for pages := 0; ; pages++ {
 			require.Less(t, pages, 10, "paging did not end")
-			chats, more, err := repo.ListArchivedChats(ctx, user, nil, page)
+			chats, more, err := store.ListArchivedChats(ctx, repo.ORM(), user, nil, page)
 			require.NoError(t, err)
 			for _, c := range chats {
 				assert.Equal(t, user, c.UserID, "%s's page lists %s", user, c.ID)
@@ -137,7 +138,7 @@ func TestListArchivedChatsPagesStayOwnerScoped(t *testing.T) {
 	}
 
 	for _, u := range users {
-		all, more, err := repo.ListArchivedChats(ctx, u, nil, ArchivedChatPage{})
+		all, more, err := store.ListArchivedChats(ctx, repo.ORM(), u, nil, ArchivedChatPage{})
 		require.NoError(t, err)
 		require.False(t, more)
 		want := make([]string, len(all))
@@ -153,11 +154,11 @@ func TestListArchivedChatsPagesStayOwnerScoped(t *testing.T) {
 	// Alice reuses a cursor from bob's first page: it only positions her own
 	// list (after bob-11, which ties alice-10 on updated_at), never lists
 	// bob's rows below it.
-	bobFirst, _, err := repo.ListArchivedChats(ctx, "bob", nil, ArchivedChatPage{Limit: 2})
+	bobFirst, _, err := store.ListArchivedChats(ctx, repo.ORM(), "bob", nil, ArchivedChatPage{Limit: 2})
 	require.NoError(t, err)
 	require.Len(t, bobFirst, 2)
 	bobCursor := &ArchivedChatCursor{UpdatedAt: bobFirst[1].UpdatedAt, ChatID: bobFirst[1].ID}
-	chats, _, err := repo.ListArchivedChats(ctx, "alice", nil, ArchivedChatPage{Limit: 50, After: bobCursor})
+	chats, _, err := store.ListArchivedChats(ctx, repo.ORM(), "alice", nil, ArchivedChatPage{Limit: 50, After: bobCursor})
 	require.NoError(t, err)
 	for _, c := range chats {
 		assert.Equal(t, "alice", c.UserID, "a cursor from bob's page lists %s", c.ID)

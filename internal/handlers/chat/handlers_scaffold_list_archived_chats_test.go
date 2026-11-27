@@ -30,7 +30,8 @@ func TestListArchivedChats_Generated(t *testing.T) {
 	var mu sync.Mutex
 	asked := map[string]db.ArchivedChatPage{}
 	repo := newChatRepo()
-	repo.ListArchivedChatsFunc = func(_ context.Context, userID string, _ *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error) {
+	lists := &chat.MockChatLists{}
+	lists.ListArchivedChatsFunc = func(_ context.Context, userID string, _ *core.OrgScope, page db.ArchivedChatPage) ([]*db.ArchivedChatInfo, bool, error) {
 		if userID == "other-user" {
 			return nil, false, errors.New("store unavailable")
 		}
@@ -47,7 +48,7 @@ func TestListArchivedChats_Generated(t *testing.T) {
 		defer mu.Unlock()
 		return asked[userID]
 	}
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, ChatLists: lists, Chats: chataccesstest.For(repo), Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListArchivedChatsRequest, pb.ListArchivedChatsResponse]{
 		{

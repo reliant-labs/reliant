@@ -46,7 +46,7 @@ func (s *Service) SearchChats(
 		Limit:       limit,
 	}
 
-	chats, err := s.deps.Repo.SearchChats(ctx, filters)
+	chats, err := s.chatLists().SearchChats(ctx, filters)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to search chats"))
 	}

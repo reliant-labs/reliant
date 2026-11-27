@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 const automationWorkflowYAML = `
@@ -66,7 +67,7 @@ func TestLaunchChatStartRefusesAnAutomationOnlyWorkflow(t *testing.T) {
 	assert.Contains(t, validation.Error(), "cannot be started from a chat")
 	assert.Empty(t, starter.calls, "a refused launch starts nothing")
 
-	chats, err := repo.ListChats(ctx, db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
+	chats, err := store.ListChats(ctx, repo.ORM(), db.ChatFilters{UserID: launchTestUserID, ProjectID: &projectID})
 	require.NoError(t, err)
 	assert.Empty(t, chats, "a refused launch writes no chat")
 }

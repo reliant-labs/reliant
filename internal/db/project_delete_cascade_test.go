@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -38,12 +39,12 @@ func TestDeleteProjectLeavesNoOrphanedChatsOrWorktrees(t *testing.T) {
 
 	require.NoError(t, repo.DeleteProject(ctx, "doomed", "owner"))
 
-	chats, err := repo.ListChats(ctx, ChatFilters{UserID: "owner", Limit: 50})
+	chats, err := store.ListChats(ctx, repo.ORM(), ChatFilters{UserID: "owner", Limit: 50})
 	require.NoError(t, err)
 	require.Len(t, chats, 1)
 	assert.Equal(t, "chat-survivor", chats[0].ID)
 
-	archived, _, err := repo.ListArchivedChats(ctx, "owner", nil, ArchivedChatPage{})
+	archived, _, err := store.ListArchivedChats(ctx, repo.ORM(), "owner", nil, ArchivedChatPage{})
 	require.NoError(t, err)
 	assert.Empty(t, archived)
 

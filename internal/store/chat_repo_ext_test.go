@@ -265,7 +265,7 @@ func TestChatListAndSearch(t *testing.T) {
 		if err != nil {
 			t.Fatalf("ListChats(%s): %v", name, err)
 		}
-		twin, err := env.Repo.ListChats(ctx, f)
+		twin, err := store.ListChats(ctx, env.Repo.ORM(), f)
 		if err != nil {
 			t.Fatalf("Repo.ListChats(%s): %v", name, err)
 		}
@@ -294,7 +294,7 @@ func TestChatListAndSearch(t *testing.T) {
 		if err != nil {
 			t.Fatalf("SearchChats(%+v): %v", f, err)
 		}
-		twin, err := env.Repo.SearchChats(ctx, f)
+		twin, err := store.SearchChats(ctx, env.Repo.ORM(), f)
 		if err != nil {
 			t.Fatalf("Repo.SearchChats(%+v): %v", f, err)
 		}
@@ -330,7 +330,7 @@ func TestChatListAndSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListArchivedChats: %v", err)
 	}
-	twinRows, _, err := env.Repo.ListArchivedChats(ctx, storetest.SeedUserID, nil, core.ArchivedChatPage{})
+	twinRows, _, err := store.ListArchivedChats(ctx, env.Repo.ORM(), storetest.SeedUserID, nil, core.ArchivedChatPage{})
 	if err != nil {
 		t.Fatalf("Repo.ListArchivedChats: %v", err)
 	}

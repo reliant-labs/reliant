@@ -150,12 +150,12 @@ func TestListChats_NilProjectMeansEveryProject(t *testing.T) {
 		}))
 	}
 
-	all, err := repo.ListChats(ctx, ChatFilters{UserID: "list-user", Limit: 50})
+	all, err := store.ListChats(ctx, repo.ORM(), ChatFilters{UserID: "list-user", Limit: 50})
 	require.NoError(t, err)
 	assert.Len(t, all, 2, "no project filter lists every project")
 
 	projectA := "project-a"
-	one, err := repo.ListChats(ctx, ChatFilters{UserID: "list-user", ProjectID: &projectA, Limit: 50})
+	one, err := store.ListChats(ctx, repo.ORM(), ChatFilters{UserID: "list-user", ProjectID: &projectA, Limit: 50})
 	require.NoError(t, err)
 	require.Len(t, one, 1)
 	assert.Equal(t, "project-a", one[0].ProjectID)

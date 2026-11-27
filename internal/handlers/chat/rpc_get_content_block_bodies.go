@@ -66,7 +66,7 @@ func (s *Service) GetContentBlockBodies(
 	}
 
 	ids := uniqueNonEmpty(req.Msg.BlockIds)
-	blocks, err := s.deps.Repo.ListContentBlocksByIDs(ctx, ids)
+	blocks, err := s.deps.ToolBlocks.ListContentBlocksByIDs(ctx, ids)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read content blocks"))
 	}

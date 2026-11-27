@@ -77,7 +77,7 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 	}
 	chatIDs := func(scope *core.OrgScope) []string {
 		t.Helper()
-		cs, err := env.Repo.ListChats(ctx, core.ChatFilters{UserID: user, Org: scope, Limit: 50})
+		cs, err := store.ListChats(ctx, env.Repo.ORM(), core.ChatFilters{UserID: user, Org: scope, Limit: 50})
 		if err != nil {
 			t.Fatal(err)
 		}

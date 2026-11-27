@@ -45,6 +45,10 @@ type Deps struct {
 	// (ChatRows, ChatViews; deps.go).
 	ChatRows  ChatRows
 	ChatViews ChatViews
+	// ChatLists lists, searches and pages chats (ChatLists, deps.go).
+	ChatLists ChatLists
+	// StepExecutions reads a workflow node's step execution records.
+	StepExecutions StepExecutions
 	// QuestionResolver resolves a question when a chat resumes past it.
 	QuestionResolver QuestionResolver
 	// Backoff reads and releases the provider-backoff markers of the chats' runs.
@@ -154,6 +158,12 @@ func (d Deps) validateDeps() error {
 	if d.ChatViews == nil {
 		return fmt.Errorf("chat: Deps.ChatViews is required")
 	}
+	if d.ChatLists == nil {
+		return fmt.Errorf("chat: Deps.ChatLists is required")
+	}
+	if d.StepExecutions == nil {
+		return fmt.Errorf("chat: Deps.StepExecutions is required")
+	}
 	if d.QuestionResolver == nil {
 		return fmt.Errorf("chat: Deps.QuestionResolver is required")
 	}
@@ -252,6 +262,23 @@ func isMockReads(v any) bool {
 // fixtureChatReads fills the chat reads: nil in every binary.
 var fixtureQuestionResolver func(Repository) QuestionResolver
 
+// fixtureStores fills ChatLists and StepExecutions for the tests, as
+// fixtureChatReads fills the chat reads: nil in every binary.
+var fixtureStores func(Repository) (ChatLists, StepExecutions)
+
+// isMockStores reports a role the harness filled with its generated mock.
+func isMockStores(v any) bool {
+	switch m := v.(type) {
+	case nil:
+		return true
+	case *MockChatLists:
+		return m.ListChatsFunc == nil && m.SearchChatsFunc == nil && m.ListArchivedChatsFunc == nil
+	case *MockStepExecutions:
+		return m.ListStepExecutionRecordsForChatFunc == nil
+	}
+	return false
+}
+
 // isMockResolver reports a role the harness filled with its generated mock.
 func isMockResolver(v QuestionResolver) bool {
 	switch v.(type) {
@@ -297,6 +324,15 @@ func New(deps Deps) (*Service, error) {
 	}
 	if fixtureQuestionResolver != nil && isMockResolver(deps.QuestionResolver) {
 		deps.QuestionResolver = fixtureQuestionResolver(deps.Repo)
+	}
+	if fixtureStores != nil {
+		lists, steps := fixtureStores(deps.Repo)
+		if isMockStores(deps.ChatLists) {
+			deps.ChatLists = lists
+		}
+		if isMockStores(deps.StepExecutions) {
+			deps.StepExecutions = steps
+		}
 	}
 	if fixtureChatReads != nil {
 		rows, views := fixtureChatReads(deps.Repo)
@@ -374,3 +410,22 @@ func (s *Service) RegisterHTTP(_ *http.ServeMux, _ func(http.Handler) http.Handl
 
 // Ensure the generated protobuf package import remains referenced even before methods exist.
 var _ = pb.File_reliant_v1_chat_proto
+
+// chatLists is Deps.ChatLists; in this package's tests, a fixture that left it
+// unnamed gets the one fixtureStores builds over its repository.
+func (s *Service) chatLists() ChatLists {
+	if isMockStores(s.deps.ChatLists) && fixtureStores != nil {
+		lists, _ := fixtureStores(s.deps.Repo)
+		return lists
+	}
+	return s.deps.ChatLists
+}
+
+// stepExecutions is Deps.StepExecutions, with the same fixture default.
+func (s *Service) stepExecutions() StepExecutions {
+	if isMockStores(s.deps.StepExecutions) && fixtureStores != nil {
+		_, steps := fixtureStores(s.deps.Repo)
+		return steps
+	}
+	return s.deps.StepExecutions
+}

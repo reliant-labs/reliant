@@ -51,7 +51,7 @@ func (s *Service) ListStepExecutions(
 	}
 
 	// One more than the limit says whether anything was left out.
-	rows, err := s.deps.Repo.ListStepExecutionRecordsForChat(ctx, req.Msg.ChatId, nodePath, stepExecutionRecordLimit+1)
+	rows, err := s.stepExecutions().ListStepExecutionRecordsForChat(ctx, req.Msg.ChatId, nodePath, stepExecutionRecordLimit+1)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list step executions"))
 	}

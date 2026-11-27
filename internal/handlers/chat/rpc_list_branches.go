@@ -36,7 +36,7 @@ func (s *Service) ListBranches(
 	}
 
 	// List all chats for the user
-	allChats, err := s.deps.Repo.ListChats(ctx, db.ChatFilters{
+	allChats, err := s.chatLists().ListChats(ctx, db.ChatFilters{
 		UserID: userID,
 		Limit:  1000,
 	})

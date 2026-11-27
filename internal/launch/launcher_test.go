@@ -453,7 +453,7 @@ func TestLaunchValidationFailureLeavesNoChat(t *testing.T) {
 	require.ErrorAs(t, err, &validationErr,
 		"an unrunnable workflow is a validation failure, not an internal error — retrying cannot help")
 
-	chats, listErr := repo.ListChats(ctx, db.ChatFilters{
+	chats, listErr := store.ListChats(ctx, repo.ORM(), db.ChatFilters{
 		UserID:    launchTestUserID,
 		ProjectID: &projectID,
 		Limit:     10,

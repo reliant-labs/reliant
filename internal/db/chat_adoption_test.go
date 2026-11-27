@@ -112,7 +112,7 @@ func TestListChatsSidebarOnlyReadsTheViewColumn(t *testing.T) {
 
 	project := "test-project"
 	ids := func(sidebarOnly bool) map[string]bool {
-		chats, err := repo.ListChats(ctx, ChatFilters{UserID: "test-user", ProjectID: &project, Limit: 100, SidebarOnly: sidebarOnly})
+		chats, err := store.ListChats(ctx, repo.ORM(), ChatFilters{UserID: "test-user", ProjectID: &project, Limit: 100, SidebarOnly: sidebarOnly})
 		require.NoError(t, err)
 		out := map[string]bool{}
 		for _, c := range chats {
