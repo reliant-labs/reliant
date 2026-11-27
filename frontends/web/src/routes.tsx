@@ -225,6 +225,10 @@ const WorkflowDetailPage = lazyRoute(
 const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
 // GTM (components/Gtm): org-gated, so its chunks load only on its pages.
+const GtmStrategyPage = lazyRoute(
+  () => import('./components/Gtm/Strategy/StrategyPage'), 'StrategyPage')
+const GtmChannelsPage = lazyRoute(
+  () => import('./components/Gtm/Channels/ChannelsPage'), 'ChannelsPage')
 const GtmIdeasPage = lazyRoute(
   () => import('./components/Gtm/Ideas/IdeasPage'), 'IdeasPage')
 const GtmIdeaDetailPage = lazyRoute(
@@ -1031,7 +1035,8 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     component: InboxPage,
   })
 
-  // GTM: ideas, campaigns, the calendar, positioning and facts. Each page
+  // GTM: strategy (with its library, `?view=library`), ideas, campaigns, the
+  // calendar, channels, positioning and facts. Each page
   // asks the org gate itself (components/Gtm/shared/GtmShell.tsx); `/gtm`
   // opens Ideas.
   const gtmIndexRoute = createRoute({
@@ -1039,12 +1044,14 @@ function createOrgScopedRoutes<TApp extends AnyRoute, TAuth extends AnyRoute>(
     path: '/gtm',
     component: () => <Navigate to={gtmPath('ideas')} replace />,
   })
+  const gtmStrategyRoute = createRoute({ getParentRoute: authParent, path: '/gtm/strategy', component: GtmStrategyPage })
+  const gtmChannelsRoute = createRoute({ getParentRoute: authParent, path: '/gtm/channels', component: GtmChannelsPage })
   const gtmIdeasRoute = createRoute({ getParentRoute: authParent, path: '/gtm/ideas', component: GtmIdeasPage })
   const gtmIdeaRoute = createRoute({ getParentRoute: authParent, path: '/gtm/ideas/$ideaId', component: GtmIdeaDetailPage })
   const gtmCampaignsRoute = createRoute({ getParentRoute: authParent, path: '/gtm/campaigns', component: GtmCampaignsPage })
   const gtmCalendarRoute = createRoute({ getParentRoute: authParent, path: '/gtm/calendar', component: GtmCalendarPage })
   const gtmPositioningRoute = createRoute({ getParentRoute: authParent, path: '/gtm/positioning', component: GtmPositioningPage })
-  const gtmRoutes = [gtmIndexRoute, gtmIdeasRoute, gtmIdeaRoute, gtmCampaignsRoute, gtmCalendarRoute, gtmPositioningRoute] as const
+  const gtmRoutes = [gtmIndexRoute, gtmStrategyRoute, gtmChannelsRoute, gtmIdeasRoute, gtmIdeaRoute, gtmCampaignsRoute, gtmCalendarRoute, gtmPositioningRoute] as const
 
   // Usage & billing: the org's spend over time, per project, AI and sandbox
   // time, plan, credits and invoices (components/Usage/UsageBillingPage.tsx;

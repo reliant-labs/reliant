@@ -7,7 +7,9 @@
  * read-only and how sending happens. The lifecycle's other moves (schedule,
  * pause, resume) show only where they are allowed; an edit of an approved
  * item says it goes back to review; a sent item is read-only; a refusal says
- * why.
+ * why. On a manual channel a person records the URL and marks it published;
+ * a held email is resolved by a person; files upload in three steps and say
+ * when storage is unavailable.
  */
 
 import { create } from "@bufbuild/protobuf";
@@ -15,7 +17,16 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GtmItemKind, GtmItemSchema, GtmItemStatus } from "@/gen/reliant/v1/gtm_pb";
+import {
+  GtmAssetSchema,
+  GtmAssetSource,
+  GtmAssetStatus,
+  GtmChannelMode,
+  GtmChannelSchema,
+  GtmItemFormat,
+  GtmItemSchema,
+  GtmItemStatus,
+} from "@/gen/reliant/v1/gtm_pb";
 
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
@@ -34,8 +45,8 @@ afterEach(() => {
 const post = create(GtmItemSchema, {
   id: "item-1",
   orgId: TEST_ORG,
-  kind: GtmItemKind.BLOG_POST,
-  channel: "blog",
+  format: GtmItemFormat.LONG_POST,
+  channelId: "ch-blog",
   title: "Launch post",
   bodyMd: "Reliant runs on your own machine.",
   status: GtmItemStatus.REVIEW,
@@ -45,15 +56,20 @@ const post = create(GtmItemSchema, {
 const email = create(GtmItemSchema, {
   ...post,
   id: "item-2",
-  kind: GtmItemKind.EMAIL,
-  channel: "email",
+  format: GtmItemFormat.EMAIL,
+  channelId: "ch-email",
   title: "Beta invite",
   emailTo: ["ada@example.com"],
   emailSubject: "You're in",
 });
 
+const blog = create(GtmChannelSchema, { id: "ch-blog", orgId: TEST_ORG, key: "blog", name: "Blog", mode: GtmChannelMode.MANUAL, manualInstructionsMd: "Publish via the site repo, then record the URL." });
+const gmail = create(GtmChannelSchema, { id: "ch-email", orgId: TEST_ORG, key: "email", name: "Email", mode: GtmChannelMode.INTEGRATED, integrationKind: "gmail" });
+
 const reads = {
   "GtmService.ListCampaigns": { response: { campaigns: [] } },
+  "GtmService.ListChannels": { response: { channels: [blog, gmail] } },
+  "GtmService.ListAssets": { response: { assets: [] } },
   "GtmService.CheckClaims": { response: { findings: [] } },
 };
 
@@ -158,6 +174,106 @@ describe("ItemDialog", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Pause" }));
     await waitFor(() => expect(toasts.warning).toHaveBeenCalledWith("This change isn't possible right now. The email is held while a send is in doubt."));
     expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it("records where a hand-posted item went out, marking it published in one write", async () => {
+    const approved = create(GtmItemSchema, { ...post, status: GtmItemStatus.APPROVED });
+    const update = vi.fn(() => ({ item: { ...approved, status: GtmItemStatus.PUBLISHED } }));
+    renderGtm(<ItemDialog item={approved} onClose={() => {}} />, { ...reads, "GtmService.UpdateItem": update });
+    const step = await screen.findByTestId("gtm-manual-step");
+    expect(within(step).getByText("Post by hand on Blog")).toBeInTheDocument();
+    const mark = within(step).getByRole("button", { name: "Mark published" });
+    expect(mark).toBeDisabled();
+    fireEvent.change(within(step).getByLabelText("Where it went out"), { target: { value: "https://blog.example/launch" } });
+    fireEvent.click(mark);
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "item-1", expectedRevision: 3, status: GtmItemStatus.PUBLISHED, publishedUrl: "https://blog.example/launch" }),
+    );
+  });
+
+  it("asks for approval before the manual step can be recorded", async () => {
+    renderGtm(<ItemDialog item={post} onClose={() => {}} />, reads);
+    const step = await screen.findByTestId("gtm-manual-step");
+    expect(within(step).queryByRole("button", { name: "Mark published" })).not.toBeInTheDocument();
+    expect(within(step).getByText(/Once it is approved/)).toBeInTheDocument();
+  });
+
+  describe("a held email (send in doubt)", () => {
+    const held = create(GtmItemSchema, { ...email, status: GtmItemStatus.APPROVED, approvalHash: "sha256:abc", revision: 6 });
+
+    it("is frozen, offering only the resolve", async () => {
+      renderGtm(<ItemDialog item={held} onClose={() => {}} />, reads);
+      expect(await screen.findByTestId("gtm-held-send")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Pause" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^send/i })).not.toBeInTheDocument();
+    });
+
+    it("records it as sent with the Gmail message id a person found", async () => {
+      const resolve = vi.fn(() => ({ item: { ...held, status: GtmItemStatus.SENT } }));
+      renderGtm(<ItemDialog item={held} onClose={() => {}} />, { ...reads, "GtmService.ResolveItemSend": resolve });
+      fireEvent.click(await screen.findByRole("button", { name: "It went out" }));
+      fireEvent.change(await screen.findByLabelText("Gmail message id"), { target: { value: "18c2f00d" } });
+      fireEvent.click(screen.getByRole("button", { name: "Record as sent" }));
+      await waitFor(() => expect(resolve).toHaveBeenCalled());
+      expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, id: "item-2", approvalHash: "sha256:abc", gmailMessageId: "18c2f00d" }));
+    });
+
+    it("releases the hold when it did not go out, and shows an in-flight refusal in the dialog", async () => {
+      const resolve = vi.fn(() => {
+        throw new ConnectError("a send of this item may still be in progress; wait a few minutes, then check the sent mail in Gmail", Code.FailedPrecondition);
+      });
+      renderGtm(<ItemDialog item={held} onClose={() => {}} />, { ...reads, "GtmService.ResolveItemSend": resolve });
+      fireEvent.click(await screen.findByRole("button", { name: "It did not go out" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Release the hold" }));
+      expect(await screen.findByTestId("gtm-resolve-refusal")).toHaveTextContent("A send of this item may still be in progress");
+      expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ approvalHash: "sha256:abc" }));
+      expect(((resolve.mock.calls[0] as unknown[])[0] as { gmailMessageId?: string }).gmailMessageId).toBeUndefined();
+    });
+  });
+
+  describe("files", () => {
+    const realFetch = globalThis.fetch;
+    afterEach(() => {
+      globalThis.fetch = realFetch;
+    });
+
+    it("upload in three steps: start, PUT with the required headers, confirm", async () => {
+      const put = vi.fn(async () => new Response(null, { status: 200 }));
+      globalThis.fetch = put as unknown as typeof fetch;
+      const asset = create(GtmAssetSchema, { id: "as-1", orgId: TEST_ORG, itemId: "item-1", filename: "hero.png", status: GtmAssetStatus.PENDING });
+      const start = vi.fn(() => ({ asset, uploadUrl: "https://bucket.example/gtm/org-1/as-1.upload?sig=x", requiredHeaders: { "content-type": "image/png" } }));
+      const confirm = vi.fn(() => ({ asset: { ...asset, status: GtmAssetStatus.READY } }));
+      renderGtm(<ItemDialog item={post} onClose={() => {}} />, { ...reads, "GtmService.CreateAssetUpload": start, "GtmService.ConfirmAssetUpload": confirm });
+      const file = new File(["png-bytes"], "hero.png", { type: "image/png" });
+      fireEvent.change(await screen.findByLabelText("Upload a file to assets"), { target: { files: [file] } });
+      await waitFor(() => expect(confirm).toHaveBeenCalled());
+      expect(start).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, target: { case: "itemId", value: "item-1" }, filename: "hero.png", contentType: "image/png", sizeBytes: 9n }));
+      expect(put).toHaveBeenCalledWith("https://bucket.example/gtm/org-1/as-1.upload?sig=x", expect.objectContaining({ method: "PUT", headers: { "content-type": "image/png" }, body: file }));
+      expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, assetId: "as-1" }));
+    });
+
+    it("say uploads are unavailable while storage is not set up", async () => {
+      renderGtm(<ItemDialog item={post} onClose={() => {}} />, {
+        ...reads,
+        "GtmService.CreateAssetUpload": { error: new ConnectError("asset storage is not configured", Code.Unavailable) },
+      });
+      fireEvent.change(await screen.findByLabelText("Upload a file to assets"), { target: { files: [new File(["x"], "a.txt", { type: "text/plain" })] } });
+      expect(await screen.findByTestId("gtm-assets-unavailable")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Upload" })).toBeDisabled();
+      expect(toasts.error).not.toHaveBeenCalled();
+    });
+
+    it("delete only after a confirm", async () => {
+      const asset = create(GtmAssetSchema, { id: "as-2", orgId: TEST_ORG, itemId: "item-1", filename: "notes.txt", contentType: "text/plain", sizeBytes: 2048n, status: GtmAssetStatus.READY, source: GtmAssetSource.PERSON });
+      const del = vi.fn(() => ({}));
+      renderGtm(<ItemDialog item={post} onClose={() => {}} />, { ...reads, "GtmService.ListAssets": { response: { assets: [asset] } }, "GtmService.DeleteAsset": del });
+      fireEvent.click(await screen.findByRole("button", { name: "Delete notes.txt" }));
+      expect(del).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+      await waitFor(() => expect(del).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, assetId: "as-2" })));
+    });
   });
 
   it("offers no approval once an item is out", async () => {

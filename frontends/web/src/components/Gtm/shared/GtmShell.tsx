@@ -26,9 +26,11 @@ import { AreaShell } from "../../Layout/AreaShell";
 import { useGtmAccess } from "./access";
 
 export const GTM_PAGE_LABELS: Record<GtmPage, string> = {
+  strategy: "Strategy",
   ideas: "Ideas",
   campaigns: "Campaigns",
   calendar: "Calendar",
+  channels: "Channels",
   positioning: "Positioning & facts",
 };
 

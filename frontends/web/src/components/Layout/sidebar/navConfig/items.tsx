@@ -22,8 +22,10 @@ import {
   BadgeCheck,
   BarChart3,
   CalendarDays,
+  Compass,
   Lightbulb,
   Megaphone,
+  Radio,
   SquareKanban,
   Bell,
   BookOpen,
@@ -537,8 +539,8 @@ function gtmRow(page: GtmPage, label: string, Icon: typeof Activity): NavRow {
 }
 
 /**
- * GTM › — a drill-in like Agents: Ideas, Campaigns, Calendar, Positioning &
- * facts. Org-gated: shown only when the server says the org may see it
+ * GTM › — a drill-in like Agents: Strategy, Ideas, Campaigns, Calendar,
+ * Channels, Positioning & facts. Org-gated: shown only when the server says the org may see it
  * (`ctx.features.gtm`, components/Gtm/shared/access.ts); hidden while that
  * answer is missing.
  */
@@ -551,9 +553,11 @@ export const gtmArea: NavArea = {
   href: () => gtmPath("ideas"),
   available: (ctx) => ctx.features?.gtm === true,
   children: [
+    gtmRow("strategy", "Strategy", Compass),
     gtmRow("ideas", "Ideas", Lightbulb),
     gtmRow("campaigns", "Campaigns", SquareKanban),
     gtmRow("calendar", "Calendar", CalendarDays),
+    gtmRow("channels", "Channels", Radio),
     gtmRow("positioning", "Positioning & facts", BadgeCheck),
   ],
 };
