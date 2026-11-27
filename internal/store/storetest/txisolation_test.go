@@ -192,6 +192,16 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			}
 			return err
 		}},
+		// The merge queue's attach: the batch's row lock holds its state
+		// while entries move, so READ COMMITTED, one attempt. The batch
+		// does not exist: the transaction is begun and its lock finds none.
+		{"store.AttachQueueEntries", readCommitted, func(ctx context.Context) error {
+			err := store.AttachQueueEntries(ctx, p.ORM, "batch-none", []string{"entry-none"})
+			if errors.Is(err, core.ErrQueueEntryNotAttachable) {
+				return nil
+			}
+			return err
+		}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

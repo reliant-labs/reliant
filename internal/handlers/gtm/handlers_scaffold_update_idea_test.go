@@ -42,11 +42,34 @@ func TestUpdateIdea_Generated(t *testing.T) {
 					assert.Nil(t, in.Kind)
 					assert.Nil(t, in.BodyMD)
 					assert.Nil(t, in.CampaignID)
+					assert.Nil(t, in.LibraryKey)
+					assert.Nil(t, in.TailorAnswers)
+					assert.Nil(t, in.SuggestedWorkflowMD)
 					return gtmsvc.Idea{ID: "i1", Title: "New", Revision: 4}, nil
 				}
 			},
 			Check: func(t *testing.T, resp *connect.Response[pb.UpdateIdeaResponse]) {
 				assert.Equal(t, int32(4), resp.Msg.GetIdea().GetRevision())
+			},
+		},
+		{
+			Name: "a set tailor_answers list replaces; empty library_key and suggested_workflow_md clear",
+			Req: connect.NewRequest(&pb.UpdateIdeaRequest{
+				OrgId: testOrg, Id: "i1", ExpectedRevision: 3, LibraryKey: proto.String(""), SuggestedWorkflowMd: proto.String(""),
+				TailorAnswers: &pb.GtmTailorAnswerList{Answers: []*pb.GtmTailorAnswer{{Question: "Who?", Answer: "Teams"}}},
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.UpdateIdeaFunc = func(_ context.Context, _ gtmsvc.Actor, in gtmsvc.UpdateIdeaInput) (gtmsvc.Idea, error) {
+					assert.Equal(t, "", *in.LibraryKey)
+					assert.Equal(t, "", *in.SuggestedWorkflowMD)
+					assert.Equal(t, []gtmsvc.TailorAnswer{{Question: "Who?", Answer: "Teams"}}, *in.TailorAnswers)
+					assert.Nil(t, in.Evidence)
+					return gtmsvc.Idea{ID: "i1", Revision: 4, TailorAnswers: *in.TailorAnswers}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.UpdateIdeaResponse]) {
+				assert.Equal(t, "Teams", resp.Msg.GetIdea().GetTailorAnswers()[0].GetAnswer())
 			},
 		},
 		{

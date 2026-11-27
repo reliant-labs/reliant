@@ -44,7 +44,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
 import Button from "@/components/forge-ui/button";
-import { activityKeys, deliveryKeys, issueKeys, obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
+import { observabilityServiceKeys } from "@/hooks/controlplane/observability-service-hooks_gen";
+import { activityKeys, deliveryKeys, invalidateObsScope, issueKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
 import { sessionKeys } from "@/hooks/observability-session-queries";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -242,8 +243,11 @@ export default function ObservabilityPanel({ place, search, navigate }: Observab
         className="min-h-[32px] touch:h-11"
         onClick={() => {
           if (view === "graph" || view === "rpc") setGraphRefresh((n) => n + 1);
-          void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });
+          void invalidateObsScope(queryClient, scope);
           void queryClient.invalidateQueries({ queryKey: deliveryKeys.root() });
+          // Release health and each frontend's replay switch: every one, as the delivery and session roots are.
+          void queryClient.invalidateQueries({ queryKey: observabilityServiceKeys.getReleaseHealth.all });
+          void queryClient.invalidateQueries({ queryKey: observabilityServiceKeys.listFrontendReplay.all });
           void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
           void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
           void queryClient.invalidateQueries({ queryKey: sessionKeys.root() });

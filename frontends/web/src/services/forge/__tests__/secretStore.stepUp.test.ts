@@ -1,36 +1,36 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The managed store's protected-environment surface (design D6) at the
- * transport boundary: what ListSecrets now carries, how a refusal is
- * recognised, the two step-up RPCs, how their failures map onto the dialog's
- * vocabulary, and who set each version.
+ * The managed store's protected-environment surface (design D6), as its
+ * answers are read: what ListSecrets now carries, how a refusal is
+ * recognised, what the two step-up RPCs answer, how their failures map onto
+ * the dialog's vocabulary, and who set each version. The requests themselves
+ * are the generated hooks' (hooks/forge-queries.ts, the step-up gate), pinned
+ * by those callers' tests.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { transport } from "@/lib/connect";
+import { describe, expect, it, vi } from "vitest";
+import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
-import { SecretAuthorKind } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
+import {
+  BeginStepUpResponseSchema,
+  CompleteStepUpResponseSchema,
+  GetSecretVersionsResponseSchema,
+  ListSecretsResponseSchema,
+  SecretAuthorKind,
+} from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 
-const rpc = {
-  listSecrets: vi.fn(),
-  getSecretVersions: vi.fn(),
-  beginStepUp: vi.fn(),
-  completeStepUp: vi.fn(),
-};
-
-vi.mock("@/services/controlPlane/client", () => ({ getControlPlaneClient: () => rpc }));
 vi.mock("@/services/controlPlane/config", () => ({ CONTROL_PLANE_API_URL: "http://127.0.0.1:8090" }));
 
 import {
-  beginStepUp,
-  completeStepUp,
-  getSecretVersions,
+  historyOf,
   isStepUpRequired,
-  listSecrets,
+  listingOf,
   sendFailureOf,
+  stepUpChallengeOf,
+  stepUpGrantOf,
   verifyFailureOf,
 } from "../secretStore";
 import { authorLabel, modeExplanation, protectionOf } from "../secretSurface";
@@ -43,26 +43,20 @@ function refused(reason?: string, code = Code.FailedPrecondition): ConnectError 
   return new ConnectError("this environment is protected", code, metadata);
 }
 
-beforeEach(() => {
-  for (const fn of Object.values(rpc)) fn.mockReset();
-});
-
-describe("listSecrets carries protection", () => {
-  it("reports protected and the caller's grant", async () => {
-    rpc.listSecrets.mockResolvedValue({
+describe("ListSecrets carries protection", () => {
+  it("reports protected and the caller's grant", () => {
+    const listing = listingOf(create(ListSecretsResponseSchema, {
       secrets: [{ name: "B" }, { name: "A" }],
       protected: true,
       stepUpValidUntil: timestampFromDate(UNTIL),
-    });
-    const listing = await listSecrets(transport, "denv_1");
+    }));
     expect(listing.protected).toBe(true);
     expect(listing.stepUpValidUntil).toBe(UNTIL.toISOString());
     expect(listing.secrets.map((s) => s.name)).toEqual(["A", "B"]);
   });
 
-  it("an unprotected environment carries no grant", async () => {
-    rpc.listSecrets.mockResolvedValue({ secrets: [], protected: false });
-    expect(await listSecrets(transport, "denv_1")).toEqual({ secrets: [], protected: false });
+  it("an unprotected environment carries no grant", () => {
+    expect(listingOf(create(ListSecretsResponseSchema, { secrets: [], protected: false }))).toEqual({ secrets: [], protected: false });
   });
 });
 
@@ -83,16 +77,16 @@ describe("recognising a step-up refusal", () => {
 });
 
 describe("the step-up RPCs", () => {
-  it("BeginStepUp is keyed on the environment and answers where the code went", async () => {
-    rpc.beginStepUp.mockResolvedValue({ sentTo: "a***@acme.dev", expiresAt: timestampFromDate(UNTIL) });
-    expect(await beginStepUp(transport, "denv_1")).toEqual({ sentTo: "a***@acme.dev", expiresAt: UNTIL.toISOString() });
-    expect(rpc.beginStepUp).toHaveBeenCalledWith({ environmentId: "denv_1" });
+  it("BeginStepUp answers where the code went", () => {
+    const res = create(BeginStepUpResponseSchema, { sentTo: "a***@acme.dev", expiresAt: timestampFromDate(UNTIL) });
+    expect(stepUpChallengeOf(res)).toEqual({ sentTo: "a***@acme.dev", expiresAt: UNTIL.toISOString() });
   });
 
-  it("CompleteStepUp sends the code inbound and answers until when the grant holds", async () => {
-    rpc.completeStepUp.mockResolvedValue({ validUntil: timestampFromDate(UNTIL) });
-    expect(await completeStepUp(transport, "denv_1", "ABCDE-FGHJK")).toEqual({ validUntil: UNTIL.toISOString() });
-    expect(rpc.completeStepUp).toHaveBeenCalledWith({ environmentId: "denv_1", code: "ABCDE-FGHJK" });
+  it("CompleteStepUp answers until when the grant holds, and nothing without one", () => {
+    expect(stepUpGrantOf(create(CompleteStepUpResponseSchema, { validUntil: timestampFromDate(UNTIL) }))).toEqual({
+      validUntil: UNTIL.toISOString(),
+    });
+    expect(stepUpGrantOf(create(CompleteStepUpResponseSchema, {}))).toEqual({});
   });
 
   it.each([
@@ -119,8 +113,8 @@ describe("the step-up RPCs", () => {
 });
 
 describe("who set each version", () => {
-  it("maps every author kind, and an absent one to not recorded", async () => {
-    rpc.getSecretVersions.mockResolvedValue({
+  it("maps every author kind, and an absent one to not recorded", () => {
+    const { versions } = historyOf(create(GetSecretVersionsResponseSchema, {
       versions: [
         { version: 1, destroyed: false, setBy: { kind: SecretAuthorKind.USER, email: "alice@acme.dev" } },
         { version: 2, destroyed: false, setBy: { kind: SecretAuthorKind.TOKEN, email: "" } },
@@ -129,8 +123,7 @@ describe("who set each version", () => {
         { version: 5, destroyed: false, setBy: { kind: SecretAuthorKind.UNSPECIFIED, email: "" } },
         { version: 6, destroyed: false, setBy: { kind: SecretAuthorKind.USER, email: "" } },
       ],
-    });
-    const { versions } = await getSecretVersions(transport, "denv_1", "KEY");
+    }));
     const byVersion = Object.fromEntries(versions.map((v) => [v.version, v.setBy]));
     expect(byVersion).toEqual({
       1: { kind: "user", email: "alice@acme.dev" },

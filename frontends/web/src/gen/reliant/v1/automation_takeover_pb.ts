@@ -582,6 +582,7 @@ export const AutomationTakeoverService: GenService<{
    * withheld (param_names says which are set), and no secret, connection or
    * event payload is returned.
    * forge:custom — an org-wide read for admins, filtered to creators who left, with values withheld
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: liveOffer settles each dead pending offer it finds (s.settle)
    *
    * @generated from rpc reliant.v1.AutomationTakeoverService.ListOrphanedAutomations
    */
@@ -625,6 +626,7 @@ export const AutomationTakeoverService: GenService<{
    * ListTriggerOffers lists the live offers made to the caller, each with
    * the offered trigger (param values withheld).
    * forge:custom — only the caller's live offers; a dead one is settled as it is read
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: liveOffer settles each dead offer it finds (s.settle)
    *
    * @generated from rpc reliant.v1.AutomationTakeoverService.ListTriggerOffers
    */

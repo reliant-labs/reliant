@@ -54,7 +54,7 @@ func TestPreflightDaemonCheck_NonRemoteExecutor(t *testing.T) {
 		UpdatedAt: time.Now(),
 	}))
 
-	activity := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), &mockLocalExecutor{})
+	activity := NewPreflightDaemonCheckActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), &mockLocalExecutor{})
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
@@ -76,7 +76,7 @@ func TestPreflightDaemonCheck_ChatNotFound(t *testing.T) {
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
-	activity := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), &mockLocalExecutor{})
+	activity := NewPreflightDaemonCheckActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), &mockLocalExecutor{})
 
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()

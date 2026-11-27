@@ -35,6 +35,8 @@ func TestGetPositioning_Generated(t *testing.T) {
 			Check: func(t *testing.T, resp *connect.Response[pb.GetPositioningResponse]) {
 				assert.Equal(t, int32(0), resp.Msg.GetPositioning().GetRevision())
 				assert.Nil(t, resp.Msg.GetPositioning().GetUpdatedAt())
+				assert.Equal(t, pb.GtmBusinessType_GTM_BUSINESS_TYPE_UNSPECIFIED, resp.Msg.GetPositioning().GetBusinessType())
+				assert.Empty(t, resp.Msg.GetPositioning().GetBusinessModels())
 			},
 		},
 		{

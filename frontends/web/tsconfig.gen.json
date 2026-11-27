@@ -24,8 +24,7 @@
     /* Note: erasableSyntaxOnly is NOT set - allows enums in generated protobuf code */
     "noFallthroughCasesInSwitch": true,
 
-    /* Path mapping */
-    "baseUrl": ".",
+    /* Path mapping: relative to this file (no baseUrl, which TypeScript 7 removed). */
     "paths": {
       "@/*": ["./src/*"]
     }

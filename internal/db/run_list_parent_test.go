@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func agentRun(id, parent, user string) listRunSeed {
@@ -80,7 +79,7 @@ func TestListRuns_ParentChatIDAndTitleArePopulated(t *testing.T) {
 	assert.Empty(t, byID["snoop"].ParentChatTitle, "another user's chat title must not leak")
 	assert.Empty(t, byID["parent"].ParentChatID, "an interactive run has no parent")
 
-	last, err := store.LastRunPerWorkflow(ctx, repo.ORM(), RunListFilters{UserID: "test-user"})
+	last, err := repo.LastRunPerWorkflow(ctx, RunListFilters{UserID: "test-user"})
 	require.NoError(t, err)
 	require.Len(t, last, 1)
 }

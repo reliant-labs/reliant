@@ -25,11 +25,10 @@ import (
 //
 // Only a person-class credential is a Person: the ones auth.RequirePerson
 // admits (an app session, a browser session, the self-host shared key). Every
-// other credential is an Agent with no chat, an rlat_ access token included:
-// the CLI login every agent shell inherits is one, so a token holder gets the
-// domain's agent rules (no approving an item, verifying a claim, resolving a
-// send or activating a strategy). ImportStrategyLibrary is the one exception
-// (rpc_import_strategy_library.go).
+// other credential is an Agent with no chat, an rlat_ access token included,
+// on every rpc: the CLI login every agent shell inherits is one, so a token
+// holder gets the domain's agent rules (no approving an item, verifying a
+// claim, resolving a send or activating a strategy).
 func actor(ctx context.Context, orgID string) (gtmsvc.Actor, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {

@@ -13,10 +13,8 @@ import (
 // declared here, by its consumer, so the package knows only what it uses
 // (forge fix narrow-deps). Add a method when the package calls one.
 type ServiceService interface {
-	CancelLibraryPrune(ctx context.Context, actor gtm.Actor, in gtm.CancelLibraryPruneInput) (gtm.LibraryPruneRequest, error)
 	CheckClaims(ctx context.Context, actor gtm.Actor, in gtm.CheckClaimsInput) (gtm.CheckClaimsResult, error)
 	ConfirmAssetUpload(ctx context.Context, actor gtm.Actor, in gtm.ConfirmAssetUploadInput) (gtm.Asset, error)
-	ConfirmLibraryPrune(ctx context.Context, actor gtm.Actor, in gtm.ConfirmLibraryPruneInput) (gtm.ConfirmLibraryPruneResult, error)
 	CreateAssetUpload(ctx context.Context, actor gtm.Actor, in gtm.CreateAssetUploadInput) (gtm.AssetUpload, error)
 	CreateCampaign(ctx context.Context, actor gtm.Actor, in gtm.CreateCampaignInput) (gtm.Campaign, error)
 	CreateChannel(ctx context.Context, actor gtm.Actor, in gtm.CreateChannelInput) (gtm.Channel, error)
@@ -34,15 +32,12 @@ type ServiceService interface {
 	GetPositioning(ctx context.Context, actor gtm.Actor) (gtm.Positioning, error)
 	GetStrategy(ctx context.Context, actor gtm.Actor, in gtm.GetStrategyInput) (gtm.StrategyDetail, error)
 	GetStrategyLibraryEntry(ctx context.Context, actor gtm.Actor, in gtm.GetStrategyLibraryEntryInput) (gtm.LibraryEntry, error)
-	ImportStrategyLibrary(ctx context.Context, actor gtm.Actor, in gtm.ImportStrategyLibraryInput) (gtm.ImportStrategyLibraryResult, error)
 	ListAssets(ctx context.Context, actor gtm.Actor, in gtm.ListAssetsInput) (gtm.ListAssetsResult, error)
 	ListCampaigns(ctx context.Context, actor gtm.Actor, in gtm.ListCampaignsInput) (gtm.ListCampaignsResult, error)
 	ListChannels(ctx context.Context, actor gtm.Actor, in gtm.ListChannelsInput) (gtm.ListChannelsResult, error)
 	ListClaims(ctx context.Context, actor gtm.Actor, in gtm.ListClaimsInput) (gtm.ListClaimsResult, error)
 	ListIdeas(ctx context.Context, actor gtm.Actor, in gtm.ListIdeasInput) (gtm.ListIdeasResult, error)
 	ListItems(ctx context.Context, actor gtm.Actor, in gtm.ListItemsInput) (gtm.ListItemsResult, error)
-	ListLibraryImports(ctx context.Context, actor gtm.Actor, in gtm.ListLibraryImportsInput) (gtm.ListLibraryImportsResult, error)
-	ListLibraryPruneRequests(ctx context.Context, actor gtm.Actor, in gtm.ListLibraryPruneRequestsInput) (gtm.ListLibraryPruneRequestsResult, error)
 	ListStrategies(ctx context.Context, actor gtm.Actor, in gtm.ListStrategiesInput) (gtm.ListStrategiesResult, error)
 	ListStrategyLibrary(ctx context.Context, actor gtm.Actor, in gtm.ListStrategyLibraryInput) (gtm.ListStrategyLibraryResult, error)
 	ResolveInDoubtSend(ctx context.Context, actor gtm.Actor, in gtm.ResolveInDoubtSendInput) (gtm.Item, error)

@@ -105,6 +105,7 @@ type CatalogServiceClient interface {
 	// options list action as the caller, through the connection they chose, and
 	// projects each item to an option. It reads only; an unknown type is
 	// NOT_FOUND.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it runs the integration's options action against the provider's API as the caller (research/forge-migration/14-p7b-lint-adoption-plan.md section 7.3 keeps calls-out rpcs off the marker)
 	ListInputOptions(context.Context, *connect.Request[v1.ListInputOptionsRequest]) (*connect.Response[v1.ListInputOptionsResponse], error)
 }
 
@@ -293,6 +294,7 @@ type CatalogServiceHandler interface {
 	// options list action as the caller, through the connection they chose, and
 	// projects each item to an option. It reads only; an unknown type is
 	// NOT_FOUND.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it runs the integration's options action against the provider's API as the caller (research/forge-migration/14-p7b-lint-adoption-plan.md section 7.3 keeps calls-out rpcs off the marker)
 	ListInputOptions(context.Context, *connect.Request[v1.ListInputOptionsRequest]) (*connect.Response[v1.ListInputOptionsResponse], error)
 }
 

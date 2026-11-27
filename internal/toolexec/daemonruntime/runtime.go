@@ -319,6 +319,13 @@ type Guards struct {
 	// HeavyShare is the CPUs each slotted command may use; zero derives
 	// it from the slot pool (heavyjob.DefaultShare).
 	HeavyShare int
+	// HeavyCPUWeight is the cpu.weight each slotted command's cgroup is
+	// lowered to; zero is heavyjob.DefaultCPUWeight, 100 or more is none.
+	HeavyCPUWeight int
+	// HeavyMemoryHigh is the memory.high, in bytes, each slotted command's
+	// cgroup is bounded by; zero derives it (heavyjob.DefaultMemoryHigh),
+	// negative sets none.
+	HeavyMemoryHigh int64
 	// CommandThreads is each command's thread limit; zero derives it from
 	// the machine (proctree.Size).
 	CommandThreads int
@@ -623,6 +630,7 @@ func describeIncumbentDaemon(dataDir string) string {
 }
 
 func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards Guards, mcpOpts ...mcp.ManagerOption) (*daemonClient, error) {
+	configureGates(host)
 	// Resolve CWD: the platform's working directory (DAEMON_WORKING_DIR, used
 	// in Docker and on pods), else os.Getwd().
 	cwd := strings.TrimSpace(host.WorkingDir)
@@ -678,6 +686,9 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// registered in Start: forge's storage reaper, where the reaper routine
 	// is enabled.
 	diskGuard := diskguard.New(guards.Disk, diskWatcher)
+	// A node's preflight refuses this machine while the guard refuses heavy
+	// work (cmd_machine_preflight.go).
+	SetPreflightDiskGuard(diskGuard)
 
 	// Every agent on this machine runs its commands through this daemon, so
 	// this is where their heavy ones (builds, test suites, codegen) are held
@@ -713,8 +724,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	forkWatch := forkwatch.New(forkWatchCfg)
 
 	heavyGate, err := heavyjob.New(heavyjob.Config{
-		Commands: guards.HeavyCommands,
-		Share:    guards.HeavyShare,
+		Commands:   guards.HeavyCommands,
+		Share:      guards.HeavyShare,
+		CPUWeight:  guards.HeavyCPUWeight,
+		MemoryHigh: guards.HeavyMemoryHigh,
 		// The slot pool is forge's, read from forge's own variables
 		// (FORGE_SLOTS_DIR, FORGE_HEAVY_SLOTS) exactly as forge's lanes
 		// read them, so both draw on one machine-wide budget.

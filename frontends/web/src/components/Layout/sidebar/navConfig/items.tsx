@@ -118,7 +118,7 @@ export const overview: NavRow = {
 export const services = consoleRow("services", "Services", { kind: "services" }, icon(Boxes), ["services", "service", "workload"]);
 /** Buckets and managed Postgres (PAGES makes the page top-level). */
 export const storage = consoleRow("storage", "Storage", { kind: "storage" }, icon(HardDrive), ["storage"]);
-export const data = consoleRow("data", "Data", { kind: "data" }, icon(Database), ["data"]);
+export const data: NavRow = { ...consoleRow("data", "Data", { kind: "data" }, icon(Database), ["data"]), tour: "nav-data" };
 export const releases = consoleRow("releases", "Releases", { kind: "releases" }, icon(Tag), ["releases", "release"]);
 
 /** The Environments page's previews view (`?show=previews`), a URL of its own. */
@@ -460,6 +460,7 @@ export const isAnalyticsRoute = (ctx: NavCtx): boolean =>
 export const analyticsGroup: NavGroup = {
   kind: "group",
   id: "analytics",
+  tour: "nav-analytics",
   label: "Analytics",
   icon: icon(BarChart3),
   available: hasApp,

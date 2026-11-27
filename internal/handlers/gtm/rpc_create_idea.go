@@ -31,6 +31,10 @@ func (s *Service) CreateIdea(
 		BodyMD:     m.GetBodyMd(),
 		Evidence:   evidence,
 		CampaignID: m.GetCampaignId(),
+
+		LibraryKey:          m.GetLibraryKey(),
+		TailorAnswers:       tailorAnswersIn(m.GetTailorAnswers()),
+		SuggestedWorkflowMD: m.GetSuggestedWorkflowMd(),
 	})
 	if err != nil {
 		return nil, wireErr(err)

@@ -1450,6 +1450,7 @@ export const ProjectCheckoutStateSchema: GenEnum<ProjectCheckoutState> = /*@__PU
 export const FileSystemService: GenService<{
   /**
    * GetFileTree returns the file tree structure for a project
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.FileSystemService.GetFileTree
    */
@@ -1460,6 +1461,7 @@ export const FileSystemService: GenService<{
   },
   /**
    * GetFileContent returns the content of a specific file
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.FileSystemService.GetFileContent
    */
@@ -1480,6 +1482,7 @@ export const FileSystemService: GenService<{
   },
   /**
    * GetFileMetadata returns metadata for a file or directory
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.FileSystemService.GetFileMetadata
    */
@@ -1490,6 +1493,7 @@ export const FileSystemService: GenService<{
   },
   /**
    * GetFilePreviewInfo returns preview metadata for a file
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.FileSystemService.GetFilePreviewInfo
    */
@@ -1500,6 +1504,7 @@ export const FileSystemService: GenService<{
   },
   /**
    * GetFilePreview returns the raw binary content of a previewable file (image, PDF, audio, video).
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.FileSystemService.GetFilePreview
    */
@@ -1540,6 +1545,7 @@ export const FileSystemService: GenService<{
   },
   /**
    * SearchFiles searches for text within files in the workspace
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.FileSystemService.SearchFiles
    */
@@ -1562,6 +1568,7 @@ export const FileSystemService: GenService<{
    * ListDirectory lists entries in an arbitrary filesystem directory.
    * Used by the project picker in browser mode (no Electron). daemon_id
    * names the machine to browse; unset browses the default machine.
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.FileSystemService.ListDirectory
    */

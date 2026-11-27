@@ -192,6 +192,7 @@ func NewSharingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			httpClient,
 			baseURL+SharingServiceListSharedWorkflowDraftsProcedure,
 			connect.WithSchema(sharingServiceMethods.ByName("ListSharedWorkflowDrafts")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		setChatMember: connect.NewClient[v1.SetChatMemberRequest, v1.SetChatMemberResponse](
@@ -398,6 +399,7 @@ func NewSharingServiceHandler(svc SharingServiceHandler, opts ...connect.Handler
 		SharingServiceListSharedWorkflowDraftsProcedure,
 		svc.ListSharedWorkflowDrafts,
 		connect.WithSchema(sharingServiceMethods.ByName("ListSharedWorkflowDrafts")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	sharingServiceSetChatMemberHandler := connect.NewUnaryHandler(

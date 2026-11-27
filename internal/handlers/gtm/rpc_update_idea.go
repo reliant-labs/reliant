@@ -9,8 +9,10 @@ import (
 	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// UpdateIdea edits an idea's content and campaign link; unset fields are left
-// alone, and a set evidence list (possibly empty) replaces the stored one.
+// UpdateIdea edits an idea's content, campaign link and library tie-in;
+// unset fields are left alone, a set evidence or tailor_answers list
+// (possibly empty) replaces the stored one, and an empty library_key or
+// suggested_workflow_md clears it.
 func (s *Service) UpdateIdea(
 	ctx context.Context,
 	req *connect.Request[pb.UpdateIdeaRequest],
@@ -27,6 +29,13 @@ func (s *Service) UpdateIdea(
 		Title:            m.Title,
 		BodyMD:           m.BodyMd,
 		CampaignID:       m.CampaignId,
+
+		LibraryKey:          m.LibraryKey,
+		SuggestedWorkflowMD: m.SuggestedWorkflowMd,
+	}
+	if m.GetTailorAnswers() != nil {
+		answers := tailorAnswersIn(m.GetTailorAnswers().GetAnswers())
+		in.TailorAnswers = &answers
 	}
 	if m.GetEvidence() != nil {
 		evidence, err := evidenceIn(m.GetEvidence().GetEvidence())

@@ -250,7 +250,7 @@ func TestTitle_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-title-ledger", project.ID, project.UserID)
 
 	driver := newPathDriver("openai", true)
-	title := NewGenerateTitleActivity(tools.WithChats(h.Repo()), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
+	title := NewGenerateTitleActivity(tools.WithChats(h.Repo()), NewTriggerReads(h.Repo().ORM()), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	runRetried(t, "GenerateTitle", title.Execute, GenerateTitleInput{ChatID: chat.ID, FirstMessage: "how do I debug a workflow?"})
 	require.Equal(t, 2, driver.requests)
 
@@ -578,7 +578,7 @@ func TestBackgroundRequests_FailedAttemptKeepsItsUsage(t *testing.T) {
 		project := h.CreateTestProject(context.Background(), "proj-title-billed", "user-title-billed")
 		chat := h.CreateTestChat(context.Background(), "chat-title-billed", project.ID, project.UserID)
 		driver := newPathDriverShaped("openai", true, failErrorThenUsage)
-		runRetried(t, "GenerateTitle", NewGenerateTitleActivity(tools.WithChats(h.Repo()), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute,
+		runRetried(t, "GenerateTitle", NewGenerateTitleActivity(tools.WithChats(h.Repo()), NewTriggerReads(h.Repo().ORM()), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute,
 			GenerateTitleInput{ChatID: chat.ID, FirstMessage: "how do I debug a workflow?"})
 		check(t, h, "title")
 	})

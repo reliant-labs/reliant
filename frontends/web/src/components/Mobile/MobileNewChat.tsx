@@ -607,7 +607,7 @@ function MobileNewChatDraft({
           onClick={revealOptions}
           aria-label={`Chat options: ${summary}. Show options`}
           data-testid="mobile-new-chat-summary"
-          className="flex min-h-[44px] w-full shrink-0 items-center gap-1 border-b border-border bg-background px-4 text-left text-xs text-muted-foreground active:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+          className="flex min-h-[44px] w-full shrink-0 items-center gap-1 border-b border-border bg-background px-4 text-left text-meta text-muted-foreground active:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
         >
           <span className="min-w-0 flex-1 truncate">{summary}</span>
           <ChevronDown className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -638,9 +638,9 @@ function MobileNewChatDraft({
         {showWorkspaces &&
           (workspacesReadOnly ? (
             <MobileCardGroup label="Workspace">
-              <div className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-3 text-sm text-foreground">
+              <div className="flex min-h-[44px] items-center justify-between gap-3 px-4 py-3 text-ui text-foreground">
                 <span className="min-w-0 truncate">{rankedWorkspaces[0].name}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">{workspaceMeta(rankedWorkspaces[0])}</span>
+                <span className="shrink-0 text-meta text-muted-foreground">{workspaceMeta(rankedWorkspaces[0])}</span>
               </div>
             </MobileCardGroup>
           ) : (
@@ -711,14 +711,14 @@ function MobileNewChatDraft({
         </MobileCardGroup>
 
         {canPickMachine && resolvedMachine.lockedBy && daemons.length > 1 && (
-          <p role="note" className="px-1 text-xs text-muted-foreground">
+          <p role="note" className="px-1 text-meta text-muted-foreground">
             Runs on{" "}
             {daemonLabel(daemons.find((d) => d.daemonId === resolvedMachine.lockedBy), resolvedMachine.lockedBy)}, where
             this workspace lives.
           </p>
         )}
         {noMachine && (
-          <p role="note" className="px-1 text-xs text-muted-foreground">
+          <p role="note" className="px-1 text-meta text-muted-foreground">
             {NO_MACHINE_COMPOSER_HINT}
           </p>
         )}
@@ -834,7 +834,7 @@ function MobileNewChatDraft({
 
 /** A 44px action row inside a `MobileCardGroup`, matching `MobileSelectRow`. */
 const CARD_ROW =
-  "flex min-h-[44px] w-full items-center gap-3 px-4 py-3 text-left text-sm active:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
+  "flex min-h-[44px] w-full items-center gap-3 px-4 py-3 text-left text-ui active:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
 /**
  * One workspace on the canvas. Radio semantics because exactly one is
@@ -862,7 +862,7 @@ function WorkspaceRadioRow({
         {checked && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
       </span>
       <span className={cn("min-w-0 flex-1 truncate", checked && "font-medium")}>{worktree.name}</span>
-      {meta && <span className="shrink-0 text-xs text-muted-foreground">{meta}</span>}
+      {meta && <span className="shrink-0 text-meta text-muted-foreground">{meta}</span>}
     </button>
   );
 }
@@ -885,7 +885,7 @@ function StatusLine({
     <div
       data-testid={testId}
       className={cn(
-        "px-1 pb-2 text-xs",
+        "px-1 pb-2 text-meta",
         tone === "destructive" ? "text-destructive-ink" : "text-muted-foreground",
       )}
     >

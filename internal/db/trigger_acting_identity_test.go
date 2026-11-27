@@ -8,12 +8,13 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
 func storedIdentity(t *testing.T, repo *Repo, id string) core.ActingIdentity {
 	t.Helper()
-	got, err := repo.GetTrigger(context.Background(), id)
+	got, err := store.GetTrigger(context.Background(), repo.ORM(), id)
 	if err != nil {
 		t.Fatalf("GetTrigger(%s): %v", id, err)
 	}

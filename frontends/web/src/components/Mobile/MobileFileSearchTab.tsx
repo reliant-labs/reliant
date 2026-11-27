@@ -91,7 +91,7 @@ export function MobileFileSearchTab({ query }: { query: string }) {
             <ChevronLeft className="h-5 w-5" />
           </button>
           <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="truncate text-sm font-medium">{preview.path}</span>
+          <span className="truncate text-ui font-medium">{preview.path}</span>
         </div>
         <MobileFilePreview path={preview.path} worktreeId={worktreeId} />
       </div>
@@ -101,7 +101,7 @@ export function MobileFileSearchTab({ query }: { query: string }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
-        <span className="text-xs text-muted-foreground">
+        <span className="text-meta text-muted-foreground">
           {query.trim()
             ? `${totalMatches} match${totalMatches !== 1 ? "es" : ""} in ${results.length} file${results.length !== 1 ? "s" : ""}`
             : "Type to search file contents"}
@@ -121,7 +121,7 @@ export function MobileFileSearchTab({ query }: { query: string }) {
 
       {showOptions && (
         <div className="shrink-0 space-y-2 border-b border-border bg-muted/30 px-4 py-3">
-          <label className="flex min-h-[44px] items-center gap-2 text-sm">
+          <label className="flex min-h-[44px] items-center gap-2 text-ui">
             <input
               type="checkbox"
               checked={caseSensitive}
@@ -131,13 +131,13 @@ export function MobileFileSearchTab({ query }: { query: string }) {
             <span className="text-muted-foreground">Case sensitive</span>
           </label>
           <div className="flex items-center gap-2">
-            <label className="text-xs text-muted-foreground">Files:</label>
+            <label className="text-meta text-muted-foreground">Files:</label>
             <input
               type="text"
               value={filePattern}
               onChange={(e) => setFilePattern(e.target.value)}
               placeholder="*.ts, *.go"
-              className="min-h-[44px] flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-xs outline-none focus:ring-1 focus:ring-ring"
+              className="min-h-[44px] flex-1 rounded-md border border-border bg-background px-2 py-1 font-mono text-code outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
         </div>
@@ -150,7 +150,7 @@ export function MobileFileSearchTab({ query }: { query: string }) {
           </div>
         ) : error ? (
           <div className="px-4 py-8 text-center">
-            <p className="text-sm text-destructive-ink">{error}</p>
+            <p className="text-ui text-destructive-ink">{error}</p>
           </div>
         ) : flatMatches.length === 0 ? (
           query.trim() ? (
@@ -179,12 +179,12 @@ export function MobileFileSearchTab({ query }: { query: string }) {
                 // belonged to which path.
                 className="flex w-full min-h-[44px] flex-col items-start gap-1 rounded-lg px-4 py-3 text-left elevation-1 active:bg-foreground/5"
               >
-                <span className="flex w-full items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="flex w-full items-center gap-1.5 text-meta text-muted-foreground">
                   <FileText className="h-3 w-3 shrink-0 text-primary-ink" />
                   <span className="truncate">{match.path}</span>
                   <span className="shrink-0">:{match.lineNumber}</span>
                 </span>
-                <span className="w-full truncate whitespace-pre font-mono text-xs">
+                <span className="w-full truncate whitespace-pre font-mono text-code">
                   {highlightMatch(match.lineContent, match.matchStart, match.matchEnd)}
                 </span>
               </button>

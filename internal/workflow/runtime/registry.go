@@ -1491,6 +1491,7 @@ func resolveMaxAttempts(info activity.Info) int32 {
 	case "SaveMessage":
 		return inlineSaveMessageMaxAttempts
 	case PreflightRequirementsActivityName,
+		MachinePreflightActivityName,
 		"WorkflowError",
 		"ValidateThreadOwnership",
 		"WorkflowStatus",

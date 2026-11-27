@@ -30,12 +30,12 @@ func TestGetStrategyLibraryEntry_Generated(t *testing.T) {
 				m.GetStrategyLibraryEntryFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.GetStrategyLibraryEntryInput) (gtmsvc.LibraryEntry, error) {
 					asPerson(t, a)
 					assert.Equal(t, "seo", in.Key)
-					return gtmsvc.LibraryEntry{Key: "seo", KPIs: []string{"signups"}, SourceRevision: "abc", ImportedBy: "u"}, nil
+					return gtmsvc.LibraryEntry{Key: "seo", KPIs: []string{"signups"}, Cost: "free"}, nil
 				}
 			},
 			Check: func(t *testing.T, resp *connect.Response[pb.GetStrategyLibraryEntryResponse]) {
 				assert.Equal(t, []string{"signups"}, resp.Msg.GetEntry().GetKpis())
-				assert.Equal(t, "abc", resp.Msg.GetEntry().GetSourceRevision())
+				assert.Equal(t, "free", resp.Msg.GetEntry().GetCost())
 			},
 		},
 		{

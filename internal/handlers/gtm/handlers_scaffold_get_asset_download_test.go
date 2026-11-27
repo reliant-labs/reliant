@@ -24,7 +24,7 @@ func TestGetAssetDownload_Generated(t *testing.T) {
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetAssetDownloadRequest, pb.GetAssetDownloadResponse]{
 		{
-			Name: "maps the URL",
+			Name: "maps the URL to download_url",
 			Req:  connect.NewRequest(&pb.GetAssetDownloadRequest{OrgId: testOrg, AssetId: "as1"}),
 			Ctx:  gtm.AuthedContext(t),
 			Setup: func(t *testing.T) {
@@ -35,7 +35,7 @@ func TestGetAssetDownload_Generated(t *testing.T) {
 				}
 			},
 			Check: func(t *testing.T, resp *connect.Response[pb.GetAssetDownloadResponse]) {
-				assert.Equal(t, "https://bucket/get", resp.Msg.GetUrl())
+				assert.Equal(t, "https://bucket/get", resp.Msg.GetDownloadUrl())
 				assert.Equal(t, int64(100), resp.Msg.GetExpiresAt().GetSeconds())
 			},
 		},

@@ -59,6 +59,9 @@ func (a *ActionActivity) executeServer(ctx context.Context, input ActivityInput,
 			Automation:     rtx.Automation,
 		},
 	}
+	if f := rtx.ServerActionFrom; f != nil {
+		call.From = &serveraction.NodeRecord{NodeID: f.NodeID, Type: f.Type, Role: f.Role, Review: f.Review, Ran: f.Ran, Output: f.Output}
+	}
 	if rtx.Telemetry != nil {
 		call.Run.WorkflowRef = rtx.Telemetry.WorkflowRef
 		call.Run.Trigger = rtx.Telemetry.Trigger

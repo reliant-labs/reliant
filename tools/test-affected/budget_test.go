@@ -138,6 +138,34 @@ func TestRunnerGoStepUsesJSONOnlyUnderABudget(t *testing.T) {
 	}
 }
 
+// GO_TEST_VET (the merge gate sets -vet=off when its vet phase runs) reaches
+// the root module's Go step in every shape, scoped, budgeted and FULL, and
+// never the SDK module's, which no gate vets.
+func TestRunnerGoVetReachesOnlyTheRootModulesStep(t *testing.T) {
+	pl := &Plan{Go: GoPlan{Packages: []string{"./internal/leaf"}}, Files: []FileReport{{Path: "sdk/go/reliant/client.go"}}}
+	r := &runner{root: "/repo", out: io.Discard, errOut: io.Discard, goVet: []string{"-vet=off"}}
+	byName := map[string][]string{}
+	for _, s := range r.goSteps(pl) {
+		byName[s.name] = s.argv
+	}
+	if want := []string{"go", "test", "-vet=off", "-buildvcs=false", "-short", "-timeout", "5m", "./internal/leaf"}; !slices.Equal(byName["go"], want) {
+		t.Errorf("root go step:\n got %q\nwant %q", byName["go"], want)
+	}
+	if got := byName["go (sdk module)"]; len(got) == 0 || slices.Contains(got, "-vet=off") {
+		t.Errorf("the sdk module's step keeps go test's vet: %q", got)
+	}
+	r.budget = time.Second
+	if s := r.goSteps(pl); !slices.Contains(s[0].argv, "-vet=off") || s[0].argv[2] != "-json" {
+		t.Errorf("a budgeted go step carries GO_TEST_VET after -json: %q", s[0].argv)
+	}
+	if full := r.goSteps(&Plan{Go: GoPlan{Full: true}}); !slices.Contains(full[0].argv, "-vet=off") {
+		t.Errorf("a FULL go lane carries GO_TEST_VET: %q", full[0].argv)
+	}
+	if plain := (&runner{root: "/repo"}).goSteps(pl); slices.Contains(plain[0].argv, "-vet=off") {
+		t.Errorf("no GO_TEST_VET, go test's own vet: %q", plain[0].argv)
+	}
+}
+
 // -capture (the merge gate's) records the root module's Go step and the web
 // step through scripts/test-capture.sh with the same flags and packages; the
 // budget filter still reads a raw -json stream. The SDK module's step stays

@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockAttachmentStore
-// forge:hash=6ee85a897ba3d71a9d2437f49a9cf7a93dd50e438e3990cc35204c73be6486d1
+// forge:hash=4bcb7a606db4d4b0236fe446539c3fab2086f07078f1d251964bd4e97bb93817
 
 // MockAttachmentStore is a test mock for the AttachmentStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAttachmentStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAttachmentStore.<Method>Func not set" error.
 type MockAttachmentStore struct {
 	contractkit.Recorder
 	InsertAttachmentFunc func(context.Context, *core.Attachment) error
@@ -38,18 +39,39 @@ func (m *MockAttachmentStore) InsertAttachment(ctx context.Context, a *core.Atta
 	return contractkit.MockNotSet("MockAttachmentStore", "InsertAttachment")
 }
 
+// MockAttachmentStoreInsertAttachmentCall is one recorded call of MockAttachmentStore.InsertAttachment, one
+// field per parameter.
+type MockAttachmentStoreInsertAttachmentCall struct {
+	Ctx context.Context
+	A   *core.Attachment
+}
+
+// InsertAttachmentCalls returns every recorded InsertAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InsertAttachment").
+func (m *MockAttachmentStore) InsertAttachmentCalls() []MockAttachmentStoreInsertAttachmentCall {
+	var out []MockAttachmentStoreInsertAttachmentCall
+	for _, c := range m.Recorder.Calls("InsertAttachment") {
+		var r MockAttachmentStoreInsertAttachmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.A, _ = c.Args[1].(*core.Attachment)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ AttachmentStore = (*MockAttachmentStore)(nil)
 
 // forge:section MockContentReader
-// forge:hash=2583b9ed341ec936e83a715453af0f1f92fd3d9956aa6610461a6e7ccfcbcd0d
+// forge:hash=db7c740e046b50e5d11557c919dbb0c939e7235d64bcf218c91a800178903015
 
 // MockContentReader is a test mock for the ContentReader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockContentReader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockContentReader.<Method>Func not set" error.
 type MockContentReader struct {
 	contractkit.Recorder
 	GetAttachmentFunc func(context.Context, string) (*core.Attachment, error)
@@ -62,6 +84,26 @@ func (m *MockContentReader) GetAttachment(ctx context.Context, id string) (*core
 		return m.GetAttachmentFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockContentReader", "GetAttachment")
+}
+
+// MockContentReaderGetAttachmentCall is one recorded call of MockContentReader.GetAttachment, one
+// field per parameter.
+type MockContentReaderGetAttachmentCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetAttachmentCalls returns every recorded GetAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAttachment").
+func (m *MockContentReader) GetAttachmentCalls() []MockContentReaderGetAttachmentCall {
+	var out []MockContentReaderGetAttachmentCall
+	for _, c := range m.Recorder.Calls("GetAttachment") {
+		var r MockContentReaderGetAttachmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

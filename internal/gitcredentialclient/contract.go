@@ -87,6 +87,22 @@ type Service interface {
 	// transient.
 	MintInstallationToken(ctx context.Context, req InstallationRequest) (InstallationToken, error)
 
+	// MintQueueInstallationToken returns a Reliant Queue App installation
+	// token scoped to ONE repository: the merge queue's own identity, the
+	// only actor a repository's ruleset lets update its default branch
+	// (pipeline redesign §3.1, §5, owner decision D2). control-plane mints it
+	// only for the reliant worker, proven by req.CallerAssertion
+	// (SignQueueCallerAssertion), and for no user.
+	//
+	// Errors: ErrQueueAppNotConfigured (control-plane holds no Queue App) and
+	// ErrQueueAppNotInstalled are the queue's cue to land as the Reliant App
+	// instead, unenforced; ErrQueueCallerNotWorker (the assertion did not
+	// verify, or control-plane holds no caller secret) and
+	// ErrQueueAppPermissions are permanent until an operator acts.
+	// ErrRateLimited is transient with a known end; anything else is
+	// transient.
+	MintQueueInstallationToken(ctx context.Context, req QueueInstallationRequest) (InstallationToken, error)
+
 	// ListOrgGitHubInstallations lists the GitHub App installations an org
 	// has linked (control-plane OrganizationService.LinkGitHubAppInstallation):
 	// ids and account names, no credential. The caller decides who may see
@@ -122,6 +138,19 @@ type InstallationRequest struct {
 	// The user's push access gates it exactly as without it. Empty is any
 	// installation of the App, as before org installations.
 	OrgID string
+}
+
+// QueueInstallationRequest names what a Queue App token is for.
+type QueueInstallationRequest struct {
+	// Owner and Repo name the one repository the token is scoped to.
+	Owner string
+	Repo  string
+	// Permissions narrows the token (contents, pull_requests, checks ->
+	// read|write). Empty means control-plane's default: all three at write.
+	Permissions map[string]string
+	// CallerAssertion proves the caller is the reliant worker: the
+	// X-Reliant-Queue-Caller JWT SignQueueCallerAssertion signs.
+	CallerAssertion string
 }
 
 // InstallationToken is a minted installation token and who it speaks as.
@@ -184,6 +213,22 @@ var (
 	ErrAppNotLinked = svcerr.WithClass(errors.New("gitcredentialclient: the repository's GitHub App installation is not linked to the organization"), svcerr.ClassUser)
 	// ErrNotOrgMember: a mint for an org whose user is not a live member.
 	ErrNotOrgMember = svcerr.WithClass(errors.New("gitcredentialclient: the user is not a member of the organization"), svcerr.ClassUser)
+)
+
+// The Queue App's outcomes (MintQueueInstallationToken). Each is an
+// operator's to fix, never a user's, so none is a user error.
+var (
+	// ErrQueueAppNotConfigured: control-plane holds no Queue App id or key.
+	ErrQueueAppNotConfigured = errors.New("gitcredentialclient: the Reliant Queue App is not configured on the control plane")
+	// ErrQueueAppNotInstalled: the Queue App is not installed on the
+	// repository.
+	ErrQueueAppNotInstalled = errors.New("gitcredentialclient: the Reliant Queue App is not installed on the repository")
+	// ErrQueueAppPermissions: the Queue App lacks a permission the token
+	// needs.
+	ErrQueueAppPermissions = errors.New("gitcredentialclient: the Reliant Queue App lacks a permission the token needs")
+	// ErrQueueCallerNotWorker: control-plane did not accept the caller as the
+	// reliant worker (a bad assertion, or no caller secret there).
+	ErrQueueCallerNotWorker = errors.New("gitcredentialclient: control-plane did not accept this caller as the reliant worker")
 )
 
 // User errors too, for the same reason as the App outcomes above.

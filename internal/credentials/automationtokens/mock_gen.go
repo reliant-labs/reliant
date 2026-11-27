@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=045e33661ffe33739fc21e80f4fdd629e145f6c201bbf613ac91c87dc7352f6c
+// forge:hash=cce458b8a928513e2c8f88466a1f6fb65a2b0d42ecb7758143f31eba3702223b
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	GetAutomationTokenFunc    func(context.Context, string, string) (string, error)
@@ -78,18 +79,127 @@ func (m *MockService) UserHasCredentials(ctx context.Context, userID string) (bo
 	return false, contractkit.MockNotSet("MockService", "UserHasCredentials")
 }
 
+// MockServiceGetAutomationTokenCall is one recorded call of MockService.GetAutomationToken, one
+// field per parameter.
+type MockServiceGetAutomationTokenCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// GetAutomationTokenCalls returns every recorded GetAutomationToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAutomationToken").
+func (m *MockService) GetAutomationTokenCalls() []MockServiceGetAutomationTokenCall {
+	var out []MockServiceGetAutomationTokenCall
+	for _, c := range m.Recorder.Calls("GetAutomationToken") {
+		var r MockServiceGetAutomationTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetAutomationTokenCall is one recorded call of MockService.SetAutomationToken, one
+// field per parameter.
+type MockServiceSetAutomationTokenCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+	Token    string
+}
+
+// SetAutomationTokenCalls returns every recorded SetAutomationToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetAutomationToken").
+func (m *MockService) SetAutomationTokenCalls() []MockServiceSetAutomationTokenCall {
+	var out []MockServiceSetAutomationTokenCall
+	for _, c := range m.Recorder.Calls("SetAutomationToken") {
+		var r MockServiceSetAutomationTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		r.Token, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceDeleteAutomationTokenCall is one recorded call of MockService.DeleteAutomationToken, one
+// field per parameter.
+type MockServiceDeleteAutomationTokenCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// DeleteAutomationTokenCalls returns every recorded DeleteAutomationToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteAutomationToken").
+func (m *MockService) DeleteAutomationTokenCalls() []MockServiceDeleteAutomationTokenCall {
+	var out []MockServiceDeleteAutomationTokenCall
+	for _, c := range m.Recorder.Calls("DeleteAutomationToken") {
+		var r MockServiceDeleteAutomationTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePurgeUserCall is one recorded call of MockService.PurgeUser, one
+// field per parameter.
+type MockServicePurgeUserCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// PurgeUserCalls returns every recorded PurgeUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PurgeUser").
+func (m *MockService) PurgeUserCalls() []MockServicePurgeUserCall {
+	var out []MockServicePurgeUserCall
+	for _, c := range m.Recorder.Calls("PurgeUser") {
+		var r MockServicePurgeUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUserHasCredentialsCall is one recorded call of MockService.UserHasCredentials, one
+// field per parameter.
+type MockServiceUserHasCredentialsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// UserHasCredentialsCalls returns every recorded UserHasCredentials call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UserHasCredentials").
+func (m *MockService) UserHasCredentialsCalls() []MockServiceUserHasCredentialsCall {
+	var out []MockServiceUserHasCredentialsCall
+	for _, c := range m.Recorder.Calls("UserHasCredentials") {
+		var r MockServiceUserHasCredentialsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockSealer
-// forge:hash=8274c2c4b760b4033f0ab0e9090e1f83b999f13792d9bcc178292fe5576919ac
+// forge:hash=1daf8f0cfcc61ac9713d53caa9edef35a219f631b12ee73b336e1e5590be10f1
 
 // MockSealer is a test mock for the Sealer interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockSealer.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockSealer.<Method>Func not set" error.
 type MockSealer struct {
 	contractkit.Recorder
 	SealFunc func(context.Context, vault.Tenant, []byte, []byte) ([]byte, error)
@@ -112,6 +222,54 @@ func (m *MockSealer) Open(ctx context.Context, tenant vault.Tenant, ciphertext [
 		return m.OpenFunc(ctx, tenant, ciphertext, aad)
 	}
 	return nil, contractkit.MockNotSet("MockSealer", "Open")
+}
+
+// MockSealerSealCall is one recorded call of MockSealer.Seal, one
+// field per parameter.
+type MockSealerSealCall struct {
+	Ctx       context.Context
+	Tenant    vault.Tenant
+	Plaintext []byte
+	Aad       []byte
+}
+
+// SealCalls returns every recorded Seal call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Seal").
+func (m *MockSealer) SealCalls() []MockSealerSealCall {
+	var out []MockSealerSealCall
+	for _, c := range m.Recorder.Calls("Seal") {
+		var r MockSealerSealCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Tenant, _ = c.Args[1].(vault.Tenant)
+		r.Plaintext, _ = c.Args[2].([]byte)
+		r.Aad, _ = c.Args[3].([]byte)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockSealerOpenCall is one recorded call of MockSealer.Open, one
+// field per parameter.
+type MockSealerOpenCall struct {
+	Ctx        context.Context
+	Tenant     vault.Tenant
+	Ciphertext []byte
+	Aad        []byte
+}
+
+// OpenCalls returns every recorded Open call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Open").
+func (m *MockSealer) OpenCalls() []MockSealerOpenCall {
+	var out []MockSealerOpenCall
+	for _, c := range m.Recorder.Calls("Open") {
+		var r MockSealerOpenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Tenant, _ = c.Args[1].(vault.Tenant)
+		r.Ciphertext, _ = c.Args[2].([]byte)
+		r.Aad, _ = c.Args[3].([]byte)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

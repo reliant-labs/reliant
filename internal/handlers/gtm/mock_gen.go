@@ -16,67 +16,54 @@ import (
 )
 
 // forge:section MockServiceService
-// forge:hash=6f2fb721bf92ccabe60d96fbf97203e4f6046027684d4a21cb4dc2375d9a87ec
+// forge:hash=864b22df12bf5bbca77d817b2f22823cae5ce078cfbaf458c49939d45dedb1e6
 
 // MockServiceService is a test mock for the ServiceService interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockServiceService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockServiceService.<Method>Func not set" error.
 type MockServiceService struct {
 	contractkit.Recorder
-	CancelLibraryPruneFunc       func(context.Context, gtm.Actor, gtm.CancelLibraryPruneInput) (gtm.LibraryPruneRequest, error)
-	CheckClaimsFunc              func(context.Context, gtm.Actor, gtm.CheckClaimsInput) (gtm.CheckClaimsResult, error)
-	ConfirmAssetUploadFunc       func(context.Context, gtm.Actor, gtm.ConfirmAssetUploadInput) (gtm.Asset, error)
-	ConfirmLibraryPruneFunc      func(context.Context, gtm.Actor, gtm.ConfirmLibraryPruneInput) (gtm.ConfirmLibraryPruneResult, error)
-	CreateAssetUploadFunc        func(context.Context, gtm.Actor, gtm.CreateAssetUploadInput) (gtm.AssetUpload, error)
-	CreateCampaignFunc           func(context.Context, gtm.Actor, gtm.CreateCampaignInput) (gtm.Campaign, error)
-	CreateChannelFunc            func(context.Context, gtm.Actor, gtm.CreateChannelInput) (gtm.Channel, error)
-	CreateIdeaFunc               func(context.Context, gtm.Actor, gtm.CreateIdeaInput) (gtm.Idea, error)
-	CreateItemFunc               func(context.Context, gtm.Actor, gtm.CreateItemInput) (gtm.Item, error)
-	CreateStrategyFunc           func(context.Context, gtm.Actor, gtm.CreateStrategyInput) (gtm.Strategy, error)
-	DeleteAssetFunc              func(context.Context, gtm.Actor, gtm.DeleteAssetInput) error
-	GetAccessFunc                func(context.Context, gtm.Actor) (gtm.Access, error)
-	GetAssetFunc                 func(context.Context, gtm.Actor, gtm.GetAssetInput) (gtm.Asset, error)
-	GetAssetDownloadFunc         func(context.Context, gtm.Actor, gtm.GetAssetDownloadInput) (gtm.AssetDownload, error)
-	GetCampaignFunc              func(context.Context, gtm.Actor, gtm.GetCampaignInput) (gtm.CampaignDetail, error)
-	GetChannelFunc               func(context.Context, gtm.Actor, gtm.GetChannelInput) (gtm.Channel, error)
-	GetIdeaFunc                  func(context.Context, gtm.Actor, gtm.GetIdeaInput) (gtm.Idea, error)
-	GetItemFunc                  func(context.Context, gtm.Actor, gtm.GetItemInput) (gtm.Item, error)
-	GetPositioningFunc           func(context.Context, gtm.Actor) (gtm.Positioning, error)
-	GetStrategyFunc              func(context.Context, gtm.Actor, gtm.GetStrategyInput) (gtm.StrategyDetail, error)
-	GetStrategyLibraryEntryFunc  func(context.Context, gtm.Actor, gtm.GetStrategyLibraryEntryInput) (gtm.LibraryEntry, error)
-	ImportStrategyLibraryFunc    func(context.Context, gtm.Actor, gtm.ImportStrategyLibraryInput) (gtm.ImportStrategyLibraryResult, error)
-	ListAssetsFunc               func(context.Context, gtm.Actor, gtm.ListAssetsInput) (gtm.ListAssetsResult, error)
-	ListCampaignsFunc            func(context.Context, gtm.Actor, gtm.ListCampaignsInput) (gtm.ListCampaignsResult, error)
-	ListChannelsFunc             func(context.Context, gtm.Actor, gtm.ListChannelsInput) (gtm.ListChannelsResult, error)
-	ListClaimsFunc               func(context.Context, gtm.Actor, gtm.ListClaimsInput) (gtm.ListClaimsResult, error)
-	ListIdeasFunc                func(context.Context, gtm.Actor, gtm.ListIdeasInput) (gtm.ListIdeasResult, error)
-	ListItemsFunc                func(context.Context, gtm.Actor, gtm.ListItemsInput) (gtm.ListItemsResult, error)
-	ListLibraryImportsFunc       func(context.Context, gtm.Actor, gtm.ListLibraryImportsInput) (gtm.ListLibraryImportsResult, error)
-	ListLibraryPruneRequestsFunc func(context.Context, gtm.Actor, gtm.ListLibraryPruneRequestsInput) (gtm.ListLibraryPruneRequestsResult, error)
-	ListStrategiesFunc           func(context.Context, gtm.Actor, gtm.ListStrategiesInput) (gtm.ListStrategiesResult, error)
-	ListStrategyLibraryFunc      func(context.Context, gtm.Actor, gtm.ListStrategyLibraryInput) (gtm.ListStrategyLibraryResult, error)
-	ResolveInDoubtSendFunc       func(context.Context, gtm.Actor, gtm.ResolveInDoubtSendInput) (gtm.Item, error)
-	SetIdeaStatusFunc            func(context.Context, gtm.Actor, gtm.SetIdeaStatusInput) (gtm.Idea, error)
-	UpdateCampaignFunc           func(context.Context, gtm.Actor, gtm.UpdateCampaignInput) (gtm.Campaign, error)
-	UpdateChannelFunc            func(context.Context, gtm.Actor, gtm.UpdateChannelInput) (gtm.Channel, error)
-	UpdateIdeaFunc               func(context.Context, gtm.Actor, gtm.UpdateIdeaInput) (gtm.Idea, error)
-	UpdateItemFunc               func(context.Context, gtm.Actor, gtm.UpdateItemInput) (gtm.Item, error)
-	UpdatePositioningFunc        func(context.Context, gtm.Actor, gtm.UpdatePositioningInput) (gtm.Positioning, error)
-	UpdateStrategyFunc           func(context.Context, gtm.Actor, gtm.UpdateStrategyInput) (gtm.Strategy, error)
-	UpsertClaimFunc              func(context.Context, gtm.Actor, gtm.UpsertClaimInput) (gtm.UpsertClaimResult, error)
-	UseLibraryStrategyFunc       func(context.Context, gtm.Actor, gtm.UseLibraryStrategyInput) (gtm.UseLibraryStrategyResult, error)
-}
-
-// CancelLibraryPrune records the call and delegates to CancelLibraryPruneFunc when set.
-func (m *MockServiceService) CancelLibraryPrune(ctx context.Context, actor gtm.Actor, in gtm.CancelLibraryPruneInput) (gtm.LibraryPruneRequest, error) {
-	m.Recorder.Record("CancelLibraryPrune", ctx, actor, in)
-	if m.CancelLibraryPruneFunc != nil {
-		return m.CancelLibraryPruneFunc(ctx, actor, in)
-	}
-	return *new(gtm.LibraryPruneRequest), contractkit.MockNotSet("MockServiceService", "CancelLibraryPrune")
+	CheckClaimsFunc             func(context.Context, gtm.Actor, gtm.CheckClaimsInput) (gtm.CheckClaimsResult, error)
+	ConfirmAssetUploadFunc      func(context.Context, gtm.Actor, gtm.ConfirmAssetUploadInput) (gtm.Asset, error)
+	CreateAssetUploadFunc       func(context.Context, gtm.Actor, gtm.CreateAssetUploadInput) (gtm.AssetUpload, error)
+	CreateCampaignFunc          func(context.Context, gtm.Actor, gtm.CreateCampaignInput) (gtm.Campaign, error)
+	CreateChannelFunc           func(context.Context, gtm.Actor, gtm.CreateChannelInput) (gtm.Channel, error)
+	CreateIdeaFunc              func(context.Context, gtm.Actor, gtm.CreateIdeaInput) (gtm.Idea, error)
+	CreateItemFunc              func(context.Context, gtm.Actor, gtm.CreateItemInput) (gtm.Item, error)
+	CreateStrategyFunc          func(context.Context, gtm.Actor, gtm.CreateStrategyInput) (gtm.Strategy, error)
+	DeleteAssetFunc             func(context.Context, gtm.Actor, gtm.DeleteAssetInput) error
+	GetAccessFunc               func(context.Context, gtm.Actor) (gtm.Access, error)
+	GetAssetFunc                func(context.Context, gtm.Actor, gtm.GetAssetInput) (gtm.Asset, error)
+	GetAssetDownloadFunc        func(context.Context, gtm.Actor, gtm.GetAssetDownloadInput) (gtm.AssetDownload, error)
+	GetCampaignFunc             func(context.Context, gtm.Actor, gtm.GetCampaignInput) (gtm.CampaignDetail, error)
+	GetChannelFunc              func(context.Context, gtm.Actor, gtm.GetChannelInput) (gtm.Channel, error)
+	GetIdeaFunc                 func(context.Context, gtm.Actor, gtm.GetIdeaInput) (gtm.Idea, error)
+	GetItemFunc                 func(context.Context, gtm.Actor, gtm.GetItemInput) (gtm.Item, error)
+	GetPositioningFunc          func(context.Context, gtm.Actor) (gtm.Positioning, error)
+	GetStrategyFunc             func(context.Context, gtm.Actor, gtm.GetStrategyInput) (gtm.StrategyDetail, error)
+	GetStrategyLibraryEntryFunc func(context.Context, gtm.Actor, gtm.GetStrategyLibraryEntryInput) (gtm.LibraryEntry, error)
+	ListAssetsFunc              func(context.Context, gtm.Actor, gtm.ListAssetsInput) (gtm.ListAssetsResult, error)
+	ListCampaignsFunc           func(context.Context, gtm.Actor, gtm.ListCampaignsInput) (gtm.ListCampaignsResult, error)
+	ListChannelsFunc            func(context.Context, gtm.Actor, gtm.ListChannelsInput) (gtm.ListChannelsResult, error)
+	ListClaimsFunc              func(context.Context, gtm.Actor, gtm.ListClaimsInput) (gtm.ListClaimsResult, error)
+	ListIdeasFunc               func(context.Context, gtm.Actor, gtm.ListIdeasInput) (gtm.ListIdeasResult, error)
+	ListItemsFunc               func(context.Context, gtm.Actor, gtm.ListItemsInput) (gtm.ListItemsResult, error)
+	ListStrategiesFunc          func(context.Context, gtm.Actor, gtm.ListStrategiesInput) (gtm.ListStrategiesResult, error)
+	ListStrategyLibraryFunc     func(context.Context, gtm.Actor, gtm.ListStrategyLibraryInput) (gtm.ListStrategyLibraryResult, error)
+	ResolveInDoubtSendFunc      func(context.Context, gtm.Actor, gtm.ResolveInDoubtSendInput) (gtm.Item, error)
+	SetIdeaStatusFunc           func(context.Context, gtm.Actor, gtm.SetIdeaStatusInput) (gtm.Idea, error)
+	UpdateCampaignFunc          func(context.Context, gtm.Actor, gtm.UpdateCampaignInput) (gtm.Campaign, error)
+	UpdateChannelFunc           func(context.Context, gtm.Actor, gtm.UpdateChannelInput) (gtm.Channel, error)
+	UpdateIdeaFunc              func(context.Context, gtm.Actor, gtm.UpdateIdeaInput) (gtm.Idea, error)
+	UpdateItemFunc              func(context.Context, gtm.Actor, gtm.UpdateItemInput) (gtm.Item, error)
+	UpdatePositioningFunc       func(context.Context, gtm.Actor, gtm.UpdatePositioningInput) (gtm.Positioning, error)
+	UpdateStrategyFunc          func(context.Context, gtm.Actor, gtm.UpdateStrategyInput) (gtm.Strategy, error)
+	UpsertClaimFunc             func(context.Context, gtm.Actor, gtm.UpsertClaimInput) (gtm.UpsertClaimResult, error)
+	UseLibraryStrategyFunc      func(context.Context, gtm.Actor, gtm.UseLibraryStrategyInput) (gtm.UseLibraryStrategyResult, error)
 }
 
 // CheckClaims records the call and delegates to CheckClaimsFunc when set.
@@ -95,15 +82,6 @@ func (m *MockServiceService) ConfirmAssetUpload(ctx context.Context, actor gtm.A
 		return m.ConfirmAssetUploadFunc(ctx, actor, in)
 	}
 	return *new(gtm.Asset), contractkit.MockNotSet("MockServiceService", "ConfirmAssetUpload")
-}
-
-// ConfirmLibraryPrune records the call and delegates to ConfirmLibraryPruneFunc when set.
-func (m *MockServiceService) ConfirmLibraryPrune(ctx context.Context, actor gtm.Actor, in gtm.ConfirmLibraryPruneInput) (gtm.ConfirmLibraryPruneResult, error) {
-	m.Recorder.Record("ConfirmLibraryPrune", ctx, actor, in)
-	if m.ConfirmLibraryPruneFunc != nil {
-		return m.ConfirmLibraryPruneFunc(ctx, actor, in)
-	}
-	return *new(gtm.ConfirmLibraryPruneResult), contractkit.MockNotSet("MockServiceService", "ConfirmLibraryPrune")
 }
 
 // CreateAssetUpload records the call and delegates to CreateAssetUploadFunc when set.
@@ -259,15 +237,6 @@ func (m *MockServiceService) GetStrategyLibraryEntry(ctx context.Context, actor 
 	return *new(gtm.LibraryEntry), contractkit.MockNotSet("MockServiceService", "GetStrategyLibraryEntry")
 }
 
-// ImportStrategyLibrary records the call and delegates to ImportStrategyLibraryFunc when set.
-func (m *MockServiceService) ImportStrategyLibrary(ctx context.Context, actor gtm.Actor, in gtm.ImportStrategyLibraryInput) (gtm.ImportStrategyLibraryResult, error) {
-	m.Recorder.Record("ImportStrategyLibrary", ctx, actor, in)
-	if m.ImportStrategyLibraryFunc != nil {
-		return m.ImportStrategyLibraryFunc(ctx, actor, in)
-	}
-	return *new(gtm.ImportStrategyLibraryResult), contractkit.MockNotSet("MockServiceService", "ImportStrategyLibrary")
-}
-
 // ListAssets records the call and delegates to ListAssetsFunc when set.
 func (m *MockServiceService) ListAssets(ctx context.Context, actor gtm.Actor, in gtm.ListAssetsInput) (gtm.ListAssetsResult, error) {
 	m.Recorder.Record("ListAssets", ctx, actor, in)
@@ -320,24 +289,6 @@ func (m *MockServiceService) ListItems(ctx context.Context, actor gtm.Actor, in 
 		return m.ListItemsFunc(ctx, actor, in)
 	}
 	return *new(gtm.ListItemsResult), contractkit.MockNotSet("MockServiceService", "ListItems")
-}
-
-// ListLibraryImports records the call and delegates to ListLibraryImportsFunc when set.
-func (m *MockServiceService) ListLibraryImports(ctx context.Context, actor gtm.Actor, in gtm.ListLibraryImportsInput) (gtm.ListLibraryImportsResult, error) {
-	m.Recorder.Record("ListLibraryImports", ctx, actor, in)
-	if m.ListLibraryImportsFunc != nil {
-		return m.ListLibraryImportsFunc(ctx, actor, in)
-	}
-	return *new(gtm.ListLibraryImportsResult), contractkit.MockNotSet("MockServiceService", "ListLibraryImports")
-}
-
-// ListLibraryPruneRequests records the call and delegates to ListLibraryPruneRequestsFunc when set.
-func (m *MockServiceService) ListLibraryPruneRequests(ctx context.Context, actor gtm.Actor, in gtm.ListLibraryPruneRequestsInput) (gtm.ListLibraryPruneRequestsResult, error) {
-	m.Recorder.Record("ListLibraryPruneRequests", ctx, actor, in)
-	if m.ListLibraryPruneRequestsFunc != nil {
-		return m.ListLibraryPruneRequestsFunc(ctx, actor, in)
-	}
-	return *new(gtm.ListLibraryPruneRequestsResult), contractkit.MockNotSet("MockServiceService", "ListLibraryPruneRequests")
 }
 
 // ListStrategies records the call and delegates to ListStrategiesFunc when set.
@@ -446,6 +397,816 @@ func (m *MockServiceService) UseLibraryStrategy(ctx context.Context, actor gtm.A
 		return m.UseLibraryStrategyFunc(ctx, actor, in)
 	}
 	return *new(gtm.UseLibraryStrategyResult), contractkit.MockNotSet("MockServiceService", "UseLibraryStrategy")
+}
+
+// MockServiceServiceCheckClaimsCall is one recorded call of MockServiceService.CheckClaims, one
+// field per parameter.
+type MockServiceServiceCheckClaimsCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.CheckClaimsInput
+}
+
+// CheckClaimsCalls returns every recorded CheckClaims call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CheckClaims").
+func (m *MockServiceService) CheckClaimsCalls() []MockServiceServiceCheckClaimsCall {
+	var out []MockServiceServiceCheckClaimsCall
+	for _, c := range m.Recorder.Calls("CheckClaims") {
+		var r MockServiceServiceCheckClaimsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.CheckClaimsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceConfirmAssetUploadCall is one recorded call of MockServiceService.ConfirmAssetUpload, one
+// field per parameter.
+type MockServiceServiceConfirmAssetUploadCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ConfirmAssetUploadInput
+}
+
+// ConfirmAssetUploadCalls returns every recorded ConfirmAssetUpload call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ConfirmAssetUpload").
+func (m *MockServiceService) ConfirmAssetUploadCalls() []MockServiceServiceConfirmAssetUploadCall {
+	var out []MockServiceServiceConfirmAssetUploadCall
+	for _, c := range m.Recorder.Calls("ConfirmAssetUpload") {
+		var r MockServiceServiceConfirmAssetUploadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ConfirmAssetUploadInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceCreateAssetUploadCall is one recorded call of MockServiceService.CreateAssetUpload, one
+// field per parameter.
+type MockServiceServiceCreateAssetUploadCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.CreateAssetUploadInput
+}
+
+// CreateAssetUploadCalls returns every recorded CreateAssetUpload call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateAssetUpload").
+func (m *MockServiceService) CreateAssetUploadCalls() []MockServiceServiceCreateAssetUploadCall {
+	var out []MockServiceServiceCreateAssetUploadCall
+	for _, c := range m.Recorder.Calls("CreateAssetUpload") {
+		var r MockServiceServiceCreateAssetUploadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.CreateAssetUploadInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceCreateCampaignCall is one recorded call of MockServiceService.CreateCampaign, one
+// field per parameter.
+type MockServiceServiceCreateCampaignCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.CreateCampaignInput
+}
+
+// CreateCampaignCalls returns every recorded CreateCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateCampaign").
+func (m *MockServiceService) CreateCampaignCalls() []MockServiceServiceCreateCampaignCall {
+	var out []MockServiceServiceCreateCampaignCall
+	for _, c := range m.Recorder.Calls("CreateCampaign") {
+		var r MockServiceServiceCreateCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.CreateCampaignInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceCreateChannelCall is one recorded call of MockServiceService.CreateChannel, one
+// field per parameter.
+type MockServiceServiceCreateChannelCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.CreateChannelInput
+}
+
+// CreateChannelCalls returns every recorded CreateChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateChannel").
+func (m *MockServiceService) CreateChannelCalls() []MockServiceServiceCreateChannelCall {
+	var out []MockServiceServiceCreateChannelCall
+	for _, c := range m.Recorder.Calls("CreateChannel") {
+		var r MockServiceServiceCreateChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.CreateChannelInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceCreateIdeaCall is one recorded call of MockServiceService.CreateIdea, one
+// field per parameter.
+type MockServiceServiceCreateIdeaCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.CreateIdeaInput
+}
+
+// CreateIdeaCalls returns every recorded CreateIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateIdea").
+func (m *MockServiceService) CreateIdeaCalls() []MockServiceServiceCreateIdeaCall {
+	var out []MockServiceServiceCreateIdeaCall
+	for _, c := range m.Recorder.Calls("CreateIdea") {
+		var r MockServiceServiceCreateIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.CreateIdeaInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceCreateItemCall is one recorded call of MockServiceService.CreateItem, one
+// field per parameter.
+type MockServiceServiceCreateItemCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.CreateItemInput
+}
+
+// CreateItemCalls returns every recorded CreateItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateItem").
+func (m *MockServiceService) CreateItemCalls() []MockServiceServiceCreateItemCall {
+	var out []MockServiceServiceCreateItemCall
+	for _, c := range m.Recorder.Calls("CreateItem") {
+		var r MockServiceServiceCreateItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.CreateItemInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceCreateStrategyCall is one recorded call of MockServiceService.CreateStrategy, one
+// field per parameter.
+type MockServiceServiceCreateStrategyCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.CreateStrategyInput
+}
+
+// CreateStrategyCalls returns every recorded CreateStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateStrategy").
+func (m *MockServiceService) CreateStrategyCalls() []MockServiceServiceCreateStrategyCall {
+	var out []MockServiceServiceCreateStrategyCall
+	for _, c := range m.Recorder.Calls("CreateStrategy") {
+		var r MockServiceServiceCreateStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.CreateStrategyInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceDeleteAssetCall is one recorded call of MockServiceService.DeleteAsset, one
+// field per parameter.
+type MockServiceServiceDeleteAssetCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.DeleteAssetInput
+}
+
+// DeleteAssetCalls returns every recorded DeleteAsset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteAsset").
+func (m *MockServiceService) DeleteAssetCalls() []MockServiceServiceDeleteAssetCall {
+	var out []MockServiceServiceDeleteAssetCall
+	for _, c := range m.Recorder.Calls("DeleteAsset") {
+		var r MockServiceServiceDeleteAssetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.DeleteAssetInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetAccessCall is one recorded call of MockServiceService.GetAccess, one
+// field per parameter.
+type MockServiceServiceGetAccessCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+}
+
+// GetAccessCalls returns every recorded GetAccess call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAccess").
+func (m *MockServiceService) GetAccessCalls() []MockServiceServiceGetAccessCall {
+	var out []MockServiceServiceGetAccessCall
+	for _, c := range m.Recorder.Calls("GetAccess") {
+		var r MockServiceServiceGetAccessCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetAssetCall is one recorded call of MockServiceService.GetAsset, one
+// field per parameter.
+type MockServiceServiceGetAssetCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.GetAssetInput
+}
+
+// GetAssetCalls returns every recorded GetAsset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAsset").
+func (m *MockServiceService) GetAssetCalls() []MockServiceServiceGetAssetCall {
+	var out []MockServiceServiceGetAssetCall
+	for _, c := range m.Recorder.Calls("GetAsset") {
+		var r MockServiceServiceGetAssetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.GetAssetInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetAssetDownloadCall is one recorded call of MockServiceService.GetAssetDownload, one
+// field per parameter.
+type MockServiceServiceGetAssetDownloadCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.GetAssetDownloadInput
+}
+
+// GetAssetDownloadCalls returns every recorded GetAssetDownload call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAssetDownload").
+func (m *MockServiceService) GetAssetDownloadCalls() []MockServiceServiceGetAssetDownloadCall {
+	var out []MockServiceServiceGetAssetDownloadCall
+	for _, c := range m.Recorder.Calls("GetAssetDownload") {
+		var r MockServiceServiceGetAssetDownloadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.GetAssetDownloadInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetCampaignCall is one recorded call of MockServiceService.GetCampaign, one
+// field per parameter.
+type MockServiceServiceGetCampaignCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.GetCampaignInput
+}
+
+// GetCampaignCalls returns every recorded GetCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetCampaign").
+func (m *MockServiceService) GetCampaignCalls() []MockServiceServiceGetCampaignCall {
+	var out []MockServiceServiceGetCampaignCall
+	for _, c := range m.Recorder.Calls("GetCampaign") {
+		var r MockServiceServiceGetCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.GetCampaignInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetChannelCall is one recorded call of MockServiceService.GetChannel, one
+// field per parameter.
+type MockServiceServiceGetChannelCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.GetChannelInput
+}
+
+// GetChannelCalls returns every recorded GetChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChannel").
+func (m *MockServiceService) GetChannelCalls() []MockServiceServiceGetChannelCall {
+	var out []MockServiceServiceGetChannelCall
+	for _, c := range m.Recorder.Calls("GetChannel") {
+		var r MockServiceServiceGetChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.GetChannelInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetIdeaCall is one recorded call of MockServiceService.GetIdea, one
+// field per parameter.
+type MockServiceServiceGetIdeaCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.GetIdeaInput
+}
+
+// GetIdeaCalls returns every recorded GetIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIdea").
+func (m *MockServiceService) GetIdeaCalls() []MockServiceServiceGetIdeaCall {
+	var out []MockServiceServiceGetIdeaCall
+	for _, c := range m.Recorder.Calls("GetIdea") {
+		var r MockServiceServiceGetIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.GetIdeaInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetItemCall is one recorded call of MockServiceService.GetItem, one
+// field per parameter.
+type MockServiceServiceGetItemCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.GetItemInput
+}
+
+// GetItemCalls returns every recorded GetItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetItem").
+func (m *MockServiceService) GetItemCalls() []MockServiceServiceGetItemCall {
+	var out []MockServiceServiceGetItemCall
+	for _, c := range m.Recorder.Calls("GetItem") {
+		var r MockServiceServiceGetItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.GetItemInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetPositioningCall is one recorded call of MockServiceService.GetPositioning, one
+// field per parameter.
+type MockServiceServiceGetPositioningCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+}
+
+// GetPositioningCalls returns every recorded GetPositioning call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPositioning").
+func (m *MockServiceService) GetPositioningCalls() []MockServiceServiceGetPositioningCall {
+	var out []MockServiceServiceGetPositioningCall
+	for _, c := range m.Recorder.Calls("GetPositioning") {
+		var r MockServiceServiceGetPositioningCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetStrategyCall is one recorded call of MockServiceService.GetStrategy, one
+// field per parameter.
+type MockServiceServiceGetStrategyCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.GetStrategyInput
+}
+
+// GetStrategyCalls returns every recorded GetStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetStrategy").
+func (m *MockServiceService) GetStrategyCalls() []MockServiceServiceGetStrategyCall {
+	var out []MockServiceServiceGetStrategyCall
+	for _, c := range m.Recorder.Calls("GetStrategy") {
+		var r MockServiceServiceGetStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.GetStrategyInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceGetStrategyLibraryEntryCall is one recorded call of MockServiceService.GetStrategyLibraryEntry, one
+// field per parameter.
+type MockServiceServiceGetStrategyLibraryEntryCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.GetStrategyLibraryEntryInput
+}
+
+// GetStrategyLibraryEntryCalls returns every recorded GetStrategyLibraryEntry call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetStrategyLibraryEntry").
+func (m *MockServiceService) GetStrategyLibraryEntryCalls() []MockServiceServiceGetStrategyLibraryEntryCall {
+	var out []MockServiceServiceGetStrategyLibraryEntryCall
+	for _, c := range m.Recorder.Calls("GetStrategyLibraryEntry") {
+		var r MockServiceServiceGetStrategyLibraryEntryCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.GetStrategyLibraryEntryInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceListAssetsCall is one recorded call of MockServiceService.ListAssets, one
+// field per parameter.
+type MockServiceServiceListAssetsCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ListAssetsInput
+}
+
+// ListAssetsCalls returns every recorded ListAssets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAssets").
+func (m *MockServiceService) ListAssetsCalls() []MockServiceServiceListAssetsCall {
+	var out []MockServiceServiceListAssetsCall
+	for _, c := range m.Recorder.Calls("ListAssets") {
+		var r MockServiceServiceListAssetsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ListAssetsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceListCampaignsCall is one recorded call of MockServiceService.ListCampaigns, one
+// field per parameter.
+type MockServiceServiceListCampaignsCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ListCampaignsInput
+}
+
+// ListCampaignsCalls returns every recorded ListCampaigns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListCampaigns").
+func (m *MockServiceService) ListCampaignsCalls() []MockServiceServiceListCampaignsCall {
+	var out []MockServiceServiceListCampaignsCall
+	for _, c := range m.Recorder.Calls("ListCampaigns") {
+		var r MockServiceServiceListCampaignsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ListCampaignsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceListChannelsCall is one recorded call of MockServiceService.ListChannels, one
+// field per parameter.
+type MockServiceServiceListChannelsCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ListChannelsInput
+}
+
+// ListChannelsCalls returns every recorded ListChannels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChannels").
+func (m *MockServiceService) ListChannelsCalls() []MockServiceServiceListChannelsCall {
+	var out []MockServiceServiceListChannelsCall
+	for _, c := range m.Recorder.Calls("ListChannels") {
+		var r MockServiceServiceListChannelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ListChannelsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceListClaimsCall is one recorded call of MockServiceService.ListClaims, one
+// field per parameter.
+type MockServiceServiceListClaimsCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ListClaimsInput
+}
+
+// ListClaimsCalls returns every recorded ListClaims call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListClaims").
+func (m *MockServiceService) ListClaimsCalls() []MockServiceServiceListClaimsCall {
+	var out []MockServiceServiceListClaimsCall
+	for _, c := range m.Recorder.Calls("ListClaims") {
+		var r MockServiceServiceListClaimsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ListClaimsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceListIdeasCall is one recorded call of MockServiceService.ListIdeas, one
+// field per parameter.
+type MockServiceServiceListIdeasCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ListIdeasInput
+}
+
+// ListIdeasCalls returns every recorded ListIdeas call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListIdeas").
+func (m *MockServiceService) ListIdeasCalls() []MockServiceServiceListIdeasCall {
+	var out []MockServiceServiceListIdeasCall
+	for _, c := range m.Recorder.Calls("ListIdeas") {
+		var r MockServiceServiceListIdeasCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ListIdeasInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceListItemsCall is one recorded call of MockServiceService.ListItems, one
+// field per parameter.
+type MockServiceServiceListItemsCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ListItemsInput
+}
+
+// ListItemsCalls returns every recorded ListItems call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListItems").
+func (m *MockServiceService) ListItemsCalls() []MockServiceServiceListItemsCall {
+	var out []MockServiceServiceListItemsCall
+	for _, c := range m.Recorder.Calls("ListItems") {
+		var r MockServiceServiceListItemsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ListItemsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceListStrategiesCall is one recorded call of MockServiceService.ListStrategies, one
+// field per parameter.
+type MockServiceServiceListStrategiesCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ListStrategiesInput
+}
+
+// ListStrategiesCalls returns every recorded ListStrategies call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStrategies").
+func (m *MockServiceService) ListStrategiesCalls() []MockServiceServiceListStrategiesCall {
+	var out []MockServiceServiceListStrategiesCall
+	for _, c := range m.Recorder.Calls("ListStrategies") {
+		var r MockServiceServiceListStrategiesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ListStrategiesInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceListStrategyLibraryCall is one recorded call of MockServiceService.ListStrategyLibrary, one
+// field per parameter.
+type MockServiceServiceListStrategyLibraryCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ListStrategyLibraryInput
+}
+
+// ListStrategyLibraryCalls returns every recorded ListStrategyLibrary call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStrategyLibrary").
+func (m *MockServiceService) ListStrategyLibraryCalls() []MockServiceServiceListStrategyLibraryCall {
+	var out []MockServiceServiceListStrategyLibraryCall
+	for _, c := range m.Recorder.Calls("ListStrategyLibrary") {
+		var r MockServiceServiceListStrategyLibraryCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ListStrategyLibraryInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceResolveInDoubtSendCall is one recorded call of MockServiceService.ResolveInDoubtSend, one
+// field per parameter.
+type MockServiceServiceResolveInDoubtSendCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.ResolveInDoubtSendInput
+}
+
+// ResolveInDoubtSendCalls returns every recorded ResolveInDoubtSend call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveInDoubtSend").
+func (m *MockServiceService) ResolveInDoubtSendCalls() []MockServiceServiceResolveInDoubtSendCall {
+	var out []MockServiceServiceResolveInDoubtSendCall
+	for _, c := range m.Recorder.Calls("ResolveInDoubtSend") {
+		var r MockServiceServiceResolveInDoubtSendCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.ResolveInDoubtSendInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceSetIdeaStatusCall is one recorded call of MockServiceService.SetIdeaStatus, one
+// field per parameter.
+type MockServiceServiceSetIdeaStatusCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.SetIdeaStatusInput
+}
+
+// SetIdeaStatusCalls returns every recorded SetIdeaStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetIdeaStatus").
+func (m *MockServiceService) SetIdeaStatusCalls() []MockServiceServiceSetIdeaStatusCall {
+	var out []MockServiceServiceSetIdeaStatusCall
+	for _, c := range m.Recorder.Calls("SetIdeaStatus") {
+		var r MockServiceServiceSetIdeaStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.SetIdeaStatusInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceUpdateCampaignCall is one recorded call of MockServiceService.UpdateCampaign, one
+// field per parameter.
+type MockServiceServiceUpdateCampaignCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.UpdateCampaignInput
+}
+
+// UpdateCampaignCalls returns every recorded UpdateCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateCampaign").
+func (m *MockServiceService) UpdateCampaignCalls() []MockServiceServiceUpdateCampaignCall {
+	var out []MockServiceServiceUpdateCampaignCall
+	for _, c := range m.Recorder.Calls("UpdateCampaign") {
+		var r MockServiceServiceUpdateCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.UpdateCampaignInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceUpdateChannelCall is one recorded call of MockServiceService.UpdateChannel, one
+// field per parameter.
+type MockServiceServiceUpdateChannelCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.UpdateChannelInput
+}
+
+// UpdateChannelCalls returns every recorded UpdateChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateChannel").
+func (m *MockServiceService) UpdateChannelCalls() []MockServiceServiceUpdateChannelCall {
+	var out []MockServiceServiceUpdateChannelCall
+	for _, c := range m.Recorder.Calls("UpdateChannel") {
+		var r MockServiceServiceUpdateChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.UpdateChannelInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceUpdateIdeaCall is one recorded call of MockServiceService.UpdateIdea, one
+// field per parameter.
+type MockServiceServiceUpdateIdeaCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.UpdateIdeaInput
+}
+
+// UpdateIdeaCalls returns every recorded UpdateIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateIdea").
+func (m *MockServiceService) UpdateIdeaCalls() []MockServiceServiceUpdateIdeaCall {
+	var out []MockServiceServiceUpdateIdeaCall
+	for _, c := range m.Recorder.Calls("UpdateIdea") {
+		var r MockServiceServiceUpdateIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.UpdateIdeaInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceUpdateItemCall is one recorded call of MockServiceService.UpdateItem, one
+// field per parameter.
+type MockServiceServiceUpdateItemCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.UpdateItemInput
+}
+
+// UpdateItemCalls returns every recorded UpdateItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateItem").
+func (m *MockServiceService) UpdateItemCalls() []MockServiceServiceUpdateItemCall {
+	var out []MockServiceServiceUpdateItemCall
+	for _, c := range m.Recorder.Calls("UpdateItem") {
+		var r MockServiceServiceUpdateItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.UpdateItemInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceUpdatePositioningCall is one recorded call of MockServiceService.UpdatePositioning, one
+// field per parameter.
+type MockServiceServiceUpdatePositioningCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.UpdatePositioningInput
+}
+
+// UpdatePositioningCalls returns every recorded UpdatePositioning call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdatePositioning").
+func (m *MockServiceService) UpdatePositioningCalls() []MockServiceServiceUpdatePositioningCall {
+	var out []MockServiceServiceUpdatePositioningCall
+	for _, c := range m.Recorder.Calls("UpdatePositioning") {
+		var r MockServiceServiceUpdatePositioningCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.UpdatePositioningInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceUpdateStrategyCall is one recorded call of MockServiceService.UpdateStrategy, one
+// field per parameter.
+type MockServiceServiceUpdateStrategyCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.UpdateStrategyInput
+}
+
+// UpdateStrategyCalls returns every recorded UpdateStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateStrategy").
+func (m *MockServiceService) UpdateStrategyCalls() []MockServiceServiceUpdateStrategyCall {
+	var out []MockServiceServiceUpdateStrategyCall
+	for _, c := range m.Recorder.Calls("UpdateStrategy") {
+		var r MockServiceServiceUpdateStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.UpdateStrategyInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceUpsertClaimCall is one recorded call of MockServiceService.UpsertClaim, one
+// field per parameter.
+type MockServiceServiceUpsertClaimCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.UpsertClaimInput
+}
+
+// UpsertClaimCalls returns every recorded UpsertClaim call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertClaim").
+func (m *MockServiceService) UpsertClaimCalls() []MockServiceServiceUpsertClaimCall {
+	var out []MockServiceServiceUpsertClaimCall
+	for _, c := range m.Recorder.Calls("UpsertClaim") {
+		var r MockServiceServiceUpsertClaimCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.UpsertClaimInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceServiceUseLibraryStrategyCall is one recorded call of MockServiceService.UseLibraryStrategy, one
+// field per parameter.
+type MockServiceServiceUseLibraryStrategyCall struct {
+	Ctx   context.Context
+	Actor gtm.Actor
+	In    gtm.UseLibraryStrategyInput
+}
+
+// UseLibraryStrategyCalls returns every recorded UseLibraryStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UseLibraryStrategy").
+func (m *MockServiceService) UseLibraryStrategyCalls() []MockServiceServiceUseLibraryStrategyCall {
+	var out []MockServiceServiceUseLibraryStrategyCall
+	for _, c := range m.Recorder.Calls("UseLibraryStrategy") {
+		var r MockServiceServiceUseLibraryStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(gtm.Actor)
+		r.In, _ = c.Args[2].(gtm.UseLibraryStrategyInput)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

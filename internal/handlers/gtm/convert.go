@@ -6,7 +6,6 @@ import (
 	"math"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -183,101 +182,46 @@ func assetsOut(as []gtmsvc.Asset) []*pb.GtmAsset {
 	return out
 }
 
-// libraryEntryIn is an imported entry. Its import stamps (source_revision,
-// imported_at, imported_by) are the import's, so they are not read.
-func libraryEntryIn(e *pb.GtmStrategyLibraryEntry) gtmsvc.LibraryEntry {
-	steps := make([]gtmsvc.LibraryStep, 0, len(e.GetSteps()))
-	for _, s := range e.GetSteps() {
-		steps = append(steps, gtmsvc.LibraryStep{Who: s.GetWho(), Title: s.GetTitle()})
+// enumsIn is a repeated enum as domain values (nil for none).
+func enumsIn[T ~string, E protoEnum](es []E) []T {
+	if len(es) == 0 {
+		return nil
 	}
-	var extra map[string]any
-	if e.GetExtra() != nil {
-		extra = e.GetExtra().AsMap()
+	out := make([]T, 0, len(es))
+	for _, e := range es {
+		out = append(out, enumIn[T](e))
 	}
-	return gtmsvc.LibraryEntry{
-		Key:           e.GetKey(),
-		Category:      enumIn[gtmsvc.StrategyCategory](e.GetCategory()),
-		Depth:         enumIn[gtmsvc.LibraryDepth](e.GetDepth()),
-		Name:          e.GetName(),
-		SummaryMD:     e.GetSummaryMd(),
-		Icon:          e.GetIcon(),
-		Stage:         e.GetStage(),
-		Cost:          e.GetCost(),
-		CostNote:      e.GetCostNote(),
-		Difficulty:    e.GetDifficulty(),
-		Level:         e.GetLevel(),
-		Objective:     e.GetObjective(),
-		NorthStar:     e.GetNorthStar(),
-		HypothesisMD:  e.GetHypothesisMd(),
-		Hours:         e.GetHours(),
-		SignalDays:    e.GetSignalDays(),
-		WindowDays:    e.GetWindowDays(),
-		LaunchDays:    e.GetLaunchDays(),
-		ExpectedDelta: e.GetExpectedDelta(),
-		Lifecycle:     e.GetLifecycle(),
-		ChannelTypes:  e.GetChannelTypes(),
-		Integrations:  e.GetIntegrations(),
-		Fits:          e.GetFits(),
-		Prerequisites: e.GetPrerequisites(),
-		KPIs:          e.GetKpis(),
-		Tactics:       e.GetTactics(),
-		Automates:     e.GetAutomates(),
-		Experiments:   e.GetExperiments(),
-		StopWhen:      e.GetStopWhen(),
-		Steps:         steps,
-		Extra:         extra,
-	}
+	return out
 }
 
-// libraryEntryOut is an entry as stored. Its extra came from JSON, so it is
-// always a valid Struct; one that somehow is not is left out rather than
-// failing the read.
+// enumsOut is domain enum values as a repeated proto enum.
+func enumsOut[E ~int32, T ~string](vs []T, values map[string]int32) []E {
+	out := make([]E, 0, len(vs))
+	for _, v := range vs {
+		out = append(out, enumOut[E](v, values))
+	}
+	return out
+}
+
+// libraryEntryOut is an entry of the embedded idea bank.
 func libraryEntryOut(e gtmsvc.LibraryEntry) *pb.GtmStrategyLibraryEntry {
-	steps := make([]*pb.GtmLibraryStep, 0, len(e.Steps))
-	for _, s := range e.Steps {
-		steps = append(steps, &pb.GtmLibraryStep{Who: s.Who, Title: s.Title})
-	}
-	var extra *structpb.Struct
-	if len(e.Extra) > 0 {
-		if s, err := structpb.NewStruct(e.Extra); err == nil {
-			extra = s
-		}
-	}
 	return &pb.GtmStrategyLibraryEntry{
-		Key:            e.Key,
-		Category:       enumOut[pb.GtmStrategyCategory](e.Category, pb.GtmStrategyCategory_value),
-		Depth:          enumOut[pb.GtmLibraryDepth](e.Depth, pb.GtmLibraryDepth_value),
-		Name:           e.Name,
-		SummaryMd:      e.SummaryMD,
-		Icon:           e.Icon,
-		Stage:          e.Stage,
-		Cost:           e.Cost,
-		CostNote:       e.CostNote,
-		Difficulty:     e.Difficulty,
-		Level:          e.Level,
-		Objective:      e.Objective,
-		NorthStar:      e.NorthStar,
-		HypothesisMd:   e.HypothesisMD,
-		Hours:          e.Hours,
-		SignalDays:     e.SignalDays,
-		WindowDays:     e.WindowDays,
-		LaunchDays:     e.LaunchDays,
-		ExpectedDelta:  e.ExpectedDelta,
-		Lifecycle:      e.Lifecycle,
-		ChannelTypes:   e.ChannelTypes,
-		Integrations:   e.Integrations,
-		Fits:           e.Fits,
-		Prerequisites:  e.Prerequisites,
-		Kpis:           e.KPIs,
-		Tactics:        e.Tactics,
-		Automates:      e.Automates,
-		Experiments:    e.Experiments,
-		StopWhen:       e.StopWhen,
-		Steps:          steps,
-		Extra:          extra,
-		SourceRevision: e.SourceRevision,
-		ImportedAt:     timeOut(e.ImportedAt),
-		ImportedBy:     e.ImportedBy,
+		Key:                 e.Key,
+		Category:            enumOut[pb.GtmStrategyCategory](e.Category, pb.GtmStrategyCategory_value),
+		Name:                e.Name,
+		SummaryMd:           e.SummaryMD,
+		WhyItWorksMd:        e.WhyItWorksMD,
+		BusinessTypes:       enumsOut[pb.GtmBusinessType](e.BusinessTypes, pb.GtmBusinessType_value),
+		BusinessModels:      enumsOut[pb.GtmBusinessModel](e.BusinessModels, pb.GtmBusinessModel_value),
+		Stages:              e.Stages,
+		Objective:           e.Objective,
+		Effort:              e.Effort,
+		Cost:                e.Cost,
+		SignalDays:          count32(e.SignalDays),
+		TailorQuestions:     e.TailorQuestions,
+		SuggestedWorkflowMd: e.SuggestedWorkflowMD,
+		ChannelTypes:        e.ChannelTypes,
+		Kpis:                e.KPIs,
 	}
 }
 
@@ -289,50 +233,18 @@ func libraryEntriesOut(es []gtmsvc.LibraryEntry) []*pb.GtmStrategyLibraryEntry {
 	return out
 }
 
-// libraryImportsOut is the import audit of orgID (the domain's rows carry
-// no org: they are all the actor's).
-func libraryImportsOut(orgID string, is []gtmsvc.LibraryImport) []*pb.GtmLibraryImport {
-	out := make([]*pb.GtmLibraryImport, 0, len(is))
-	for _, i := range is {
-		out = append(out, &pb.GtmLibraryImport{
-			Id:             i.ID,
-			OrgId:          orgID,
-			ActorUserId:    i.ActorUserID,
-			CredentialKind: enumOut[pb.GtmCredentialKind](i.CredentialKind, pb.GtmCredentialKind_value),
-			SourceRevision: i.SourceRevision,
-			Created:        count32(i.Created),
-			Updated:        count32(i.Updated),
-			Unchanged:      count32(i.Unchanged),
-			Pruned:         count32(i.Pruned),
-			PruneRequestId: i.PruneRequestID,
-			CreatedAt:      timeOut(i.CreatedAt),
-		})
+func tailorAnswersIn(as []*pb.GtmTailorAnswer) []gtmsvc.TailorAnswer {
+	out := make([]gtmsvc.TailorAnswer, 0, len(as))
+	for _, a := range as {
+		out = append(out, gtmsvc.TailorAnswer{Question: a.GetQuestion(), Answer: a.GetAnswer()})
 	}
 	return out
 }
 
-// pruneRequestOut is a prune request of orgID; an undecided one has no
-// decided_at.
-func pruneRequestOut(orgID string, r gtmsvc.LibraryPruneRequest) *pb.GtmLibraryPruneRequest {
-	return &pb.GtmLibraryPruneRequest{
-		Id:             r.ID,
-		OrgId:          orgID,
-		RequestedBy:    r.RequestedBy,
-		CredentialKind: enumOut[pb.GtmCredentialKind](r.CredentialKind, pb.GtmCredentialKind_value),
-		SourceRevision: r.SourceRevision,
-		RemoveKeys:     r.RemoveKeys,
-		Status:         enumOut[pb.GtmPruneRequestStatus](r.Status, pb.GtmPruneRequestStatus_value),
-		DecidedBy:      r.DecidedBy,
-		DecidedAt:      timeOut(r.DecidedAt),
-		CreatedAt:      timeOut(r.CreatedAt),
-		ExpiresAt:      timeOut(r.ExpiresAt),
-	}
-}
-
-func pruneRequestsOut(orgID string, rs []gtmsvc.LibraryPruneRequest) []*pb.GtmLibraryPruneRequest {
-	out := make([]*pb.GtmLibraryPruneRequest, 0, len(rs))
-	for _, r := range rs {
-		out = append(out, pruneRequestOut(orgID, r))
+func tailorAnswersOut(as []gtmsvc.TailorAnswer) []*pb.GtmTailorAnswer {
+	out := make([]*pb.GtmTailorAnswer, 0, len(as))
+	for _, a := range as {
+		out = append(out, &pb.GtmTailorAnswer{Question: a.Question, Answer: a.Answer})
 	}
 	return out
 }
@@ -385,6 +297,10 @@ func ideaOut(i gtmsvc.Idea) *pb.GtmIdea {
 		Revision:     i.Revision,
 		CreatedAt:    timeOut(i.CreatedAt),
 		UpdatedAt:    timeOut(i.UpdatedAt),
+
+		LibraryKey:          i.LibraryKey,
+		TailorAnswers:       tailorAnswersOut(i.TailorAnswers),
+		SuggestedWorkflowMd: i.SuggestedWorkflowMD,
 	}
 }
 
@@ -484,6 +400,9 @@ func positioningOut(p gtmsvc.Positioning) *pb.GtmPositioning {
 		UpdatedBy:     p.UpdatedBy,
 		Revision:      p.Revision,
 		UpdatedAt:     timeOut(p.UpdatedAt),
+
+		BusinessType:   enumOut[pb.GtmBusinessType](p.BusinessType, pb.GtmBusinessType_value),
+		BusinessModels: enumsOut[pb.GtmBusinessModel](p.BusinessModels, pb.GtmBusinessModel_value),
 	}
 }
 

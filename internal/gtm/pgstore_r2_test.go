@@ -4,20 +4,23 @@ package gtm
 
 import (
 	"context"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/gtm/library"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
 // The r2/r3 tables over a migrated Postgres: the channel seed is
 // idempotent, the composite foreign keys come back as LinkErrors, the
-// coverage aggregate and the asset quota sum see every row, and the library
-// lists, upserts and prunes by key.
+// coverage aggregate and the asset quota sum see every row, and the idea
+// bank's columns (positioning profile, idea fields) round-trip.
 func TestPGStoreR2(t *testing.T) {
 	env := storetest.New(t)
 	st := NewStore(env.ORM)
@@ -28,15 +31,15 @@ func TestPGStoreR2(t *testing.T) {
 	t.Run("channels seed once, keys are unique per org", func(t *testing.T) {
 		res, err := svc.ListChannels(ctx, person, ListChannelsInput{})
 		require.NoError(t, err)
-		require.Len(t, res.Channels, len(DefaultChannels))
+		require.Len(t, res.Channels, len(DefaultChannels()))
 		again, err := svc.ListChannels(ctx, person, ListChannelsInput{})
 		require.NoError(t, err)
-		assert.Len(t, again.Channels, len(DefaultChannels))
-		rows := []*store.GtmChannel{seededChannelRow(orgA, DefaultChannels[0], now)}
+		assert.Len(t, again.Channels, len(DefaultChannels()))
+		rows := []*store.GtmChannel{seededChannelRow(orgA, DefaultChannels()[0], now)}
 		require.NoError(t, st.InTx(ctx, func(ctx context.Context) error { return st.SeedChannels(ctx, rows) }), "a re-seed skips held keys")
 		n, err := st.CountChannels(ctx, orgA)
 		require.NoError(t, err)
-		assert.Equal(t, int64(len(DefaultChannels)), n)
+		assert.Equal(t, int64(len(DefaultChannels())), n)
 
 		_, err = svc.CreateChannel(ctx, person, CreateChannelInput{Key: "blog", Name: "Blog", Mode: ChannelManual})
 		require.ErrorIs(t, err, ErrChannelExists)
@@ -141,125 +144,46 @@ func TestPGStoreR2(t *testing.T) {
 		require.ErrorIs(t, err, ErrNotFound)
 	})
 
-	t.Run("the library upserts, filters and prunes", func(t *testing.T) {
-		a, b := libEntry("alpha", CategoryLaunchesPR), libEntry("beta", CategoryPaidAcquisition)
-		b.Fits, b.Name = []string{"b2c"}, "Paid ads"
-		res, err := svc.ImportStrategyLibrary(ctx, person, ImportStrategyLibraryInput{SourceRevision: "r1", Entries: []LibraryEntry{a, b}})
+	t.Run("the idea bank's columns round-trip: positioning profile, idea fields, a used strategy", func(t *testing.T) {
+		pos, err := svc.UpdatePositioning(ctx, person, UpdatePositioningInput{PositioningMD: "p", BusinessType: BusinessDeveloperTools, BusinessModels: []BusinessModel{ModelFreemium, ModelUsageBased}})
 		require.NoError(t, err)
-		assert.Equal(t, ImportStrategyLibraryResult{Created: 2}, res)
-		res, err = svc.ImportStrategyLibrary(ctx, person, ImportStrategyLibraryInput{SourceRevision: "r2", Entries: []LibraryEntry{a, b}})
+		pos, err = svc.UpdatePositioning(ctx, person, UpdatePositioningInput{ExpectedRevision: pos.Revision, PositioningMD: "p2", BusinessType: BusinessDeveloperTools, BusinessModels: []BusinessModel{ModelSubscription}})
 		require.NoError(t, err)
-		assert.Equal(t, ImportStrategyLibraryResult{Unchanged: 2}, res, "equal after a Postgres round trip")
-
-		for name, tc := range map[string]struct {
-			f    LibraryFilter
-			want []string
-		}{
-			"fit":   {LibraryFilter{Fit: "b2c"}, []string{"beta"}},
-			"query": {LibraryFilter{Query: "ADS"}, []string{"beta"}},
-			"keys":  {LibraryFilter{Keys: []string{"alpha"}}, []string{"alpha"}},
-			"none":  {LibraryFilter{Keys: []string{}}, nil},
-			"cat":   {LibraryFilter{Category: CategoryLaunchesPR, Stage: "launch"}, []string{"alpha"}},
-		} {
-			tc.f.OrgID = orgA
-			rows, err := st.ListLibrary(ctx, tc.f)
-			require.NoError(t, err, name)
-			var got []string
-			for _, r := range rows {
-				got = append(got, r.Key)
-			}
-			assert.Equal(t, tc.want, got, name)
+		got, err := svc.GetPositioning(ctx, person)
+		require.NoError(t, err)
+		assert.Equal(t, BusinessDeveloperTools, got.BusinessType)
+		assert.Equal(t, []BusinessModel{ModelSubscription}, got.BusinessModels, "an update writes the profile")
+		fits, err := svc.ListStrategyLibrary(ctx, person, ListStrategyLibraryInput{FitsMyBusiness: true, PageSize: MaxLibraryPageSize})
+		require.NoError(t, err)
+		for _, e := range fits.Entries {
+			assert.True(t, len(e.BusinessModels) == 0 || slices.Contains(e.BusinessModels, ModelSubscription), e.Key)
 		}
-		used, err := svc.UseLibraryStrategy(ctx, agent, UseLibraryStrategyInput{LibraryKey: "alpha", CreateFirstCampaign: true})
-		require.NoError(t, err)
-		assert.Equal(t, "alpha", used.Strategy.LibraryKey)
-		require.NotNil(t, used.Campaign)
-		assert.Len(t, used.Campaign.PlannedChannelIDs, 2, "reddit and blog, by key")
 
-		res, err = svc.ImportStrategyLibrary(ctx, person, ImportStrategyLibraryInput{SourceRevision: "r3", Entries: []LibraryEntry{a}, Prune: true, AllKeys: []string{"alpha"}})
+		key := library.All()[0].Key
+		answers := []TailorAnswer{{Question: "Who?", Answer: "Builders"}}
+		idea, err := svc.CreateIdea(ctx, agent, CreateIdeaInput{Kind: IdeaKindGTM, Title: "t", LibraryKey: key, TailorAnswers: answers, SuggestedWorkflowMD: "w"})
 		require.NoError(t, err)
-		assert.Equal(t, 1, res.Pruned)
-		_, err = st.GetLibraryEntry(ctx, orgA, "beta")
-		require.ErrorIs(t, err, ErrNotFound)
-		kept, err := svc.GetStrategy(ctx, person, GetStrategyInput{ID: used.Strategy.ID})
+		stored, err := svc.GetIdea(ctx, person, GetIdeaInput{ID: idea.ID})
 		require.NoError(t, err)
-		assert.Equal(t, "alpha", kept.Strategy.LibraryKey)
-	})
+		assert.Equal(t, key, stored.LibraryKey)
+		assert.Equal(t, answers, stored.TailorAnswers)
+		assert.Equal(t, "w", stored.SuggestedWorkflowMD)
+		cleared, err := svc.UpdateIdea(ctx, agent, UpdateIdeaInput{ID: idea.ID, ExpectedRevision: idea.Revision, LibraryKey: ptr(""), TailorAnswers: &[]TailorAnswer{}, SuggestedWorkflowMD: ptr("")})
+		require.NoError(t, err)
+		stored, err = svc.GetIdea(ctx, person, GetIdeaInput{ID: idea.ID})
+		require.NoError(t, err)
+		assert.Equal(t, cleared.Revision, stored.Revision)
+		assert.Empty(t, stored.LibraryKey)
+		assert.Empty(t, stored.TailorAnswers)
+		assert.Empty(t, stored.SuggestedWorkflowMD)
 
-	t.Run("a token's prune is staged, audited and confirmed key by key", func(t *testing.T) {
-		pb := Actor{UserID: "u-b", OrgID: orgB, Kind: ActorPerson}
-		tok := pb
-		tok.ViaToken = true
-		entries := []LibraryEntry{libEntry("alpha", CategoryLaunchesPR), libEntry("beta", CategoryLaunchesPR), libEntry("gamma", CategoryLaunchesPR)}
-		_, err := svc.ImportStrategyLibrary(ctx, pb, ImportStrategyLibraryInput{SourceRevision: "r1", Entries: entries})
+		used, err := svc.UseLibraryStrategy(ctx, agent, UseLibraryStrategyInput{LibraryKey: key, CreateFirstCampaign: true})
 		require.NoError(t, err)
-		staged, err := svc.ImportStrategyLibrary(ctx, tok, ImportStrategyLibraryInput{SourceRevision: "ci-1", Entries: entries[:1], Prune: true, AllKeys: []string{"alpha"}})
+		st2, err := svc.GetStrategy(ctx, person, GetStrategyInput{ID: used.Strategy.ID})
 		require.NoError(t, err)
-		assert.Zero(t, staged.Pruned)
-		assert.Equal(t, []string{"beta", "gamma"}, staged.WouldRemove)
-		require.NotEmpty(t, staged.PruneRequestID)
-		keys, err := st.LibraryKeysNotIn(ctx, orgB, []string{"alpha"})
-		require.NoError(t, err)
-		assert.Equal(t, []string{"beta", "gamma"}, keys, "nothing removed")
-
-		time.Sleep(2 * time.Millisecond)
-		again, err := svc.ImportStrategyLibrary(ctx, tok, ImportStrategyLibraryInput{SourceRevision: "ci-2", Entries: entries[2:]})
-		require.NoError(t, err)
-		assert.Equal(t, 1, again.Unchanged)
-		gamma, err := st.GetLibraryEntry(ctx, orgB, "gamma")
-		require.NoError(t, err)
-		assert.Equal(t, "ci-2", gamma.SourceRevision, "an unchanged entry's stamps move")
-
-		pending, err := svc.ListLibraryPruneRequests(ctx, pb, ListLibraryPruneRequestsInput{Status: PruneRequestPending})
-		require.NoError(t, err)
-		require.Len(t, pending.Requests, 1)
-		assert.True(t, gamma.ImportedAt.After(pending.Requests[0].CreatedAt))
-		res, err := svc.ConfirmLibraryPrune(ctx, pb, ConfirmLibraryPruneInput{RequestID: staged.PruneRequestID})
-		require.NoError(t, err)
-		assert.Equal(t, 1, res.Removed, "beta; gamma was imported again since")
-		assert.Equal(t, PruneRequestConfirmed, res.Request.Status)
-		keys, err = st.LibraryKeysNotIn(ctx, orgB, nil)
-		require.NoError(t, err)
-		assert.Equal(t, []string{"alpha", "gamma"}, keys)
-		require.ErrorIs(t, st.DecidePruneRequest(ctx, orgB, staged.PruneRequestID, PruneRequestCancelled, "u", now), ErrPruneRequestNotPending)
-
-		audit, err := svc.ListLibraryImports(ctx, pb, ListLibraryImportsInput{})
-		require.NoError(t, err)
-		require.Len(t, audit.Imports, 3)
-		assert.Equal(t, []CredentialKind{CredentialToken, CredentialToken, CredentialPerson},
-			[]CredentialKind{audit.Imports[0].CredentialKind, audit.Imports[1].CredentialKind, audit.Imports[2].CredentialKind}, "newest first")
-		assert.Equal(t, staged.PruneRequestID, audit.Imports[1].PruneRequestID)
-
-		var ve *ValidationError
-		require.ErrorAs(t, st.CreateLibraryImport(ctx, &store.GtmLibraryImport{ID: "imp-x", OrgID: orgB, ActorUserID: "u", CredentialKind: string(CredentialToken),
-			SourceRevision: "r", Pruned: 1, CreatedAt: now}), &ve, "a token never prunes, at the table too")
-
-		old := &store.GtmLibraryPruneRequest{ID: "pr-old", OrgID: orgB, RequestedBy: "u", CredentialKind: string(CredentialToken), SourceRevision: "r",
-			RemoveKeys: []string{"alpha"}, Status: string(PruneRequestPending), CreatedAt: now.Add(-8 * 24 * time.Hour)}
-		require.NoError(t, st.CreatePruneRequest(ctx, old))
-		cutoff := now.Add(-LibraryPruneRequestTTL)
-		for status, want := range map[PruneRequestStatus][]string{
-			PruneRequestPending:   nil,
-			PruneRequestExpired:   {"pr-old"},
-			PruneRequestConfirmed: {staged.PruneRequestID},
-			"":                    {staged.PruneRequestID, "pr-old"},
-		} {
-			rows, err := st.ListPruneRequests(ctx, PruneRequestFilter{OrgID: orgB, Status: status, ExpiredAtOrBefore: cutoff})
-			require.NoError(t, err, status)
-			var ids []string
-			for _, r := range rows {
-				ids = append(ids, r.ID)
-			}
-			assert.Equal(t, want, ids, status)
-		}
-		_, err = svc.ConfirmLibraryPrune(ctx, pb, ConfirmLibraryPruneInput{RequestID: "pr-old"})
-		require.ErrorIs(t, err, ErrPruneRequestExpired)
-		got, err := st.GetPruneRequest(ctx, orgB, "pr-old")
-		require.NoError(t, err)
-		assert.Equal(t, string(PruneRequestExpired), got.Status)
-		assert.Nil(t, got.DecidedAt)
-		_, err = st.GetLibraryEntry(ctx, orgB, "alpha")
-		require.NoError(t, err, "an expired request removes nothing")
+		assert.Equal(t, key, st2.Strategy.LibraryKey)
+		assert.Equal(t, StrategyCategory("GTM_STRATEGY_CATEGORY_"+strings.ToUpper(library.All()[0].Category)), st2.Strategy.Category)
+		require.Len(t, st2.Campaigns, 1)
 	})
 }
 
