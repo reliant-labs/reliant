@@ -14,6 +14,8 @@ import Badge from "@/components/forge-ui/badge";
 import Link from "@/components/forge-ui/link";
 import Tag from "@/components/forge-ui/tag";
 import {
+  GtmBusinessModel,
+  GtmBusinessType,
   GtmCampaignStatus,
   GtmChannelMode,
   GtmChannelSource,
@@ -116,6 +118,68 @@ export const STRATEGY_CATEGORIES: { id: GtmStrategyCategory; label: string }[] =
 ];
 
 export const categoryLabel = (id: GtmStrategyCategory) => STRATEGY_CATEGORIES.find((c) => c.id === id)?.label ?? "No category";
+
+/** What kind of business an org is (GtmBusinessType), with display labels, in the proto's order. */
+export const BUSINESS_TYPES: { id: GtmBusinessType; label: string }[] = [
+  { id: GtmBusinessType.B2B_SAAS, label: "B2B SaaS" },
+  { id: GtmBusinessType.B2C_APP, label: "Consumer app" },
+  { id: GtmBusinessType.DEVELOPER_TOOLS, label: "Developer tools" },
+  { id: GtmBusinessType.ECOMMERCE, label: "Ecommerce" },
+  { id: GtmBusinessType.MARKETPLACE, label: "Marketplace" },
+  { id: GtmBusinessType.AGENCY_SERVICES, label: "Agency & services" },
+  { id: GtmBusinessType.CREATOR_MEDIA, label: "Creator & media" },
+  { id: GtmBusinessType.LOCAL_BUSINESS, label: "Local business" },
+  { id: GtmBusinessType.OPEN_SOURCE, label: "Open source" },
+  { id: GtmBusinessType.HARDWARE, label: "Hardware" },
+];
+
+/** How an org makes money (GtmBusinessModel), with display labels, in the proto's order. */
+export const BUSINESS_MODELS: { id: GtmBusinessModel; label: string }[] = [
+  { id: GtmBusinessModel.SUBSCRIPTION, label: "Subscription" },
+  { id: GtmBusinessModel.USAGE_BASED, label: "Usage-based" },
+  { id: GtmBusinessModel.ONE_TIME, label: "One-time purchase" },
+  { id: GtmBusinessModel.FREEMIUM, label: "Freemium" },
+  { id: GtmBusinessModel.FREE_OSS, label: "Free / open source" },
+  { id: GtmBusinessModel.MARKETPLACE, label: "Marketplace fees" },
+  { id: GtmBusinessModel.SERVICES, label: "Services" },
+  { id: GtmBusinessModel.AD_SUPPORTED, label: "Ad-supported" },
+];
+
+export const businessTypeLabel = (id: GtmBusinessType) => BUSINESS_TYPES.find((t) => t.id === id)?.label ?? "Not set";
+export const businessModelLabel = (id: GtmBusinessModel) => BUSINESS_MODELS.find((m) => m.id === id)?.label ?? "Unknown";
+
+/** The library's string vocabularies (GtmStrategyLibraryEntry stages, objective, effort, cost), with labels. */
+export const LIBRARY_STAGES = [
+  { id: "pre_launch", label: "Pre-launch" },
+  { id: "launch", label: "Launch" },
+  { id: "early_traction", label: "Early traction" },
+  { id: "growth", label: "Growth" },
+  { id: "scale", label: "Scale" },
+] as const;
+export const LIBRARY_OBJECTIVES = [
+  { id: "awareness", label: "Awareness" },
+  { id: "acquisition", label: "Acquisition" },
+  { id: "activation", label: "Activation" },
+  { id: "conversion", label: "Conversion" },
+  { id: "retention", label: "Retention" },
+  { id: "expansion", label: "Expansion" },
+  { id: "referral", label: "Referral" },
+  { id: "research", label: "Research" },
+] as const;
+export const LIBRARY_EFFORTS = [
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Medium" },
+  { id: "high", label: "High" },
+] as const;
+export const LIBRARY_COSTS = [
+  { id: "free", label: "Free" },
+  { id: "low", label: "Low" },
+  { id: "medium", label: "Medium" },
+  { id: "high", label: "High" },
+] as const;
+
+/** A library vocabulary value's label; an unknown value as written. */
+export const vocabLabel = (list: readonly { id: string; label: string }[], value: string) => list.find((v) => v.id === value)?.label ?? value;
 
 export const CONNECTION_STATE: Partial<Record<GtmConnectionState, Label>> = {
   [GtmConnectionState.CONNECTED]: { label: "Connected", variant: "success" },
