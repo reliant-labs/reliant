@@ -467,6 +467,11 @@ func (s *Service) ManageActivation(ctx context.Context, user, operation string, 
 	// check alone does not protect mutable workflows, presets or connections.
 	var result tools.TriggerSummary
 	var effects *activationEffects
+	// Preparing refreshes the owner's provider access, and so does the app
+	// RPC it then calls (CreateTrigger, UpdateTrigger, SetTriggerEnabled):
+	// one refresh per activation is as fresh as it needs, so the RPC reuses
+	// the first, and so do the transaction's retries.
+	ctx = withAccessRefreshMemo(ctx)
 	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		project := p.ProjectID
 		if p.TriggerID != "" {

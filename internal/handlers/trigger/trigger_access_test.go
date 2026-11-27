@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -149,6 +150,39 @@ func TestAccessGatedTriggerRefreshesOnUpdateAndEnable(t *testing.T) {
 	access.err, access.permanent = errors.New("not connected"), true
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: true}))
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+}
+
+// txProbeAccess records, per refresh, whether it ran inside a transaction.
+type txProbeAccess struct {
+	mu   sync.Mutex
+	inTx []bool
+}
+
+func (p *txProbeAccess) Refresh(ctx context.Context, _ string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.inTx = append(p.inTx, orm.InTx(ctx))
+	return nil
+}
+
+func (p *txProbeAccess) IsPermanent(error) bool { return false }
+
+// The access refresh commits on its own, never as part of the caller's
+// transaction: joined to ManageActivation's SERIALIZABLE one, its write to
+// the owner's access rows made concurrent activations of one owner abort
+// each other.
+func TestRefreshTriggerAccessRunsOutsideTheCallersTransaction(t *testing.T) {
+	t.Parallel()
+
+	env, _ := setupAccessTriggerTest(t)
+	probe := &txProbeAccess{}
+	s := &Service{deps: Deps{Access: map[string]IntegrationAccess{"gh": probe}}}
+	err := env.repo.ORM().RunTx(env.ctx, orm.Serializable, func(txCtx context.Context) error {
+		require.True(t, orm.InTx(txCtx))
+		return s.refreshTriggerAccess(txCtx, memoTestTrigger(t, env.userID))
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []bool{false}, probe.inTx, "the refresh ran detached from the caller's transaction")
 }
 
 // Integrations that are not access-gated keep requiring a connection.
