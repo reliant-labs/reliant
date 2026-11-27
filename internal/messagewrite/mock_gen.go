@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=a498d31381eef0123827580236cf72664b3638de01fa33a1e1bb325de4811b4c
+// forge:hash=a0202f578f1cd3a47395ea8f8cc4eec4f5771ca652fe4bd07b81a0af55f5195b
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	SaveMessageToThreadFunc       func(context.Context, string, string, int32, string, *string, []string, *int32) (*core.Message, error)
@@ -60,18 +61,119 @@ func (m *MockService) SaveMessageToThreadOnce(ctx context.Context, chatID string
 	return nil, false, contractkit.MockNotSet("MockService", "SaveMessageToThreadOnce")
 }
 
+// MockServiceSaveMessageToThreadCall is one recorded call of MockService.SaveMessageToThread, one
+// field per parameter.
+type MockServiceSaveMessageToThreadCall struct {
+	Ctx           context.Context
+	ChatID        string
+	Thread        string
+	Role          int32
+	Content       string
+	WorkflowID    *string
+	AttachmentIDs []string
+	DisplayStyle  *int32
+}
+
+// SaveMessageToThreadCalls returns every recorded SaveMessageToThread call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SaveMessageToThread").
+func (m *MockService) SaveMessageToThreadCalls() []MockServiceSaveMessageToThreadCall {
+	var out []MockServiceSaveMessageToThreadCall
+	for _, c := range m.Recorder.Calls("SaveMessageToThread") {
+		var r MockServiceSaveMessageToThreadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Thread, _ = c.Args[2].(string)
+		r.Role, _ = c.Args[3].(int32)
+		r.Content, _ = c.Args[4].(string)
+		r.WorkflowID, _ = c.Args[5].(*string)
+		r.AttachmentIDs, _ = c.Args[6].([]string)
+		r.DisplayStyle, _ = c.Args[7].(*int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSaveMessageToThreadWithIDCall is one recorded call of MockService.SaveMessageToThreadWithID, one
+// field per parameter.
+type MockServiceSaveMessageToThreadWithIDCall struct {
+	Ctx           context.Context
+	ChatID        string
+	Thread        string
+	Role          int32
+	Content       string
+	WorkflowID    *string
+	AttachmentIDs []string
+	DisplayStyle  *int32
+	MessageID     string
+}
+
+// SaveMessageToThreadWithIDCalls returns every recorded SaveMessageToThreadWithID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SaveMessageToThreadWithID").
+func (m *MockService) SaveMessageToThreadWithIDCalls() []MockServiceSaveMessageToThreadWithIDCall {
+	var out []MockServiceSaveMessageToThreadWithIDCall
+	for _, c := range m.Recorder.Calls("SaveMessageToThreadWithID") {
+		var r MockServiceSaveMessageToThreadWithIDCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Thread, _ = c.Args[2].(string)
+		r.Role, _ = c.Args[3].(int32)
+		r.Content, _ = c.Args[4].(string)
+		r.WorkflowID, _ = c.Args[5].(*string)
+		r.AttachmentIDs, _ = c.Args[6].([]string)
+		r.DisplayStyle, _ = c.Args[7].(*int32)
+		r.MessageID, _ = c.Args[8].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSaveMessageToThreadOnceCall is one recorded call of MockService.SaveMessageToThreadOnce, one
+// field per parameter.
+type MockServiceSaveMessageToThreadOnceCall struct {
+	Ctx           context.Context
+	ChatID        string
+	Thread        string
+	Role          int32
+	Content       string
+	WorkflowID    *string
+	AttachmentIDs []string
+	DisplayStyle  *int32
+	MessageID     string
+}
+
+// SaveMessageToThreadOnceCalls returns every recorded SaveMessageToThreadOnce call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SaveMessageToThreadOnce").
+func (m *MockService) SaveMessageToThreadOnceCalls() []MockServiceSaveMessageToThreadOnceCall {
+	var out []MockServiceSaveMessageToThreadOnceCall
+	for _, c := range m.Recorder.Calls("SaveMessageToThreadOnce") {
+		var r MockServiceSaveMessageToThreadOnceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.Thread, _ = c.Args[2].(string)
+		r.Role, _ = c.Args[3].(int32)
+		r.Content, _ = c.Args[4].(string)
+		r.WorkflowID, _ = c.Args[5].(*string)
+		r.AttachmentIDs, _ = c.Args[6].([]string)
+		r.DisplayStyle, _ = c.Args[7].(*int32)
+		r.MessageID, _ = c.Args[8].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockTx
-// forge:hash=2525243a7419ebc7708dbb9ea9cb20f20f391dc4b63a75cb8c1ea567f122039c
+// forge:hash=ba53b748539809e6d5bfc9c2f620daf42e96f4d4da06aa48a1811dcb214fe095
 
 // MockTx is a test mock for the Tx interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTx.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTx.<Method>Func not set" error.
 type MockTx struct {
 	contractkit.Recorder
 	RunTxFunc func(context.Context, orm.TxPolicy, func(context.Context) error) error
@@ -86,18 +188,41 @@ func (m *MockTx) RunTx(p0 context.Context, p1 orm.TxPolicy, p2 func(context.Cont
 	return contractkit.MockNotSet("MockTx", "RunTx")
 }
 
+// MockTxRunTxCall is one recorded call of MockTx.RunTx, one
+// field per parameter.
+type MockTxRunTxCall struct {
+	P0 context.Context
+	P1 orm.TxPolicy
+	P2 func(context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockTx) RunTxCalls() []MockTxRunTxCall {
+	var out []MockTxRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockTxRunTxCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(orm.TxPolicy)
+		r.P2, _ = c.Args[2].(func(context.Context) error)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Tx = (*MockTx)(nil)
 
 // forge:section MockOrder
-// forge:hash=30fcb1fee5840740a1f8555f10e9e5218d8f90c9fb0b211160d97d57b204b120
+// forge:hash=fb76d26cddc9a64aacbbf538803197228439bf6fc2990e51412a24838afe0291
 
 // MockOrder is a test mock for the Order interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockOrder.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOrder.<Method>Func not set" error.
 type MockOrder struct {
 	contractkit.Recorder
 	AllocateMessageOrderFunc func(context.Context, string, string) (int64, int64, error)
@@ -112,18 +237,41 @@ func (m *MockOrder) AllocateMessageOrder(p0 context.Context, p1 string, p2 strin
 	return 0, 0, contractkit.MockNotSet("MockOrder", "AllocateMessageOrder")
 }
 
+// MockOrderAllocateMessageOrderCall is one recorded call of MockOrder.AllocateMessageOrder, one
+// field per parameter.
+type MockOrderAllocateMessageOrderCall struct {
+	P0 context.Context
+	P1 string
+	P2 string
+}
+
+// AllocateMessageOrderCalls returns every recorded AllocateMessageOrder call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AllocateMessageOrder").
+func (m *MockOrder) AllocateMessageOrderCalls() []MockOrderAllocateMessageOrderCall {
+	var out []MockOrderAllocateMessageOrderCall
+	for _, c := range m.Recorder.Calls("AllocateMessageOrder") {
+		var r MockOrderAllocateMessageOrderCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		r.P2, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Order = (*MockOrder)(nil)
 
 // forge:section MockMessages
-// forge:hash=b6dc4697fe8bb36fbb0deb25d05daa440f047a865b93222f8e8434ad10f0de0d
+// forge:hash=6ee177e2dcdae2e53edbbb093244d8d564567c0000192dd89a7a43bf831cf771
 
 // MockMessages is a test mock for the Messages interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMessages.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMessages.<Method>Func not set" error.
 type MockMessages struct {
 	contractkit.Recorder
 	InsertMessageFunc     func(context.Context, *core.Message) error
@@ -158,18 +306,79 @@ func (m *MockMessages) FindMessage(p0 context.Context, p1 string) (*core.Message
 	return nil, contractkit.MockNotSet("MockMessages", "FindMessage")
 }
 
+// MockMessagesInsertMessageCall is one recorded call of MockMessages.InsertMessage, one
+// field per parameter.
+type MockMessagesInsertMessageCall struct {
+	P0 context.Context
+	P1 *core.Message
+}
+
+// InsertMessageCalls returns every recorded InsertMessage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InsertMessage").
+func (m *MockMessages) InsertMessageCalls() []MockMessagesInsertMessageCall {
+	var out []MockMessagesInsertMessageCall
+	for _, c := range m.Recorder.Calls("InsertMessage") {
+		var r MockMessagesInsertMessageCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(*core.Message)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMessagesInsertMessageOnceCall is one recorded call of MockMessages.InsertMessageOnce, one
+// field per parameter.
+type MockMessagesInsertMessageOnceCall struct {
+	P0 context.Context
+	P1 *core.Message
+}
+
+// InsertMessageOnceCalls returns every recorded InsertMessageOnce call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InsertMessageOnce").
+func (m *MockMessages) InsertMessageOnceCalls() []MockMessagesInsertMessageOnceCall {
+	var out []MockMessagesInsertMessageOnceCall
+	for _, c := range m.Recorder.Calls("InsertMessageOnce") {
+		var r MockMessagesInsertMessageOnceCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(*core.Message)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockMessagesFindMessageCall is one recorded call of MockMessages.FindMessage, one
+// field per parameter.
+type MockMessagesFindMessageCall struct {
+	P0 context.Context
+	P1 string
+}
+
+// FindMessageCalls returns every recorded FindMessage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FindMessage").
+func (m *MockMessages) FindMessageCalls() []MockMessagesFindMessageCall {
+	var out []MockMessagesFindMessageCall
+	for _, c := range m.Recorder.Calls("FindMessage") {
+		var r MockMessagesFindMessageCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Messages = (*MockMessages)(nil)
 
 // forge:section MockWindows
-// forge:hash=171a9172266c822b99d5c45ce57f5d7823f458823f7c9ccda4bcf6bb298848e7
+// forge:hash=33e8d7f07d43f76d3cb16f3e6a6c300d171d4456802af4eeaedd16ba0e1b6002
 
 // MockWindows is a test mock for the Windows interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWindows.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWindows.<Method>Func not set" error.
 type MockWindows struct {
 	contractkit.Recorder
 	GetMaxSequenceForThreadFunc func(context.Context, string) (int, error)
@@ -204,18 +413,79 @@ func (m *MockWindows) InsertContextWindow(p0 context.Context, p1 *core.ContextWi
 	return nil, contractkit.MockNotSet("MockWindows", "InsertContextWindow")
 }
 
+// MockWindowsGetMaxSequenceForThreadCall is one recorded call of MockWindows.GetMaxSequenceForThread, one
+// field per parameter.
+type MockWindowsGetMaxSequenceForThreadCall struct {
+	P0 context.Context
+	P1 string
+}
+
+// GetMaxSequenceForThreadCalls returns every recorded GetMaxSequenceForThread call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetMaxSequenceForThread").
+func (m *MockWindows) GetMaxSequenceForThreadCalls() []MockWindowsGetMaxSequenceForThreadCall {
+	var out []MockWindowsGetMaxSequenceForThreadCall
+	for _, c := range m.Recorder.Calls("GetMaxSequenceForThread") {
+		var r MockWindowsGetMaxSequenceForThreadCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWindowsGetContextWindowCall is one recorded call of MockWindows.GetContextWindow, one
+// field per parameter.
+type MockWindowsGetContextWindowCall struct {
+	P0 context.Context
+	P1 string
+}
+
+// GetContextWindowCalls returns every recorded GetContextWindow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetContextWindow").
+func (m *MockWindows) GetContextWindowCalls() []MockWindowsGetContextWindowCall {
+	var out []MockWindowsGetContextWindowCall
+	for _, c := range m.Recorder.Calls("GetContextWindow") {
+		var r MockWindowsGetContextWindowCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockWindowsInsertContextWindowCall is one recorded call of MockWindows.InsertContextWindow, one
+// field per parameter.
+type MockWindowsInsertContextWindowCall struct {
+	P0 context.Context
+	P1 *core.ContextWindow
+}
+
+// InsertContextWindowCalls returns every recorded InsertContextWindow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InsertContextWindow").
+func (m *MockWindows) InsertContextWindowCalls() []MockWindowsInsertContextWindowCall {
+	var out []MockWindowsInsertContextWindowCall
+	for _, c := range m.Recorder.Calls("InsertContextWindow") {
+		var r MockWindowsInsertContextWindowCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(*core.ContextWindow)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Windows = (*MockWindows)(nil)
 
 // forge:section MockThreads
-// forge:hash=0e3a89e340dc7e27e72d7a6c526d6c2414782640d8a3f34323682f19378ed55b
+// forge:hash=480e596e0a600a963fce8f383b556f36326e21190448cca855facccab46a178e
 
 // MockThreads is a test mock for the Threads interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockThreads.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockThreads.<Method>Func not set" error.
 type MockThreads struct {
 	contractkit.Recorder
 	GetThreadWithParentFunc     func(context.Context, string) (*core.Thread, *string, error)
@@ -240,18 +510,59 @@ func (m *MockThreads) SenderTitlesByThreadIDs(p0 context.Context, p1 []string) (
 	return nil, contractkit.MockNotSet("MockThreads", "SenderTitlesByThreadIDs")
 }
 
+// MockThreadsGetThreadWithParentCall is one recorded call of MockThreads.GetThreadWithParent, one
+// field per parameter.
+type MockThreadsGetThreadWithParentCall struct {
+	P0 context.Context
+	P1 string
+}
+
+// GetThreadWithParentCalls returns every recorded GetThreadWithParent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetThreadWithParent").
+func (m *MockThreads) GetThreadWithParentCalls() []MockThreadsGetThreadWithParentCall {
+	var out []MockThreadsGetThreadWithParentCall
+	for _, c := range m.Recorder.Calls("GetThreadWithParent") {
+		var r MockThreadsGetThreadWithParentCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockThreadsSenderTitlesByThreadIDsCall is one recorded call of MockThreads.SenderTitlesByThreadIDs, one
+// field per parameter.
+type MockThreadsSenderTitlesByThreadIDsCall struct {
+	P0 context.Context
+	P1 []string
+}
+
+// SenderTitlesByThreadIDsCalls returns every recorded SenderTitlesByThreadIDs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SenderTitlesByThreadIDs").
+func (m *MockThreads) SenderTitlesByThreadIDsCalls() []MockThreadsSenderTitlesByThreadIDsCall {
+	var out []MockThreadsSenderTitlesByThreadIDsCall
+	for _, c := range m.Recorder.Calls("SenderTitlesByThreadIDs") {
+		var r MockThreadsSenderTitlesByThreadIDsCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Threads = (*MockThreads)(nil)
 
 // forge:section MockWorkflows
-// forge:hash=c61fd4490f3f79279480256b4be82c372d524ecdab458be2d84a35c5ec2d6610
+// forge:hash=c1b6fdf4a0b335e1692533d362eaa94f14bd13f3377053f948ccc3511f6631bd
 
 // MockWorkflows is a test mock for the Workflows interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorkflows.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorkflows.<Method>Func not set" error.
 type MockWorkflows struct {
 	contractkit.Recorder
 	FindWorkflowByThreadFunc func(context.Context, string, string) (*core.Workflow, error)
@@ -266,18 +577,41 @@ func (m *MockWorkflows) FindWorkflowByThread(p0 context.Context, p1 string, p2 s
 	return nil, contractkit.MockNotSet("MockWorkflows", "FindWorkflowByThread")
 }
 
+// MockWorkflowsFindWorkflowByThreadCall is one recorded call of MockWorkflows.FindWorkflowByThread, one
+// field per parameter.
+type MockWorkflowsFindWorkflowByThreadCall struct {
+	P0 context.Context
+	P1 string
+	P2 string
+}
+
+// FindWorkflowByThreadCalls returns every recorded FindWorkflowByThread call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FindWorkflowByThread").
+func (m *MockWorkflows) FindWorkflowByThreadCalls() []MockWorkflowsFindWorkflowByThreadCall {
+	var out []MockWorkflowsFindWorkflowByThreadCall
+	for _, c := range m.Recorder.Calls("FindWorkflowByThread") {
+		var r MockWorkflowsFindWorkflowByThreadCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		r.P2, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Workflows = (*MockWorkflows)(nil)
 
 // forge:section MockBlocks
-// forge:hash=0034c5753c7b655b33ee764754ea0e8dc27759bb2b0e223997051c5f439d3dfb
+// forge:hash=2fed64d49a9c2b0a952b43f6ae2bef8640d58bc8486a66e7e1676204e5f9fba0
 
 // MockBlocks is a test mock for the Blocks interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockBlocks.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockBlocks.<Method>Func not set" error.
 type MockBlocks struct {
 	contractkit.Recorder
 	InsertContentBlockFunc func(context.Context, *core.MessageContentBlock) error
@@ -292,18 +626,39 @@ func (m *MockBlocks) InsertContentBlock(p0 context.Context, p1 *core.MessageCont
 	return contractkit.MockNotSet("MockBlocks", "InsertContentBlock")
 }
 
+// MockBlocksInsertContentBlockCall is one recorded call of MockBlocks.InsertContentBlock, one
+// field per parameter.
+type MockBlocksInsertContentBlockCall struct {
+	P0 context.Context
+	P1 *core.MessageContentBlock
+}
+
+// InsertContentBlockCalls returns every recorded InsertContentBlock call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InsertContentBlock").
+func (m *MockBlocks) InsertContentBlockCalls() []MockBlocksInsertContentBlockCall {
+	var out []MockBlocksInsertContentBlockCall
+	for _, c := range m.Recorder.Calls("InsertContentBlock") {
+		var r MockBlocksInsertContentBlockCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(*core.MessageContentBlock)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Blocks = (*MockBlocks)(nil)
 
 // forge:section MockAttachments
-// forge:hash=72a8070914379a893692ae8c1596e628d59bbe1cdef56c5347ed53b840c67486
+// forge:hash=52c56ece3187f954be08bc2768581c42ea524eaf57211597ae200b0491a03dc4
 
 // MockAttachments is a test mock for the Attachments interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAttachments.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAttachments.<Method>Func not set" error.
 type MockAttachments struct {
 	contractkit.Recorder
 	GetAttachmentFunc       func(context.Context, string) (*core.Attachment, error)
@@ -328,18 +683,59 @@ func (m *MockAttachments) GetAttachmentsByIDs(p0 context.Context, p1 []string) (
 	return nil, contractkit.MockNotSet("MockAttachments", "GetAttachmentsByIDs")
 }
 
+// MockAttachmentsGetAttachmentCall is one recorded call of MockAttachments.GetAttachment, one
+// field per parameter.
+type MockAttachmentsGetAttachmentCall struct {
+	P0 context.Context
+	P1 string
+}
+
+// GetAttachmentCalls returns every recorded GetAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAttachment").
+func (m *MockAttachments) GetAttachmentCalls() []MockAttachmentsGetAttachmentCall {
+	var out []MockAttachmentsGetAttachmentCall
+	for _, c := range m.Recorder.Calls("GetAttachment") {
+		var r MockAttachmentsGetAttachmentCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAttachmentsGetAttachmentsByIDsCall is one recorded call of MockAttachments.GetAttachmentsByIDs, one
+// field per parameter.
+type MockAttachmentsGetAttachmentsByIDsCall struct {
+	P0 context.Context
+	P1 []string
+}
+
+// GetAttachmentsByIDsCalls returns every recorded GetAttachmentsByIDs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAttachmentsByIDs").
+func (m *MockAttachments) GetAttachmentsByIDsCalls() []MockAttachmentsGetAttachmentsByIDsCall {
+	var out []MockAttachmentsGetAttachmentsByIDsCall
+	for _, c := range m.Recorder.Calls("GetAttachmentsByIDs") {
+		var r MockAttachmentsGetAttachmentsByIDsCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Attachments = (*MockAttachments)(nil)
 
 // forge:section MockUpdates
-// forge:hash=f7a7abf157f7f47cf4121ba352cda4503d3249080e315284adda6bdcebc19913
+// forge:hash=dd5aa33c319a693bfc0e19127721669f69fc9f400f5b31477377ac77424bbff5
 
 // MockUpdates is a test mock for the Updates interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockUpdates.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockUpdates.<Method>Func not set" error.
 type MockUpdates struct {
 	contractkit.Recorder
 	CreateChatUpdateFunc func(context.Context, string, pb.ChatUpdateType, string, string) error
@@ -352,6 +748,32 @@ func (m *MockUpdates) CreateChatUpdate(p0 context.Context, p1 string, p2 pb.Chat
 		return m.CreateChatUpdateFunc(p0, p1, p2, p3, p4)
 	}
 	return contractkit.MockNotSet("MockUpdates", "CreateChatUpdate")
+}
+
+// MockUpdatesCreateChatUpdateCall is one recorded call of MockUpdates.CreateChatUpdate, one
+// field per parameter.
+type MockUpdatesCreateChatUpdateCall struct {
+	P0 context.Context
+	P1 string
+	P2 pb.ChatUpdateType
+	P3 string
+	P4 string
+}
+
+// CreateChatUpdateCalls returns every recorded CreateChatUpdate call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateChatUpdate").
+func (m *MockUpdates) CreateChatUpdateCalls() []MockUpdatesCreateChatUpdateCall {
+	var out []MockUpdatesCreateChatUpdateCall
+	for _, c := range m.Recorder.Calls("CreateChatUpdate") {
+		var r MockUpdatesCreateChatUpdateCall
+		r.P0, _ = c.Args[0].(context.Context)
+		r.P1, _ = c.Args[1].(string)
+		r.P2, _ = c.Args[2].(pb.ChatUpdateType)
+		r.P3, _ = c.Args[3].(string)
+		r.P4, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
