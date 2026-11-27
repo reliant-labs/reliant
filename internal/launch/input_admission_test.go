@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -43,7 +45,7 @@ func TestLaunchRefusesTextForABooleanInputBeforeCreatingARun(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	seedCompleteWorkflow(t, ctx, repo, "release-forge", releaseWorkflowYAML)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	params := mockModelParams(t)
 	params["asap"] = structpb.NewStringValue("true")
@@ -75,7 +77,7 @@ func TestLaunchRefusesOverflowingIntegerAfterDefaults(t *testing.T) {
 	yaml := strings.Replace(releaseWorkflowYAML, "type: boolean\n    default: true", "type: integer\n    default: 1", 1)
 	seedCompleteWorkflow(t, ctx, repo, "release-forge", yaml)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	params := mockModelParams(t)
 	params["asap"] = structpb.NewNumberValue(0x1p63)
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindAgentStartRun, DedupeKey: "overflow", OccurredAt: time.Now().UTC()}, Spec{
@@ -123,7 +125,7 @@ func TestLaunchWrapsASingleValidItemForAListInput(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	seedCompleteWorkflow(t, ctx, repo, "release", reposWorkflowYAML)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	params := mockModelParams(t)
 	params["repos"] = structpb.NewStringValue("reliant-labs/control-plane")
@@ -157,7 +159,7 @@ func TestLaunchWrapsASingleValidItemForAListInput(t *testing.T) {
 // rather than passing inputs nobody checked.
 func TestValidateChatWorkflowInputsFailsWhenTheWorkflowDoesNotResolve(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 
 	errs := launcher.ValidateChatWorkflowInputs(ctx, launchTestUserID, &db.Chat{ProjectID: projectID}, "no-such-workflow", map[string]any{"asap": "true"})
 	require.NotEmpty(t, errs, "an unresolvable workflow is not a pass")

@@ -40,7 +40,7 @@ func setupBranchNoteSource(t *testing.T, repo *db.Repo, ctx context.Context, pro
 		ID: chatID, UserID: "test-user", Title: "Roofing Management App", ProjectID: projectID,
 		State: db.ChatStateIdle, CreatedAt: branchNoteForkTime, UpdatedAt: branchNoteForkTime,
 	}))
-	_, _, _, err := threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}).CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: "builtin://agent",
 			Thread: threadID, Status: db.Active(), CreatedAt: branchNoteForkTime,
@@ -85,7 +85,7 @@ func setupBranchNoteSource(t *testing.T, repo *db.Repo, ctx context.Context, pro
 // the branch starts with — the only message the branch's own thread holds.
 func branchNote(t *testing.T, repo *db.Repo, ctx context.Context, sourceChatID, forkPoint string) string {
 	t.Helper()
-	service := &Service{deps: Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})}
+	service := &Service{deps: Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})}
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
 		ChatId: sourceChatID, MessageId: forkPoint,
 	}))

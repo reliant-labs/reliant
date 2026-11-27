@@ -71,7 +71,7 @@ func TestSendAgentMessage_EndToEndDelivery(t *testing.T) {
 	// Simulate the agent-loop step boundary: drain the child thread's
 	// mailbox, via a real Temporal test activity environment (Execute reads
 	// activity.GetLogger, which panics outside one).
-	drainActivity := handlers.NewDrainAgentMessagesActivity(handlers.DrainAgentMessagesDeps{Store: repo, Mailbox: store.NewAgentMessageExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
+	drainActivity := handlers.NewDrainAgentMessagesActivity(handlers.DrainAgentMessagesDeps{Store: rowreads.WithRepo(repo), Mailbox: store.NewAgentMessageExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})})
 	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(drainActivity.Execute)

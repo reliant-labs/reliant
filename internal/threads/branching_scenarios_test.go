@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +44,7 @@ func newTestEnv(t *testing.T) *testEnv {
 	return &testEnv{
 		t:       t,
 		repo:    repo,
-		service: New(Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
+		service: New(Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
 		ctx:     context.Background(),
 	}
 }

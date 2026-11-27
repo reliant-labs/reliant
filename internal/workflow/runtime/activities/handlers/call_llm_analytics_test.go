@@ -56,7 +56,7 @@ func (d *usageDriver) StreamResponse(ctx context.Context, prompts []string, mess
 
 func newAnalyticsCallLLM(t *testing.T, h *IdempotencyTestHelper, driver llm.Driver, rec *productEventRecorder) *CallLLMActivity {
 	t.Helper()
-	activity := NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+	activity := NewCallLLMActivity(CallLLMDeps{Store: rowreads.WithRepo(h.Repo()), Mailbox: store.NewAgentMessageExtStore(h.Repo().ORM()), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(h.Repo()), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), Spawns: store.NewToolCallExtStore(h.Repo().ORM()), Hub: nil, ToolsFactory: nil, ConfigProvider: &staticConfigProvider{}, DriverResolver: func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
 	}, MCPBinder: nil})
 	activity.trackerFor = rec.trackerFor

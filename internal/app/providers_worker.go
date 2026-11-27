@@ -359,7 +359,7 @@ func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
 		TriggerEvents: store.NewTriggerEventExtStore(d.DB.ORM()),
 		Projects:      d.Projects,
 		Selections:    store.NewChatSelectionExtStore(d.DB.ORM()),
-		Threads:       threads.New(threads.Deps{Repo: d.DB}),
+		Threads:       threads.New(threads.Deps{Repo: rowreads.WithRepo(d.DB)}),
 		Temporal:      d.Temporal.Client,
 		Runs:          d.Runs,
 		TaskQueue:     v2workflow.SharedTaskQueue,

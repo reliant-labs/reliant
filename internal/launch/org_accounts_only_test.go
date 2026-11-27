@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,7 +51,7 @@ func orgOnlySchedule(projectID string) (Event, Spec) {
 func TestLaunch_OrgAccountsOnlyRefusesAModelNoOrgSourceServes(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	sources := &scopedSources{}
 	launcher.sources = sources.lookup
 
@@ -155,7 +157,7 @@ func TestLaunch_OrgAccountsOnlyRefusesAnyNamedModelInput(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	seedCompleteWorkflow(t, ctx, repo, "review-bot", reviewModelWorkflowYAML)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	sources := &scopedSources{}
 	launcher.sources = sources.lookup
 
@@ -201,7 +203,7 @@ func TestLaunch_OrgAccountsOnlyIsCheckedOnlyWhereItApplies(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			repo, ctx, projectID, _ := launchFixture(t)
-			launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+			launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 			sources := &scopedSources{}
 			launcher.sources = sources.lookup
 
@@ -219,7 +221,7 @@ func TestLaunch_OrgAccountsOnlyIsCheckedOnlyWhereItApplies(t *testing.T) {
 // outage must not record a no_org_account failure that counts toward a pause.
 func TestLaunch_OrgAccountsOnlyReadFailureIsInternal(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 	launcher.sources = func(context.Context, drivers.Scope) (models.AvailableDrivers, error) {
 		return models.AvailableDrivers{}, drivers.ErrDriverLookupFailed
 	}

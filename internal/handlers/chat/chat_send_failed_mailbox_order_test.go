@@ -95,7 +95,7 @@ func TestSendMessage_FailedRunResetRevivesTheThreadItQueuedTo(t *testing.T) {
 	require.Equal(t, 1, pause.interruptResumes, "the run is recovered by reset-and-replay")
 	require.True(t, resp.Msg.Queued)
 
-	thread, err := repo.GetThread(ctx, fx.rootThreadID)
+	thread, err := store.GetThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Equal(t, db.ThreadStatusRunning, thread.Status,
 		"the thread the message was queued to is revived, so the orphaned-mailbox sweep cannot take it")

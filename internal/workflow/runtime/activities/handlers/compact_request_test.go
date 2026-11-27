@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,7 +116,7 @@ func TestCompactThreadUpdate_CarriesPersistedThreadMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(repo), Store: repo, Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), DriverResolver: nil}).emitThreadUpdate(ctx, chatID, threadID, "active", "Compact")
+	NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(repo), Store: rowreads.WithRepo(repo), Threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), DriverResolver: nil}).emitThreadUpdate(ctx, chatID, threadID, "active", "Compact")
 
 	updates, err := repo.GetUpdatesSince(ctx, chatID, 0, 100)
 	require.NoError(t, err)

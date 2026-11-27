@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -372,7 +374,7 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 
 			chatID, thread, explicitContextSeq := tt.setup(t, repo)
 
-			messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, explicitContextSeq)
+			messages, err := LoadMessagesForLLM(ctx, rowreads.WithRepo(repo), toolCallsOf(repo), chatID, thread, explicitContextSeq)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -477,7 +479,7 @@ func TestLoadMessagesForLLM_OrphanedToolCallRepair(t *testing.T) {
 
 			chatID, thread := tt.setup(t, repo)
 
-			messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, thread, nil)
+			messages, err := LoadMessagesForLLM(ctx, rowreads.WithRepo(repo), toolCallsOf(repo), chatID, thread, nil)
 
 			require.NoError(t, err)
 			assert.Len(t, messages, tt.expectedMsgCount,
@@ -512,7 +514,7 @@ func TestLoadMessagesForLLM_MessageOrdering(t *testing.T) {
 	createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 1, reliantv1.MessageRole_MESSAGE_ROLE_USER, "Second")
 	createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 2, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "Third")
 
-	messages, err := LoadMessagesForLLM(ctx, repo, toolCallsOf(repo), chatID, threadID, nil)
+	messages, err := LoadMessagesForLLM(ctx, rowreads.WithRepo(repo), toolCallsOf(repo), chatID, threadID, nil)
 	require.NoError(t, err)
 	require.Len(t, messages, 3)
 

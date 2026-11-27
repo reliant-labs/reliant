@@ -100,7 +100,7 @@ func TestStartChatDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
 			Spawns: store.NewToolCallExtStore(e.repo.ORM()), Selections: store.NewChatSelectionExtStore(e.repo.ORM()), Messages: store.NewMessageExtStore(e.repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM()), Temporal: e.temporal, Router: router,
 			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(e.repo.ORM()), Announcer: e.repo}),
 			AgentMessages: store.NewAgentMessageExtStore(e.repo.ORM()),
-		}, threads: threads.New(threads.Deps{Repo: e.repo, Messages: store.NewMessageExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM())}),
+		}, threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(e.repo), Messages: store.NewMessageExtStore(e.repo.ORM()), Senders: store.NewThreadExtStore(e.repo.ORM())}),
 		runs: runs.New(runs.Deps{Repo: e.repo, Resolver: questions.NewFromRepo(e.repo), Chats: store.NewChatsWithActivityExtStore(e.repo.ORM()), Workflows: store.NewWorkflowExtStore(e.repo.ORM()), Questions: store.NewQuestionExtStore(e.repo.ORM()), Temporal: e.temporal, Pause: nil}),
 	}
 

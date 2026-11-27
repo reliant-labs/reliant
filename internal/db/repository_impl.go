@@ -3022,13 +3022,6 @@ func (r *Repo) CreateThread(ctx context.Context, thread *Thread) (*Thread, error
 	return store.InsertThread(ctx, r.ORM(), thread)
 }
 
-func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
-	if id == "" {
-		return nil, fmt.Errorf("thread ID cannot be empty")
-	}
-	return store.GetThread(ctx, r.ORM(), id)
-}
-
 // ResolveThreadAmbientMemoryExclusion fails closed on persistence errors.
 func (r *Repo) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
 	return store.ResolveThreadAmbientMemoryExclusion(ctx, r.ORM(), chatID, threadID, requested)

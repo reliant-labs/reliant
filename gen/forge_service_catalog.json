@@ -60108,9 +60108,7 @@
       "field": "Threads",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/plan.ThreadStore",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -61241,9 +61239,7 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.Repository",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -61392,9 +61388,7 @@
       "field": "Threads",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/task.ThreadStore",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [],
       "resolution": "unresolved"
     },

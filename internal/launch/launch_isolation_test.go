@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,7 +68,7 @@ func TestSixteenConcurrentStartChatsAllSucceedFirstTime(t *testing.T) {
 			t.Parallel()
 			repo, cleanup := db.SetupTestDB(t)
 			t.Cleanup(cleanup)
-			launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+			launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 
 			userIDs := make([]string, launches)
 			projectIDs := make([]string, launches)
@@ -104,7 +106,7 @@ func TestConcurrentStartChatsTakeNoPredicateLocks(t *testing.T) {
 
 	repo, raw, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 	ctx := context.Background()
 	userID := "siread-user-" + uuid.NewString()[:8]
 	projectID := seedLaunchUser(t, repo, userID)

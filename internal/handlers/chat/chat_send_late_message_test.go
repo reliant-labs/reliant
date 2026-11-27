@@ -188,7 +188,7 @@ func TestSendMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
 		},
 	}
 	temporal.onStart = func() {
-		thread, err := repo.GetThread(ctx, fx.rootThreadID)
+		thread, err := store.GetThread(ctx, repo.ORM(), fx.rootThreadID)
 		require.NoError(t, err)
 		threadStatusAtStart = thread.Status
 	}
@@ -279,7 +279,7 @@ func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T
 	// run is never asked (it would be replayed to answer).
 	seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": "mock"}})
 	temporal.onStart = func() {
-		thread, err := repo.GetThread(ctx, fx.rootThreadID)
+		thread, err := store.GetThread(ctx, repo.ORM(), fx.rootThreadID)
 		require.NoError(t, err)
 		threadStatusAtStart = thread.Status
 	}
@@ -350,7 +350,7 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 			}
 			seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": "mock"}})
 			temporal.onStart = func() {
-				thread, err := repo.GetThread(ctx, fx.rootThreadID)
+				thread, err := store.GetThread(ctx, repo.ORM(), fx.rootThreadID)
 				require.NoError(t, err)
 				threadStatusAtStart = thread.Status
 			}

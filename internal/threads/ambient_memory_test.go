@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func TestAmbientMemoryExclusionAtomicThreadInitialization(t *testing.T) {
@@ -26,7 +28,7 @@ func TestAmbientMemoryExclusionAtomicThreadInitialization(t *testing.T) {
 	require.True(t, root.ExcludeAmbientMemory)
 	child := create("unstarted-child", &root.ID, false)
 	require.True(t, child.ExcludeAmbientMemory, "must persist before first model turn, including a crash immediately after initialization")
-	stored, err := h.repo.GetThread(ctx, child.ID)
+	stored, err := store.GetThread(ctx, h.repo.ORM(), child.ID)
 	require.NoError(t, err)
 	require.True(t, stored.ExcludeAmbientMemory)
 	require.True(t, create("unstarted-child", &root.ID, false).ExcludeAmbientMemory, "idempotent resume cannot reset policy")

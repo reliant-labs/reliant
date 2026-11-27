@@ -4,6 +4,8 @@ package db
 import (
 	"context"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // TestReapOrphanedThreads is the invariant
@@ -97,7 +99,7 @@ func TestReapOrphanedThreads(t *testing.T) {
 
 	assertThreadStatus := func(id string, want ThreadStatus, why string) {
 		t.Helper()
-		th, err := repo.GetThread(ctx, id)
+		th, err := store.GetThread(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetThread(%s): %v", id, err)
 		}
@@ -111,7 +113,7 @@ func TestReapOrphanedThreads(t *testing.T) {
 	assertThreadStatus(failedThread, ThreadStatusFailed, "a paused thread under a failed workflow must also be reaped")
 
 	for _, id := range []string{completedThread, cancelledThread, failedThread} {
-		th, err := repo.GetThread(ctx, id)
+		th, err := store.GetThread(ctx, repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetThread(%s): %v", id, err)
 		}
@@ -127,7 +129,7 @@ func TestReapOrphanedThreads(t *testing.T) {
 	// completed_at staying nil, since insertTestThreadForWorkflow never set
 	// it. A reap that touched this row would prove it is not scoping to
 	// status IN (2, 6) as intended.
-	settled, err := repo.GetThread(ctx, settledThread)
+	settled, err := store.GetThread(ctx, repo.ORM(), settledThread)
 	if err != nil {
 		t.Fatalf("GetThread(settled): %v", err)
 	}

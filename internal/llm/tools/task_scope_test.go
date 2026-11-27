@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -57,7 +59,7 @@ func TestUpdateTask_SubAgentsUpdateOnlyTheirOwnTask(t *testing.T) {
 	sibling := createTestContextForThread(t, chatID, spawnChildThread(t, repo, chatID, chatID))
 	update := func(ctx *rctx.ToolContext, p UpdateTaskParams) string {
 		t.Helper()
-		resp, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, p)
+		resp, err := (&UpdateTaskTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(ctx, p)
 		require.NoError(t, err)
 		return resp.Content
 	}
@@ -112,13 +114,13 @@ func TestUpdateTask_SubAgentsUpdateOnlyTheirOwnTask(t *testing.T) {
 	}
 
 	// create_subtask changes the plan's shape: the owner only.
-	sub, err := (&CreateSubtaskTool{repo: repo}).Execute(first, CreateSubtaskParams{ParentTaskID: taskA, Title: "sneak"})
+	sub, err := (&CreateSubtaskTool{repo: rowreads.WithRepo(repo)}).Execute(first, CreateSubtaskParams{ParentTaskID: taskA, Title: "sneak"})
 	require.NoError(t, err)
 	assert.Contains(t, sub.Content, "read-only", "a sub-agent cannot add subtasks to its parent's plan")
-	sub, err = (&CreateSubtaskTool{repo: repo}).Execute(parentCtx, CreateSubtaskParams{ParentTaskID: otherTasks[0].ID, Title: "sneak"})
+	sub, err = (&CreateSubtaskTool{repo: rowreads.WithRepo(repo)}).Execute(parentCtx, CreateSubtaskParams{ParentTaskID: otherTasks[0].ID, Title: "sneak"})
 	require.NoError(t, err)
 	assert.Contains(t, sub.Content, "not on this thread's plan")
-	sub, err = (&CreateSubtaskTool{repo: repo}).Execute(parentCtx, CreateSubtaskParams{ParentTaskID: taskA, Title: "owned"})
+	sub, err = (&CreateSubtaskTool{repo: rowreads.WithRepo(repo)}).Execute(parentCtx, CreateSubtaskParams{ParentTaskID: taskA, Title: "owned"})
 	require.NoError(t, err)
 	assert.Contains(t, sub.Content, "Subtask created successfully")
 }
@@ -146,7 +148,7 @@ func TestUpdateTask_ConcurrentClaimsHaveOneWinner(t *testing.T) {
 		ctx := createTestContextForThread(t, chatID, spawnChildThread(t, repo, chatID, chatID))
 		go func(i int) {
 			<-start
-			resp, err := (&UpdateTaskTool{repo: repo, plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
+			resp, err := (&UpdateTaskTool{repo: rowreads.WithRepo(repo), plans: planningtest.New(t, repo)}).Execute(ctx, UpdateTaskParams{
 				TaskID: "1", Status: "in_progress", Assignee: fmt.Sprintf("agent-%d", i),
 			})
 			if err != nil {
@@ -196,11 +198,11 @@ func TestScopeTaskForThread_ReadFailureIsAnError(t *testing.T) {
 	require.NoError(t, err)
 
 	child := spawnChildThread(t, repo, chatID, chatID)
-	scope, _, err := scopeTaskForThread(context.Background(), errThreadStore{repo}, child, tasks[0])
+	scope, _, err := scopeTaskForThread(context.Background(), errThreadStore{rowreads.WithRepo(repo)}, child, tasks[0])
 	require.Error(t, err, "a failed ancestry read must surface")
 	assert.Equal(t, taskPlanForeign, scope)
 
-	scope, owner, err := scopeTaskForThread(context.Background(), repo, child, tasks[0])
+	scope, owner, err := scopeTaskForThread(context.Background(), rowreads.WithRepo(repo), child, tasks[0])
 	require.NoError(t, err)
 	assert.Equal(t, taskPlanInherited, scope)
 	assert.Equal(t, chatID, owner)

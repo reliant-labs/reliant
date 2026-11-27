@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"connectrpc.com/connect"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/stretchr/testify/require"
@@ -314,7 +316,7 @@ func TestChatOpenLargeChatPerf(t *testing.T) {
 		require.NoError(t, err)
 	}
 	repo := perfRepo(t, dsn, rtt/2)
-	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo})))
+	svc := NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: rowreads.WithRepo(repo)})))
 
 	// The chat_snapshot.* / chat_stream.* spans, averaged per name.
 	recorder := tracetest.NewSpanRecorder()

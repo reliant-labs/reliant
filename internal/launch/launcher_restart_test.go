@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -44,7 +46,7 @@ func chatStartSpec(t *testing.T, chatID, workflow, text string) (Event, Spec) {
 func TestLaunchPendingNewTurnAfterFailedStartAppliesMessageAndSwitch(t *testing.T) {
 	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
 	starter := &fakeStarter{failRootStarts: 1}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	ev, spec := chatStartSpec(t, chatID, "builtin://agent", "first")
@@ -76,7 +78,7 @@ func TestLaunchPendingNewTurnAfterFailedStartAppliesMessageAndSwitch(t *testing.
 func TestLaunchPendingTrueRetryIsIdempotent(t *testing.T) {
 	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
 	starter := &fakeStarter{failRootStarts: 1}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	ev, spec := chatStartSpec(t, chatID, "builtin://structured-agent", "only once")
@@ -100,7 +102,7 @@ func TestLaunchPendingTrueRetryIsIdempotent(t *testing.T) {
 func TestLaunchScheduleRetryStartsFromPersistedWorkflow(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{failRootStarts: 1}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	chatID := uuid.NewString()
 	ev := Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID}
@@ -129,7 +131,7 @@ func TestLaunchScheduleRetryStartsFromPersistedWorkflow(t *testing.T) {
 func TestLaunchPendingConcurrentStartsDoNotLoseMessages(t *testing.T) {
 	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 
 	texts := []string{"from tab one", "from tab two"}
@@ -168,6 +170,7 @@ func TestLaunchPendingConcurrentStartsDoNotLoseMessages(t *testing.T) {
 // over a real *db.Repo.
 type failingLookups struct {
 	*db.Repo
+	rowreads.Reads
 	failProject  bool
 	failChat     bool
 	failWorkflow bool
@@ -207,7 +210,7 @@ func TestLaunchStoreFailuresStayRetryable(t *testing.T) {
 	}{
 		{
 			name: "project lookup on a new chat",
-			repo: &failingLookups{Repo: repo, failProject: true},
+			repo: &failingLookups{Repo: repo, Reads: rowreads.Of(repo), failProject: true},
 			spec: func(t *testing.T) (Event, Spec) {
 				return Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "k-" + uuid.NewString()}, Spec{
 					OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -217,7 +220,7 @@ func TestLaunchStoreFailuresStayRetryable(t *testing.T) {
 		},
 		{
 			name: "chat lookup on a pending start",
-			repo: &failingLookups{Repo: repo, failChat: true},
+			repo: &failingLookups{Repo: repo, Reads: rowreads.Of(repo), failChat: true},
 			spec: func(t *testing.T) (Event, Spec) {
 				chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 				return chatStartSpec(t, chatID, "builtin://agent", "hi")
@@ -225,7 +228,7 @@ func TestLaunchStoreFailuresStayRetryable(t *testing.T) {
 		},
 		{
 			name: "workflow draft lookup",
-			repo: &failingLookups{Repo: repo, failWorkflow: true},
+			repo: &failingLookups{Repo: repo, Reads: rowreads.Of(repo), failWorkflow: true},
 			spec: func(t *testing.T) (Event, Spec) {
 				return Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "k-" + uuid.NewString()}, Spec{
 					OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "my-custom-workflow",
@@ -253,7 +256,7 @@ func TestLaunchStoreFailuresStayRetryable(t *testing.T) {
 // The other side of M1: a project that really is absent is final.
 func TestLaunchMissingProjectIsNotFound(t *testing.T) {
 	repo, ctx, _, _ := launchFixture(t)
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "k-" + uuid.NewString()}, Spec{
 		OwnerUserID: launchTestUserID, ProjectID: "no-such-project", Workflow: "builtin://agent",
 		Params: mockModelParams(t), Messages: userSeed("hi"),
@@ -269,7 +272,7 @@ func TestLaunchMissingProjectIsNotFound(t *testing.T) {
 func TestLaunchDuplicateOfStartedEventIsAlreadyLaunched(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	chatID := uuid.NewString()
 	ev := Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + chatID}
@@ -303,7 +306,7 @@ func TestLaunchDraftWorkflowStaysAValidationError(t *testing.T) {
 		Definition: "name: still-draft\nentry: [echo]\nnodes:\n  - id: echo\n    type: run\n    command: \"echo hi\"\n",
 		Status:     db.WorkflowDraftStatusDraft, CreatedAt: now, UpdatedAt: now, Version: 1,
 	}))
-	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), &fakeStarter{})
 
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "k-" + uuid.NewString()}, Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "still-draft",
@@ -322,7 +325,7 @@ func TestLaunchDraftWorkflowStaysAValidationError(t *testing.T) {
 func TestLaunchRetryRestartsOnTheRecordedCatalogPin(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	starter := &fakeStarter{failRootStarts: 1}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 	pinA, err := repo.PinProjectCatalog(ctx, db.CatalogPinScope{ProjectID: projectID, UserID: launchTestUserID})
 	require.NoError(t, err)
 

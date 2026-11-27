@@ -44,7 +44,7 @@ func newMoveFixture(t *testing.T) *moveFixture {
 		t:       t,
 		ctx:     context.WithValue(context.Background(), auth.UserIDContextKey, moveUser),
 		repo:    repo,
-		service: &Service{deps: Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})},
+		service: &Service{deps: Deps{Repo: rowreads.WithRepo(repo), Projects: projectaccesstest.For(repo), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM())}, threads: threads.New(threads.Deps{Repo: rowreads.WithRepo(repo), Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())})},
 		now:     time.Now().UTC(),
 	}
 }
@@ -99,7 +99,7 @@ func (f *moveFixture) chatWithRun(projectID, worktreeID string, daemonID *string
 		ID: chatID, UserID: moveUser, Title: "Moving chat", ProjectID: projectID, WorktreeID: &worktreeID,
 		WorkflowID: &chatID, ActiveDaemonID: daemonID, State: db.ChatStateIdle, CreatedAt: f.now, UpdatedAt: f.now,
 	}))
-	_, _, _, err := threads.New(threads.Deps{Repo: f.repo, Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}).CreateWorkflowWithThread(f.ctx, threads.CreateWorkflowWithThreadOpts{
+	_, _, _, err := threads.New(threads.Deps{Repo: rowreads.WithRepo(f.repo), Messages: store.NewMessageExtStore(f.repo.ORM()), Senders: store.NewThreadExtStore(f.repo.ORM())}).CreateWorkflowWithThread(f.ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: &db.Workflow{
 			ID: chatID, ChatID: chatID, WorkflowName: "builtin://agent",
 			Thread: chatID, Status: status, CreatedAt: f.now,

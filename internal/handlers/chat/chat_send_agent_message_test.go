@@ -250,7 +250,7 @@ func TestSendAgentMessage_RefusesIdleThread(t *testing.T) {
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	// The run finished; the thread row is deliberately left at RUNNING.
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.childThreadID, db.Completed()))
-	thread, err := repo.GetThread(ctx, fx.childThreadID)
+	thread, err := store.GetThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, db.ThreadStatusRunning, thread.Status,
 		"fixture must reproduce the live shape: an idle agent still claiming thread status=running")
@@ -358,7 +358,7 @@ func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
 	assert.Equal(t, int64(1), revived, "the terminal main thread must be the row revived")
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Active()))
 
-	thread, err := repo.GetThread(ctx, fx.rootThreadID)
+	thread, err := store.GetThread(ctx, repo.ORM(), fx.rootThreadID)
 	require.NoError(t, err)
 	require.Equal(t, db.ThreadStatusRunning, thread.Status,
 		"a thread executing a new turn must not still read as finished")

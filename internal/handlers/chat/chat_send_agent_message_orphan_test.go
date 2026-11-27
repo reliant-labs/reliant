@@ -91,7 +91,7 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	thread, err := repo.GetThread(ctx, fx.childThreadID)
+	thread, err := store.GetThread(ctx, repo.ORM(), fx.childThreadID)
 	require.NoError(t, err)
 	require.True(t, core.ThreadStatusIsTerminal(thread.Status),
 		"fixture must reproduce the bug: the loop has exited")

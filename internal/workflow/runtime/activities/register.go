@@ -251,7 +251,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// CONTEXT MANAGEMENT ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewCompactActivity(handlers.CompactDeps{Store: deps.Repo, Threads: deps.Threads, ToolResults: toolCalls, DriverResolver: deps.DriverResolver}).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
+	v2.RegisterActivity(registry, handlers.NewCompactActivity(handlers.CompactDeps{Store: repoRows, Threads: deps.Threads, ToolResults: toolCalls, DriverResolver: deps.DriverResolver}).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage))
 	v2.RegisterActivity(registry, handlers.NewGenerateTitleActivity(deps.Repo, deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewDraftAutomationActivity(deps.DriverResolver).WithAccountRouting(deps.AccountRouting).WithUsageRecorder(deps.LLMUsage).WithProviderPreferences(deps.Repo))
 
@@ -318,7 +318,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: repoRows, Runs: runRecords, Workflows: workflowRuns, Attention: attention, RunEvents: runEvents, Pauser: pauser}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: deps.Repo, Mailbox: mailboxStore.resolver}))
-	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(handlers.UsageLimitWaitDeps{Store: deps.Repo, Waits: deps.ProviderBackoff, Threads: deps.Threads}))
+	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(handlers.UsageLimitWaitDeps{Store: repoRows, Waits: deps.ProviderBackoff, Threads: deps.Threads}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(handlers.TriggerCapacitySlotDeps{Slots: capacitySlots}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(handlers.WorkflowCheckpointDeps{Checkpoints: checkpoints}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))
@@ -339,10 +339,10 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewRecordToleratedFailureActivity())
 	v2.RegisterActivity(registry, handlers.NewSkippedStepActivity())
 	v2.RegisterActivity(registry, handlers.NewFetchThreadResultActivity(deps.Threads))
-	v2.RegisterActivity(registry, handlers.NewValidateThreadOwnershipActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewValidateThreadOwnershipActivity(repoRows))
 	v2.RegisterActivity(registry, handlers.NewLoadPresetParamsActivity(deps.Repo))
 	v2.RegisterObservabilityActivity(registry, handlers.NewEmitToolCallStatusActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewDrainAgentMessagesActivity(handlers.DrainAgentMessagesDeps{Store: deps.Repo, Mailbox: mailboxStore.queue, Threads: deps.Threads}))
+	v2.RegisterActivity(registry, handlers.NewDrainAgentMessagesActivity(handlers.DrainAgentMessagesDeps{Store: repoRows, Mailbox: mailboxStore.queue, Threads: deps.Threads}))
 	v2.RegisterActivity(registry, handlers.NewEnqueueAgentMessageActivity(handlers.EnqueueAgentMessageDeps{Mailbox: mailboxStore.enqueue}))
 	v2.RegisterActivity(registry, handlers.NewLookupStoppedSubAgentActivity(stoppedAgents))
 

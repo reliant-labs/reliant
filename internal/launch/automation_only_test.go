@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,7 +55,7 @@ func TestLaunchChatStartRefusesAnAutomationOnlyWorkflow(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	seedCompleteWorkflow(t, ctx, repo, "nightly-digest", automationWorkflowYAML)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "nightly-digest",
@@ -77,7 +79,7 @@ func TestLaunchBuilderTestStartsAnAutomationOnlyWorkflow(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)
 	seedCompleteWorkflow(t, ctx, repo, "nightly-digest", automationWorkflowYAML)
 	starter := &fakeStarter{}
-	launcher, _ := newTestLauncher(t, repo, starter)
+	launcher, _ := newTestLauncher(t, rowreads.WithRepo(repo), starter)
 
 	_, err := launcher.Launch(ctx, Event{Kind: core.TriggerEventKindBuilderTest, OccurredAt: time.Now().UTC()}, Spec{
 		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "nightly-digest",

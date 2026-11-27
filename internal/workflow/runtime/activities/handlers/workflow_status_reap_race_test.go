@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
@@ -129,7 +130,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 	var output WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(plain.Execute, turn("started"), &output))
 	require.NoError(t, h.ExecuteActivity(plain.Execute, turn("completed"), &output))
-	thread, err := h.Repo().GetThread(ctx, chatID)
+	thread, err := store.GetThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	require.Equal(t, db.ThreadStatusCompleted, thread.Status, "precondition: turn 1 closed the thread")
 
@@ -140,7 +141,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 
 	assert.Empty(t, repo.reapedIn(chatID),
 		"no pass may ever see the starting run's thread running under the previous turn's terminal workflow")
-	thread, err = h.Repo().GetThread(ctx, chatID)
+	thread, err = store.GetThread(ctx, h.Repo().ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, db.ThreadStatusRunning, thread.Status,
 		"the thread of a run that is starting must read running, not the status a reap stamped on it")
@@ -209,7 +210,7 @@ func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 			assert.Empty(t, repo.reapedIn(chatID),
 				"a pass between the status write and the cascade must find nothing to reap")
 			for _, threadID := range []string{chatID, childWorkflowID} {
-				thread, err := h.Repo().GetThread(ctx, threadID)
+				thread, err := store.GetThread(ctx, h.Repo().ORM(), threadID)
 				require.NoError(t, err)
 				assert.Equal(t, tc.wantThread, thread.Status, "thread %s ends with its run", threadID)
 			}
