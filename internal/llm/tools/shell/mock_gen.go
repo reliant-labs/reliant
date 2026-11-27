@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockProcessStore
-// forge:hash=175f7f348838e43deb3ef2af4f0fb76a7999ebc904cf36dadddcd251baf475fa
+// forge:hash=29c87d209797721fab4c5a08aab6f3c9c72cc34f593e4a6fa08fe1528247a7b7
 
 // MockProcessStore is a test mock for the ProcessStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockProcessStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockProcessStore.<Method>Func not set" error.
 type MockProcessStore struct {
 	contractkit.Recorder
 	GetBackgroundProcessFunc          func(context.Context, string) (*db.BackgroundProcess, error)
@@ -47,6 +48,52 @@ func (m *MockProcessStore) UpdateBackgroundProcessStatus(ctx context.Context, id
 		return m.UpdateBackgroundProcessStatusFunc(ctx, id, status, exitCode, endedAt)
 	}
 	return contractkit.MockNotSet("MockProcessStore", "UpdateBackgroundProcessStatus")
+}
+
+// MockProcessStoreGetBackgroundProcessCall is one recorded call of MockProcessStore.GetBackgroundProcess, one
+// field per parameter.
+type MockProcessStoreGetBackgroundProcessCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetBackgroundProcessCalls returns every recorded GetBackgroundProcess call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetBackgroundProcess").
+func (m *MockProcessStore) GetBackgroundProcessCalls() []MockProcessStoreGetBackgroundProcessCall {
+	var out []MockProcessStoreGetBackgroundProcessCall
+	for _, c := range m.Recorder.Calls("GetBackgroundProcess") {
+		var r MockProcessStoreGetBackgroundProcessCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockProcessStoreUpdateBackgroundProcessStatusCall is one recorded call of MockProcessStore.UpdateBackgroundProcessStatus, one
+// field per parameter.
+type MockProcessStoreUpdateBackgroundProcessStatusCall struct {
+	Ctx      context.Context
+	ID       string
+	Status   db.BackgroundProcessStatus
+	ExitCode *int
+	EndedAt  *time.Time
+}
+
+// UpdateBackgroundProcessStatusCalls returns every recorded UpdateBackgroundProcessStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateBackgroundProcessStatus").
+func (m *MockProcessStore) UpdateBackgroundProcessStatusCalls() []MockProcessStoreUpdateBackgroundProcessStatusCall {
+	var out []MockProcessStoreUpdateBackgroundProcessStatusCall
+	for _, c := range m.Recorder.Calls("UpdateBackgroundProcessStatus") {
+		var r MockProcessStoreUpdateBackgroundProcessStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Status, _ = c.Args[2].(db.BackgroundProcessStatus)
+		r.ExitCode, _ = c.Args[3].(*int)
+		r.EndedAt, _ = c.Args[4].(*time.Time)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

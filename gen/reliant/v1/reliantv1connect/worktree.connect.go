@@ -137,6 +137,8 @@ type WorktreeServiceClient interface {
 	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
+	// Declared NO_SIDE_EFFECTS though it creates the project's main worktree when it has none (an idempotent repair): the repair is idempotent and
+	// no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	// ListArchivedWorktrees pages through the project's archived workspaces,
 	// most recently archived first. Archived workspaces are never part of
@@ -222,6 +224,7 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceListWorktreesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktrees")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listArchivedWorktrees: connect.NewClient[v1.ListArchivedWorktreesRequest, v1.ListArchivedWorktreesResponse](
@@ -291,24 +294,28 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreeChangesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeChanges")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorktreeGitStatus: connect.NewClient[v1.GetWorktreeGitStatusRequest, v1.GetWorktreeGitStatusResponse](
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreeGitStatusProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeGitStatus")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		getWorktreeCommits: connect.NewClient[v1.GetWorktreeCommitsRequest, v1.GetWorktreeCommitsResponse](
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreeCommitsProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeCommits")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listWorktreeRepoStatuses: connect.NewClient[v1.ListWorktreeRepoStatusesRequest, v1.ListWorktreeRepoStatusesResponse](
 			httpClient,
 			baseURL+WorktreeServiceListWorktreeRepoStatusesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRepoStatuses")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		stageFiles: connect.NewClient[v1.StageFilesRequest, v1.StageFilesResponse](
@@ -351,6 +358,7 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceGetWorktreePRProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreePR")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		createWorktreePR: connect.NewClient[v1.CreateWorktreePRRequest, v1.CreateWorktreePRResponse](
@@ -547,6 +555,8 @@ type WorktreeServiceHandler interface {
 	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
+	// Declared NO_SIDE_EFFECTS though it creates the project's main worktree when it has none (an idempotent repair): the repair is idempotent and
+	// no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	// ListArchivedWorktrees pages through the project's archived workspaces,
 	// most recently archived first. Archived workspaces are never part of
@@ -628,6 +638,7 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceListWorktreesProcedure,
 		svc.ListWorktrees,
 		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktrees")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceListArchivedWorktreesHandler := connect.NewUnaryHandler(
@@ -697,24 +708,28 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceGetWorktreeChangesProcedure,
 		svc.GetWorktreeChanges,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeChanges")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceGetWorktreeGitStatusHandler := connect.NewUnaryHandler(
 		WorktreeServiceGetWorktreeGitStatusProcedure,
 		svc.GetWorktreeGitStatus,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeGitStatus")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceGetWorktreeCommitsHandler := connect.NewUnaryHandler(
 		WorktreeServiceGetWorktreeCommitsProcedure,
 		svc.GetWorktreeCommits,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreeCommits")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceListWorktreeRepoStatusesHandler := connect.NewUnaryHandler(
 		WorktreeServiceListWorktreeRepoStatusesProcedure,
 		svc.ListWorktreeRepoStatuses,
 		connect.WithSchema(worktreeServiceMethods.ByName("ListWorktreeRepoStatuses")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceStageFilesHandler := connect.NewUnaryHandler(
@@ -757,6 +772,7 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceGetWorktreePRProcedure,
 		svc.GetWorktreePR,
 		connect.WithSchema(worktreeServiceMethods.ByName("GetWorktreePR")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceCreateWorktreePRHandler := connect.NewUnaryHandler(

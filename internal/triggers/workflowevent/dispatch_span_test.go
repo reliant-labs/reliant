@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
@@ -60,7 +61,7 @@ func TestDispatch_EachMatchedTriggerIsAFireSpan(t *testing.T) {
 	assert.Equal(t, launched, l[telemetry.AttrGenAIConversationID])
 	assert.Equal(t, source, l[telemetry.AttrTriggerOriginRunID])
 	assert.Equal(t, f.userID, l[telemetry.AttrUserID])
-	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launched)
+	launchEv, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launched)
 	require.NoError(t, err)
 	assert.Equal(t, launchEv.ID, l[telemetry.AttrTriggerEventID])
 	root := f.starter.lastRoot()

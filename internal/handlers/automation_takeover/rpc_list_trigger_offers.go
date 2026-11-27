@@ -35,7 +35,7 @@ func (s *Service) ListTriggerOffers(
 	}
 	resp := &pb.ListTriggerOffersResponse{}
 	for _, o := range offers {
-		t, err := s.deps.Repo.GetTrigger(ctx, o.TriggerID)
+		t, err := s.deps.TriggerReads.GetTrigger(ctx, o.TriggerID)
 		if errors.Is(err, core.ErrTriggerNotFound) {
 			continue // deleted; its offers went with it
 		}

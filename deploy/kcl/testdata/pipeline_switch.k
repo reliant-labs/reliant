@@ -1,5 +1,6 @@
-# Fixture for cmd/reliant/cmd TestPipelineSwitchReachesTheWorkerDispatcher:
-# the worker's env as a deployment projects it, at the schema default (the
+# Fixture for cmd/reliant/cmd TestPipelineSwitchReachesTheWorkerDispatcher
+# and TestPipelineSwitchReachesTheAPIServer: the worker's and the API
+# server's env as a deployment projects it, at the schema default (the
 # pipeline switch off, as every env ships until the pipeline is enabled), as
 # this repo's dev and demo envs render it, and with pipeline.enabled set. It
 # goes through the same config_gen.workloadEnvMap and workloads.temporal_worker
@@ -29,3 +30,8 @@ switch_default = config_gen.workloadEnvMap(_process(config_gen.ServerProcessConf
 dev_worker = config_gen.workloadEnvMap(devcfg.reliant_process, workloads.temporal_worker)
 demo_worker = config_gen.workloadEnvMap(democfg.reliant_process, workloads.temporal_worker)
 switch_on = config_gen.workloadEnvMap(_process(config_gen.ServerProcessConfig {pipeline = {enabled = True}}), workloads.temporal_worker)
+
+switch_default_api = config_gen.workloadEnvMap(_process(config_gen.ServerProcessConfig {}), workloads.api_server)
+dev_api = config_gen.workloadEnvMap(devcfg.reliant_process, workloads.api_server)
+demo_api = config_gen.workloadEnvMap(democfg.reliant_process, workloads.api_server)
+switch_on_api = config_gen.workloadEnvMap(_process(config_gen.ServerProcessConfig {pipeline = {enabled = True}}), workloads.api_server)

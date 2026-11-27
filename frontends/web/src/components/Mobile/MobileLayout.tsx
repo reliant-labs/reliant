@@ -59,7 +59,7 @@ export function MobileLayout({ children }: { children: ReactNode }) {
     applyRootFontSize(stored);
     return () => {
       // Runs after the route has already left /m/*, so this resolves the
-      // desktop map.
+      // desktop map, or the phone map again on a phone (lib/rootFontSize).
       applyRootFontSize(stored);
     };
   }, []);

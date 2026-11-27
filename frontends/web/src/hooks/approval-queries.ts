@@ -36,6 +36,7 @@ import {
   type Approval,
   type ApprovalActions,
   type ApprovalFields,
+  type UseApprovalsResult,
 } from "@reliantlabs/sdk/react";
 
 import type { ToolApprovalUpdate } from "../types/streaming";
@@ -82,8 +83,17 @@ export function upsertApprovalInCache(chatId: string, fields: ApprovalFields & {
 // (cursor resume) or re-snapshotted. A time-based staleTime would add nothing
 // but a ListApprovalsByChat on every chat open, racing that replay.
 
+// The return types are spelled out: inferred, they name the SDK's generated
+// response message, which this project's declaration emit cannot reach
+// (TypeScript 7 refuses it, TS2883).
+type ApprovalsQuery = UseApprovalsResult["query"];
+/** ApprovalsQuery with `data` replaced, member by member of its union. */
+type ApprovalsQueryWithData<Q = ApprovalsQuery> = Q extends unknown
+  ? Omit<Q, "data"> & { data: ApprovalsQuery["data"] }
+  : never;
+
 /** Every approval in a chat (`data.approvals`), any status. */
-export function useApprovals(chatId?: string) {
+export function useApprovals(chatId?: string): ApprovalsQuery {
   return useSdkApprovals(chatId, { live: false }).query;
 }
 
@@ -91,7 +101,7 @@ export function useApprovals(chatId?: string) {
  * A chat's pending approvals (`data.approvals`). Shares useApprovals' cache
  * entry — pending is a client-side filter — so one patch updates both.
  */
-export function usePendingApprovals(chatId?: string) {
+export function usePendingApprovals(chatId?: string): ApprovalsQueryWithData {
   const { pending, query } = useSdkApprovals(chatId, { live: false });
   const data = useMemo(
     () => (query.data ? (pending === query.data.approvals ? query.data : { ...query.data, approvals: pending, total: pending.length }) : undefined),

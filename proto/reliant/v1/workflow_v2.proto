@@ -191,6 +191,35 @@ message NodeObserve {
   repeated ObserveMetric metrics = 3;
 }
 
+// NodePreflight is a node's machine self-check (Node.preflight). Its presence
+// turns the check on; each field overrides one default and is left unset to
+// keep it. The fields are plain values, not the Cel* wrappers: the check runs
+// before the node's work, on the machine placement chose, and its thresholds
+// are the author's, not the run's data.
+//
+// What fails a machine: less free disk than min_free_disk on the filesystem
+// of the daemon's home (its workspace) or of /tmp, or a filesystem the disk
+// guard would refuse heavy work on; /tmp that is not a writable directory
+// with mode 1777; a daemon running as root (unless allow_root), or as a uid
+// that does not own its home; a tool missing from PATH (git always, plus
+// tools); and a 5-minute load average per CPU above max_load.
+message NodePreflight {
+  // Tools that must be on the daemon's PATH, beside git (always checked).
+  repeated string tools = 1 [(reliant) = {description: "Tools that must be on the machine's PATH; git is always checked"}];
+  // MinFreeDisk is the least free space, on each checked filesystem, a
+  // machine may have: a size such as "10GiB" or "500MB". Unset: 5GiB.
+  string min_free_disk = 2 [(reliant) = {description: "The least free disk a machine may have on its workspace and /tmp filesystems, such as 10GiB or 500MB. Default 5GiB"}];
+  // MaxLoad is the most 5-minute load average per CPU a machine may run
+  // at. Unset (0): 2.
+  double max_load = 3 [(reliant) = {description: "The highest 5-minute load average per CPU a machine may have. Default 2"}];
+  // AllowRoot accepts a daemon that runs as root.
+  bool allow_root = 4 [(reliant) = {description: "Accept a machine whose daemon runs as root"}];
+  // MaxMachines bounds how many machines the node tries before it fails
+  // with no healthy machine. Unset (0): 3. Every member of a smaller pool
+  // is tried; a node that is not on a pool has one machine.
+  int32 max_machines = 5 [(reliant) = {description: "How many machines the node tries before it fails with no healthy machine. Default 3"}];
+}
+
 // ObserveEvent is one span event a node records.
 message ObserveEvent {
   // Name is the event's name, e.g. "decision".
@@ -371,6 +400,16 @@ message Node {
     description: "The engine role this node acts in. Only reviewer, and only on a review node, which requires it"
     enum_values: "reviewer"
   }];
+
+  // Preflight makes the machine the node is placed on check itself before
+  // the node's work starts: free disk, a usable /tmp, the daemon's uid, the
+  // tools on PATH and the load. A machine that fails is never given the
+  // node: a node placed on a machine pool moves to another member (the
+  // failed one excluded for this node), and the move is not one of the
+  // node's attempts. Present means on (`preflight: true` is the message
+  // with every default); unset changes nothing. Only valid on a node that
+  // runs on a machine. See NodePreflight.
+  NodePreflight preflight = 34 [(reliant) = {description: "Check the machine before the node's work starts (disk, /tmp, uid, tools, load); a machine that fails is never given the node, which moves to another member of its pool without spending an attempt. true, or a mapping of overrides"}];
 
   // Type-specific arguments. Exactly one must be set, matching the type field.
   // SecretRefs are the declared secrets this node's activity resolves, written by

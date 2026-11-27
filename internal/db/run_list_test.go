@@ -355,7 +355,7 @@ func TestLastRunPerWorkflow(t *testing.T) {
 	seedListRun(t, repo, listRunSeed{id: "other-user", user: "someone-else", workflow: "wf-four", status: Completed(), at: base})
 	seedListRun(t, repo, listRunSeed{id: "one-archived", workflow: "wf-one", status: Completed(), at: base.Add(time.Hour / 2), archived: true})
 
-	items, err := store.LastRunPerWorkflow(ctx, repo.ORM(), RunListFilters{UserID: "test-user"})
+	items, err := repo.LastRunPerWorkflow(ctx, RunListFilters{UserID: "test-user"})
 	require.NoError(t, err)
 	got := map[string]string{}
 	for _, item := range items {
@@ -370,11 +370,11 @@ func TestLastRunPerWorkflow(t *testing.T) {
 	assert.True(t, items[0].Archived)
 
 	p2 := "p2"
-	items, err = store.LastRunPerWorkflow(ctx, repo.ORM(), RunListFilters{UserID: "test-user", ProjectID: &p2})
+	items, err = repo.LastRunPerWorkflow(ctx, RunListFilters{UserID: "test-user", ProjectID: &p2})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"three-p2"}, listRunIDs(items))
 
-	items, err = store.LastRunPerWorkflow(ctx, repo.ORM(), RunListFilters{UserID: "test-user", Workflows: []string{"wf-two"}})
+	items, err = repo.LastRunPerWorkflow(ctx, RunListFilters{UserID: "test-user", Workflows: []string{"wf-two"}})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"two-only"}, listRunIDs(items))
 }
