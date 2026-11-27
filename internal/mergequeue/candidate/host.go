@@ -46,6 +46,7 @@ type Host struct {
 	// Root holds one bare git cache per repository
 	// (<Root>/<owner>/<name>.git), kept across jobs so a repository is
 	// fetched in full once. Jobs on one repository run one at a time.
+	// [Host.Prune] holds the caches to an age and size budget.
 	Root string
 	// Credentials authenticate fetches, pushes and GitHub calls. nil runs
 	// them with none (a test against a local fake remote).
@@ -260,6 +261,18 @@ func (h *Host) run(ctx context.Context, req buildjob.StartRequest) buildjob.Stat
 	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
 		return fail(fmt.Errorf("candidate: make the git cache directory: %w", err))
 	}
+	// The cache's lease, for the whole job: Prune never removes a cache a
+	// job holds, whichever daemon process runs it, and reads its last use
+	// from the stamps (prune.go).
+	lease, err := acquireLease(ctx, dir)
+	if err != nil {
+		return fail(err)
+	}
+	stampLease(dir, h.clock())
+	defer func() {
+		stampLease(dir, h.clock())
+		releaseLease(lease)
+	}()
 	local, err := gitport.Init(ctx, dir, gitport.Options{})
 	if err != nil {
 		return fail(err)
