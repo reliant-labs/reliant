@@ -46,7 +46,12 @@ func (r *Reclaimer) SettleParkedFor(ctx context.Context, repo, dest, stateDir st
 	if err != nil {
 		return false, "a reclaim of " + dest + " was interrupted: " + err.Error()
 	}
-	found, _ := discoverWorktrees(ctx, []string{common})
+	found, anchors := discoverWorktrees(ctx, []string{common})
+	// Discovery only returns anchors that Git successfully enumerated. An
+	// incomplete listing cannot establish that the parked registration is gone.
+	if !slices.Contains(anchors, common) {
+		return false, "a reclaim of " + dest + " was interrupted, and its repository " + repo + " could not enumerate worktrees"
+	}
 	for _, d := range found {
 		if !slices.Contains(parked, d.Path) {
 			continue

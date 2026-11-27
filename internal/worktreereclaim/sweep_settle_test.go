@@ -2,6 +2,7 @@ package worktreereclaim
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -77,4 +78,39 @@ func TestSettleParkedForLetsTheCheckoutBeRecreated(t *testing.T) {
 			t.Fatalf("got back=%v held=%q", back, held)
 		}
 	})
+}
+
+func TestSettleParkedForHoldsWhenDiscoveryFails(t *testing.T) {
+	heavyUnderShort(t, "git processes over real worktrees")
+	requireOpenat2(t)
+	s := newSweepFixture(t)
+	orig := s.plain(filepath.Join(s.tmp, "ws", "api"), "discovery-failure")
+	q := parkLikeACrash(t, s, orig, CaptureKey(orig), "")
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	// Leave repository resolution working, but make enumeration fail.
+	write(t, filepath.Join(bin, "git"), "#!/bin/sh\ncase \"$*\" in\n*'worktree list --porcelain'*) exit 1 ;;\nesac\nexec \"$RELIANT_TEST_REAL_GIT\" \"$@\"\n")
+	if err := os.Chmod(filepath.Join(bin, "git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RELIANT_TEST_REAL_GIT", realGit)
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	ctx := context.Background()
+	common := repoCommonDir(ctx, s.project)
+	if common == "" {
+		t.Fatal("repository resolution must still succeed")
+	}
+	if _, anchors := discoverWorktrees(ctx, []string{common}); len(anchors) != 0 {
+		t.Fatal("the fixture must fail discovery")
+	}
+	back, held := s.r.SettleParkedFor(ctx, s.project, orig, s.state)
+	if back || !strings.Contains(held, "could not enumerate worktrees") {
+		t.Fatalf("got back=%v held=%q, want a discovery hold", back, held)
+	}
+	if !exists(q) || exists(orig) {
+		t.Fatal("failed discovery must leave the parked checkout untouched")
+	}
 }
