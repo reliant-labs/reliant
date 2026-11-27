@@ -217,6 +217,21 @@ func ProjectOrgMoveBlockers(ctx context.Context, db orm.Context, projectID strin
 	return b, nil
 }
 
+// ProjectPipelineEnrolled reports whether one of the project's repositories
+// is enrolled in the pipeline with a mode other than off. Its pipeline rows
+// carry the project's org, so the project cannot move to another org until
+// it is unenrolled (pipeline redesign §13, G1): MoveProjectOrg refuses it
+// with core.ErrProjectPipelineEnrolled, in the transaction that would move
+// it, and MoveProjectToOrg before it records a move.
+func ProjectPipelineEnrolled(ctx context.Context, db orm.Context, projectID string) (bool, error) {
+	var enrolled bool
+	if err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM pipeline_repos WHERE project_id = ? AND mode <> ?)`,
+		projectID, core.PipelineRepoModeOff).Scan(ctx, &enrolled); err != nil {
+		return false, fmt.Errorf("read the project's pipeline enrolments: %w", err)
+	}
+	return enrolled, nil
+}
+
 // The statement set of the move's transaction (design §3.2, step 4). Each
 // is bounded to the project by its id; ?1 is always the target org.
 const (
@@ -423,6 +438,12 @@ func MoveProjectOrg(ctx context.Context, db orm.Context, c core.ProjectOrgMoveCo
 	}
 	if !blockers.Empty() {
 		return &core.ProjectOrgMoveResult{Move: move, Blockers: blockers}, core.ErrProjectNotQuiescent
+	}
+	switch enrolled, err := ProjectPipelineEnrolled(ctx, db, move.ProjectID); {
+	case err != nil:
+		return nil, err
+	case enrolled:
+		return nil, core.ErrProjectPipelineEnrolled
 	}
 
 	at := c.At

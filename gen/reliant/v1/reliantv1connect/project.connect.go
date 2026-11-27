@@ -152,6 +152,7 @@ type ProjectServiceClient interface {
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	// GetProject retrieves a project by ID
 	// forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it reconciles the stored is_git_repo flag from a live daemon check and records TrackProjectOpened on every call
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	// UpdateProject updates an existing project
 	// forge:custom — a partial update the caller's ownership check gates
@@ -811,6 +812,7 @@ type ProjectServiceHandler interface {
 	ListProjects(context.Context, *connect.Request[v1.ListProjectsRequest]) (*connect.Response[v1.ListProjectsResponse], error)
 	// GetProject retrieves a project by ID
 	// forge:custom — checks the caller owns the project and reconciles its git flag with the daemon
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it reconciles the stored is_git_repo flag from a live daemon check and records TrackProjectOpened on every call
 	GetProject(context.Context, *connect.Request[v1.GetProjectRequest]) (*connect.Response[v1.GetProjectResponse], error)
 	// UpdateProject updates an existing project
 	// forge:custom — a partial update the caller's ownership check gates

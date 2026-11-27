@@ -1,0 +1,338 @@
+# Organic content and search: blogs, long-form writing, newsletters, video and
+# pages that earn attention and search traffic over time.
+entries:
+  - key: founder-long-form-blog
+    category: organic_content_seo
+    name: Founder-written long-form blog
+    summary: >-
+      The founder publishes a substantial essay every two to four weeks on the
+      problem the business solves: a strong opinion, a hard-won lesson, a
+      teardown of how something works, or a story of a failure. Each post is
+      long enough to be the best answer on its topic and ends with one clear
+      next step.
+    why_it_works: >-
+      Long-form writing with a real point of view is shared, linked and
+      remembered in a way that short marketing posts are not. It builds the
+      founder's reputation, attracts people who think the same way, and keeps
+      ranking for years.
+    stages: [pre_launch, launch, early_traction, growth, scale]
+    objective: awareness
+    effort: medium
+    cost: free
+    signal_days: 60
+    tailor_questions:
+      - What does the founder believe about the problem that most of the industry gets wrong?
+      - Which three lessons from building the business would help the target reader?
+      - How often can the founder realistically publish a post they are proud of?
+      - Where will each post be shared on the day it goes out?
+    suggested_workflow: >-
+      Keep a running list of post ideas from customer calls, support
+      questions and the founder's notes; every two weeks, propose the three
+      strongest with an outline each, and after the founder writes a draft,
+      check it for clarity, a single next step and broken links.
+    channel_types: [blog, newsletter, social]
+    kpis: [readers per post, newsletter sign-ups from posts, inbound mentions of a post]
+
+  - key: comparison-and-alternatives-pages
+    category: organic_content_seo
+    name: Honest comparison and alternatives pages
+    summary: >-
+      Publish a page for each common "versus" and "alternatives to" search in
+      the category, written honestly: who each option is best for, where the
+      business's product is weaker, and a clear table of differences. Keep the
+      pages current.
+    why_it_works: >-
+      People searching comparisons are close to a decision. An honest page
+      earns trust that a one-sided page loses, and it ranks for searches that
+      convert far better than general topics.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app, ecommerce]
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 60
+    tailor_questions:
+      - Which alternatives do prospects mention most often in calls and sign-up surveys?
+      - Where is each alternative genuinely the better choice?
+      - Who will check the pages for accuracy every quarter?
+    channel_types: [website, search]
+    kpis: [organic visits to comparison pages, sign-up rate from those pages, ranking for comparison searches]
+
+  - key: programmatic-landing-pages
+    category: organic_content_seo
+    name: Template-driven pages for long-tail searches
+    summary: >-
+      Where searches follow a pattern (a use case per industry, an
+      integration per tool type, a template per job, a service per town),
+      build one genuinely useful page per combination from structured data,
+      each with unique, specific content rather than swapped keywords.
+    why_it_works: >-
+      Long-tail searches are individually small but add up to large,
+      high-intent traffic. Structured data makes hundreds of pages feasible,
+      and real usefulness per page is what keeps them indexed and ranking.
+    fits:
+      business_types: [b2b_saas, marketplace, ecommerce, local_business, developer_tools]
+    stages: [growth, scale]
+    objective: acquisition
+    effort: high
+    cost: low
+    signal_days: 90
+    tailor_questions:
+      - Which search pattern repeats across many combinations in this market?
+      - What unique data does the business have for each combination?
+      - How will thin or low-value pages be detected and removed?
+    suggested_workflow: >-
+      Monthly, pull search impressions and clicks per generated page, flag
+      pages with no impressions after three months for improvement or removal,
+      and list new combinations with rising search demand as candidates.
+    channel_types: [website, search]
+    kpis: [indexed pages, organic sign-ups from template pages, share of pages with traffic]
+
+  - key: job-to-be-done-tutorials
+    category: organic_content_seo
+    name: Step-by-step tutorials for real jobs
+    summary: >-
+      Write detailed tutorials for the specific jobs the audience is trying
+      to get done, with screenshots or code, the pitfalls, and a working
+      result at the end. Use the product where it genuinely helps and show
+      the manual way too.
+    why_it_works: >-
+      People search for how to do things, not for products. A tutorial that
+      solves the job earns the visit, and showing the product inside the
+      solution demonstrates value better than any feature page.
+    fits:
+      business_types: [developer_tools, b2b_saas, open_source, creator_media, ecommerce]
+    stages: [launch, early_traction, growth, scale]
+    objective: acquisition
+    effort: medium
+    cost: free
+    signal_days: 60
+    tailor_questions:
+      - What jobs do customers hire the product for, in their own words?
+      - Which of those jobs do people search for most?
+      - Who on the team can write tutorials that work when followed exactly?
+    channel_types: [blog, search, video]
+    kpis: [organic visits to tutorials, sign-ups attributed to tutorials, tutorial completion feedback]
+
+  - key: original-data-report
+    category: organic_content_seo
+    name: Original research or benchmark report
+    summary: >-
+      Publish an annual or quarterly report built on data only the business
+      has, such as anonymised aggregate usage, a survey of the audience, or a
+      careful benchmark. Lead with three surprising findings and offer the
+      charts for others to cite.
+    why_it_works: >-
+      Original data gets cited by journalists, bloggers and analysts, which
+      earns links and authority that ordinary content cannot. A recurring
+      report becomes a reference that people wait for.
+    fits:
+      business_types: [b2b_saas, developer_tools, marketplace, agency_services, open_source]
+    stages: [growth, scale]
+    objective: awareness
+    effort: high
+    cost: low
+    signal_days: 60
+    tailor_questions:
+      - What data does the business have that nobody else can publish?
+      - How will customer data be aggregated and anonymised safely?
+      - Which findings would surprise the industry?
+    channel_types: [blog, press, social]
+    kpis: [links earned, press and blog citations, report downloads or sign-ups]
+
+  - key: own-newsletter
+    category: organic_content_seo
+    name: A newsletter readers look forward to
+    summary: >-
+      Send a regular newsletter (weekly or every two weeks) built around
+      something readers value on its own: a curated roundup of the field, a
+      single deep idea, or behind-the-scenes lessons. Keep product news to a
+      short section at the end.
+    why_it_works: >-
+      An email list is an audience the business owns. A newsletter worth
+      reading keeps the business in mind until the reader is ready to buy,
+      and readers forward the best issues.
+    stages: [pre_launch, launch, early_traction, growth, scale]
+    objective: awareness
+    effort: medium
+    cost: low
+    signal_days: 45
+    tailor_questions:
+      - What would the target reader be glad to receive every week even if they never bought?
+      - Who will write it, and can they keep the schedule for six months?
+      - Where on the site and in the product will people be invited to subscribe?
+    suggested_workflow: >-
+      Through the week, collect links, notes and customer questions into a
+      draft file; two days before the send, assemble a draft issue in the
+      newsletter's usual structure for the writer to edit, and after sending
+      record opens, clicks and replies.
+    channel_types: [newsletter, email]
+    kpis: [subscribers, open and click rates, replies and forwards]
+
+  - key: build-in-public
+    category: organic_content_seo
+    name: Build in public
+    summary: >-
+      Share the journey openly and regularly: revenue or user milestones,
+      decisions and their reasons, mistakes, and what is being built next, in
+      short posts and a monthly long-form update.
+    why_it_works: >-
+      People follow stories, not companies. Openness builds an audience that
+      roots for the business, invites advice and early users, and holds the
+      team to a steady shipping rhythm.
+    fits:
+      business_types: [b2c_app, developer_tools, b2b_saas, creator_media, open_source]
+    stages: [pre_launch, launch, early_traction]
+    objective: awareness
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which numbers and decisions is the team comfortable sharing publicly?
+      - Who is the audience that would follow this journey?
+      - What milestone in the next month is worth sharing?
+    channel_types: [social, blog, newsletter]
+    kpis: [followers, sign-ups from updates, replies offering help or interest]
+
+  - key: repurpose-long-form
+    category: organic_content_seo
+    name: Repurpose every long-form piece
+    summary: >-
+      Turn each substantial piece (an essay, a talk, a podcast episode, a
+      report) into a set of smaller ones: a short thread of key points, a
+      chart with a takeaway, a short clip, a newsletter section, and a slide
+      for sales.
+    why_it_works: >-
+      Most people never see a single piece of content. Repurposing puts the
+      best ideas in front of each audience where it already is, for a
+      fraction of the effort of creating new ideas.
+    stages: [launch, early_traction, growth, scale]
+    objective: awareness
+    effort: low
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - Which recent long-form pieces performed best?
+      - Which channels does the audience use, and what format works on each?
+      - Who approves the derived pieces before they go out?
+    suggested_workflow: >-
+      When a long-form piece is published, draft a short social thread, three
+      standalone quotes, a newsletter blurb and a one-paragraph summary from
+      it, and queue them on a two-week schedule for a person to approve.
+    channel_types: [social, newsletter, video]
+    kpis: [reach per source piece, clicks back to the original, time spent per derived piece]
+
+  - key: free-tool-or-calculator
+    category: organic_content_seo
+    name: A free tool or calculator
+    summary: >-
+      Build a small, free, no-sign-up tool that solves one adjacent problem
+      for the target audience: a calculator, a checker, a generator or a
+      converter. Link it to the product at the natural next step.
+    why_it_works: >-
+      A useful free tool attracts searches and links for years and puts the
+      business in front of people at the moment they have the problem. It is
+      marketing that is also a product.
+    fits:
+      business_types: [b2b_saas, developer_tools, ecommerce, b2c_app, agency_services]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: medium
+    cost: low
+    signal_days: 60
+    tailor_questions:
+      - What quick question does the audience keep trying to answer by hand?
+      - Can the tool be built in a week and kept simple?
+      - What is the natural step from the tool's result to the product?
+    channel_types: [website, search]
+    kpis: [tool users, links earned, tool-to-sign-up conversion]
+
+  - key: documentation-as-marketing
+    category: organic_content_seo
+    name: Documentation as marketing
+    summary: >-
+      Treat public documentation as a front door: a quick start that works in
+      five minutes, task-based guides, copy-paste examples, and reference
+      pages that rank for the error messages and questions developers search.
+    why_it_works: >-
+      Technical buyers evaluate by reading the docs. Clear, searchable
+      documentation wins evaluations, brings in search traffic, and reduces
+      the support load at the same time.
+    fits:
+      business_types: [developer_tools, open_source, b2b_saas]
+    stages: [launch, early_traction, growth, scale]
+    objective: activation
+    effort: medium
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - How long does the quick start take a new user today, measured with someone fresh?
+      - Which errors and questions do users search before contacting support?
+      - Who owns keeping the examples working with each release?
+    suggested_workflow: >-
+      On every release, run the quick start and every code example from the
+      documentation against the new version and open a task for each one that
+      fails; weekly, list search terms that led to documentation pages with a
+      high exit rate.
+    channel_types: [website, search]
+    kpis: [quick start completion rate, organic visits to docs, support tickets per active user]
+
+  - key: video-tutorial-series
+    category: organic_content_seo
+    name: A video tutorial series
+    summary: >-
+      Publish a consistent series of short videos on a video platform, each
+      solving one specific problem in under ten minutes, with chapters, a clear
+      title that matches what people search, and a link to a written version.
+    why_it_works: >-
+      Video platforms are search engines in their own right, and many people
+      learn better by watching. A consistent series builds subscribers who see
+      every new episode.
+    fits:
+      business_types: [b2c_app, creator_media, developer_tools, ecommerce, hardware, b2b_saas]
+    stages: [early_traction, growth, scale]
+    objective: awareness
+    effort: medium
+    cost: low
+    signal_days: 60
+    tailor_questions:
+      - Which problems does the audience search for on video platforms?
+      - Who on the team is comfortable on camera, or can screen recordings carry it?
+      - How often can the team publish without the quality dropping?
+    channel_types: [video, social]
+    kpis: [views per video, subscribers, sign-ups from video links]
+
+  - key: local-listings-and-map-profiles
+    category: organic_content_seo
+    name: Complete local listings and map profiles
+    summary: >-
+      Claim and fully complete the business's profile on the main map and
+      local search services and the local directories customers use: the
+      exact same name, address and phone number everywhere, accurate opening
+      hours, service areas, categories, recent photos, and a short
+      description in the words customers search with. Post updates and
+      offers there, answer questions, and reply to every review.
+    why_it_works: >-
+      People looking for a local business search with the place in mind and
+      pick from the first few listings. Complete, consistent and active
+      profiles rank higher and win the click, and they cost nothing but time.
+    fits:
+      business_types: [local_business, agency_services, ecommerce]
+    stages: [launch, early_traction, growth, scale]
+    objective: acquisition
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which map, local search and directory listings do local customers use for this kind of business?
+      - Are the name, address, phone number and hours identical on every listing today?
+      - Which phrases do customers use when searching for this service nearby?
+      - Who will reply to reviews and questions on the listings each week?
+    suggested_workflow: >-
+      Monthly, check each listing against the business's canonical name,
+      address, phone number and hours and list any mismatch for a person to
+      correct; weekly, collect new reviews and questions from every listing
+      and draft replies for a person to approve.
+    channel_types: [directory, search, review-site]
+    kpis: [listing views, calls and direction requests from listings, listing mismatches fixed]

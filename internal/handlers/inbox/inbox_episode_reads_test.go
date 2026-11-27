@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -33,25 +34,32 @@ func (l legacyEpisodes) InboxEpisodeFailures(ctx context.Context, userID string,
 	return l.FiringsSinceLastSuccess(ctx, userID, ids, per)
 }
 
-// countingEpisodes counts the firing rows the episode reads return.
+// countingEpisodes counts the firing rows the episode reads return. ListInbox
+// runs its reads concurrently (failingAutomations' errgroup), so the count is
+// guarded.
 type countingEpisodes struct {
 	store.TriggerEventExtStore
+	mu   sync.Mutex
 	rows map[string]int
+}
+
+func (c *countingEpisodes) count(out map[string][]*core.TriggerEventWithRun) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for id, firings := range out {
+		c.rows[id] += len(firings)
+	}
 }
 
 func (c *countingEpisodes) InboxEpisodes(ctx context.Context, userID string, ids []string, per, window int) (map[string][]*core.TriggerEventWithRun, error) {
 	out, err := c.TriggerEventExtStore.InboxEpisodes(ctx, userID, ids, per, window)
-	for id, firings := range out {
-		c.rows[id] += len(firings)
-	}
+	c.count(out)
 	return out, err
 }
 
 func (c *countingEpisodes) InboxEpisodeFailures(ctx context.Context, userID string, ids []string, per int) (map[string][]*core.TriggerEventWithRun, error) {
 	out, err := c.TriggerEventExtStore.InboxEpisodeFailures(ctx, userID, ids, per)
-	for id, firings := range out {
-		c.rows[id] += len(firings)
-	}
+	c.count(out)
 	return out, err
 }
 

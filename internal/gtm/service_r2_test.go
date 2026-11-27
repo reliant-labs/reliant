@@ -195,28 +195,8 @@ func TestR2MethodsAreNotFoundWhenTheGateRefuses(t *testing.T) {
 			_, err := s.GetStrategyLibraryEntry(ctx(), a, GetStrategyLibraryEntryInput{Key: "k"})
 			return err
 		},
-		"ImportStrategyLibrary": func(s Service, a Actor) error {
-			_, err := s.ImportStrategyLibrary(ctx(), a, ImportStrategyLibraryInput{SourceRevision: "r", Entries: []LibraryEntry{{Key: "k"}}})
-			return err
-		},
 		"UseLibraryStrategy": func(s Service, a Actor) error {
 			_, err := s.UseLibraryStrategy(ctx(), a, UseLibraryStrategyInput{LibraryKey: "k"})
-			return err
-		},
-		"ListLibraryImports": func(s Service, a Actor) error {
-			_, err := s.ListLibraryImports(ctx(), a, ListLibraryImportsInput{})
-			return err
-		},
-		"ListLibraryPruneRequests": func(s Service, a Actor) error {
-			_, err := s.ListLibraryPruneRequests(ctx(), a, ListLibraryPruneRequestsInput{})
-			return err
-		},
-		"ConfirmLibraryPrune": func(s Service, a Actor) error {
-			_, err := s.ConfirmLibraryPrune(ctx(), a, ConfirmLibraryPruneInput{RequestID: "x"})
-			return err
-		},
-		"CancelLibraryPrune": func(s Service, a Actor) error {
-			_, err := s.CancelLibraryPrune(ctx(), a, CancelLibraryPruneInput{RequestID: "x"})
 			return err
 		},
 	}
@@ -232,7 +212,7 @@ func TestR2MethodsAreNotFoundWhenTheGateRefuses(t *testing.T) {
 				err := call(svc, person)
 				require.ErrorIs(t, err, ErrNotFound)
 				assert.Equal(t, "not found", err.Error())
-				for _, m := range []string{"InTx", "CountChannels", "ListChannels", "GetStrategy", "ListStrategies", "GetAsset", "ListAssets", "ListLibrary", "GetLibraryEntry", "ListLibraryImports", "ListPruneRequests", "GetPruneRequest"} {
+				for _, m := range []string{"InTx", "CountChannels", "ListChannels", "GetStrategy", "ListStrategies", "GetAsset", "ListAssets", "GetPositioning"} {
 					assert.Zero(t, st.CallCount(m), m)
 				}
 				assert.Empty(t, blobs.puts)
@@ -365,7 +345,7 @@ func TestChannels(t *testing.T) {
 		f := newFixture(t)
 		res, err := f.svc.ListChannels(ctx(), person, ListChannelsInput{})
 		require.NoError(t, err)
-		require.Len(t, res.Channels, len(DefaultChannels))
+		require.Len(t, res.Channels, len(DefaultChannels()))
 		keys := []string{}
 		for _, ch := range res.Channels {
 			keys = append(keys, ch.Key)
@@ -374,7 +354,7 @@ func TestChannels(t *testing.T) {
 			assert.Equal(t, ChannelActive, ch.Status)
 		}
 		assert.Equal(t, []string{"blog", "email", "hacker-news", "linkedin", "reddit", "x", "youtube"}, keys)
-		for _, d := range DefaultChannels {
+		for _, d := range DefaultChannels() {
 			assert.Equal(t, d.ChannelTypes, f.channel(t, d.Key).ChannelTypes, d.Key)
 		}
 		assert.Equal(t, []string{"forum", "community"}, f.channel(t, "reddit").ChannelTypes)
@@ -391,7 +371,7 @@ func TestChannels(t *testing.T) {
 		assert.Equal(t, 1, f.store.r2().seeds, "seeded once")
 		other, err := f.svc.ListChannels(ctx(), Actor{UserID: "u-b", OrgID: orgB, Kind: ActorPerson}, ListChannelsInput{})
 		require.NoError(t, err)
-		assert.Len(t, other.Channels, len(DefaultChannels), "every org gets its own")
+		assert.Len(t, other.Channels, len(DefaultChannels()), "every org gets its own")
 		manual, err := f.svc.ListChannels(ctx(), person, ListChannelsInput{Mode: ChannelManual})
 		require.NoError(t, err)
 		assert.Len(t, manual.Channels, 6)
@@ -692,169 +672,6 @@ func TestCampaignPlanAndCoverage(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, upd.PlannedFormats)
 	assert.Equal(t, []string{reddit.ID, x.ID}, upd.PlannedChannelIDs)
-}
-
-func libEntry(key string, cat StrategyCategory) LibraryEntry {
-	return LibraryEntry{
-		Key: key, Category: cat, Depth: DepthPlay, Name: "Play " + key, SummaryMD: "A placeholder play about " + key,
-		Stage: "launch", Cost: "low", Difficulty: "easy", NorthStar: "More signups", Objective: "Reach builders",
-		KPIs: []string{"signups", "activation"}, Fits: []string{"devtools"}, ChannelTypes: []string{"reddit", "blog"},
-		Hours: 4, Steps: []LibraryStep{{Who: "agent", Title: "Draft the post"}}, Extra: map[string]any{"note": "placeholder"},
-	}
-}
-
-func TestStrategyLibrary(t *testing.T) {
-	t.Run("import is a person's, idempotent, counted, and prunes by all_keys", func(t *testing.T) {
-		f := newFixture(t)
-		in := ImportStrategyLibraryInput{SourceRevision: "abc123", Entries: []LibraryEntry{libEntry("alpha", CategoryLaunchesPR), libEntry("beta", CategoryPaidAcquisition)}}
-		_, err := f.svc.ImportStrategyLibrary(ctx(), agent, in)
-		require.ErrorIs(t, err, ErrPersonOnly)
-		res, err := f.svc.ImportStrategyLibrary(ctx(), person, in)
-		require.NoError(t, err)
-		assert.Equal(t, ImportStrategyLibraryResult{Created: 2}, res)
-		res, err = f.svc.ImportStrategyLibrary(ctx(), person, in)
-		require.NoError(t, err)
-		assert.Equal(t, ImportStrategyLibraryResult{Unchanged: 2}, res)
-		in.Entries[1].SummaryMD = "changed"
-		in.SourceRevision = "def456"
-		res, err = f.svc.ImportStrategyLibrary(ctx(), person, in)
-		require.NoError(t, err)
-		assert.Equal(t, ImportStrategyLibraryResult{Unchanged: 1, Updated: 1}, res)
-		got, err := f.svc.GetStrategyLibraryEntry(ctx(), agent, GetStrategyLibraryEntryInput{Key: "beta"})
-		require.NoError(t, err)
-		assert.Equal(t, "def456", got.SourceRevision)
-		assert.Equal(t, person.UserID, got.ImportedBy)
-		assert.Equal(t, []LibraryStep{{Who: "agent", Title: "Draft the post"}}, got.Steps)
-		assert.Equal(t, map[string]any{"note": "placeholder"}, got.Extra)
-
-		prune := ImportStrategyLibraryInput{SourceRevision: "g", Entries: []LibraryEntry{libEntry("alpha", CategoryLaunchesPR)}, Prune: true}
-		_, err = f.svc.ImportStrategyLibrary(ctx(), person, prune)
-		require.ErrorIs(t, err, ErrInvalidArgument, "prune needs all_keys")
-		prune.AllKeys = []string{"gamma"}
-		_, err = f.svc.ImportStrategyLibrary(ctx(), person, prune)
-		require.ErrorIs(t, err, ErrInvalidArgument, "every entry's key is in all_keys")
-		prune.AllKeys = []string{"alpha", "gamma"}
-		res, err = f.svc.ImportStrategyLibrary(ctx(), person, prune)
-		require.NoError(t, err)
-		assert.Equal(t, 1, res.Pruned, "beta goes")
-		_, err = f.svc.GetStrategyLibraryEntry(ctx(), person, GetStrategyLibraryEntryInput{Key: "beta"})
-		require.ErrorIs(t, err, ErrNotFound)
-	})
-	t.Run("every entry validates itself", func(t *testing.T) {
-		f := newFixture(t)
-		big := make([]LibraryEntry, MaxLibraryImport+1)
-		for i := range big {
-			big[i] = libEntry(fmt.Sprintf("k%d", i), CategoryLaunchesPR)
-		}
-		for name, in := range map[string]ImportStrategyLibraryInput{
-			"empty":         {SourceRevision: "r"},
-			"too many":      {SourceRevision: "r", Entries: big},
-			"no revision":   {Entries: []LibraryEntry{libEntry("a", CategoryLaunchesPR)}},
-			"duplicate key": {SourceRevision: "r", Entries: []LibraryEntry{libEntry("a", CategoryLaunchesPR), libEntry("a", CategoryLaunchesPR)}},
-			"bad key":       {SourceRevision: "r", Entries: []LibraryEntry{libEntry("Not A Slug", CategoryLaunchesPR)}},
-			"no category":   {SourceRevision: "r", Entries: []LibraryEntry{libEntry("a", "")}},
-			"bad all_keys":  {SourceRevision: "r", Entries: []LibraryEntry{libEntry("a", CategoryLaunchesPR)}, AllKeys: []string{"a", "a"}},
-			"negative hours": {SourceRevision: "r", Entries: []LibraryEntry{func() LibraryEntry {
-				e := libEntry("a", CategoryLaunchesPR)
-				e.Hours = -1
-				return e
-			}()}},
-			"blank kpi": {SourceRevision: "r", Entries: []LibraryEntry{func() LibraryEntry {
-				e := libEntry("a", CategoryLaunchesPR)
-				e.KPIs = []string{" "}
-				return e
-			}()}},
-		} {
-			_, err := f.svc.ImportStrategyLibrary(ctx(), person, in)
-			require.ErrorIs(t, err, ErrInvalidArgument, name)
-		}
-		keys := make([]string, MaxLibraryKeys+1)
-		for i := range keys {
-			keys[i] = fmt.Sprintf("k%d", i)
-		}
-		_, err := f.svc.ImportStrategyLibrary(ctx(), person, ImportStrategyLibraryInput{SourceRevision: "r", Entries: []LibraryEntry{libEntry("k1", CategoryLaunchesPR)}, Prune: true, AllKeys: keys})
-		require.ErrorIs(t, err, ErrInvalidArgument, "all_keys is capped")
-	})
-	t.Run("list filters and searches", func(t *testing.T) {
-		f := newFixture(t)
-		a, b := libEntry("alpha", CategoryLaunchesPR), libEntry("beta", CategoryPaidAcquisition)
-		b.Fits, b.Name = []string{"b2c"}, "Paid ads"
-		_, err := f.svc.ImportStrategyLibrary(ctx(), person, ImportStrategyLibraryInput{SourceRevision: "r", Entries: []LibraryEntry{a, b}})
-		require.NoError(t, err)
-		for name, tc := range map[string]struct {
-			in   ListStrategyLibraryInput
-			want []string
-		}{
-			"all":      {ListStrategyLibraryInput{}, []string{"alpha", "beta"}},
-			"category": {ListStrategyLibraryInput{Category: CategoryPaidAcquisition}, []string{"beta"}},
-			"fit":      {ListStrategyLibraryInput{Fit: "devtools"}, []string{"alpha"}},
-			"query":    {ListStrategyLibraryInput{Query: "PAID"}, []string{"beta"}},
-			"depth":    {ListStrategyLibraryInput{Depth: DepthTactic}, nil},
-		} {
-			res, err := f.svc.ListStrategyLibrary(ctx(), agent, tc.in)
-			require.NoError(t, err, name)
-			var got []string
-			for _, e := range res.Entries {
-				got = append(got, e.Key)
-			}
-			assert.Equal(t, tc.want, got, name)
-		}
-		_, err = f.svc.ListStrategyLibrary(ctx(), agent, ListStrategyLibraryInput{Query: strings.Repeat("q", 201)})
-		require.ErrorIs(t, err, ErrInvalidArgument)
-		other, err := f.svc.ListStrategyLibrary(ctx(), Actor{UserID: "u-b", OrgID: orgB, Kind: ActorAgent}, ListStrategyLibraryInput{})
-		require.NoError(t, err)
-		assert.Empty(t, other.Entries, "each org's library is its own")
-	})
-	t.Run("use makes a DRAFT strategy and a first campaign planning the matching channels", func(t *testing.T) {
-		f := newFixture(t)
-		_, err := f.svc.ImportStrategyLibrary(ctx(), person, ImportStrategyLibraryInput{SourceRevision: "r", Entries: []LibraryEntry{libEntry("alpha", CategoryLaunchesPR)}})
-		require.NoError(t, err)
-		res, err := f.svc.UseLibraryStrategy(ctx(), agent, UseLibraryStrategyInput{LibraryKey: "alpha", CreateFirstCampaign: true})
-		require.NoError(t, err)
-		st := res.Strategy
-		assert.Equal(t, StrategyDraft, st.Status)
-		assert.Equal(t, "Play alpha", st.Name)
-		assert.Equal(t, "More signups\n\nReach builders", st.GoalMD)
-		assert.Equal(t, "signups, activation", st.TargetMetric)
-		assert.Equal(t, CategoryLaunchesPR, st.Category)
-		assert.Equal(t, "alpha", st.LibraryKey)
-		require.NotNil(t, res.Campaign)
-		assert.Equal(t, CampaignDraft, res.Campaign.Status)
-		assert.Equal(t, st.ID, res.Campaign.StrategyID)
-		assert.Equal(t, "Play alpha", res.Campaign.Name)
-		assert.Equal(t, []string{f.channel(t, "reddit").ID, f.channel(t, "blog").ID}, res.Campaign.PlannedChannelIDs, "by key, in channel_types order")
-
-		bare, err := f.svc.UseLibraryStrategy(ctx(), person, UseLibraryStrategyInput{LibraryKey: "alpha"})
-		require.NoError(t, err)
-		assert.Nil(t, bare.Campaign)
-		named, err := f.svc.UseLibraryStrategy(ctx(), person, UseLibraryStrategyInput{LibraryKey: "alpha", CreateFirstCampaign: true, CampaignName: ptr("Q1 push")})
-		require.NoError(t, err)
-		assert.Equal(t, "Q1 push", named.Campaign.Name)
-		_, err = f.svc.UseLibraryStrategy(ctx(), person, UseLibraryStrategyInput{LibraryKey: "alpha", CampaignName: ptr("x")})
-		require.ErrorIs(t, err, ErrInvalidArgument, "a campaign name needs create_first_campaign")
-		_, err = f.svc.UseLibraryStrategy(ctx(), person, UseLibraryStrategyInput{LibraryKey: "nope"})
-		require.ErrorIs(t, err, ErrNotFound)
-	})
-	t.Run("plannedChannels matches by key or by a shared channel type", func(t *testing.T) {
-		chs := []*store.GtmChannel{{ID: "1", Key: "reddit", ChannelTypes: []string{"forum"}}, {ID: "2", Key: "hacker-news", ChannelTypes: []string{"forum"}}, {ID: "3", Key: "blog"}}
-		assert.Equal(t, []string{"3", "1"}, plannedChannels([]string{"blog", "reddit", "blog"}, chs))
-		assert.Equal(t, []string{"1", "2"}, plannedChannels([]string{"forum"}, chs))
-		assert.Empty(t, plannedChannels([]string{"podcast"}, chs))
-	})
-	t.Run("use plans the org's ACTIVE channels whose types fit", func(t *testing.T) {
-		f := newFixture(t)
-		e := libEntry("forums", CategoryCommunityEvents)
-		e.ChannelTypes = []string{"forum", "video"}
-		_, err := f.svc.ImportStrategyLibrary(ctx(), person, ImportStrategyLibraryInput{SourceRevision: "r", Entries: []LibraryEntry{e}})
-		require.NoError(t, err)
-		hn := f.channel(t, "hacker-news")
-		_, err = f.svc.UpdateChannel(ctx(), person, UpdateChannelInput{ID: hn.ID, ExpectedRevision: hn.Revision, Status: ptr(ChannelArchived)})
-		require.NoError(t, err)
-		res, err := f.svc.UseLibraryStrategy(ctx(), agent, UseLibraryStrategyInput{LibraryKey: "forums", CreateFirstCampaign: true})
-		require.NoError(t, err)
-		assert.Equal(t, []string{f.channel(t, "reddit").ID, f.channel(t, "youtube").ID}, res.Campaign.PlannedChannelIDs,
-			"reddit is a forum, youtube a video; the archived hacker-news is left out")
-	})
 }
 
 func sum(b []byte) string {
@@ -1266,4 +1083,33 @@ func TestAnalyticsErrorsAndHiddenGroups(t *testing.T) {
 		assert.True(t, res.Truncated)
 		assert.Equal(t, 4, res.HiddenGroups)
 	})
+}
+
+func TestAnalyticsEnvironmentScope(t *testing.T) {
+	f := newFixture(t)
+	var seen AnalyticsQuery
+	f.analytics.QueryFunc = func(_ context.Context, _ string, q AnalyticsQuery) (AnalyticsResult, error) {
+		seen = q
+		return AnalyticsResult{EnvironmentIDs: []string{"env-1", "env-2"}}, nil
+	}
+	res, err := f.svc.ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventCounts, Environment: "prod", ProjectID: "proj_1"})
+	require.NoError(t, err)
+	assert.Equal(t, "prod", seen.Environment, "handed to Analytics as named")
+	assert.Equal(t, "proj_1", seen.ProjectID)
+	assert.Equal(t, "prod", res.Environment, "the result is labelled with its scope")
+	assert.Equal(t, "proj_1", res.ProjectID)
+	assert.Equal(t, []string{"env-1", "env-2"}, res.EnvironmentIDs)
+
+	res, err = f.svc.ReadProductAnalytics(ctx(), agent, AnalyticsQuery{Template: AnalyticsEventCounts})
+	require.NoError(t, err)
+	assert.Empty(t, res.Environment, "every environment")
+	for name, q := range map[string]AnalyticsQuery{
+		"environment": {Template: AnalyticsEventCounts, Environment: "prod env"},
+		"project":     {Template: AnalyticsEventCounts, ProjectID: strings.Repeat("p", 129)},
+	} {
+		calls := f.analytics.CallCount("Query")
+		_, err := f.svc.ReadProductAnalytics(ctx(), agent, q)
+		require.ErrorIs(t, err, ErrInvalidArgument, name)
+		assert.Equal(t, calls, f.analytics.CallCount("Query"), name)
+	}
 }

@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
+	"github.com/reliant-labs/reliant/internal/handlers/gtm"
 	"github.com/reliant-labs/reliant/internal/handlers/inbox"
 	"github.com/reliant-labs/reliant/internal/handlers/mcp"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
@@ -47,6 +48,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
+	"github.com/reliant-labs/reliant/internal/handlers/pipeline"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
@@ -92,7 +94,8 @@ var userServices = []string{
 	reliantv1connect.WorktreeReclaimServiceName, reliantv1connect.SharingServiceName, reliantv1connect.AutomationTakeoverServiceName,
 	reliantv1connect.OrgProviderAccountServiceName, reliantv1connect.OrgUsageServiceName, reliantv1connect.OrgPolicyImpactServiceName,
 	reliantv1connect.CoverageSourceServiceName, reliantv1connect.PullRequestRecordServiceName,
-	reliantv1connect.ChatTraceServiceName,
+	reliantv1connect.ChatTraceServiceName, reliantv1connect.PipelineServiceName,
+	reliantv1connect.GtmServiceName,
 }
 
 // testUserRoutes is the api's route set over services that are never called
@@ -116,6 +119,8 @@ func testUserRoutes(t *testing.T, opts MountOptions) *UserRoutes {
 		OrgUsage: &org_usage.Service{}, OrgPolicyImpact: &org_policy_impact.Service{}, CoverageSource: &coverage_source.Service{},
 		PullRequestRecord: &pull_request_record.Service{},
 		ChatTrace:         &chat_trace.Service{},
+		Pipeline:          &pipeline.Service{},
+		SvcGtm:            &gtm.Service{},
 		Logger:            slog.Default(),
 		Options:           opts,
 	})

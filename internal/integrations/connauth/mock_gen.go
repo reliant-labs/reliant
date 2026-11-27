@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=1ea5f9c47d13ce69deff711c07aa41aa7f88075368877cc4f7498cc5619e682c
+// forge:hash=7f59f353c13fd13cff0bafb72fce2f4af565f059ad1f971c1b07a6226a4bb753
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	CredentialFunc         func(context.Context, httpaction.CredentialRequest) (httpaction.Credential, error)
@@ -100,18 +101,159 @@ func (m *MockService) RunOrgOf(ctx context.Context, runID string) (string, error
 	return "", contractkit.MockNotSet("MockService", "RunOrgOf")
 }
 
+// MockServiceCredentialCall is one recorded call of MockService.Credential, one
+// field per parameter.
+type MockServiceCredentialCall struct {
+	Ctx context.Context
+	Req httpaction.CredentialRequest
+}
+
+// CredentialCalls returns every recorded Credential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Credential").
+func (m *MockService) CredentialCalls() []MockServiceCredentialCall {
+	var out []MockServiceCredentialCall
+	for _, c := range m.Recorder.Calls("Credential") {
+		var r MockServiceCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(httpaction.CredentialRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUsableIntegrationsCall is one recorded call of MockService.UsableIntegrations, one
+// field per parameter.
+type MockServiceUsableIntegrationsCall struct {
+	Ctx          context.Context
+	RunID        string
+	Integrations map[string]*reliantv1.ConnectionSpec
+}
+
+// UsableIntegrationsCalls returns every recorded UsableIntegrations call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UsableIntegrations").
+func (m *MockService) UsableIntegrationsCalls() []MockServiceUsableIntegrationsCall {
+	var out []MockServiceUsableIntegrationsCall
+	for _, c := range m.Recorder.Calls("UsableIntegrations") {
+		var r MockServiceUsableIntegrationsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RunID, _ = c.Args[1].(string)
+		r.Integrations, _ = c.Args[2].(map[string]*reliantv1.ConnectionSpec)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceForTriggerCall is one recorded call of MockService.ForTrigger, one
+// field per parameter.
+type MockServiceForTriggerCall struct {
+	Ctx       context.Context
+	TriggerID string
+}
+
+// ForTriggerCalls returns every recorded ForTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ForTrigger").
+func (m *MockService) ForTriggerCalls() []MockServiceForTriggerCall {
+	var out []MockServiceForTriggerCall
+	for _, c := range m.Recorder.Calls("ForTrigger") {
+		var r MockServiceForTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.TriggerID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceBrokerCall is one recorded call of MockService.Broker, one
+// field per parameter.
+type MockServiceBrokerCall struct {
+	ID string
+}
+
+// BrokerCalls returns every recorded Broker call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Broker").
+func (m *MockService) BrokerCalls() []MockServiceBrokerCall {
+	var out []MockServiceBrokerCall
+	for _, c := range m.Recorder.Calls("Broker") {
+		var r MockServiceBrokerCall
+		r.ID, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceForUserCall is one recorded call of MockService.ForUser, one
+// field per parameter.
+type MockServiceForUserCall struct {
+	UserID string
+}
+
+// ForUserCalls returns every recorded ForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ForUser").
+func (m *MockService) ForUserCalls() []MockServiceForUserCall {
+	var out []MockServiceForUserCall
+	for _, c := range m.Recorder.Calls("ForUser") {
+		var r MockServiceForUserCall
+		r.UserID, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceAdmitIntegrationCall is one recorded call of MockService.AdmitIntegration, one
+// field per parameter.
+type MockServiceAdmitIntegrationCall struct {
+	Ctx           context.Context
+	RunID         string
+	IntegrationID string
+}
+
+// AdmitIntegrationCalls returns every recorded AdmitIntegration call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AdmitIntegration").
+func (m *MockService) AdmitIntegrationCalls() []MockServiceAdmitIntegrationCall {
+	var out []MockServiceAdmitIntegrationCall
+	for _, c := range m.Recorder.Calls("AdmitIntegration") {
+		var r MockServiceAdmitIntegrationCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RunID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRunOrgOfCall is one recorded call of MockService.RunOrgOf, one
+// field per parameter.
+type MockServiceRunOrgOfCall struct {
+	Ctx   context.Context
+	RunID string
+}
+
+// RunOrgOfCalls returns every recorded RunOrgOf call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunOrgOf").
+func (m *MockService) RunOrgOfCalls() []MockServiceRunOrgOfCall {
+	var out []MockServiceRunOrgOfCall
+	for _, c := range m.Recorder.Calls("RunOrgOf") {
+		var r MockServiceRunOrgOfCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RunID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockResolver
-// forge:hash=15c51a1304a5e877a19ad9df694ad6e7b9d3965b574b6012a7385a9eb7239a49
+// forge:hash=04ef6a22a769299e4744f9d0ebcecedc0b1a62ca94fd8eb017e8f9ed964cf753
 
 // MockResolver is a test mock for the Resolver interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockResolver.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockResolver.<Method>Func not set" error.
 type MockResolver struct {
 	contractkit.Recorder
 	ForCallFunc    func(context.Context, connections.CallSite, connections.Ref) (*connections.Resolved, error)
@@ -166,18 +308,125 @@ func (m *MockResolver) Usable(ctx context.Context, call connections.CallSite, re
 	return nil, contractkit.MockNotSet("MockResolver", "Usable")
 }
 
+// MockResolverForCallCall is one recorded call of MockResolver.ForCall, one
+// field per parameter.
+type MockResolverForCallCall struct {
+	Ctx  context.Context
+	Call connections.CallSite
+	Ref  connections.Ref
+}
+
+// ForCallCalls returns every recorded ForCall call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ForCall").
+func (m *MockResolver) ForCallCalls() []MockResolverForCallCall {
+	var out []MockResolverForCallCall
+	for _, c := range m.Recorder.Calls("ForCall") {
+		var r MockResolverForCallCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Call, _ = c.Args[1].(connections.CallSite)
+		r.Ref, _ = c.Args[2].(connections.Ref)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockResolverForTriggerCall is one recorded call of MockResolver.ForTrigger, one
+// field per parameter.
+type MockResolverForTriggerCall struct {
+	Ctx  context.Context
+	Site connections.TriggerSite
+}
+
+// ForTriggerCalls returns every recorded ForTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ForTrigger").
+func (m *MockResolver) ForTriggerCalls() []MockResolverForTriggerCall {
+	var out []MockResolverForTriggerCall
+	for _, c := range m.Recorder.Calls("ForTrigger") {
+		var r MockResolverForTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Site, _ = c.Args[1].(connections.TriggerSite)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockResolverForUserCall is one recorded call of MockResolver.ForUser, one
+// field per parameter.
+type MockResolverForUserCall struct {
+	Ctx    context.Context
+	UserID string
+	Ref    connections.Ref
+}
+
+// ForUserCalls returns every recorded ForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ForUser").
+func (m *MockResolver) ForUserCalls() []MockResolverForUserCall {
+	var out []MockResolverForUserCall
+	for _, c := range m.Recorder.Calls("ForUser") {
+		var r MockResolverForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Ref, _ = c.Args[2].(connections.Ref)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockResolverOwnerOfCall is one recorded call of MockResolver.OwnerOf, one
+// field per parameter.
+type MockResolverOwnerOfCall struct {
+	Ctx   context.Context
+	RunID string
+}
+
+// OwnerOfCalls returns every recorded OwnerOf call, oldest first, with
+// its arguments typed. It reads the same log as Calls("OwnerOf").
+func (m *MockResolver) OwnerOfCalls() []MockResolverOwnerOfCall {
+	var out []MockResolverOwnerOfCall
+	for _, c := range m.Recorder.Calls("OwnerOf") {
+		var r MockResolverOwnerOfCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RunID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockResolverUsableCall is one recorded call of MockResolver.Usable, one
+// field per parameter.
+type MockResolverUsableCall struct {
+	Ctx  context.Context
+	Call connections.CallSite
+	Refs []connections.Ref
+}
+
+// UsableCalls returns every recorded Usable call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Usable").
+func (m *MockResolver) UsableCalls() []MockResolverUsableCall {
+	var out []MockResolverUsableCall
+	for _, c := range m.Recorder.Calls("Usable") {
+		var r MockResolverUsableCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Call, _ = c.Args[1].(connections.CallSite)
+		r.Refs, _ = c.Args[2].([]connections.Ref)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Resolver = (*MockResolver)(nil)
 
 // forge:section MockActingBroker
-// forge:hash=4946d8bb6048921664c07aaa97cbdb5501569991025060077c2b7fa48185ba3f
+// forge:hash=5938b0fd4e6e205cbc2c636a825828b5a4c6c9458b0f498bf313fd4dc812caa9
 
 // MockActingBroker is a test mock for the ActingBroker interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockActingBroker.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockActingBroker.<Method>Func not set" error.
 type MockActingBroker struct {
 	contractkit.Recorder
 	ActingCredentialFunc func(context.Context, string, httpaction.CredentialRequest) (httpaction.Credential, error)
@@ -202,18 +451,61 @@ func (m *MockActingBroker) Credential(ctx context.Context, ownerUserID string) (
 	return *new(httpaction.Credential), contractkit.MockNotSet("MockActingBroker", "Credential")
 }
 
+// MockActingBrokerActingCredentialCall is one recorded call of MockActingBroker.ActingCredential, one
+// field per parameter.
+type MockActingBrokerActingCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+	Req         httpaction.CredentialRequest
+}
+
+// ActingCredentialCalls returns every recorded ActingCredential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ActingCredential").
+func (m *MockActingBroker) ActingCredentialCalls() []MockActingBrokerActingCredentialCall {
+	var out []MockActingBrokerActingCredentialCall
+	for _, c := range m.Recorder.Calls("ActingCredential") {
+		var r MockActingBrokerActingCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		r.Req, _ = c.Args[2].(httpaction.CredentialRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockActingBrokerCredentialCall is one recorded call of MockActingBroker.Credential, one
+// field per parameter.
+type MockActingBrokerCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+}
+
+// CredentialCalls returns every recorded Credential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Credential").
+func (m *MockActingBroker) CredentialCalls() []MockActingBrokerCredentialCall {
+	var out []MockActingBrokerCredentialCall
+	for _, c := range m.Recorder.Calls("Credential") {
+		var r MockActingBrokerCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ActingBroker = (*MockActingBroker)(nil)
 
 // forge:section MockOrgActingBroker
-// forge:hash=970d7b58e2e3a33525c9d6a4369c4a4aa55a714e4211c62ae219651655958e68
+// forge:hash=3eb469048bad3eb4a8bf4feb2aec32baa8f9bdf53aa3cfdb77e9a90b285efc2d
 
 // MockOrgActingBroker is a test mock for the OrgActingBroker interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockOrgActingBroker.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOrgActingBroker.<Method>Func not set" error.
 type MockOrgActingBroker struct {
 	contractkit.Recorder
 	OwnsConnectionIDFunc    func(string) bool
@@ -258,18 +550,103 @@ func (m *MockOrgActingBroker) Credential(ctx context.Context, ownerUserID string
 	return *new(httpaction.Credential), contractkit.MockNotSet("MockOrgActingBroker", "Credential")
 }
 
+// MockOrgActingBrokerOwnsConnectionIDCall is one recorded call of MockOrgActingBroker.OwnsConnectionID, one
+// field per parameter.
+type MockOrgActingBrokerOwnsConnectionIDCall struct {
+	ID string
+}
+
+// OwnsConnectionIDCalls returns every recorded OwnsConnectionID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("OwnsConnectionID").
+func (m *MockOrgActingBroker) OwnsConnectionIDCalls() []MockOrgActingBrokerOwnsConnectionIDCall {
+	var out []MockOrgActingBrokerOwnsConnectionIDCall
+	for _, c := range m.Recorder.Calls("OwnsConnectionID") {
+		var r MockOrgActingBrokerOwnsConnectionIDCall
+		r.ID, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOrgActingBrokerOrgActingCredentialCall is one recorded call of MockOrgActingBroker.OrgActingCredential, one
+// field per parameter.
+type MockOrgActingBrokerOrgActingCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+	OrgID       string
+	Req         httpaction.CredentialRequest
+}
+
+// OrgActingCredentialCalls returns every recorded OrgActingCredential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("OrgActingCredential").
+func (m *MockOrgActingBroker) OrgActingCredentialCalls() []MockOrgActingBrokerOrgActingCredentialCall {
+	var out []MockOrgActingBrokerOrgActingCredentialCall
+	for _, c := range m.Recorder.Calls("OrgActingCredential") {
+		var r MockOrgActingBrokerOrgActingCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		r.OrgID, _ = c.Args[2].(string)
+		r.Req, _ = c.Args[3].(httpaction.CredentialRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOrgActingBrokerActingCredentialCall is one recorded call of MockOrgActingBroker.ActingCredential, one
+// field per parameter.
+type MockOrgActingBrokerActingCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+	Req         httpaction.CredentialRequest
+}
+
+// ActingCredentialCalls returns every recorded ActingCredential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ActingCredential").
+func (m *MockOrgActingBroker) ActingCredentialCalls() []MockOrgActingBrokerActingCredentialCall {
+	var out []MockOrgActingBrokerActingCredentialCall
+	for _, c := range m.Recorder.Calls("ActingCredential") {
+		var r MockOrgActingBrokerActingCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		r.Req, _ = c.Args[2].(httpaction.CredentialRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOrgActingBrokerCredentialCall is one recorded call of MockOrgActingBroker.Credential, one
+// field per parameter.
+type MockOrgActingBrokerCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+}
+
+// CredentialCalls returns every recorded Credential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Credential").
+func (m *MockOrgActingBroker) CredentialCalls() []MockOrgActingBrokerCredentialCall {
+	var out []MockOrgActingBrokerCredentialCall
+	for _, c := range m.Recorder.Calls("Credential") {
+		var r MockOrgActingBrokerCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ OrgActingBroker = (*MockOrgActingBroker)(nil)
 
 // forge:section MockDelegatedBroker
-// forge:hash=a7e34351194a5d3a5eb36ce8bce8e7f85e0df5e60e86e9fdbbd5ec1bd635d00b
+// forge:hash=b6e7e4f96a424e47186ac503c7baa2f75a4997822a53c1bafaee488034952f9d
 
 // MockDelegatedBroker is a test mock for the DelegatedBroker interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDelegatedBroker.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDelegatedBroker.<Method>Func not set" error.
 type MockDelegatedBroker struct {
 	contractkit.Recorder
 	CredentialFunc func(context.Context, string) (httpaction.Credential, error)
@@ -282,6 +659,26 @@ func (m *MockDelegatedBroker) Credential(ctx context.Context, ownerUserID string
 		return m.CredentialFunc(ctx, ownerUserID)
 	}
 	return *new(httpaction.Credential), contractkit.MockNotSet("MockDelegatedBroker", "Credential")
+}
+
+// MockDelegatedBrokerCredentialCall is one recorded call of MockDelegatedBroker.Credential, one
+// field per parameter.
+type MockDelegatedBrokerCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+}
+
+// CredentialCalls returns every recorded Credential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Credential").
+func (m *MockDelegatedBroker) CredentialCalls() []MockDelegatedBrokerCredentialCall {
+	var out []MockDelegatedBrokerCredentialCall
+	for _, c := range m.Recorder.Calls("Credential") {
+		var r MockDelegatedBrokerCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

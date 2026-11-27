@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { setReaderPrincipal, getReaderSession } from "../../AuditedAccess/readerSession";
 import { readStorageAccess, wasBucketOpened } from "../storageAccess-model";
-import { createStorageFixtureApi } from "../__fixtures__/fixtureStorageApi";
+import { createStorageFixture } from "../__fixtures__/fixtureStorageService";
 import { callsOf, PROD, renderBrowser } from "./storageTestUtils";
 
 vi.mock("@tanstack/react-router", async (original) => ({ ...(await original<typeof import("@tanstack/react-router")>()), useNavigate: () => vi.fn() }));
@@ -15,7 +15,7 @@ async function confirm(reason: string) {
 
 it.each([true, false])("requires B's own confirmation and bucket Activity after account transition (logout=%s)", async (logout) => {
   setReaderPrincipal("A");
-  const api = createStorageFixtureApi();
+  const api = createStorageFixture();
   const view = renderBrowser(api, { bucket: "uploads", prefix: "docs/", object: "docs/readme.txt" }, PROD);
   await confirm("A investigation");
   await screen.findByTestId("storage-preview-text");
@@ -36,7 +36,7 @@ it.each([true, false])("requires B's own confirmation and bucket Activity after 
 
 it("never displays A's deferred preview after B's own response", async () => {
   setReaderPrincipal("A");
-  const api = createStorageFixtureApi();
+  const api = createStorageFixture();
   const preview = api.previewObject;
   let release!: () => void;
   let started!: () => void;
@@ -50,7 +50,7 @@ it("never displays A's deferred preview after B's own response", async () => {
     if (first) { started(); await gate; }
     const result = await preview(...args);
     if (first) finished();
-    return { ...result, content: new TextEncoder().encode(first ? "A PRIVATE CONTENT" : "B CONTENT") };
+    return { ...result, body: { case: "content", value: new TextEncoder().encode(first ? "A PRIVATE CONTENT" : "B CONTENT") } };
   };
   renderBrowser(api, { bucket: "uploads", object: "docs/readme.txt" });
   await act(async () => { await begun; });
@@ -63,7 +63,7 @@ it("never displays A's deferred preview after B's own response", async () => {
 
 it("drops A's deferred listing and download after B replaces the reader, even when abort is ignored", async () => {
   setReaderPrincipal("A");
-  const api = createStorageFixtureApi();
+  const api = createStorageFixture();
   const list = api.listObjects;
   const mint = api.presignObjectDownload;
   let finishList!: () => void;

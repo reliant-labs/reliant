@@ -1,0 +1,394 @@
+# Pricing, offers and incentives: what you charge, how you package it, and the
+# offers that move a decision. Most entries here are specific to one business
+# model; pick the ones that match how the business actually earns money.
+entries:
+  - key: founding-customer-pricing
+    category: pricing_offers_incentives
+    name: Founding-customer pricing
+    summary: >-
+      Offer the first 25 to 100 customers a lower price that stays locked for
+      as long as they keep paying, in exchange for regular feedback and
+      permission to use their name. Cap the number of seats, show how many
+      are left, and close the offer on a fixed date.
+    why_it_works: >-
+      Early buyers take a risk on an unproven product. A permanent discount
+      rewards that risk, a visible cap and deadline create honest urgency, and
+      the feedback commitment turns buyers into design partners.
+    fits:
+      business_models: [subscription, usage_based]
+    stages: [pre_launch, launch]
+    objective: conversion
+    effort: low
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - What discount is meaningful to the buyer but still leaves a sustainable margin at scale?
+      - How many founding seats can the team support with hands-on attention?
+      - What exactly does a founding customer commit to in return (calls, a case study, a logo)?
+      - When does the offer close, and what event justifies that date?
+    channel_types: [email, website, social]
+    kpis: [founding seats sold, conversion rate from waitlist, feedback calls held]
+
+  - key: annual-prepay-discount
+    category: pricing_offers_incentives
+    name: Annual prepay discount
+    summary: >-
+      Give subscribers a clear reason to pay for a year up front, typically
+      two months free, and present the annual option as the default on the
+      pricing page and in the checkout. Offer the switch to existing monthly
+      customers around their third renewal.
+    why_it_works: >-
+      Annual plans pull cash forward, remove eleven monthly chances to churn,
+      and signal commitment. Customers who already renewed a few times have
+      proven they value the product and respond well to saving money.
+    fits:
+      business_models: [subscription]
+    stages: [early_traction, growth, scale]
+    objective: retention
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - What share of current subscribers pay monthly versus annually?
+      - What discount can the business afford in exchange for twelve months of cash up front?
+      - At which renewal does a monthly customer become very likely to stay?
+    suggested_workflow: >-
+      Each week, list monthly subscribers who just passed their third renewal
+      and have healthy usage, draft a short personal note offering the annual
+      switch with the exact saving in their currency, and queue the drafts for
+      a person to review and send.
+    channel_types: [email, in-product]
+    kpis: [share of revenue on annual plans, monthly-to-annual switch rate, cash collected up front]
+
+  - key: usage-free-allowance-and-commit-discount
+    category: pricing_offers_incentives
+    name: Free monthly allowance plus committed-use discounts
+    summary: >-
+      For usage-priced products, give every account a small free allowance
+      each month so trying the product costs nothing, then publish volume
+      tiers and a discount for customers who commit to a minimum monthly or
+      annual spend.
+    why_it_works: >-
+      A free allowance removes the fear of an unexpected bill during
+      evaluation. Commit discounts give finance teams predictability and give
+      the business a revenue floor, while heavy users still pay more as they
+      grow.
+    fits:
+      business_models: [usage_based]
+    stages: [launch, early_traction, growth]
+    objective: conversion
+    effort: medium
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - What is the unit of usage that best tracks the value a customer gets?
+      - How much free usage lets a new account reach a first real result, but not run production for free?
+      - At what monthly spend do customers start asking for predictability or a discount?
+      - What does it cost to serve one unit, and how does that change at volume?
+    channel_types: [website, email]
+    kpis: [accounts exceeding the free allowance, committed spend contracts signed, revenue per active account]
+
+  - key: prepaid-credit-packs
+    category: pricing_offers_incentives
+    name: Prepaid credit packs with bonus credits
+    summary: >-
+      Sell usage as prepaid packs of credits, with a bonus on larger packs
+      (for example 10 percent extra on the mid pack and 20 percent on the
+      largest). Offer an optional automatic top-up when the balance runs low.
+    why_it_works: >-
+      Prepayment turns variable usage into upfront cash and makes spending
+      feel controlled for the buyer. Bonus credits nudge customers to a larger
+      pack, and automatic top-up keeps heavy users from stalling.
+    fits:
+      business_models: [usage_based]
+      business_types: [b2c_app, developer_tools, b2b_saas]
+    stages: [launch, early_traction, growth]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - What pack sizes match a light, typical and heavy month of usage?
+      - Do credits expire, and how will that be explained so it feels fair?
+      - What bonus on the larger packs still protects the margin?
+    channel_types: [website, in-product]
+    kpis: [average pack size, top-up enablement rate, repeat purchase rate]
+
+  - key: launch-price-with-dated-increase
+    category: pricing_offers_incentives
+    name: Launch price with a dated increase
+    summary: >-
+      For a product sold once, open with a launch price for a fixed window and
+      announce in advance the date and amount of the increase. Pair it with a
+      bundle (the product plus extras or a premium edition) that is only
+      available during launch.
+    why_it_works: >-
+      One-time purchases lack a renewal moment, so the launch window is the
+      main lever for urgency. A real, dated increase is honest and gives
+      fence-sitters a concrete reason to act now.
+    fits:
+      business_models: [one_time]
+      business_types: [ecommerce, hardware, creator_media, b2c_app, developer_tools]
+    stages: [launch]
+    objective: conversion
+    effort: low
+    cost: free
+    signal_days: 7
+    tailor_questions:
+      - What will the regular price be, and is the launch discount large enough to matter?
+      - What extras can be bundled at low marginal cost?
+      - Who is already waiting to buy, and how will they hear about the deadline?
+    suggested_workflow: >-
+      Three days and one day before the price rises, send a reminder to
+      everyone who signed up for launch news but has not bought, with the
+      exact new price and the time it changes, and hold each send for a person
+      to approve.
+    channel_types: [email, website, social]
+    kpis: [launch-window revenue, conversion rate of the waitlist, bundle attach rate]
+
+  - key: paid-upgrade-for-existing-owners
+    category: pricing_offers_incentives
+    name: Upgrade pricing for existing owners
+    summary: >-
+      When a major new version or model of a one-time product ships, give
+      existing owners a clear upgrade price below the new-customer price, and
+      a free upgrade to anyone who bought in the last few months.
+    why_it_works: >-
+      Past buyers are the warmest audience a one-time business has, but they
+      will not pay full price twice. A fair upgrade path turns each release
+      into a new revenue event and avoids a backlash from recent buyers.
+    fits:
+      business_models: [one_time]
+      business_types: [developer_tools, b2c_app, hardware, creator_media]
+    stages: [growth, scale]
+    objective: expansion
+    effort: medium
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - How many past buyers can the business still reach by email?
+      - What is new enough in this release to justify a paid upgrade?
+      - What purchase window qualifies for a free upgrade?
+    channel_types: [email, website]
+    kpis: [upgrade conversion among past owners, upgrade revenue, support complaints about pricing]
+
+  - key: freemium-limit-on-value-metric
+    category: pricing_offers_incentives
+    name: Put the free limit on the metric that grows with success
+    summary: >-
+      Design the free plan so that its limit is on the thing that grows as the
+      customer succeeds (projects, seats, contacts, storage, monthly volume),
+      not on core features. A customer who outgrows the free plan is by
+      definition getting value.
+    why_it_works: >-
+      Gating core features stops people from ever reaching value. Gating the
+      value metric lets everyone reach value, and makes the upgrade request
+      arrive exactly when the customer has a reason to pay.
+    fits:
+      business_models: [freemium]
+    stages: [launch, early_traction, growth]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - Which metric rises most reliably as a customer gets more value?
+      - Where on that metric do most active free accounts sit today?
+      - What share of free users should eventually hit the limit for the model to work?
+    channel_types: [in-product, website]
+    kpis: [free-to-paid conversion rate, share of free accounts near the limit, time to upgrade]
+
+  - key: open-core-paid-tier
+    category: pricing_offers_incentives
+    name: Open core with a paid tier for teams and operations
+    summary: >-
+      Keep the open-source project fully useful for individuals, and sell
+      what larger teams need to run it in production, such as a hosted
+      version, single sign-on, audit logs, access control, support with
+      response times, and long-term maintenance releases.
+    why_it_works: >-
+      Individuals adopt the free project and bring it into their company; the
+      company then pays for operational needs that individuals never feel.
+      Drawing the line at team and operations features keeps the community
+      goodwill intact.
+    fits:
+      business_models: [free_oss]
+      business_types: [open_source, developer_tools]
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: high
+    cost: medium
+    signal_days: 60
+    tailor_questions:
+      - Which requests come only from companies running the project in production?
+      - What would the community see as a fair line between free and paid?
+      - Can the team operate a hosted version reliably, or is a support plan the better first offer?
+      - Which companies already use the project heavily, and who inside them would buy?
+    channel_types: [website, community, email]
+    kpis: [companies on the paid tier, inbound requests from production users, community sentiment about the split]
+
+  - key: oss-sponsorship-tiers
+    category: pricing_offers_incentives
+    name: Sponsorship tiers for an open-source project
+    summary: >-
+      Publish clear sponsorship tiers for individuals and companies, each with
+      concrete benefits (a logo in the readme, priority on the issue tracker,
+      a quarterly call with maintainers), and ask the heaviest corporate users
+      directly.
+    why_it_works: >-
+      Companies that depend on a project want it to stay maintained but need
+      a purchasable thing with a receipt. Tiers with named benefits make the
+      purchase easy to justify internally.
+    fits:
+      business_models: [free_oss]
+      business_types: [open_source]
+    stages: [early_traction, growth]
+    objective: conversion
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which companies depend on the project, judging by issues, forks and downloads?
+      - What benefits can maintainers give sponsors without bending the roadmap?
+      - What monthly amount would cover a part-time maintainer?
+    channel_types: [website, community, email]
+    kpis: [monthly sponsorship revenue, corporate sponsors, maintainer hours funded]
+
+  - key: marketplace-take-rate-holiday
+    category: pricing_offers_incentives
+    name: Commission holiday for new sellers
+    summary: >-
+      Waive or cut the marketplace commission for a new seller's first months
+      or first sales, and waive the buyer fee on a buyer's first order. Target
+      the category or region where supply is thinnest.
+    why_it_works: >-
+      A marketplace lives or dies on liquidity. Lowering the cost of a first
+      listing and a first purchase gets both sides over the hump, and the
+      holiday expires once the participant has seen the marketplace work.
+    fits:
+      business_models: [marketplace]
+      business_types: [marketplace]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: low
+    cost: medium
+    signal_days: 30
+    tailor_questions:
+      - Which side of the marketplace is the constraint right now?
+      - In which category or region is liquidity weakest?
+      - How long should the holiday last for a seller to make a few sales?
+      - How will the business stop the holiday from being gamed with new accounts?
+    channel_types: [email, website, marketplace]
+    kpis: [new active sellers, time to first sale, buyer first-order rate]
+
+  - key: productized-service-packages
+    category: pricing_offers_incentives
+    name: Productized service packages
+    summary: >-
+      Turn custom services into two or three fixed-scope packages with a fixed
+      price, a fixed timeline and a clear deliverable, and publish them. Keep
+      a paid discovery or audit package as the low-risk first purchase.
+    why_it_works: >-
+      Buyers of services fear open-ended cost. A fixed price and scope makes
+      the decision small and comparable, and a paid audit both qualifies the
+      buyer and usually leads into the larger package.
+    fits:
+      business_models: [services]
+      business_types: [agency_services, local_business]
+    stages: [launch, early_traction, growth]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - Which past projects were most profitable and most repeatable?
+      - What does a buyer receive at the end of each package, in concrete terms?
+      - What small paid first step would reveal whether a client is a good fit?
+    channel_types: [website, email, outbound]
+    kpis: [package sales, audit-to-project conversion, average margin per project]
+
+  - key: paid-pilot-credited-to-contract
+    category: pricing_offers_incentives
+    name: Paid pilot credited toward the contract
+    summary: >-
+      For larger business deals, offer a short paid pilot with written success
+      criteria agreed up front, and credit the pilot fee toward the first-year
+      contract if the customer goes ahead.
+    why_it_works: >-
+      Free pilots drift because nobody owns them. A fee makes the buyer assign
+      people and time, the success criteria define when the pilot is done,
+      and the credit removes the sting of paying twice.
+    fits:
+      business_models: [subscription, usage_based, services]
+      business_types: [b2b_saas, developer_tools, agency_services]
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - What result in a pilot would make the buyer confident enough to sign?
+      - How long does a pilot need to show that result?
+      - Who on the buyer's side owns the pilot and the decision afterwards?
+    channel_types: [outbound, email]
+    kpis: [pilot-to-contract conversion, pilot length, first-year contract value]
+
+  - key: ad-free-supporter-tier
+    category: pricing_offers_incentives
+    name: Ad-free supporter tier
+    summary: >-
+      Offer the most engaged readers, listeners or users a paid tier that
+      removes ads and adds a small set of member perks (early access, a
+      members-only post or episode, a badge). Ask at moments of high
+      engagement rather than on the first visit.
+    why_it_works: >-
+      A small share of an ad-supported audience is worth far more as paying
+      members than as ad impressions. Removing ads is a benefit they already
+      understand, and perks make support feel like belonging.
+    fits:
+      business_models: [ad_supported]
+      business_types: [creator_media, b2c_app]
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: medium
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - What is the average ad revenue per engaged user per month?
+      - Which perks are cheap to deliver but feel special to fans?
+      - At which moment are users most engaged and open to an ask?
+    channel_types: [in-product, newsletter, website]
+    kpis: [paying supporters, supporter revenue versus lost ad revenue, supporter churn]
+
+  - key: trial-design
+    category: pricing_offers_incentives
+    name: Design the trial deliberately
+    summary: >-
+      Choose the trial's shape on purpose instead of by default. Set its
+      length to how long a typical customer needs to reach the first real
+      result, not a round number. Decide whether to ask for a card up front:
+      it means fewer sign-ups but more of them convert. Consider a reverse
+      trial, where every new account gets the full paid plan for a set time
+      and then drops to the free plan rather than losing access. Tell users
+      clearly before any charge and make cancelling easy.
+    why_it_works: >-
+      Trial length, card policy and what happens at the end decide how many
+      people start and how many pay. A trial sized to the time-to-value
+      avoids rushing or boring users, and a reverse trial shows the paid
+      features to everyone while keeping those who do not upgrade as active
+      free users.
+    fits:
+      business_models: [subscription, freemium]
+      business_types: [b2b_saas, b2c_app, developer_tools]
+    stages: [launch, early_traction, growth]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - How many days does a typical new customer take to reach the first real result?
+      - Is the business better served by more trial starts (no card) or fewer, more committed ones (card up front)?
+      - Is there a free plan for a reverse trial to fall back to, and which paid features would users miss most?
+      - How will users be reminded before the trial ends or a charge is made?
+    channel_types: [website, in-product, email]
+    kpis: [trial starts, trial-to-paid conversion, paid conversion within 90 days of sign-up]

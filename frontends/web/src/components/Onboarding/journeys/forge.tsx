@@ -30,13 +30,14 @@
  *
  * Cuts (isAvailable; lib/demoTour.ts, runtime config DEMO_TOUR):
  *  - the public demo host, `short` (default), 10 steps: intro, instrumented,
- *    trace, hops, inside, logs, issue, ask, built (the recorded forge run, a
- *    dialog), done;
+ *    trace, hops, logs, issue, ask, analytics, built (the recorded forge run,
+ *    a dialog), done;
  *  - the demo host, `full`: every step but the shell's;
- *  - the shell, 14 steps: intro, nav, instrumented, deployments, trace, hops,
- *    logs, issue, oncall, ask, tests, security, configure, done;
+ *  - the shell, 16 steps: intro, nav, instrumented, deployments, trace, hops,
+ *    logs, issue, oncall, ask, analytics, data, tests, security, configure,
+ *    done;
  *  - signed out on an app host, 11 steps: no fg-inside, fg-graph, fg-agent,
- *    fg-built or the shell's steps. Their /forge/demo leaves for the demo
+ *    fg-analytics, fg-data, fg-built or the shell's steps. Their /forge/demo leaves for the demo
  *    host (Forge/Demo/demoHandoff.ts), `?tour=` kept, so a journey started
  *    there continues on the demo host's cut.
  *
@@ -63,6 +64,7 @@ import type { Journey, JourneyRoute, RouteTarget } from "../types";
 import { TourCommands } from "./TourCommand";
 import { projectsPath, workflowDetailPath } from "@/lib/paths";
 import { consoleBase, consolePath, type ConsolePage } from "@/components/Forge/Console/paths";
+import { DEFAULT_ENV } from "@/components/Forge/Console/envScope";
 
 /** The CreateOrder trace the tour opens (FIXTURE_TRACE_ID): two failed payment calls, then the worker. */
 export const DEMO_TRACE_ID = "4bf92f3577b34da6a3ce929d0e0e4736";
@@ -124,15 +126,38 @@ function walkedApp(): string | null {
  * demo console's (`demo`). Read when the step is, so the shell and the
  * session are known by then.
  */
-function stop({ view, ...search }: { view: StopView } & Record<string, unknown>): JourneyRoute {
+function stop({ view, ...rest }: { view: StopView } & Record<string, unknown>): JourneyRoute {
   const app = walkedApp();
-  if (!app) return demo({ view, ...search });
+  if (!app) return demo({ view, ...rest });
   const base = consoleBase(app);
+  const search = { ...storyScope(), ...rest };
   const label = "Open the sample app";
   const message = "This step is on the sample app's console.";
   if (view === "overview") return { path: base, open: { to: base, search }, label, message };
   return { path: `${base}/observability`, open: { to: `${base}/observability/${view}`, search }, label, message };
 }
+
+/**
+ * A step on another of the walked app's console pages (Analytics, Data), in
+ * prod unless `search` names an environment. Signed out on an app host, where
+ * these steps do not run, the demo console's, like `stop`.
+ */
+function consoleStop(page: ConsolePage, search: Record<string, unknown> = {}): JourneyRoute {
+  const app = walkedApp();
+  if (!app) return demo({ view: "overview", ...CLOSED });
+  const path = consolePath(app, page);
+  return { path, open: { to: path, search: { ...CLOSED, ...storyScope(), ...search } }, label: "Open the sample app", message: "This step is on the sample app's console." };
+}
+
+/**
+ * On the demo host, the environment the console's steps are scoped to: the
+ * story's failing request, its issue and its alert are prod's. Named on every
+ * one, because the console remembers the scope a page was opened in
+ * (envScope.ts), so a visitor who had picked dev, or fg-data's staging, would
+ * otherwise carry it into the steps after. The shell's sample is never
+ * remembered, so its steps open on the default, prod, as they are.
+ */
+const storyScope = (): Record<string, unknown> => (onPublicDemo() ? { env: DEFAULT_ENV } : {});
 
 /**
  * A fixture id (a trace, a span, an issue) as the walked app's pages show
@@ -314,14 +339,44 @@ function Tests({ cli }: { cli: string }) {
   );
 }
 
+function Analytics({ cli }: { cli: string }) {
+  return (
+    <>
+      <p>
+        Analytics shows who uses the app: visitors, sign-ups, active and returning users, and where they came from, counted from the events
+        the app sends. Sessions, under Observability, replays a visit with its errors marked.
+      </p>
+      <AgentLine>
+        Your agent reads the same figures with <code>{cli} obs users prod</code>.
+      </AgentLine>
+    </>
+  );
+}
+
+function Data({ cli }: { cli: string }) {
+  return (
+    <>
+      <p>
+        Data browses the app&apos;s database, table by table, read-only. This is staging. In prod, reading asks for a reason first and every
+        read is recorded, so looking at customer data always leaves a trail.
+      </p>
+      <AgentLine>
+        Your agent runs one read-only query with <code>{cli} db query prod … --reason &lt;why&gt;</code>, its reason recorded the same way.
+      </AgentLine>
+    </>
+  );
+}
+
 const SECURITY_COPY =
   "Every release Forge builds carries a software bill of materials (SBOM), and Security scans it: which known vulnerabilities each environment runs, and in which packages. A finding can go to an agent to patch on its own branch.";
 
+// Usage (what hosting costs) is in Configure too, where the app is hosted; the public demo serves no Usage
+// (DEMO_HIDDEN_PAGES), so the step names the pages every Configure has.
 const CONFIGURE_COPY =
-  "Configure holds the rest of the app's settings: its secrets, kept out of git; its custom domains, with HTTPS; what its hosting costs this month; and an activity log of every change.";
+  "Configure holds the rest of the app's settings: its secrets, kept out of git; its custom domains, with HTTPS; and an activity log of every change, from releases to settings.";
 
 const SHELL_NAV_COPY =
-  "Every Forge app gets these sections in the left nav: its Overview, Observability, Deployments, Tests, Security and Configure. This is shop, a sample app with an api, a worker and an inventory service in dev, staging and prod. Its data is made up, and nothing you do here touches your own apps.";
+  "Every Forge app gets these sections in the left nav: what it runs and ships, how it behaves, who uses it, its tests, its data, and its settings. This is shop, a sample app with an api, a worker and an inventory service in dev, staging and prod. Its data is made up, and nothing you do here touches your own apps.";
 
 export const forgeJourney: Journey = {
   id: "forge",
@@ -354,7 +409,7 @@ export const forgeJourney: Journey = {
       id: "fg-console",
       title: "A Forge app's console",
       description:
-        "Every Forge project gets this console: environments, releases, domains, secrets and observability, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
+        "Every Forge project gets this console: releases and environments, observability, product analytics, tests, its data, security and settings, in one place. shop has an api, a worker and an inventory service in dev, staging and prod. The data here is made up.",
       // The console's sections: the open app's rows in the shell's left nav (NavRenderer's `nav-top`), on the
       // demo host too, which runs in the same shell. The step is on the Overview, never in a drill-in: a step
       // that rings the nav on an Observability route points at `nav-drill-in` (the drill-in's header) instead.
@@ -455,8 +510,9 @@ export const forgeJourney: Journey = {
           </p>
         </>
       ),
-      // The demo host only: the instrumentation forge writes WITHIN a service.
-      isAvailable: onDemo,
+      // The demo host's full tour only: the instrumentation forge writes WITHIN a service. The short tour gives
+      // its place to fg-analytics (at most ten steps, lib/demoTour.ts); the Traces tip covers spans.
+      isAvailable: onDemoFull,
       get target() {
         return `[data-testid='trace-span-row'][data-span-id='${shown(DEMO_INSIDE_SPAN_IDS.method)}']`;
       },
@@ -622,6 +678,35 @@ export const forgeJourney: Journey = {
       actionHint: "Click Ask an agent",
       signal: "ask_agent_opened",
     },
+    // Experiments (Analytics ▾) and ML get their steps here once the demo's sample app serves them.
+    {
+      id: "fg-analytics",
+      title: "Who uses the app",
+      description: <Analytics cli="reliant forge" />,
+      copyByShell: { forge: { description: <Analytics cli="forge" /> } },
+      // The nav's Analytics group, open on its first tab (Product overview) beside it.
+      target: "[data-tour='nav-analytics']",
+      tooltipPosition: "right",
+      get route() {
+        return consoleStop({ kind: "analytics" });
+      },
+      // Wherever the tour walks an app's console: the shell's sample and both of the demo host's cuts.
+      isAvailable: () => walkedApp() !== null,
+    },
+    {
+      id: "fg-data",
+      title: "The app's database",
+      description: <Data cli="reliant forge" />,
+      copyByShell: { forge: { description: <Data cli="forge" /> } },
+      target: "[data-tour='nav-data']",
+      tooltipPosition: "right",
+      // On staging: prod's database is audited, and its reason dialog would open over the tour (DataBrowser).
+      get route() {
+        return consoleStop({ kind: "data" }, { env: "staging" });
+      },
+      // The demo host's short tour leaves it out (at most ten steps); the Data tip covers it.
+      isAvailable: () => inAppShell() || onDemoFull(),
+    },
     {
       id: "fg-tests",
       title: "The app's tests",
@@ -647,7 +732,7 @@ export const forgeJourney: Journey = {
     },
     {
       id: "fg-configure",
-      title: "Secrets, domains and costs",
+      title: "Secrets, domains and activity",
       description: CONFIGURE_COPY,
       target: "[data-tour='nav-configure']",
       tooltipPosition: "right",

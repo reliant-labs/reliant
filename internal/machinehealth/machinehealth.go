@@ -204,6 +204,14 @@ func (s *Sampler) Sample() (health []any, volumes [][]any) {
 	return health, volumes
 }
 
+// Load5 is the 5-minute load average from procRoot's loadavg ("/proc" on
+// Linux); false when it cannot be read (another platform, a container /proc
+// without it).
+func Load5(procRoot string) (float64, bool) {
+	_, l5, _, ok := readLoadavg(filepath.Join(procRoot, "loadavg"))
+	return l5, ok
+}
+
 // readLoadavg parses /proc/loadavg: "0.52 0.58 0.59 1/1234 5678".
 func readLoadavg(path string) (l1, l5, l15 float64, ok bool) {
 	data, err := os.ReadFile(path)

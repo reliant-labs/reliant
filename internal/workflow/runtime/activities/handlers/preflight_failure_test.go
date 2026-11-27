@@ -70,7 +70,7 @@ func TestPreflight_DatabaseOutageStaysRetryable(t *testing.T) {
 			store := &preflightFailingStore{}
 			rows := &preflightFailingRows{}
 			fail(store, rows)
-			a := NewPreflightDaemonCheckActivity(store, rows, toolexec.NewRemoteExecutor(&waitFakeRouter{}))
+			a := NewPreflightDaemonCheckActivity(store, nil, rows, toolexec.NewRemoteExecutor(&waitFakeRouter{}))
 
 			_, err := a.Execute(context.Background(), PreflightDaemonCheckInput{ChatID: "c1"})
 

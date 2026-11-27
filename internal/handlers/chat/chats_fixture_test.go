@@ -57,6 +57,25 @@ func init() {
 	}
 }
 
+// A fixture that builds a Service without naming Deps.TriggerReads reads a
+// chat's launch event through its own repository: the generated trigger event
+// store over a *db.Repo's ORM, or the repository itself when it answers the
+// read (a hand fixture). A test that needs another answer names the role.
+func init() {
+	fixtureTriggerReads = func(repo Repository, reads TriggerReads) TriggerReads {
+		if mock, ok := reads.(*MockTriggerReads); reads != nil && (!ok || mock.GetTriggerEventByChatIDFunc != nil) {
+			return reads
+		}
+		if client := ormOf(repo); client != nil {
+			return store.NewTriggerEventExtStore(client)
+		}
+		if r, ok := any(repo).(TriggerReads); ok {
+			return r
+		}
+		return &MockTriggerReads{}
+	}
+}
+
 // boundChatReads maps a mock repository to the chat reads its fixture
 // programmed (the role of the old GetChatFunc / GetChatRowFunc on the mock).
 var boundChatReads sync.Map

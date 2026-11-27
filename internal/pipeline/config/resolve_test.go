@@ -121,6 +121,11 @@ func TestResolve(t *testing.T) {
 				t.Errorf("queue = %+v", r.Queue)
 			}
 		}},
+		{"gate allows an unisolated landing only when it says so", "version: 1\ngate: {run: make test, allow_unisolated: true}\n", func(t *testing.T, r Resolved) {
+			if !r.Gate.AllowUnisolated || Defaults().Gate.AllowUnisolated {
+				t.Errorf("allow_unisolated = %v (default %v)", r.Gate.AllowUnisolated, Defaults().Gate.AllowUnisolated)
+			}
+		}},
 		{"explicit zero rerun", base + "queue: {rerun_on_red: 0}\n", func(t *testing.T, r Resolved) {
 			if r.Queue.RerunOnRed != 0 {
 				t.Errorf("rerun_on_red = %d, want the written 0", r.Queue.RerunOnRed)

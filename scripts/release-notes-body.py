@@ -8,17 +8,33 @@ descriptions of one release.
 
 Prints nothing and exits 0 when the file is absent. That is deliberate: a tag
 cut without notes should still get a Release carrying GitHub's auto-generated
-commit list, which is strictly better than no Release at all. The caller
-appends that list via `gh release create --generate-notes`.
+commit list, which is strictly better than no Release at all.
 
-Usage: release-notes-body.py <tag>
+With --generated, it prints the WHOLE Release body: the prose above, then the
+commit list GitHub's generate-notes API returned (release.yml fetches it with
+the previous final tag pinned), capped at --max-bytes. GitHub refuses a body
+over 125000 characters with HTTP 422, and v1.33.0 and v1.34.0 hit it: their
+Releases were never created, which skipped the CLI publish behind them. The
+cap is in bytes, which are never fewer than characters, so a body that fits
+in bytes fits GitHub's limit too. A body over the cap is cut at a line
+boundary and ends with a link to the full comparison (--compare-url).
+
+Usage: release-notes-body.py <tag> [--generated FILE [--compare-url URL] [--max-bytes N]]
 """
 
+import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# GitHub's limit is 125000 characters; stay clear of it.
+MAX_BODY_BYTES = 120000
+# The hand-written prose is a summary. Capped on its own so a runaway YAML can
+# never crowd out the commit list, nor the commit list push the body over.
+MAX_PROSE_BYTES = 30000
 
 
 def load(path):
@@ -89,17 +105,8 @@ def unquote(value):
     return value
 
 
-def main():
-    if len(sys.argv) != 2:
-        print("usage: release-notes-body.py <tag>", file=sys.stderr)
-        return 2
-
-    tag = sys.argv[1]
-    path = REPO_ROOT / "docs" / "data" / "releases" / f"{tag}.yaml"
-    if not path.is_file():
-        # Not an error — see the module docstring.
-        return 0
-
+def render(path):
+    """Render one release YAML to markdown ("" when it has no content)."""
     meta, entries = load(path)
 
     out = []
@@ -129,9 +136,63 @@ def main():
                 out.append(entry["description"])
             out.append("")
 
-    sys.stdout.write("\n".join(out).rstrip() + "\n")
+    text = "\n".join(out).rstrip()
+    return text + "\n" if text else ""
+
+
+def cap(text, max_bytes, footer):
+    """Return text whole when it fits in max_bytes, else cut at a line boundary.
+
+    The cut keeps only whole lines, so no markdown line (or UTF-8 sequence) is
+    split, and appends footer; the result, footer included, is at most
+    max_bytes.
+    """
+    data = text.encode("utf-8")
+    if len(data) <= max_bytes:
+        return text
+    tail = ("\n" + footer.rstrip("\n") + "\n").encode("utf-8")
+    budget = max(0, max_bytes - len(tail))
+    head = data[:budget]
+    cut = head.rfind(b"\n")
+    head = head[: cut + 1] if cut >= 0 else b""
+    return (head + tail).decode("utf-8")
+
+
+def main(argv):
+    parser = argparse.ArgumentParser(prog="release-notes-body.py")
+    parser.add_argument("tag")
+    parser.add_argument("--generated", help="file holding GitHub's generated release notes")
+    parser.add_argument("--compare-url", default="", help="the full comparison, linked when the body is cut")
+    parser.add_argument("--max-bytes", type=int, default=MAX_BODY_BYTES)
+    args = parser.parse_args(argv)
+
+    tag = args.tag
+    repo = os.environ.get("GITHUB_REPOSITORY", "reliant-labs/reliant")
+    path = REPO_ROOT / "docs" / "data" / "releases" / f"{tag}.yaml"
+
+    prose = ""
+    if path.is_file():
+        prose = cap(
+            render(path),
+            MAX_PROSE_BYTES,
+            f"_The rest of these notes is in [docs/data/releases/{tag}.yaml]"
+            f"(https://github.com/{repo}/blob/{tag}/docs/data/releases/{tag}.yaml)._",
+        )
+    # Absent notes are not an error — see the module docstring.
+
+    if args.generated is None:
+        sys.stdout.write(prose)
+        return 0
+
+    generated = Path(args.generated).read_text(encoding="utf-8").strip()
+    body = "\n".join(part.rstrip("\n") + "\n" for part in (prose, generated) if part.strip())
+    if args.compare_url:
+        footer = f"_Truncated to fit GitHub's limit. Every change: {args.compare_url}_"
+    else:
+        footer = "_Truncated to fit GitHub's limit._"
+    sys.stdout.write(cap(body, args.max_bytes, footer))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))

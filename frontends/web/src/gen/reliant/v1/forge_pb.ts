@@ -1500,6 +1500,7 @@ export const ForgeService: GenService<{
   /**
    * GetTopology returns the whole release/environment topology. Set verify to
    * reconcile each environment against its live cluster.
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: rememberForgeProjectName stores the project's forge name (SetProjectForgeName) and refreshForgeApps runs in the background
    *
    * @generated from rpc reliant.v1.ForgeService.GetTopology
    */
@@ -1521,6 +1522,7 @@ export const ForgeService: GenService<{
   /**
    * ListSecrets returns declared/present/inert secrets for an environment.
    * The report carries NAMES and BOOLEANS only, never a secret value.
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.secret_list to the user's machine, resolving secret presence from the provider's metadata; not pinned to a read-only argv in the forge handler test
    *
    * @generated from rpc reliant.v1.ForgeService.ListSecrets
    */
@@ -1531,6 +1533,7 @@ export const ForgeService: GenService<{
   },
   /**
    * GetEnvStatus returns runtime checks for an environment.
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.env_status to run a forge CLI command on the user's machine, whose argv is not pinned read-only
    *
    * @generated from rpc reliant.v1.ForgeService.GetEnvStatus
    */
@@ -1555,6 +1558,7 @@ export const ForgeService: GenService<{
    * records. That identity is what stops a Register from writing a
    * declaration that disagrees with the next build's, on an env whose kind is
    * immutable.
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: calls out: it dispatches forge.env_shape to run a forge CLI command on the user's machine, whose argv is not pinned read-only
    *
    * @generated from rpc reliant.v1.ForgeService.GetEnvShape
    */

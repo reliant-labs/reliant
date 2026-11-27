@@ -44,9 +44,9 @@ type DefaultChannel struct {
 // manualPost is the default channels' instructions for posting by hand.
 const manualPost = "Post by hand, then paste the URL on the item."
 
-// DefaultChannels are what ListChannels and GetChannel seed for an org with
+// defaultChannels are what ListChannels and GetChannel seed for an org with
 // no channel yet (source SEED).
-var DefaultChannels = []DefaultChannel{
+var defaultChannels = []DefaultChannel{
 	{Key: "blog", Name: "Blog", Mode: ChannelManual, ManualInstructionsMD: "Publish via the site repo, then record the URL.", ChannelTypes: []string{"blog", "content"}},
 	{Key: "email", Name: "Email", Mode: ChannelIntegrated, IntegrationKind: GmailIntegration, ChannelTypes: []string{"email", "newsletter"}},
 	{Key: "hacker-news", Name: "Hacker News", Mode: ChannelManual, ManualInstructionsMD: manualPost, ChannelTypes: []string{"forum", "community"}},
@@ -54,6 +54,17 @@ var DefaultChannels = []DefaultChannel{
 	{Key: "linkedin", Name: "LinkedIn", Mode: ChannelManual, ManualInstructionsMD: manualPost, ChannelTypes: []string{"social"}},
 	{Key: "x", Name: "X", Mode: ChannelManual, ManualInstructionsMD: manualPost, ChannelTypes: []string{"social"}},
 	{Key: "youtube", Name: "YouTube", Mode: ChannelManual, ManualInstructionsMD: manualPost, ChannelTypes: []string{"video"}},
+}
+
+// DefaultChannels returns the channels ListChannels and GetChannel seed for
+// an org with no channel yet (source SEED). The result is a copy.
+func DefaultChannels() []DefaultChannel {
+	out := make([]DefaultChannel, len(defaultChannels))
+	for i, d := range defaultChannels {
+		d.ChannelTypes = slices.Clone(d.ChannelTypes)
+		out[i] = d
+	}
+	return out
 }
 
 // ensureChannels seeds the defaults for an org with no channel yet. It is
@@ -64,8 +75,8 @@ func (s *service) ensureChannels(ctx context.Context, orgID string) error {
 		return err
 	}
 	now := s.now()
-	rows := make([]*store.GtmChannel, 0, len(DefaultChannels))
-	for _, d := range DefaultChannels {
+	rows := make([]*store.GtmChannel, 0, len(defaultChannels))
+	for _, d := range defaultChannels {
 		rows = append(rows, seededChannelRow(orgID, d, now))
 	}
 	return s.store.InTx(ctx, func(ctx context.Context) error {

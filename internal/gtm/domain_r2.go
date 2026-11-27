@@ -58,13 +58,39 @@ const (
 	CategoryMarketResearchPositioning StrategyCategory = "GTM_STRATEGY_CATEGORY_MARKET_RESEARCH_POSITIONING"
 )
 
-// LibraryDepth is how much a library entry holds.
-type LibraryDepth string
+// BusinessType is what kind of business an org is (its positioning), and
+// what kinds an idea bank entry fits. The values are the proto enum names;
+// the bank's lowercase slugs map 1:1 (bankBusinessType).
+type BusinessType string
 
-// LibraryDepth values.
+// BusinessType values.
 const (
-	DepthPlay   LibraryDepth = "GTM_LIBRARY_DEPTH_PLAY"
-	DepthTactic LibraryDepth = "GTM_LIBRARY_DEPTH_TACTIC"
+	BusinessB2BSaaS        BusinessType = "GTM_BUSINESS_TYPE_B2B_SAAS"
+	BusinessB2CApp         BusinessType = "GTM_BUSINESS_TYPE_B2C_APP"
+	BusinessDeveloperTools BusinessType = "GTM_BUSINESS_TYPE_DEVELOPER_TOOLS"
+	BusinessEcommerce      BusinessType = "GTM_BUSINESS_TYPE_ECOMMERCE"
+	BusinessMarketplace    BusinessType = "GTM_BUSINESS_TYPE_MARKETPLACE"
+	BusinessAgencyServices BusinessType = "GTM_BUSINESS_TYPE_AGENCY_SERVICES"
+	BusinessCreatorMedia   BusinessType = "GTM_BUSINESS_TYPE_CREATOR_MEDIA"
+	BusinessLocalBusiness  BusinessType = "GTM_BUSINESS_TYPE_LOCAL_BUSINESS"
+	BusinessOpenSource     BusinessType = "GTM_BUSINESS_TYPE_OPEN_SOURCE"
+	BusinessHardware       BusinessType = "GTM_BUSINESS_TYPE_HARDWARE"
+)
+
+// BusinessModel is how an org makes money (its positioning, possibly
+// several), and which models an idea bank entry fits. Proto enum names.
+type BusinessModel string
+
+// BusinessModel values.
+const (
+	ModelSubscription BusinessModel = "GTM_BUSINESS_MODEL_SUBSCRIPTION"
+	ModelUsageBased   BusinessModel = "GTM_BUSINESS_MODEL_USAGE_BASED"
+	ModelOneTime      BusinessModel = "GTM_BUSINESS_MODEL_ONE_TIME"
+	ModelFreemium     BusinessModel = "GTM_BUSINESS_MODEL_FREEMIUM"
+	ModelFreeOSS      BusinessModel = "GTM_BUSINESS_MODEL_FREE_OSS"
+	ModelMarketplace  BusinessModel = "GTM_BUSINESS_MODEL_MARKETPLACE"
+	ModelServices     BusinessModel = "GTM_BUSINESS_MODEL_SERVICES"
+	ModelAdSupported  BusinessModel = "GTM_BUSINESS_MODEL_AD_SUPPORTED"
 )
 
 // ChannelMode is how items go out on a channel.
@@ -247,53 +273,35 @@ type AssetDownload struct {
 	ExpiresAt time.Time
 }
 
-// LibraryStep is one step of a play and who does it.
-type LibraryStep struct {
-	Who   string `json:"who"`
-	Title string `json:"title"`
-}
-
-// LibraryEntry is one play or tactic of an org's strategy library, as the
-// org imported it. Reliant ships none.
+// LibraryEntry is one entry of the embedded idea bank (internal/gtm/library),
+// in domain terms: category, business types and models are the proto enum
+// names. Text fields are markdown; an empty BusinessTypes, BusinessModels
+// or Stages means any. The bank is the same, read-only, for every org.
 type LibraryEntry struct {
-	Key          string
-	Category     StrategyCategory
-	Depth        LibraryDepth
-	Name         string
-	SummaryMD    string
-	Icon         string
-	Stage        string
-	Cost         string
-	CostNote     string
-	Difficulty   string
-	Level        string
-	Objective    string
-	NorthStar    string
-	HypothesisMD string
-	// Hours, SignalDays, WindowDays and LaunchDays are 0 when the entry
-	// does not say.
-	Hours         int32
-	SignalDays    int32
-	WindowDays    int32
-	LaunchDays    int32
-	ExpectedDelta float64
-	Lifecycle     []string
-	ChannelTypes  []string
-	Integrations  []string
-	Fits          []string
-	Prerequisites []string
-	KPIs          []string
-	Tactics       []string
-	Automates     []string
-	Experiments   []string
-	StopWhen      []string
-	Steps         []LibraryStep
-	// Extra is every field of the entry the columns have no place for.
-	Extra map[string]any
-	// Set by the import; ignored on the way in.
-	SourceRevision string
-	ImportedAt     time.Time
-	ImportedBy     string
+	Key            string
+	Category       StrategyCategory
+	Name           string
+	SummaryMD      string
+	WhyItWorksMD   string
+	BusinessTypes  []BusinessType
+	BusinessModels []BusinessModel
+	// Stages are bank stage slugs (library.Stages); Objective, Effort and
+	// Cost are bank slugs too.
+	Stages    []string
+	Objective string
+	Effort    string
+	Cost      string
+	// SignalDays is the days to a first signal; 0 when the entry does not
+	// say.
+	SignalDays int
+	// TailorQuestions are what an agent answers for one business
+	// (Idea.TailorAnswers).
+	TailorQuestions     []string
+	SuggestedWorkflowMD string
+	// ChannelTypes are channel-type slugs, matched against the org's
+	// channels by UseLibraryStrategy.
+	ChannelTypes []string
+	KPIs         []string
 }
 
 // Limits of the r2/r3 surface.
@@ -306,10 +314,6 @@ const (
 	MaxAssetPageSize       = 200
 	DefaultLibraryPageSize = 50
 	MaxLibraryPageSize     = 200
-	// MaxLibraryImport caps one ImportStrategyLibrary batch.
-	MaxLibraryImport = 500
-	// MaxLibraryKeys caps ImportStrategyLibrary's AllKeys.
-	MaxLibraryKeys = 5000
 	// MaxPlannedChannels caps a campaign's planned channels.
 	MaxPlannedChannels = 50
 	// MaxChannels caps an org's channels (they are read unpaged).
@@ -484,17 +488,33 @@ type AttachFromAttachmentInput struct {
 }
 
 // ListStrategyLibraryInput is the input to Service.ListStrategyLibrary.
-// Every "" filter matches anything.
+// Every empty filter matches anything; set ones combine.
 type ListStrategyLibraryInput struct {
-	Category   StrategyCategory
-	Depth      LibraryDepth
-	Stage      string
-	Cost       string
-	Difficulty string
-	// Fit matches entries whose fits include it.
-	Fit string
-	// Query matches name and summary, case-insensitively.
-	Query     string
+	// Categories: the entry's category is one of these. Each list is
+	// capped as the proto caps it (MaxLibraryCategories,
+	// MaxLibraryBusinessTypes, MaxLibraryBusinessModels; past that is
+	// InvalidArgument) and a repeated value counts once.
+	Categories []StrategyCategory
+	// BusinessTypes, BusinessModels: the entry fits any, or one of these.
+	BusinessTypes  []BusinessType
+	BusinessModels []BusinessModel
+	// Stage: the entry fits any stage, or this one. Stage, Objective,
+	// Effort and Cost are bank slugs (library.Stages, ...).
+	Stage     string
+	Objective string
+	Effort    string
+	Cost      string
+	// Query: every term appears in the name or summary, case-insensitively.
+	Query string
+	// FitsMyBusiness keeps the entries that fit the org's positioning
+	// (business_type, business_models; library.Fits): an unset side of the
+	// profile excludes nothing.
+	FitsMyBusiness bool
+	// Diverse returns a spread instead of a page: up to PageSize entries (0
+	// is DefaultLibraryPageSize) round-robin across the matching
+	// categories (library.Diverse). PageToken is ignored and NextPageToken
+	// is empty.
+	Diverse   bool
 	PageSize  int
 	PageToken string
 }
@@ -510,35 +530,6 @@ type GetStrategyLibraryEntryInput struct {
 	Key string
 }
 
-// ImportStrategyLibraryInput is the input to Service.ImportStrategyLibrary.
-type ImportStrategyLibraryInput struct {
-	// Entries: 1 to MaxLibraryImport, each key once.
-	Entries []LibraryEntry
-	// SourceRevision is what they were exported from (a commit SHA).
-	SourceRevision string
-	// Prune removes the org's entries whose key is not in AllKeys.
-	Prune bool
-	// AllKeys is every key of the whole library being imported (at most
-	// MaxLibraryKeys), across all its batches; required with Prune, and
-	// every entry's key must be in it.
-	AllKeys []string
-}
-
-// ImportStrategyLibraryResult counts what an import did.
-type ImportStrategyLibraryResult struct {
-	Created   int
-	Updated   int
-	Unchanged int
-	// Pruned is the entries removed now: a prune by a person-class
-	// credential. A token's prune removes nothing.
-	Pruned int
-	// PruneRequestID is the request a token's prune staged; "" when none
-	// was (no prune, a person-class credential, or nothing to remove).
-	PruneRequestID string
-	// WouldRemove is the keys that request would remove.
-	WouldRemove []string
-}
-
 // UseLibraryStrategyInput is the input to Service.UseLibraryStrategy.
 type UseLibraryStrategyInput struct {
 	LibraryKey          string
@@ -552,122 +543,6 @@ type UseLibraryStrategyResult struct {
 	Strategy Strategy
 	// Campaign is nil when none was asked for.
 	Campaign *Campaign
-}
-
-// CredentialKind is the class of credential a library import came through.
-type CredentialKind string
-
-// CredentialKind values.
-const (
-	// CredentialPerson is a person-class credential: a signed-in session, a
-	// shared key, a browser session.
-	CredentialPerson CredentialKind = "GTM_CREDENTIAL_KIND_PERSON"
-	// CredentialToken is an access token (Actor.ViaToken).
-	CredentialToken CredentialKind = "GTM_CREDENTIAL_KIND_TOKEN"
-)
-
-// PruneRequestStatus is a staged prune's lifecycle.
-type PruneRequestStatus string
-
-// PruneRequestStatus values.
-const (
-	PruneRequestPending   PruneRequestStatus = "GTM_PRUNE_REQUEST_STATUS_PENDING"
-	PruneRequestConfirmed PruneRequestStatus = "GTM_PRUNE_REQUEST_STATUS_CONFIRMED"
-	PruneRequestCancelled PruneRequestStatus = "GTM_PRUNE_REQUEST_STATUS_CANCELLED"
-	// PruneRequestExpired is a request not decided within
-	// LibraryPruneRequestTTL; it can no longer be confirmed.
-	PruneRequestExpired PruneRequestStatus = "GTM_PRUNE_REQUEST_STATUS_EXPIRED"
-)
-
-const (
-	// LibraryPruneRequestTTL is how long a PENDING prune request waits for
-	// a person: from created_at + LibraryPruneRequestTTL on it is EXPIRED.
-	LibraryPruneRequestTTL = 7 * 24 * time.Hour
-
-	DefaultLibraryImportPageSize = 50
-	MaxLibraryImportPageSize     = 200
-)
-
-// LibraryImport is one ImportStrategyLibrary call, for the audit history.
-type LibraryImport struct {
-	ID string
-	// ActorUserID is the user it acted as.
-	ActorUserID    string
-	CredentialKind CredentialKind
-	SourceRevision string
-	Created        int
-	Updated        int
-	Unchanged      int
-	Pruned         int
-	// PruneRequestID is the prune request it staged, if any.
-	PruneRequestID string
-	CreatedAt      time.Time
-}
-
-// LibraryPruneRequest is a prune an import over a token staged: the keys
-// it would remove, waiting for a person.
-type LibraryPruneRequest struct {
-	ID string
-	// RequestedBy is the user the staging import acted as.
-	RequestedBy    string
-	CredentialKind CredentialKind
-	SourceRevision string
-	RemoveKeys     []string
-	// Status is EXPIRED for a PENDING request past ExpiresAt, whatever the
-	// row says.
-	Status PruneRequestStatus
-	// DecidedBy and DecidedAt are who confirmed or cancelled it, and when.
-	DecidedBy string
-	DecidedAt time.Time
-	CreatedAt time.Time
-	ExpiresAt time.Time
-}
-
-// ListLibraryImportsInput is the input to Service.ListLibraryImports.
-type ListLibraryImportsInput struct {
-	PageSize  int
-	PageToken string
-}
-
-// ListLibraryImportsResult is the result of Service.ListLibraryImports.
-type ListLibraryImportsResult struct {
-	Imports       []LibraryImport
-	NextPageToken string
-}
-
-// ListLibraryPruneRequestsInput is the input to
-// Service.ListLibraryPruneRequests. Status "" matches any; PENDING and
-// EXPIRED match as answered (a PENDING row past its TTL is EXPIRED).
-type ListLibraryPruneRequestsInput struct {
-	Status    PruneRequestStatus
-	PageSize  int
-	PageToken string
-}
-
-// ListLibraryPruneRequestsResult is the result of
-// Service.ListLibraryPruneRequests.
-type ListLibraryPruneRequestsResult struct {
-	Requests      []LibraryPruneRequest
-	NextPageToken string
-}
-
-// ConfirmLibraryPruneInput is the input to Service.ConfirmLibraryPrune.
-type ConfirmLibraryPruneInput struct {
-	RequestID string
-}
-
-// ConfirmLibraryPruneResult is the result of Service.ConfirmLibraryPrune.
-type ConfirmLibraryPruneResult struct {
-	// Removed is the entries removed: the request's keys still present and
-	// not imported again since it was made.
-	Removed int
-	// Request is the request, now CONFIRMED.
-	Request LibraryPruneRequest
-}
-
-// CancelLibraryPruneInput is the input to Service.CancelLibraryPrune.
-type CancelLibraryPruneInput struct {
-	RequestID string
 }
 
 // Store filters for the r2/r3 tables (see IdeaFilter).
@@ -695,22 +570,6 @@ type AssetFilter struct {
 	CampaignID string
 	Limit      int
 	Offset     int
-}
-
-// LibraryFilter selects library entries for Store.ListLibrary.
-type LibraryFilter struct {
-	OrgID      string
-	Category   StrategyCategory
-	Depth      LibraryDepth
-	Stage      string
-	Cost       string
-	Difficulty string
-	Fit        string
-	Query      string
-	// Keys, when non-nil, selects exactly these keys.
-	Keys   []string
-	Limit  int
-	Offset int
 }
 
 // Asset storage (PR-13 implements AssetStore over pkg/blobstore).
@@ -747,23 +606,4 @@ type AttachmentFile struct {
 	ContentType string
 	// Size is the attachment's size in bytes, as the attachment store has it.
 	Size int64
-}
-
-// LibraryImportFilter selects audit rows for Store.ListLibraryImports.
-type LibraryImportFilter struct {
-	OrgID  string
-	Limit  int
-	Offset int
-}
-
-// PruneRequestFilter selects prune requests for Store.ListPruneRequests.
-// Status "" matches any. PENDING matches PENDING rows created after
-// ExpiredAtOrBefore; EXPIRED matches EXPIRED rows and PENDING ones created
-// at or before it.
-type PruneRequestFilter struct {
-	OrgID             string
-	Status            PruneRequestStatus
-	ExpiredAtOrBefore time.Time
-	Limit             int
-	Offset            int
 }

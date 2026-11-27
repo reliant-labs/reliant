@@ -52,6 +52,34 @@ func TestLockService_OneHolderAtATime(t *testing.T) {
 	release2()
 }
 
+// A named lock is one per name: a second holder of the same name is refused,
+// another name is its own lock.
+func TestLockService_NamedLocks(t *testing.T) {
+	t.Parallel()
+
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+	first := newLocker(t, repo.SessionPool())
+	second := newLocker(t, repo.SessionPool())
+
+	release, ok, err := first.TryLockNamed(ctx, "test:one")
+	require.NoError(t, err)
+	require.True(t, ok)
+	_, ok, err = second.TryLockNamed(ctx, "test:one")
+	require.NoError(t, err)
+	assert.False(t, ok, "a held name is not taken twice")
+	other, ok, err := second.TryLockNamed(ctx, "test:two")
+	require.NoError(t, err)
+	assert.True(t, ok, "another name is another lock")
+	other()
+	release()
+	again, ok, err := second.TryLockNamed(ctx, "test:one")
+	require.NoError(t, err)
+	require.True(t, ok, "a released name is taken again")
+	again()
+}
+
 // A lock that was not taken returns a release that is safe to call, so a
 // caller can defer it unconditionally.
 func TestLockService_ReleaseOfAnUntakenLockIsANoOp(t *testing.T) {

@@ -21,7 +21,7 @@ const { parseArgs, packCommand, missingPrerequisites, main, PLATFORMS } = requir
 
 test('each platform runs the electron-builder command its release job ran', () => {
   for (const publish of ['always', 'never']) {
-    for (const config of ['electron-builder.js', 'electron-builder.alpha.js']) {
+    for (const config of ['electron-builder.js', 'electron-builder.dev.js']) {
       for (const platform of ['mac', 'linux']) {
         assert.deepEqual(packCommand(parseArgs([platform, config, publish])), {
           command: 'npx',
