@@ -19,9 +19,10 @@ import { logger } from "../lib/logger";
 import { streamPageEnvironment } from "../lib/pageActivity";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import { TRANSCRIPT_TOOL_BODIES } from "../lib/toolBodies";
-import { markChatOpen, noteChatOpenSync } from "../lib/chatOpenInteraction";
+import { markChatOpen, noteChatOpenSync, recordingChatOpen } from "../lib/chatOpenInteraction";
 import { StreamingService } from "../gen/reliant/v1/streaming_pb";
 import type { ChatStreamCallbacks } from "../types/streaming";
+import { chatStreamDeliveryProbe } from "./chatStreamDeliveryProbe";
 
 /**
  * The streaming client, with each StreamChatUpdates request marking its
@@ -36,7 +37,8 @@ function markingStreamRequests(client: StreamingClient): StreamingClient {
     streamChatUpdates: (request, options) => {
       const chatId = request.chatId ?? "";
       const sinceSequence = Number(request.sinceSeq ?? 0n);
-      return client.streamChatUpdates(request, {
+      const probe = chatStreamDeliveryProbe(recordingChatOpen(chatId), options?.signal);
+      const stream = client.streamChatUpdates(request, {
         ...options,
         contextValues: withRequestSent(options?.contextValues, () => {
           markChatOpen(chatId, "stream_requested", { since_sequence: sinceSequence });
@@ -44,7 +46,14 @@ function markingStreamRequests(client: StreamingClient): StreamingClient {
             tabSwitchProfiler.mark("grpc-stream-request-sent", { chatId });
           }
         }),
+        ...(probe && {
+          onHeader: (headers: Headers) => {
+            probe.onHeader(headers);
+            options?.onHeader?.(headers);
+          },
+        }),
       });
+      return probe ? probe.observe(stream) : stream;
     },
   };
 }
