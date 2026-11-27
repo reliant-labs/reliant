@@ -23,12 +23,20 @@ import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Tag from "@/components/forge-ui/tag";
 import Textarea from "@/components/forge-ui/textarea";
-import { GtmClaimCategory, GtmClaimSourceKind, GtmClaimStatus, type GtmClaim, type GtmPositioning } from "@/gen/reliant/v1/gtm_pb";
+import {
+  GtmBusinessModel,
+  GtmBusinessType,
+  GtmClaimCategory,
+  GtmClaimSourceKind,
+  GtmClaimStatus,
+  type GtmClaim,
+  type GtmPositioning,
+} from "@/gen/reliant/v1/gtm_pb";
 import { useGetPositioning, useListClaims, useUpdatePositioning, useUpsertClaim } from "@/hooks/gtm-service-hooks_gen";
 
 import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
 import { PersonActionButton, PersonActionDialog } from "../shared/PersonAction";
-import { ClaimStatusBadge, formatDay, OutboundLink } from "../shared/ui";
+import { BUSINESS_MODELS, BUSINESS_TYPES, businessModelLabel, businessTypeLabel, ClaimStatusBadge, formatDay, OutboundLink } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
 
 /** The most facts the table lists; the list's own page limit (ListClaimsRequest.page_size). */
@@ -164,17 +172,30 @@ export function PositioningView() {
   );
 }
 
-/** The positioning, read or edited. None yet is revision 0: the first save creates it. */
+const SELECT =
+  "h-9 w-full rounded-md border border-border-strong bg-surface px-2.5 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-72";
+
+/**
+ * The positioning, read or edited: the statement, the audiences, and the
+ * business profile (what kind of business, how it makes money), which the
+ * strategy library's "Fits my business" reads. None yet is revision 0: the
+ * first save creates it. A save sends the whole record.
+ */
 function PositioningCard({ positioning }: { positioning: GtmPositioning | undefined }) {
   const orgId = useGtmOrgId();
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(positioning?.positioningMd ?? "");
   const [audiences, setAudiences] = useState((positioning?.audiences ?? []).join(", "));
+  const [businessType, setBusinessType] = useState<GtmBusinessType>(positioning?.businessType ?? GtmBusinessType.UNSPECIFIED);
+  const [models, setModels] = useState<GtmBusinessModel[]>(positioning?.businessModels ?? []);
+  const toggleModel = (m: GtmBusinessModel) => setModels((cur) => (cur.includes(m) ? cur.filter((x) => x !== m) : [...cur, m]));
   const onError = useGtmWriteError();
   const update = useUpdatePositioning({ onSuccess: () => setEditing(false), onError });
   const reset = () => {
     setText(positioning?.positioningMd ?? "");
     setAudiences((positioning?.audiences ?? []).join(", "));
+    setBusinessType(positioning?.businessType ?? GtmBusinessType.UNSPECIFIED);
+    setModels(positioning?.businessModels ?? []);
     setEditing(false);
   };
   const save = () =>
@@ -186,6 +207,9 @@ function PositioningCard({ positioning }: { positioning: GtmPositioning | undefi
         .split(",")
         .map((a) => a.trim())
         .filter(Boolean),
+      businessType,
+      // In the proto's order, each once.
+      businessModels: BUSINESS_MODELS.map((m) => m.id).filter((m) => models.includes(m)),
     });
   const statement = positioning?.positioningMd.trim() ?? "";
 
@@ -219,6 +243,28 @@ function PositioningCard({ positioning }: { positioning: GtmPositioning | undefi
               Audiences <span className="font-normal text-ink-muted">(comma-separated)</span>
             </label>
             <Input id="gtm-audiences" value={audiences} onChange={(e) => setAudiences(e.target.value)} />
+            <label className="block space-y-1.5 text-sm" htmlFor="gtm-business-type">
+              <span className="block font-medium text-ink">Business type</span>
+              <select id="gtm-business-type" className={SELECT} value={businessType} onChange={(e) => setBusinessType(Number(e.target.value) as GtmBusinessType)}>
+                <option value={GtmBusinessType.UNSPECIFIED}>Not set</option>
+                {BUSINESS_TYPES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <fieldset className="space-y-1.5 text-sm">
+              <legend className="font-medium text-ink">Business models</legend>
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                {BUSINESS_MODELS.map((m) => (
+                  <label key={m.id} className="inline-flex items-center gap-2 text-ink">
+                    <input type="checkbox" className="size-4 accent-ink" checked={models.includes(m.id)} onChange={() => toggleModel(m.id)} />
+                    {m.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
           </div>
         ) : (
           <>
@@ -233,6 +279,7 @@ function PositioningCard({ positioning }: { positioning: GtmPositioning | undefi
             ) : (
               <p className="text-sm text-ink-muted">No positioning yet. Write what every draft should start from.</p>
             )}
+            <BusinessProfile positioning={positioning} />
             {(positioning?.audiences.length ?? 0) > 0 && (
               <div className="mt-4 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-ink-muted">Audiences</span>
@@ -293,5 +340,21 @@ function VerifyDialog({ claim, onClose }: { claim: GtmClaim; onClose: () => void
         </div>
       </div>
     </PersonActionDialog>
+  );
+}
+
+/** The business profile, read: what the strategy library's "Fits my business" goes by. */
+function BusinessProfile({ positioning }: { positioning: GtmPositioning | undefined }) {
+  const type = positioning?.businessType ?? GtmBusinessType.UNSPECIFIED;
+  const models = positioning?.businessModels ?? [];
+  return (
+    <dl className="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[8rem_minmax(0,1fr)]" data-testid="gtm-business-profile">
+      <dt className="text-ink-muted">Business type</dt>
+      <dd className="text-ink">{type === GtmBusinessType.UNSPECIFIED ? <span className="text-ink-muted">Not set</span> : businessTypeLabel(type)}</dd>
+      <dt className="text-ink-muted">Business models</dt>
+      <dd className="flex flex-wrap gap-1.5 text-ink">
+        {models.length === 0 ? <span className="text-ink-muted">Not set</span> : models.map((m) => <Tag key={m}>{businessModelLabel(m)}</Tag>)}
+      </dd>
+    </dl>
   );
 }
