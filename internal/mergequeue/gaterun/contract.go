@@ -37,6 +37,12 @@ type GateRequest struct {
 	// A ref that no longer points at the sha is unproven.
 	CandidateRef string
 	CandidateSHA string
+	// BaseSHA is the batch's base, the main commit the candidate is built
+	// on (queue_batches.base_sha). The member fetches it beside the
+	// candidate and the gate's environment names it (GATE_BASE, CI_BASE),
+	// so affected-only lanes diff against it. "" fetches the candidate
+	// alone.
+	BaseSHA string
 	// Gate is the repository's resolved gate (pipeline.yaml from the base
 	// branch): its stages, and the pool, timeout, env and infra patterns
 	// the gate also needs.

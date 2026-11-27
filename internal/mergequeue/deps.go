@@ -94,7 +94,10 @@ type GateRequest struct {
 	Attempt      int
 	CandidateRef string
 	CandidateSHA string
-	Gate         config.ResolvedGate
+	// BaseSHA is the batch's base (queue_batches.base_sha): what the gate
+	// diffs the candidate against. "" for a gate of main's own tip.
+	BaseSHA string
+	Gate    config.ResolvedGate
 	// Shadow marks a gate whose batch never lands.
 	Shadow bool
 	// AvoidMachines are members that already left this batch unproven: a

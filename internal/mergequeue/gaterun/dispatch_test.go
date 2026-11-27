@@ -227,17 +227,60 @@ func TestDispatchRefusesWithoutAnIsolatedMachine(t *testing.T) {
 	if g.Isolation != IsolationRunc || g.Class != ClassPass || g.Landable() {
 		t.Fatalf("shadow gate on runc: %+v", g)
 	}
+	if last := runc.specs[len(runc.specs)-1]; last.CacheVolume != "" {
+		t.Fatalf("a shadow gate of a repository that did not opt in got the warm cache %q", last.CacheVolume)
+	}
 
 	// A repository that is on and opted in to unisolated gates runs on
 	// runc too; marking the batch unisolated_accepted is the caller's.
 	opted := gateRequest()
 	opted.AllowUnisolated = true
+	opted.Attempt = 2 // a new gate id: the member answers gate-b1-1 from its result
 	g, err = newDispatcher(pools, daemons, repoOn).Dispatch(context.Background(), opted)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if g.Isolation != IsolationRunc || g.Class != ClassPass {
 		t.Fatalf("opted-in gate on runc: %+v", g)
+	}
+	// The opt-in is also the warm cache's: the gate gets the repository's
+	// cache volume.
+	if last := runc.specs[len(runc.specs)-1]; last.CacheVolume != CacheVolumeName("acme/widgets") {
+		t.Fatalf("an opted-in gate's cache volume is %q, want %q", last.CacheVolume, CacheVolumeName("acme/widgets"))
+	}
+}
+
+func TestStartRequestCarriesTheWarmCacheOptInAndTheBase(t *testing.T) {
+	repo, _ := repoOn.GateRepo(context.Background(), "r1")
+	shadowRepo, _ := fakeRepos(core.PipelineRepoModeShadow).GateRepo(context.Background(), "r1")
+	base := strings.Repeat("b", 40)
+	for _, tc := range []struct {
+		name       string
+		repo       GateRepo
+		shadow     bool
+		unisolated bool
+		wantRunc   bool
+		wantWarm   bool
+	}{
+		{name: "on, no opt-in", repo: repo},
+		{name: "shadow gate of a shadow repository", repo: shadowRepo, shadow: true, wantRunc: true},
+		{name: "on, opted in", repo: repo, unisolated: true, wantRunc: true, wantWarm: true},
+		{name: "shadow, opted in", repo: shadowRepo, shadow: true, unisolated: true, wantRunc: true, wantWarm: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := gateRequest()
+			req.Shadow, req.AllowUnisolated, req.BaseSHA = tc.shadow, tc.unisolated, base
+			s, err := startRequest(tc.repo, req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.AllowNotIsolated != tc.wantRunc || s.WarmCache != tc.wantWarm {
+				t.Fatalf("AllowNotIsolated=%v WarmCache=%v, want %v %v", s.AllowNotIsolated, s.WarmCache, tc.wantRunc, tc.wantWarm)
+			}
+			if s.BaseSHA != base {
+				t.Fatalf("base %q, want the batch's %q", s.BaseSHA, base)
+			}
+		})
 	}
 }
 

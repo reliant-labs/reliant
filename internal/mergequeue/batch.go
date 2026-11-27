@@ -189,7 +189,7 @@ func (r *round) gate(ctx context.Context, b *built, attempt int, avoid []string,
 	req := GateRequest{
 		RepoID: r.repo.ID, BatchID: b.batch.ID, Attempt: attempt,
 		CandidateRef: strings.TrimPrefix(b.batch.CandidateRef, "refs/heads/"), CandidateSHA: b.batch.CandidateSHA,
-		Gate: r.cfg.Gate, Shadow: r.shadow, AvoidMachines: avoid,
+		BaseSHA: b.batch.BaseSHA, Gate: r.cfg.Gate, Shadow: r.shadow, AvoidMachines: avoid,
 	}
 	res, err := r.s.deps.Gate.Run(ctx, req)
 	if err != nil {
