@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=fa7ed250e6b363f66326e15a809bd04677dabcb11348803ed9e6c012f7460ca6
+// forge:hash=7b95bfcff305c188752385d1b96b94b0a92d658a9247d7a0dd7b5e7593aa4c44
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	SetOrgAccountAccessFunc               func(context.Context, string, string, string) (core.ProviderAccount, error)
@@ -237,6 +238,468 @@ func (m *MockService) ReleaseOrgSeat(ctx context.Context, orgID string, accountI
 		return m.ReleaseOrgSeatFunc(ctx, orgID, accountID, releasedBy)
 	}
 	return contractkit.MockNotSet("MockService", "ReleaseOrgSeat")
+}
+
+// MockServiceSetOrgAccountAccessCall is one recorded call of MockService.SetOrgAccountAccess, one
+// field per parameter.
+type MockServiceSetOrgAccountAccessCall struct {
+	Ctx       context.Context
+	OrgID     string
+	AccountID string
+	Access    string
+}
+
+// SetOrgAccountAccessCalls returns every recorded SetOrgAccountAccess call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetOrgAccountAccess").
+func (m *MockService) SetOrgAccountAccessCalls() []MockServiceSetOrgAccountAccessCall {
+	var out []MockServiceSetOrgAccountAccessCall
+	for _, c := range m.Recorder.Calls("SetOrgAccountAccess") {
+		var r MockServiceSetOrgAccountAccessCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		r.Access, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListOrgAccountGrantsCall is one recorded call of MockService.ListOrgAccountGrants, one
+// field per parameter.
+type MockServiceListOrgAccountGrantsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgAccountGrantsCalls returns every recorded ListOrgAccountGrants call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgAccountGrants").
+func (m *MockService) ListOrgAccountGrantsCalls() []MockServiceListOrgAccountGrantsCall {
+	var out []MockServiceListOrgAccountGrantsCall
+	for _, c := range m.Recorder.Calls("ListOrgAccountGrants") {
+		var r MockServiceListOrgAccountGrantsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListOrgProviderWorkspacesCall is one recorded call of MockService.ListOrgProviderWorkspaces, one
+// field per parameter.
+type MockServiceListOrgProviderWorkspacesCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgProviderWorkspacesCalls returns every recorded ListOrgProviderWorkspaces call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgProviderWorkspaces").
+func (m *MockService) ListOrgProviderWorkspacesCalls() []MockServiceListOrgProviderWorkspacesCall {
+	var out []MockServiceListOrgProviderWorkspacesCall
+	for _, c := range m.Recorder.Calls("ListOrgProviderWorkspaces") {
+		var r MockServiceListOrgProviderWorkspacesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListOrgSeatsCall is one recorded call of MockService.ListOrgSeats, one
+// field per parameter.
+type MockServiceListOrgSeatsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgSeatsCalls returns every recorded ListOrgSeats call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgSeats").
+func (m *MockService) ListOrgSeatsCalls() []MockServiceListOrgSeatsCall {
+	var out []MockServiceListOrgSeatsCall
+	for _, c := range m.Recorder.Calls("ListOrgSeats") {
+		var r MockServiceListOrgSeatsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceProviderWorkspaceBindingCall is one recorded call of MockService.ProviderWorkspaceBinding, one
+// field per parameter.
+type MockServiceProviderWorkspaceBindingCall struct {
+	Ctx           context.Context
+	Provider      string
+	ExternalOrgID string
+}
+
+// ProviderWorkspaceBindingCalls returns every recorded ProviderWorkspaceBinding call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ProviderWorkspaceBinding").
+func (m *MockService) ProviderWorkspaceBindingCalls() []MockServiceProviderWorkspaceBindingCall {
+	var out []MockServiceProviderWorkspaceBindingCall
+	for _, c := range m.Recorder.Calls("ProviderWorkspaceBinding") {
+		var r MockServiceProviderWorkspaceBindingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Provider, _ = c.Args[1].(string)
+		r.ExternalOrgID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListWorkspaceSignInsCall is one recorded call of MockService.ListWorkspaceSignIns, one
+// field per parameter.
+type MockServiceListWorkspaceSignInsCall struct {
+	Ctx           context.Context
+	Provider      string
+	ExternalOrgID string
+}
+
+// ListWorkspaceSignInsCalls returns every recorded ListWorkspaceSignIns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorkspaceSignIns").
+func (m *MockService) ListWorkspaceSignInsCalls() []MockServiceListWorkspaceSignInsCall {
+	var out []MockServiceListWorkspaceSignInsCall
+	for _, c := range m.Recorder.Calls("ListWorkspaceSignIns") {
+		var r MockServiceListWorkspaceSignInsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Provider, _ = c.Args[1].(string)
+		r.ExternalOrgID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceHasRejectedOrgKeysCall is one recorded call of MockService.HasRejectedOrgKeys, one
+// field per parameter.
+type MockServiceHasRejectedOrgKeysCall struct {
+	Ctx context.Context
+}
+
+// HasRejectedOrgKeysCalls returns every recorded HasRejectedOrgKeys call, oldest first, with
+// its arguments typed. It reads the same log as Calls("HasRejectedOrgKeys").
+func (m *MockService) HasRejectedOrgKeysCalls() []MockServiceHasRejectedOrgKeysCall {
+	var out []MockServiceHasRejectedOrgKeysCall
+	for _, c := range m.Recorder.Calls("HasRejectedOrgKeys") {
+		var r MockServiceHasRejectedOrgKeysCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListRejectedOrgKeysInCall is one recorded call of MockService.ListRejectedOrgKeysIn, one
+// field per parameter.
+type MockServiceListRejectedOrgKeysInCall struct {
+	Ctx    context.Context
+	OrgIDs []string
+}
+
+// ListRejectedOrgKeysInCalls returns every recorded ListRejectedOrgKeysIn call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListRejectedOrgKeysIn").
+func (m *MockService) ListRejectedOrgKeysInCalls() []MockServiceListRejectedOrgKeysInCall {
+	var out []MockServiceListRejectedOrgKeysInCall
+	for _, c := range m.Recorder.Calls("ListRejectedOrgKeysIn") {
+		var r MockServiceListRejectedOrgKeysInCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgIDs, _ = c.Args[1].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceClaimDueOrgKeyNoticesCall is one recorded call of MockService.ClaimDueOrgKeyNotices, one
+// field per parameter.
+type MockServiceClaimDueOrgKeyNoticesCall struct {
+	Ctx   context.Context
+	Limit int
+	Lease time.Duration
+}
+
+// ClaimDueOrgKeyNoticesCalls returns every recorded ClaimDueOrgKeyNotices call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimDueOrgKeyNotices").
+func (m *MockService) ClaimDueOrgKeyNoticesCalls() []MockServiceClaimDueOrgKeyNoticesCall {
+	var out []MockServiceClaimDueOrgKeyNoticesCall
+	for _, c := range m.Recorder.Calls("ClaimDueOrgKeyNotices") {
+		var r MockServiceClaimDueOrgKeyNoticesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Limit, _ = c.Args[1].(int)
+		r.Lease, _ = c.Args[2].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceConfirmOrgKeyNoticeCall is one recorded call of MockService.ConfirmOrgKeyNotice, one
+// field per parameter.
+type MockServiceConfirmOrgKeyNoticeCall struct {
+	Ctx       context.Context
+	OrgID     string
+	AccountID string
+	MarkedAt  time.Time
+}
+
+// ConfirmOrgKeyNoticeCalls returns every recorded ConfirmOrgKeyNotice call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ConfirmOrgKeyNotice").
+func (m *MockService) ConfirmOrgKeyNoticeCalls() []MockServiceConfirmOrgKeyNoticeCall {
+	var out []MockServiceConfirmOrgKeyNoticeCall
+	for _, c := range m.Recorder.Calls("ConfirmOrgKeyNotice") {
+		var r MockServiceConfirmOrgKeyNoticeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		r.MarkedAt, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListProviderAccountGrantMembersCall is one recorded call of MockService.ListProviderAccountGrantMembers, one
+// field per parameter.
+type MockServiceListProviderAccountGrantMembersCall struct {
+	Ctx   context.Context
+	After core.GrantMember
+	Limit int
+}
+
+// ListProviderAccountGrantMembersCalls returns every recorded ListProviderAccountGrantMembers call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListProviderAccountGrantMembers").
+func (m *MockService) ListProviderAccountGrantMembersCalls() []MockServiceListProviderAccountGrantMembersCall {
+	var out []MockServiceListProviderAccountGrantMembersCall
+	for _, c := range m.Recorder.Calls("ListProviderAccountGrantMembers") {
+		var r MockServiceListProviderAccountGrantMembersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.After, _ = c.Args[1].(core.GrantMember)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceDeleteProviderAccountGrantsBeforeCall is one recorded call of MockService.DeleteProviderAccountGrantsBefore, one
+// field per parameter.
+type MockServiceDeleteProviderAccountGrantsBeforeCall struct {
+	Ctx    context.Context
+	OrgID  string
+	UserID string
+	Before time.Time
+}
+
+// DeleteProviderAccountGrantsBeforeCalls returns every recorded DeleteProviderAccountGrantsBefore call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteProviderAccountGrantsBefore").
+func (m *MockService) DeleteProviderAccountGrantsBeforeCalls() []MockServiceDeleteProviderAccountGrantsBeforeCall {
+	var out []MockServiceDeleteProviderAccountGrantsBeforeCall
+	for _, c := range m.Recorder.Calls("DeleteProviderAccountGrantsBefore") {
+		var r MockServiceDeleteProviderAccountGrantsBeforeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		r.Before, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListOrgCredentialHoldersCall is one recorded call of MockService.ListOrgCredentialHolders, one
+// field per parameter.
+type MockServiceListOrgCredentialHoldersCall struct {
+	Ctx   context.Context
+	After string
+	Limit int
+}
+
+// ListOrgCredentialHoldersCalls returns every recorded ListOrgCredentialHolders call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgCredentialHolders").
+func (m *MockService) ListOrgCredentialHoldersCalls() []MockServiceListOrgCredentialHoldersCall {
+	var out []MockServiceListOrgCredentialHoldersCall
+	for _, c := range m.Recorder.Calls("ListOrgCredentialHolders") {
+		var r MockServiceListOrgCredentialHoldersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.After, _ = c.Args[1].(string)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePurgeOrgCredentialsCall is one recorded call of MockService.PurgeOrgCredentials, one
+// field per parameter.
+type MockServicePurgeOrgCredentialsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// PurgeOrgCredentialsCalls returns every recorded PurgeOrgCredentials call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PurgeOrgCredentials").
+func (m *MockService) PurgeOrgCredentialsCalls() []MockServicePurgeOrgCredentialsCall {
+	var out []MockServicePurgeOrgCredentialsCall
+	for _, c := range m.Recorder.Calls("PurgeOrgCredentials") {
+		var r MockServicePurgeOrgCredentialsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRotateOrgAPIKeyCall is one recorded call of MockService.RotateOrgAPIKey, one
+// field per parameter.
+type MockServiceRotateOrgAPIKeyCall struct {
+	Ctx       context.Context
+	OrgID     string
+	AccountID string
+	K         core.OrgAPIKey
+}
+
+// RotateOrgAPIKeyCalls returns every recorded RotateOrgAPIKey call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RotateOrgAPIKey").
+func (m *MockService) RotateOrgAPIKeyCalls() []MockServiceRotateOrgAPIKeyCall {
+	var out []MockServiceRotateOrgAPIKeyCall
+	for _, c := range m.Recorder.Calls("RotateOrgAPIKey") {
+		var r MockServiceRotateOrgAPIKeyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		r.K, _ = c.Args[3].(core.OrgAPIKey)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetOrgAccountGrantsCall is one recorded call of MockService.SetOrgAccountGrants, one
+// field per parameter.
+type MockServiceSetOrgAccountGrantsCall struct {
+	Ctx       context.Context
+	OrgID     string
+	AccountID string
+	UserIDs   []string
+	GrantedBy string
+}
+
+// SetOrgAccountGrantsCalls returns every recorded SetOrgAccountGrants call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetOrgAccountGrants").
+func (m *MockService) SetOrgAccountGrantsCalls() []MockServiceSetOrgAccountGrantsCall {
+	var out []MockServiceSetOrgAccountGrantsCall
+	for _, c := range m.Recorder.Calls("SetOrgAccountGrants") {
+		var r MockServiceSetOrgAccountGrantsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		r.UserIDs, _ = c.Args[3].([]string)
+		r.GrantedBy, _ = c.Args[4].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceBindOrgProviderWorkspaceCall is one recorded call of MockService.BindOrgProviderWorkspace, one
+// field per parameter.
+type MockServiceBindOrgProviderWorkspaceCall struct {
+	Ctx context.Context
+	W   core.OrgProviderWorkspace
+}
+
+// BindOrgProviderWorkspaceCalls returns every recorded BindOrgProviderWorkspace call, oldest first, with
+// its arguments typed. It reads the same log as Calls("BindOrgProviderWorkspace").
+func (m *MockService) BindOrgProviderWorkspaceCalls() []MockServiceBindOrgProviderWorkspaceCall {
+	var out []MockServiceBindOrgProviderWorkspaceCall
+	for _, c := range m.Recorder.Calls("BindOrgProviderWorkspace") {
+		var r MockServiceBindOrgProviderWorkspaceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.W, _ = c.Args[1].(core.OrgProviderWorkspace)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUnbindOrgProviderWorkspaceCall is one recorded call of MockService.UnbindOrgProviderWorkspace, one
+// field per parameter.
+type MockServiceUnbindOrgProviderWorkspaceCall struct {
+	Ctx           context.Context
+	OrgID         string
+	Provider      string
+	ExternalOrgID string
+}
+
+// UnbindOrgProviderWorkspaceCalls returns every recorded UnbindOrgProviderWorkspace call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UnbindOrgProviderWorkspace").
+func (m *MockService) UnbindOrgProviderWorkspaceCalls() []MockServiceUnbindOrgProviderWorkspaceCall {
+	var out []MockServiceUnbindOrgProviderWorkspaceCall
+	for _, c := range m.Recorder.Calls("UnbindOrgProviderWorkspace") {
+		var r MockServiceUnbindOrgProviderWorkspaceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.Provider, _ = c.Args[2].(string)
+		r.ExternalOrgID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceAttributeWorkspaceSeatCall is one recorded call of MockService.AttributeWorkspaceSeat, one
+// field per parameter.
+type MockServiceAttributeWorkspaceSeatCall struct {
+	Ctx       context.Context
+	W         core.OrgProviderWorkspace
+	AccountID string
+}
+
+// AttributeWorkspaceSeatCalls returns every recorded AttributeWorkspaceSeat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AttributeWorkspaceSeat").
+func (m *MockService) AttributeWorkspaceSeatCalls() []MockServiceAttributeWorkspaceSeatCall {
+	var out []MockServiceAttributeWorkspaceSeatCall
+	for _, c := range m.Recorder.Calls("AttributeWorkspaceSeat") {
+		var r MockServiceAttributeWorkspaceSeatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.W, _ = c.Args[1].(core.OrgProviderWorkspace)
+		r.AccountID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceClearWorkspaceSeatCall is one recorded call of MockService.ClearWorkspaceSeat, one
+// field per parameter.
+type MockServiceClearWorkspaceSeatCall struct {
+	Ctx       context.Context
+	OrgID     string
+	AccountID string
+}
+
+// ClearWorkspaceSeatCalls returns every recorded ClearWorkspaceSeat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClearWorkspaceSeat").
+func (m *MockService) ClearWorkspaceSeatCalls() []MockServiceClearWorkspaceSeatCall {
+	var out []MockServiceClearWorkspaceSeatCall
+	for _, c := range m.Recorder.Calls("ClearWorkspaceSeat") {
+		var r MockServiceClearWorkspaceSeatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceReleaseOrgSeatCall is one recorded call of MockService.ReleaseOrgSeat, one
+// field per parameter.
+type MockServiceReleaseOrgSeatCall struct {
+	Ctx        context.Context
+	OrgID      string
+	AccountID  string
+	ReleasedBy string
+}
+
+// ReleaseOrgSeatCalls returns every recorded ReleaseOrgSeat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseOrgSeat").
+func (m *MockService) ReleaseOrgSeatCalls() []MockServiceReleaseOrgSeatCall {
+	var out []MockServiceReleaseOrgSeatCall
+	for _, c := range m.Recorder.Calls("ReleaseOrgSeat") {
+		var r MockServiceReleaseOrgSeatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		r.ReleasedBy, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

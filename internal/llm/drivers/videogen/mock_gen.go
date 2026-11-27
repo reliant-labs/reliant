@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockClient
-// forge:hash=c678f8bce0da573770270d208ddefd7dcad6ab48981a8cbc40b667ce797fefb2
+// forge:hash=7d54727ae82ca191886b28f767920f66fc2a4b37e228c61427fb1e6b92f9c960
 
 // MockClient is a test mock for the Client interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockClient.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockClient.<Method>Func not set" error.
 type MockClient struct {
 	contractkit.Recorder
 	InfoFunc   func() ModelInfo
@@ -64,6 +65,82 @@ func (m *MockClient) Cancel(ctx context.Context, job Job) error {
 		return m.CancelFunc(ctx, job)
 	}
 	return contractkit.MockNotSet("MockClient", "Cancel")
+}
+
+// MockClientInfoCall is one recorded call of MockClient.Info, one
+// field per parameter.
+type MockClientInfoCall struct {
+}
+
+// InfoCalls returns every recorded Info call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Info").
+func (m *MockClient) InfoCalls() []MockClientInfoCall {
+	var out []MockClientInfoCall
+	for range m.Recorder.Calls("Info") {
+		var r MockClientInfoCall
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockClientSubmitCall is one recorded call of MockClient.Submit, one
+// field per parameter.
+type MockClientSubmitCall struct {
+	Ctx     context.Context
+	Request Request
+}
+
+// SubmitCalls returns every recorded Submit call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Submit").
+func (m *MockClient) SubmitCalls() []MockClientSubmitCall {
+	var out []MockClientSubmitCall
+	for _, c := range m.Recorder.Calls("Submit") {
+		var r MockClientSubmitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Request, _ = c.Args[1].(Request)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockClientPollCall is one recorded call of MockClient.Poll, one
+// field per parameter.
+type MockClientPollCall struct {
+	Ctx context.Context
+	Job Job
+}
+
+// PollCalls returns every recorded Poll call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Poll").
+func (m *MockClient) PollCalls() []MockClientPollCall {
+	var out []MockClientPollCall
+	for _, c := range m.Recorder.Calls("Poll") {
+		var r MockClientPollCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Job, _ = c.Args[1].(Job)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockClientCancelCall is one recorded call of MockClient.Cancel, one
+// field per parameter.
+type MockClientCancelCall struct {
+	Ctx context.Context
+	Job Job
+}
+
+// CancelCalls returns every recorded Cancel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Cancel").
+func (m *MockClient) CancelCalls() []MockClientCancelCall {
+	var out []MockClientCancelCall
+	for _, c := range m.Recorder.Calls("Cancel") {
+		var r MockClientCancelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Job, _ = c.Args[1].(Job)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

@@ -4,8 +4,9 @@
  * A model-level ObservabilityApi fake for a component or hook test, served the
  * way the app reads it: through ObservabilityApiProvider for the reads that
  * still go through the context, AND on the wire for ObservabilityService's
- * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …),
- * which call their QueryClient's transport and never the context.
+ * reads on generated hooks (useServiceOverview, useWorkloads, useTrace, …)
+ * and AlertingService's reads and writes (useAlerts, useSilences, …), which
+ * call their QueryClient's transport and never the context.
  *
  * The wire half is the shop fixture pack's handlers (fixtures/shop/handlers/
  * observability.ts) over the fake: each decodes the request into the model,
@@ -38,7 +39,8 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
  * The fake on the wire: every procedure the observability handlers serve
  * (ObservabilityService's, and the other observability services' the shop
  * pack answers: alerting, delivery, issues, rum, dashboards, user, billing)
- * goes to them, over the fake; a relative window resolves against `clock`.
+ * goes to them, over the fake; a relative window (or an alert history's
+ * lookback) resolves against `clock`.
  * A procedure they do not serve (a project list, a deploy read) goes to the
  * app's transport, as it would outside this scope, so a test's
  * setTransport(...) answers it.

@@ -9,7 +9,53 @@ package serveraction
 // each with its Handler bound on the worker (app.WorkerServerActions). Every
 // one of them runs only while the server's pipeline.enabled switch is on.
 func builtinSpecs() []Spec {
-	return prSpecs()
+	return append(append(prSpecs(), queueSpecs()...), sweepSpecs()...)
+}
+
+// SweepPR is the daily PR sweep (pipeline build plan M13;
+// internal/pipeline/practions.Sweep).
+const SweepPR = "reliant/sweep.pr@1"
+
+// sweepChecks mirrors practions.SweepChecks (TestSweepSpecNamesEveryCheck).
+var sweepChecks = []any{"superseded", "stuck_in_queue", "stale_needs_person", "draft_abandoned", "stale_pr"}
+
+func sweepSpecs() []Spec {
+	return []Spec{{
+		Name: SweepPR,
+		Description: "Find the run's project's open PRs that fell through the cracks and act on each once: " +
+			"wake the pr workflow, close it with cited evidence, or ask a person. Shadow mode records its GitHub writes only.",
+		Params: map[string]any{
+			"type": "object", "additionalProperties": false,
+			"properties": map[string]any{
+				"checks": map[string]any{
+					"type": "array", "items": map[string]any{"type": "string", "enum": sweepChecks},
+					"description": "The checks to run; empty or absent runs every one.",
+				},
+			},
+		},
+		Mutates: true,
+	}}
+}
+
+// QueueEnqueue is the queue.enqueue action (pipeline build plan M7;
+// internal/mergequeue.EnqueueHandler).
+const QueueEnqueue = "reliant/queue.enqueue@1"
+
+func queueSpecs() []Spec {
+	return []Spec{{
+		Name:        QueueEnqueue,
+		Description: "Put the PR's current head in the merge queue, if the server finds it admissible",
+		Params: map[string]any{
+			"type":                 "object",
+			"required":             []any{"record_id"},
+			"additionalProperties": false,
+			"properties": map[string]any{
+				"record_id": map[string]any{"type": "string", "minLength": 1},
+				"head":      map[string]any{"type": "string"},
+			},
+		},
+		Mutates: true,
+	}}
 }
 
 // The pr.* actions (pipeline build plan M5; internal/pipeline/practions).
@@ -23,6 +69,17 @@ const (
 	PRClose       = "reliant/pr.close@1"
 	PRNeedsPerson = "reliant/pr.needs_person@1"
 )
+
+// withLocator makes an object schema name its PR either way: record_id, or
+// repository and number.
+func withLocator(schema map[string]any) map[string]any {
+	delete(schema, "required")
+	schema["anyOf"] = []any{
+		map[string]any{"required": []any{"record_id"}},
+		map[string]any{"required": []any{"repository", "number"}},
+	}
+	return schema
+}
 
 func prSpecs() []Spec {
 	recordID := map[string]any{"type": "string", "minLength": 1,
@@ -38,8 +95,11 @@ func prSpecs() []Spec {
 			Name: PRNext,
 			Description: "Decide what a pull request needs next (review, fix, enqueue, close, escalate or none) " +
 				"from its pipeline state and its head on GitHub; a low-risk head passes here with no model.",
-			Params: object([]string{"record_id"}, map[string]any{
+			Params: withLocator(object(nil, map[string]any{
 				"record_id": recordID,
+				"repository": map[string]any{"type": "string", "minLength": 1,
+					"description": "The PR's repository as owner/name, with number, when the record id is not known (a GitHub firing): trigger.record.repository."},
+				"number": map[string]any{"type": "integer", "minimum": 1, "description": "The PR's number, with repository: trigger.record.number."},
 				"comment": map[string]any{
 					"type": "object", "description": "The review or issue comment that woke the run, if one did: it becomes a blocker for the fixer.",
 					"properties": map[string]any{
@@ -50,7 +110,7 @@ func prSpecs() []Spec {
 						"line":   map[string]any{"type": []any{"integer", "null"}},
 					},
 				},
-			}),
+			})),
 			Mutates: true,
 		},
 		{

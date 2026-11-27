@@ -58,15 +58,16 @@ const machinePreflightCommandTimeout = 30 * time.Second
 // the node and the reason, and counted on reliant.machine.preflight.failures
 // by reason.
 type MachinePreflightActivity struct {
-	repo   PreflightDaemonCheckStore
-	rows   WorkspaceRows
-	router toolexec.DaemonRouter
+	repo     PreflightDaemonCheckStore
+	launches LaunchEvents
+	rows     WorkspaceRows
+	router   toolexec.DaemonRouter
 }
 
 // NewMachinePreflightActivity builds the activity. router may be nil (a worker
 // with no daemons), and every machine then passes: there is none to check.
-func NewMachinePreflightActivity(repo PreflightDaemonCheckStore, rows WorkspaceRows, router toolexec.DaemonRouter) *MachinePreflightActivity {
-	return &MachinePreflightActivity{repo: repo, rows: rows, router: router}
+func NewMachinePreflightActivity(repo PreflightDaemonCheckStore, launches LaunchEvents, rows WorkspaceRows, router toolexec.DaemonRouter) *MachinePreflightActivity {
+	return &MachinePreflightActivity{repo: repo, launches: launches, rows: rows, router: router}
 }
 
 func (a *MachinePreflightActivity) Name() string        { return "MachinePreflight" }
@@ -95,7 +96,10 @@ func (a *MachinePreflightActivity) Execute(ctx context.Context, input MachinePre
 	if err != nil {
 		return MachinePreflightOutput{}, fmt.Errorf("read the project for a machine preflight: %w", err)
 	}
-	if ev, evErr := a.repo.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil && ev.Kind.Unattended() {
+	if a.launches == nil {
+		return MachinePreflightOutput{}, fmt.Errorf("machine preflight: launch events are not configured")
+	}
+	if ev, evErr := a.launches.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil && ev.Kind.Unattended() {
 		ctx = automationcred.Allow(ctx)
 	}
 	selector := runMachineSelector(ctx, a.rows, chat, input.DaemonSelector)

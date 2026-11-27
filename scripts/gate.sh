@@ -40,7 +40,10 @@
 # system packages). The queue never lands on 2 and never blames a PR for it.
 #
 #   GATE_BASE=<rev>     the queue's base (main before the batch), for the repo
-#                       lane's ranges (default: the merge base with origin/main)
+#                       lane's ranges (default: CI_BASE, else the merge base
+#                       with origin/main). The Reliant queue's gate sets both
+#                       GATE_BASE and CI_BASE and fetches the base, and its
+#                       checkout has no origin/main.
 #   GATE_LANES=go,web   run only those lanes (the rest are NOT RUN: exit 2)
 #   GATE_JOBS=N         lanes at once (default: all)
 #   GATE_LOG_DIR=dir    logs and the private checkouts (default: a fresh temp dir)
@@ -91,7 +94,7 @@ lane_ui() {
   task build:electron:smoke
 }
 lane_repo() {
-  local base=${GATE_BASE:-}
+  local base=${GATE_BASE:-${CI_BASE:-}}
   [[ -n "$base" ]] || base=$(git merge-base HEAD origin/main 2>/dev/null) ||
     { echo "repo: no base: set GATE_BASE (the queue's base), or fetch origin/main"; return 2; }
   task ci:migration-order BASE="$base" && task ci:repo-checks BASE="$base"

@@ -33,8 +33,8 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo reads an org's triggers and saved workflows and keeps the offers.
-	Repo Repository
+	// TriggerReads reads the trigger an offer or a takeover names.
+	TriggerReads TriggerReads
 
 	// Offers lists what a takeover offers and keeps its offers.
 	Offers Offers
@@ -57,8 +57,8 @@ func (d Deps) validateDeps() error {
 	if d.Config == nil {
 		return fmt.Errorf("automation_takeover: Deps.Config is required")
 	}
-	if d.Repo == nil {
-		return fmt.Errorf("automation_takeover: Deps.Repo is required")
+	if d.TriggerReads == nil {
+		return fmt.Errorf("automation_takeover: Deps.TriggerReads is required")
 	}
 	if d.Offers == nil {
 		return fmt.Errorf("automation_takeover: Deps.Offers is required")

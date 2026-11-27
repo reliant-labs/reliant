@@ -25,6 +25,10 @@ type Fetcher interface {
 // FetchSpec is one fetch.
 type FetchSpec struct {
 	Repo, Ref, SHA string
+	// BaseSHA, when set, is fetched too (StartRequest.BaseSHA): the
+	// candidate's history down to it is present, so the gate can diff
+	// against it.
+	BaseSHA string
 	// Dir is an empty directory the tree is checked out into.
 	Dir string
 }
@@ -117,7 +121,7 @@ func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResul
 	if err := req.Validate(); err != nil {
 		return unproven(ReasonBackendFailed, err)
 	}
-	env, err := GateEnv(req.GateID, req.Env)
+	env, err := GateEnv(req.GateID, req.gateEnv())
 	if err != nil {
 		return unproven(ReasonBackendFailed, err)
 	}
@@ -131,7 +135,7 @@ func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResul
 		return unproven(ReasonFetchFailed, fmt.Errorf("make the gate directory: %w", err))
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	if err := r.Fetcher.Fetch(ctx, FetchSpec{Repo: req.Repo, Ref: req.Ref, SHA: req.SHA, Dir: src}); err != nil {
+	if err := r.Fetcher.Fetch(ctx, FetchSpec{Repo: req.Repo, Ref: req.Ref, SHA: req.SHA, BaseSHA: req.BaseSHA, Dir: src}); err != nil {
 		code := ReasonFetchFailed
 		if errors.Is(err, ErrCandidateMoved) {
 			code = ReasonCandidateMoved
@@ -148,7 +152,7 @@ func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResul
 	limits.Wall = req.Timeout()
 	res, err := b.Run(ctx, Spec{
 		RunID: req.GateID, Image: r.Image, Command: []string{"/bin/sh", "-c", Script(plan)},
-		SourceDir: src, Env: env, VulnDBDir: r.VulnDBDir, Limits: limits,
+		SourceDir: src, Env: env, VulnDBDir: r.VulnDBDir, CacheVolume: cacheVolume(b, req), Limits: limits,
 		Stdout: r.Log, Stderr: r.Log,
 	})
 	if err != nil {
@@ -166,6 +170,17 @@ func (r *Runner) Run(ctx context.Context, b Backend, req StartRequest) GateResul
 		return unproven(ReasonResultInvalid, err)
 	}
 	return out(assemble(req.GateID, b.Isolation(), plan, res, o))
+}
+
+// cacheVolume is the warm cache volume req's gate gets in b: the
+// repository's, only when the request asks for it and allows a not-isolated
+// gate, and only when b is not isolated. Otherwise it is "" (see
+// StartRequest.WarmCache).
+func cacheVolume(b Backend, req StartRequest) string {
+	if !req.WarmCache || !req.AllowNotIsolated || b.Isolation().Isolated() {
+		return ""
+	}
+	return CacheVolumeName(req.Repo)
 }
 
 // Jobs is a daemon's gates by id: CommandStart starts one in the background

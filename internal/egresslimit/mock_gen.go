@@ -15,14 +15,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=9efd5040ee3d5e0695789e4751eff074ecd6b8b0916322140f1659a4b3cc6958
+// forge:hash=60d926a7bb5271523958e8cd319a85c86563041faa1d7d48eabd8afb78e9eb53
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	AcquireFunc func(context.Context, Request) (func(), error)
@@ -37,18 +38,39 @@ func (m *MockService) Acquire(ctx context.Context, req Request) (func(), error) 
 	return nil, contractkit.MockNotSet("MockService", "Acquire")
 }
 
+// MockServiceAcquireCall is one recorded call of MockService.Acquire, one
+// field per parameter.
+type MockServiceAcquireCall struct {
+	Ctx context.Context
+	Req Request
+}
+
+// AcquireCalls returns every recorded Acquire call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Acquire").
+func (m *MockService) AcquireCalls() []MockServiceAcquireCall {
+	var out []MockServiceAcquireCall
+	for _, c := range m.Recorder.Calls("Acquire") {
+		var r MockServiceAcquireCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(Request)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockClock
-// forge:hash=d1feadfcd72cae882cbb95281aa0c5c028d33f7e82504f60a854db7575ebc8b0
+// forge:hash=5749c316d8980d0721de642304b9d60c8b623bf6a7478b529f05d8f02a41ac48
 
 // MockClock is a test mock for the Clock interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockClock.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockClock.<Method>Func not set" error.
 type MockClock struct {
 	contractkit.Recorder
 	NowFunc func() time.Time
@@ -61,6 +83,22 @@ func (m *MockClock) Now() time.Time {
 		return m.NowFunc()
 	}
 	return *new(time.Time)
+}
+
+// MockClockNowCall is one recorded call of MockClock.Now, one
+// field per parameter.
+type MockClockNowCall struct {
+}
+
+// NowCalls returns every recorded Now call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Now").
+func (m *MockClock) NowCalls() []MockClockNowCall {
+	var out []MockClockNowCall
+	for range m.Recorder.Calls("Now") {
+		var r MockClockNowCall
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

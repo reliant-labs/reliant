@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chataccess/chataccesstest"
+	"github.com/reliant-labs/reliant/internal/chatupdates"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -104,7 +105,7 @@ func branchCopyService(probe *storetest.TxProbe) *Service {
 			Worktrees:   store.NewWorktreeExtStore(orm),
 			ProjectRows: store.NewProjectExtStore(orm), TriggerEvents: store.NewTriggerEventExtStore(orm),
 			Questions: store.NewQuestionExtStore(orm), Spawns: store.NewToolCallExtStore(orm), Selections: store.NewChatSelectionExtStore(orm), Messages: store.NewMessageExtStore(orm), ToolBlocks: store.NewMessageContentBlockExtStore(orm), Senders: store.NewThreadExtStore(orm),
-			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(orm), Announcer: repo}),
+			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(orm), Announcer: chatupdates.NewFromORM(orm, repo, nil)}),
 			AgentMessages: store.NewAgentMessageExtStore(orm),
 		},
 		threads: branchCopyThreads(repo),

@@ -160,8 +160,8 @@ func TestMergeQueueTestUploadRunsMainsCode(t *testing.T) {
 }
 
 // TestMainTestUploadHoldsOIDC: ci.yml's upload of main's runs holds id-token
-// (forge's OIDC exchange when the environment has no token), and only a push
-// to main of this repository reaches it.
+// and uploads with forge's OIDC exchange alone (no token passed to the step),
+// and only a push to main of this repository reaches it.
 func TestMainTestUploadHoldsOIDC(t *testing.T) {
 	rel := ".github/workflows/ci.yml"
 	j := loadUploadWorkflow(t, rel).Jobs["test-upload"]
@@ -181,6 +181,21 @@ func TestMainTestUploadHoldsOIDC(t *testing.T) {
 		t.Error("test-upload must be continue-on-error")
 	}
 	noLocalActions(t, rel+" job test-upload", j.Steps)
+	// The upload runs on the OIDC exchange alone: a token passed to the step
+	// would win (cloud.ResolveCredentialFor) and the exchange would never run.
+	var uploads int
+	for _, s := range j.Steps {
+		if !strings.Contains(s.Run, "scripts/test-upload.sh") {
+			continue
+		}
+		uploads++
+		if _, ok := s.Env["FORGE_CONTROL_PLANE_TOKEN"]; ok {
+			t.Errorf("test-upload's upload step sets FORGE_CONTROL_PLANE_TOKEN; it uploads with the job's OIDC identity")
+		}
+	}
+	if uploads != 1 {
+		t.Errorf("test-upload has %d steps running scripts/test-upload.sh, want 1", uploads)
+	}
 }
 
 // TestTestUploadScriptAlwaysAsksToUpload runs scripts/test-upload.sh in a
@@ -215,8 +230,29 @@ func TestTestUploadScriptAlwaysAsksToUpload(t *testing.T) {
 		}
 		return dir
 	}
-	env := map[string]string{"FORGE_CONTROL_PLANE_TOKEN": "", "GITHUB_ACTIONS": "true"}
+	env := map[string]string{"FORGE_CONTROL_PLANE_TOKEN": "", "ACTIONS_ID_TOKEN_REQUEST_URL": "", "GITHUB_ACTIONS": "true"}
 	const sha = "0123456789abcdef0123456789abcdef01234567"
+
+	// The credential line names the path forge takes first, never a value, and
+	// never stops the upload: a job with id-token and no token uploads by OIDC.
+	for _, tc := range []struct {
+		name, token, oidcURL, want string
+	}{
+		{"oidc only", "", "https://token.actions.example/req", "credential: this job's GitHub Actions OIDC identity"},
+		{"token wins", "SECRET-TOKEN-VALUE", "https://token.actions.example/req", "credential: FORGE_CONTROL_PLANE_TOKEN\n"},
+		{"neither", "", "", "credential: no FORGE_CONTROL_PLANE_TOKEN and no GitHub Actions OIDC identity"},
+	} {
+		dir := setup(t, "0", true)
+		ok, out := ciShellIn(t, dir, "scripts/test-upload.sh "+sha, map[string]string{
+			"FORGE_CONTROL_PLANE_TOKEN": tc.token, "ACTIONS_ID_TOKEN_REQUEST_URL": tc.oidcURL, "GITHUB_ACTIONS": "true",
+		})
+		if !ok || !strings.Contains(out, tc.want) || !strings.Contains(out, "forge-args: test report --commit "+sha+" --upload\n") {
+			t.Errorf("%s: want exit 0, %q and an upload request; ok=%v:\n%s", tc.name, tc.want, ok, out)
+		}
+		if strings.Contains(out, "SECRET-TOKEN-VALUE") || strings.Contains(out, "::warning") {
+			t.Errorf("%s: the script printed the token or warned on its own:\n%s", tc.name, out)
+		}
+	}
 
 	for _, forgeExit := range []string{"0", "2"} {
 		dir := setup(t, forgeExit, true)
