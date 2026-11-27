@@ -306,6 +306,33 @@ describe("the demo's Tests answers", () => {
   });
 });
 
+describe("the demo's Tests answers across several projects", () => {
+  const api = () => controlPlaneTestApi;
+
+  it("answers a row per named project, shop's with its summary, and totals over them", async () => {
+    const summary = await api().getTestSummary(req);
+    const portfolio = await api().getTestPortfolio({ orgId: null, projects: ["docs", "shop"] });
+    expect(portfolio.projects.map((p) => [p.project, p.hasRuns])).toEqual([
+      ["docs", false],
+      ["shop", true],
+    ]);
+    const shop = portfolio.projects[1]!;
+    expect(shop.branch).toBe(summary.branch);
+    expect(shop.passRate).toBe(summary.passRate);
+    expect(shop.lastRun?.runId).toBe(summary.lastRun?.runId);
+    expect(shop.coverage.length).toBeGreaterThan(0);
+    expect(portfolio.totals).toMatchObject({ projects: 2, projectsWithRuns: 1, projectsWithReport: 1, passRateRuns: summary.passRateRuns, flaky: summary.flaky });
+    // One project with coverage: the totals are its figures.
+    expect(portfolio.totals.coverage.map((c) => c.combined)).toEqual(shop.coverage.map((c) => c.combined));
+  });
+
+  it("answers a list naming none of the demo's projects with nothing, as for any other foreign project", async () => {
+    const portfolio = await api().getTestPortfolio({ orgId: null, projects: ["docs", "mobile-api"] });
+    expect(portfolio.projects).toEqual([]);
+    expect(portfolio.totals.projectsWithRuns).toBe(0);
+  });
+});
+
 describe("the demo's coverage source", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -334,6 +361,7 @@ describe("the demo transport's Security and Tests RPCs", () => {
     getReleaseTests: () => controlPlaneTestApi.getReleaseTests({ ...req, version: "v1.8.4" }),
     listFlakyTests: () => controlPlaneTestApi.listFlakyTests({ ...req, filters: {} }),
     getTest: () => controlPlaneTestApi.getTest({ ...req, testId: SHOP_TESTS.retryOnTimeout.id }),
+    getTestPortfolio: () => controlPlaneTestApi.getTestPortfolio({ orgId: null, projects: ["shop", "docs"] }),
     fetchCoverageSource: () => fetchCoverageSource("shop", SHOP_CHARGE_BLOB),
   };
 

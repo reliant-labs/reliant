@@ -21,6 +21,9 @@ import { useTestApi } from "@/services/controlPlane/tests/TestApiContext";
 import { testsRetry, testsRetryDelay } from "@/services/controlPlane/tests/errors";
 import type { CoverageTarget, FlakyFilters, TestRunFilters } from "@/services/controlPlane/tests/types";
 
+/** GetTestPortfolio names at most this many projects. */
+export const PORTFOLIO_MAX_PROJECTS = 50;
+
 export const testKeys = {
   all: (orgId: string | null, project: string) => ["tests", orgId ?? "", project] as const,
   summary: (orgId: string | null, project: string, branch: string, environmentId: string) => [...testKeys.all(orgId, project), "summary", branch, environmentId] as const,
@@ -32,6 +35,14 @@ export const testKeys = {
   release: (orgId: string | null, project: string, version: string) => [...testKeys.all(orgId, project), "release", version] as const,
   flaky: (orgId: string | null, project: string, filters: FlakyFilters) => [...testKeys.all(orgId, project), "flaky", filters] as const,
   test: (orgId: string | null, project: string, testId: string) => [...testKeys.all(orgId, project), "test", testId] as const,
+  /**
+   * Several projects at once (GetTestPortfolio), sorted so a selection in any
+   * order shares one answer. Its third segment is an object, never a project
+   * name, so it cannot collide with one project's keys; Refresh of the org
+   * (`["tests", orgId]`) covers it.
+   */
+  portfolio: (orgId: string | null, projects: readonly string[] | "all") =>
+    ["tests", orgId ?? "", { portfolio: projects === "all" ? "all" : [...new Set(projects)].sort() }] as const,
 };
 
 const READ = {
@@ -227,4 +238,34 @@ export function useTest(project: string, testId: string) {
       org
     )
   );
+}
+
+/**
+ * Several projects' test health on their default branches, and the server's
+ * totals across them (GetTestPortfolio): what the aggregate Tests, Coverage
+ * and Overview pages read. `projects` is the forge apps, as every other Tests
+ * read names one; `"all"` asks for every project of the org with a recorded
+ * run (the server lists and totals the 50 most recent, and says when it
+ * truncated). A list longer than the server takes is cut to its first 50
+ * (`capped`): totals are never stitched together from several answers in the
+ * browser. `null`: nothing is fetched.
+ */
+export function useTestPortfolio(projects: readonly string[] | "all" | null) {
+  const api = useTestApi();
+  const org = useOrgScope();
+  const named = projects === null || projects === "all" ? [] : [...new Set(projects)].sort();
+  const sent = named.slice(0, PORTFOLIO_MAX_PROJECTS);
+  const capped = named.length > sent.length;
+  const query = useQuery(
+    withOrgFailure(
+      {
+        queryKey: testKeys.portfolio(org.orgId, projects === "all" ? "all" : sent),
+        queryFn: ({ signal }: { signal: AbortSignal }) => api.getTestPortfolio({ orgId: org.orgId, projects: sent }, { signal }),
+        enabled: (projects === "all" || sent.length > 0) && orgQueryEnabled(org),
+        ...LIVE,
+      },
+      org
+    )
+  );
+  return { ...query, capped };
 }

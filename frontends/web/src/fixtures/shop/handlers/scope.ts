@@ -16,7 +16,9 @@
  * plural too: `from_environment`, `env_names`) — at any depth of the request:
  * nested messages, repeated messages and message-valued maps are all walked,
  * and set oneof cases with them. Empty means unscoped (the org's view, which
- * in the demo org is shop's).
+ * in the demo org is shop's). A plural PROJECT selector (`project_ids`,
+ * `projects`) is a union, so it is outside only when it names none of the
+ * pack's (foreignList).
  */
 
 import { create, isMessage, type DescMessage, type DescMethod, type DescService, type Message } from "@bufbuild/protobuf";
@@ -80,6 +82,20 @@ function foreignSelector(fieldName: string, value: string, scope: PackScope): bo
 }
 
 /**
+ * Whether a repeated selector is outside the demo. A list of PROJECTS is a
+ * union (QueryScope.project_ids, GetTestPortfolioRequest.projects: the
+ * environments or rows of each), so it is outside only when none of its
+ * projects is the pack's: the other projects add nothing, as a project the
+ * org does not have adds nothing on the server. Every other list narrows
+ * (env_ids AND), so any foreign entry makes it outside.
+ */
+function foreignList(fieldName: string, values: readonly unknown[], scope: PackScope): boolean {
+  const strings = values.filter((v): v is string => typeof v === "string" && v !== "");
+  if (PROJECT_FIELD.test(fieldName)) return strings.length > 0 && strings.every((v) => foreignSelector(fieldName, v, scope));
+  return strings.some((v) => foreignSelector(fieldName, v, scope));
+}
+
+/**
  * How deep a request is walked. Every console request is far shallower; the
  * cap only stops a self-referencing message type from recursing for ever.
  */
@@ -105,7 +121,7 @@ export function outsideDemo(input: DescMessage, req: Message, scope: PackScope =
         if (nested(field.message, value)) return true;
         break;
       case "list":
-        if (field.listKind === "scalar" && (value as unknown[]).some((v) => typeof v === "string" && foreignSelector(field.name, v, scope))) return true;
+        if (field.listKind === "scalar" && foreignList(field.name, value as unknown[], scope)) return true;
         if (field.listKind === "message" && (value as unknown[]).some((v) => nested(field.message, v))) return true;
         break;
       case "map":

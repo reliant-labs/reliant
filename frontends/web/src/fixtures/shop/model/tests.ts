@@ -39,6 +39,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { timestampFromMs, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { coverageFixtureEngine, GENERIC_COVERAGE_LINES, type CoverageFixtureNode, type CoverageLineRow, type CoverageReportFixture } from "@/components/Forge/Tests/coverageFixtures";
+import { portfolioRowWire, portfolioWire } from "@/components/Forge/Tests/portfolioFixtures";
 import { runMatchesFilters } from "@/components/Forge/Tests/runFilterFixture";
 import type {
   CoverageRequest,
@@ -71,6 +72,8 @@ import {
   type WireListFlakyResponse,
   type WireListRunsResponse,
   type WireOutcome,
+  type WirePortfolioCoverage,
+  type WirePortfolioResponse,
   type WireReleaseTestsResponse,
   type WireRunResponse,
   type WireRunSummary,
@@ -805,6 +808,27 @@ export interface ShopTestsAnswers {
   getReleaseTests(req: Pick<ReleaseTestsRequest, "version">): WireReleaseTestsResponse;
   listFlakyTests(req: FlakyRequest): WireListFlakyResponse;
   getTest(req: Pick<TestRequest, "testId">): WireTestResponse;
+  /** Each named project's row (only the story's app has runs), and the totals over them; none named: the app with runs. */
+  getTestPortfolio(req: { projects: readonly string[] }): WirePortfolioResponse;
+}
+
+/**
+ * main's head report per language (Go and TypeScript), summed over its files
+ * as the server splits a report's root: covered statements over statements,
+ * never an average of the files' percentages.
+ */
+function headLanguages(): WirePortfolioCoverage[] {
+  const byLang = new Map<string, { statements: number; covered: number }>();
+  for (const node of report(HEAD.sha)!.nodes) {
+    if (node.kind !== WireNodeKind.FILE) continue;
+    const acc = byLang.get(node.lang) ?? { statements: 0, covered: 0 };
+    acc.statements += node.statements;
+    acc.covered += Math.round((node.statements * node.combined) / 100);
+    byLang.set(node.lang, acc);
+  }
+  return [...byLang.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([lang, c]) => ({ lang, granularity: "statement", combined: { statements: BigInt(c.statements), covered: BigInt(c.covered), percent: round1((c.covered / c.statements) * 100) }, projects: 1 }));
 }
 
 /** shop's runs, coverage and flakes, measured from the page load (handlers/tests.ts serves them). */
@@ -818,5 +842,11 @@ export function shopTestsAnswers(now: number = demoNow(), app: string = DEMO_PRO
     getReleaseTests: (req) => releaseTests(req.version, now),
     listFlakyTests: (req) => flakyPage(req, now),
     getTest: (req) => testDetail(req.testId, now),
+    getTestPortfolio: (req) =>
+      portfolioWire(
+        (req.projects.length ? [...new Set(req.projects)] : [app]).map((project) =>
+          project === app ? portfolioRowWire(project, summary(now, undefined, app), headLanguages()) : portfolioRowWire(project, undefined)
+        )
+      ),
   };
 }

@@ -403,6 +403,67 @@ export interface TestDetail {
   signatures: TestFailureSignature[];
 }
 
+/**
+ * Coverage of one language at one granularity, summed over statements:
+ * `combined.percent` is Σcovered / Σstatements as the server computed it,
+ * never an average of percentages. A figure of one granularity is never
+ * mixed with one of the other, nor one language with another.
+ */
+export interface PortfolioCoverage {
+  /** "go" | "ts" | another runner's language. */
+  lang: string;
+  /** "statement", or "line" when any file was counted by line. */
+  granularity: string;
+  combined: StatementCoverage;
+  /** The projects summed into this figure: 1 on a project's row. */
+  projects: number;
+}
+
+/** One project's test health on its default branch, as GetTestSummary answers it with no branch named. */
+export interface PortfolioProject {
+  project: string;
+  /** False for a project with no recorded run (or one this org does not have, which reads the same): every figure is then empty. */
+  hasRuns: boolean;
+  /** The default branch summarised; "" when no recent run names one. */
+  branch: string;
+  latest: CommitReport | null;
+  /** latest's coverage per language, generated code left out. */
+  coverage: PortfolioCoverage[];
+  /** 0–1; null when no run was judged: never 100% of nothing. */
+  passRate: number | null;
+  passRateRuns: number;
+  suspected: number;
+  flaky: number;
+  quarantined: number;
+  lastRun: TestRun | null;
+}
+
+/** GetTestPortfolio's totals: the rows summed by the server, rates weighted, never averaged. */
+export interface PortfolioTotals {
+  projects: number;
+  projectsWithRuns: number;
+  projectsWithReport: number;
+  /** Every row's passed runs over every row's judged runs; null when none was judged. */
+  passRate: number | null;
+  passRateRuns: number;
+  suspected: number;
+  flaky: number;
+  quarantined: number;
+  /** The rows' latest reports' totals, summed. */
+  latestTotals: TestTotals;
+  /** Per (language, granularity), by language then granularity. */
+  coverage: PortfolioCoverage[];
+}
+
+/** GetTestPortfolio: several projects' test health at once, and the server's totals across them. */
+export interface TestPortfolio {
+  /** In the request's order when projects were named, else most recent run first. */
+  projects: PortfolioProject[];
+  totals: PortfolioTotals;
+  /** No project was named and the org has more than 50 with runs: only the 50 with the most recent run are listed and totalled. */
+  truncated: boolean;
+}
+
 // ── Requests ────────────────────────────────────────────────────────────────
 
 /** Every request names its org (null: the caller's default) and the forge project. */
@@ -477,6 +538,13 @@ export interface FlakyRequest extends TestsRequestBase {
 
 export interface TestRequest extends TestsRequestBase {
   testId: string;
+}
+
+/** GetTestPortfolio's request: it names no one project. */
+export interface PortfolioRequest {
+  orgId: string | null;
+  /** At most 50, each once. Empty: every project of the org with a recorded run (the 50 most recent). */
+  projects: readonly string[];
 }
 
 export interface CallOptions {

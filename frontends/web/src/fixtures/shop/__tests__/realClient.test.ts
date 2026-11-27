@@ -125,6 +125,18 @@ describe.each(WHEN)("the real client over the shop pack, %s", (_when, at) => {
     await same((api) => api.listAttributeValues({ ...scope(["env-prod"]), window: hour(), key: "service.name", prefix: "", limit: 50 }));
   });
 
+  it("answers a panel over several projects (project_ids) with shop's figures, and nothing for projects without shop", async () => {
+    const panel: Panel = { id: "p95", title: "p95", kind: "number", signal: "traces", series: [{ label: "p95", agg: "quantile", quantile: 0.95, field: "duration" }] };
+    const read = (projectIds: string[]) => wire.queryPanel({ orgId: DEMO_ORG, projectIds, envIds: ["env-prod"], filters: [], window: hour(), panel, services: [], stepSeconds: 0 });
+    const shop = await read(["docs", "shop"]);
+    const alone = await wire.queryPanel({ ...scope(["env-prod"]), window: hour(), panel, services: [], stepSeconds: 0 });
+    // The union of their environments: only shop has any, so it reads as shop alone does.
+    expect(plain(shop.series)).toEqual(plain(alone.series));
+    expect(shop.series[0]?.value ?? null).not.toBeNull();
+    const none = await read(["docs", "mobile-api"]);
+    expect(none.series.every((series) => series.value === null || series.value === undefined)).toBe(true);
+  });
+
   it("answers every panel of every dashboard shop ships, as its dashboard asks", async () => {
     let answeredSql = 0;
     const index = await same((api) => api.listDashboards({ orgId: DEMO_ORG, projectId: "shop" }));

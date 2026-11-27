@@ -12,6 +12,7 @@
  *   GetReleaseTests  a release commit's report and what changed since the previous release
  *   ListFlakyTests   tests that are, or were, flaky; paged
  *   GetTest          one test's outcomes, events and failure signatures
+ *   GetTestPortfolio several projects' health at once, and the server's totals
  *
  * Each is one call over the generated client (proto-vendor/controlplane,
  * services/tests/v1), mapped by wire.ts. A control plane that does not serve
@@ -34,6 +35,7 @@ import type {
   FileCoverage,
   FileCoverageRequest,
   FlakyRequest,
+  PortfolioRequest,
   ReleaseTests,
   ReleaseTestsRequest,
   RunRequest,
@@ -41,6 +43,7 @@ import type {
   SummaryRequest,
   TestDetail,
   TestFlakePage,
+  TestPortfolio,
   TestRequest,
   TestRunDetail,
   TestRunPage,
@@ -53,6 +56,8 @@ import {
   fileCoverageRequest,
   flakePageOf,
   flakyRequest,
+  portfolioOf,
+  portfolioRequest,
   releaseTestsOf,
   releaseTestsRequest,
   runDetailOf,
@@ -107,4 +112,13 @@ export async function listFlakyTests(req: FlakyRequest, opts?: CallOptions, tran
 
 export async function getTest(req: TestRequest, opts?: CallOptions, transport?: Transport): Promise<TestDetail> {
   return testDetailOf(await client(transport).getTest(testRequest(req), opts));
+}
+
+/**
+ * Several projects' test health and the server's totals across them. A
+ * control plane from before control-plane#3956 answers Unimplemented: the
+ * aggregate pages read that as "not available here", never as no runs.
+ */
+export async function getTestPortfolio(req: PortfolioRequest, opts?: CallOptions, transport?: Transport): Promise<TestPortfolio> {
+  return portfolioOf(await client(transport).getTestPortfolio(portfolioRequest(req), opts));
 }

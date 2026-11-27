@@ -28,6 +28,7 @@ export interface TestApi {
   getReleaseTests: typeof tests.getReleaseTests;
   listFlakyTests: typeof tests.listFlakyTests;
   getTest: typeof tests.getTest;
+  getTestPortfolio: typeof tests.getTestPortfolio;
 }
 
 /**
@@ -45,6 +46,7 @@ function apiOn(transport: Transport | undefined): TestApi {
     getReleaseTests: (req, opts) => tests.getReleaseTests(req, opts, transport),
     listFlakyTests: (req, opts) => tests.listFlakyTests(req, opts, transport),
     getTest: (req, opts) => tests.getTest(req, opts, transport),
+    getTestPortfolio: (req, opts) => tests.getTestPortfolio(req, opts, transport),
   };
 }
 

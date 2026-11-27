@@ -37,6 +37,9 @@ import type {
   LanguageCoverage,
   LineCoverage,
   PackageCoverage,
+  PortfolioCoverage,
+  PortfolioProject,
+  PortfolioRequest,
   ReleaseMarker,
   ReleaseTests,
   ReleaseTestsRequest,
@@ -56,6 +59,7 @@ import type {
   TestFlakeVerdict,
   TestIngestState,
   TestKey,
+  TestPortfolio,
   TestQuarantine,
   TestRequest,
   TestRun,
@@ -374,6 +378,46 @@ export interface WireTestResponse {
   signatures: WireFailureSignature[];
 }
 
+export interface WirePortfolioCoverage {
+  lang: string;
+  granularity: string;
+  combined?: WireStatementCoverage;
+  projects: number;
+}
+
+export interface WirePortfolioProject {
+  project: string;
+  hasRuns: boolean;
+  branch: string;
+  latest?: WireCommitReport;
+  coverage: WirePortfolioCoverage[];
+  passRate: number;
+  passRateRuns: number;
+  suspectedCount: number;
+  flakyCount: number;
+  quarantinedCount: number;
+  lastRun?: WireRunSummary;
+}
+
+export interface WirePortfolioTotals {
+  projects: number;
+  projectsWithRuns: number;
+  projectsWithReport: number;
+  passRate: number;
+  passRateRuns: number;
+  suspectedCount: number;
+  flakyCount: number;
+  quarantinedCount: number;
+  latestTotals?: WireTotals;
+  coverage: WirePortfolioCoverage[];
+}
+
+export interface WirePortfolioResponse {
+  projects: WirePortfolioProject[];
+  totals?: WirePortfolioTotals;
+  truncated: boolean;
+}
+
 // ── Responses → plain types ─────────────────────────────────────────────────
 
 function ms(ts: Timestamp | undefined): number | null {
@@ -528,6 +572,48 @@ export function summaryOf(res: WireSummaryResponse): TestSummary {
     hostHealth: (res.hostHealth ?? []).map((h): HostHealth => ({ signature: h.signature, events: h.events, runs: [...h.runs], tests: [...h.tests] })),
     // Absent until the server says: the customer default, flaky only.
     flakePolicy: res.actsOnSuspected ? "suspected" : "flaky",
+  };
+}
+
+function portfolioCoverageOf(c: WirePortfolioCoverage): PortfolioCoverage {
+  return { lang: c.lang, granularity: c.granularity, combined: statementsOf(c.combined) ?? { statements: 0, covered: 0, percent: 0 }, projects: c.projects };
+}
+
+function portfolioProjectOf(p: WirePortfolioProject): PortfolioProject {
+  return {
+    project: p.project,
+    hasRuns: p.hasRuns,
+    branch: p.branch,
+    latest: reportOf(p.latest),
+    // A figure over no statements is no figure: it would read as 0% covered.
+    coverage: p.coverage.map(portfolioCoverageOf).filter((c) => c.combined.statements > 0),
+    // As GetTestSummary's: a rate over no judged run is no rate.
+    passRate: p.passRateRuns > 0 ? p.passRate : null,
+    passRateRuns: p.passRateRuns,
+    suspected: p.suspectedCount,
+    flaky: p.flakyCount,
+    quarantined: p.quarantinedCount,
+    lastRun: p.lastRun ? runOf(p.lastRun) : null,
+  };
+}
+
+export function portfolioOf(res: WirePortfolioResponse): TestPortfolio {
+  const t = res.totals;
+  return {
+    projects: res.projects.map(portfolioProjectOf),
+    totals: {
+      projects: t?.projects ?? 0,
+      projectsWithRuns: t?.projectsWithRuns ?? 0,
+      projectsWithReport: t?.projectsWithReport ?? 0,
+      passRate: t && t.passRateRuns > 0 ? t.passRate : null,
+      passRateRuns: t?.passRateRuns ?? 0,
+      suspected: t?.suspectedCount ?? 0,
+      flaky: t?.flakyCount ?? 0,
+      quarantined: t?.quarantinedCount ?? 0,
+      latestTotals: totalsOf(t?.latestTotals),
+      coverage: (t?.coverage ?? []).map(portfolioCoverageOf).filter((c) => c.combined.statements > 0),
+    },
+    truncated: res.truncated,
   };
 }
 
@@ -756,4 +842,9 @@ export function flakyRequest(req: FlakyRequest) {
 
 export function testRequest(req: TestRequest) {
   return { project: req.project, testId: req.testId, ...defined({ orgId: req.orgId ?? undefined }) };
+}
+
+/** GetTestPortfolio's request: the projects each once (the server refuses a repeat), in the order given. */
+export function portfolioRequest(req: PortfolioRequest) {
+  return { projects: [...new Set(req.projects)], ...defined({ orgId: req.orgId ?? undefined }) };
 }

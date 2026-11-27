@@ -3,7 +3,7 @@
 /**
  * The shop pack's TestsService handlers: the eight reads the Tests pages make
  * (Overview, Coverage, Runs, a run, Flaky tests, a test, a release's Tests
- * tab), answered on the WIRE as control-plane would answer them. The pack
+ * tab), and the portfolio the aggregate Tests pages read, answered on the WIRE as control-plane would answer them. The pack
  * composes them with the other services' handlers (../index.ts shopScenario).
  *
  * model/tests.ts already tells shop's runs, coverage and flakes as wire
@@ -23,6 +23,7 @@ import {
   GetReleaseTestsResponseSchema,
   GetTestResponseSchema,
   GetTestRunResponseSchema,
+  GetTestPortfolioResponseSchema,
   GetTestSummaryResponseSchema,
   ListFlakyTestsResponseSchema,
   ListTestRunsResponseSchema,
@@ -34,6 +35,7 @@ import {
   type GetFileCoverageRequest,
   type GetReleaseTestsRequest,
   type GetTestRequest,
+  type GetTestPortfolioRequest,
   type GetTestRunRequest,
   type GetTestSummaryRequest,
   type ListFlakyTestsRequest,
@@ -59,6 +61,7 @@ export const TESTS_RPCS = {
   getReleaseTests: rpc("GetReleaseTests"),
   listFlakyTests: rpc("ListFlakyTests"),
   getTest: rpc("GetTest"),
+  getTestPortfolio: rpc("GetTestPortfolio"),
 } as const;
 
 // ── Wire → the client's plain requests (wire.ts's request builders, inverted) ─
@@ -159,6 +162,9 @@ export function testsHandlers(now: () => number = demoNow, scope: PackScope = DE
         })
       ),
     [TESTS_RPCS.getTest]: (req: GetTestRequest) => create(GetTestResponseSchema, answers().getTest({ testId: req.testId })),
+    // Several projects at once: a row for each named, the story's app with its runs (scope.ts reads a
+    // project list as a union, so a list without the app never reaches here).
+    [TESTS_RPCS.getTestPortfolio]: (req: GetTestPortfolioRequest) => create(GetTestPortfolioResponseSchema, answers().getTestPortfolio({ projects: req.projects })),
   };
   return withMessageRequests(scopedToDemo(handlers, [TestsService], scope), [TestsService]);
 }

@@ -37,6 +37,10 @@ vi.mock("@/hooks/observability-queries", () => ({
     data: scope ? { series: [{ label: "errors", value: 3 }, { label: "p95", value: 0.25 }] } : undefined,
   }),
 }));
+// The portfolio read the Overview's totals take their tests figures from (TestsAggregatePages.test.tsx covers it).
+vi.mock("@/hooks/test-queries", () => ({
+  useTestPortfolio: () => ({ data: undefined, error: null, isPending: true, isFetching: true, refetch: () => undefined, capped: false }),
+}));
 
 const { severalModeOf } = await import("../../severalProjects");
 const { aggregateKinds, aggregatePageOf, hasAggregatePage } = await import("../registry");
@@ -61,13 +65,14 @@ describe("severalModeOf", () => {
     expect(severalModeOf({ kind: "services" })).toBe("self");
     expect(severalModeOf({ kind: "storage" })).toBe("self");
     expect(severalModeOf({ kind: "obs-overview" })).toBe("self");
-    expect(severalModeOf({ kind: "tests" })).toBe("sections");
-    expect(severalModeOf({ kind: "tests-coverage" })).toBe("sections");
+    expect(severalModeOf({ kind: "tests" })).toBe("aggregate");
+    expect(severalModeOf({ kind: "tests-coverage" })).toBe("aggregate");
+    expect(severalModeOf({ kind: "tests-runs" })).toBe("sections");
     expect(severalModeOf({ kind: "release", version: "v1" })).toBe("one");
   });
 
   it("agrees with the registry", () => {
-    expect(aggregateKinds()).toEqual(["overview"]);
+    expect(aggregateKinds()).toEqual(["overview", "tests", "tests-coverage"]);
     for (const kind of aggregateKinds()) {
       const page = { kind } as Parameters<typeof hasAggregatePage>[0];
       expect(hasAggregatePage(page)).toBe(true);
@@ -173,9 +178,12 @@ describe("the Overview's aggregate page", () => {
   it("keeps the Overview's columns and reads, one row per project, each opening its Overview", () => {
     render(<ProjectsOverviewPage page={{ kind: "overview" }} apps={APPS} mode="many" />);
     expect(screen.getByTestId("projects-overview")).toBeInTheDocument();
-    expect(screen.getByTestId("aggregate-scope")).toHaveTextContent("2 projects, in prod over the last 24 hours; cost is this month to date.");
-    // No totals strip until the backend's portfolio read fills it.
-    expect(screen.queryByTestId("aggregate-totals")).toBeNull();
+    expect(screen.getByTestId("aggregate-scope")).toHaveTextContent("2 projects, in prod over the last 24 hours; tests on each default branch; cost is this month to date.");
+    // The one observability read across them has answered; the tests figures have not, so they are left out.
+    const totals = screen.getByTestId("aggregate-totals");
+    expect(within(totals).getByText("Errors")).toBeInTheDocument();
+    expect(within(totals).getByText("p95")).toBeInTheDocument();
+    expect(within(totals).queryByText(/Test pass rate/)).toBeNull();
     expect(screen.getByTestId("drill-down-hint")).toBeInTheDocument();
 
     const shop = screen.getByTestId("projects-overview-row-p1");

@@ -14,11 +14,14 @@ import Status from "@/components/forge-ui/status";
 import { useApps } from "@/hooks/apps-queries";
 import { useProjectCost } from "@/hooks/organization-usage-queries";
 import { useObservabilityOrg, usePanelQuery } from "@/hooks/observability-queries";
+import { useTestPortfolio } from "@/hooks/test-queries";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
 import type { HostedVerdict } from "@/services/forge/topology";
 
 import { verdictBusy, verdictTone } from "../../Apps/appParts";
 import { formatAgo, formatCount, formatDuration } from "../Observability/format";
 import { redPanel } from "../Observability/Home/homeModel";
+import { coverageTotal, passRateTotal, portfolioProjects } from "../Tests/portfolioModel";
 import { AggregatePage, ProjectBreakdown, type AggregateTotal, type BreakdownColumn } from "./aggregate/AggregatePage";
 import { DrillDownHint } from "./aggregate/DrillDownHint";
 import type { AggregatePageProps } from "./aggregate/registry";
@@ -48,24 +51,95 @@ const COLUMNS: readonly BreakdownColumn[] = [
   { header: "Cost", align: "end" },
 ];
 
+/** QueryScope takes at most this many environments, and project_ids at most this many projects. */
+const SCOPE_MAX = 50;
+
 /**
- * The totals strip's figures over every project in scope. They come from the
- * backend's portfolio read, never from summing the rows here; until that read
- * exists the page shows no strip.
+ * The environment a project's row reads its health in: prod, else its first.
+ * The Overview's totals read the same environments, so they cover exactly the
+ * figures the rows show.
  */
-function useOverviewTotals(_apps: readonly SeveralApp[]): readonly AggregateTotal[] | undefined {
-  return undefined;
+export function healthEnvOf<E extends { name: string }>(summary: { envs: readonly E[] } | undefined): E | undefined {
+  return summary?.envs.find((env) => env.name === "prod") ?? summary?.envs[0];
+}
+
+/**
+ * The scope of the Overview's requests, errors and p95 across the projects
+ * in scope: ONE read, the same panel the rows run (homeModel redPanel), over
+ * the union of the environments the rows read. A chosen several names its
+ * projects (QueryScope.project_ids, control-plane#3957); every project reads
+ * the org, narrowed by those environments alone. Null until the org and the
+ * environments are known, when no project is deployed, or when the scope is
+ * larger than one read may name.
+ */
+export function useOverviewRedScope(apps: readonly SeveralApp[], mode: "many" | "all"): ObsScope | null {
+  const { apps: summaries } = useApps();
+  const org = useObservabilityOrg();
+  return useMemo(() => {
+    if (!org.orgId) return null;
+    const projects = new Set<string>();
+    const envIds = new Set<string>();
+    for (const project of apps) {
+      if (!project.deployed) continue;
+      const env = healthEnvOf(summaries.find((summary) => summary.name === project.app));
+      if (!env) continue;
+      projects.add(project.app);
+      envIds.add(env.id);
+    }
+    if (envIds.size === 0 || envIds.size > SCOPE_MAX || projects.size > SCOPE_MAX) return null;
+    return {
+      orgId: org.orgId,
+      ...(mode === "many" ? { projectIds: [...projects].sort() } : {}),
+      envIds: [...envIds].sort(),
+      filters: [],
+    };
+  }, [org.orgId, apps, summaries, mode]);
+}
+
+/**
+ * The totals strip's figures over every project in scope, each the
+ * backend's: requests' errors and p95 from one observability read across
+ * them (useOverviewRedScope), the tests' pass rate and coverage from
+ * GetTestPortfolio. Never summed from the rows here. A figure whose read has
+ * not answered, or cannot be made, is left out; none at all shows no strip.
+ * Cost is not totalled: the rows read each project's own cost, and the org's
+ * by-project usage is not read on this page.
+ */
+function useOverviewTotals(apps: readonly SeveralApp[], mode: "many" | "all"): readonly AggregateTotal[] | undefined {
+  const scope = useOverviewRedScope(apps, mode);
+  const panel = useMemo(() => redPanel("number"), []);
+  const red = usePanelQuery(scope, "24h", panel, []);
+  const portfolio = useTestPortfolio(portfolioProjects(apps, mode));
+  return useMemo(() => {
+    const totals: AggregateTotal[] = [];
+    const value = (label: string) => red.data?.series.find((series) => series.label === label)?.value ?? null;
+    if (scope && red.data) {
+      const errors = value("errors");
+      const p95 = value("p95");
+      totals.push({ label: "Errors", value: errors === null ? "—" : formatCount(errors) });
+      totals.push({ label: "p95", value: p95 === null ? "—" : formatDuration(p95) });
+    }
+    const tests = portfolio.data?.totals;
+    if (tests && tests.projectsWithRuns > 0) {
+      totals.push(passRateTotal(tests, "Test pass rate"));
+      for (const coverage of tests.coverage) {
+        const total = coverageTotal(coverage);
+        totals.push({ ...total, label: `Coverage · ${total.label}` });
+      }
+    }
+    return totals.length > 0 ? totals : undefined;
+  }, [scope, red.data, portfolio.data]);
 }
 
 /** The Overview's aggregate page: a row per project in scope. */
 export function ProjectsOverviewPage({ page, apps, mode }: AggregatePageProps) {
-  const totals = useOverviewTotals(apps);
+  const totals = useOverviewTotals(apps, mode);
   return (
     <AggregatePage
       title="Overview"
       mode={mode}
       count={apps.length}
-      coverage="in prod over the last 24 hours; cost is this month to date"
+      coverage="in prod over the last 24 hours; tests on each default branch; cost is this month to date"
       totals={totals}
       hint={<DrillDownHint purpose="see its workloads, what needs attention and its recent releases" projects={apps} page={page} />}
       testId="projects-overview"
@@ -83,7 +157,7 @@ export function ProjectsOverviewPage({ page, apps, mode }: AggregatePageProps) {
 export function useAppHealth(app: string, deployed: boolean) {
   const { apps, loading } = useApps();
   const summary = apps.find((candidate) => candidate.name === app);
-  const prod = summary?.envs.find((env) => env.name === "prod") ?? summary?.envs[0];
+  const prod = healthEnvOf(summary);
   const org = useObservabilityOrg();
   const scope = useMemo(
     () => (org.orgId && prod ? { orgId: org.orgId, projectId: app, envIds: [prod.id], filters: [] } : null),

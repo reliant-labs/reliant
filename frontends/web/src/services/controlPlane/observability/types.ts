@@ -39,6 +39,13 @@ export interface ObsScope {
   orgId: string;
   /** The forge project (`deploy_environments.project`). Undefined: no project narrowing. */
   projectId?: string;
+  /**
+   * Several forge projects at once (QueryScope.project_ids,
+   * control-plane#3957): the union of their environments. projectId's plural:
+   * a scope sets one or the other, never both (projectId wins on the wire).
+   * At most 50. Empty or undefined: no narrowing by it.
+   */
+  projectIds?: string[];
   /** control-plane environment ids (stamped on telemetry as `reliant.env.id`). Empty: every environment. */
   envIds: string[];
   /**

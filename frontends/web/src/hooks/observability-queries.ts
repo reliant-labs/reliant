@@ -147,7 +147,7 @@ function panelRequestKey(panel: Panel) {
 export const obsKeys = {
   org: () => ["observability", "org"] as const,
   all: (scope: ObsScope | null) =>
-    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? [], scope?.platformScope ?? false] as const,
+    ["observability", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], scope?.filters ?? [], scope?.platformScope ?? false, scope?.projectIds ?? []] as const,
   logs: (scope: ObsScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
   traces: (scope: ObsScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
@@ -157,7 +157,7 @@ export const obsKeys = {
 
 /** What names a scope in a QueryScope's protojson: everything but the window and the services filter. */
 function scopeIdentity(scope: Record<string, unknown> | undefined): string | undefined {
-  return scope ? hashKey([scope.orgId, scope.projectId, scope.envIds, scope.filters, scope.platformScope]) : undefined;
+  return scope ? hashKey([scope.orgId, scope.projectId, scope.envIds, scope.filters, scope.platformScope, scope.projectIds]) : undefined;
 }
 
 /** The scope a generated read's key names: its request (protojson, the key's last entry) carries a QueryScope. */

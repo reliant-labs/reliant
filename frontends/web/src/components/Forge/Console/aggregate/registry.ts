@@ -60,6 +60,8 @@ function lazyAggregate<M extends Record<string, unknown>, K extends keyof M & st
  */
 const AGGREGATE_PAGES: Partial<Record<ConsolePage["kind"], LazyExoticComponent<AggregatePageComponent>>> = {
   overview: lazyAggregate(() => import("../ProjectsOverview"), "ProjectsOverviewPage"),
+  tests: lazyAggregate(() => import("../../Tests/TestsAggregatePages"), "TestsAggregatePage"),
+  "tests-coverage": lazyAggregate(() => import("../../Tests/TestsAggregatePages"), "CoverageAggregatePage"),
 };
 
 /** The kinds with an aggregate page, for tests and diagnostics. */

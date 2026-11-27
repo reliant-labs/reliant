@@ -17,7 +17,8 @@
  * GetTestRun, ListFlakyTests and GetTest from runFlakeFixtures.ts (the Runs
  * and Flaky tests pages, W3); GetCoverage and GetFileCoverage from
  * coverageFixtures.ts (the Coverage page, W2); GetReleaseTests from
- * releaseTestsFixtures.ts (the release Tests tab and the Releases column, W4).
+ * releaseTestsFixtures.ts (the release Tests tab and the Releases column, W4);
+ * GetTestPortfolio from portfolioFixtures.ts (the aggregate Tests pages).
  */
 
 import { Code, ConnectError } from "@connectrpc/connect";
@@ -26,6 +27,7 @@ import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import type { TestApi } from "@/services/controlPlane/tests/TestApiContext";
 import {
   flakePageOf,
+  portfolioOf,
   releaseTestsOf,
   runDetailOf,
   runPageOf,
@@ -44,6 +46,7 @@ import {
 import { fixtureFlakyWire, fixtureRunsWire, fixtureRunWire, fixtureTestWire } from "./runFlakeFixtures";
 import { fixtureCoverage, fixtureFileCoverage } from "./coverageFixtures";
 import { FIXTURE_RELEASE_COMMITS, FIXTURE_RELEASE_VERSIONS } from "./fixtureReleases";
+import { portfolioRowWire, portfolioWire } from "./portfolioFixtures";
 import { fixtureReleaseTestsWire } from "./releaseTestsFixtures";
 
 /**
@@ -294,5 +297,10 @@ export function fixtureTestApi(scenario: TestsScenario = "report"): FixtureTestA
     getReleaseTests: (req) => answer("getReleaseTests", req, () => releaseTestsOf(fixtureReleaseTestsWire(data, req))),
     listFlakyTests: (req) => answer("listFlakyTests", req, () => flakePageOf(fixtureFlakyWire(data, req))),
     getTest: (req) => answer("getTest", req, () => testDetailOf(fixtureTestWire(data, req))),
+    // Every named project tells this scenario's story (none named: the fixture's one project).
+    getTestPortfolio: (req) =>
+      answer("getTestPortfolio", req, () =>
+        portfolioOf(portfolioWire((req.projects.length ? [...new Set(req.projects)] : [FIXTURE_PROJECT]).map((project) => portfolioRowWire(project, fixtureSummaryWire(scenario)))))
+      ),
   };
 }

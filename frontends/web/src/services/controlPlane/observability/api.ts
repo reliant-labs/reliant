@@ -196,12 +196,16 @@ export function wireTimeRange(window: ObsWindow) {
 /**
  * QueryScope. `projectId` is sent only when the console knows the project —
  * absent means "no project narrowing", while an EMPTY string would mean "the
- * project-less environments only", which no view asks for.
+ * project-less environments only", which no view asks for. `projectIds`
+ * (several projects, control-plane#3957) only when there is no projectId: the
+ * server refuses both. A server from before it drops the field, reading every
+ * project's environments the env_ids allow, so callers name env_ids too.
  */
 export function wireScope(s: ObsScope, window: ObsWindow, services: string[] = []) {
   return {
     orgId: s.orgId,
     projectId: s.projectId || undefined,
+    ...(!s.projectId && s.projectIds?.length ? { projectIds: s.projectIds } : {}),
     envIds: s.envIds,
     ...(s.platformScope ? { platformScope: true } : {}),
     services,
