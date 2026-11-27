@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
@@ -495,6 +496,10 @@ func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
 type TemporalClient struct {
 	Client    client.Client
 	Namespace string
+	// DataConverter is a converter configured as Client's is (the same
+	// claim-check store), for a reader that decodes payloads Client hands
+	// back raw, such as a history event's. nil: the reader's own default.
+	DataConverter converter.DataConverter
 }
 
 // TemporalClientDeps is the server, and the boot context the first dial
@@ -556,7 +561,11 @@ func newTemporalClient(d TemporalClientDeps, dial dialTemporalFunc) (*TemporalCl
 		c = stopnudge.Wrap(c, d.NATS.Conn, stopSignals...)
 	}
 	logging.Info("Connected to external Temporal server", "host", host, "port", port)
-	return &TemporalClient{Client: c, Namespace: namespace}, nil
+	return &TemporalClient{
+		Client:        c,
+		Namespace:     namespace,
+		DataConverter: temporal.NewFlexibleDataConverter(temporal.WithPayloadStore(d.PayloadStore)),
+	}, nil
 }
 
 // Ready fails while the Temporal server does not answer its health check.

@@ -1522,6 +1522,7 @@ export const WorkflowService: GenService<{
   /**
    * ListWorkflows returns all available workflows from DB + builtins
    * forge:custom — merges builtin, project and the caller's own workflow definitions for one project
+   * forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
    *
    * @generated from rpc reliant.v1.WorkflowService.ListWorkflows
    */
@@ -1545,6 +1546,7 @@ export const WorkflowService: GenService<{
   /**
    * GetWorkflow returns a specific workflow by slug
    * forge:custom — resolves a workflow definition by slug across builtin, project and user sources
+   * forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
    *
    * @generated from rpc reliant.v1.WorkflowService.GetWorkflow
    */
@@ -1589,6 +1591,7 @@ export const WorkflowService: GenService<{
   /**
    * ExportWorkflow exports a workflow from the database as YAML. A read
    * (NO_SIDE_EFFECTS), like ValidateWorkflow.
+   * forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
    *
    * @generated from rpc reliant.v1.WorkflowService.ExportWorkflow
    */

@@ -77,6 +77,7 @@ const (
 type WorkflowServiceClient interface {
 	// ListWorkflows returns all available workflows from DB + builtins
 	// forge:custom — merges builtin, project and the caller's own workflow definitions for one project
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
 	ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error)
 	// SaveWorkflow creates or updates a workflow in the database.
 	// A draft is stored as-is (validation findings are returned, not enforced);
@@ -84,6 +85,7 @@ type WorkflowServiceClient interface {
 	SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error)
 	// GetWorkflow returns a specific workflow by slug
 	// forge:custom — resolves a workflow definition by slug across builtin, project and user sources
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
 	GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error)
 	// DeleteWorkflow deletes a workflow from the database
 	// forge:custom — deletes the caller's workflow draft by the slug of its name
@@ -96,6 +98,7 @@ type WorkflowServiceClient interface {
 	ImportWorkflow(context.Context, *connect.Request[v1.ImportWorkflowRequest]) (*connect.Response[v1.ImportWorkflowResponse], error)
 	// ExportWorkflow exports a workflow from the database as YAML. A read
 	// (NO_SIDE_EFFECTS), like ValidateWorkflow.
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
 	ExportWorkflow(context.Context, *connect.Request[v1.ExportWorkflowRequest]) (*connect.Response[v1.ExportWorkflowResponse], error)
 	// SetWorkflowVisibility toggles the hidden status of a workflow
 	SetWorkflowVisibility(context.Context, *connect.Request[v1.SetWorkflowVisibilityRequest]) (*connect.Response[v1.SetWorkflowVisibilityResponse], error)
@@ -290,6 +293,7 @@ func (c *workflowServiceClient) ForkOrphanedWorkflow(ctx context.Context, req *c
 type WorkflowServiceHandler interface {
 	// ListWorkflows returns all available workflows from DB + builtins
 	// forge:custom — merges builtin, project and the caller's own workflow definitions for one project
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
 	ListWorkflows(context.Context, *connect.Request[v1.ListWorkflowsRequest]) (*connect.Response[v1.ListWorkflowsResponse], error)
 	// SaveWorkflow creates or updates a workflow in the database.
 	// A draft is stored as-is (validation findings are returned, not enforced);
@@ -297,6 +301,7 @@ type WorkflowServiceHandler interface {
 	SaveWorkflow(context.Context, *connect.Request[v1.SaveWorkflowRequest]) (*connect.Response[v1.SaveWorkflowResponse], error)
 	// GetWorkflow returns a specific workflow by slug
 	// forge:custom — resolves a workflow definition by slug across builtin, project and user sources
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
 	GetWorkflow(context.Context, *connect.Request[v1.GetWorkflowRequest]) (*connect.Response[v1.GetWorkflowResponse], error)
 	// DeleteWorkflow deletes a workflow from the database
 	// forge:custom — deletes the caller's workflow draft by the slug of its name
@@ -309,6 +314,7 @@ type WorkflowServiceHandler interface {
 	ImportWorkflow(context.Context, *connect.Request[v1.ImportWorkflowRequest]) (*connect.Response[v1.ImportWorkflowResponse], error)
 	// ExportWorkflow exports a workflow from the database as YAML. A read
 	// (NO_SIDE_EFFECTS), like ValidateWorkflow.
+	// forge:lint-disable-next-line forge-idempotency-secret-response-marked-read: nodes.run.credentials is the credential MODE (none or inherit), not a credential or a per-call value
 	ExportWorkflow(context.Context, *connect.Request[v1.ExportWorkflowRequest]) (*connect.Response[v1.ExportWorkflowResponse], error)
 	// SetWorkflowVisibility toggles the hidden status of a workflow
 	SetWorkflowVisibility(context.Context, *connect.Request[v1.SetWorkflowVisibilityRequest]) (*connect.Response[v1.SetWorkflowVisibilityResponse], error)

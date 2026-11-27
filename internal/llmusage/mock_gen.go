@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=61d8ed18fdb1046d9633898cf88c9205b34c4835615b81c96415821aaaf24068
+// forge:hash=ff4dd7d6a6fada0123f6973559e14df6996623aae945bf3832cc717f6cfe085f
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	RecordToolCallUsageFunc      func(context.Context, store.ToolCallUsageRecord) (bool, error)
@@ -90,18 +91,137 @@ func (m *MockService) PruneLLMUsagePurgeFences(ctx context.Context, now time.Tim
 	return 0, contractkit.MockNotSet("MockService", "PruneLLMUsagePurgeFences")
 }
 
+// MockServiceRecordToolCallUsageCall is one recorded call of MockService.RecordToolCallUsage, one
+// field per parameter.
+type MockServiceRecordToolCallUsageCall struct {
+	Ctx context.Context
+	Rec store.ToolCallUsageRecord
+}
+
+// RecordToolCallUsageCalls returns every recorded RecordToolCallUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordToolCallUsage").
+func (m *MockService) RecordToolCallUsageCalls() []MockServiceRecordToolCallUsageCall {
+	var out []MockServiceRecordToolCallUsageCall
+	for _, c := range m.Recorder.Calls("RecordToolCallUsage") {
+		var r MockServiceRecordToolCallUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Rec, _ = c.Args[1].(store.ToolCallUsageRecord)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePruneToolCallUsageCall is one recorded call of MockService.PruneToolCallUsage, one
+// field per parameter.
+type MockServicePruneToolCallUsageCall struct {
+	Ctx context.Context
+	Now time.Time
+}
+
+// PruneToolCallUsageCalls returns every recorded PruneToolCallUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PruneToolCallUsage").
+func (m *MockService) PruneToolCallUsageCalls() []MockServicePruneToolCallUsageCall {
+	var out []MockServicePruneToolCallUsageCall
+	for _, c := range m.Recorder.Calls("PruneToolCallUsage") {
+		var r MockServicePruneToolCallUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Now, _ = c.Args[1].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceRecordLLMCallUsageCall is one recorded call of MockService.RecordLLMCallUsage, one
+// field per parameter.
+type MockServiceRecordLLMCallUsageCall struct {
+	Ctx context.Context
+	Rec store.LLMCallUsageRecord
+}
+
+// RecordLLMCallUsageCalls returns every recorded RecordLLMCallUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordLLMCallUsage").
+func (m *MockService) RecordLLMCallUsageCalls() []MockServiceRecordLLMCallUsageCall {
+	var out []MockServiceRecordLLMCallUsageCall
+	for _, c := range m.Recorder.Calls("RecordLLMCallUsage") {
+		var r MockServiceRecordLLMCallUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Rec, _ = c.Args[1].(store.LLMCallUsageRecord)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePruneLLMCallUsageCall is one recorded call of MockService.PruneLLMCallUsage, one
+// field per parameter.
+type MockServicePruneLLMCallUsageCall struct {
+	Ctx context.Context
+	Now time.Time
+}
+
+// PruneLLMCallUsageCalls returns every recorded PruneLLMCallUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PruneLLMCallUsage").
+func (m *MockService) PruneLLMCallUsageCalls() []MockServicePruneLLMCallUsageCall {
+	var out []MockServicePruneLLMCallUsageCall
+	for _, c := range m.Recorder.Calls("PruneLLMCallUsage") {
+		var r MockServicePruneLLMCallUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Now, _ = c.Args[1].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceFoldInsightsCall is one recorded call of MockService.FoldInsights, one
+// field per parameter.
+type MockServiceFoldInsightsCall struct {
+	Ctx context.Context
+}
+
+// FoldInsightsCalls returns every recorded FoldInsights call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FoldInsights").
+func (m *MockService) FoldInsightsCalls() []MockServiceFoldInsightsCall {
+	var out []MockServiceFoldInsightsCall
+	for _, c := range m.Recorder.Calls("FoldInsights") {
+		var r MockServiceFoldInsightsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePruneLLMUsagePurgeFencesCall is one recorded call of MockService.PruneLLMUsagePurgeFences, one
+// field per parameter.
+type MockServicePruneLLMUsagePurgeFencesCall struct {
+	Ctx context.Context
+	Now time.Time
+}
+
+// PruneLLMUsagePurgeFencesCalls returns every recorded PruneLLMUsagePurgeFences call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PruneLLMUsagePurgeFences").
+func (m *MockService) PruneLLMUsagePurgeFencesCalls() []MockServicePruneLLMUsagePurgeFencesCall {
+	var out []MockServicePruneLLMUsagePurgeFencesCall
+	for _, c := range m.Recorder.Calls("PruneLLMUsagePurgeFences") {
+		var r MockServicePruneLLMUsagePurgeFencesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Now, _ = c.Args[1].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockLedger
-// forge:hash=7a873ed24f992de7f9b995dbe096206ee065c800f80fcdbdba65692353f72e03
+// forge:hash=8c0724236f985e61089efc1ee10826c93fb6c283ddd76b8e108c3a0c194276dc
 
 // MockLedger is a test mock for the Ledger interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockLedger.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockLedger.<Method>Func not set" error.
 type MockLedger struct {
 	contractkit.Recorder
 	RecordLLMCallUsageFunc           func(context.Context, store.LLMCallUsageRecord) (bool, error)
@@ -146,18 +266,101 @@ func (m *MockLedger) FoldLLMCallUsageIntoInsights(ctx context.Context, batch int
 	return 0, contractkit.MockNotSet("MockLedger", "FoldLLMCallUsageIntoInsights")
 }
 
+// MockLedgerRecordLLMCallUsageCall is one recorded call of MockLedger.RecordLLMCallUsage, one
+// field per parameter.
+type MockLedgerRecordLLMCallUsageCall struct {
+	Ctx context.Context
+	Rec store.LLMCallUsageRecord
+}
+
+// RecordLLMCallUsageCalls returns every recorded RecordLLMCallUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordLLMCallUsage").
+func (m *MockLedger) RecordLLMCallUsageCalls() []MockLedgerRecordLLMCallUsageCall {
+	var out []MockLedgerRecordLLMCallUsageCall
+	for _, c := range m.Recorder.Calls("RecordLLMCallUsage") {
+		var r MockLedgerRecordLLMCallUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Rec, _ = c.Args[1].(store.LLMCallUsageRecord)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockLedgerPruneLLMCallUsageCall is one recorded call of MockLedger.PruneLLMCallUsage, one
+// field per parameter.
+type MockLedgerPruneLLMCallUsageCall struct {
+	Ctx    context.Context
+	Cutoff time.Time
+	Batch  int
+}
+
+// PruneLLMCallUsageCalls returns every recorded PruneLLMCallUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PruneLLMCallUsage").
+func (m *MockLedger) PruneLLMCallUsageCalls() []MockLedgerPruneLLMCallUsageCall {
+	var out []MockLedgerPruneLLMCallUsageCall
+	for _, c := range m.Recorder.Calls("PruneLLMCallUsage") {
+		var r MockLedgerPruneLLMCallUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Cutoff, _ = c.Args[1].(time.Time)
+		r.Batch, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockLedgerPruneLLMUsagePurgeFencesCall is one recorded call of MockLedger.PruneLLMUsagePurgeFences, one
+// field per parameter.
+type MockLedgerPruneLLMUsagePurgeFencesCall struct {
+	Ctx context.Context
+	Now time.Time
+}
+
+// PruneLLMUsagePurgeFencesCalls returns every recorded PruneLLMUsagePurgeFences call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PruneLLMUsagePurgeFences").
+func (m *MockLedger) PruneLLMUsagePurgeFencesCalls() []MockLedgerPruneLLMUsagePurgeFencesCall {
+	var out []MockLedgerPruneLLMUsagePurgeFencesCall
+	for _, c := range m.Recorder.Calls("PruneLLMUsagePurgeFences") {
+		var r MockLedgerPruneLLMUsagePurgeFencesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Now, _ = c.Args[1].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockLedgerFoldLLMCallUsageIntoInsightsCall is one recorded call of MockLedger.FoldLLMCallUsageIntoInsights, one
+// field per parameter.
+type MockLedgerFoldLLMCallUsageIntoInsightsCall struct {
+	Ctx   context.Context
+	Batch int
+}
+
+// FoldLLMCallUsageIntoInsightsCalls returns every recorded FoldLLMCallUsageIntoInsights call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FoldLLMCallUsageIntoInsights").
+func (m *MockLedger) FoldLLMCallUsageIntoInsightsCalls() []MockLedgerFoldLLMCallUsageIntoInsightsCall {
+	var out []MockLedgerFoldLLMCallUsageIntoInsightsCall
+	for _, c := range m.Recorder.Calls("FoldLLMCallUsageIntoInsights") {
+		var r MockLedgerFoldLLMCallUsageIntoInsightsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Batch, _ = c.Args[1].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Ledger = (*MockLedger)(nil)
 
 // forge:section MockToolLedger
-// forge:hash=647eee8b3d8d42511f1722be47a83b528b2a8b22a0b0145967de804498a6ef20
+// forge:hash=665c3bfa44135d6f3ca49e5410548a3eaf677bcb5ab16f097525a0df9940558c
 
 // MockToolLedger is a test mock for the ToolLedger interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockToolLedger.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockToolLedger.<Method>Func not set" error.
 type MockToolLedger struct {
 	contractkit.Recorder
 	RecordToolCallUsageFunc           func(context.Context, store.ToolCallUsageRecord) (bool, error)
@@ -192,18 +395,81 @@ func (m *MockToolLedger) FoldToolCallUsageIntoInsights(ctx context.Context, batc
 	return 0, contractkit.MockNotSet("MockToolLedger", "FoldToolCallUsageIntoInsights")
 }
 
+// MockToolLedgerRecordToolCallUsageCall is one recorded call of MockToolLedger.RecordToolCallUsage, one
+// field per parameter.
+type MockToolLedgerRecordToolCallUsageCall struct {
+	Ctx context.Context
+	Rec store.ToolCallUsageRecord
+}
+
+// RecordToolCallUsageCalls returns every recorded RecordToolCallUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordToolCallUsage").
+func (m *MockToolLedger) RecordToolCallUsageCalls() []MockToolLedgerRecordToolCallUsageCall {
+	var out []MockToolLedgerRecordToolCallUsageCall
+	for _, c := range m.Recorder.Calls("RecordToolCallUsage") {
+		var r MockToolLedgerRecordToolCallUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Rec, _ = c.Args[1].(store.ToolCallUsageRecord)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockToolLedgerPruneToolCallUsageCall is one recorded call of MockToolLedger.PruneToolCallUsage, one
+// field per parameter.
+type MockToolLedgerPruneToolCallUsageCall struct {
+	Ctx    context.Context
+	Cutoff time.Time
+	Batch  int
+}
+
+// PruneToolCallUsageCalls returns every recorded PruneToolCallUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PruneToolCallUsage").
+func (m *MockToolLedger) PruneToolCallUsageCalls() []MockToolLedgerPruneToolCallUsageCall {
+	var out []MockToolLedgerPruneToolCallUsageCall
+	for _, c := range m.Recorder.Calls("PruneToolCallUsage") {
+		var r MockToolLedgerPruneToolCallUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Cutoff, _ = c.Args[1].(time.Time)
+		r.Batch, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockToolLedgerFoldToolCallUsageIntoInsightsCall is one recorded call of MockToolLedger.FoldToolCallUsageIntoInsights, one
+// field per parameter.
+type MockToolLedgerFoldToolCallUsageIntoInsightsCall struct {
+	Ctx   context.Context
+	Batch int
+}
+
+// FoldToolCallUsageIntoInsightsCalls returns every recorded FoldToolCallUsageIntoInsights call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FoldToolCallUsageIntoInsights").
+func (m *MockToolLedger) FoldToolCallUsageIntoInsightsCalls() []MockToolLedgerFoldToolCallUsageIntoInsightsCall {
+	var out []MockToolLedgerFoldToolCallUsageIntoInsightsCall
+	for _, c := range m.Recorder.Calls("FoldToolCallUsageIntoInsights") {
+		var r MockToolLedgerFoldToolCallUsageIntoInsightsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Batch, _ = c.Args[1].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ToolLedger = (*MockToolLedger)(nil)
 
 // forge:section MockTxRunner
-// forge:hash=1a0ee09450a8c0c0c820b797730ecbfabb88f624601078e98bcecc809d6c34d9
+// forge:hash=1a9a9ed41b954ef2ab28e8326f76baa309a556ade16a586f99462bed4c992c21
 
 // MockTxRunner is a test mock for the TxRunner interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTxRunner.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTxRunner.<Method>Func not set" error.
 type MockTxRunner struct {
 	contractkit.Recorder
 	RunTxFunc func(context.Context, orm.TxPolicy, func(ctx context.Context) error) error
@@ -216,6 +482,28 @@ func (m *MockTxRunner) RunTx(p0 context.Context, policy orm.TxPolicy, fn func(ct
 		return m.RunTxFunc(p0, policy, fn)
 	}
 	return contractkit.MockNotSet("MockTxRunner", "RunTx")
+}
+
+// MockTxRunnerRunTxCall is one recorded call of MockTxRunner.RunTx, one
+// field per parameter.
+type MockTxRunnerRunTxCall struct {
+	Ctx    context.Context
+	Policy orm.TxPolicy
+	Fn     func(ctx context.Context) error
+}
+
+// RunTxCalls returns every recorded RunTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunTx").
+func (m *MockTxRunner) RunTxCalls() []MockTxRunnerRunTxCall {
+	var out []MockTxRunnerRunTxCall
+	for _, c := range m.Recorder.Calls("RunTx") {
+		var r MockTxRunnerRunTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Policy, _ = c.Args[1].(orm.TxPolicy)
+		r.Fn, _ = c.Args[2].(func(ctx context.Context) error)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

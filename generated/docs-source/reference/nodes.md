@@ -30,6 +30,7 @@ These fields are available on **all** node types. They provide shared functional
 | `tolerate_failure` | boolean | No | Make the node optional: when it fails the run continues, and nodes.<id>.failed is true with the reason in nodes.<id>.error |
 | `observe` | NodeObserve | No | What the node records when it finishes: span attributes, events (a decision is an event named decision) and metrics, as templates over output.*. Never fails the node |
 | `role` | string | No | The engine role this node acts in. Only reviewer, and only on a review node, which requires it (enum: reviewer) |
+| `preflight` | NodePreflight | No | Check the machine before the node's work starts (disk, /tmp, uid, tools, load); a machine that fails is never given the node, which moves to another member of its pool without spending an attempt. true, or a mapping of overrides |
 
 ### Thread Configuration
 

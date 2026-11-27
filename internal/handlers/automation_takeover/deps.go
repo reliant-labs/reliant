@@ -1,6 +1,6 @@
 // forge:deps — consumer-declared interfaces for this package's Deps.
-// mock_gen.go mocks them. *db.Repo is the Repository and *trigger.Service the
-// TriggerAdopter; the composition root hands them to New.
+// mock_gen.go mocks them. store.TriggerExtStore is the TriggerReads and
+// *trigger.Service the TriggerAdopter; the composition root hands them to New.
 package automation_takeover
 
 import (
@@ -10,8 +10,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Repository is what the takeover reads and writes. *db.Repo satisfies it.
-type Repository interface {
+// TriggerReads reads one trigger by id. store.TriggerExtStore satisfies it.
+type TriggerReads interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 }
 

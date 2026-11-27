@@ -14,18 +14,20 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=bcfe52a0b5086453719f99590e8a585f4480648232cedff8f03d2da94de59fd3
+// forge:hash=065c98d36e423e6217cd8b764c75e04e8593073b2a77294f0092f126021ad6f4
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	UserAccessTokenFunc            func(context.Context, string, string) (Token, error)
 	MintInstallationTokenFunc      func(context.Context, InstallationRequest) (InstallationToken, error)
+	MintQueueInstallationTokenFunc func(context.Context, QueueInstallationRequest) (InstallationToken, error)
 	ListOrgGitHubInstallationsFunc func(context.Context, string) ([]OrgInstallation, error)
 }
 
@@ -47,6 +49,15 @@ func (m *MockService) MintInstallationToken(ctx context.Context, req Installatio
 	return InstallationToken{}, contractkit.MockNotSet("MockService", "MintInstallationToken")
 }
 
+// MintQueueInstallationToken records the call and delegates to MintQueueInstallationTokenFunc when set.
+func (m *MockService) MintQueueInstallationToken(ctx context.Context, req QueueInstallationRequest) (InstallationToken, error) {
+	m.Recorder.Record("MintQueueInstallationToken", ctx, req)
+	if m.MintQueueInstallationTokenFunc != nil {
+		return m.MintQueueInstallationTokenFunc(ctx, req)
+	}
+	return InstallationToken{}, contractkit.MockNotSet("MockService", "MintQueueInstallationToken")
+}
+
 // ListOrgGitHubInstallations records the call and delegates to ListOrgGitHubInstallationsFunc when set.
 func (m *MockService) ListOrgGitHubInstallations(ctx context.Context, orgID string) ([]OrgInstallation, error) {
 	m.Recorder.Record("ListOrgGitHubInstallations", ctx, orgID)
@@ -54,6 +65,88 @@ func (m *MockService) ListOrgGitHubInstallations(ctx context.Context, orgID stri
 		return m.ListOrgGitHubInstallationsFunc(ctx, orgID)
 	}
 	return nil, contractkit.MockNotSet("MockService", "ListOrgGitHubInstallations")
+}
+
+// MockServiceUserAccessTokenCall is one recorded call of MockService.UserAccessToken, one
+// field per parameter.
+type MockServiceUserAccessTokenCall struct {
+	Ctx            context.Context
+	ExternalUserID string
+	Provider       string
+}
+
+// UserAccessTokenCalls returns every recorded UserAccessToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UserAccessToken").
+func (m *MockService) UserAccessTokenCalls() []MockServiceUserAccessTokenCall {
+	var out []MockServiceUserAccessTokenCall
+	for _, c := range m.Recorder.Calls("UserAccessToken") {
+		var r MockServiceUserAccessTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ExternalUserID, _ = c.Args[1].(string)
+		r.Provider, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceMintInstallationTokenCall is one recorded call of MockService.MintInstallationToken, one
+// field per parameter.
+type MockServiceMintInstallationTokenCall struct {
+	Ctx context.Context
+	Req InstallationRequest
+}
+
+// MintInstallationTokenCalls returns every recorded MintInstallationToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MintInstallationToken").
+func (m *MockService) MintInstallationTokenCalls() []MockServiceMintInstallationTokenCall {
+	var out []MockServiceMintInstallationTokenCall
+	for _, c := range m.Recorder.Calls("MintInstallationToken") {
+		var r MockServiceMintInstallationTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(InstallationRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceMintQueueInstallationTokenCall is one recorded call of MockService.MintQueueInstallationToken, one
+// field per parameter.
+type MockServiceMintQueueInstallationTokenCall struct {
+	Ctx context.Context
+	Req QueueInstallationRequest
+}
+
+// MintQueueInstallationTokenCalls returns every recorded MintQueueInstallationToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MintQueueInstallationToken").
+func (m *MockService) MintQueueInstallationTokenCalls() []MockServiceMintQueueInstallationTokenCall {
+	var out []MockServiceMintQueueInstallationTokenCall
+	for _, c := range m.Recorder.Calls("MintQueueInstallationToken") {
+		var r MockServiceMintQueueInstallationTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(QueueInstallationRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListOrgGitHubInstallationsCall is one recorded call of MockService.ListOrgGitHubInstallations, one
+// field per parameter.
+type MockServiceListOrgGitHubInstallationsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// ListOrgGitHubInstallationsCalls returns every recorded ListOrgGitHubInstallations call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOrgGitHubInstallations").
+func (m *MockService) ListOrgGitHubInstallationsCalls() []MockServiceListOrgGitHubInstallationsCall {
+	var out []MockServiceListOrgGitHubInstallationsCall
+	for _, c := range m.Recorder.Calls("ListOrgGitHubInstallations") {
+		var r MockServiceListOrgGitHubInstallationsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

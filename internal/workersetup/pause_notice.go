@@ -202,7 +202,7 @@ type PauseNoticeStore interface {
 }
 
 // pauseTriggerReads is the one trigger read a pause's notice makes: the pause
-// read back. The repository facade serves it (other areas share it).
+// read back. store.TriggerExtStore serves it.
 type pauseTriggerReads interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 }

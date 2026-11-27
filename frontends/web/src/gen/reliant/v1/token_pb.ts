@@ -672,6 +672,7 @@ export const TokenService: GenService<{
    *
    * auth_required: false for the same reason as ExchangeToken: the handler,
    * not the interceptor, authenticates the caller.
+   * forge:mutation: mints a new short-lived git credential for the provider connection on every call
    *
    * @generated from rpc reliant.v1.TokenService.GetGitToken
    */
@@ -708,6 +709,7 @@ export const TokenService: GenService<{
    *     `git_credential_not_connected`, `git_credential_needs_reconnect`.
    *   - PERMISSION_DENIED, reason `github_owner_cannot_push`.
    *   - UNAVAILABLE: the control plane or GitHub could not be reached; retry.
+   * forge:mutation: mints a new GitHub App installation token on every call
    *
    * @generated from rpc reliant.v1.TokenService.GetGitHubBotToken
    */

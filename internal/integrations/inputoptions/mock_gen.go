@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=0ae6a1197da93c3af2f7f13bc92159660fd89a75805fb6e1c2f0a4be7ce6017a
+// forge:hash=0e421e3c2da8af1e8d15091f3d806bfa7485728350a685af1c15a55144b8ebfe
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	ListFunc    func(context.Context, ListRequest) (*ListResult, error)
@@ -49,18 +50,59 @@ func (m *MockService) Resolve(ctx context.Context, req ResolveRequest) (*Resolut
 	return nil, contractkit.MockNotSet("MockService", "Resolve")
 }
 
+// MockServiceListCall is one recorded call of MockService.List, one
+// field per parameter.
+type MockServiceListCall struct {
+	Ctx context.Context
+	Req ListRequest
+}
+
+// ListCalls returns every recorded List call, oldest first, with
+// its arguments typed. It reads the same log as Calls("List").
+func (m *MockService) ListCalls() []MockServiceListCall {
+	var out []MockServiceListCall
+	for _, c := range m.Recorder.Calls("List") {
+		var r MockServiceListCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(ListRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceResolveCall is one recorded call of MockService.Resolve, one
+// field per parameter.
+type MockServiceResolveCall struct {
+	Ctx context.Context
+	Req ResolveRequest
+}
+
+// ResolveCalls returns every recorded Resolve call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Resolve").
+func (m *MockService) ResolveCalls() []MockServiceResolveCall {
+	var out []MockServiceResolveCall
+	for _, c := range m.Recorder.Calls("Resolve") {
+		var r MockServiceResolveCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(ResolveRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockTypeSource
-// forge:hash=e2634e158bb7686637ce0c91e0945965f62c8104c8421a8fe9a93aa8df9dc0c1
+// forge:hash=98368b861f7b960a1f9e967daa9845d3b7763c9d387bf23049950f6e82fc5c7d
 
 // MockTypeSource is a test mock for the TypeSource interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTypeSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTypeSource.<Method>Func not set" error.
 type MockTypeSource struct {
 	contractkit.Recorder
 	LookupFunc func(string) (*reliantv1.IntegrationManifest, *reliantv1.TypeSpec, bool)
@@ -75,18 +117,37 @@ func (m *MockTypeSource) Lookup(ref string) (*reliantv1.IntegrationManifest, *re
 	return nil, nil, false
 }
 
+// MockTypeSourceLookupCall is one recorded call of MockTypeSource.Lookup, one
+// field per parameter.
+type MockTypeSourceLookupCall struct {
+	Ref string
+}
+
+// LookupCalls returns every recorded Lookup call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Lookup").
+func (m *MockTypeSource) LookupCalls() []MockTypeSourceLookupCall {
+	var out []MockTypeSourceLookupCall
+	for _, c := range m.Recorder.Calls("Lookup") {
+		var r MockTypeSourceLookupCall
+		r.Ref, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ TypeSource = (*MockTypeSource)(nil)
 
 // forge:section MockActionRunner
-// forge:hash=2a6af8056f9cc23dac9b3f02f5469dc9e7e9818867e4e20bc334b6f68e69061a
+// forge:hash=a00a2d436282d9d279807bce19d418a0e71e6e7fa0aaac86b2043d719b3fdac3
 
 // MockActionRunner is a test mock for the ActionRunner interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockActionRunner.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockActionRunner.<Method>Func not set" error.
 type MockActionRunner struct {
 	contractkit.Recorder
 	RunAuthenticatedFunc func(context.Context, *reliantv1.IntegrationManifest, *reliantv1.ActionSpec, map[string]any, httpaction.CredentialSource, httpaction.CallSite) (*httpaction.Result, error)
@@ -101,18 +162,47 @@ func (m *MockActionRunner) RunAuthenticated(ctx context.Context, integration *re
 	return nil, contractkit.MockNotSet("MockActionRunner", "RunAuthenticated")
 }
 
+// MockActionRunnerRunAuthenticatedCall is one recorded call of MockActionRunner.RunAuthenticated, one
+// field per parameter.
+type MockActionRunnerRunAuthenticatedCall struct {
+	Ctx         context.Context
+	Integration *reliantv1.IntegrationManifest
+	Action      *reliantv1.ActionSpec
+	Params      map[string]any
+	Src         httpaction.CredentialSource
+	Site        httpaction.CallSite
+}
+
+// RunAuthenticatedCalls returns every recorded RunAuthenticated call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RunAuthenticated").
+func (m *MockActionRunner) RunAuthenticatedCalls() []MockActionRunnerRunAuthenticatedCall {
+	var out []MockActionRunnerRunAuthenticatedCall
+	for _, c := range m.Recorder.Calls("RunAuthenticated") {
+		var r MockActionRunnerRunAuthenticatedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Integration, _ = c.Args[1].(*reliantv1.IntegrationManifest)
+		r.Action, _ = c.Args[2].(*reliantv1.ActionSpec)
+		r.Params, _ = c.Args[3].(map[string]any)
+		r.Src, _ = c.Args[4].(httpaction.CredentialSource)
+		r.Site, _ = c.Args[5].(httpaction.CallSite)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ActionRunner = (*MockActionRunner)(nil)
 
 // forge:section MockUserCredentials
-// forge:hash=23cc50c0acb0312bc533b83afb3b736a19b69940a87cdaff306ae0407fcd179c
+// forge:hash=b2fc925e3e3bec7f2906aeb5f44302d5f59f4d3dcdb69959e39ace442d223202
 
 // MockUserCredentials is a test mock for the UserCredentials interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockUserCredentials.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockUserCredentials.<Method>Func not set" error.
 type MockUserCredentials struct {
 	contractkit.Recorder
 	ForUserFunc func(string) httpaction.CredentialSource
@@ -125,6 +215,24 @@ func (m *MockUserCredentials) ForUser(userID string) httpaction.CredentialSource
 		return m.ForUserFunc(userID)
 	}
 	return *new(httpaction.CredentialSource)
+}
+
+// MockUserCredentialsForUserCall is one recorded call of MockUserCredentials.ForUser, one
+// field per parameter.
+type MockUserCredentialsForUserCall struct {
+	UserID string
+}
+
+// ForUserCalls returns every recorded ForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ForUser").
+func (m *MockUserCredentials) ForUserCalls() []MockUserCredentialsForUserCall {
+	var out []MockUserCredentialsForUserCall
+	for _, c := range m.Recorder.Calls("ForUser") {
+		var r MockUserCredentialsForUserCall
+		r.UserID, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

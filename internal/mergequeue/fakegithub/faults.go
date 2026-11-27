@@ -23,6 +23,9 @@ const (
 	MethodListCheckRuns    Method = "ListCheckRuns"
 	MethodGetContents      Method = "GetContents"
 	MethodGetCommit        Method = "GetCommit"
+	MethodCreateCommit     Method = "CreateCommit"
+	MethodCreateComment    Method = "CreateIssueComment"
+	MethodListComments     Method = "ListIssueComments"
 )
 
 // Call is one client call as the fake received it.
