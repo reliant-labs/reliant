@@ -13,7 +13,8 @@
 import { useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
 
-import { useAlertingMutation, useNotifications } from "@/hooks/observability-queries";
+import { useAlertingWriteOptions, useNotifications } from "@/hooks/observability-queries";
+import { useMarkNotificationsRead } from "@/hooks/controlplane/alerting-service-hooks_gen";
 import type { Notification } from "@/services/controlPlane/observability/alertingTypes";
 import { cn } from "@/lib/utils";
 
@@ -31,7 +32,7 @@ export interface AlertNotificationsProps {
 export function AlertNotifications({ orgId, envName, onOpenAlerts }: AlertNotificationsProps) {
   const [open, setOpen] = useState(false);
   const notifications = useNotifications(orgId);
-  const mark = useAlertingMutation(orgId, (api, org, ids: string[]) => api.markNotificationsRead(org, ids));
+  const mark = useMarkNotificationsRead(useAlertingWriteOptions(orgId));
   if (!notifications.data) return null;
   const { unread, notifications: list } = notifications.data;
 
@@ -63,7 +64,7 @@ export function AlertNotifications({ orgId, envName, onOpenAlerts }: AlertNotifi
         {unread > 0 && (
           <button
             type="button"
-            onClick={() => mark.mutate([])}
+            onClick={() => mark.mutate({ orgId, ids: [] })}
             disabled={mark.isPending}
             className="inline-flex items-center gap-1 rounded-sm text-xs text-primary-ink underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
             data-testid="obs-notifications-mark-all"
@@ -80,7 +81,7 @@ export function AlertNotifications({ orgId, envName, onOpenAlerts }: AlertNotifi
       ) : (
         <ul className="-mx-2 max-h-96 divide-y divide-border/60 overflow-y-auto border-y border-border/60">
           {list.map((n) => (
-            <NotificationItem key={n.id} notification={n} env={envName(n.envId)} onRead={() => mark.mutate([n.id])} />
+            <NotificationItem key={n.id} notification={n} env={envName(n.envId)} onRead={() => mark.mutate({ orgId, ids: [n.id] })} />
           ))}
         </ul>
       )}
