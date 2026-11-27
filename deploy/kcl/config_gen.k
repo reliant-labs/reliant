@@ -586,8 +586,33 @@ schema ReliantConfigGtm:
     # Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)
     analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
 
+# forge:section schema ReliantConfigGtmAssets
+# forge:hash=273956fdf14ce0c25b167e09aae9737690286342725f650c840ffea6fa31f116
+# ReliantConfigGtmAssets is the gtm_assets block (GtmAssetsConfig) — author its values in config.k as `gtm_assets.<field> = ...`.
+schema ReliantConfigGtmAssets:
+    # GTM assets bucket: the S3 API base URL this process dials (forge.bucket_env)
+    endpoint: str = ""
+    # GTM assets bucket: the S3 API base URL a browser reaches, when it differs from the endpoint (forge.bucket_env)
+    public_endpoint: str = ""
+    # GTM assets bucket: region (forge.bucket_env; unset: us-east-1)
+    region: str = ""
+    # GTM assets bucket: its name (forge.bucket_env; unset: GTM assets are off)
+    bucket: str = ""
+    # GTM assets bucket: S3 access key id (forge.bucket_env)
+    access_key_id: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_assets_access_key_id" }
+    # GTM assets bucket: S3 secret access key (forge.bucket_env)
+    secret_access_key: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_assets_secret_access_key" }
+    # GTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)
+    path_style: bool = False
+    # Largest GTM asset a person uploads, in bytes (at most 64 MiB)
+    max_asset_bytes: int = 26214400
+    # Largest GTM asset copied from a chat attachment, in bytes (at most 64 MiB)
+    max_copied_asset_bytes: int = 67108864
+    # Bytes one organization's GTM assets may hold together
+    org_quota_bytes: int = 2147483648
+
 # forge:section schema ReliantConfig
-# forge:hash=cbc7d7c9461d88d7d1271dbdf0f86aa9f5ba8b5f57d0bf5315f9b935e427d998
+# forge:hash=1c1e07eef49d9a70bc8584f434f849b6b558c9acf67fcb07b5dd6adb7b601df7
 schema ReliantConfig:
     # log config block (LogConfig). Set its fields as `log.<field> = ...`.
     log: ReliantConfigLog = ReliantConfigLog {}
@@ -605,6 +630,8 @@ schema ReliantConfig:
     idle_reclaim: ReliantConfigIdleReclaim = ReliantConfigIdleReclaim {}
     # gtm config block (GtmConfig). Set its fields as `gtm.<field> = ...`.
     gtm: ReliantConfigGtm = ReliantConfigGtm {}
+    # gtm_assets config block (GtmAssetsConfig). Set its fields as `gtm_assets.<field> = ...`.
+    gtm_assets: ReliantConfigGtmAssets = ReliantConfigGtmAssets {}
 
 # forge:section env-map reliantConfigEnvMap
 # forge:hash=b6d59175cfbe3674b1beacb0e82b712699f93bd21c82d21648a5b68b7da62db8
@@ -617,6 +644,11 @@ RELIANT_CONFIG_SENSITIVE_ENV: [str] = [
     # forge:section RELIANT_CONFIG_SENSITIVE_ENV gtm
     # forge:hash=4732ad503bb2b73cc8415d5f0be9e139cc2d7db6371ab652f2e34be13cd7aa7c
     "GTM_ANALYTICS_TOKEN"
+
+    # forge:section RELIANT_CONFIG_SENSITIVE_ENV gtm_assets
+    # forge:hash=b8beb741cd69883b892a8fb4fb3fffc7962e612621a0bc9bb1f2d833f7456ea9
+    "GTM_ASSETS_ACCESS_KEY_ID"
+    "GTM_ASSETS_SECRET_ACCESS_KEY"
 
     # forge:section RELIANT_CONFIG_SENSITIVE_ENV (end)
     # forge:hash=8f6169d91ce0159578853ff1837be73119109fa462ad430ea7dc1c44cb37ce10
@@ -631,6 +663,11 @@ RELIANT_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
     # forge:section RELIANT_CONFIG_OPTIONAL_SECRET_ENV gtm
     # forge:hash=860b322ccb637fde76fe3c742e73cfd56e9d18e77e140cdd36aac65f03b4838f
     "GTM_ANALYTICS_TOKEN"
+
+    # forge:section RELIANT_CONFIG_OPTIONAL_SECRET_ENV gtm_assets
+    # forge:hash=c69ec3fbfbf6c408e8581ae909c0feb6e561785be8790ea6358761e105f24860
+    "GTM_ASSETS_ACCESS_KEY_ID"
+    "GTM_ASSETS_SECRET_ACCESS_KEY"
 
     # forge:section RELIANT_CONFIG_OPTIONAL_SECRET_ENV (end)
     # forge:hash=3d68c81c1b9e6fb0b06cf3da43ce13ca5a60fdeb6b0c3927ac76003f4031a3a5
@@ -655,6 +692,11 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
         # forge:section reliantConfigEnvMap secrets gtm
         # forge:hash=14d7fa419d2ccfb9c11b31ac59016f8afcaf465f487affc1e5201c8802bcd182
         "GTM_ANALYTICS_TOKEN" = forge.SecretRef {name = c.gtm.analytics_token.name, key = c.gtm.analytics_token.key, store_key = "GTM_ANALYTICS_TOKEN", optional = True}
+
+        # forge:section reliantConfigEnvMap secrets gtm_assets
+        # forge:hash=e4b09c007126d14a37de9f1b248c6cb4b71eb4b357e74c7151fcb92dd4280b62
+        "GTM_ASSETS_ACCESS_KEY_ID" = forge.SecretRef {name = c.gtm_assets.access_key_id.name, key = c.gtm_assets.access_key_id.key, store_key = "GTM_ASSETS_ACCESS_KEY_ID", optional = True}
+        "GTM_ASSETS_SECRET_ACCESS_KEY" = forge.SecretRef {name = c.gtm_assets.secret_access_key.name, key = c.gtm_assets.secret_access_key.key, store_key = "GTM_ASSETS_SECRET_ACCESS_KEY", optional = True}
 
         # forge:section reliantConfigEnvMap secrets (end)
         # forge:hash=8814721ecfde294a68421f4230bd7c3f0c85f54ed77f18b7b62982501bc97207
@@ -704,6 +746,17 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
         # forge:section reliantConfigEnvMap values gtm
         # forge:hash=f05da31ddc209262d8412a08fce809785b5a6991c94ba6c78cd8db631b45a7c0
         "GTM_ALLOWED_ORG_IDS" = c.gtm.allowed_org_ids
+
+        # forge:section reliantConfigEnvMap values gtm_assets
+        # forge:hash=b913ebdb46e2180d2fca5e7d6c59cfca5c961f221039f2e2139682634681b423
+        "GTM_ASSETS_ENDPOINT" = c.gtm_assets.endpoint
+        "GTM_ASSETS_PUBLIC_ENDPOINT" = c.gtm_assets.public_endpoint
+        "GTM_ASSETS_REGION" = c.gtm_assets.region
+        "GTM_ASSETS_BUCKET" = c.gtm_assets.bucket
+        "GTM_ASSETS_PATH_STYLE" = "true" if c.gtm_assets.path_style else "false"
+        "GTM_ASSETS_MAX_BYTES" = str(c.gtm_assets.max_asset_bytes)
+        "GTM_ASSETS_MAX_COPIED_BYTES" = str(c.gtm_assets.max_copied_asset_bytes)
+        "GTM_ASSETS_ORG_QUOTA_BYTES" = str(c.gtm_assets.org_quota_bytes)
 
         # forge:section reliantConfigEnvMap values (end)
         # forge:hash=e1769827ac16f2cb38e2dd9a87b234861e5af33f295889268d5884a88256e96c
@@ -2223,6 +2276,17 @@ ROOTS: {str: Root} = {
             # forge:hash=316b3f8012cd90daf74f920b0cb091dee0dadf10f1475c436de68374a1b8ff9b
             "GTM_ALLOWED_ORG_IDS",
 
+            # forge:section root api env gtm_assets
+            # forge:hash=8b1578acf3e0de8fdf36e7a4d31ce2c767f02ed0ee218f75ec16b0a57d2e8107
+            "GTM_ASSETS_ENDPOINT",
+            "GTM_ASSETS_PUBLIC_ENDPOINT",
+            "GTM_ASSETS_REGION",
+            "GTM_ASSETS_BUCKET",
+            "GTM_ASSETS_PATH_STYLE",
+            "GTM_ASSETS_MAX_BYTES",
+            "GTM_ASSETS_MAX_COPIED_BYTES",
+            "GTM_ASSETS_ORG_QUOTA_BYTES",
+
             # forge:section root api env (root)
             # forge:hash=5305b56f25d75cda0413c1c63d9abe6b9b80e689bc28041cc9fcd22b02b3dd2e
             "JWT_PUBLIC_KEY",
@@ -2402,6 +2466,11 @@ ROOTS: {str: Root} = {
             # forge:hash=28385b00489d9b52f48b32775bcee9609c20935ad7c2434fbdfa12bd77b4c48d
             "GTM_ANALYTICS_TOKEN",
 
+            # forge:section root api secrets gtm_assets
+            # forge:hash=22fe72bbecf20bae01492c2ccdfb3a75139bb8a34bf0ca1d2bcc8781a87cbeed
+            "GTM_ASSETS_ACCESS_KEY_ID",
+            "GTM_ASSETS_SECRET_ACCESS_KEY",
+
             # forge:section root api secrets (root)
             # forge:hash=7644db6ed035848e2f2801d70d42bca729aacbbd45665db122772f125656e93d
             "JWT_JWKS_SNAPSHOT",
@@ -2491,6 +2560,17 @@ ROOTS: {str: Root} = {
             # forge:hash=946f5fbbf68b59491a382d360ccea79461e3c5937422daa5970cbaeb70ed32e2
             "GTM_ALLOWED_ORG_IDS",
 
+            # forge:section root gateway env gtm_assets
+            # forge:hash=b04ab4a2e2db0993bbe06edc69c33f3603296724d4f8641fe4c57486ed77a410
+            "GTM_ASSETS_ENDPOINT",
+            "GTM_ASSETS_PUBLIC_ENDPOINT",
+            "GTM_ASSETS_REGION",
+            "GTM_ASSETS_BUCKET",
+            "GTM_ASSETS_PATH_STYLE",
+            "GTM_ASSETS_MAX_BYTES",
+            "GTM_ASSETS_MAX_COPIED_BYTES",
+            "GTM_ASSETS_ORG_QUOTA_BYTES",
+
             # forge:section root gateway env (root)
             # forge:hash=751acacff603d412b87b85659d2724d1b9ea693dd4d7863993d4f5276f14383d
             "DATABASE_DRIVER",
@@ -2576,6 +2656,11 @@ ROOTS: {str: Root} = {
             # forge:hash=f574297299aa803c1e18f21d670a28f7cd08aefda5f0b090444fd83ad2ce1c38
             "GTM_ANALYTICS_TOKEN",
 
+            # forge:section root gateway secrets gtm_assets
+            # forge:hash=cf52d55c48faf9f75b1f4c8eeec671856b30ab8675445f2549ee6b4fed6b1397
+            "GTM_ASSETS_ACCESS_KEY_ID",
+            "GTM_ASSETS_SECRET_ACCESS_KEY",
+
             # forge:section root gateway secrets (root)
             # forge:hash=3866495ae5fbd45cadcb97c8b7bb9534a83959306fa1959040054cc1a5c95342
             "DATABASE_URL",
@@ -2651,6 +2736,17 @@ ROOTS: {str: Root} = {
             # forge:section root worker env gtm
             # forge:hash=9fb051addcb3b354dc69e34bdfc5f80bd1c1b046327cb96f1f29b3991f7960f7
             "GTM_ALLOWED_ORG_IDS",
+
+            # forge:section root worker env gtm_assets
+            # forge:hash=686e6156f9ce137a3e9c7224548f82957c6d354233687ad2225a530f32ca8ebe
+            "GTM_ASSETS_ENDPOINT",
+            "GTM_ASSETS_PUBLIC_ENDPOINT",
+            "GTM_ASSETS_REGION",
+            "GTM_ASSETS_BUCKET",
+            "GTM_ASSETS_PATH_STYLE",
+            "GTM_ASSETS_MAX_BYTES",
+            "GTM_ASSETS_MAX_COPIED_BYTES",
+            "GTM_ASSETS_ORG_QUOTA_BYTES",
 
             # forge:section root worker env (root)
             # forge:hash=84aaf81e7e16a419f918f4ddcce4e4a5c2fb7ca9a2e408ffd246c84e9dc5f6f3
@@ -2764,6 +2860,11 @@ ROOTS: {str: Root} = {
             # forge:section root worker secrets gtm
             # forge:hash=11dee0e938f40347af90fff57aae1c5bb93d7b3d27338a4df54839c5297f57e8
             "GTM_ANALYTICS_TOKEN",
+
+            # forge:section root worker secrets gtm_assets
+            # forge:hash=694b2822ff06e31ec381dadd8d104c1de5dd3b3ff961cefe7e213fb78525bcb9
+            "GTM_ASSETS_ACCESS_KEY_ID",
+            "GTM_ASSETS_SECRET_ACCESS_KEY",
 
             # forge:section root worker secrets (root)
             # forge:hash=41bc290c3090c98a4ba10fd8f412e3482f979a8b4c92b99d2a328ed5d8e86740
