@@ -66,6 +66,9 @@ type Watcher struct {
 	trim cacheTrimState
 	// wtSizes remembers each worktree's size across scans (worktreesizes.go).
 	wtSizes worktreeSizes
+	// ownCaches are the caches the daemon alone creates (owncaches.go),
+	// guarded by mu.
+	ownCaches []*ownCacheEntry
 	// systemEnv: the watcher reads the daemon's own environment, so its
 	// caches are this machine's real ones (never trimmed from a test).
 	systemEnv bool

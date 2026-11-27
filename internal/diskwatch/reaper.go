@@ -253,6 +253,8 @@ func (w *Watcher) RunReaper(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		w.reaperTick(ctx)
+		// The caches the daemon alone creates, in both modes (owncaches.go).
+		w.ownCachesTick(ctx)
 		select {
 		case <-ctx.Done():
 			return
@@ -314,8 +316,9 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 // runReaperOff is RunReaper with the storage reaper off: on the reaper's
 // poll, the in-process worktree sweep when it runs alone (worktreereap.go)
 // and the pass over the daemon's own per-command GOTMPDIR roots
-// (ownGoTmpTick), in the same single-flight, until ctx is done. Nothing else:
-// no cache pass, no forge subprocess.
+// (ownGoTmpTick) and the caches the daemon alone creates (ownCachesTick), in
+// the same single-flight, until ctx is done. Nothing else: no pass over a
+// cache of the person's, no forge subprocess.
 func (w *Watcher) runReaperOff(ctx context.Context) {
 	ticker := time.NewTicker(reaperPollInterval)
 	defer ticker.Stop()
@@ -338,6 +341,9 @@ func (w *Watcher) reaperOffTick(ctx context.Context) (ran bool) {
 		ran = w.worktreeTick(ctx, false)
 	}
 	if ctx.Err() == nil && w.ownGoTmpTick(ctx) {
+		ran = true
+	}
+	if w.ownCachesTick(ctx) {
 		ran = true
 	}
 	return ran

@@ -184,6 +184,43 @@ func TestHostReadsAConfigFile(t *testing.T) {
 	}
 }
 
+func TestHostPrunesAJobCacheAndTheNextJobRefetches(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	e := f.pr("one", map[string]string{"x.txt": "x1\n"})
+	h := f.host()
+	paths := func(id string) buildjob.StatusReply {
+		return runJob(t, h, buildjob.StartRequest{JobID: id, Kind: buildjob.KindPaths, Paths: &buildjob.PathsRequest{
+			Repository: "acme/widgets", Base: f.r.Head("main"), Head: e.Head,
+		}})
+	}
+	if r := paths("paths-1"); r.Error != "" {
+		t.Fatalf("first job: %+v", r)
+	}
+	cache := filepath.Join(h.Root, "acme", "widgets.git")
+	lease, err := os.Stat(cache + ".lease")
+	if err != nil || time.Since(lease.ModTime()) > time.Minute {
+		t.Fatalf("the job did not stamp its lease: %v", err)
+	}
+
+	// Just used: kept by age and by the size eviction's idle floor, and gc'd.
+	res := h.Prune(t.Context(), candidate.PrunePolicy{MaxBytes: 1, GC: true})
+	if len(res.Caches) != 1 || res.Caches[0].Repository != "acme/widgets" || res.Caches[0].Outcome != candidate.PruneKept || res.Caches[0].Err != "" {
+		t.Fatalf("a fresh cache: %+v", res.Caches)
+	}
+	// Unused for longer than the age limit: removed.
+	res = h.Prune(t.Context(), candidate.PrunePolicy{MaxAge: time.Nanosecond})
+	if len(res.Caches) != 1 || res.Caches[0].Outcome != candidate.PruneRemovedAge || res.Freed == 0 {
+		t.Fatalf("an aged cache: %+v", res)
+	}
+	if _, err := os.Stat(cache); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the cache is still there: %v", err)
+	}
+	if r := paths("paths-2"); r.Error != "" || r.Paths == nil || !slices.Equal(r.Paths.Paths, []string{"x.txt"}) {
+		t.Fatalf("the job after the prune: %+v", r)
+	}
+}
+
 func TestHostRefusesWhatItCannotRun(t *testing.T) {
 	t.Parallel()
 	h := &candidate.Host{Root: t.TempDir()}
