@@ -1,41 +1,64 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestListLibraryPruneRequests_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement ListLibraryPruneRequests —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestListLibraryPruneRequests_Generated runs the canonical scaffold rows for ListLibraryPruneRequests.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestListLibraryPruneRequests_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
+	created := time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC)
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListLibraryPruneRequestsRequest, pb.ListLibraryPruneRequestsResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement ListLibraryPruneRequests; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.ListLibraryPruneRequestsRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.ListLibraryPruneRequestsResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "maps the status filter and the requests; an undecided one has no decided_at",
+			Req: connect.NewRequest(&pb.ListLibraryPruneRequestsRequest{
+				OrgId: testOrg, Status: pb.GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_PENDING.Enum(),
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ListLibraryPruneRequestsFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.ListLibraryPruneRequestsInput) (gtmsvc.ListLibraryPruneRequestsResult, error) {
+					asPerson(t, a)
+					assert.Equal(t, gtmsvc.ListLibraryPruneRequestsInput{Status: gtmsvc.PruneRequestPending}, in)
+					return gtmsvc.ListLibraryPruneRequestsResult{Requests: []gtmsvc.LibraryPruneRequest{{
+						ID: "pr1", RequestedBy: "u", CredentialKind: gtmsvc.CredentialToken, RemoveKeys: []string{"old"},
+						Status: gtmsvc.PruneRequestPending, CreatedAt: created, ExpiresAt: created.Add(gtmsvc.LibraryPruneRequestTTL),
+					}}}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.ListLibraryPruneRequestsResponse]) {
+				r := resp.Msg.GetRequests()[0]
+				assert.Equal(t, testOrg, r.GetOrgId())
+				assert.Equal(t, pb.GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_PENDING, r.GetStatus())
+				assert.Equal(t, []string{"old"}, r.GetRemoveKeys())
+				assert.Nil(t, r.GetDecidedAt())
+				assert.True(t, created.Add(gtmsvc.LibraryPruneRequestTTL).Equal(r.GetExpiresAt().AsTime()))
+			},
+		},
+		{
+			Name: "a refusal is NotFound",
+			Req:  connect.NewRequest(&pb.ListLibraryPruneRequestsRequest{OrgId: testOrg}),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ListLibraryPruneRequestsFunc = func(context.Context, gtmsvc.Actor, gtmsvc.ListLibraryPruneRequestsInput) (gtmsvc.ListLibraryPruneRequestsResult, error) {
+					return gtmsvc.ListLibraryPruneRequestsResult{}, gtmsvc.ErrNotFound
+				}
+			},
+			WantErr: connect.CodeNotFound,
 		},
 	}, svc.ListLibraryPruneRequests)
 }

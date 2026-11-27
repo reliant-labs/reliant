@@ -14,9 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/featuregate"
 	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
@@ -213,6 +215,76 @@ func everyRPC() map[string]rpcCall {
 			_, err := s.CheckClaims(ctx, connect.NewRequest(&pb.CheckClaimsRequest{OrgId: org, Text: "It is free."}))
 			return err
 		},
+		"DeleteAsset": func(ctx context.Context, s *gtm.Service, org, id string) error {
+			_, err := s.DeleteAsset(ctx, connect.NewRequest(&pb.DeleteAssetRequest{OrgId: org, AssetId: id}))
+			return err
+		},
+		"ListLibraryImports": func(ctx context.Context, s *gtm.Service, org, _ string) error {
+			_, err := s.ListLibraryImports(ctx, connect.NewRequest(&pb.ListLibraryImportsRequest{OrgId: org}))
+			return err
+		},
+		"ListLibraryPruneRequests": func(ctx context.Context, s *gtm.Service, org, _ string) error {
+			_, err := s.ListLibraryPruneRequests(ctx, connect.NewRequest(&pb.ListLibraryPruneRequestsRequest{OrgId: org}))
+			return err
+		},
+		"ConfirmLibraryPrune": func(ctx context.Context, s *gtm.Service, org, id string) error {
+			_, err := s.ConfirmLibraryPrune(ctx, connect.NewRequest(&pb.ConfirmLibraryPruneRequest{OrgId: org, RequestId: id}))
+			return err
+		},
+		"CancelLibraryPrune": func(ctx context.Context, s *gtm.Service, org, id string) error {
+			_, err := s.CancelLibraryPrune(ctx, connect.NewRequest(&pb.CancelLibraryPruneRequest{OrgId: org, RequestId: id}))
+			return err
+		},
+	}
+}
+
+// badTimestamp is a Timestamp no time is: protovalidate lets it through,
+// and the handler's conversion refuses it.
+var badTimestamp = &timestamppb.Timestamp{Seconds: 1, Nanos: -1}
+
+// withBadTimestamp is every rpc that converts a request Timestamp before
+// the domain sees it, called with one that is not valid. Each must answer a
+// refused caller the bare NotFound, never InvalidArgument.
+func withBadTimestamp() map[string]rpcCall {
+	return map[string]rpcCall{
+		"CreateCampaign": func(ctx context.Context, s *gtm.Service, org, id string) error {
+			_, err := s.CreateCampaign(ctx, connect.NewRequest(&pb.CreateCampaignRequest{OrgId: org, Name: "C", StrategyId: id, PeriodStart: badTimestamp}))
+			return err
+		},
+		"UpdateCampaign": func(ctx context.Context, s *gtm.Service, org, id string) error {
+			_, err := s.UpdateCampaign(ctx, connect.NewRequest(&pb.UpdateCampaignRequest{OrgId: org, Id: id, ExpectedRevision: 1, PeriodEnd: badTimestamp}))
+			return err
+		},
+		"CreateItem": func(ctx context.Context, s *gtm.Service, org, _ string) error {
+			_, err := s.CreateItem(ctx, connect.NewRequest(&pb.CreateItemRequest{
+				OrgId: org, Format: pb.GtmItemFormat_GTM_ITEM_FORMAT_LONG_POST, Title: "T", ScheduledAt: badTimestamp,
+			}))
+			return err
+		},
+		"UpdateItem": func(ctx context.Context, s *gtm.Service, org, id string) error {
+			_, err := s.UpdateItem(ctx, connect.NewRequest(&pb.UpdateItemRequest{OrgId: org, Id: id, ExpectedRevision: 1, ScheduledAt: badTimestamp}))
+			return err
+		},
+		"ListItems": func(ctx context.Context, s *gtm.Service, org, _ string) error {
+			_, err := s.ListItems(ctx, connect.NewRequest(&pb.ListItemsRequest{OrgId: org, ScheduledFrom: badTimestamp}))
+			return err
+		},
+		"UpsertClaim": func(ctx context.Context, s *gtm.Service, org, id string) error {
+			_, err := s.UpsertClaim(ctx, connect.NewRequest(&pb.UpsertClaimRequest{OrgId: org, Id: id, ExpectedRevision: 1, ExpiresOrRecheckAt: badTimestamp}))
+			return err
+		},
+		"CreateIdea": func(ctx context.Context, s *gtm.Service, org, _ string) error {
+			_, err := s.CreateIdea(ctx, connect.NewRequest(&pb.CreateIdeaRequest{
+				OrgId: org, Kind: pb.GtmIdeaKind_GTM_IDEA_KIND_PRODUCT, Title: "I", Evidence: []*pb.GtmEvidence{{ObservedAt: badTimestamp}},
+			}))
+			return err
+		},
+		"UpdateIdea": func(ctx context.Context, s *gtm.Service, org, id string) error {
+			_, err := s.UpdateIdea(ctx, connect.NewRequest(&pb.UpdateIdeaRequest{
+				OrgId: org, Id: id, ExpectedRevision: 1, Evidence: &pb.GtmEvidenceList{Evidence: []*pb.GtmEvidence{{ObservedAt: badTimestamp}}},
+			}))
+			return err
+		},
 	}
 }
 
@@ -287,6 +359,16 @@ func TestGtmViewerMatrix(t *testing.T) {
 				assert.Equal(t, svcerr.ToConnect(missingRow).Message(), svcerr.ToConnect(err).Message(), rpc)
 			}
 		})
+		t.Run(name+": a timestamp that is not one is the bare NotFound too", func(t *testing.T) {
+			for rpc, call := range withBadTimestamp() {
+				err := call(who.ctx, svc, who.org, missing)
+				if !assert.Error(t, err, rpc) {
+					continue
+				}
+				assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), rpc)
+				assert.Equal(t, svcerr.ToConnect(missingRow).Message(), svcerr.ToConnect(err).Message(), rpc)
+			}
+		})
 		t.Run(name+": GetGtmAccess is enabled=false, not an error", func(t *testing.T) {
 			resp, err := svc.GetGtmAccess(who.ctx, connect.NewRequest(&pb.GetGtmAccessRequest{OrgId: who.org}))
 			require.NoError(t, err)
@@ -299,6 +381,28 @@ func TestGtmViewerMatrix(t *testing.T) {
 		requireRefused(t, err, missingRow)
 		_, err = svc.CreateStrategy(alice, connect.NewRequest(&pb.CreateStrategyRequest{OrgId: orgA}))
 		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	})
+
+	t.Run("protovalidate runs: a rule only it enforces is InvalidArgument for an admitted caller", func(t *testing.T) {
+		// size_bytes lte 64 MiB is protovalidate's alone: without it the
+		// domain answers Unavailable here (no asset store is wired).
+		huge := &pb.CreateAssetUploadRequest{
+			OrgId: orgA, Target: &pb.CreateAssetUploadRequest_ItemId{ItemId: missing},
+			Filename: "a.png", ContentType: "image/png", SizeBytes: 100 << 20,
+		}
+		_, err := svc.CreateAssetUpload(alice, connect.NewRequest(huge))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+		assert.Contains(t, svcerr.ToConnect(err).Message(), "size_bytes")
+		huge.OrgId = orgC
+		_, err = svc.CreateAssetUpload(sessionCtx(t, "carol"), connect.NewRequest(huge))
+		requireRefused(t, err, missingRow)
+	})
+
+	t.Run("an admitted caller's bad timestamp is InvalidArgument naming the field", func(t *testing.T) {
+		for rpc, call := range withBadTimestamp() {
+			err := call(alice, svc, orgA, missing)
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), rpc)
+		}
 	})
 
 	t.Run("GetGtmAccess is enabled for an allowlisted member", func(t *testing.T) {
@@ -388,8 +492,14 @@ func TestGtmViewerMatrix(t *testing.T) {
 		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a person gets past the person check; the item is not held")
 	})
 
-	t.Run("an access token imports the strategy library as a Person, and may not prune", func(t *testing.T) {
+	t.Run("an access token imports the strategy library as a Person ViaToken, and only stages a prune", func(t *testing.T) {
 		token := tokenCtx("alice", orgA)
+		// alice, signed in, has an entry the token's library lacks.
+		old := libraryImport(orgA)
+		old.Entries[0].Key, old.Entries[0].Name = "old", "Old"
+		_, err := svc.ImportStrategyLibrary(alice, connect.NewRequest(old))
+		require.NoError(t, err)
+
 		resp, err := svc.ImportStrategyLibrary(token, connect.NewRequest(libraryImport(orgA)))
 		require.NoError(t, err)
 		assert.Equal(t, int32(1), resp.Msg.GetCreated())
@@ -399,13 +509,51 @@ func TestGtmViewerMatrix(t *testing.T) {
 
 		prune := libraryImport(orgA)
 		prune.Prune, prune.AllKeys = true, []string{"seo"}
-		_, err = svc.ImportStrategyLibrary(token, connect.NewRequest(prune))
-		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
-		_, err = svc.ImportStrategyLibrary(alice, connect.NewRequest(prune))
-		assert.NoError(t, err, "a person may prune")
+		staged, err := svc.ImportStrategyLibrary(token, connect.NewRequest(prune))
+		require.NoError(t, err)
+		assert.Zero(t, staged.Msg.GetPruned(), "a token removes nothing")
+		assert.Equal(t, []string{"old"}, staged.Msg.GetWouldRemove())
+		requestID := staged.Msg.GetPruneRequestId()
+		require.NotEmpty(t, requestID)
+		_, err = svc.GetStrategyLibraryEntry(alice, connect.NewRequest(&pb.GetStrategyLibraryEntryRequest{OrgId: orgA, Key: "old"}))
+		require.NoError(t, err, "the entry is still there")
 
-		// The exception is ImportStrategyLibrary only, and only in the
-		// token's own org.
+		imports, err := svc.ListLibraryImports(alice, connect.NewRequest(&pb.ListLibraryImportsRequest{OrgId: orgA}))
+		require.NoError(t, err)
+		require.NotEmpty(t, imports.Msg.GetImports())
+		newest := imports.Msg.GetImports()[0]
+		assert.Equal(t, pb.GtmCredentialKind_GTM_CREDENTIAL_KIND_TOKEN, newest.GetCredentialKind())
+		assert.Equal(t, requestID, newest.GetPruneRequestId())
+
+		pending, err := svc.ListLibraryPruneRequests(alice, connect.NewRequest(&pb.ListLibraryPruneRequestsRequest{
+			OrgId: orgA, Status: pb.GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_PENDING.Enum(),
+		}))
+		require.NoError(t, err)
+		require.Len(t, pending.Msg.GetRequests(), 1)
+		assert.Equal(t, requestID, pending.Msg.GetRequests()[0].GetId())
+
+		// A token is an Agent on confirm and cancel: it cannot decide its
+		// own prune.
+		_, err = svc.ConfirmLibraryPrune(token, connect.NewRequest(&pb.ConfirmLibraryPruneRequest{OrgId: orgA, RequestId: requestID}))
+		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+		_, err = svc.CancelLibraryPrune(token, connect.NewRequest(&pb.CancelLibraryPruneRequest{OrgId: orgA, RequestId: requestID}))
+		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+
+		confirmed, err := svc.ConfirmLibraryPrune(alice, connect.NewRequest(&pb.ConfirmLibraryPruneRequest{OrgId: orgA, RequestId: requestID}))
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), confirmed.Msg.GetRemoved())
+		assert.Equal(t, pb.GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_CONFIRMED, confirmed.Msg.GetRequest().GetStatus())
+		assert.Equal(t, "alice", confirmed.Msg.GetRequest().GetDecidedBy())
+		_, err = svc.GetStrategyLibraryEntry(alice, connect.NewRequest(&pb.GetStrategyLibraryEntryRequest{OrgId: orgA, Key: "old"}))
+		requireRefused(t, err, missingRow)
+
+		// The exception is exactly an access token: other software
+		// credentials are Agents, which may not import.
+		for _, c := range []auth.Credential{auth.CredentialOAuthClient, auth.CredentialIdentityToken, auth.CredentialUnknown} {
+			_, err = svc.ImportStrategyLibrary(credentialCtx("alice", c), connect.NewRequest(libraryImport(orgA)))
+			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), c.String())
+		}
+		// And only in the token's own org.
 		_, err = svc.ImportStrategyLibrary(tokenCtx("dave", orgB), connect.NewRequest(libraryImport(orgA)))
 		requireRefused(t, err, missingRow)
 	})

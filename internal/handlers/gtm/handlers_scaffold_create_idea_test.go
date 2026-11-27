@@ -46,7 +46,7 @@ func TestCreateIdea_Generated(t *testing.T) {
 			},
 		},
 		{
-			Name: "an invalid evidence timestamp is InvalidArgument",
+			Name: "an invalid evidence timestamp is InvalidArgument for a caller GTM admits",
 			Req: connect.NewRequest(&pb.CreateIdeaRequest{
 				OrgId: testOrg, Kind: pb.GtmIdeaKind_GTM_IDEA_KIND_PRODUCT, Title: "x",
 				Evidence: []*pb.GtmEvidence{{ObservedAt: &timestamppb.Timestamp{Seconds: 1, Nanos: -1}}},
@@ -56,6 +56,22 @@ func TestCreateIdea_Generated(t *testing.T) {
 				m.GetAccessFunc = func(context.Context, gtmsvc.Actor) (gtmsvc.Access, error) { return gtmsvc.Access{Enabled: true}, nil }
 			},
 			WantErr: connect.CodeInvalidArgument,
+		},
+		{
+			Name: "and the bare NotFound for a caller GTM refuses, so a bad timestamp cannot probe for GTM",
+			Req: connect.NewRequest(&pb.CreateIdeaRequest{
+				OrgId: testOrg, Kind: pb.GtmIdeaKind_GTM_IDEA_KIND_PRODUCT, Title: "x",
+				Evidence: []*pb.GtmEvidence{{ObservedAt: &timestamppb.Timestamp{Seconds: 1, Nanos: -1}}},
+			}),
+			Ctx: gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.GetAccessFunc = func(context.Context, gtmsvc.Actor) (gtmsvc.Access, error) { return gtmsvc.Access{}, nil }
+				m.CreateIdeaFunc = func(context.Context, gtmsvc.Actor, gtmsvc.CreateIdeaInput) (gtmsvc.Idea, error) {
+					t.Error("a refused caller's request reached the domain")
+					return gtmsvc.Idea{}, nil
+				}
+			},
+			WantErr: connect.CodeNotFound,
 		},
 		{
 			Name: "a link to another org's campaign is NotFound",

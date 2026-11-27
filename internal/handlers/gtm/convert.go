@@ -289,6 +289,54 @@ func libraryEntriesOut(es []gtmsvc.LibraryEntry) []*pb.GtmStrategyLibraryEntry {
 	return out
 }
 
+// libraryImportsOut is the import audit of orgID (the domain's rows carry
+// no org: they are all the actor's).
+func libraryImportsOut(orgID string, is []gtmsvc.LibraryImport) []*pb.GtmLibraryImport {
+	out := make([]*pb.GtmLibraryImport, 0, len(is))
+	for _, i := range is {
+		out = append(out, &pb.GtmLibraryImport{
+			Id:             i.ID,
+			OrgId:          orgID,
+			ActorUserId:    i.ActorUserID,
+			CredentialKind: enumOut[pb.GtmCredentialKind](i.CredentialKind, pb.GtmCredentialKind_value),
+			SourceRevision: i.SourceRevision,
+			Created:        count32(i.Created),
+			Updated:        count32(i.Updated),
+			Unchanged:      count32(i.Unchanged),
+			Pruned:         count32(i.Pruned),
+			PruneRequestId: i.PruneRequestID,
+			CreatedAt:      timeOut(i.CreatedAt),
+		})
+	}
+	return out
+}
+
+// pruneRequestOut is a prune request of orgID; an undecided one has no
+// decided_at.
+func pruneRequestOut(orgID string, r gtmsvc.LibraryPruneRequest) *pb.GtmLibraryPruneRequest {
+	return &pb.GtmLibraryPruneRequest{
+		Id:             r.ID,
+		OrgId:          orgID,
+		RequestedBy:    r.RequestedBy,
+		CredentialKind: enumOut[pb.GtmCredentialKind](r.CredentialKind, pb.GtmCredentialKind_value),
+		SourceRevision: r.SourceRevision,
+		RemoveKeys:     r.RemoveKeys,
+		Status:         enumOut[pb.GtmPruneRequestStatus](r.Status, pb.GtmPruneRequestStatus_value),
+		DecidedBy:      r.DecidedBy,
+		DecidedAt:      timeOut(r.DecidedAt),
+		CreatedAt:      timeOut(r.CreatedAt),
+		ExpiresAt:      timeOut(r.ExpiresAt),
+	}
+}
+
+func pruneRequestsOut(orgID string, rs []gtmsvc.LibraryPruneRequest) []*pb.GtmLibraryPruneRequest {
+	out := make([]*pb.GtmLibraryPruneRequest, 0, len(rs))
+	for _, r := range rs {
+		out = append(out, pruneRequestOut(orgID, r))
+	}
+	return out
+}
+
 func evidenceIn(ev []*pb.GtmEvidence) ([]gtmsvc.Evidence, error) {
 	out := make([]gtmsvc.Evidence, 0, len(ev))
 	for _, e := range ev {

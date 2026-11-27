@@ -31,7 +31,7 @@ func (s *Service) UpdateIdea(
 	if m.GetEvidence() != nil {
 		evidence, err := evidenceIn(m.GetEvidence().GetEvidence())
 		if err != nil {
-			return nil, wireErr(err)
+			return nil, s.invalid(ctx, a, err)
 		}
 		in.Evidence = &evidence
 	}

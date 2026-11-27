@@ -23,7 +23,7 @@ func (s *Service) UpsertClaim(
 	}
 	recheck, err := timeIn("expires_or_recheck_at", m.GetExpiresOrRecheckAt())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	in := gtmsvc.UpsertClaimInput{
 		ID:                      m.GetId(),

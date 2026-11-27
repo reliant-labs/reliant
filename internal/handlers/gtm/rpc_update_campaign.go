@@ -23,11 +23,11 @@ func (s *Service) UpdateCampaign(
 	}
 	start, err := timeIn("period_start", m.GetPeriodStart())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	end, err := timeIn("period_end", m.GetPeriodEnd())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	in := gtmsvc.UpdateCampaignInput{
 		ID:               m.GetId(),

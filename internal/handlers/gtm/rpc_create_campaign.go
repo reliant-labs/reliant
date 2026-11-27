@@ -21,11 +21,11 @@ func (s *Service) CreateCampaign(
 	}
 	start, err := timeIn("period_start", m.GetPeriodStart())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	end, err := timeIn("period_end", m.GetPeriodEnd())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	c, err := s.deps.Service.CreateCampaign(ctx, a, gtmsvc.CreateCampaignInput{
 		Name:              m.GetName(),

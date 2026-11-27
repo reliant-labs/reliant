@@ -21,7 +21,7 @@ func (s *Service) CreateItem(
 	}
 	scheduled, err := timeIn("scheduled_at", m.GetScheduledAt())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	item, err := s.deps.Service.CreateItem(ctx, a, gtmsvc.CreateItemInput{
 		Status:       enumIn[gtmsvc.ItemStatus](m.GetStatus()),

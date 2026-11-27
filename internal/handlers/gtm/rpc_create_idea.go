@@ -23,7 +23,7 @@ func (s *Service) CreateIdea(
 	}
 	evidence, err := evidenceIn(m.GetEvidence())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	idea, err := s.deps.Service.CreateIdea(ctx, a, gtmsvc.CreateIdeaInput{
 		Kind:       enumIn[gtmsvc.IdeaKind](m.GetKind()),

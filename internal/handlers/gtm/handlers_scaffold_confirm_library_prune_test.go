@@ -1,41 +1,68 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestConfirmLibraryPrune_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement ConfirmLibraryPrune —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestConfirmLibraryPrune_Generated runs the canonical scaffold rows for ConfirmLibraryPrune.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestConfirmLibraryPrune_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
+	req := func() *connect.Request[pb.ConfirmLibraryPruneRequest] {
+		return connect.NewRequest(&pb.ConfirmLibraryPruneRequest{OrgId: testOrg, RequestId: "pr1"})
+	}
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ConfirmLibraryPruneRequest, pb.ConfirmLibraryPruneResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement ConfirmLibraryPrune; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.ConfirmLibraryPruneRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.ConfirmLibraryPruneResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "a person signed in to the app confirms",
+			Req:  req(),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ConfirmLibraryPruneFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.ConfirmLibraryPruneInput) (gtmsvc.ConfirmLibraryPruneResult, error) {
+					asPerson(t, a)
+					assert.Equal(t, "pr1", in.RequestID)
+					return gtmsvc.ConfirmLibraryPruneResult{Removed: 2, Request: gtmsvc.LibraryPruneRequest{ID: "pr1", Status: gtmsvc.PruneRequestConfirmed, DecidedBy: "test-user"}}, nil
+				}
+			},
+			Check: func(t *testing.T, resp *connect.Response[pb.ConfirmLibraryPruneResponse]) {
+				assert.Equal(t, int32(2), resp.Msg.GetRemoved())
+				assert.Equal(t, pb.GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_CONFIRMED, resp.Msg.GetRequest().GetStatus())
+			},
+		},
+		{
+			Name: "an API token is an Agent, never ViaToken here: PermissionDenied",
+			Req:  req(),
+			Ctx:  tokenCtx("test-user", testOrg),
+			Setup: func(t *testing.T) {
+				m.ConfirmLibraryPruneFunc = func(_ context.Context, a gtmsvc.Actor, _ gtmsvc.ConfirmLibraryPruneInput) (gtmsvc.ConfirmLibraryPruneResult, error) {
+					assert.Equal(t, gtmsvc.Actor{UserID: "test-user", OrgID: testOrg, Kind: gtmsvc.ActorAgent}, a)
+					return gtmsvc.ConfirmLibraryPruneResult{}, &gtmsvc.PersonOnlyError{Action: "confirm a library prune"}
+				}
+			},
+			WantErr: connect.CodePermissionDenied,
+		},
+		{
+			Name: "an expired request is FailedPrecondition",
+			Req:  req(),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.ConfirmLibraryPruneFunc = func(context.Context, gtmsvc.Actor, gtmsvc.ConfirmLibraryPruneInput) (gtmsvc.ConfirmLibraryPruneResult, error) {
+					return gtmsvc.ConfirmLibraryPruneResult{}, gtmsvc.ErrPruneRequestExpired
+				}
+			},
+			WantErr: connect.CodeFailedPrecondition,
 		},
 	}, svc.ConfirmLibraryPrune)
 }

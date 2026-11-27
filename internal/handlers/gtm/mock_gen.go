@@ -16,7 +16,7 @@ import (
 )
 
 // forge:section MockServiceService
-// forge:hash=29127cc67ca0794a0d6a3ce12377679255dc938c21f8da0188ea29d7e813330d
+// forge:hash=6f2fb721bf92ccabe60d96fbf97203e4f6046027684d4a21cb4dc2375d9a87ec
 
 // MockServiceService is a test mock for the ServiceService interface.
 //
@@ -26,43 +26,57 @@ import (
 // "MockServiceService.<Method>Func not set" error.
 type MockServiceService struct {
 	contractkit.Recorder
-	CheckClaimsFunc             func(context.Context, gtm.Actor, gtm.CheckClaimsInput) (gtm.CheckClaimsResult, error)
-	ConfirmAssetUploadFunc      func(context.Context, gtm.Actor, gtm.ConfirmAssetUploadInput) (gtm.Asset, error)
-	CreateAssetUploadFunc       func(context.Context, gtm.Actor, gtm.CreateAssetUploadInput) (gtm.AssetUpload, error)
-	CreateCampaignFunc          func(context.Context, gtm.Actor, gtm.CreateCampaignInput) (gtm.Campaign, error)
-	CreateChannelFunc           func(context.Context, gtm.Actor, gtm.CreateChannelInput) (gtm.Channel, error)
-	CreateIdeaFunc              func(context.Context, gtm.Actor, gtm.CreateIdeaInput) (gtm.Idea, error)
-	CreateItemFunc              func(context.Context, gtm.Actor, gtm.CreateItemInput) (gtm.Item, error)
-	CreateStrategyFunc          func(context.Context, gtm.Actor, gtm.CreateStrategyInput) (gtm.Strategy, error)
-	GetAccessFunc               func(context.Context, gtm.Actor) (gtm.Access, error)
-	GetAssetFunc                func(context.Context, gtm.Actor, gtm.GetAssetInput) (gtm.Asset, error)
-	GetAssetDownloadFunc        func(context.Context, gtm.Actor, gtm.GetAssetDownloadInput) (gtm.AssetDownload, error)
-	GetCampaignFunc             func(context.Context, gtm.Actor, gtm.GetCampaignInput) (gtm.CampaignDetail, error)
-	GetChannelFunc              func(context.Context, gtm.Actor, gtm.GetChannelInput) (gtm.Channel, error)
-	GetIdeaFunc                 func(context.Context, gtm.Actor, gtm.GetIdeaInput) (gtm.Idea, error)
-	GetItemFunc                 func(context.Context, gtm.Actor, gtm.GetItemInput) (gtm.Item, error)
-	GetPositioningFunc          func(context.Context, gtm.Actor) (gtm.Positioning, error)
-	GetStrategyFunc             func(context.Context, gtm.Actor, gtm.GetStrategyInput) (gtm.StrategyDetail, error)
-	GetStrategyLibraryEntryFunc func(context.Context, gtm.Actor, gtm.GetStrategyLibraryEntryInput) (gtm.LibraryEntry, error)
-	ImportStrategyLibraryFunc   func(context.Context, gtm.Actor, gtm.ImportStrategyLibraryInput) (gtm.ImportStrategyLibraryResult, error)
-	ListAssetsFunc              func(context.Context, gtm.Actor, gtm.ListAssetsInput) (gtm.ListAssetsResult, error)
-	ListCampaignsFunc           func(context.Context, gtm.Actor, gtm.ListCampaignsInput) (gtm.ListCampaignsResult, error)
-	ListChannelsFunc            func(context.Context, gtm.Actor, gtm.ListChannelsInput) (gtm.ListChannelsResult, error)
-	ListClaimsFunc              func(context.Context, gtm.Actor, gtm.ListClaimsInput) (gtm.ListClaimsResult, error)
-	ListIdeasFunc               func(context.Context, gtm.Actor, gtm.ListIdeasInput) (gtm.ListIdeasResult, error)
-	ListItemsFunc               func(context.Context, gtm.Actor, gtm.ListItemsInput) (gtm.ListItemsResult, error)
-	ListStrategiesFunc          func(context.Context, gtm.Actor, gtm.ListStrategiesInput) (gtm.ListStrategiesResult, error)
-	ListStrategyLibraryFunc     func(context.Context, gtm.Actor, gtm.ListStrategyLibraryInput) (gtm.ListStrategyLibraryResult, error)
-	ResolveInDoubtSendFunc      func(context.Context, gtm.Actor, gtm.ResolveInDoubtSendInput) (gtm.Item, error)
-	SetIdeaStatusFunc           func(context.Context, gtm.Actor, gtm.SetIdeaStatusInput) (gtm.Idea, error)
-	UpdateCampaignFunc          func(context.Context, gtm.Actor, gtm.UpdateCampaignInput) (gtm.Campaign, error)
-	UpdateChannelFunc           func(context.Context, gtm.Actor, gtm.UpdateChannelInput) (gtm.Channel, error)
-	UpdateIdeaFunc              func(context.Context, gtm.Actor, gtm.UpdateIdeaInput) (gtm.Idea, error)
-	UpdateItemFunc              func(context.Context, gtm.Actor, gtm.UpdateItemInput) (gtm.Item, error)
-	UpdatePositioningFunc       func(context.Context, gtm.Actor, gtm.UpdatePositioningInput) (gtm.Positioning, error)
-	UpdateStrategyFunc          func(context.Context, gtm.Actor, gtm.UpdateStrategyInput) (gtm.Strategy, error)
-	UpsertClaimFunc             func(context.Context, gtm.Actor, gtm.UpsertClaimInput) (gtm.UpsertClaimResult, error)
-	UseLibraryStrategyFunc      func(context.Context, gtm.Actor, gtm.UseLibraryStrategyInput) (gtm.UseLibraryStrategyResult, error)
+	CancelLibraryPruneFunc       func(context.Context, gtm.Actor, gtm.CancelLibraryPruneInput) (gtm.LibraryPruneRequest, error)
+	CheckClaimsFunc              func(context.Context, gtm.Actor, gtm.CheckClaimsInput) (gtm.CheckClaimsResult, error)
+	ConfirmAssetUploadFunc       func(context.Context, gtm.Actor, gtm.ConfirmAssetUploadInput) (gtm.Asset, error)
+	ConfirmLibraryPruneFunc      func(context.Context, gtm.Actor, gtm.ConfirmLibraryPruneInput) (gtm.ConfirmLibraryPruneResult, error)
+	CreateAssetUploadFunc        func(context.Context, gtm.Actor, gtm.CreateAssetUploadInput) (gtm.AssetUpload, error)
+	CreateCampaignFunc           func(context.Context, gtm.Actor, gtm.CreateCampaignInput) (gtm.Campaign, error)
+	CreateChannelFunc            func(context.Context, gtm.Actor, gtm.CreateChannelInput) (gtm.Channel, error)
+	CreateIdeaFunc               func(context.Context, gtm.Actor, gtm.CreateIdeaInput) (gtm.Idea, error)
+	CreateItemFunc               func(context.Context, gtm.Actor, gtm.CreateItemInput) (gtm.Item, error)
+	CreateStrategyFunc           func(context.Context, gtm.Actor, gtm.CreateStrategyInput) (gtm.Strategy, error)
+	DeleteAssetFunc              func(context.Context, gtm.Actor, gtm.DeleteAssetInput) error
+	GetAccessFunc                func(context.Context, gtm.Actor) (gtm.Access, error)
+	GetAssetFunc                 func(context.Context, gtm.Actor, gtm.GetAssetInput) (gtm.Asset, error)
+	GetAssetDownloadFunc         func(context.Context, gtm.Actor, gtm.GetAssetDownloadInput) (gtm.AssetDownload, error)
+	GetCampaignFunc              func(context.Context, gtm.Actor, gtm.GetCampaignInput) (gtm.CampaignDetail, error)
+	GetChannelFunc               func(context.Context, gtm.Actor, gtm.GetChannelInput) (gtm.Channel, error)
+	GetIdeaFunc                  func(context.Context, gtm.Actor, gtm.GetIdeaInput) (gtm.Idea, error)
+	GetItemFunc                  func(context.Context, gtm.Actor, gtm.GetItemInput) (gtm.Item, error)
+	GetPositioningFunc           func(context.Context, gtm.Actor) (gtm.Positioning, error)
+	GetStrategyFunc              func(context.Context, gtm.Actor, gtm.GetStrategyInput) (gtm.StrategyDetail, error)
+	GetStrategyLibraryEntryFunc  func(context.Context, gtm.Actor, gtm.GetStrategyLibraryEntryInput) (gtm.LibraryEntry, error)
+	ImportStrategyLibraryFunc    func(context.Context, gtm.Actor, gtm.ImportStrategyLibraryInput) (gtm.ImportStrategyLibraryResult, error)
+	ListAssetsFunc               func(context.Context, gtm.Actor, gtm.ListAssetsInput) (gtm.ListAssetsResult, error)
+	ListCampaignsFunc            func(context.Context, gtm.Actor, gtm.ListCampaignsInput) (gtm.ListCampaignsResult, error)
+	ListChannelsFunc             func(context.Context, gtm.Actor, gtm.ListChannelsInput) (gtm.ListChannelsResult, error)
+	ListClaimsFunc               func(context.Context, gtm.Actor, gtm.ListClaimsInput) (gtm.ListClaimsResult, error)
+	ListIdeasFunc                func(context.Context, gtm.Actor, gtm.ListIdeasInput) (gtm.ListIdeasResult, error)
+	ListItemsFunc                func(context.Context, gtm.Actor, gtm.ListItemsInput) (gtm.ListItemsResult, error)
+	ListLibraryImportsFunc       func(context.Context, gtm.Actor, gtm.ListLibraryImportsInput) (gtm.ListLibraryImportsResult, error)
+	ListLibraryPruneRequestsFunc func(context.Context, gtm.Actor, gtm.ListLibraryPruneRequestsInput) (gtm.ListLibraryPruneRequestsResult, error)
+	ListStrategiesFunc           func(context.Context, gtm.Actor, gtm.ListStrategiesInput) (gtm.ListStrategiesResult, error)
+	ListStrategyLibraryFunc      func(context.Context, gtm.Actor, gtm.ListStrategyLibraryInput) (gtm.ListStrategyLibraryResult, error)
+	ResolveInDoubtSendFunc       func(context.Context, gtm.Actor, gtm.ResolveInDoubtSendInput) (gtm.Item, error)
+	SetIdeaStatusFunc            func(context.Context, gtm.Actor, gtm.SetIdeaStatusInput) (gtm.Idea, error)
+	UpdateCampaignFunc           func(context.Context, gtm.Actor, gtm.UpdateCampaignInput) (gtm.Campaign, error)
+	UpdateChannelFunc            func(context.Context, gtm.Actor, gtm.UpdateChannelInput) (gtm.Channel, error)
+	UpdateIdeaFunc               func(context.Context, gtm.Actor, gtm.UpdateIdeaInput) (gtm.Idea, error)
+	UpdateItemFunc               func(context.Context, gtm.Actor, gtm.UpdateItemInput) (gtm.Item, error)
+	UpdatePositioningFunc        func(context.Context, gtm.Actor, gtm.UpdatePositioningInput) (gtm.Positioning, error)
+	UpdateStrategyFunc           func(context.Context, gtm.Actor, gtm.UpdateStrategyInput) (gtm.Strategy, error)
+	UpsertClaimFunc              func(context.Context, gtm.Actor, gtm.UpsertClaimInput) (gtm.UpsertClaimResult, error)
+	UseLibraryStrategyFunc       func(context.Context, gtm.Actor, gtm.UseLibraryStrategyInput) (gtm.UseLibraryStrategyResult, error)
+}
+
+// CancelLibraryPrune records the call and delegates to CancelLibraryPruneFunc when set.
+func (m *MockServiceService) CancelLibraryPrune(ctx context.Context, actor gtm.Actor, in gtm.CancelLibraryPruneInput) (gtm.LibraryPruneRequest, error) {
+	m.Recorder.Record("CancelLibraryPrune", ctx, actor, in)
+	if m.CancelLibraryPruneFunc != nil {
+		return m.CancelLibraryPruneFunc(ctx, actor, in)
+	}
+	return *new(gtm.LibraryPruneRequest), contractkit.MockNotSet("MockServiceService", "CancelLibraryPrune")
 }
 
 // CheckClaims records the call and delegates to CheckClaimsFunc when set.
@@ -81,6 +95,15 @@ func (m *MockServiceService) ConfirmAssetUpload(ctx context.Context, actor gtm.A
 		return m.ConfirmAssetUploadFunc(ctx, actor, in)
 	}
 	return *new(gtm.Asset), contractkit.MockNotSet("MockServiceService", "ConfirmAssetUpload")
+}
+
+// ConfirmLibraryPrune records the call and delegates to ConfirmLibraryPruneFunc when set.
+func (m *MockServiceService) ConfirmLibraryPrune(ctx context.Context, actor gtm.Actor, in gtm.ConfirmLibraryPruneInput) (gtm.ConfirmLibraryPruneResult, error) {
+	m.Recorder.Record("ConfirmLibraryPrune", ctx, actor, in)
+	if m.ConfirmLibraryPruneFunc != nil {
+		return m.ConfirmLibraryPruneFunc(ctx, actor, in)
+	}
+	return *new(gtm.ConfirmLibraryPruneResult), contractkit.MockNotSet("MockServiceService", "ConfirmLibraryPrune")
 }
 
 // CreateAssetUpload records the call and delegates to CreateAssetUploadFunc when set.
@@ -135,6 +158,15 @@ func (m *MockServiceService) CreateStrategy(ctx context.Context, actor gtm.Actor
 		return m.CreateStrategyFunc(ctx, actor, in)
 	}
 	return *new(gtm.Strategy), contractkit.MockNotSet("MockServiceService", "CreateStrategy")
+}
+
+// DeleteAsset records the call and delegates to DeleteAssetFunc when set.
+func (m *MockServiceService) DeleteAsset(ctx context.Context, actor gtm.Actor, in gtm.DeleteAssetInput) error {
+	m.Recorder.Record("DeleteAsset", ctx, actor, in)
+	if m.DeleteAssetFunc != nil {
+		return m.DeleteAssetFunc(ctx, actor, in)
+	}
+	return contractkit.MockNotSet("MockServiceService", "DeleteAsset")
 }
 
 // GetAccess records the call and delegates to GetAccessFunc when set.
@@ -288,6 +320,24 @@ func (m *MockServiceService) ListItems(ctx context.Context, actor gtm.Actor, in 
 		return m.ListItemsFunc(ctx, actor, in)
 	}
 	return *new(gtm.ListItemsResult), contractkit.MockNotSet("MockServiceService", "ListItems")
+}
+
+// ListLibraryImports records the call and delegates to ListLibraryImportsFunc when set.
+func (m *MockServiceService) ListLibraryImports(ctx context.Context, actor gtm.Actor, in gtm.ListLibraryImportsInput) (gtm.ListLibraryImportsResult, error) {
+	m.Recorder.Record("ListLibraryImports", ctx, actor, in)
+	if m.ListLibraryImportsFunc != nil {
+		return m.ListLibraryImportsFunc(ctx, actor, in)
+	}
+	return *new(gtm.ListLibraryImportsResult), contractkit.MockNotSet("MockServiceService", "ListLibraryImports")
+}
+
+// ListLibraryPruneRequests records the call and delegates to ListLibraryPruneRequestsFunc when set.
+func (m *MockServiceService) ListLibraryPruneRequests(ctx context.Context, actor gtm.Actor, in gtm.ListLibraryPruneRequestsInput) (gtm.ListLibraryPruneRequestsResult, error) {
+	m.Recorder.Record("ListLibraryPruneRequests", ctx, actor, in)
+	if m.ListLibraryPruneRequestsFunc != nil {
+		return m.ListLibraryPruneRequestsFunc(ctx, actor, in)
+	}
+	return *new(gtm.ListLibraryPruneRequestsResult), contractkit.MockNotSet("MockServiceService", "ListLibraryPruneRequests")
 }
 
 // ListStrategies records the call and delegates to ListStrategiesFunc when set.

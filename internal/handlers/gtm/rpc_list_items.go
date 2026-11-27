@@ -21,11 +21,11 @@ func (s *Service) ListItems(
 	}
 	from, err := timeIn("scheduled_from", m.GetScheduledFrom())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	to, err := timeIn("scheduled_to", m.GetScheduledTo())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	res, err := s.deps.Service.ListItems(ctx, a, gtmsvc.ListItemsInput{
 		CampaignID:    m.CampaignId,

@@ -62,12 +62,21 @@ func (s *Service) begin(ctx context.Context, orgID string, req proto.Message) (g
 		return a, svcerr.Wrap(gtmsvc.ErrNotFound)
 	}
 	if verr := protovalidate.Validate(req); verr != nil {
-		if !s.enabled(ctx, a) {
-			return a, svcerr.Wrap(gtmsvc.ErrNotFound)
-		}
-		return a, svcerr.Wrap(svcerr.InvalidArgument(verr.Error()))
+		return a, s.invalid(ctx, a, svcerr.InvalidArgument(verr.Error()))
 	}
 	return a, nil
+}
+
+// invalid is the answer to a request the handler refuses before the domain
+// sees it (its buf.validate rules, a timestamp that is not one): err for a
+// caller GTM admits, and for anyone else the bare NotFound every refusal
+// gets. Every pre-domain error after begin resolved the caller goes through
+// here, so nothing about the surface reaches a caller who cannot see it.
+func (s *Service) invalid(ctx context.Context, a gtmsvc.Actor, err error) error {
+	if !s.enabled(ctx, a) {
+		return svcerr.Wrap(gtmsvc.ErrNotFound)
+	}
+	return wireErr(err)
 }
 
 // enabled is the gate's answer for a: a refusal and an outage are false.

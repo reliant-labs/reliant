@@ -4,17 +4,25 @@ import (
 	"context"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// CancelLibraryPrune implements the CancelLibraryPrune RPC.
-// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
-// forge:gen unwired-stub symbol=gtm.CancelLibraryPrune
+// CancelLibraryPrune records a PENDING prune request CANCELLED, removing
+// nothing. Refused as ConfirmLibraryPrune is: a person-class credential only.
 func (s *Service) CancelLibraryPrune(
 	ctx context.Context,
 	req *connect.Request[pb.CancelLibraryPruneRequest],
 ) (*connect.Response[pb.CancelLibraryPruneResponse], error) {
-	return nil, svcerr.Wrap(svcerr.ScaffoldStub("CancelLibraryPrune"))
+	m := req.Msg
+	a, err := s.begin(ctx, m.GetOrgId(), m)
+	if err != nil {
+		return nil, err
+	}
+	r, err := s.deps.Service.CancelLibraryPrune(ctx, a, gtmsvc.CancelLibraryPruneInput{RequestID: m.GetRequestId()})
+	if err != nil {
+		return nil, wireErr(err)
+	}
+	return connect.NewResponse(&pb.CancelLibraryPruneResponse{Request: pruneRequestOut(a.OrgID, r)}), nil
 }

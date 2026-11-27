@@ -23,7 +23,7 @@ func (s *Service) UpdateItem(
 	}
 	scheduled, err := timeIn("scheduled_at", m.GetScheduledAt())
 	if err != nil {
-		return nil, wireErr(err)
+		return nil, s.invalid(ctx, a, err)
 	}
 	in := gtmsvc.UpdateItemInput{
 		ID:               m.GetId(),

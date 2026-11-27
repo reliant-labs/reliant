@@ -37,9 +37,14 @@ func sessionCtx(t *testing.T, userID string) context.Context {
 // API token, or the CLI login an agent shell inherits): it binds every
 // decision to orgID, as auth.Verified.Bind does.
 func tokenCtx(userID, orgID string) context.Context {
-	ctx := auth.WithUser(context.Background(), userID, "user", "")
-	ctx = auth.WithCredential(ctx, auth.CredentialAccessToken)
+	ctx := credentialCtx(userID, auth.CredentialAccessToken)
 	return auth.WithMachineToken(ctx, &fat.Principal{TokenID: "tok-" + userID, OrgID: orgID, ActingUserID: userID})
+}
+
+// credentialCtx is userID authenticated by a credential of kind c and
+// nothing else (no org binding).
+func credentialCtx(userID string, c auth.Credential) context.Context {
+	return auth.WithCredential(auth.WithUser(context.Background(), userID, "user", ""), c)
 }
 
 // asPerson asserts the handler called the domain as the default test

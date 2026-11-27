@@ -1,41 +1,62 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 // ONE RPC PER FILE, no package-level identifiers, so two RPCs' owners never collide; CRUD RPCs are
 // tested in handlers_crud_test.go.
-// TestDeleteAsset_Generated: rows for `tdd.RunRPCCases`. The scaffold row is SELF-DESTRUCTING: it matches only
-// forge's stub sentinel (not a bare CodeUnimplemented), so it fails once you implement DeleteAsset —
-// replace it then with Check / WantErr rows. Depth: `forge skill load testing/patterns`.
 package gtm_test
 
 import (
+	"context"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
-
+	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 )
 
-// TestDeleteAsset_Generated runs the canonical scaffold rows for DeleteAsset.
-// Add more rows by appending tdd.RPCCase entries — never write a new
-// Test<X> function for what is really a new row in this table.
 func TestDeleteAsset_Generated(t *testing.T) {
 	t.Parallel()
-
-	// gtm.NewTestGtm (helpers_gen_test.go) returns the
-	// gtm *Service wired with stubbed dependencies. Override one
-	// with gtm.WithGtmDeps(...), or per-row via Case.Setup.
-	svc := gtm.NewTestGtm(t)
+	svc, m := mocked(t)
+	req := func() *connect.Request[pb.DeleteAssetRequest] {
+		return connect.NewRequest(&pb.DeleteAssetRequest{OrgId: testOrg, AssetId: "as1"})
+	}
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteAssetRequest, pb.DeleteAssetResponse]{
 		{
-			Name: "unimplemented_scaffold", // delete this row once you implement DeleteAsset; it only asserts nobody has
-			Req:  connect.NewRequest(&pb.DeleteAssetRequest{}),
-			Ctx:  gtm.AuthedContext(t), // authenticated test claims (UserID "test-user", role "admin")
-			// replace with Check: func(t *testing.T, resp *connect.Response[pb.DeleteAssetResponse]) {...}, or WantErr: connect.CodeInvalidArgument
-			WantScaffoldStub: true,
+			Name: "a person deletes",
+			Req:  req(),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.DeleteAssetFunc = func(_ context.Context, a gtmsvc.Actor, in gtmsvc.DeleteAssetInput) error {
+					asPerson(t, a)
+					assert.Equal(t, "as1", in.AssetID)
+					return nil
+				}
+			},
+		},
+		{
+			Name: "an API token is an Agent: deleting is PermissionDenied",
+			Req:  req(),
+			Ctx:  tokenCtx("test-user", testOrg),
+			Setup: func(t *testing.T) {
+				m.DeleteAssetFunc = func(_ context.Context, a gtmsvc.Actor, _ gtmsvc.DeleteAssetInput) error {
+					assert.Equal(t, gtmsvc.ActorAgent, a.Kind)
+					return &gtmsvc.PersonOnlyError{Action: "delete an asset"}
+				}
+			},
+			WantErr: connect.CodePermissionDenied,
+		},
+		{
+			Name: "no asset store is Unavailable",
+			Req:  req(),
+			Ctx:  gtm.AuthedContext(t),
+			Setup: func(t *testing.T) {
+				m.DeleteAssetFunc = func(context.Context, gtmsvc.Actor, gtmsvc.DeleteAssetInput) error { return gtmsvc.ErrAssetsUnavailable }
+			},
+			WantErr: connect.CodeUnavailable,
 		},
 	}, svc.DeleteAsset)
 }
