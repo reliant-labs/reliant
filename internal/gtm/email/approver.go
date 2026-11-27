@@ -14,8 +14,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// Refusals Prepare and Execute return besides the gtm service's own:
-// gtm.ErrNotApproved, gtm.ErrAlreadySent, *gtm.SendInDoubtError,
+// Refusals Prepare and Execute return besides the gtm service's own (and
+// ErrNoGmailAccount): gtm.ErrNotApproved, gtm.ErrAlreadySent, *gtm.SendInDoubtError,
 // gtm.ErrChannelNotSendable, *gtm.RevisionConflictError, gtm.ErrNotFound,
 // and from the send gtm.ErrApprovalMismatch, gtm.ErrEmailNotSent and
 // *gtm.SentUnrecordedError. Every error names at most ids and revisions,
@@ -45,24 +45,26 @@ type Items interface {
 }
 
 // SendRequest is one send_gtm_email call: the item and the revision the
-// agent read, which is the revision the owner is asked to approve.
+// agent read, which is the revision the owner is asked to approve. The call
+// never names the mailbox: the item's channel does, or the actor's default.
 type SendRequest struct {
 	ItemID           string
 	ExpectedRevision int32
-	// ConnectionID is the Gmail connection the call names; "" (the usual
-	// case) lets the item's channel decide, else the actor's default. One
-	// that differs from the channel's is gtm.ErrChannelNotSendable.
-	ConnectionID string
 }
 
 // Approver is the send_gtm_email tool's logic, behind the tool's
 // AutomationApprovalTool hook (Prepare) and its execution (Execute).
 type Approver struct {
-	items Items
+	items    Items
+	accounts Accounts
 }
 
-// NewApprover builds the approver over the GTM service.
-func NewApprover(items Items) *Approver { return &Approver{items: items} }
+// NewApprover builds the approver over the GTM service and the Gmail
+// accounts the card names as the sender (NewConnectionAccounts). Without
+// either, every call is refused.
+func NewApprover(items Items, accounts Accounts) *Approver {
+	return &Approver{items: items, accounts: accounts}
+}
 
 // Prepare is the card for req, for PrepareAutomation: a send ALWAYS needs
 // one when attended, and is refused (ErrUnattended) when unattended, before
@@ -73,18 +75,22 @@ func NewApprover(items Items) *Approver { return &Approver{items: items} }
 // email-type item (EMAIL or COLD_OUTREACH), APPROVED by a person, never SENT,
 // not held by an earlier send (*gtm.SendInDoubtError), at exactly
 // req.ExpectedRevision, and its channel, when it has one, is an ACTIVE,
-// INTEGRATED gmail channel whose connection req does not contradict
-// (gtm.ErrChannelNotSendable). The card shows the stored recipients,
-// subject and body, and its Hash is gtm.ApprovalHash of the item.
+// INTEGRATED gmail channel (gtm.ErrChannelNotSendable).
+//
+// The sender is resolved here and shown by address: the channel's pinned
+// connection, else the actor's default Gmail connection. One whose address
+// cannot be told is ErrNoGmailAccount, and no card is shown. The card shows
+// the stored recipients, subject and body, and its Hash is gtm.ApprovalHash
+// of the item.
 func (a *Approver) Prepare(ctx context.Context, actor gtm.Actor, req SendRequest, unattended bool) (Card, error) {
 	if unattended {
 		return Card{}, ErrUnattended
 	}
-	it, ch, err := a.read(ctx, actor, req)
+	it, ch, from, err := a.read(ctx, actor, req)
 	if err != nil {
 		return Card{}, err
 	}
-	return BuildCard(it, ch)
+	return BuildCard(it, ch, from)
 }
 
 // Execute sends req's item, for the tool's execution after the runtime
@@ -96,9 +102,18 @@ func (a *Approver) Prepare(ctx context.Context, actor gtm.Actor, req SendRequest
 // re-reads the item and applies Prepare's checks again (a SENT item is
 // gtm.ErrAlreadySent, so a second send is refused), and refuses an item
 // whose content no longer hashes to the approved card (ErrCardStale).
-// Last it sends through gtm.Service.SendItemEmail with run (its
-// ConnectionID set to req's), which checks all of it once more under the
+// Last it sends through gtm.Service.SendItemEmail with the APPROVED hash
+// (not one recomputed here), so the service's own ErrApprovalMismatch check
+// is a second, independent guard; that checks all of it once more under the
 // item's send hold, sends as actor and records SENT with the hash.
+//
+// The send is pinned to the account resolved now: run.ConnectionID is set
+// to it, and a run that names another is refused (gtm.ErrChannelNotSendable).
+// Residual risk: the card names the account resolved at Prepare. If the
+// item has no pinned channel connection and the person changes their default
+// Gmail connection after the card is raised and before Execute, the email
+// goes from the new default, which the card did not show. The hash binds the
+// email, not the sender.
 //
 // Content cannot change without a new revision, so an edit after this read
 // moves the revision and SendItemEmail refuses it. A send that fails with
@@ -117,73 +132,85 @@ func (a *Approver) Execute(ctx context.Context, actor gtm.Actor, req SendRequest
 	if approved == "" {
 		return gtm.Item{}, ErrNoApproval
 	}
-	if run.ConnectionID != "" && run.ConnectionID != req.ConnectionID {
-		return gtm.Item{}, gtm.ErrChannelNotSendable
-	}
-	run.ConnectionID = req.ConnectionID
-	it, ch, err := a.read(ctx, actor, req)
+	it, ch, from, err := a.read(ctx, actor, req)
 	if err != nil {
 		return gtm.Item{}, err
 	}
-	card, err := BuildCard(it, ch)
+	card, err := BuildCard(it, ch, from)
 	if err != nil {
 		return gtm.Item{}, err
 	}
 	if subtle.ConstantTimeCompare([]byte(card.Hash), []byte(approved)) != 1 {
 		return gtm.Item{}, ErrCardStale
 	}
+	return a.send(ctx, actor, req, run, from, approved)
+}
+
+// send is Execute's last step: SendItemEmail under the approved hash, pinned
+// to from's connection.
+func (a *Approver) send(ctx context.Context, actor gtm.Actor, req SendRequest, run gtm.EmailRun, from Account, approved string) (gtm.Item, error) {
+	if run.ConnectionID != "" && run.ConnectionID != from.ConnectionID {
+		return gtm.Item{}, gtm.ErrChannelNotSendable
+	}
+	run.ConnectionID = from.ConnectionID
 	return a.items.SendItemEmail(ctx, actor, gtm.SendItemEmailInput{
 		ItemID:           req.ItemID,
 		ExpectedRevision: req.ExpectedRevision,
-		ApprovalHash:     card.Hash,
+		ApprovalHash:     approved,
 		Run:              run,
 	})
 }
 
-// read is the item and its channel (nil for none), checked sendable at
-// req's revision.
-func (a *Approver) read(ctx context.Context, actor gtm.Actor, req SendRequest) (gtm.Item, *gtm.Channel, error) {
-	if a == nil || a.items == nil {
-		return gtm.Item{}, nil, gtm.ErrEmailUnavailable
+// read is the item, its channel (nil for none) and the account it goes out
+// from, checked sendable at req's revision.
+func (a *Approver) read(ctx context.Context, actor gtm.Actor, req SendRequest) (gtm.Item, *gtm.Channel, Account, error) {
+	if a == nil || a.items == nil || a.accounts == nil {
+		return gtm.Item{}, nil, Account{}, gtm.ErrEmailUnavailable
 	}
 	if strings.TrimSpace(req.ItemID) == "" {
-		return gtm.Item{}, nil, &gtm.ValidationError{Field: "item_id", Reason: "required"}
+		return gtm.Item{}, nil, Account{}, &gtm.ValidationError{Field: "item_id", Reason: "required"}
 	}
 	if req.ExpectedRevision < 1 {
-		return gtm.Item{}, nil, &gtm.ValidationError{Field: "expected_revision", Reason: "required"}
+		return gtm.Item{}, nil, Account{}, &gtm.ValidationError{Field: "expected_revision", Reason: "required"}
 	}
 	it, err := a.items.GetItem(ctx, actor, gtm.GetItemInput{ID: req.ItemID})
 	if err != nil {
-		return gtm.Item{}, nil, err
+		return gtm.Item{}, nil, Account{}, err
 	}
 	// The order is SendItemEmail's: a SENT item is refused as sent, and a
 	// held one as in doubt, whatever revision was named.
 	switch {
 	case it.Status == gtm.ItemSent:
-		return gtm.Item{}, nil, gtm.ErrAlreadySent
+		return gtm.Item{}, nil, Account{}, gtm.ErrAlreadySent
 	case it.ApprovalHash != "":
 		// An approval hash on an unsent item is SendItemEmail's hold: a send
 		// was started and may have gone out. No card is raised for it until
 		// a person resolves it. Whether it may still be running is the
 		// service's call; this read only words the refusal.
-		return gtm.Item{}, nil, &gtm.SendInDoubtError{ItemID: it.ID, MayBeInFlight: time.Since(it.UpdatedAt) < 2*gtm.EmailSendTimeout}
+		return gtm.Item{}, nil, Account{}, &gtm.SendInDoubtError{ItemID: it.ID, MayBeInFlight: time.Since(it.UpdatedAt) < 2*gtm.EmailSendTimeout}
 	case it.Revision != req.ExpectedRevision:
-		return gtm.Item{}, nil, &gtm.RevisionConflictError{ID: it.ID, Expected: req.ExpectedRevision, Current: it.Revision}
+		return gtm.Item{}, nil, Account{}, &gtm.RevisionConflictError{ID: it.ID, Expected: req.ExpectedRevision, Current: it.Revision}
 	case !it.Format.EmailType() || it.Status != gtm.ItemApproved:
-		return gtm.Item{}, nil, gtm.ErrNotApproved
+		return gtm.Item{}, nil, Account{}, gtm.ErrNotApproved
 	}
-	if it.ChannelID == "" {
-		return it, nil, nil
+	var ch *gtm.Channel
+	pinned := ""
+	if it.ChannelID != "" {
+		c, err := a.items.GetChannel(ctx, actor, gtm.GetChannelInput{ID: it.ChannelID})
+		if err != nil {
+			return gtm.Item{}, nil, Account{}, err
+		}
+		if c.Status != gtm.ChannelActive || c.Mode != gtm.ChannelIntegrated || c.IntegrationKind != gtm.GmailIntegration {
+			return gtm.Item{}, nil, Account{}, gtm.ErrChannelNotSendable
+		}
+		ch, pinned = &c, c.ConnectionID
 	}
-	ch, err := a.items.GetChannel(ctx, actor, gtm.GetChannelInput{ID: it.ChannelID})
+	from, err := a.accounts.GmailAccount(ctx, actor, pinned)
 	if err != nil {
-		return gtm.Item{}, nil, err
+		return gtm.Item{}, nil, Account{}, err
 	}
-	if ch.Status != gtm.ChannelActive || ch.Mode != gtm.ChannelIntegrated || ch.IntegrationKind != gtm.GmailIntegration {
-		return gtm.Item{}, nil, gtm.ErrChannelNotSendable
+	if from.ConnectionID == "" || (pinned != "" && from.ConnectionID != pinned) {
+		return gtm.Item{}, nil, Account{}, ErrNoGmailAccount
 	}
-	if req.ConnectionID != "" && ch.ConnectionID != "" && req.ConnectionID != ch.ConnectionID {
-		return gtm.Item{}, nil, gtm.ErrChannelNotSendable
-	}
-	return it, &ch, nil
+	return it, ch, from, nil
 }

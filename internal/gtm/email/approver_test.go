@@ -154,6 +154,8 @@ type fixture struct {
 	items    *memItems
 	store    *gtm.MockStore
 	email    gtm.Email
+	svc      gtm.Service
+	conns    *fakeConns
 	approver *email.Approver
 }
 
@@ -186,7 +188,9 @@ func newFixture(t *testing.T, it gtm.Item, sender gtm.Email, channels ...store.G
 		Clock: &gtm.MockClock{NowFunc: func() time.Time { return time.Date(2026, 11, 26, 12, 0, 0, 0, time.UTC) }},
 		Email: sender,
 	})
-	return &fixture{items: items, store: st, email: sender, approver: email.NewApprover(svc)}
+	conns := newFakeConns()
+	return &fixture{items: items, store: st, email: sender, svc: svc, conns: conns,
+		approver: email.NewApprover(svc, email.NewConnectionAccounts(conns))}
 }
 
 var sendReq = email.SendRequest{ItemID: "item-1", ExpectedRevision: 3}
@@ -278,7 +282,9 @@ func TestExecute_SendsUnderTheApprovedCard(t *testing.T) {
 
 	require.Equal(t, 1, sender.count())
 	assert.Equal(t, gtm.EmailMessage{To: []string{"ann@example.com", "bo@example.com"}, Subject: "Launch week", BodyMD: approvedEmail().BodyMD}, sender.sent[0])
-	assert.Equal(t, sendRun, sender.runs[0])
+	pinned := sendRun
+	pinned.ConnectionID = "conn-default"
+	assert.Equal(t, pinned, sender.runs[0], "sent through the run, pinned to the default resolved for it")
 	assert.Equal(t, string(gtm.ItemSent), f.items.snapshot().Status)
 }
 
@@ -417,8 +423,11 @@ func TestExecute_SendInDoubtHoldsTheItem(t *testing.T) {
 }
 
 func TestApprover_NoServiceIsUnavailable(t *testing.T) {
-	_, err := email.NewApprover(nil).Prepare(context.Background(), agent, sendReq, false)
+	_, err := email.NewApprover(nil, email.NewConnectionAccounts(newFakeConns())).Prepare(context.Background(), agent, sendReq, false)
 	require.ErrorIs(t, err, gtm.ErrEmailUnavailable)
+	f := newFixture(t, approvedEmail(), &recordingEmail{})
+	_, err = email.NewApprover(f.svc, nil).Prepare(context.Background(), agent, sendReq, false)
+	require.ErrorIs(t, err, gtm.ErrEmailUnavailable, "no accounts: no card")
 	_, err = (*email.Approver)(nil).Execute(approvedCtx("h"), agent, sendReq, sendRun)
 	require.ErrorIs(t, err, gtm.ErrEmailUnavailable)
 }
@@ -469,12 +478,12 @@ func TestPrepare_RefusesAnUnsendableChannel(t *testing.T) {
 		req      email.SendRequest
 		want     error
 	}{
-		"paused":                        {[]store.GtmChannel{paused}, sendReq, gtm.ErrChannelNotSendable},
-		"archived":                      {[]store.GtmChannel{archived}, sendReq, gtm.ErrChannelNotSendable},
-		"manual":                        {[]store.GtmChannel{manual}, sendReq, gtm.ErrChannelNotSendable},
-		"not gmail":                     {[]store.GtmChannel{slack}, sendReq, gtm.ErrChannelNotSendable},
-		"call names another connection": {[]store.GtmChannel{gmailChannel("ch-1", "conn-channel")}, email.SendRequest{ItemID: "item-1", ExpectedRevision: 3, ConnectionID: "conn-other"}, gtm.ErrChannelNotSendable},
-		"channel gone":                  {nil, sendReq, gtm.ErrNotFound},
+		"paused":                    {[]store.GtmChannel{paused}, sendReq, gtm.ErrChannelNotSendable},
+		"archived":                  {[]store.GtmChannel{archived}, sendReq, gtm.ErrChannelNotSendable},
+		"manual":                    {[]store.GtmChannel{manual}, sendReq, gtm.ErrChannelNotSendable},
+		"not gmail":                 {[]store.GtmChannel{slack}, sendReq, gtm.ErrChannelNotSendable},
+		"pinned connection unknown": {[]store.GtmChannel{gmailChannel("ch-1", "conn-gone")}, sendReq, email.ErrNoGmailAccount},
+		"channel gone":              {nil, sendReq, gtm.ErrNotFound},
 	} {
 		t.Run(name, func(t *testing.T) {
 			it := approvedEmail()
@@ -490,43 +499,6 @@ func TestPrepare_RefusesAnUnsendableChannel(t *testing.T) {
 			assert.Empty(t, f.items.snapshot().ApprovalHash, "never held")
 		})
 	}
-}
-
-// A sendable channel is named on the card, and its connection is the one
-// the email goes out through.
-func TestExecute_SendsThroughTheChannelsConnection(t *testing.T) {
-	it := approvedEmail()
-	it.ChannelID = "ch-1"
-	sender := &recordingEmail{}
-	f := newFixture(t, it, sender, gmailChannel("ch-1", "conn-channel"))
-
-	card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
-	require.NoError(t, err)
-	assert.Contains(t, card.Title, "From: Your Gmail on channel “Founder newsletter”, under your name")
-	_, err = f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
-	require.NoError(t, err)
-	require.Equal(t, 1, sender.count())
-	assert.Equal(t, "conn-channel", sender.runs[0].ConnectionID)
-
-	// The call naming the channel's own connection is the same send.
-	it2 := approvedEmail()
-	it2.ChannelID = "ch-1"
-	f2 := newFixture(t, it2, &recordingEmail{}, gmailChannel("ch-1", "conn-channel"))
-	req := email.SendRequest{ItemID: "item-1", ExpectedRevision: 3, ConnectionID: "conn-channel"}
-	_, err = f2.approver.Prepare(context.Background(), agent, req, false)
-	require.NoError(t, err)
-}
-
-// A run's connection that contradicts the request's is refused before any
-// read: the request is what Prepare checked and the card was raised for.
-func TestExecute_RunConnectionMustBeTheRequests(t *testing.T) {
-	sender := &recordingEmail{}
-	f := newFixture(t, approvedEmail(), sender)
-	run := sendRun
-	run.ConnectionID = "conn-other"
-	_, err := f.approver.Execute(approvedCtx(gtm.ApprovalHash(approvedEmail())), agent, sendReq, run)
-	require.ErrorIs(t, err, gtm.ErrChannelNotSendable)
-	assert.Zero(t, sender.count())
 }
 
 // The run the email would go out through is someone else's: nothing is

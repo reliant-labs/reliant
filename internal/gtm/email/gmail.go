@@ -21,6 +21,29 @@
 // names it runs it without one. A GTM email always needs its own card, and an
 // unattended run cannot show one, so it is refused.
 //
+// # The send_gtm_email tool (internal/llm/tools, PR-7)
+//
+// The tool is a thin AutomationApprovalTool over Approver, and must keep to
+// these rules:
+//
+//   - Its params are item_id and expected_revision only. Nothing the model
+//     sends names a mailbox, a connection, a hash or a run.
+//   - The actor is the resolved run caller (resolveRunCaller plus the chat's
+//     org) as gtm.Actor{Kind: gtm.ActorAgent, UserID, OrgID, ChatID}.
+//   - PrepareAutomation decodes the call as Run will, calls Prepare with its
+//     unattended flag, and returns ActivationPreview{Title: card.Title,
+//     Hash: card.Hash} with needsApproval TRUE. It never returns
+//     needsApproval false (a NoApproval preview): every send needs a card.
+//     Every error is returned as tools.RefuseActivation(err.Error(), err);
+//     the errors' text names ids and revisions only, never the email.
+//   - Execute builds gtm.EmailRun{RunID: the run (integrationRunID(chat,
+//     thread)), NodeID, ToolCallID: the runtime's ToolCall.ID for this call
+//     (ctxkeys.ToolCallContext.CurrentToolCallID), ConnectionID: ""} and
+//     calls Approver.Execute with the ctx the runtime handed it, which
+//     carries automationpolicy's Unattended flag and Approvals. The
+//     ToolCallID is never a model value: it is what keys the approved hash.
+//   - Errors from Execute are the tool's error response, as text.
+//
 // forge:outbound-io
 //
 // Gmail calls the Gmail API through the integration runner (httpaction), at
@@ -200,6 +223,14 @@ func (g *Gmail) Send(ctx context.Context, actor gtm.Actor, run gtm.EmailRun, msg
 	case o := <-done:
 		return o.id, o.err
 	case <-ctx.Done():
+		// A send that finished as the deadline passed is reported as it
+		// finished, not as in doubt: both cases may be ready at once, and
+		// select picks one at random.
+		select {
+		case o := <-done:
+			return o.id, o.err
+		default:
+		}
 		if stage.CompareAndSwap(stagePending, stageAbandoned) {
 			return "", notSent(svcerr.WithCause(svcerr.DeadlineExceeded("the email send ran out of time before it started"), ctx.Err()))
 		}
@@ -306,11 +337,15 @@ func (e *notSentError) Unwrap() error        { return e.err }
 func (e *notSentError) Is(target error) bool { return target == gtm.ErrEmailNotSent }
 
 // refused reports whether a failed response is Gmail refusing the request,
-// so nothing was sent: a 4xx, except 408 (the request may have been read).
+// so nothing was sent: a 4xx, except 408 (the request may have been read). A
+// rate limit (RateLimited) is always a 429 or a 403, so it is one of these.
+//
+// The write ledger's refusal (writeledger: the intent could not be recorded,
+// so the call was not made) is also certain nothing was sent, but it is an
+// IsError result with no status and only its text says so; it is not told
+// apart here, so it reads as in doubt and holds the item for a person to
+// resolve. Mapping it to ErrEmailNotSent needs a typed marker on that result.
 func refused(res *httpaction.Result) bool {
-	if res.RateLimited != "" {
-		return true
-	}
 	return res.StatusCode >= 400 && res.StatusCode < 500 && res.StatusCode != http.StatusRequestTimeout
 }
 

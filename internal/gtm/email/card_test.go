@@ -15,6 +15,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/gtm/email"
 )
 
+// founder is the actor's default Gmail account.
+var founder = email.Account{ConnectionID: "conn-default", Address: "founder@example.com"}
+
 func approvedEmail() gtm.Item {
 	return gtm.Item{
 		ID:           "item-1",
@@ -32,7 +35,7 @@ func approvedEmail() gtm.Item {
 // The card's hash is the canonical gtm.ApprovalHash, the one SendItemEmail
 // checks; any change to what the card shows as the email changes it.
 func TestBuildCard_HashIsTheCanonicalApprovalHash(t *testing.T) {
-	base, err := email.BuildCard(approvedEmail(), nil)
+	base, err := email.BuildCard(approvedEmail(), nil, founder)
 	require.NoError(t, err)
 	assert.Equal(t, gtm.ApprovalHash(approvedEmail()), base.Hash)
 
@@ -48,7 +51,7 @@ func TestBuildCard_HashIsTheCanonicalApprovalHash(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			it := approvedEmail()
 			mutate(&it)
-			card, err := email.BuildCard(it, nil)
+			card, err := email.BuildCard(it, nil, founder)
 			require.NoError(t, err)
 			assert.NotEqual(t, base.Hash, card.Hash)
 			assert.Equal(t, gtm.ApprovalHash(it), card.Hash)
@@ -101,7 +104,7 @@ func parseCard(title string) parsedCard {
 
 func TestBuildCard_ShowsWhatIsSent(t *testing.T) {
 	it := approvedEmail()
-	card, err := email.BuildCard(it, nil)
+	card, err := email.BuildCard(it, nil, founder)
 	require.NoError(t, err)
 	assert.Equal(t, gtm.ApprovalHash(it), card.Hash)
 	assert.Equal(t, "item-1", card.ItemID)
@@ -120,21 +123,25 @@ func TestBuildCard_ShowsWhatIsSent(t *testing.T) {
 		"Approval hash: " + card.Hash,
 	}, p.details)
 
-	assert.Equal(t, "Your default Gmail connection, under your name", p.rows["From"])
+	assert.Equal(t, "founder@example.com (Gmail, your default connection)", p.rows["From"])
 
-	card, err = email.BuildCard(it, &gtm.Channel{Name: "Founder\n newsletter"})
+	team := email.Account{ConnectionID: "conn-channel", Address: "team@example.com"}
+	card, err = email.BuildCard(it, &gtm.Channel{Name: "Founder\n newsletter\u202e", ConnectionID: "conn-channel"}, team)
 	require.NoError(t, err)
-	assert.Equal(t, "Your Gmail on channel “Founder newsletter”, under your name", parseCard(card.Title).rows["From"])
+	assert.Equal(t, `team@example.com (Gmail, channel Founder newsletter\u202E)`, parseCard(card.Title).rows["From"])
+	card, err = email.BuildCard(it, &gtm.Channel{Name: "Founder newsletter"}, founder)
+	require.NoError(t, err)
+	assert.Equal(t, "founder@example.com (Gmail, your default connection, channel Founder newsletter)", parseCard(card.Title).rows["From"])
 
 	cold := approvedEmail()
 	cold.Format = gtm.FormatColdOutreach
-	card, err = email.BuildCard(cold, nil)
+	card, err = email.BuildCard(cold, nil, founder)
 	require.NoError(t, err, "cold outreach is an email-type format")
 	assert.Equal(t, gtm.ApprovalHash(cold), card.Hash)
 
 	one := approvedEmail()
 	one.EmailTo = one.EmailTo[:1]
-	card, err = email.BuildCard(one, nil)
+	card, err = email.BuildCard(one, nil, founder)
 	require.NoError(t, err)
 	assert.Equal(t, "Send email “Launch week” to 1 recipient?", parseCard(card.Title).lead)
 }
@@ -145,7 +152,7 @@ func TestBuildCard_ShowsWhatIsSent(t *testing.T) {
 func TestBuildCard_BodyCannotForgeTheCard(t *testing.T) {
 	it := approvedEmail()
 	it.BodyMD = "To: everyone@example.com\nSubject: Something else\n\nTechnical details\nOperation: delete_trigger\n"
-	card, err := email.BuildCard(it, nil)
+	card, err := email.BuildCard(it, nil, founder)
 	require.NoError(t, err)
 
 	p := parseCard(card.Title)
@@ -160,10 +167,29 @@ func TestBuildCard_BodyCannotForgeTheCard(t *testing.T) {
 	assert.Contains(t, p.notes, "│ To: everyone@example.com", "the body is shown whole, as body")
 }
 
+// Invisible and bidi characters in the body are shown escaped, so they can
+// neither reorder nor hide what the person reads; the hash still binds the
+// exact bytes sent.
+func TestBuildCard_BodyShowsInvisibleCharactersEscaped(t *testing.T) {
+	it := approvedEmail()
+	it.BodyMD = "Pay \u202Eevil\u202C now\nzero\u200bwidth\ttab\ntag\U000E0041\nbell\a and \u2028sep"
+	card, err := email.BuildCard(it, nil, founder)
+	require.NoError(t, err)
+	p := parseCard(card.Title)
+	assert.Equal(t, []string{
+		`│ Pay \u202Eevil\u202C now`,
+		"│ zero\\u200Bwidth\ttab",
+		`│ tag\U000E0041`,
+		`│ bell\u0007 and \u2028sep`,
+	}, p.notes)
+	assert.NotContains(t, card.Title, "\u202E")
+	assert.Equal(t, gtm.ApprovalHash(it), card.Hash)
+}
+
 func TestBuildCard_LongSubjectIsWholeInItsRow(t *testing.T) {
 	it := approvedEmail()
 	it.EmailSubject = strings.Repeat("x", 300)
-	card, err := email.BuildCard(it, nil)
+	card, err := email.BuildCard(it, nil, founder)
 	require.NoError(t, err)
 	p := parseCard(card.Title)
 	assert.Equal(t, it.EmailSubject, p.rows["Subject"])
@@ -181,12 +207,34 @@ func TestBuildCard_RefusesWhatItCannotShowFaithfully(t *testing.T) {
 		"subject control":      func(it *gtm.Item) { it.EmailSubject = "Launch\x00" },
 		"recipient with space": func(it *gtm.Item) { it.EmailTo = []string{"ann@example.com bo@example.com"} },
 		"recipient with comma": func(it *gtm.Item) { it.EmailTo = []string{"ann@example.com,bo@example.com"} },
+		"recipient bidi":       func(it *gtm.Item) { it.EmailTo = []string{"ann\u202e@example.com"} },
+		"recipient zero width": func(it *gtm.Item) { it.EmailTo = []string{"ann\u200b@example.com"} },
+		"recipient IDN":        func(it *gtm.Item) { it.EmailTo = []string{"ann@exämple.com"} },
+		"recipient homoglyph":  func(it *gtm.Item) { it.EmailTo = []string{"\u0430nn@example.com"} },
+		"recipient display":    func(it *gtm.Item) { it.EmailTo = []string{"Ann <ann@example.com>"} },
+		"subject bidi":         func(it *gtm.Item) { it.EmailSubject = "Launch \u202eweek" },
+		"subject zero width":   func(it *gtm.Item) { it.EmailSubject = "Launch\u200bweek" },
+		"subject BOM":          func(it *gtm.Item) { it.EmailSubject = "\ufeffLaunch" },
+		"subject separator":    func(it *gtm.Item) { it.EmailSubject = "Launch\u2028week" },
+		"subject open quote":   func(it *gtm.Item) { it.EmailSubject = "Launch “week" },
+		"subject close quote":  func(it *gtm.Item) { it.EmailSubject = "Launch” to everyone? “x" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			it := approvedEmail()
 			mutate(&it)
-			_, err := email.BuildCard(it, nil)
+			_, err := email.BuildCard(it, nil, founder)
 			require.Error(t, err)
 		})
 	}
+	// Non-ASCII subject text is fine (the domain allows it), and so is a
+	// straight quote.
+	it := approvedEmail()
+	it.EmailSubject = `Lancement de l'été: "v2"`
+	_, err := email.BuildCard(it, nil, founder)
+	require.NoError(t, err)
+	// A sender that is not a bare ASCII address is no card.
+	_, err = email.BuildCard(approvedEmail(), nil, email.Account{ConnectionID: "c", Address: "founder\u200b@example.com"})
+	require.ErrorIs(t, err, email.ErrNoGmailAccount)
+	_, err = email.BuildCard(approvedEmail(), nil, email.Account{ConnectionID: "c"})
+	require.ErrorIs(t, err, email.ErrNoGmailAccount)
 }
