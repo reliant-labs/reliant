@@ -14,8 +14,11 @@ import { consolePageOf, consolePath, orgPageOf } from "../../Console/paths";
 import { flattenIds, hybridNav, visibleItems, childrenOf, type NavConfig, type NavCtx, type NavItem } from "@/components/Layout/sidebar/navConfig";
 import { DEMO_HIDDEN_PAGES, FORGE_DEMO_PATH } from "../demoPath";
 import { DEMO_OWN_ITEMS, demoNav } from "../demoNavConfig";
+import { changesUIEnabled as demoChangesUIEnabled } from "@/lib/changesFeature.demo";
 
-vi.mock("@/lib/changesFeature", () => ({ changesUIEnabled: () => false }));
+// The app's CHANGES_UI, off unless a test turns it on: the demo bundle's twin (lib/changesFeature.demo.ts) is on.
+const changesUI = vi.hoisted(() => ({ on: false }));
+vi.mock("@/lib/changesFeature", () => ({ changesUIEnabled: () => changesUI.on }));
 
 const APP = "shop";
 
@@ -61,19 +64,34 @@ function isSubsequence(sub: readonly string[], of: readonly string[]): boolean {
   return true;
 }
 
+function expectSubsetAt(place: string) {
+  const ctx = ctxAt(place);
+  for (const part of ["items", "footer"] as const) {
+    const app = drawn(hybridNav[part], ctx);
+    const demo = drawn(demoNav[part], ctx).filter((item) => !own.has(item.id));
+    expect(isSubsequence(demo.map((item) => item.id), app.map((item) => item.id))).toBe(true);
+    const labels = new Map(app.map((item) => [item.id, item.label]));
+    for (const item of demo) expect(item.label, item.id).toBe(labels.get(item.id));
+  }
+}
+
 describe("demoNav", () => {
   for (const place of PLACES) {
-    it(`is hybridNav with rows removed, in order, at ${place}`, () => {
-      const ctx = ctxAt(place);
-      for (const part of ["items", "footer"] as const) {
-        const app = drawn(hybridNav[part], ctx);
-        const demo = drawn(demoNav[part], ctx).filter((item) => !own.has(item.id));
-        expect(isSubsequence(demo.map((item) => item.id), app.map((item) => item.id))).toBe(true);
-        const labels = new Map(app.map((item) => [item.id, item.label]));
-        for (const item of demo) expect(item.label, item.id).toBe(labels.get(item.id));
-      }
-    });
+    it(`is hybridNav with rows removed, in order, at ${place}`, () => expectSubsetAt(place));
   }
+
+  it("lists Experiments under Analytics in the demo bundle, as the app does with CHANGES_UI on", () => {
+    // The demo's twin says the demo serves Forge Changes; the app's flag is the deployment's.
+    expect(demoChangesUIEnabled()).toBe(true);
+    changesUI.on = true;
+    try {
+      const ctx = ctxAt(consolePath(APP, { kind: "overview" }));
+      expect(flattenIds(demoNav.items, ctx)).toContain("experiments");
+      for (const place of PLACES) expectSubsetAt(place);
+    } finally {
+      changesUI.on = false;
+    }
+  });
 
   it("draws the app's console rows and none of the app's own", () => {
     const ctx = ctxAt(consolePath(APP, { kind: "overview" }));

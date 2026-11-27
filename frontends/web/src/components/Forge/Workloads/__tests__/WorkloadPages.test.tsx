@@ -90,10 +90,10 @@ function everywhere() {
   return { ...base, getWorkload: (req: Parameters<typeof base.getWorkload>[0]) => base.getWorkload({ ...req, envIds: ["env-prod"] }) };
 }
 
-function open(env: string, name = "admin-server") {
+function open(env: string, name = "admin-server", obs = everywhere()) {
   route.params = { env, name };
   return render(
-    <WorkloadsProviders obs={everywhere()}>
+    <WorkloadsProviders obs={obs}>
       <WorkloadPage />
     </WorkloadsProviders>
   );
@@ -119,6 +119,19 @@ describe("the workload page in the console", () => {
     await userEvent.click(within(screen.getByRole("dialog", { name: "Restart admin-server in prod?" })).getByRole("button", { name: "Restart in prod" }));
     await waitFor(() => expect(cloud.restartWorkload).toHaveBeenCalledWith("env-prod", "admin-server"));
     expect(cloud.getEnvironmentStatus).toHaveBeenCalledWith("env-prod", null);
+  });
+
+  it("re-reads the workload after a restart: its generated reads, not only the old observability keys", async () => {
+    const obs = everywhere();
+    const getWorkload = vi.spyOn(obs, "getWorkload");
+    open("prod", "admin-server", obs);
+    await ready();
+    await waitFor(() => expect(getWorkload).toHaveBeenCalled());
+    const before = getWorkload.mock.calls.length;
+    await userEvent.click(screen.getByTestId("workload-restart"));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Restart admin-server in prod?" })).getByRole("button", { name: "Restart in prod" }));
+    await waitFor(() => expect(cloud.restartWorkload).toHaveBeenCalled());
+    await waitFor(() => expect(getWorkload.mock.calls.length).toBeGreaterThan(before));
   });
 
   it("stops the workload's own deployment, found in that environment's status", async () => {

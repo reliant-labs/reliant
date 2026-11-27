@@ -6,7 +6,9 @@
 // from `gh run view --json`. Nothing here talks to GitHub or the network.
 
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -28,6 +30,45 @@ import {
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const RELEASE_YML = readFileSync(join(REPO_ROOT, ".github", "workflows", "release.yml"), "utf8");
+
+// Execute the actual workflow step, not a copy of its predicate. Substitute
+// only the GitHub expressions; Bash must decide admission and write outputs.
+const configStep = RELEASE_YML.match(
+  /      - name: Detect release type and set config\n        id: config\n        run: \|\n([\s\S]*?)(?=\n      - name:)/,
+);
+assert.ok(configStep, "release config step moved; update the workflow extraction");
+const configScript = configStep[1].replace(/^          /gm, "");
+
+const releaseCases = [
+  { name: "stable tag", refType: "tag", refName: "v1.20.3", allowed: true },
+  { name: "branch dispatch", refType: "branch", refName: "main", allowed: true },
+  { name: "RC-looking branch", refType: "branch", refName: "release/v1.20.3-rc.1", allowed: true },
+  { name: "rc-train stable prebuild", refType: "branch", refName: "release/v1.20.3-rc.1", prebuild: "v1.20.3", allowed: true },
+  ...["rc.1", "rc1", "beta.1", "beta1", "alpha.1", "alpha1"].map((suffix) => ({
+    name: `refuse ${suffix} tag`, refType: "tag", refName: `v1.20.3-${suffix}`, allowed: false,
+  })),
+];
+for (const { name, refType, refName, prebuild = "", allowed } of releaseCases) {
+  test(`release workflow config decision: ${name}`, (t) => {
+    const dir = mkdtempSync(join(tmpdir(), "release-config-test-"));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const output = join(dir, "output");
+    writeFileSync(output, "");
+    const script = configScript
+      .replaceAll("${{ inputs.prebuild_version || github.ref_name }}", prebuild || refName)
+      .replaceAll("${{ github.ref_type }}", refType);
+    assert.ok(!script.includes("${{"), "unhandled GitHub expression in config step");
+    const result = spawnSync("bash", ["--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script], {
+      env: { ...process.env, GITHUB_OUTPUT: output },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    assert.ifError(result.error);
+    assert.equal(result.status, allowed ? 0 : 1, result.stdout + result.stderr);
+    assert.equal(readFileSync(output, "utf8"), allowed ? "config=electron-builder.js\nchannel=latest\n" : "");
+    if (!allowed) assert.match(result.stdout, /::error::.*prerelease tag/);
+  });
+}
 
 const RUNS = "https://github.com/reliant-labs/reliant/actions/runs";
 
@@ -215,7 +256,8 @@ test("the prerelease regex is release.yml's, verbatim", () => {
 });
 
 test("the feeds read are the manifests release.yml's Finalize purges", () => {
-  for (const channel of ["latest", "alpha"]) {
+  // Finalize publishes and purges `latest` alone: the alpha channel is retired.
+  for (const channel of ["latest"]) {
     for (const file of feedFiles(channel)) {
       assert.ok(
         RELEASE_YML.includes(`"\${BASE_URL}/${file}"`),

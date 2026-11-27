@@ -62,14 +62,14 @@ function MobileRuns() {
   }
   if (list.isError) {
     return (
-      <p className="py-10 text-center text-sm text-muted-foreground" role="alert">
+      <p className="py-10 text-center text-ui text-muted-foreground" role="alert">
         Runs could not be loaded.
       </p>
     );
   }
   const rows = mobileRunRows(list.runs, list.events);
   if (rows.length === 0) {
-    return <p className="py-10 text-center text-sm text-muted-foreground">No runs in the last 7 days.</p>;
+    return <p className="py-10 text-center text-ui text-muted-foreground">No runs in the last 7 days.</p>;
   }
 
   return (
@@ -84,8 +84,8 @@ function MobileRuns() {
               >
                 <RunStatusDot status={runStatusFromDisplayState(row.run.displayState, row.run.outcome)} />
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium text-foreground">{row.run.title || "Untitled run"}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
+                  <span className="block truncate text-ui font-medium text-foreground">{row.run.title || "Untitled run"}</span>
+                  <span className="block truncate text-meta text-muted-foreground">
                     {[
                       runStatusFromDisplayState(row.run.displayState, row.run.outcome).label,
                       row.run.triggerName || undefined,
@@ -95,7 +95,7 @@ function MobileRuns() {
                       .join(" · ")}
                   </span>
                 </span>
-                <span className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(new Date(row.at).toISOString())}</span>
+                <span className="shrink-0 text-meta text-muted-foreground">{formatRelativeTime(new Date(row.at).toISOString())}</span>
               </Link>
             </li>
           ) : (
@@ -105,17 +105,17 @@ function MobileRuns() {
                 className={cn("h-2.5 w-2.5 shrink-0 rounded-full border-2", row.event.outcome === "failed" ? "border-destructive" : "border-warning")}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm text-foreground/80">
+                <span className="block truncate text-ui text-foreground/80">
                   {triggerEventOutcomeDisplay(row.event.outcome).label}
                   {row.event.outcomeDetail ? `: ${row.event.outcomeDetail}` : ""}
                 </span>
-                <span className="block truncate text-xs">
+                <span className="block truncate text-meta">
                   {[row.event.triggerName, getWorkflowDisplayName(row.event.workflowName, true), projectName(row.event.projectId)]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
               </span>
-              <span className="shrink-0 text-xs">{formatRelativeTime(new Date(row.at).toISOString())}</span>
+              <span className="shrink-0 text-meta">{formatRelativeTime(new Date(row.at).toISOString())}</span>
             </li>
           ),
         )}
@@ -125,7 +125,7 @@ function MobileRuns() {
           type="button"
           onClick={() => void list.fetchNextPage()}
           disabled={list.isFetchingNextPage}
-          className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-h-[44px] w-full items-center justify-center rounded-lg border border-border text-ui font-medium text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {list.isFetchingNextPage ? "Loading…" : "Load more"}
         </button>

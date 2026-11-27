@@ -285,6 +285,24 @@ export function BillingSection() {
     });
   };
 
+  // A hosting checkout returns with `?tab=hosting&checkout=…`: the marker is
+  // there for the desktop app's checkout window, which settles only on it
+  // (usageBillingReturnUrls). It is not a plan purchase, so it gets no plan
+  // banner, and it is dropped at once: a tab switch keeps the search, and
+  // would otherwise carry it to a tab that reads it as one. The hosting card
+  // says what the server knows (pending, then active).
+  const hostingCheckoutReturn = search.tab === "hosting" && !!search.checkout;
+  useEffect(() => {
+    if (!hostingCheckoutReturn) return;
+    void navigate({
+      to: ".",
+      search: (prev: Record<string, unknown>) => ({ ...prev, checkout: undefined }),
+      hash: true,
+      replace: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostingCheckoutReturn]);
+
   return (
     <div className="flex min-w-0 flex-col gap-6">
       <SettingsPageHeader
@@ -310,7 +328,7 @@ export function BillingSection() {
         <BackToOrigin returnTo={search.returnTo} />
       )}
 
-      {search.checkout && (
+      {search.checkout && !hostingCheckoutReturn && (
         <CheckoutReturnBanner
           outcome={search.checkout}
           planId={search.planId}

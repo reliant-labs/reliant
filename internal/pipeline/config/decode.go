@@ -83,11 +83,16 @@ func Parse(data []byte) (*Config, error) {
 
 // Load is Parse followed by Resolve: the one call most readers want.
 func Load(data []byte) (Resolved, error) {
+	return LoadFor(data, Project{})
+}
+
+// LoadFor is Parse followed by ResolveFor: the stage defaults are p's.
+func LoadFor(data []byte, p Project) (Resolved, error) {
 	cfg, err := Parse(data)
 	if err != nil {
 		return Resolved{}, err
 	}
-	return cfg.Resolve()
+	return cfg.ResolveFor(p)
 }
 
 func decodeDocument(data []byte) (*Config, error) {
@@ -483,6 +488,41 @@ func (g *Gate) decodeNode(d *decoder, n *yaml.Node, path string) {
 		return
 	}
 	d.decodeStruct(n, path, reflect.ValueOf(g).Elem())
+}
+
+// stageOff is the one string a gate stage takes.
+const stageOff = "off"
+
+func (s *Stage) emptyHint() string {
+	return "write {run: <command>} to replace the stage's command, or off to turn it off; remove the key for its default"
+}
+
+// decodeNode reads a gate stage: the mapping {run} or the exact string off.
+// Any other scalar is an error, a command string included: a command goes in
+// run, so a stage named by a bare string is always off and never a command
+// that happens to read "off".
+func (s *Stage) decodeNode(d *decoder, n *yaml.Node, path string) {
+	if n.Kind != yaml.ScalarNode {
+		d.decodeStruct(n, path, reflect.ValueOf(s).Elem())
+		return
+	}
+	switch {
+	case isString(n) && n.Value == stageOff:
+		s.Off = true
+	case isString(n) && strings.EqualFold(n.Value, stageOff):
+		d.errorf(n, path, "must be off (lowercase) or {run: <command>}, got %s", describe(n))
+	case isString(n):
+		d.errorf(n, path, "must be off or {run: <command>}, got %s: a command goes in run, e.g. `%s: {run: %s}`", describe(n), lastKey(path), strconv.Quote(n.Value))
+	case n.ShortTag() == "!!bool":
+		d.errorf(n, path, "must be off or {run: <command>}, got %s: write off to turn the stage off", describe(n))
+	default:
+		d.errorf(n, path, "must be off or {run: <command>}, got %s", describe(n))
+	}
+}
+
+func lastKey(path string) string {
+	_, key := splitLast(path)
+	return key
 }
 
 func (c *Check) emptyHint() string {

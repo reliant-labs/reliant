@@ -31,12 +31,9 @@ const RELEASE_CONFIG = JSON.parse(fs.readFileSync(RELEASE_CONFIG_PATH, 'utf8'));
 // release-config wrapper — not around it.
 const PUBLIC_BUILD_TARGETS = [
   'build',
-  'build:alpha',
   'dist',
-  'dist:alpha',
   'dist:mac',
   'dist:mac:dev',
-  'dist:mac:alpha',
   'dist:mac:prod-local',
   'dist:pr',
   'dist:win',
