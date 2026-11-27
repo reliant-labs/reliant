@@ -22,14 +22,15 @@ import (
 )
 
 // forge:section MockOwnerSource
-// forge:hash=bf74788d0f757ccd09dab39cd1f7d96c57dd39ae1224cd47bde4dbce41e57ea1
+// forge:hash=b97bca59b45ae835a274b4aea41c8afaf183a8dde67c40993b4de5daf8574628
 
 // MockOwnerSource is a test mock for the OwnerSource interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockOwnerSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOwnerSource.<Method>Func not set" error.
 type MockOwnerSource struct {
 	contractkit.Recorder
 	GetConnectionFunc               func(context.Context, string, string) (*core.Connection, error)
@@ -54,18 +55,65 @@ func (m *MockOwnerSource) GetIntegrationAccessSubject(ctx context.Context, userI
 	return "", contractkit.MockNotSet("MockOwnerSource", "GetIntegrationAccessSubject")
 }
 
+// MockOwnerSourceGetConnectionCall is one recorded call of MockOwnerSource.GetConnection, one
+// field per parameter.
+type MockOwnerSourceGetConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetConnectionCalls returns every recorded GetConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetConnection").
+func (m *MockOwnerSource) GetConnectionCalls() []MockOwnerSourceGetConnectionCall {
+	var out []MockOwnerSourceGetConnectionCall
+	for _, c := range m.Recorder.Calls("GetConnection") {
+		var r MockOwnerSourceGetConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOwnerSourceGetIntegrationAccessSubjectCall is one recorded call of MockOwnerSource.GetIntegrationAccessSubject, one
+// field per parameter.
+type MockOwnerSourceGetIntegrationAccessSubjectCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	FreshAfter    time.Time
+}
+
+// GetIntegrationAccessSubjectCalls returns every recorded GetIntegrationAccessSubject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIntegrationAccessSubject").
+func (m *MockOwnerSource) GetIntegrationAccessSubjectCalls() []MockOwnerSourceGetIntegrationAccessSubjectCall {
+	var out []MockOwnerSourceGetIntegrationAccessSubjectCall
+	for _, c := range m.Recorder.Calls("GetIntegrationAccessSubject") {
+		var r MockOwnerSourceGetIntegrationAccessSubjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.FreshAfter, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ OwnerSource = (*MockOwnerSource)(nil)
 
 // forge:section MockReceiptStore
-// forge:hash=e7956a62ed378aaae639dc1624cb6ece4672b9af0f99feda7c0b53b799d9aabf
+// forge:hash=619bd4f2a7ac3c2800ee5225b064891fe48289be88f9dc5f2f3a7f243607942b
 
 // MockReceiptStore is a test mock for the ReceiptStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockReceiptStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockReceiptStore.<Method>Func not set" error.
 type MockReceiptStore struct {
 	contractkit.Recorder
 	TriggerDeliveryEventFunc       func(context.Context, string, string, string) (*core.TriggerEvent, error)
@@ -90,18 +138,67 @@ func (m *MockReceiptStore) RecordDeliveryTriggerEvent(ctx context.Context, id st
 	return nil, false, contractkit.MockNotSet("MockReceiptStore", "RecordDeliveryTriggerEvent")
 }
 
+// MockReceiptStoreTriggerDeliveryEventCall is one recorded call of MockReceiptStore.TriggerDeliveryEvent, one
+// field per parameter.
+type MockReceiptStoreTriggerDeliveryEventCall struct {
+	Ctx       context.Context
+	ID        string
+	TriggerID string
+	UserID    string
+}
+
+// TriggerDeliveryEventCalls returns every recorded TriggerDeliveryEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TriggerDeliveryEvent").
+func (m *MockReceiptStore) TriggerDeliveryEventCalls() []MockReceiptStoreTriggerDeliveryEventCall {
+	var out []MockReceiptStoreTriggerDeliveryEventCall
+	for _, c := range m.Recorder.Calls("TriggerDeliveryEvent") {
+		var r MockReceiptStoreTriggerDeliveryEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.TriggerID, _ = c.Args[2].(string)
+		r.UserID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockReceiptStoreRecordDeliveryTriggerEventCall is one recorded call of MockReceiptStore.RecordDeliveryTriggerEvent, one
+// field per parameter.
+type MockReceiptStoreRecordDeliveryTriggerEventCall struct {
+	Ctx   context.Context
+	ID    string
+	Token string
+	Event *core.TriggerEvent
+}
+
+// RecordDeliveryTriggerEventCalls returns every recorded RecordDeliveryTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordDeliveryTriggerEvent").
+func (m *MockReceiptStore) RecordDeliveryTriggerEventCalls() []MockReceiptStoreRecordDeliveryTriggerEventCall {
+	var out []MockReceiptStoreRecordDeliveryTriggerEventCall
+	for _, c := range m.Recorder.Calls("RecordDeliveryTriggerEvent") {
+		var r MockReceiptStoreRecordDeliveryTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Token, _ = c.Args[2].(string)
+		r.Event, _ = c.Args[3].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ReceiptStore = (*MockReceiptStore)(nil)
 
 // forge:section MockIntakeRepo
-// forge:hash=d34523a9ed1ab40409a725788f7872aaae5ac9d1b242405b5f8b9fa304fd401e
+// forge:hash=c9678e08e199b6cb54c072f3bd2f558de82d9c0f6ea8ddacf7422b16a38bd36e
 
 // MockIntakeRepo is a test mock for the IntakeRepo interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockIntakeRepo.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockIntakeRepo.<Method>Func not set" error.
 type MockIntakeRepo struct {
 	contractkit.Recorder
 	GetTriggerFunc                    func(context.Context, string) (*core.Trigger, error)
@@ -216,18 +313,265 @@ func (m *MockIntakeRepo) RecordDeliveryTriggerEvent(ctx context.Context, id stri
 	return nil, false, contractkit.MockNotSet("MockIntakeRepo", "RecordDeliveryTriggerEvent")
 }
 
+// MockIntakeRepoGetTriggerCall is one recorded call of MockIntakeRepo.GetTrigger, one
+// field per parameter.
+type MockIntakeRepoGetTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetTriggerCalls returns every recorded GetTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTrigger").
+func (m *MockIntakeRepo) GetTriggerCalls() []MockIntakeRepoGetTriggerCall {
+	var out []MockIntakeRepoGetTriggerCall
+	for _, c := range m.Recorder.Calls("GetTrigger") {
+		var r MockIntakeRepoGetTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoGetDaemonCall is one recorded call of MockIntakeRepo.GetDaemon, one
+// field per parameter.
+type MockIntakeRepoGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockIntakeRepo) GetDaemonCalls() []MockIntakeRepoGetDaemonCall {
+	var out []MockIntakeRepoGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockIntakeRepoGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoCreateTriggerEventCall is one recorded call of MockIntakeRepo.CreateTriggerEvent, one
+// field per parameter.
+type MockIntakeRepoCreateTriggerEventCall struct {
+	Ctx context.Context
+	Ev  *core.TriggerEvent
+}
+
+// CreateTriggerEventCalls returns every recorded CreateTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateTriggerEvent").
+func (m *MockIntakeRepo) CreateTriggerEventCalls() []MockIntakeRepoCreateTriggerEventCall {
+	var out []MockIntakeRepoCreateTriggerEventCall
+	for _, c := range m.Recorder.Calls("CreateTriggerEvent") {
+		var r MockIntakeRepoCreateTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoGetTriggerEventByDedupeCall is one recorded call of MockIntakeRepo.GetTriggerEventByDedupe, one
+// field per parameter.
+type MockIntakeRepoGetTriggerEventByDedupeCall struct {
+	Ctx       context.Context
+	Kind      core.TriggerEventKind
+	DedupeKey string
+}
+
+// GetTriggerEventByDedupeCalls returns every recorded GetTriggerEventByDedupe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerEventByDedupe").
+func (m *MockIntakeRepo) GetTriggerEventByDedupeCalls() []MockIntakeRepoGetTriggerEventByDedupeCall {
+	var out []MockIntakeRepoGetTriggerEventByDedupeCall
+	for _, c := range m.Recorder.Calls("GetTriggerEventByDedupe") {
+		var r MockIntakeRepoGetTriggerEventByDedupeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerEventKind)
+		r.DedupeKey, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoGetLatestTriggerEventCall is one recorded call of MockIntakeRepo.GetLatestTriggerEvent, one
+// field per parameter.
+type MockIntakeRepoGetLatestTriggerEventCall struct {
+	Ctx       context.Context
+	TriggerID string
+	Outcome   *core.TriggerEventOutcome
+}
+
+// GetLatestTriggerEventCalls returns every recorded GetLatestTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetLatestTriggerEvent").
+func (m *MockIntakeRepo) GetLatestTriggerEventCalls() []MockIntakeRepoGetLatestTriggerEventCall {
+	var out []MockIntakeRepoGetLatestTriggerEventCall
+	for _, c := range m.Recorder.Calls("GetLatestTriggerEvent") {
+		var r MockIntakeRepoGetLatestTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.TriggerID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(*core.TriggerEventOutcome)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoSettlePendingTriggerEventCall is one recorded call of MockIntakeRepo.SettlePendingTriggerEvent, one
+// field per parameter.
+type MockIntakeRepoSettlePendingTriggerEventCall struct {
+	Ctx     context.Context
+	ID      string
+	Outcome core.TriggerEventOutcome
+	Detail  string
+	Def     *core.TriggerEventDefinition
+}
+
+// SettlePendingTriggerEventCalls returns every recorded SettlePendingTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettlePendingTriggerEvent").
+func (m *MockIntakeRepo) SettlePendingTriggerEventCalls() []MockIntakeRepoSettlePendingTriggerEventCall {
+	var out []MockIntakeRepoSettlePendingTriggerEventCall
+	for _, c := range m.Recorder.Calls("SettlePendingTriggerEvent") {
+		var r MockIntakeRepoSettlePendingTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(core.TriggerEventOutcome)
+		r.Detail, _ = c.Args[3].(string)
+		r.Def, _ = c.Args[4].(*core.TriggerEventDefinition)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoListStalePendingTriggerEventsCall is one recorded call of MockIntakeRepo.ListStalePendingTriggerEvents, one
+// field per parameter.
+type MockIntakeRepoListStalePendingTriggerEventsCall struct {
+	Ctx       context.Context
+	OlderThan time.Time
+	Limit     int
+}
+
+// ListStalePendingTriggerEventsCalls returns every recorded ListStalePendingTriggerEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStalePendingTriggerEvents").
+func (m *MockIntakeRepo) ListStalePendingTriggerEventsCalls() []MockIntakeRepoListStalePendingTriggerEventsCall {
+	var out []MockIntakeRepoListStalePendingTriggerEventsCall
+	for _, c := range m.Recorder.Calls("ListStalePendingTriggerEvents") {
+		var r MockIntakeRepoListStalePendingTriggerEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OlderThan, _ = c.Args[1].(time.Time)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoGetConnectionCall is one recorded call of MockIntakeRepo.GetConnection, one
+// field per parameter.
+type MockIntakeRepoGetConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetConnectionCalls returns every recorded GetConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetConnection").
+func (m *MockIntakeRepo) GetConnectionCalls() []MockIntakeRepoGetConnectionCall {
+	var out []MockIntakeRepoGetConnectionCall
+	for _, c := range m.Recorder.Calls("GetConnection") {
+		var r MockIntakeRepoGetConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoGetIntegrationAccessSubjectCall is one recorded call of MockIntakeRepo.GetIntegrationAccessSubject, one
+// field per parameter.
+type MockIntakeRepoGetIntegrationAccessSubjectCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	FreshAfter    time.Time
+}
+
+// GetIntegrationAccessSubjectCalls returns every recorded GetIntegrationAccessSubject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIntegrationAccessSubject").
+func (m *MockIntakeRepo) GetIntegrationAccessSubjectCalls() []MockIntakeRepoGetIntegrationAccessSubjectCall {
+	var out []MockIntakeRepoGetIntegrationAccessSubjectCall
+	for _, c := range m.Recorder.Calls("GetIntegrationAccessSubject") {
+		var r MockIntakeRepoGetIntegrationAccessSubjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.FreshAfter, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoTriggerDeliveryEventCall is one recorded call of MockIntakeRepo.TriggerDeliveryEvent, one
+// field per parameter.
+type MockIntakeRepoTriggerDeliveryEventCall struct {
+	Ctx       context.Context
+	ID        string
+	TriggerID string
+	UserID    string
+}
+
+// TriggerDeliveryEventCalls returns every recorded TriggerDeliveryEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TriggerDeliveryEvent").
+func (m *MockIntakeRepo) TriggerDeliveryEventCalls() []MockIntakeRepoTriggerDeliveryEventCall {
+	var out []MockIntakeRepoTriggerDeliveryEventCall
+	for _, c := range m.Recorder.Calls("TriggerDeliveryEvent") {
+		var r MockIntakeRepoTriggerDeliveryEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.TriggerID, _ = c.Args[2].(string)
+		r.UserID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockIntakeRepoRecordDeliveryTriggerEventCall is one recorded call of MockIntakeRepo.RecordDeliveryTriggerEvent, one
+// field per parameter.
+type MockIntakeRepoRecordDeliveryTriggerEventCall struct {
+	Ctx   context.Context
+	ID    string
+	Token string
+	Event *core.TriggerEvent
+}
+
+// RecordDeliveryTriggerEventCalls returns every recorded RecordDeliveryTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecordDeliveryTriggerEvent").
+func (m *MockIntakeRepo) RecordDeliveryTriggerEventCalls() []MockIntakeRepoRecordDeliveryTriggerEventCall {
+	var out []MockIntakeRepoRecordDeliveryTriggerEventCall
+	for _, c := range m.Recorder.Calls("RecordDeliveryTriggerEvent") {
+		var r MockIntakeRepoRecordDeliveryTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Token, _ = c.Args[2].(string)
+		r.Event, _ = c.Args[3].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ IntakeRepo = (*MockIntakeRepo)(nil)
 
 // forge:section MockRepo
-// forge:hash=143c4b39150b1b06bc5224d2626926f51e71d57018534e792fd035ac230278a6
+// forge:hash=b00cc8ad86a2ed350158ca9b34f877542214d1904892fa194d1e8c1f8a508aeb
 
 // MockRepo is a test mock for the Repo interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRepo.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRepo.<Method>Func not set" error.
 type MockRepo struct {
 	contractkit.Recorder
 	GetTriggerFunc                  func(context.Context, string) (*core.Trigger, error)
@@ -362,18 +706,293 @@ func (m *MockRepo) GetIntegrationAccessSubject(ctx context.Context, userID strin
 	return "", contractkit.MockNotSet("MockRepo", "GetIntegrationAccessSubject")
 }
 
+// MockRepoGetTriggerCall is one recorded call of MockRepo.GetTrigger, one
+// field per parameter.
+type MockRepoGetTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetTriggerCalls returns every recorded GetTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTrigger").
+func (m *MockRepo) GetTriggerCalls() []MockRepoGetTriggerCall {
+	var out []MockRepoGetTriggerCall
+	for _, c := range m.Recorder.Calls("GetTrigger") {
+		var r MockRepoGetTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoListAllTriggersCall is one recorded call of MockRepo.ListAllTriggers, one
+// field per parameter.
+type MockRepoListAllTriggersCall struct {
+	Ctx context.Context
+}
+
+// ListAllTriggersCalls returns every recorded ListAllTriggers call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAllTriggers").
+func (m *MockRepo) ListAllTriggersCalls() []MockRepoListAllTriggersCall {
+	var out []MockRepoListAllTriggersCall
+	for _, c := range m.Recorder.Calls("ListAllTriggers") {
+		var r MockRepoListAllTriggersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoLockTriggerCall is one recorded call of MockRepo.LockTrigger, one
+// field per parameter.
+type MockRepoLockTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// LockTriggerCalls returns every recorded LockTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockTrigger").
+func (m *MockRepo) LockTriggerCalls() []MockRepoLockTriggerCall {
+	var out []MockRepoLockTriggerCall
+	for _, c := range m.Recorder.Calls("LockTrigger") {
+		var r MockRepoLockTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoCreateTriggerEventCall is one recorded call of MockRepo.CreateTriggerEvent, one
+// field per parameter.
+type MockRepoCreateTriggerEventCall struct {
+	Ctx context.Context
+	Ev  *core.TriggerEvent
+}
+
+// CreateTriggerEventCalls returns every recorded CreateTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateTriggerEvent").
+func (m *MockRepo) CreateTriggerEventCalls() []MockRepoCreateTriggerEventCall {
+	var out []MockRepoCreateTriggerEventCall
+	for _, c := range m.Recorder.Calls("CreateTriggerEvent") {
+		var r MockRepoCreateTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoGetTriggerEventByDedupeCall is one recorded call of MockRepo.GetTriggerEventByDedupe, one
+// field per parameter.
+type MockRepoGetTriggerEventByDedupeCall struct {
+	Ctx       context.Context
+	Kind      core.TriggerEventKind
+	DedupeKey string
+}
+
+// GetTriggerEventByDedupeCalls returns every recorded GetTriggerEventByDedupe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerEventByDedupe").
+func (m *MockRepo) GetTriggerEventByDedupeCalls() []MockRepoGetTriggerEventByDedupeCall {
+	var out []MockRepoGetTriggerEventByDedupeCall
+	for _, c := range m.Recorder.Calls("GetTriggerEventByDedupe") {
+		var r MockRepoGetTriggerEventByDedupeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerEventKind)
+		r.DedupeKey, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoGetLatestTriggerEventCall is one recorded call of MockRepo.GetLatestTriggerEvent, one
+// field per parameter.
+type MockRepoGetLatestTriggerEventCall struct {
+	Ctx       context.Context
+	TriggerID string
+	Outcome   *core.TriggerEventOutcome
+}
+
+// GetLatestTriggerEventCalls returns every recorded GetLatestTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetLatestTriggerEvent").
+func (m *MockRepo) GetLatestTriggerEventCalls() []MockRepoGetLatestTriggerEventCall {
+	var out []MockRepoGetLatestTriggerEventCall
+	for _, c := range m.Recorder.Calls("GetLatestTriggerEvent") {
+		var r MockRepoGetLatestTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.TriggerID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(*core.TriggerEventOutcome)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoSettlePendingTriggerEventCall is one recorded call of MockRepo.SettlePendingTriggerEvent, one
+// field per parameter.
+type MockRepoSettlePendingTriggerEventCall struct {
+	Ctx     context.Context
+	ID      string
+	Outcome core.TriggerEventOutcome
+	Detail  string
+	Def     *core.TriggerEventDefinition
+}
+
+// SettlePendingTriggerEventCalls returns every recorded SettlePendingTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettlePendingTriggerEvent").
+func (m *MockRepo) SettlePendingTriggerEventCalls() []MockRepoSettlePendingTriggerEventCall {
+	var out []MockRepoSettlePendingTriggerEventCall
+	for _, c := range m.Recorder.Calls("SettlePendingTriggerEvent") {
+		var r MockRepoSettlePendingTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(core.TriggerEventOutcome)
+		r.Detail, _ = c.Args[3].(string)
+		r.Def, _ = c.Args[4].(*core.TriggerEventDefinition)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoGetDaemonCall is one recorded call of MockRepo.GetDaemon, one
+// field per parameter.
+type MockRepoGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockRepo) GetDaemonCalls() []MockRepoGetDaemonCall {
+	var out []MockRepoGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockRepoGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoRootWorkflowStatusForChatsCall is one recorded call of MockRepo.RootWorkflowStatusForChats, one
+// field per parameter.
+type MockRepoRootWorkflowStatusForChatsCall struct {
+	Ctx     context.Context
+	ChatIDs []string
+}
+
+// RootWorkflowStatusForChatsCalls returns every recorded RootWorkflowStatusForChats call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RootWorkflowStatusForChats").
+func (m *MockRepo) RootWorkflowStatusForChatsCalls() []MockRepoRootWorkflowStatusForChatsCall {
+	var out []MockRepoRootWorkflowStatusForChatsCall
+	for _, c := range m.Recorder.Calls("RootWorkflowStatusForChats") {
+		var r MockRepoRootWorkflowStatusForChatsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatIDs, _ = c.Args[1].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoListRootWorkflowsCall is one recorded call of MockRepo.ListRootWorkflows, one
+// field per parameter.
+type MockRepoListRootWorkflowsCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ListRootWorkflowsCalls returns every recorded ListRootWorkflows call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListRootWorkflows").
+func (m *MockRepo) ListRootWorkflowsCalls() []MockRepoListRootWorkflowsCall {
+	var out []MockRepoListRootWorkflowsCall
+	for _, c := range m.Recorder.Calls("ListRootWorkflows") {
+		var r MockRepoListRootWorkflowsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoAbandonFailedWorkflowStartCall is one recorded call of MockRepo.AbandonFailedWorkflowStart, one
+// field per parameter.
+type MockRepoAbandonFailedWorkflowStartCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// AbandonFailedWorkflowStartCalls returns every recorded AbandonFailedWorkflowStart call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AbandonFailedWorkflowStart").
+func (m *MockRepo) AbandonFailedWorkflowStartCalls() []MockRepoAbandonFailedWorkflowStartCall {
+	var out []MockRepoAbandonFailedWorkflowStartCall
+	for _, c := range m.Recorder.Calls("AbandonFailedWorkflowStart") {
+		var r MockRepoAbandonFailedWorkflowStartCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoGetConnectionCall is one recorded call of MockRepo.GetConnection, one
+// field per parameter.
+type MockRepoGetConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetConnectionCalls returns every recorded GetConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetConnection").
+func (m *MockRepo) GetConnectionCalls() []MockRepoGetConnectionCall {
+	var out []MockRepoGetConnectionCall
+	for _, c := range m.Recorder.Calls("GetConnection") {
+		var r MockRepoGetConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepoGetIntegrationAccessSubjectCall is one recorded call of MockRepo.GetIntegrationAccessSubject, one
+// field per parameter.
+type MockRepoGetIntegrationAccessSubjectCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	FreshAfter    time.Time
+}
+
+// GetIntegrationAccessSubjectCalls returns every recorded GetIntegrationAccessSubject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIntegrationAccessSubject").
+func (m *MockRepo) GetIntegrationAccessSubjectCalls() []MockRepoGetIntegrationAccessSubjectCall {
+	var out []MockRepoGetIntegrationAccessSubjectCall
+	for _, c := range m.Recorder.Calls("GetIntegrationAccessSubject") {
+		var r MockRepoGetIntegrationAccessSubjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.FreshAfter, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Repo = (*MockRepo)(nil)
 
 // forge:section MockEventRepo
-// forge:hash=3c7d551f046fcf966ae82d17c3cad3c9a6d4482945c7b8f4d2eed4018641ac9b
+// forge:hash=680d769200b4ef95440058a6997f6260f90a63ec1017aadfa967b467789d968e
 
 // MockEventRepo is a test mock for the EventRepo interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockEventRepo.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockEventRepo.<Method>Func not set" error.
 type MockEventRepo struct {
 	contractkit.Recorder
 	GetTriggerFunc                    func(context.Context, string) (*core.Trigger, error)
@@ -468,18 +1087,217 @@ func (m *MockEventRepo) GetIntegrationAccessSubject(ctx context.Context, userID 
 	return "", contractkit.MockNotSet("MockEventRepo", "GetIntegrationAccessSubject")
 }
 
+// MockEventRepoGetTriggerCall is one recorded call of MockEventRepo.GetTrigger, one
+// field per parameter.
+type MockEventRepoGetTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetTriggerCalls returns every recorded GetTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTrigger").
+func (m *MockEventRepo) GetTriggerCalls() []MockEventRepoGetTriggerCall {
+	var out []MockEventRepoGetTriggerCall
+	for _, c := range m.Recorder.Calls("GetTrigger") {
+		var r MockEventRepoGetTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventRepoGetDaemonCall is one recorded call of MockEventRepo.GetDaemon, one
+// field per parameter.
+type MockEventRepoGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockEventRepo) GetDaemonCalls() []MockEventRepoGetDaemonCall {
+	var out []MockEventRepoGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockEventRepoGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventRepoCreateTriggerEventCall is one recorded call of MockEventRepo.CreateTriggerEvent, one
+// field per parameter.
+type MockEventRepoCreateTriggerEventCall struct {
+	Ctx context.Context
+	Ev  *core.TriggerEvent
+}
+
+// CreateTriggerEventCalls returns every recorded CreateTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateTriggerEvent").
+func (m *MockEventRepo) CreateTriggerEventCalls() []MockEventRepoCreateTriggerEventCall {
+	var out []MockEventRepoCreateTriggerEventCall
+	for _, c := range m.Recorder.Calls("CreateTriggerEvent") {
+		var r MockEventRepoCreateTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventRepoGetTriggerEventByDedupeCall is one recorded call of MockEventRepo.GetTriggerEventByDedupe, one
+// field per parameter.
+type MockEventRepoGetTriggerEventByDedupeCall struct {
+	Ctx       context.Context
+	Kind      core.TriggerEventKind
+	DedupeKey string
+}
+
+// GetTriggerEventByDedupeCalls returns every recorded GetTriggerEventByDedupe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerEventByDedupe").
+func (m *MockEventRepo) GetTriggerEventByDedupeCalls() []MockEventRepoGetTriggerEventByDedupeCall {
+	var out []MockEventRepoGetTriggerEventByDedupeCall
+	for _, c := range m.Recorder.Calls("GetTriggerEventByDedupe") {
+		var r MockEventRepoGetTriggerEventByDedupeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerEventKind)
+		r.DedupeKey, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventRepoGetLatestTriggerEventCall is one recorded call of MockEventRepo.GetLatestTriggerEvent, one
+// field per parameter.
+type MockEventRepoGetLatestTriggerEventCall struct {
+	Ctx       context.Context
+	TriggerID string
+	Outcome   *core.TriggerEventOutcome
+}
+
+// GetLatestTriggerEventCalls returns every recorded GetLatestTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetLatestTriggerEvent").
+func (m *MockEventRepo) GetLatestTriggerEventCalls() []MockEventRepoGetLatestTriggerEventCall {
+	var out []MockEventRepoGetLatestTriggerEventCall
+	for _, c := range m.Recorder.Calls("GetLatestTriggerEvent") {
+		var r MockEventRepoGetLatestTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.TriggerID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(*core.TriggerEventOutcome)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventRepoSettlePendingTriggerEventCall is one recorded call of MockEventRepo.SettlePendingTriggerEvent, one
+// field per parameter.
+type MockEventRepoSettlePendingTriggerEventCall struct {
+	Ctx     context.Context
+	ID      string
+	Outcome core.TriggerEventOutcome
+	Detail  string
+	Def     *core.TriggerEventDefinition
+}
+
+// SettlePendingTriggerEventCalls returns every recorded SettlePendingTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettlePendingTriggerEvent").
+func (m *MockEventRepo) SettlePendingTriggerEventCalls() []MockEventRepoSettlePendingTriggerEventCall {
+	var out []MockEventRepoSettlePendingTriggerEventCall
+	for _, c := range m.Recorder.Calls("SettlePendingTriggerEvent") {
+		var r MockEventRepoSettlePendingTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(core.TriggerEventOutcome)
+		r.Detail, _ = c.Args[3].(string)
+		r.Def, _ = c.Args[4].(*core.TriggerEventDefinition)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventRepoListStalePendingTriggerEventsCall is one recorded call of MockEventRepo.ListStalePendingTriggerEvents, one
+// field per parameter.
+type MockEventRepoListStalePendingTriggerEventsCall struct {
+	Ctx       context.Context
+	OlderThan time.Time
+	Limit     int
+}
+
+// ListStalePendingTriggerEventsCalls returns every recorded ListStalePendingTriggerEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStalePendingTriggerEvents").
+func (m *MockEventRepo) ListStalePendingTriggerEventsCalls() []MockEventRepoListStalePendingTriggerEventsCall {
+	var out []MockEventRepoListStalePendingTriggerEventsCall
+	for _, c := range m.Recorder.Calls("ListStalePendingTriggerEvents") {
+		var r MockEventRepoListStalePendingTriggerEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OlderThan, _ = c.Args[1].(time.Time)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventRepoGetConnectionCall is one recorded call of MockEventRepo.GetConnection, one
+// field per parameter.
+type MockEventRepoGetConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetConnectionCalls returns every recorded GetConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetConnection").
+func (m *MockEventRepo) GetConnectionCalls() []MockEventRepoGetConnectionCall {
+	var out []MockEventRepoGetConnectionCall
+	for _, c := range m.Recorder.Calls("GetConnection") {
+		var r MockEventRepoGetConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventRepoGetIntegrationAccessSubjectCall is one recorded call of MockEventRepo.GetIntegrationAccessSubject, one
+// field per parameter.
+type MockEventRepoGetIntegrationAccessSubjectCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	FreshAfter    time.Time
+}
+
+// GetIntegrationAccessSubjectCalls returns every recorded GetIntegrationAccessSubject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIntegrationAccessSubject").
+func (m *MockEventRepo) GetIntegrationAccessSubjectCalls() []MockEventRepoGetIntegrationAccessSubjectCall {
+	var out []MockEventRepoGetIntegrationAccessSubjectCall
+	for _, c := range m.Recorder.Calls("GetIntegrationAccessSubject") {
+		var r MockEventRepoGetIntegrationAccessSubjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.FreshAfter, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ EventRepo = (*MockEventRepo)(nil)
 
 // forge:section MockTriggerPauser
-// forge:hash=16f9425fa78409238747fb5828dff117147e63f9c7e5afc111de1d9dc23703fd
+// forge:hash=6be19cb5069cd089ab84a5cd990051632db1ebb3c2e43df42e835943bc2b7717
 
 // MockTriggerPauser is a test mock for the TriggerPauser interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTriggerPauser.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTriggerPauser.<Method>Func not set" error.
 type MockTriggerPauser struct {
 	contractkit.Recorder
 	SystemPauseTriggerFunc func(context.Context, string, string) (bool, error)
@@ -494,18 +1312,41 @@ func (m *MockTriggerPauser) SystemPauseTrigger(ctx context.Context, id string, r
 	return false, contractkit.MockNotSet("MockTriggerPauser", "SystemPauseTrigger")
 }
 
+// MockTriggerPauserSystemPauseTriggerCall is one recorded call of MockTriggerPauser.SystemPauseTrigger, one
+// field per parameter.
+type MockTriggerPauserSystemPauseTriggerCall struct {
+	Ctx    context.Context
+	ID     string
+	Reason string
+}
+
+// SystemPauseTriggerCalls returns every recorded SystemPauseTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SystemPauseTrigger").
+func (m *MockTriggerPauser) SystemPauseTriggerCalls() []MockTriggerPauserSystemPauseTriggerCall {
+	var out []MockTriggerPauserSystemPauseTriggerCall
+	for _, c := range m.Recorder.Calls("SystemPauseTrigger") {
+		var r MockTriggerPauserSystemPauseTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Reason, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ TriggerPauser = (*MockTriggerPauser)(nil)
 
 // forge:section MockLauncher
-// forge:hash=a148b0b5669db5cfdb72bea387c917843791a7e14aa13e9346f6252eccd51ae7
+// forge:hash=03d6d7ff17d1c796bee1d8b4530e06f7736dffd38f312ebee1c328270f88bdc3
 
 // MockLauncher is a test mock for the Launcher interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockLauncher.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockLauncher.<Method>Func not set" error.
 type MockLauncher struct {
 	contractkit.Recorder
 	LaunchFunc                 func(context.Context, launch.Event, launch.Spec) (*launch.Result, error)
@@ -530,18 +1371,63 @@ func (m *MockLauncher) ResolveDefaultWorkflow(ctx context.Context, userID string
 	return ""
 }
 
+// MockLauncherLaunchCall is one recorded call of MockLauncher.Launch, one
+// field per parameter.
+type MockLauncherLaunchCall struct {
+	Ctx  context.Context
+	Ev   launch.Event
+	Spec launch.Spec
+}
+
+// LaunchCalls returns every recorded Launch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Launch").
+func (m *MockLauncher) LaunchCalls() []MockLauncherLaunchCall {
+	var out []MockLauncherLaunchCall
+	for _, c := range m.Recorder.Calls("Launch") {
+		var r MockLauncherLaunchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(launch.Event)
+		r.Spec, _ = c.Args[2].(launch.Spec)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockLauncherResolveDefaultWorkflowCall is one recorded call of MockLauncher.ResolveDefaultWorkflow, one
+// field per parameter.
+type MockLauncherResolveDefaultWorkflowCall struct {
+	Ctx         context.Context
+	UserID      string
+	ReqWorkflow string
+}
+
+// ResolveDefaultWorkflowCalls returns every recorded ResolveDefaultWorkflow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveDefaultWorkflow").
+func (m *MockLauncher) ResolveDefaultWorkflowCalls() []MockLauncherResolveDefaultWorkflowCall {
+	var out []MockLauncherResolveDefaultWorkflowCall
+	for _, c := range m.Recorder.Calls("ResolveDefaultWorkflow") {
+		var r MockLauncherResolveDefaultWorkflowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ReqWorkflow, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Launcher = (*MockLauncher)(nil)
 
 // forge:section MockScheduleClient
-// forge:hash=a1f9ff4b3007156699e0a14bc4e0cd4841764b4df1b2ef1633115095a7e6f853
+// forge:hash=17d731a3e795678a161a00d2aaa0718d59014d722afd5c2abab6931181677d41
 
 // MockScheduleClient is a test mock for the ScheduleClient interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockScheduleClient.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockScheduleClient.<Method>Func not set" error.
 type MockScheduleClient struct {
 	contractkit.Recorder
 	CreateFunc    func(context.Context, client.ScheduleOptions) (client.ScheduleHandle, error)
@@ -576,18 +1462,79 @@ func (m *MockScheduleClient) GetHandle(ctx context.Context, scheduleID string) c
 	return *new(client.ScheduleHandle)
 }
 
+// MockScheduleClientCreateCall is one recorded call of MockScheduleClient.Create, one
+// field per parameter.
+type MockScheduleClientCreateCall struct {
+	Ctx     context.Context
+	Options client.ScheduleOptions
+}
+
+// CreateCalls returns every recorded Create call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Create").
+func (m *MockScheduleClient) CreateCalls() []MockScheduleClientCreateCall {
+	var out []MockScheduleClientCreateCall
+	for _, c := range m.Recorder.Calls("Create") {
+		var r MockScheduleClientCreateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Options, _ = c.Args[1].(client.ScheduleOptions)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockScheduleClientListCall is one recorded call of MockScheduleClient.List, one
+// field per parameter.
+type MockScheduleClientListCall struct {
+	Ctx     context.Context
+	Options client.ScheduleListOptions
+}
+
+// ListCalls returns every recorded List call, oldest first, with
+// its arguments typed. It reads the same log as Calls("List").
+func (m *MockScheduleClient) ListCalls() []MockScheduleClientListCall {
+	var out []MockScheduleClientListCall
+	for _, c := range m.Recorder.Calls("List") {
+		var r MockScheduleClientListCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Options, _ = c.Args[1].(client.ScheduleListOptions)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockScheduleClientGetHandleCall is one recorded call of MockScheduleClient.GetHandle, one
+// field per parameter.
+type MockScheduleClientGetHandleCall struct {
+	Ctx        context.Context
+	ScheduleID string
+}
+
+// GetHandleCalls returns every recorded GetHandle call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetHandle").
+func (m *MockScheduleClient) GetHandleCalls() []MockScheduleClientGetHandleCall {
+	var out []MockScheduleClientGetHandleCall
+	for _, c := range m.Recorder.Calls("GetHandle") {
+		var r MockScheduleClientGetHandleCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ScheduleID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ScheduleClient = (*MockScheduleClient)(nil)
 
 // forge:section MockWorkflowStarter
-// forge:hash=c7558a2cc74e6dcb462a066a7e592510a9eb2abcfeb3e50de742c6f9d2da702e
+// forge:hash=88e031ce3c7f0597ff7fd418f849eb43a0929d0772fb041d3ec718d568ad5504
 
 // MockWorkflowStarter is a test mock for the WorkflowStarter interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorkflowStarter.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorkflowStarter.<Method>Func not set" error.
 type MockWorkflowStarter struct {
 	contractkit.Recorder
 	ExecuteWorkflowFunc func(context.Context, client.StartWorkflowOptions, any, ...any) (client.WorkflowRun, error)
@@ -602,18 +1549,43 @@ func (m *MockWorkflowStarter) ExecuteWorkflow(ctx context.Context, options clien
 	return *new(client.WorkflowRun), contractkit.MockNotSet("MockWorkflowStarter", "ExecuteWorkflow")
 }
 
+// MockWorkflowStarterExecuteWorkflowCall is one recorded call of MockWorkflowStarter.ExecuteWorkflow, one
+// field per parameter.
+type MockWorkflowStarterExecuteWorkflowCall struct {
+	Ctx      context.Context
+	Options  client.StartWorkflowOptions
+	Workflow any
+	Args     []any
+}
+
+// ExecuteWorkflowCalls returns every recorded ExecuteWorkflow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ExecuteWorkflow").
+func (m *MockWorkflowStarter) ExecuteWorkflowCalls() []MockWorkflowStarterExecuteWorkflowCall {
+	var out []MockWorkflowStarterExecuteWorkflowCall
+	for _, c := range m.Recorder.Calls("ExecuteWorkflow") {
+		var r MockWorkflowStarterExecuteWorkflowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Options, _ = c.Args[1].(client.StartWorkflowOptions)
+		r.Workflow, _ = c.Args[2].(any)
+		r.Args, _ = c.Args[3].([]any)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ WorkflowStarter = (*MockWorkflowStarter)(nil)
 
 // forge:section MockPollRepo
-// forge:hash=553b189436e453441444f1754310cadd74f64618ce7d0c2e31a97ecde883371d
+// forge:hash=0686c8f8c8c9fdb96595ce8e48c7dcd67a553a02958aa483679fee2260f39f84
 
 // MockPollRepo is a test mock for the PollRepo interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockPollRepo.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockPollRepo.<Method>Func not set" error.
 type MockPollRepo struct {
 	contractkit.Recorder
 	GetTriggerRegistrationFunc        func(context.Context, string) (*core.TriggerRegistration, error)
@@ -728,18 +1700,257 @@ func (m *MockPollRepo) GetIntegrationAccessSubject(ctx context.Context, userID s
 	return "", contractkit.MockNotSet("MockPollRepo", "GetIntegrationAccessSubject")
 }
 
+// MockPollRepoGetTriggerRegistrationCall is one recorded call of MockPollRepo.GetTriggerRegistration, one
+// field per parameter.
+type MockPollRepoGetTriggerRegistrationCall struct {
+	Ctx       context.Context
+	TriggerID string
+}
+
+// GetTriggerRegistrationCalls returns every recorded GetTriggerRegistration call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerRegistration").
+func (m *MockPollRepo) GetTriggerRegistrationCalls() []MockPollRepoGetTriggerRegistrationCall {
+	var out []MockPollRepoGetTriggerRegistrationCall
+	for _, c := range m.Recorder.Calls("GetTriggerRegistration") {
+		var r MockPollRepoGetTriggerRegistrationCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.TriggerID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoUpsertTriggerRegistrationCall is one recorded call of MockPollRepo.UpsertTriggerRegistration, one
+// field per parameter.
+type MockPollRepoUpsertTriggerRegistrationCall struct {
+	Ctx context.Context
+	Reg *core.TriggerRegistration
+}
+
+// UpsertTriggerRegistrationCalls returns every recorded UpsertTriggerRegistration call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertTriggerRegistration").
+func (m *MockPollRepo) UpsertTriggerRegistrationCalls() []MockPollRepoUpsertTriggerRegistrationCall {
+	var out []MockPollRepoUpsertTriggerRegistrationCall
+	for _, c := range m.Recorder.Calls("UpsertTriggerRegistration") {
+		var r MockPollRepoUpsertTriggerRegistrationCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Reg, _ = c.Args[1].(*core.TriggerRegistration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoGetTriggerCall is one recorded call of MockPollRepo.GetTrigger, one
+// field per parameter.
+type MockPollRepoGetTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetTriggerCalls returns every recorded GetTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTrigger").
+func (m *MockPollRepo) GetTriggerCalls() []MockPollRepoGetTriggerCall {
+	var out []MockPollRepoGetTriggerCall
+	for _, c := range m.Recorder.Calls("GetTrigger") {
+		var r MockPollRepoGetTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoGetDaemonCall is one recorded call of MockPollRepo.GetDaemon, one
+// field per parameter.
+type MockPollRepoGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockPollRepo) GetDaemonCalls() []MockPollRepoGetDaemonCall {
+	var out []MockPollRepoGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockPollRepoGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoCreateTriggerEventCall is one recorded call of MockPollRepo.CreateTriggerEvent, one
+// field per parameter.
+type MockPollRepoCreateTriggerEventCall struct {
+	Ctx context.Context
+	Ev  *core.TriggerEvent
+}
+
+// CreateTriggerEventCalls returns every recorded CreateTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateTriggerEvent").
+func (m *MockPollRepo) CreateTriggerEventCalls() []MockPollRepoCreateTriggerEventCall {
+	var out []MockPollRepoCreateTriggerEventCall
+	for _, c := range m.Recorder.Calls("CreateTriggerEvent") {
+		var r MockPollRepoCreateTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoGetTriggerEventByDedupeCall is one recorded call of MockPollRepo.GetTriggerEventByDedupe, one
+// field per parameter.
+type MockPollRepoGetTriggerEventByDedupeCall struct {
+	Ctx       context.Context
+	Kind      core.TriggerEventKind
+	DedupeKey string
+}
+
+// GetTriggerEventByDedupeCalls returns every recorded GetTriggerEventByDedupe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerEventByDedupe").
+func (m *MockPollRepo) GetTriggerEventByDedupeCalls() []MockPollRepoGetTriggerEventByDedupeCall {
+	var out []MockPollRepoGetTriggerEventByDedupeCall
+	for _, c := range m.Recorder.Calls("GetTriggerEventByDedupe") {
+		var r MockPollRepoGetTriggerEventByDedupeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerEventKind)
+		r.DedupeKey, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoGetLatestTriggerEventCall is one recorded call of MockPollRepo.GetLatestTriggerEvent, one
+// field per parameter.
+type MockPollRepoGetLatestTriggerEventCall struct {
+	Ctx       context.Context
+	TriggerID string
+	Outcome   *core.TriggerEventOutcome
+}
+
+// GetLatestTriggerEventCalls returns every recorded GetLatestTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetLatestTriggerEvent").
+func (m *MockPollRepo) GetLatestTriggerEventCalls() []MockPollRepoGetLatestTriggerEventCall {
+	var out []MockPollRepoGetLatestTriggerEventCall
+	for _, c := range m.Recorder.Calls("GetLatestTriggerEvent") {
+		var r MockPollRepoGetLatestTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.TriggerID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(*core.TriggerEventOutcome)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoSettlePendingTriggerEventCall is one recorded call of MockPollRepo.SettlePendingTriggerEvent, one
+// field per parameter.
+type MockPollRepoSettlePendingTriggerEventCall struct {
+	Ctx     context.Context
+	ID      string
+	Outcome core.TriggerEventOutcome
+	Detail  string
+	Def     *core.TriggerEventDefinition
+}
+
+// SettlePendingTriggerEventCalls returns every recorded SettlePendingTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettlePendingTriggerEvent").
+func (m *MockPollRepo) SettlePendingTriggerEventCalls() []MockPollRepoSettlePendingTriggerEventCall {
+	var out []MockPollRepoSettlePendingTriggerEventCall
+	for _, c := range m.Recorder.Calls("SettlePendingTriggerEvent") {
+		var r MockPollRepoSettlePendingTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(core.TriggerEventOutcome)
+		r.Detail, _ = c.Args[3].(string)
+		r.Def, _ = c.Args[4].(*core.TriggerEventDefinition)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoListStalePendingTriggerEventsCall is one recorded call of MockPollRepo.ListStalePendingTriggerEvents, one
+// field per parameter.
+type MockPollRepoListStalePendingTriggerEventsCall struct {
+	Ctx       context.Context
+	OlderThan time.Time
+	Limit     int
+}
+
+// ListStalePendingTriggerEventsCalls returns every recorded ListStalePendingTriggerEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStalePendingTriggerEvents").
+func (m *MockPollRepo) ListStalePendingTriggerEventsCalls() []MockPollRepoListStalePendingTriggerEventsCall {
+	var out []MockPollRepoListStalePendingTriggerEventsCall
+	for _, c := range m.Recorder.Calls("ListStalePendingTriggerEvents") {
+		var r MockPollRepoListStalePendingTriggerEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OlderThan, _ = c.Args[1].(time.Time)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoGetConnectionCall is one recorded call of MockPollRepo.GetConnection, one
+// field per parameter.
+type MockPollRepoGetConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetConnectionCalls returns every recorded GetConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetConnection").
+func (m *MockPollRepo) GetConnectionCalls() []MockPollRepoGetConnectionCall {
+	var out []MockPollRepoGetConnectionCall
+	for _, c := range m.Recorder.Calls("GetConnection") {
+		var r MockPollRepoGetConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPollRepoGetIntegrationAccessSubjectCall is one recorded call of MockPollRepo.GetIntegrationAccessSubject, one
+// field per parameter.
+type MockPollRepoGetIntegrationAccessSubjectCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	FreshAfter    time.Time
+}
+
+// GetIntegrationAccessSubjectCalls returns every recorded GetIntegrationAccessSubject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIntegrationAccessSubject").
+func (m *MockPollRepo) GetIntegrationAccessSubjectCalls() []MockPollRepoGetIntegrationAccessSubjectCall {
+	var out []MockPollRepoGetIntegrationAccessSubjectCall
+	for _, c := range m.Recorder.Calls("GetIntegrationAccessSubject") {
+		var r MockPollRepoGetIntegrationAccessSubjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.FreshAfter, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ PollRepo = (*MockPollRepo)(nil)
 
 // forge:section MockFireRepo
-// forge:hash=2b8ec5b1c29f9e2f7f687a3ed898a055dfe186b2818ea919de8989a1cf99ccc6
+// forge:hash=fc3b496106a5f6df74beb966a7bc8d2cff216693b642141b00920389e8c30d26
 
 // MockFireRepo is a test mock for the FireRepo interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockFireRepo.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockFireRepo.<Method>Func not set" error.
 type MockFireRepo struct {
 	contractkit.Recorder
 	GetTriggerFunc                            func(context.Context, string) (*core.Trigger, error)
@@ -1034,18 +2245,639 @@ func (m *MockFireRepo) SettleSupersededTriggerCapacityRun(ctx context.Context, e
 	return contractkit.MockNotSet("MockFireRepo", "SettleSupersededTriggerCapacityRun")
 }
 
+// MockFireRepoGetTriggerCall is one recorded call of MockFireRepo.GetTrigger, one
+// field per parameter.
+type MockFireRepoGetTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetTriggerCalls returns every recorded GetTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTrigger").
+func (m *MockFireRepo) GetTriggerCalls() []MockFireRepoGetTriggerCall {
+	var out []MockFireRepoGetTriggerCall
+	for _, c := range m.Recorder.Calls("GetTrigger") {
+		var r MockFireRepoGetTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoListAllTriggersCall is one recorded call of MockFireRepo.ListAllTriggers, one
+// field per parameter.
+type MockFireRepoListAllTriggersCall struct {
+	Ctx context.Context
+}
+
+// ListAllTriggersCalls returns every recorded ListAllTriggers call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAllTriggers").
+func (m *MockFireRepo) ListAllTriggersCalls() []MockFireRepoListAllTriggersCall {
+	var out []MockFireRepoListAllTriggersCall
+	for _, c := range m.Recorder.Calls("ListAllTriggers") {
+		var r MockFireRepoListAllTriggersCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoLockTriggerCall is one recorded call of MockFireRepo.LockTrigger, one
+// field per parameter.
+type MockFireRepoLockTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// LockTriggerCalls returns every recorded LockTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LockTrigger").
+func (m *MockFireRepo) LockTriggerCalls() []MockFireRepoLockTriggerCall {
+	var out []MockFireRepoLockTriggerCall
+	for _, c := range m.Recorder.Calls("LockTrigger") {
+		var r MockFireRepoLockTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoCreateTriggerEventCall is one recorded call of MockFireRepo.CreateTriggerEvent, one
+// field per parameter.
+type MockFireRepoCreateTriggerEventCall struct {
+	Ctx context.Context
+	Ev  *core.TriggerEvent
+}
+
+// CreateTriggerEventCalls returns every recorded CreateTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateTriggerEvent").
+func (m *MockFireRepo) CreateTriggerEventCalls() []MockFireRepoCreateTriggerEventCall {
+	var out []MockFireRepoCreateTriggerEventCall
+	for _, c := range m.Recorder.Calls("CreateTriggerEvent") {
+		var r MockFireRepoCreateTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoGetTriggerEventByDedupeCall is one recorded call of MockFireRepo.GetTriggerEventByDedupe, one
+// field per parameter.
+type MockFireRepoGetTriggerEventByDedupeCall struct {
+	Ctx       context.Context
+	Kind      core.TriggerEventKind
+	DedupeKey string
+}
+
+// GetTriggerEventByDedupeCalls returns every recorded GetTriggerEventByDedupe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerEventByDedupe").
+func (m *MockFireRepo) GetTriggerEventByDedupeCalls() []MockFireRepoGetTriggerEventByDedupeCall {
+	var out []MockFireRepoGetTriggerEventByDedupeCall
+	for _, c := range m.Recorder.Calls("GetTriggerEventByDedupe") {
+		var r MockFireRepoGetTriggerEventByDedupeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerEventKind)
+		r.DedupeKey, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoGetLatestTriggerEventCall is one recorded call of MockFireRepo.GetLatestTriggerEvent, one
+// field per parameter.
+type MockFireRepoGetLatestTriggerEventCall struct {
+	Ctx       context.Context
+	TriggerID string
+	Outcome   *core.TriggerEventOutcome
+}
+
+// GetLatestTriggerEventCalls returns every recorded GetLatestTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetLatestTriggerEvent").
+func (m *MockFireRepo) GetLatestTriggerEventCalls() []MockFireRepoGetLatestTriggerEventCall {
+	var out []MockFireRepoGetLatestTriggerEventCall
+	for _, c := range m.Recorder.Calls("GetLatestTriggerEvent") {
+		var r MockFireRepoGetLatestTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.TriggerID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(*core.TriggerEventOutcome)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoSettlePendingTriggerEventCall is one recorded call of MockFireRepo.SettlePendingTriggerEvent, one
+// field per parameter.
+type MockFireRepoSettlePendingTriggerEventCall struct {
+	Ctx     context.Context
+	ID      string
+	Outcome core.TriggerEventOutcome
+	Detail  string
+	Def     *core.TriggerEventDefinition
+}
+
+// SettlePendingTriggerEventCalls returns every recorded SettlePendingTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettlePendingTriggerEvent").
+func (m *MockFireRepo) SettlePendingTriggerEventCalls() []MockFireRepoSettlePendingTriggerEventCall {
+	var out []MockFireRepoSettlePendingTriggerEventCall
+	for _, c := range m.Recorder.Calls("SettlePendingTriggerEvent") {
+		var r MockFireRepoSettlePendingTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(core.TriggerEventOutcome)
+		r.Detail, _ = c.Args[3].(string)
+		r.Def, _ = c.Args[4].(*core.TriggerEventDefinition)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoGetDaemonCall is one recorded call of MockFireRepo.GetDaemon, one
+// field per parameter.
+type MockFireRepoGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockFireRepo) GetDaemonCalls() []MockFireRepoGetDaemonCall {
+	var out []MockFireRepoGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockFireRepoGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoRootWorkflowStatusForChatsCall is one recorded call of MockFireRepo.RootWorkflowStatusForChats, one
+// field per parameter.
+type MockFireRepoRootWorkflowStatusForChatsCall struct {
+	Ctx     context.Context
+	ChatIDs []string
+}
+
+// RootWorkflowStatusForChatsCalls returns every recorded RootWorkflowStatusForChats call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RootWorkflowStatusForChats").
+func (m *MockFireRepo) RootWorkflowStatusForChatsCalls() []MockFireRepoRootWorkflowStatusForChatsCall {
+	var out []MockFireRepoRootWorkflowStatusForChatsCall
+	for _, c := range m.Recorder.Calls("RootWorkflowStatusForChats") {
+		var r MockFireRepoRootWorkflowStatusForChatsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatIDs, _ = c.Args[1].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoListRootWorkflowsCall is one recorded call of MockFireRepo.ListRootWorkflows, one
+// field per parameter.
+type MockFireRepoListRootWorkflowsCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ListRootWorkflowsCalls returns every recorded ListRootWorkflows call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListRootWorkflows").
+func (m *MockFireRepo) ListRootWorkflowsCalls() []MockFireRepoListRootWorkflowsCall {
+	var out []MockFireRepoListRootWorkflowsCall
+	for _, c := range m.Recorder.Calls("ListRootWorkflows") {
+		var r MockFireRepoListRootWorkflowsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoAbandonFailedWorkflowStartCall is one recorded call of MockFireRepo.AbandonFailedWorkflowStart, one
+// field per parameter.
+type MockFireRepoAbandonFailedWorkflowStartCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// AbandonFailedWorkflowStartCalls returns every recorded AbandonFailedWorkflowStart call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AbandonFailedWorkflowStart").
+func (m *MockFireRepo) AbandonFailedWorkflowStartCalls() []MockFireRepoAbandonFailedWorkflowStartCall {
+	var out []MockFireRepoAbandonFailedWorkflowStartCall
+	for _, c := range m.Recorder.Calls("AbandonFailedWorkflowStart") {
+		var r MockFireRepoAbandonFailedWorkflowStartCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoGetConnectionCall is one recorded call of MockFireRepo.GetConnection, one
+// field per parameter.
+type MockFireRepoGetConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetConnectionCalls returns every recorded GetConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetConnection").
+func (m *MockFireRepo) GetConnectionCalls() []MockFireRepoGetConnectionCall {
+	var out []MockFireRepoGetConnectionCall
+	for _, c := range m.Recorder.Calls("GetConnection") {
+		var r MockFireRepoGetConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoGetIntegrationAccessSubjectCall is one recorded call of MockFireRepo.GetIntegrationAccessSubject, one
+// field per parameter.
+type MockFireRepoGetIntegrationAccessSubjectCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	FreshAfter    time.Time
+}
+
+// GetIntegrationAccessSubjectCalls returns every recorded GetIntegrationAccessSubject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIntegrationAccessSubject").
+func (m *MockFireRepo) GetIntegrationAccessSubjectCalls() []MockFireRepoGetIntegrationAccessSubjectCall {
+	var out []MockFireRepoGetIntegrationAccessSubjectCall
+	for _, c := range m.Recorder.Calls("GetIntegrationAccessSubject") {
+		var r MockFireRepoGetIntegrationAccessSubjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.FreshAfter, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoEnqueueTriggerCapacitySupersedingCall is one recorded call of MockFireRepo.EnqueueTriggerCapacitySuperseding, one
+// field per parameter.
+type MockFireRepoEnqueueTriggerCapacitySupersedingCall struct {
+	Ctx   context.Context
+	Ev    *core.TriggerEvent
+	Scope store.TriggerCapacityScope
+}
+
+// EnqueueTriggerCapacitySupersedingCalls returns every recorded EnqueueTriggerCapacitySuperseding call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EnqueueTriggerCapacitySuperseding").
+func (m *MockFireRepo) EnqueueTriggerCapacitySupersedingCalls() []MockFireRepoEnqueueTriggerCapacitySupersedingCall {
+	var out []MockFireRepoEnqueueTriggerCapacitySupersedingCall
+	for _, c := range m.Recorder.Calls("EnqueueTriggerCapacitySuperseding") {
+		var r MockFireRepoEnqueueTriggerCapacitySupersedingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		r.Scope, _ = c.Args[2].(store.TriggerCapacityScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoCanLaunchTriggerCapacityCall is one recorded call of MockFireRepo.CanLaunchTriggerCapacity, one
+// field per parameter.
+type MockFireRepoCanLaunchTriggerCapacityCall struct {
+	Ctx     context.Context
+	EventID string
+	Scope   store.TriggerCapacityScope
+	Limits  store.TriggerCapacityLimits
+}
+
+// CanLaunchTriggerCapacityCalls returns every recorded CanLaunchTriggerCapacity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CanLaunchTriggerCapacity").
+func (m *MockFireRepo) CanLaunchTriggerCapacityCalls() []MockFireRepoCanLaunchTriggerCapacityCall {
+	var out []MockFireRepoCanLaunchTriggerCapacityCall
+	for _, c := range m.Recorder.Calls("CanLaunchTriggerCapacity") {
+		var r MockFireRepoCanLaunchTriggerCapacityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.Scope, _ = c.Args[2].(store.TriggerCapacityScope)
+		r.Limits, _ = c.Args[3].(store.TriggerCapacityLimits)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoNextAdmissibleTriggerCapacityEventCall is one recorded call of MockFireRepo.NextAdmissibleTriggerCapacityEvent, one
+// field per parameter.
+type MockFireRepoNextAdmissibleTriggerCapacityEventCall struct {
+	Ctx    context.Context
+	Scope  store.TriggerCapacityScope
+	Limits store.TriggerCapacityLimits
+}
+
+// NextAdmissibleTriggerCapacityEventCalls returns every recorded NextAdmissibleTriggerCapacityEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("NextAdmissibleTriggerCapacityEvent").
+func (m *MockFireRepo) NextAdmissibleTriggerCapacityEventCalls() []MockFireRepoNextAdmissibleTriggerCapacityEventCall {
+	var out []MockFireRepoNextAdmissibleTriggerCapacityEventCall
+	for _, c := range m.Recorder.Calls("NextAdmissibleTriggerCapacityEvent") {
+		var r MockFireRepoNextAdmissibleTriggerCapacityEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		r.Limits, _ = c.Args[2].(store.TriggerCapacityLimits)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoBindTriggerCapacityExecutionCall is one recorded call of MockFireRepo.BindTriggerCapacityExecution, one
+// field per parameter.
+type MockFireRepoBindTriggerCapacityExecutionCall struct {
+	Ctx        context.Context
+	EventID    string
+	WorkflowID string
+	FirstRunID string
+}
+
+// BindTriggerCapacityExecutionCalls returns every recorded BindTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("BindTriggerCapacityExecution").
+func (m *MockFireRepo) BindTriggerCapacityExecutionCalls() []MockFireRepoBindTriggerCapacityExecutionCall {
+	var out []MockFireRepoBindTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("BindTriggerCapacityExecution") {
+		var r MockFireRepoBindTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.WorkflowID, _ = c.Args[2].(string)
+		r.FirstRunID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoPrepareTriggerCapacityExecutionCall is one recorded call of MockFireRepo.PrepareTriggerCapacityExecution, one
+// field per parameter.
+type MockFireRepoPrepareTriggerCapacityExecutionCall struct {
+	Ctx        context.Context
+	EventID    string
+	WorkflowID string
+}
+
+// PrepareTriggerCapacityExecutionCalls returns every recorded PrepareTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PrepareTriggerCapacityExecution").
+func (m *MockFireRepo) PrepareTriggerCapacityExecutionCalls() []MockFireRepoPrepareTriggerCapacityExecutionCall {
+	var out []MockFireRepoPrepareTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("PrepareTriggerCapacityExecution") {
+		var r MockFireRepoPrepareTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.WorkflowID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoListTriggerCapacityExecutionsCall is one recorded call of MockFireRepo.ListTriggerCapacityExecutions, one
+// field per parameter.
+type MockFireRepoListTriggerCapacityExecutionsCall struct {
+	Ctx   context.Context
+	Scope store.TriggerCapacityScope
+}
+
+// ListTriggerCapacityExecutionsCalls returns every recorded ListTriggerCapacityExecutions call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityExecutions").
+func (m *MockFireRepo) ListTriggerCapacityExecutionsCalls() []MockFireRepoListTriggerCapacityExecutionsCall {
+	var out []MockFireRepoListTriggerCapacityExecutionsCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityExecutions") {
+		var r MockFireRepoListTriggerCapacityExecutionsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoListTriggerCapacityExecutionBatchCall is one recorded call of MockFireRepo.ListTriggerCapacityExecutionBatch, one
+// field per parameter.
+type MockFireRepoListTriggerCapacityExecutionBatchCall struct {
+	Ctx   context.Context
+	Limit int
+}
+
+// ListTriggerCapacityExecutionBatchCalls returns every recorded ListTriggerCapacityExecutionBatch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityExecutionBatch").
+func (m *MockFireRepo) ListTriggerCapacityExecutionBatchCalls() []MockFireRepoListTriggerCapacityExecutionBatchCall {
+	var out []MockFireRepoListTriggerCapacityExecutionBatchCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityExecutionBatch") {
+		var r MockFireRepoListTriggerCapacityExecutionBatchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Limit, _ = c.Args[1].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoReleaseTriggerCapacityExecutionCall is one recorded call of MockFireRepo.ReleaseTriggerCapacityExecution, one
+// field per parameter.
+type MockFireRepoReleaseTriggerCapacityExecutionCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// ReleaseTriggerCapacityExecutionCalls returns every recorded ReleaseTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseTriggerCapacityExecution").
+func (m *MockFireRepo) ReleaseTriggerCapacityExecutionCalls() []MockFireRepoReleaseTriggerCapacityExecutionCall {
+	var out []MockFireRepoReleaseTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("ReleaseTriggerCapacityExecution") {
+		var r MockFireRepoReleaseTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoReleaseClosedTriggerCapacityExecutionCall is one recorded call of MockFireRepo.ReleaseClosedTriggerCapacityExecution, one
+// field per parameter.
+type MockFireRepoReleaseClosedTriggerCapacityExecutionCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// ReleaseClosedTriggerCapacityExecutionCalls returns every recorded ReleaseClosedTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseClosedTriggerCapacityExecution").
+func (m *MockFireRepo) ReleaseClosedTriggerCapacityExecutionCalls() []MockFireRepoReleaseClosedTriggerCapacityExecutionCall {
+	var out []MockFireRepoReleaseClosedTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("ReleaseClosedTriggerCapacityExecution") {
+		var r MockFireRepoReleaseClosedTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoFenceUnboundTriggerCapacityStartCall is one recorded call of MockFireRepo.FenceUnboundTriggerCapacityStart, one
+// field per parameter.
+type MockFireRepoFenceUnboundTriggerCapacityStartCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// FenceUnboundTriggerCapacityStartCalls returns every recorded FenceUnboundTriggerCapacityStart call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FenceUnboundTriggerCapacityStart").
+func (m *MockFireRepo) FenceUnboundTriggerCapacityStartCalls() []MockFireRepoFenceUnboundTriggerCapacityStartCall {
+	var out []MockFireRepoFenceUnboundTriggerCapacityStartCall
+	for _, c := range m.Recorder.Calls("FenceUnboundTriggerCapacityStart") {
+		var r MockFireRepoFenceUnboundTriggerCapacityStartCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoReleaseUnboundTriggerCapacityCall is one recorded call of MockFireRepo.ReleaseUnboundTriggerCapacity, one
+// field per parameter.
+type MockFireRepoReleaseUnboundTriggerCapacityCall struct {
+	Ctx    context.Context
+	E      store.TriggerCapacityExecution
+	Reason string
+}
+
+// ReleaseUnboundTriggerCapacityCalls returns every recorded ReleaseUnboundTriggerCapacity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseUnboundTriggerCapacity").
+func (m *MockFireRepo) ReleaseUnboundTriggerCapacityCalls() []MockFireRepoReleaseUnboundTriggerCapacityCall {
+	var out []MockFireRepoReleaseUnboundTriggerCapacityCall
+	for _, c := range m.Recorder.Calls("ReleaseUnboundTriggerCapacity") {
+		var r MockFireRepoReleaseUnboundTriggerCapacityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		r.Reason, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoTriggerCapacityStartFencedCall is one recorded call of MockFireRepo.TriggerCapacityStartFenced, one
+// field per parameter.
+type MockFireRepoTriggerCapacityStartFencedCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// TriggerCapacityStartFencedCalls returns every recorded TriggerCapacityStartFenced call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TriggerCapacityStartFenced").
+func (m *MockFireRepo) TriggerCapacityStartFencedCalls() []MockFireRepoTriggerCapacityStartFencedCall {
+	var out []MockFireRepoTriggerCapacityStartFencedCall
+	for _, c := range m.Recorder.Calls("TriggerCapacityStartFenced") {
+		var r MockFireRepoTriggerCapacityStartFencedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoExpirePendingTriggerCapacityEventsCall is one recorded call of MockFireRepo.ExpirePendingTriggerCapacityEvents, one
+// field per parameter.
+type MockFireRepoExpirePendingTriggerCapacityEventsCall struct {
+	Ctx            context.Context
+	RecordedBefore time.Time
+	Detail         string
+	Limit          int
+}
+
+// ExpirePendingTriggerCapacityEventsCalls returns every recorded ExpirePendingTriggerCapacityEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ExpirePendingTriggerCapacityEvents").
+func (m *MockFireRepo) ExpirePendingTriggerCapacityEventsCalls() []MockFireRepoExpirePendingTriggerCapacityEventsCall {
+	var out []MockFireRepoExpirePendingTriggerCapacityEventsCall
+	for _, c := range m.Recorder.Calls("ExpirePendingTriggerCapacityEvents") {
+		var r MockFireRepoExpirePendingTriggerCapacityEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RecordedBefore, _ = c.Args[1].(time.Time)
+		r.Detail, _ = c.Args[2].(string)
+		r.Limit, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoListTriggerCapacityKeyRunsCall is one recorded call of MockFireRepo.ListTriggerCapacityKeyRuns, one
+// field per parameter.
+type MockFireRepoListTriggerCapacityKeyRunsCall struct {
+	Ctx   context.Context
+	Scope store.TriggerCapacityScope
+	Key   string
+	Order int64
+}
+
+// ListTriggerCapacityKeyRunsCalls returns every recorded ListTriggerCapacityKeyRuns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityKeyRuns").
+func (m *MockFireRepo) ListTriggerCapacityKeyRunsCalls() []MockFireRepoListTriggerCapacityKeyRunsCall {
+	var out []MockFireRepoListTriggerCapacityKeyRunsCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityKeyRuns") {
+		var r MockFireRepoListTriggerCapacityKeyRunsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		r.Key, _ = c.Args[2].(string)
+		r.Order, _ = c.Args[3].(int64)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoMarkTriggerCapacityRunSupersededCall is one recorded call of MockFireRepo.MarkTriggerCapacityRunSuperseded, one
+// field per parameter.
+type MockFireRepoMarkTriggerCapacityRunSupersededCall struct {
+	Ctx       context.Context
+	EventID   string
+	ByEventID string
+}
+
+// MarkTriggerCapacityRunSupersededCalls returns every recorded MarkTriggerCapacityRunSuperseded call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkTriggerCapacityRunSuperseded").
+func (m *MockFireRepo) MarkTriggerCapacityRunSupersededCalls() []MockFireRepoMarkTriggerCapacityRunSupersededCall {
+	var out []MockFireRepoMarkTriggerCapacityRunSupersededCall
+	for _, c := range m.Recorder.Calls("MarkTriggerCapacityRunSuperseded") {
+		var r MockFireRepoMarkTriggerCapacityRunSupersededCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.ByEventID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockFireRepoSettleSupersededTriggerCapacityRunCall is one recorded call of MockFireRepo.SettleSupersededTriggerCapacityRun, one
+// field per parameter.
+type MockFireRepoSettleSupersededTriggerCapacityRunCall struct {
+	Ctx     context.Context
+	EventID string
+}
+
+// SettleSupersededTriggerCapacityRunCalls returns every recorded SettleSupersededTriggerCapacityRun call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleSupersededTriggerCapacityRun").
+func (m *MockFireRepo) SettleSupersededTriggerCapacityRunCalls() []MockFireRepoSettleSupersededTriggerCapacityRunCall {
+	var out []MockFireRepoSettleSupersededTriggerCapacityRunCall
+	for _, c := range m.Recorder.Calls("SettleSupersededTriggerCapacityRun") {
+		var r MockFireRepoSettleSupersededTriggerCapacityRunCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ FireRepo = (*MockFireRepo)(nil)
 
 // forge:section MockEventFireRepo
-// forge:hash=bd6372a759c0137c932c325ce8c847eb30e748355125412e98ff7482eedb1713
+// forge:hash=409292f587859d1703bcdb8a3dc80ee5bea0d3443c15fcbaa005b536a86cfdf3
 
 // MockEventFireRepo is a test mock for the EventFireRepo interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockEventFireRepo.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockEventFireRepo.<Method>Func not set" error.
 type MockEventFireRepo struct {
 	contractkit.Recorder
 	GetTriggerFunc                            func(context.Context, string) (*core.Trigger, error)
@@ -1300,18 +3132,563 @@ func (m *MockEventFireRepo) SettleSupersededTriggerCapacityRun(ctx context.Conte
 	return contractkit.MockNotSet("MockEventFireRepo", "SettleSupersededTriggerCapacityRun")
 }
 
+// MockEventFireRepoGetTriggerCall is one recorded call of MockEventFireRepo.GetTrigger, one
+// field per parameter.
+type MockEventFireRepoGetTriggerCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetTriggerCalls returns every recorded GetTrigger call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTrigger").
+func (m *MockEventFireRepo) GetTriggerCalls() []MockEventFireRepoGetTriggerCall {
+	var out []MockEventFireRepoGetTriggerCall
+	for _, c := range m.Recorder.Calls("GetTrigger") {
+		var r MockEventFireRepoGetTriggerCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoGetDaemonCall is one recorded call of MockEventFireRepo.GetDaemon, one
+// field per parameter.
+type MockEventFireRepoGetDaemonCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetDaemonCalls returns every recorded GetDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetDaemon").
+func (m *MockEventFireRepo) GetDaemonCalls() []MockEventFireRepoGetDaemonCall {
+	var out []MockEventFireRepoGetDaemonCall
+	for _, c := range m.Recorder.Calls("GetDaemon") {
+		var r MockEventFireRepoGetDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoCreateTriggerEventCall is one recorded call of MockEventFireRepo.CreateTriggerEvent, one
+// field per parameter.
+type MockEventFireRepoCreateTriggerEventCall struct {
+	Ctx context.Context
+	Ev  *core.TriggerEvent
+}
+
+// CreateTriggerEventCalls returns every recorded CreateTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateTriggerEvent").
+func (m *MockEventFireRepo) CreateTriggerEventCalls() []MockEventFireRepoCreateTriggerEventCall {
+	var out []MockEventFireRepoCreateTriggerEventCall
+	for _, c := range m.Recorder.Calls("CreateTriggerEvent") {
+		var r MockEventFireRepoCreateTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoGetTriggerEventByDedupeCall is one recorded call of MockEventFireRepo.GetTriggerEventByDedupe, one
+// field per parameter.
+type MockEventFireRepoGetTriggerEventByDedupeCall struct {
+	Ctx       context.Context
+	Kind      core.TriggerEventKind
+	DedupeKey string
+}
+
+// GetTriggerEventByDedupeCalls returns every recorded GetTriggerEventByDedupe call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetTriggerEventByDedupe").
+func (m *MockEventFireRepo) GetTriggerEventByDedupeCalls() []MockEventFireRepoGetTriggerEventByDedupeCall {
+	var out []MockEventFireRepoGetTriggerEventByDedupeCall
+	for _, c := range m.Recorder.Calls("GetTriggerEventByDedupe") {
+		var r MockEventFireRepoGetTriggerEventByDedupeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Kind, _ = c.Args[1].(core.TriggerEventKind)
+		r.DedupeKey, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoGetLatestTriggerEventCall is one recorded call of MockEventFireRepo.GetLatestTriggerEvent, one
+// field per parameter.
+type MockEventFireRepoGetLatestTriggerEventCall struct {
+	Ctx       context.Context
+	TriggerID string
+	Outcome   *core.TriggerEventOutcome
+}
+
+// GetLatestTriggerEventCalls returns every recorded GetLatestTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetLatestTriggerEvent").
+func (m *MockEventFireRepo) GetLatestTriggerEventCalls() []MockEventFireRepoGetLatestTriggerEventCall {
+	var out []MockEventFireRepoGetLatestTriggerEventCall
+	for _, c := range m.Recorder.Calls("GetLatestTriggerEvent") {
+		var r MockEventFireRepoGetLatestTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.TriggerID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(*core.TriggerEventOutcome)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoSettlePendingTriggerEventCall is one recorded call of MockEventFireRepo.SettlePendingTriggerEvent, one
+// field per parameter.
+type MockEventFireRepoSettlePendingTriggerEventCall struct {
+	Ctx     context.Context
+	ID      string
+	Outcome core.TriggerEventOutcome
+	Detail  string
+	Def     *core.TriggerEventDefinition
+}
+
+// SettlePendingTriggerEventCalls returns every recorded SettlePendingTriggerEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettlePendingTriggerEvent").
+func (m *MockEventFireRepo) SettlePendingTriggerEventCalls() []MockEventFireRepoSettlePendingTriggerEventCall {
+	var out []MockEventFireRepoSettlePendingTriggerEventCall
+	for _, c := range m.Recorder.Calls("SettlePendingTriggerEvent") {
+		var r MockEventFireRepoSettlePendingTriggerEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Outcome, _ = c.Args[2].(core.TriggerEventOutcome)
+		r.Detail, _ = c.Args[3].(string)
+		r.Def, _ = c.Args[4].(*core.TriggerEventDefinition)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoListStalePendingTriggerEventsCall is one recorded call of MockEventFireRepo.ListStalePendingTriggerEvents, one
+// field per parameter.
+type MockEventFireRepoListStalePendingTriggerEventsCall struct {
+	Ctx       context.Context
+	OlderThan time.Time
+	Limit     int
+}
+
+// ListStalePendingTriggerEventsCalls returns every recorded ListStalePendingTriggerEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStalePendingTriggerEvents").
+func (m *MockEventFireRepo) ListStalePendingTriggerEventsCalls() []MockEventFireRepoListStalePendingTriggerEventsCall {
+	var out []MockEventFireRepoListStalePendingTriggerEventsCall
+	for _, c := range m.Recorder.Calls("ListStalePendingTriggerEvents") {
+		var r MockEventFireRepoListStalePendingTriggerEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OlderThan, _ = c.Args[1].(time.Time)
+		r.Limit, _ = c.Args[2].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoGetConnectionCall is one recorded call of MockEventFireRepo.GetConnection, one
+// field per parameter.
+type MockEventFireRepoGetConnectionCall struct {
+	Ctx    context.Context
+	UserID string
+	ID     string
+}
+
+// GetConnectionCalls returns every recorded GetConnection call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetConnection").
+func (m *MockEventFireRepo) GetConnectionCalls() []MockEventFireRepoGetConnectionCall {
+	var out []MockEventFireRepoGetConnectionCall
+	for _, c := range m.Recorder.Calls("GetConnection") {
+		var r MockEventFireRepoGetConnectionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoGetIntegrationAccessSubjectCall is one recorded call of MockEventFireRepo.GetIntegrationAccessSubject, one
+// field per parameter.
+type MockEventFireRepoGetIntegrationAccessSubjectCall struct {
+	Ctx           context.Context
+	UserID        string
+	IntegrationID string
+	FreshAfter    time.Time
+}
+
+// GetIntegrationAccessSubjectCalls returns every recorded GetIntegrationAccessSubject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIntegrationAccessSubject").
+func (m *MockEventFireRepo) GetIntegrationAccessSubjectCalls() []MockEventFireRepoGetIntegrationAccessSubjectCall {
+	var out []MockEventFireRepoGetIntegrationAccessSubjectCall
+	for _, c := range m.Recorder.Calls("GetIntegrationAccessSubject") {
+		var r MockEventFireRepoGetIntegrationAccessSubjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.IntegrationID, _ = c.Args[2].(string)
+		r.FreshAfter, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoEnqueueTriggerCapacitySupersedingCall is one recorded call of MockEventFireRepo.EnqueueTriggerCapacitySuperseding, one
+// field per parameter.
+type MockEventFireRepoEnqueueTriggerCapacitySupersedingCall struct {
+	Ctx   context.Context
+	Ev    *core.TriggerEvent
+	Scope store.TriggerCapacityScope
+}
+
+// EnqueueTriggerCapacitySupersedingCalls returns every recorded EnqueueTriggerCapacitySuperseding call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EnqueueTriggerCapacitySuperseding").
+func (m *MockEventFireRepo) EnqueueTriggerCapacitySupersedingCalls() []MockEventFireRepoEnqueueTriggerCapacitySupersedingCall {
+	var out []MockEventFireRepoEnqueueTriggerCapacitySupersedingCall
+	for _, c := range m.Recorder.Calls("EnqueueTriggerCapacitySuperseding") {
+		var r MockEventFireRepoEnqueueTriggerCapacitySupersedingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		r.Scope, _ = c.Args[2].(store.TriggerCapacityScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoCanLaunchTriggerCapacityCall is one recorded call of MockEventFireRepo.CanLaunchTriggerCapacity, one
+// field per parameter.
+type MockEventFireRepoCanLaunchTriggerCapacityCall struct {
+	Ctx     context.Context
+	EventID string
+	Scope   store.TriggerCapacityScope
+	Limits  store.TriggerCapacityLimits
+}
+
+// CanLaunchTriggerCapacityCalls returns every recorded CanLaunchTriggerCapacity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CanLaunchTriggerCapacity").
+func (m *MockEventFireRepo) CanLaunchTriggerCapacityCalls() []MockEventFireRepoCanLaunchTriggerCapacityCall {
+	var out []MockEventFireRepoCanLaunchTriggerCapacityCall
+	for _, c := range m.Recorder.Calls("CanLaunchTriggerCapacity") {
+		var r MockEventFireRepoCanLaunchTriggerCapacityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.Scope, _ = c.Args[2].(store.TriggerCapacityScope)
+		r.Limits, _ = c.Args[3].(store.TriggerCapacityLimits)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoNextAdmissibleTriggerCapacityEventCall is one recorded call of MockEventFireRepo.NextAdmissibleTriggerCapacityEvent, one
+// field per parameter.
+type MockEventFireRepoNextAdmissibleTriggerCapacityEventCall struct {
+	Ctx    context.Context
+	Scope  store.TriggerCapacityScope
+	Limits store.TriggerCapacityLimits
+}
+
+// NextAdmissibleTriggerCapacityEventCalls returns every recorded NextAdmissibleTriggerCapacityEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("NextAdmissibleTriggerCapacityEvent").
+func (m *MockEventFireRepo) NextAdmissibleTriggerCapacityEventCalls() []MockEventFireRepoNextAdmissibleTriggerCapacityEventCall {
+	var out []MockEventFireRepoNextAdmissibleTriggerCapacityEventCall
+	for _, c := range m.Recorder.Calls("NextAdmissibleTriggerCapacityEvent") {
+		var r MockEventFireRepoNextAdmissibleTriggerCapacityEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		r.Limits, _ = c.Args[2].(store.TriggerCapacityLimits)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoBindTriggerCapacityExecutionCall is one recorded call of MockEventFireRepo.BindTriggerCapacityExecution, one
+// field per parameter.
+type MockEventFireRepoBindTriggerCapacityExecutionCall struct {
+	Ctx        context.Context
+	EventID    string
+	WorkflowID string
+	FirstRunID string
+}
+
+// BindTriggerCapacityExecutionCalls returns every recorded BindTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("BindTriggerCapacityExecution").
+func (m *MockEventFireRepo) BindTriggerCapacityExecutionCalls() []MockEventFireRepoBindTriggerCapacityExecutionCall {
+	var out []MockEventFireRepoBindTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("BindTriggerCapacityExecution") {
+		var r MockEventFireRepoBindTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.WorkflowID, _ = c.Args[2].(string)
+		r.FirstRunID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoPrepareTriggerCapacityExecutionCall is one recorded call of MockEventFireRepo.PrepareTriggerCapacityExecution, one
+// field per parameter.
+type MockEventFireRepoPrepareTriggerCapacityExecutionCall struct {
+	Ctx        context.Context
+	EventID    string
+	WorkflowID string
+}
+
+// PrepareTriggerCapacityExecutionCalls returns every recorded PrepareTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PrepareTriggerCapacityExecution").
+func (m *MockEventFireRepo) PrepareTriggerCapacityExecutionCalls() []MockEventFireRepoPrepareTriggerCapacityExecutionCall {
+	var out []MockEventFireRepoPrepareTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("PrepareTriggerCapacityExecution") {
+		var r MockEventFireRepoPrepareTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.WorkflowID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoListTriggerCapacityExecutionsCall is one recorded call of MockEventFireRepo.ListTriggerCapacityExecutions, one
+// field per parameter.
+type MockEventFireRepoListTriggerCapacityExecutionsCall struct {
+	Ctx   context.Context
+	Scope store.TriggerCapacityScope
+}
+
+// ListTriggerCapacityExecutionsCalls returns every recorded ListTriggerCapacityExecutions call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityExecutions").
+func (m *MockEventFireRepo) ListTriggerCapacityExecutionsCalls() []MockEventFireRepoListTriggerCapacityExecutionsCall {
+	var out []MockEventFireRepoListTriggerCapacityExecutionsCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityExecutions") {
+		var r MockEventFireRepoListTriggerCapacityExecutionsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoListTriggerCapacityExecutionBatchCall is one recorded call of MockEventFireRepo.ListTriggerCapacityExecutionBatch, one
+// field per parameter.
+type MockEventFireRepoListTriggerCapacityExecutionBatchCall struct {
+	Ctx   context.Context
+	Limit int
+}
+
+// ListTriggerCapacityExecutionBatchCalls returns every recorded ListTriggerCapacityExecutionBatch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityExecutionBatch").
+func (m *MockEventFireRepo) ListTriggerCapacityExecutionBatchCalls() []MockEventFireRepoListTriggerCapacityExecutionBatchCall {
+	var out []MockEventFireRepoListTriggerCapacityExecutionBatchCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityExecutionBatch") {
+		var r MockEventFireRepoListTriggerCapacityExecutionBatchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Limit, _ = c.Args[1].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoReleaseTriggerCapacityExecutionCall is one recorded call of MockEventFireRepo.ReleaseTriggerCapacityExecution, one
+// field per parameter.
+type MockEventFireRepoReleaseTriggerCapacityExecutionCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// ReleaseTriggerCapacityExecutionCalls returns every recorded ReleaseTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseTriggerCapacityExecution").
+func (m *MockEventFireRepo) ReleaseTriggerCapacityExecutionCalls() []MockEventFireRepoReleaseTriggerCapacityExecutionCall {
+	var out []MockEventFireRepoReleaseTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("ReleaseTriggerCapacityExecution") {
+		var r MockEventFireRepoReleaseTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoReleaseClosedTriggerCapacityExecutionCall is one recorded call of MockEventFireRepo.ReleaseClosedTriggerCapacityExecution, one
+// field per parameter.
+type MockEventFireRepoReleaseClosedTriggerCapacityExecutionCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// ReleaseClosedTriggerCapacityExecutionCalls returns every recorded ReleaseClosedTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseClosedTriggerCapacityExecution").
+func (m *MockEventFireRepo) ReleaseClosedTriggerCapacityExecutionCalls() []MockEventFireRepoReleaseClosedTriggerCapacityExecutionCall {
+	var out []MockEventFireRepoReleaseClosedTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("ReleaseClosedTriggerCapacityExecution") {
+		var r MockEventFireRepoReleaseClosedTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoFenceUnboundTriggerCapacityStartCall is one recorded call of MockEventFireRepo.FenceUnboundTriggerCapacityStart, one
+// field per parameter.
+type MockEventFireRepoFenceUnboundTriggerCapacityStartCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// FenceUnboundTriggerCapacityStartCalls returns every recorded FenceUnboundTriggerCapacityStart call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FenceUnboundTriggerCapacityStart").
+func (m *MockEventFireRepo) FenceUnboundTriggerCapacityStartCalls() []MockEventFireRepoFenceUnboundTriggerCapacityStartCall {
+	var out []MockEventFireRepoFenceUnboundTriggerCapacityStartCall
+	for _, c := range m.Recorder.Calls("FenceUnboundTriggerCapacityStart") {
+		var r MockEventFireRepoFenceUnboundTriggerCapacityStartCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoReleaseUnboundTriggerCapacityCall is one recorded call of MockEventFireRepo.ReleaseUnboundTriggerCapacity, one
+// field per parameter.
+type MockEventFireRepoReleaseUnboundTriggerCapacityCall struct {
+	Ctx    context.Context
+	E      store.TriggerCapacityExecution
+	Reason string
+}
+
+// ReleaseUnboundTriggerCapacityCalls returns every recorded ReleaseUnboundTriggerCapacity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseUnboundTriggerCapacity").
+func (m *MockEventFireRepo) ReleaseUnboundTriggerCapacityCalls() []MockEventFireRepoReleaseUnboundTriggerCapacityCall {
+	var out []MockEventFireRepoReleaseUnboundTriggerCapacityCall
+	for _, c := range m.Recorder.Calls("ReleaseUnboundTriggerCapacity") {
+		var r MockEventFireRepoReleaseUnboundTriggerCapacityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		r.Reason, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoTriggerCapacityStartFencedCall is one recorded call of MockEventFireRepo.TriggerCapacityStartFenced, one
+// field per parameter.
+type MockEventFireRepoTriggerCapacityStartFencedCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// TriggerCapacityStartFencedCalls returns every recorded TriggerCapacityStartFenced call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TriggerCapacityStartFenced").
+func (m *MockEventFireRepo) TriggerCapacityStartFencedCalls() []MockEventFireRepoTriggerCapacityStartFencedCall {
+	var out []MockEventFireRepoTriggerCapacityStartFencedCall
+	for _, c := range m.Recorder.Calls("TriggerCapacityStartFenced") {
+		var r MockEventFireRepoTriggerCapacityStartFencedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoExpirePendingTriggerCapacityEventsCall is one recorded call of MockEventFireRepo.ExpirePendingTriggerCapacityEvents, one
+// field per parameter.
+type MockEventFireRepoExpirePendingTriggerCapacityEventsCall struct {
+	Ctx            context.Context
+	RecordedBefore time.Time
+	Detail         string
+	Limit          int
+}
+
+// ExpirePendingTriggerCapacityEventsCalls returns every recorded ExpirePendingTriggerCapacityEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ExpirePendingTriggerCapacityEvents").
+func (m *MockEventFireRepo) ExpirePendingTriggerCapacityEventsCalls() []MockEventFireRepoExpirePendingTriggerCapacityEventsCall {
+	var out []MockEventFireRepoExpirePendingTriggerCapacityEventsCall
+	for _, c := range m.Recorder.Calls("ExpirePendingTriggerCapacityEvents") {
+		var r MockEventFireRepoExpirePendingTriggerCapacityEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RecordedBefore, _ = c.Args[1].(time.Time)
+		r.Detail, _ = c.Args[2].(string)
+		r.Limit, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoListTriggerCapacityKeyRunsCall is one recorded call of MockEventFireRepo.ListTriggerCapacityKeyRuns, one
+// field per parameter.
+type MockEventFireRepoListTriggerCapacityKeyRunsCall struct {
+	Ctx   context.Context
+	Scope store.TriggerCapacityScope
+	Key   string
+	Order int64
+}
+
+// ListTriggerCapacityKeyRunsCalls returns every recorded ListTriggerCapacityKeyRuns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityKeyRuns").
+func (m *MockEventFireRepo) ListTriggerCapacityKeyRunsCalls() []MockEventFireRepoListTriggerCapacityKeyRunsCall {
+	var out []MockEventFireRepoListTriggerCapacityKeyRunsCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityKeyRuns") {
+		var r MockEventFireRepoListTriggerCapacityKeyRunsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		r.Key, _ = c.Args[2].(string)
+		r.Order, _ = c.Args[3].(int64)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoMarkTriggerCapacityRunSupersededCall is one recorded call of MockEventFireRepo.MarkTriggerCapacityRunSuperseded, one
+// field per parameter.
+type MockEventFireRepoMarkTriggerCapacityRunSupersededCall struct {
+	Ctx       context.Context
+	EventID   string
+	ByEventID string
+}
+
+// MarkTriggerCapacityRunSupersededCalls returns every recorded MarkTriggerCapacityRunSuperseded call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkTriggerCapacityRunSuperseded").
+func (m *MockEventFireRepo) MarkTriggerCapacityRunSupersededCalls() []MockEventFireRepoMarkTriggerCapacityRunSupersededCall {
+	var out []MockEventFireRepoMarkTriggerCapacityRunSupersededCall
+	for _, c := range m.Recorder.Calls("MarkTriggerCapacityRunSuperseded") {
+		var r MockEventFireRepoMarkTriggerCapacityRunSupersededCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.ByEventID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockEventFireRepoSettleSupersededTriggerCapacityRunCall is one recorded call of MockEventFireRepo.SettleSupersededTriggerCapacityRun, one
+// field per parameter.
+type MockEventFireRepoSettleSupersededTriggerCapacityRunCall struct {
+	Ctx     context.Context
+	EventID string
+}
+
+// SettleSupersededTriggerCapacityRunCalls returns every recorded SettleSupersededTriggerCapacityRun call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleSupersededTriggerCapacityRun").
+func (m *MockEventFireRepo) SettleSupersededTriggerCapacityRunCalls() []MockEventFireRepoSettleSupersededTriggerCapacityRunCall {
+	var out []MockEventFireRepoSettleSupersededTriggerCapacityRunCall
+	for _, c := range m.Recorder.Calls("SettleSupersededTriggerCapacityRun") {
+		var r MockEventFireRepoSettleSupersededTriggerCapacityRunCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ EventFireRepo = (*MockEventFireRepo)(nil)
 
 // forge:section MockCapacityStore
-// forge:hash=89bf027113cc7080ea5d99f9d07400351a5fe5bb09cb07fc283dddf1a63eeb0f
+// forge:hash=986b56b60526eb8b2b7287669a75f880cb916172e5c3932d8bb748bd37a51aaf
 
 // MockCapacityStore is a test mock for the CapacityStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockCapacityStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockCapacityStore.<Method>Func not set" error.
 type MockCapacityStore struct {
 	contractkit.Recorder
 	EnqueueTriggerCapacitySupersedingFunc     func(context.Context, *core.TriggerEvent, store.TriggerCapacityScope) ([]*core.TriggerEvent, error)
@@ -1476,18 +3853,365 @@ func (m *MockCapacityStore) SettleSupersededTriggerCapacityRun(ctx context.Conte
 	return contractkit.MockNotSet("MockCapacityStore", "SettleSupersededTriggerCapacityRun")
 }
 
+// MockCapacityStoreEnqueueTriggerCapacitySupersedingCall is one recorded call of MockCapacityStore.EnqueueTriggerCapacitySuperseding, one
+// field per parameter.
+type MockCapacityStoreEnqueueTriggerCapacitySupersedingCall struct {
+	Ctx   context.Context
+	Ev    *core.TriggerEvent
+	Scope store.TriggerCapacityScope
+}
+
+// EnqueueTriggerCapacitySupersedingCalls returns every recorded EnqueueTriggerCapacitySuperseding call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EnqueueTriggerCapacitySuperseding").
+func (m *MockCapacityStore) EnqueueTriggerCapacitySupersedingCalls() []MockCapacityStoreEnqueueTriggerCapacitySupersedingCall {
+	var out []MockCapacityStoreEnqueueTriggerCapacitySupersedingCall
+	for _, c := range m.Recorder.Calls("EnqueueTriggerCapacitySuperseding") {
+		var r MockCapacityStoreEnqueueTriggerCapacitySupersedingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Ev, _ = c.Args[1].(*core.TriggerEvent)
+		r.Scope, _ = c.Args[2].(store.TriggerCapacityScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreCanLaunchTriggerCapacityCall is one recorded call of MockCapacityStore.CanLaunchTriggerCapacity, one
+// field per parameter.
+type MockCapacityStoreCanLaunchTriggerCapacityCall struct {
+	Ctx     context.Context
+	EventID string
+	Scope   store.TriggerCapacityScope
+	Limits  store.TriggerCapacityLimits
+}
+
+// CanLaunchTriggerCapacityCalls returns every recorded CanLaunchTriggerCapacity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CanLaunchTriggerCapacity").
+func (m *MockCapacityStore) CanLaunchTriggerCapacityCalls() []MockCapacityStoreCanLaunchTriggerCapacityCall {
+	var out []MockCapacityStoreCanLaunchTriggerCapacityCall
+	for _, c := range m.Recorder.Calls("CanLaunchTriggerCapacity") {
+		var r MockCapacityStoreCanLaunchTriggerCapacityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.Scope, _ = c.Args[2].(store.TriggerCapacityScope)
+		r.Limits, _ = c.Args[3].(store.TriggerCapacityLimits)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreNextAdmissibleTriggerCapacityEventCall is one recorded call of MockCapacityStore.NextAdmissibleTriggerCapacityEvent, one
+// field per parameter.
+type MockCapacityStoreNextAdmissibleTriggerCapacityEventCall struct {
+	Ctx    context.Context
+	Scope  store.TriggerCapacityScope
+	Limits store.TriggerCapacityLimits
+}
+
+// NextAdmissibleTriggerCapacityEventCalls returns every recorded NextAdmissibleTriggerCapacityEvent call, oldest first, with
+// its arguments typed. It reads the same log as Calls("NextAdmissibleTriggerCapacityEvent").
+func (m *MockCapacityStore) NextAdmissibleTriggerCapacityEventCalls() []MockCapacityStoreNextAdmissibleTriggerCapacityEventCall {
+	var out []MockCapacityStoreNextAdmissibleTriggerCapacityEventCall
+	for _, c := range m.Recorder.Calls("NextAdmissibleTriggerCapacityEvent") {
+		var r MockCapacityStoreNextAdmissibleTriggerCapacityEventCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		r.Limits, _ = c.Args[2].(store.TriggerCapacityLimits)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreBindTriggerCapacityExecutionCall is one recorded call of MockCapacityStore.BindTriggerCapacityExecution, one
+// field per parameter.
+type MockCapacityStoreBindTriggerCapacityExecutionCall struct {
+	Ctx        context.Context
+	EventID    string
+	WorkflowID string
+	FirstRunID string
+}
+
+// BindTriggerCapacityExecutionCalls returns every recorded BindTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("BindTriggerCapacityExecution").
+func (m *MockCapacityStore) BindTriggerCapacityExecutionCalls() []MockCapacityStoreBindTriggerCapacityExecutionCall {
+	var out []MockCapacityStoreBindTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("BindTriggerCapacityExecution") {
+		var r MockCapacityStoreBindTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.WorkflowID, _ = c.Args[2].(string)
+		r.FirstRunID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStorePrepareTriggerCapacityExecutionCall is one recorded call of MockCapacityStore.PrepareTriggerCapacityExecution, one
+// field per parameter.
+type MockCapacityStorePrepareTriggerCapacityExecutionCall struct {
+	Ctx        context.Context
+	EventID    string
+	WorkflowID string
+}
+
+// PrepareTriggerCapacityExecutionCalls returns every recorded PrepareTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PrepareTriggerCapacityExecution").
+func (m *MockCapacityStore) PrepareTriggerCapacityExecutionCalls() []MockCapacityStorePrepareTriggerCapacityExecutionCall {
+	var out []MockCapacityStorePrepareTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("PrepareTriggerCapacityExecution") {
+		var r MockCapacityStorePrepareTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.WorkflowID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreListTriggerCapacityExecutionsCall is one recorded call of MockCapacityStore.ListTriggerCapacityExecutions, one
+// field per parameter.
+type MockCapacityStoreListTriggerCapacityExecutionsCall struct {
+	Ctx   context.Context
+	Scope store.TriggerCapacityScope
+}
+
+// ListTriggerCapacityExecutionsCalls returns every recorded ListTriggerCapacityExecutions call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityExecutions").
+func (m *MockCapacityStore) ListTriggerCapacityExecutionsCalls() []MockCapacityStoreListTriggerCapacityExecutionsCall {
+	var out []MockCapacityStoreListTriggerCapacityExecutionsCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityExecutions") {
+		var r MockCapacityStoreListTriggerCapacityExecutionsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreListTriggerCapacityExecutionBatchCall is one recorded call of MockCapacityStore.ListTriggerCapacityExecutionBatch, one
+// field per parameter.
+type MockCapacityStoreListTriggerCapacityExecutionBatchCall struct {
+	Ctx   context.Context
+	Limit int
+}
+
+// ListTriggerCapacityExecutionBatchCalls returns every recorded ListTriggerCapacityExecutionBatch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityExecutionBatch").
+func (m *MockCapacityStore) ListTriggerCapacityExecutionBatchCalls() []MockCapacityStoreListTriggerCapacityExecutionBatchCall {
+	var out []MockCapacityStoreListTriggerCapacityExecutionBatchCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityExecutionBatch") {
+		var r MockCapacityStoreListTriggerCapacityExecutionBatchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Limit, _ = c.Args[1].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreReleaseTriggerCapacityExecutionCall is one recorded call of MockCapacityStore.ReleaseTriggerCapacityExecution, one
+// field per parameter.
+type MockCapacityStoreReleaseTriggerCapacityExecutionCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// ReleaseTriggerCapacityExecutionCalls returns every recorded ReleaseTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseTriggerCapacityExecution").
+func (m *MockCapacityStore) ReleaseTriggerCapacityExecutionCalls() []MockCapacityStoreReleaseTriggerCapacityExecutionCall {
+	var out []MockCapacityStoreReleaseTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("ReleaseTriggerCapacityExecution") {
+		var r MockCapacityStoreReleaseTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreReleaseClosedTriggerCapacityExecutionCall is one recorded call of MockCapacityStore.ReleaseClosedTriggerCapacityExecution, one
+// field per parameter.
+type MockCapacityStoreReleaseClosedTriggerCapacityExecutionCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// ReleaseClosedTriggerCapacityExecutionCalls returns every recorded ReleaseClosedTriggerCapacityExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseClosedTriggerCapacityExecution").
+func (m *MockCapacityStore) ReleaseClosedTriggerCapacityExecutionCalls() []MockCapacityStoreReleaseClosedTriggerCapacityExecutionCall {
+	var out []MockCapacityStoreReleaseClosedTriggerCapacityExecutionCall
+	for _, c := range m.Recorder.Calls("ReleaseClosedTriggerCapacityExecution") {
+		var r MockCapacityStoreReleaseClosedTriggerCapacityExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreFenceUnboundTriggerCapacityStartCall is one recorded call of MockCapacityStore.FenceUnboundTriggerCapacityStart, one
+// field per parameter.
+type MockCapacityStoreFenceUnboundTriggerCapacityStartCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// FenceUnboundTriggerCapacityStartCalls returns every recorded FenceUnboundTriggerCapacityStart call, oldest first, with
+// its arguments typed. It reads the same log as Calls("FenceUnboundTriggerCapacityStart").
+func (m *MockCapacityStore) FenceUnboundTriggerCapacityStartCalls() []MockCapacityStoreFenceUnboundTriggerCapacityStartCall {
+	var out []MockCapacityStoreFenceUnboundTriggerCapacityStartCall
+	for _, c := range m.Recorder.Calls("FenceUnboundTriggerCapacityStart") {
+		var r MockCapacityStoreFenceUnboundTriggerCapacityStartCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreReleaseUnboundTriggerCapacityCall is one recorded call of MockCapacityStore.ReleaseUnboundTriggerCapacity, one
+// field per parameter.
+type MockCapacityStoreReleaseUnboundTriggerCapacityCall struct {
+	Ctx    context.Context
+	E      store.TriggerCapacityExecution
+	Reason string
+}
+
+// ReleaseUnboundTriggerCapacityCalls returns every recorded ReleaseUnboundTriggerCapacity call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseUnboundTriggerCapacity").
+func (m *MockCapacityStore) ReleaseUnboundTriggerCapacityCalls() []MockCapacityStoreReleaseUnboundTriggerCapacityCall {
+	var out []MockCapacityStoreReleaseUnboundTriggerCapacityCall
+	for _, c := range m.Recorder.Calls("ReleaseUnboundTriggerCapacity") {
+		var r MockCapacityStoreReleaseUnboundTriggerCapacityCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		r.Reason, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreTriggerCapacityStartFencedCall is one recorded call of MockCapacityStore.TriggerCapacityStartFenced, one
+// field per parameter.
+type MockCapacityStoreTriggerCapacityStartFencedCall struct {
+	Ctx context.Context
+	E   store.TriggerCapacityExecution
+}
+
+// TriggerCapacityStartFencedCalls returns every recorded TriggerCapacityStartFenced call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TriggerCapacityStartFenced").
+func (m *MockCapacityStore) TriggerCapacityStartFencedCalls() []MockCapacityStoreTriggerCapacityStartFencedCall {
+	var out []MockCapacityStoreTriggerCapacityStartFencedCall
+	for _, c := range m.Recorder.Calls("TriggerCapacityStartFenced") {
+		var r MockCapacityStoreTriggerCapacityStartFencedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.E, _ = c.Args[1].(store.TriggerCapacityExecution)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreExpirePendingTriggerCapacityEventsCall is one recorded call of MockCapacityStore.ExpirePendingTriggerCapacityEvents, one
+// field per parameter.
+type MockCapacityStoreExpirePendingTriggerCapacityEventsCall struct {
+	Ctx            context.Context
+	RecordedBefore time.Time
+	Detail         string
+	Limit          int
+}
+
+// ExpirePendingTriggerCapacityEventsCalls returns every recorded ExpirePendingTriggerCapacityEvents call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ExpirePendingTriggerCapacityEvents").
+func (m *MockCapacityStore) ExpirePendingTriggerCapacityEventsCalls() []MockCapacityStoreExpirePendingTriggerCapacityEventsCall {
+	var out []MockCapacityStoreExpirePendingTriggerCapacityEventsCall
+	for _, c := range m.Recorder.Calls("ExpirePendingTriggerCapacityEvents") {
+		var r MockCapacityStoreExpirePendingTriggerCapacityEventsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.RecordedBefore, _ = c.Args[1].(time.Time)
+		r.Detail, _ = c.Args[2].(string)
+		r.Limit, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreListTriggerCapacityKeyRunsCall is one recorded call of MockCapacityStore.ListTriggerCapacityKeyRuns, one
+// field per parameter.
+type MockCapacityStoreListTriggerCapacityKeyRunsCall struct {
+	Ctx   context.Context
+	Scope store.TriggerCapacityScope
+	Key   string
+	Order int64
+}
+
+// ListTriggerCapacityKeyRunsCalls returns every recorded ListTriggerCapacityKeyRuns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListTriggerCapacityKeyRuns").
+func (m *MockCapacityStore) ListTriggerCapacityKeyRunsCalls() []MockCapacityStoreListTriggerCapacityKeyRunsCall {
+	var out []MockCapacityStoreListTriggerCapacityKeyRunsCall
+	for _, c := range m.Recorder.Calls("ListTriggerCapacityKeyRuns") {
+		var r MockCapacityStoreListTriggerCapacityKeyRunsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Scope, _ = c.Args[1].(store.TriggerCapacityScope)
+		r.Key, _ = c.Args[2].(string)
+		r.Order, _ = c.Args[3].(int64)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreMarkTriggerCapacityRunSupersededCall is one recorded call of MockCapacityStore.MarkTriggerCapacityRunSuperseded, one
+// field per parameter.
+type MockCapacityStoreMarkTriggerCapacityRunSupersededCall struct {
+	Ctx       context.Context
+	EventID   string
+	ByEventID string
+}
+
+// MarkTriggerCapacityRunSupersededCalls returns every recorded MarkTriggerCapacityRunSuperseded call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkTriggerCapacityRunSuperseded").
+func (m *MockCapacityStore) MarkTriggerCapacityRunSupersededCalls() []MockCapacityStoreMarkTriggerCapacityRunSupersededCall {
+	var out []MockCapacityStoreMarkTriggerCapacityRunSupersededCall
+	for _, c := range m.Recorder.Calls("MarkTriggerCapacityRunSuperseded") {
+		var r MockCapacityStoreMarkTriggerCapacityRunSupersededCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		r.ByEventID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockCapacityStoreSettleSupersededTriggerCapacityRunCall is one recorded call of MockCapacityStore.SettleSupersededTriggerCapacityRun, one
+// field per parameter.
+type MockCapacityStoreSettleSupersededTriggerCapacityRunCall struct {
+	Ctx     context.Context
+	EventID string
+}
+
+// SettleSupersededTriggerCapacityRunCalls returns every recorded SettleSupersededTriggerCapacityRun call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SettleSupersededTriggerCapacityRun").
+func (m *MockCapacityStore) SettleSupersededTriggerCapacityRunCalls() []MockCapacityStoreSettleSupersededTriggerCapacityRunCall {
+	var out []MockCapacityStoreSettleSupersededTriggerCapacityRunCall
+	for _, c := range m.Recorder.Calls("SettleSupersededTriggerCapacityRun") {
+		var r MockCapacityStoreSettleSupersededTriggerCapacityRunCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.EventID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ CapacityStore = (*MockCapacityStore)(nil)
 
 // forge:section MockRunCanceller
-// forge:hash=942c31ba9232eee68356a1db045eb6e6e35e596ed77b72d7deae3df9abb85a06
+// forge:hash=b991190e194063889de9e678a1e874a5610ce949c18b30b5e341c0530e2f4e15
 
 // MockRunCanceller is a test mock for the RunCanceller interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRunCanceller.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRunCanceller.<Method>Func not set" error.
 type MockRunCanceller struct {
 	contractkit.Recorder
 	TerminateExecutionFunc func(context.Context, string, string, string) error
@@ -1502,18 +4226,43 @@ func (m *MockRunCanceller) TerminateExecution(ctx context.Context, chatID string
 	return contractkit.MockNotSet("MockRunCanceller", "TerminateExecution")
 }
 
+// MockRunCancellerTerminateExecutionCall is one recorded call of MockRunCanceller.TerminateExecution, one
+// field per parameter.
+type MockRunCancellerTerminateExecutionCall struct {
+	Ctx        context.Context
+	ChatID     string
+	WorkflowID string
+	RunID      string
+}
+
+// TerminateExecutionCalls returns every recorded TerminateExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TerminateExecution").
+func (m *MockRunCanceller) TerminateExecutionCalls() []MockRunCancellerTerminateExecutionCall {
+	var out []MockRunCancellerTerminateExecutionCall
+	for _, c := range m.Recorder.Calls("TerminateExecution") {
+		var r MockRunCancellerTerminateExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.WorkflowID, _ = c.Args[2].(string)
+		r.RunID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ RunCanceller = (*MockRunCanceller)(nil)
 
 // forge:section MockCapacityDescriber
-// forge:hash=a4fdc80178c99ed364f2cde1f6b06e709f0e510eb3554f1b1a1dc01e58c7c16f
+// forge:hash=963f25d9537fce284dda5b80d1d931ebd5d1f3e68bdac206819038bbc9fd9dcf
 
 // MockCapacityDescriber is a test mock for the CapacityDescriber interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockCapacityDescriber.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockCapacityDescriber.<Method>Func not set" error.
 type MockCapacityDescriber struct {
 	contractkit.Recorder
 	DescribeWorkflowExecutionFunc func(context.Context, string, string) (*workflowservice.DescribeWorkflowExecutionResponse, error)
@@ -1528,18 +4277,41 @@ func (m *MockCapacityDescriber) DescribeWorkflowExecution(ctx context.Context, w
 	return nil, contractkit.MockNotSet("MockCapacityDescriber", "DescribeWorkflowExecution")
 }
 
+// MockCapacityDescriberDescribeWorkflowExecutionCall is one recorded call of MockCapacityDescriber.DescribeWorkflowExecution, one
+// field per parameter.
+type MockCapacityDescriberDescribeWorkflowExecutionCall struct {
+	Ctx        context.Context
+	WorkflowID string
+	RunID      string
+}
+
+// DescribeWorkflowExecutionCalls returns every recorded DescribeWorkflowExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DescribeWorkflowExecution").
+func (m *MockCapacityDescriber) DescribeWorkflowExecutionCalls() []MockCapacityDescriberDescribeWorkflowExecutionCall {
+	var out []MockCapacityDescriberDescribeWorkflowExecutionCall
+	for _, c := range m.Recorder.Calls("DescribeWorkflowExecution") {
+		var r MockCapacityDescriberDescribeWorkflowExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.WorkflowID, _ = c.Args[1].(string)
+		r.RunID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ CapacityDescriber = (*MockCapacityDescriber)(nil)
 
 // forge:section MockRedriveStarter
-// forge:hash=067ddf2868155284b0c3addc90ff6b36a95ee839ed120b4d75a92c4885c203b6
+// forge:hash=7af79bb8c3078b9802d47de48fe888213111b53860f0ba497505f3f77ed7dd53
 
 // MockRedriveStarter is a test mock for the RedriveStarter interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRedriveStarter.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRedriveStarter.<Method>Func not set" error.
 type MockRedriveStarter struct {
 	contractkit.Recorder
 	ExecuteWorkflowFunc           func(context.Context, client.StartWorkflowOptions, any, ...any) (client.WorkflowRun, error)
@@ -1562,6 +4334,52 @@ func (m *MockRedriveStarter) DescribeWorkflowExecution(ctx context.Context, work
 		return m.DescribeWorkflowExecutionFunc(ctx, workflowID, runID)
 	}
 	return nil, contractkit.MockNotSet("MockRedriveStarter", "DescribeWorkflowExecution")
+}
+
+// MockRedriveStarterExecuteWorkflowCall is one recorded call of MockRedriveStarter.ExecuteWorkflow, one
+// field per parameter.
+type MockRedriveStarterExecuteWorkflowCall struct {
+	Ctx      context.Context
+	Options  client.StartWorkflowOptions
+	Workflow any
+	Args     []any
+}
+
+// ExecuteWorkflowCalls returns every recorded ExecuteWorkflow call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ExecuteWorkflow").
+func (m *MockRedriveStarter) ExecuteWorkflowCalls() []MockRedriveStarterExecuteWorkflowCall {
+	var out []MockRedriveStarterExecuteWorkflowCall
+	for _, c := range m.Recorder.Calls("ExecuteWorkflow") {
+		var r MockRedriveStarterExecuteWorkflowCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Options, _ = c.Args[1].(client.StartWorkflowOptions)
+		r.Workflow, _ = c.Args[2].(any)
+		r.Args, _ = c.Args[3].([]any)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRedriveStarterDescribeWorkflowExecutionCall is one recorded call of MockRedriveStarter.DescribeWorkflowExecution, one
+// field per parameter.
+type MockRedriveStarterDescribeWorkflowExecutionCall struct {
+	Ctx        context.Context
+	WorkflowID string
+	RunID      string
+}
+
+// DescribeWorkflowExecutionCalls returns every recorded DescribeWorkflowExecution call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DescribeWorkflowExecution").
+func (m *MockRedriveStarter) DescribeWorkflowExecutionCalls() []MockRedriveStarterDescribeWorkflowExecutionCall {
+	var out []MockRedriveStarterDescribeWorkflowExecutionCall
+	for _, c := range m.Recorder.Calls("DescribeWorkflowExecution") {
+		var r MockRedriveStarterDescribeWorkflowExecutionCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.WorkflowID, _ = c.Args[1].(string)
+		r.RunID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
