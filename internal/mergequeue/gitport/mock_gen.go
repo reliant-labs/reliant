@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockPort
-// forge:hash=d0f1161fb3bdb168e00069b2cbd774a96643ac69b6cf9ef2798f160ca45aaee7
+// forge:hash=3f95527cd05dd339901f42b85b670160a97a64e2abe7816fd2bf6f9c8c4086c4
 
 // MockPort is a test mock for the Port interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockPort.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockPort.<Method>Func not set" error.
 type MockPort struct {
 	contractkit.Recorder
 	DirFunc           func() string
@@ -94,6 +95,146 @@ func (m *MockPort) Push(ctx context.Context, url string, in PushInput) error {
 		return m.PushFunc(ctx, url, in)
 	}
 	return contractkit.MockNotSet("MockPort", "Push")
+}
+
+// MockPortDirCall is one recorded call of MockPort.Dir, one
+// field per parameter.
+type MockPortDirCall struct {
+}
+
+// DirCalls returns every recorded Dir call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Dir").
+func (m *MockPort) DirCalls() []MockPortDirCall {
+	var out []MockPortDirCall
+	for range m.Recorder.Calls("Dir") {
+		var r MockPortDirCall
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPortFetchCall is one recorded call of MockPort.Fetch, one
+// field per parameter.
+type MockPortFetchCall struct {
+	Ctx      context.Context
+	URL      string
+	Refspecs []string
+}
+
+// FetchCalls returns every recorded Fetch call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Fetch").
+func (m *MockPort) FetchCalls() []MockPortFetchCall {
+	var out []MockPortFetchCall
+	for _, c := range m.Recorder.Calls("Fetch") {
+		var r MockPortFetchCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.URL, _ = c.Args[1].(string)
+		r.Refspecs, _ = c.Args[2].([]string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPortResolveCommitCall is one recorded call of MockPort.ResolveCommit, one
+// field per parameter.
+type MockPortResolveCommitCall struct {
+	Ctx context.Context
+	Rev string
+}
+
+// ResolveCommitCalls returns every recorded ResolveCommit call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveCommit").
+func (m *MockPort) ResolveCommitCalls() []MockPortResolveCommitCall {
+	var out []MockPortResolveCommitCall
+	for _, c := range m.Recorder.Calls("ResolveCommit") {
+		var r MockPortResolveCommitCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Rev, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPortTreeOfCall is one recorded call of MockPort.TreeOf, one
+// field per parameter.
+type MockPortTreeOfCall struct {
+	Ctx context.Context
+	Rev string
+}
+
+// TreeOfCalls returns every recorded TreeOf call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TreeOf").
+func (m *MockPort) TreeOfCalls() []MockPortTreeOfCall {
+	var out []MockPortTreeOfCall
+	for _, c := range m.Recorder.Calls("TreeOf") {
+		var r MockPortTreeOfCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Rev, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPortSquashCall is one recorded call of MockPort.Squash, one
+// field per parameter.
+type MockPortSquashCall struct {
+	Ctx context.Context
+	In  SquashInput
+}
+
+// SquashCalls returns every recorded Squash call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Squash").
+func (m *MockPort) SquashCalls() []MockPortSquashCall {
+	var out []MockPortSquashCall
+	for _, c := range m.Recorder.Calls("Squash") {
+		var r MockPortSquashCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.In, _ = c.Args[1].(SquashInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPortRevertCall is one recorded call of MockPort.Revert, one
+// field per parameter.
+type MockPortRevertCall struct {
+	Ctx context.Context
+	In  RevertInput
+}
+
+// RevertCalls returns every recorded Revert call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Revert").
+func (m *MockPort) RevertCalls() []MockPortRevertCall {
+	var out []MockPortRevertCall
+	for _, c := range m.Recorder.Calls("Revert") {
+		var r MockPortRevertCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.In, _ = c.Args[1].(RevertInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockPortPushCall is one recorded call of MockPort.Push, one
+// field per parameter.
+type MockPortPushCall struct {
+	Ctx context.Context
+	URL string
+	In  PushInput
+}
+
+// PushCalls returns every recorded Push call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Push").
+func (m *MockPort) PushCalls() []MockPortPushCall {
+	var out []MockPortPushCall
+	for _, c := range m.Recorder.Calls("Push") {
+		var r MockPortPushCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.URL, _ = c.Args[1].(string)
+		r.In, _ = c.Args[2].(PushInput)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

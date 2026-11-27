@@ -200,7 +200,7 @@ func TestRunStep_DurableMachineAcrossRegistrationOfflineAndReconnect(t *testing.
 	assert.Contains(t, err.Error(), "suspended")
 	assert.Contains(t, err.Error(), "the command never ran")
 	assert.Empty(t, out.Stdout)
-	wake := NewMachineResumeWakeActivity(f.h.Repo(), workspaceRowsOf(f.h.Repo()), f.remote)
+	wake := NewMachineResumeWakeActivity(f.h.Repo(), NewTriggerReads(f.h.Repo().ORM()), workspaceRowsOf(f.h.Repo()), f.remote)
 	wakeOut, err := wake.Execute(ctx, MachineResumeWakeInput{ChatID: f.chat})
 	require.NoError(t, err)
 	require.True(t, wakeOut.Waiting || wakeOut.NotComing != "", "nil snapshot must not consider online cicd ready for this chat")

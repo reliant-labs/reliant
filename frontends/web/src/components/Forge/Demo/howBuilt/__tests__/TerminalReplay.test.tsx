@@ -13,6 +13,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 
 import { scaffoldFixtures, type ScaffoldCast } from "../fixtures";
 import { delayToNext, EDIT_HOLD, formatSeconds, initialReplay, isComplete, outputOf, replayReducer, terminalText, type ReplayState } from "../replay";
+import { GATING_LINTERS } from "../ScaffoldPanel";
 import { TerminalReplay } from "../TerminalReplay";
 
 const CAST: ScaffoldCast = {
@@ -261,7 +262,7 @@ describe("<TerminalReplay>", () => {
     }
     expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Replay");
     expect(elapsed).toBeLessThanOrEqual((total / 4) * 1000 + 100 * eventsIn(cast));
-    expect(screenText()).toMatch(/All \d+ gating linters passed/);
+    expect(screenText()).toMatch(GATING_LINTERS);
     expect(screen.getAllByTestId("replay-command").map((el) => el.textContent)).toEqual(
       cast.steps.flatMap((s) => (s.kind === "command" ? [s.command] : []))
     );

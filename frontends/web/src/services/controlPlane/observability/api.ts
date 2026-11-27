@@ -25,9 +25,23 @@
 
 import type { Transport } from "@connectrpc/connect";
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
-import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { DurationSchema, TimestampSchema, type Duration, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
+  type GetFlamegraphRequestSchema,
+  type GetFlamegraphResponse,
+  type GetServiceOverviewRequestSchema,
+  type GetServiceOverviewResponse,
+  type GetServiceSignalsRequestSchema,
+  type GetServiceSignalsResponse,
+  type GetTraceRequestSchema,
+  type GetTraceResponse,
+  type GetWorkloadRequestSchema,
+  type GetWorkloadResponse,
+  type ListAttributeValuesRequestSchema,
+  type ListAttributeValuesResponse,
+  type ListWorkloadsRequestSchema,
+  type ListWorkloadsResponse,
   AttributeOp as WireAttributeOp,
   MetricType as WireMetricType,
   ObservabilityService,
@@ -146,12 +160,45 @@ export function wireFilters(filters: AttributeFilter[]) {
   }));
 }
 
+function duration(ms: number): Duration {
+  const seconds = Math.floor(ms / 1000);
+  return create(DurationSchema, { seconds: BigInt(seconds), nanos: Math.round((ms - seconds * 1000) * 1e6) });
+}
+
+/**
+ * A window the SERVER resolves against its own clock when it answers
+ * (controlplane.v1.RelativeWindow): the `lastMs` before now, ending `endsAgoMs`
+ * before it. A read keyed by its request (the generated hooks) sends this, so
+ * its request and cache key stay the same while "the last hour" moves, and a
+ * Refresh or a poll re-reads the hour as of now.
+ */
+export interface RelativeTimeWindow {
+  lastMs: number;
+  endsAgoMs?: number;
+}
+
+/** What a read's window is on the wire: absolute bounds, or relative to the server's now. */
+export type ObsWindow = TimeWindow | RelativeTimeWindow;
+
+/** The relative window a preset names: "the last hour" as of whenever the server answers. */
+export function relativeWindow(lastMs: number, endsAgoMs = 0): RelativeTimeWindow {
+  return endsAgoMs > 0 ? { lastMs, endsAgoMs } : { lastMs };
+}
+
+/** TimeRange: absolute `start`/`end`, or `relative` (control-plane#3500). */
+export function wireTimeRange(window: ObsWindow) {
+  if ("lastMs" in window) {
+    return { relative: { last: duration(window.lastMs), endsAgo: window.endsAgoMs ? duration(window.endsAgoMs) : undefined } };
+  }
+  return { start: timestamp(window.startMs), end: timestamp(window.endMs) };
+}
+
 /**
  * QueryScope. `projectId` is sent only when the console knows the project —
  * absent means "no project narrowing", while an EMPTY string would mean "the
  * project-less environments only", which no view asks for.
  */
-export function wireScope(s: ObsScope, window: TimeWindow, services: string[] = []) {
+export function wireScope(s: ObsScope, window: ObsWindow, services: string[] = []) {
   return {
     orgId: s.orgId,
     projectId: s.projectId || undefined,
@@ -159,9 +206,12 @@ export function wireScope(s: ObsScope, window: TimeWindow, services: string[] = 
     ...(s.platformScope ? { platformScope: true } : {}),
     services,
     filters: wireFilters(s.filters),
-    timeRange: { start: timestamp(window.startMs), end: timestamp(window.endMs) },
+    timeRange: wireTimeRange(window),
   };
 }
+
+/** A request type of ./types.ts with its window widened to an ObsWindow: what the request builders below take. */
+export type WithObsWindow<T extends { window: TimeWindow }> = Omit<T, "window"> & { window: ObsWindow };
 
 const scope = wireScope;
 
@@ -326,11 +376,19 @@ function mapSpan(s: WireSpan): Span {
   };
 }
 
+export function traceRequest(req: ObsScope & { traceId: string; window: ObsWindow }): MessageInitShape<typeof GetTraceRequestSchema> {
+  return { scope: scope(req, req.window), traceId: req.traceId };
+}
+
 /** Traces are kept 7 days, so a lookup by id searches all of them. */
 export async function getTrace(req: ObsScope & { traceId: string; window: TimeWindow }, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<Trace> {
-  const res = await client(transport).getTrace({ scope: scope(req, req.window), traceId: req.traceId }, obsCall(options));
+  return toTrace(await client(transport).getTrace(traceRequest(req), obsCall(options)), req.traceId);
+}
+
+/** GetTrace's answer; `traceId` is the one asked for, for a server that does not echo it. */
+export function toTrace(res: GetTraceResponse, traceId: string): Trace {
   return {
-    traceId: res.traceId || req.traceId,
+    traceId: res.traceId || traceId,
     spans: res.spans.map(mapSpan),
     truncated: res.truncated,
     relatedTraces: res.relatedTraces.map((ref) => ({ traceId: ref.traceId, spanId: ref.spanId, linkedSpanId: ref.linkedSpanId })),
@@ -497,12 +555,21 @@ export async function queryPanel(req: QueryPanelRequest, options: { signal?: Abo
 
 // ── Service overview ─────────────────────────────────────────────────────────
 
+export function serviceOverviewRequest(
+  req: ObsScope & { window: ObsWindow; services?: string[]; groupBy?: string[] },
+): MessageInitShape<typeof GetServiceOverviewRequestSchema> {
+  return { scope: scope(req, req.window, req.services), groupBy: req.groupBy ?? [] };
+}
+
 export async function getServiceOverview(
   req: ObsScope & { window: TimeWindow; services?: string[]; groupBy?: string[] },
   options: { signal?: AbortSignal } = {},
   transport?: Transport,
 ): Promise<ServiceOverview> {
-  const res = await client(transport).getServiceOverview({ scope: scope(req, req.window, req.services), groupBy: req.groupBy ?? [] }, obsCall(options));
+  return toServiceOverview(await client(transport).getServiceOverview(serviceOverviewRequest(req), obsCall(options)));
+}
+
+export function toServiceOverview(res: GetServiceOverviewResponse): ServiceOverview {
   const step = res.trendStepSeconds > 0 ? res.trendStepSeconds : 60;
   const services: ServiceHealth[] = res.services.map((s) => {
     const requests = pointsOf(s.requestTrend);
@@ -545,13 +612,15 @@ function unavailableSectionsOf(res: object): string[] {
 
 // ── Profiles ─────────────────────────────────────────────────────────────────
 
+export function flamegraphRequest(req: WithObsWindow<GetFlamegraphRequest>): MessageInitShape<typeof GetFlamegraphRequestSchema> {
+  return { scope: scope(req, req.window), service: req.service, profileType: req.profileType, traceId: req.traceId ?? "" };
+}
+
 export async function getFlamegraph(req: GetFlamegraphRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<Flamegraph> {
-  const res = await client(transport).getFlamegraph({
-    scope: scope(req, req.window),
-    service: req.service,
-    profileType: req.profileType,
-    traceId: req.traceId ?? "",
-  }, obsCall(options));
+  return toFlamegraph(await client(transport).getFlamegraph(flamegraphRequest(req), obsCall(options)));
+}
+
+export function toFlamegraph(res: GetFlamegraphResponse): Flamegraph {
   return {
     speedscopeJson: res.speedscopeJson,
     totalValue: Number(res.totalValue),
@@ -572,8 +641,15 @@ const signalsOf = (values: string[]): ServiceSignal[] =>
  * server-side statement, cached a minute. Attribute filters are not applied
  * (a filter that matches nothing must not hide the view that would show it).
  */
+export function serviceSignalsRequest(req: WithObsWindow<GetServiceSignalsRequest>): MessageInitShape<typeof GetServiceSignalsRequestSchema> {
+  return { scope: scope(req, req.window) };
+}
+
 export async function getServiceSignals(req: GetServiceSignalsRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ServiceSignalsResult> {
-  const res = await client(transport).getServiceSignals({ scope: scope(req, req.window) }, obsCall(options));
+  return toServiceSignals(await client(transport).getServiceSignals(serviceSignalsRequest(req), obsCall(options)));
+}
+
+export function toServiceSignals(res: GetServiceSignalsResponse): ServiceSignalsResult {
   return {
     services: res.services.map((s) => ({
       service: s.service,
@@ -657,14 +733,21 @@ const WIRE_SIGNAL = { traces: WireSignal.TRACES, logs: WireSignal.LOGS, metrics:
  * filter bar's autocomplete. The server ignores filters on the SAME key, so
  * choosing a second value is never narrowed to the first one.
  */
-export async function listAttributeValues(req: ListAttributeValuesRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ListAttributeValuesResult> {
-  const res = await client(transport).listAttributeValues({
+export function attributeValuesRequest(req: WithObsWindow<ListAttributeValuesRequest>): MessageInitShape<typeof ListAttributeValuesRequestSchema> {
+  return {
     scope: scope(req, req.window),
     key: req.key,
     prefix: req.prefix || undefined,
     signal: req.signal ? WIRE_SIGNAL[req.signal] : undefined,
     limit: req.limit ?? 50,
-  }, obsCall(options));
+  };
+}
+
+export async function listAttributeValues(req: ListAttributeValuesRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ListAttributeValuesResult> {
+  return toAttributeValues(await client(transport).listAttributeValues(attributeValuesRequest(req), obsCall(options)));
+}
+
+export function toAttributeValues(res: ListAttributeValuesResponse): ListAttributeValuesResult {
   return { values: res.values.map((v) => ({ value: v.value, count: Number(v.count) })), truncated: res.truncated };
 }
 
@@ -845,8 +928,15 @@ function mapJob(j: WireWorkloadJob): WorkloadJob {
   };
 }
 
+export function workloadsRequest(req: ObsScope & { window: ObsWindow; services?: string[] }): MessageInitShape<typeof ListWorkloadsRequestSchema> {
+  return { scope: scope(req, req.window, req.services) };
+}
+
 export async function listWorkloads(req: ObsScope & { window: TimeWindow; services?: string[] }, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<ListWorkloadsResult> {
-  const res = await client(transport).listWorkloads({ scope: scope(req, req.window, req.services) }, obsCall(options));
+  return toWorkloads(await client(transport).listWorkloads(workloadsRequest(req), obsCall(options)));
+}
+
+export function toWorkloads(res: ListWorkloadsResponse): ListWorkloadsResult {
   return {
     truncated: res.truncated,
     workloads: res.workloads.map(mapWorkload),
@@ -866,13 +956,15 @@ const WORKLOAD_METRIC: Partial<Record<WireWorkloadMetric, WorkloadMetric>> = {
   [WireWorkloadMetric.RESTARTS]: "restarts",
 };
 
+export function workloadRequest(req: WithObsWindow<GetWorkloadRequest>): MessageInitShape<typeof GetWorkloadRequestSchema> {
+  return { scope: scope(req, req.window), workload: req.workload, container: req.container ?? "", stepSeconds: req.stepSeconds ?? 0 };
+}
+
 export async function getWorkload(req: GetWorkloadRequest, options: { signal?: AbortSignal } = {}, transport?: Transport): Promise<WorkloadDetail> {
-  const res = await client(transport).getWorkload({
-    scope: scope(req, req.window),
-    workload: req.workload,
-    container: req.container ?? "",
-    stepSeconds: req.stepSeconds ?? 0,
-  }, obsCall(options));
+  return toWorkloadDetail(await client(transport).getWorkload(workloadRequest(req), obsCall(options)));
+}
+
+export function toWorkloadDetail(res: GetWorkloadResponse): WorkloadDetail {
   return {
     stepSeconds: res.stepSeconds,
     truncated: res.truncated,

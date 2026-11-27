@@ -56,7 +56,6 @@ var userScopedReads = map[string]string{
 	"ListMainWorktreesForUser": readCallersFilter,
 	"ListProjects":             readCallersFilter,
 	"ListRuns":                 readCallersFilter,
-	"ListTriggers":             readCallersFilter,
 	// The takeover decides each offer: its offeree and offerer must be live
 	// members of its org, or an admin of it asked (internal/orgtakeover).
 	// The inbox's P11 notices (inbox_automation_notices.go): each row is the
@@ -71,6 +70,7 @@ var userScopedReads = map[string]string{
 	// "Recently deleted": ProjectService decides each row again with
 	// authz.ProjectDelete (its owner, a live member; or an admin of its org,
 	// asked fresh, once the owner left).
+	"ListUnlaunchedTriggerEvents": readCallersFilter,
 	// The inbox passes each incident through authz.Visible (itemReads.incident:
 	// its chat and its project) before showing it.
 	"ListAttentionIncidents":       readCallersFilter,
@@ -79,7 +79,6 @@ var userScopedReads = map[string]string{
 	"GetProjectByPathAndUser":      readCallersFilter,
 	"GetProjectByRemoteURLAndUser": readCallersFilter,
 
-	"FiringsSinceLastSuccess":   readParentAuthorized,
 	"GetPresetBySlugAndProject": readParentAuthorized,
 	"ListPresetsByTag":          readParentAuthorized,
 	"ListUserPresetsByProject":  readParentAuthorized,

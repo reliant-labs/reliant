@@ -75,7 +75,9 @@ service CatalogService {
   // options list action as the caller, through the connection they chose, and
   // projects each item to an option. It reads only; an unknown type is
   // NOT_FOUND.
-  rpc ListInputOptions(ListInputOptionsRequest) returns (ListInputOptionsResponse) {}
+  rpc ListInputOptions(ListInputOptionsRequest) returns (ListInputOptionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // ModelInfo represents information about an LLM model

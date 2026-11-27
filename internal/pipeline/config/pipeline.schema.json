@@ -13,7 +13,7 @@
       "oneOf": [{ "$ref": "#/$defs/command" }, { "$ref": "#/$defs/Check" }]
     },
     "gate": {
-      "description": "The gate every batch candidate must pass before it lands: the test stage's command (the full suite), or {run, stages, runner, pool, timeout, checks, env, infra_patterns, infra_patterns_file}.",
+      "description": "The gate every batch candidate must pass before it lands: the test stage's command (the full suite), or {run, stages, runner, pool, timeout, checks, env, infra_patterns, infra_patterns_file, allow_unisolated}.",
       "oneOf": [{ "$ref": "#/$defs/command" }, { "$ref": "#/$defs/Gate" }]
     },
     "generated": {
@@ -119,7 +119,11 @@
           "description": "Regular expressions over failing step logs that mark a failure as infra.",
           "items": { "type": "string", "minLength": 1 }
         },
-        "infra_patterns_file": { "$ref": "#/$defs/relPath" }
+        "infra_patterns_file": { "$ref": "#/$defs/relPath" },
+        "allow_unisolated": {
+          "type": "boolean",
+          "description": "Let a batch land on a gate that ran outside an isolation boundary (plain runc), until isolated gate machines exist. Default false: such a gate never lands."
+        }
       },
       "anyOf": [{ "required": ["run"] }, { "$ref": "#/$defs/testStageWritten" }, { "required": ["checks"] }],
       "not": { "required": ["run", "stages"], "properties": { "stages": { "required": ["test"] } } },

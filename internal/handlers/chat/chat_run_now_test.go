@@ -107,7 +107,7 @@ func TestRunNow_RecordsManualRunKind(t *testing.T) {
 	chatID := resp.Msg.GetChat().GetId()
 
 	assert.Equal(t, "manual.run", f.launchKind(t, chatID))
-	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
+	event, err := store.GetTriggerEventByChatID(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventKindManualRun, event.Kind)
 	assert.False(t, event.Kind.Unattended(), "a person pressed the button")
@@ -174,7 +174,7 @@ func TestRunNow_ReplayRecordsAndSeedsTheEvent(t *testing.T) {
 	require.NoError(t, err)
 	chatID := resp.Msg.GetChat().GetId()
 
-	event, err := f.repo.GetTriggerEventByChatID(f.ctx, chatID)
+	event, err := store.GetTriggerEventByChatID(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventKindManualRun, event.Kind)
 	replay, ok := event.Payload["replay"].(map[string]any)

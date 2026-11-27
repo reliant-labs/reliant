@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=59fa194401d93bee63a1efcbe89578f8af77eca73ce4f4f29191d2f10924757d
+// forge:hash=e2089ecbbf36fa579fef0b1842b3bd51e9befc98800536e84770e33d4841d60c
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	LinkWorktreePRFunc func(context.Context, string, string, string) (int, error)
@@ -58,18 +59,89 @@ func (m *MockService) ListForChat(ctx context.Context, userID string, chatID str
 	return nil, contractkit.MockNotSet("MockService", "ListForChat")
 }
 
+// MockServiceLinkWorktreePRCall is one recorded call of MockService.LinkWorktreePR, one
+// field per parameter.
+type MockServiceLinkWorktreePRCall struct {
+	Ctx        context.Context
+	UserID     string
+	WorktreeID string
+	PrURL      string
+}
+
+// LinkWorktreePRCalls returns every recorded LinkWorktreePR call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LinkWorktreePR").
+func (m *MockService) LinkWorktreePRCalls() []MockServiceLinkWorktreePRCall {
+	var out []MockServiceLinkWorktreePRCall
+	for _, c := range m.Recorder.Calls("LinkWorktreePR") {
+		var r MockServiceLinkWorktreePRCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.WorktreeID, _ = c.Args[2].(string)
+		r.PrURL, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceLinkRunPRCall is one recorded call of MockService.LinkRunPR, one
+// field per parameter.
+type MockServiceLinkRunPRCall struct {
+	Ctx    context.Context
+	ChatID string
+	RunID  string
+	Pr     core.PRRef
+}
+
+// LinkRunPRCalls returns every recorded LinkRunPR call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LinkRunPR").
+func (m *MockService) LinkRunPRCalls() []MockServiceLinkRunPRCall {
+	var out []MockServiceLinkRunPRCall
+	for _, c := range m.Recorder.Calls("LinkRunPR") {
+		var r MockServiceLinkRunPRCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		r.RunID, _ = c.Args[2].(string)
+		r.Pr, _ = c.Args[3].(core.PRRef)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListForChatCall is one recorded call of MockService.ListForChat, one
+// field per parameter.
+type MockServiceListForChatCall struct {
+	Ctx    context.Context
+	UserID string
+	ChatID string
+}
+
+// ListForChatCalls returns every recorded ListForChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListForChat").
+func (m *MockService) ListForChatCalls() []MockServiceListForChatCall {
+	var out []MockServiceListForChatCall
+	for _, c := range m.Recorder.Calls("ListForChat") {
+		var r MockServiceListForChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ChatID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=55eccaf855168bfbf3726a142eb7847c82ece0d152ac7a3096b9da4e2e88302c
+// forge:hash=1a4ccbc7b7c6ea905173888b4d13966d11a8cf2d22faa330dbb6883ab06fff86
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	WriteChatPRLinksFunc    func(context.Context, core.ChatPRLinkWrite) (int, error)
@@ -104,18 +176,81 @@ func (m *MockStore) ListWorktreeChatIDs(ctx context.Context, userID string, work
 	return nil, contractkit.MockNotSet("MockStore", "ListWorktreeChatIDs")
 }
 
+// MockStoreWriteChatPRLinksCall is one recorded call of MockStore.WriteChatPRLinks, one
+// field per parameter.
+type MockStoreWriteChatPRLinksCall struct {
+	Ctx context.Context
+	W   core.ChatPRLinkWrite
+}
+
+// WriteChatPRLinksCalls returns every recorded WriteChatPRLinks call, oldest first, with
+// its arguments typed. It reads the same log as Calls("WriteChatPRLinks").
+func (m *MockStore) WriteChatPRLinksCalls() []MockStoreWriteChatPRLinksCall {
+	var out []MockStoreWriteChatPRLinksCall
+	for _, c := range m.Recorder.Calls("WriteChatPRLinks") {
+		var r MockStoreWriteChatPRLinksCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.W, _ = c.Args[1].(core.ChatPRLinkWrite)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListChatPRLinksCall is one recorded call of MockStore.ListChatPRLinks, one
+// field per parameter.
+type MockStoreListChatPRLinksCall struct {
+	Ctx    context.Context
+	ChatID string
+}
+
+// ListChatPRLinksCalls returns every recorded ListChatPRLinks call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChatPRLinks").
+func (m *MockStore) ListChatPRLinksCalls() []MockStoreListChatPRLinksCall {
+	var out []MockStoreListChatPRLinksCall
+	for _, c := range m.Recorder.Calls("ListChatPRLinks") {
+		var r MockStoreListChatPRLinksCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ChatID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListWorktreeChatIDsCall is one recorded call of MockStore.ListWorktreeChatIDs, one
+// field per parameter.
+type MockStoreListWorktreeChatIDsCall struct {
+	Ctx        context.Context
+	UserID     string
+	WorktreeID string
+}
+
+// ListWorktreeChatIDsCalls returns every recorded ListWorktreeChatIDs call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorktreeChatIDs").
+func (m *MockStore) ListWorktreeChatIDsCalls() []MockStoreListWorktreeChatIDsCall {
+	var out []MockStoreListWorktreeChatIDsCall
+	for _, c := range m.Recorder.Calls("ListWorktreeChatIDs") {
+		var r MockStoreListWorktreeChatIDsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.WorktreeID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Store = (*MockStore)(nil)
 
 // forge:section MockChats
-// forge:hash=20d49e55b398d592066cfb460990360a8b52313f38580ac85c88acbd5a21cbed
+// forge:hash=a87c3b89e58a13e53147e02da4514e48000d9ba0ddf2d68eb0c9514eb1a4ef4d
 
 // MockChats is a test mock for the Chats interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChats.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChats.<Method>Func not set" error.
 type MockChats struct {
 	contractkit.Recorder
 	GetChatFunc func(context.Context, string) (*core.Chat, error)
@@ -128,6 +263,26 @@ func (m *MockChats) GetChat(ctx context.Context, id string) (*core.Chat, error) 
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockChats", "GetChat")
+}
+
+// MockChatsGetChatCall is one recorded call of MockChats.GetChat, one
+// field per parameter.
+type MockChatsGetChatCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetChatCalls returns every recorded GetChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChat").
+func (m *MockChats) GetChatCalls() []MockChatsGetChatCall {
+	var out []MockChatsGetChatCall
+	for _, c := range m.Recorder.Calls("GetChat") {
+		var r MockChatsGetChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

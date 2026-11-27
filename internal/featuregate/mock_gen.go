@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockGate
-// forge:hash=cce8359b26075b10562ad3eb164c7f21eeeeedee31ebbf191891d82f558559db
+// forge:hash=5a5eeef044de48036e2843688d204144ceae11cfa5443433b7fea21f1ac4a059
 
 // MockGate is a test mock for the Gate interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockGate.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockGate.<Method>Func not set" error.
 type MockGate struct {
 	contractkit.Recorder
 	AllowedFunc        func(context.Context, Feature, string, string) (bool, error)
@@ -46,18 +47,65 @@ func (m *MockGate) AllowedForUser(ctx context.Context, f Feature, userID string)
 	return false, contractkit.MockNotSet("MockGate", "AllowedForUser")
 }
 
+// MockGateAllowedCall is one recorded call of MockGate.Allowed, one
+// field per parameter.
+type MockGateAllowedCall struct {
+	Ctx    context.Context
+	F      Feature
+	UserID string
+	OrgID  string
+}
+
+// AllowedCalls returns every recorded Allowed call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Allowed").
+func (m *MockGate) AllowedCalls() []MockGateAllowedCall {
+	var out []MockGateAllowedCall
+	for _, c := range m.Recorder.Calls("Allowed") {
+		var r MockGateAllowedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(Feature)
+		r.UserID, _ = c.Args[2].(string)
+		r.OrgID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockGateAllowedForUserCall is one recorded call of MockGate.AllowedForUser, one
+// field per parameter.
+type MockGateAllowedForUserCall struct {
+	Ctx    context.Context
+	F      Feature
+	UserID string
+}
+
+// AllowedForUserCalls returns every recorded AllowedForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AllowedForUser").
+func (m *MockGate) AllowedForUserCalls() []MockGateAllowedForUserCall {
+	var out []MockGateAllowedForUserCall
+	for _, c := range m.Recorder.Calls("AllowedForUser") {
+		var r MockGateAllowedForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(Feature)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Gate = (*MockGate)(nil)
 
 // forge:section MockMembership
-// forge:hash=2f8a8a619172abbbb7f155b660d28278b6f6f7a2c2b7619966ef95e637263488
+// forge:hash=b191c58527f6b1083c8cd09b956667eb224e368b96531113928c7e5bd6667227
 
 // MockMembership is a test mock for the Membership interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockMembership.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockMembership.<Method>Func not set" error.
 type MockMembership struct {
 	contractkit.Recorder
 	IsMemberFunc func(context.Context, string, string) (bool, bool, error)
@@ -70,6 +118,28 @@ func (m *MockMembership) IsMember(ctx context.Context, userID string, orgID stri
 		return m.IsMemberFunc(ctx, userID, orgID)
 	}
 	return false, false, contractkit.MockNotSet("MockMembership", "IsMember")
+}
+
+// MockMembershipIsMemberCall is one recorded call of MockMembership.IsMember, one
+// field per parameter.
+type MockMembershipIsMemberCall struct {
+	Ctx    context.Context
+	UserID string
+	OrgID  string
+}
+
+// IsMemberCalls returns every recorded IsMember call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IsMember").
+func (m *MockMembership) IsMemberCalls() []MockMembershipIsMemberCall {
+	var out []MockMembershipIsMemberCall
+	for _, c := range m.Recorder.Calls("IsMember") {
+		var r MockMembershipIsMemberCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.OrgID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

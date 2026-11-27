@@ -3,6 +3,7 @@ package triggers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"strings"
@@ -27,7 +28,8 @@ type LedgerReader interface {
 	ListRecentIntegrationWrites(ctx context.Context, integration, scope string, since time.Time, limit int) ([]*core.IntegrationWrite, error)
 }
 
-// RunLineage finds the lineage of the run that wrote. *db.Repo satisfies it.
+// RunLineage finds the lineage of the run that wrote. store.TriggerEventExtStore
+// satisfies it.
 type RunLineage interface {
 	lineage.LaunchEventReader
 }
@@ -71,6 +73,15 @@ var _ Enricher = (*OriginEnricher)(nil)
 // An event that carries no echo (another source, another integration) is not
 // looked at: it has no origin, which readers treat as "not caused by Reliant".
 func (e *OriginEnricher) Enrich(ctx context.Context, trigger *core.Trigger, ev InboundEvent) (Enrichment, error) {
+	return e.enrichIn(ctx, nil, trigger, ev)
+}
+
+var _ batchEnricher = (*OriginEnricher)(nil)
+
+// enrichIn is Enrich for one of the triggers an arrival reaches: the ledger
+// match and the writing run's lineage depend on the event alone, so they are
+// read once per batch rather than once per trigger. A nil batch reads them.
+func (e *OriginEnricher) enrichIn(ctx context.Context, batch *Batch, trigger *core.Trigger, ev InboundEvent) (Enrichment, error) {
 	if e == nil || ev.Echo == nil || ev.Kind != core.TriggerEventKindIntegration || ev.Echo.Scope == "" {
 		return Enrichment{}, nil
 	}
@@ -78,16 +89,16 @@ func (e *OriginEnricher) Enrich(ctx context.Context, trigger *core.Trigger, ev I
 	if integration != "github" {
 		return Enrichment{}, nil
 	}
-	return Enrichment{Origin: e.resolve(ctx, trigger, integration, ev.Echo)}, nil
+	return Enrichment{Origin: e.resolve(ctx, batch, trigger, integration, ev.Echo)}, nil
 }
 
-func (e *OriginEnricher) resolve(ctx context.Context, trigger *core.Trigger, integration string, echo *provenance.Echo) *core.TriggerOrigin {
+func (e *OriginEnricher) resolve(ctx context.Context, batch *Batch, trigger *core.Trigger, integration string, echo *provenance.Echo) *core.TriggerOrigin {
 	none := &core.TriggerOrigin{Confidence: core.OriginNone, Actor: core.OriginActorUnknown}
 
-	write, confidence := e.match(ctx, integration, echo)
+	write, confidence := e.match(ctx, batch, integration, echo)
 	switch {
 	case write != nil:
-		return e.fromWrite(ctx, trigger, write, confidence)
+		return e.fromWrite(ctx, batch, trigger, write, confidence)
 	case e.isApp(echo):
 		return &core.TriggerOrigin{CausedByReliant: true, Confidence: core.OriginApp, Actor: core.OriginActorApp}
 	case echo.RunTrailer != "":
@@ -97,31 +108,70 @@ func (e *OriginEnricher) resolve(ctx context.Context, trigger *core.Trigger, int
 }
 
 // match finds the ledger entry an echo is the consequence of: by object id first
-// (exact), then by target and content inside the window (intent).
-func (e *OriginEnricher) match(ctx context.Context, integration string, echo *provenance.Echo) (*core.IntegrationWrite, core.OriginConfidence) {
-	if e.ledger == nil {
-		return nil, core.OriginNone
+// (exact), then by target and content inside the window (intent). Through a
+// batch, one arrival's echo is matched once for all its triggers.
+func (e *OriginEnricher) match(ctx context.Context, batch *Batch, integration string, echo *provenance.Echo) (*core.IntegrationWrite, core.OriginConfidence) {
+	key, err := json.Marshal(struct {
+		Integration string           `json:"i"`
+		Echo        *provenance.Echo `json:"e"`
+	}{integration, echo})
+	if batch == nil || err != nil {
+		got, _ := e.readMatch(ctx, integration, echo)
+		return got.write, got.confidence
 	}
+	got, _ := batch.echoes.get(string(key), func() (echoMatch, error) {
+		return e.readMatch(ctx, integration, echo)
+	})
+	return got.write, got.confidence
+}
+
+// echoMatch is match's answer: the write an echo is the consequence of, and
+// how sure.
+type echoMatch struct {
+	write      *core.IntegrationWrite
+	confidence core.OriginConfidence
+}
+
+// readMatch reads match's answer from the ledger. A ledger read that failed
+// is logged and the answer is the best without it, as always; the error is
+// returned too, so a batch does not keep that answer for the next trigger.
+func (e *OriginEnricher) readMatch(ctx context.Context, integration string, echo *provenance.Echo) (echoMatch, error) {
+	none := echoMatch{confidence: core.OriginNone}
+	if e.ledger == nil {
+		return none, nil
+	}
+	var readErr error
 	if echo.ObjectID != "" && echo.ObjectKind != "" {
 		w, err := e.ledger.GetIntegrationWriteByObject(ctx, integration, echo.Scope, echo.ObjectKind, echo.ObjectID)
 		switch {
 		case err == nil && echoableBy(w, echo):
-			return w, core.OriginExact
+			return echoMatch{w, core.OriginExact}, nil
 		case err != nil && !errors.Is(err, core.ErrIntegrationWriteNotFound):
 			slog.WarnContext(ctx, "origin: could not read the write ledger by object", "scope", echo.Scope, "error", err)
+			readErr = err
 		}
 	}
 	recent, err := e.ledger.ListRecentIntegrationWrites(ctx, integration, echo.Scope, e.now().Add(-IntentWindow), 50)
 	if err != nil {
 		slog.WarnContext(ctx, "origin: could not read the write ledger", "scope", echo.Scope, "error", err)
-		return nil, core.OriginNone
+		return none, err
 	}
 	for _, w := range recent {
 		if intentMatches(w, echo) {
-			return w, core.OriginIntent
+			return echoMatch{w, core.OriginIntent}, readErr
 		}
 	}
-	return nil, core.OriginNone
+	return none, readErr
+}
+
+// lineageOf is the lineage of the run chatID, read once per batch.
+func (e *OriginEnricher) lineageOf(ctx context.Context, batch *Batch, chatID string) (lineage.Lineage, error) {
+	if batch == nil {
+		return lineage.Of(ctx, e.lineage, chatID)
+	}
+	return batch.lineages.get(chatID, func() (lineage.Lineage, error) {
+		return lineage.Of(ctx, e.lineage, chatID)
+	})
 }
 
 // echoableBy reports whether a write can produce this event type: an id match
@@ -198,7 +248,7 @@ func sameObjectKind(write, echo string) bool {
 // Reliant caused it and nothing about whose run. How DEEP the writing run's chain
 // is, though, is not identity, and the loop cap must count it for everyone: a
 // cross-user pair of workflows is a loop like any other.
-func (e *OriginEnricher) fromWrite(ctx context.Context, trigger *core.Trigger, w *core.IntegrationWrite, confidence core.OriginConfidence) *core.TriggerOrigin {
+func (e *OriginEnricher) fromWrite(ctx context.Context, batch *Batch, trigger *core.Trigger, w *core.IntegrationWrite, confidence core.OriginConfidence) *core.TriggerOrigin {
 	actor := core.OriginActorOwner
 	if w.Actor == core.IntegrationActorApp {
 		actor = core.OriginActorApp
@@ -206,7 +256,7 @@ func (e *OriginEnricher) fromWrite(ctx context.Context, trigger *core.Trigger, w
 	var chain lineage.Lineage
 	if w.ChatID != "" && e.lineage != nil {
 		var err error
-		if chain, err = lineage.Of(ctx, e.lineage, w.ChatID); err != nil {
+		if chain, err = e.lineageOf(ctx, batch, w.ChatID); err != nil {
 			// An unreadable lineage must not silently become depth 0, which would
 			// let a chain grow unbounded: treat it as AT the cap, which refuses to
 			// launch from it.

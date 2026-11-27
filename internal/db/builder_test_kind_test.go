@@ -100,7 +100,7 @@ func TestListRuns_BuilderTestsExcludedByDefaultAndIncludedWhenFiltered(t *testin
 	assert.Equal(t, []string{"test", "legacy", "real"}, list("builder.test", "chat.start"))
 
 	// The per-workflow "last run" rollup is the same real-history view.
-	last, err := store.LastRunPerWorkflow(ctx, repo.ORM(), RunListFilters{UserID: "test-user"})
+	last, err := repo.LastRunPerWorkflow(ctx, RunListFilters{UserID: "test-user"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"agent"}, listRunIDs(last))
 }

@@ -65,8 +65,8 @@ function ExecutionStatusRow({ execution }: { execution: StepExecution }) {
   return (
     <div className="flex items-center gap-2 px-4 py-2">
       <Icon className={`h-4 w-4 shrink-0 ${className} ${iconClass}`} />
-      <span className={`text-sm capitalize ${className}`}>{execution.status}</span>
-      <span className="ml-auto text-xs text-muted-foreground">
+      <span className={`text-ui capitalize ${className}`}>{execution.status}</span>
+      <span className="ml-auto text-meta text-muted-foreground">
         {formatDuration(execution.durationMs)}
       </span>
     </div>
@@ -112,8 +112,8 @@ export function MobileWorkflowNodeSheet({
       >
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-foreground">{nodeId}</div>
-            <div className="text-xs text-muted-foreground">{typeLabel}</div>
+            <div className="truncate text-ui font-semibold text-foreground">{nodeId}</div>
+            <div className="text-meta text-muted-foreground">{typeLabel}</div>
           </div>
           <button
             type="button"
@@ -128,21 +128,21 @@ export function MobileWorkflowNodeSheet({
         <div className="min-h-0 flex-1 overflow-y-auto">
           {summary && (
             <div className="border-b border-border px-4 py-3">
-              <div className="mb-1 text-xs font-medium text-muted-foreground">
+              <div className="mb-1 text-meta font-medium text-muted-foreground">
                 Configuration
               </div>
-              <div className="break-words font-mono text-sm text-foreground">{summary}</div>
+              <div className="break-words font-mono text-code text-foreground">{summary}</div>
             </div>
           )}
 
           {argEntries.length > 0 && (
             <div className="border-b border-border px-4 py-3">
-              <div className="mb-1 text-xs font-medium text-muted-foreground">
+              <div className="mb-1 text-meta font-medium text-muted-foreground">
                 Parameters
               </div>
               <div className="space-y-1.5">
                 {argEntries.map(([key, value]) => (
-                  <div key={key} className="flex items-start justify-between gap-3 text-sm">
+                  <div key={key} className="flex items-start justify-between gap-3 text-ui">
                     <span className="shrink-0 text-muted-foreground">{key}</span>
                     <span className="min-w-0 break-words text-right text-foreground">
                       {formatValueForDisplay(value)}
@@ -154,7 +154,7 @@ export function MobileWorkflowNodeSheet({
           )}
 
           <div className="px-4 py-3">
-            <div className="mb-1 text-xs font-medium text-muted-foreground">
+            <div className="mb-1 text-meta font-medium text-muted-foreground">
               Execution
             </div>
             {latest ? (
@@ -162,13 +162,13 @@ export function MobileWorkflowNodeSheet({
                 <ExecutionStatusRow execution={latest} />
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Not run yet.</p>
+              <p className="text-ui text-muted-foreground">Not run yet.</p>
             )}
           </div>
 
           {/* This view never offers to change the node — editing lives on
               desktop only, where the builder's canvas and CEL editor fit. */}
-          <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
+          <p className="border-t border-border px-4 py-3 text-meta text-muted-foreground">
             Edit this workflow on desktop.
           </p>
         </div>
