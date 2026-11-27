@@ -1,0 +1,205 @@
+# Conversion optimization: helping more of the people who already arrive
+# become sign-ups, buyers and paying customers.
+entries:
+  - key: pricing-page-clarity
+    category: conversion_optimization
+    name: A pricing page that answers the real questions
+    summary: >-
+      Rewrite the pricing page so each plan says who it is for, what the
+      limits are in plain units, what happens when a limit is reached, and how
+      to cancel. Add a short list of frequently asked questions taken from
+      real sales and support questions.
+    why_it_works: >-
+      The pricing page is where buying decisions stall. Unclear limits and
+      hidden terms create doubt; answering the real questions removes reasons
+      to leave and reduces back-and-forth with sales.
+    stages: [launch, early_traction, growth, scale]
+    objective: conversion
+    effort: low
+    cost: free
+    signal_days: 21
+    tailor_questions:
+      - Which questions do prospects ask most often before buying?
+      - Can each plan's limits be stated in units a buyer understands?
+      - Which plan should be visually recommended, and why?
+    channel_types: [website]
+    kpis: [pricing page to checkout rate, pricing questions to sales and support, plan mix]
+
+  - key: segment-specific-landing-pages
+    category: conversion_optimization
+    name: A landing page per segment or use case
+    summary: >-
+      Create a dedicated page for each important segment or use case with
+      their language, their problem, a customer like them, and the features
+      that matter to them, and point campaigns and outreach for that segment
+      to it.
+    why_it_works: >-
+      A visitor decides in seconds whether a page is for them. A page that
+      speaks directly to their situation converts far better than a general
+      homepage.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, marketplace, ecommerce]
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which two or three segments bring the most valuable customers?
+      - How does each segment describe the problem in its own words?
+      - Which customer story fits each segment?
+    channel_types: [website]
+    kpis: [conversion rate per segment page, bounce rate, sign-ups per segment]
+
+  - key: proof-near-the-decision
+    category: conversion_optimization
+    name: Put proof next to the decision
+    summary: >-
+      Place the most relevant proof (a short customer quote with a result,
+      the number of customers like the visitor, a security note, a guarantee)
+      right next to every sign-up and checkout button rather than on a
+      separate page.
+    why_it_works: >-
+      Doubt peaks at the moment of commitment. Proof placed at that moment
+      answers the doubt when it matters, while proof elsewhere is often never
+      seen.
+    stages: [launch, early_traction, growth, scale]
+    objective: conversion
+    effort: low
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - What doubt do visitors have right before signing up or paying?
+      - Which customer result is most persuasive for the typical visitor?
+      - Which proof does the business have permission to show?
+    channel_types: [website, in-product]
+    kpis: [button click-through rate, checkout completion rate, sign-up rate]
+
+  - key: abandoned-checkout-recovery
+    category: conversion_optimization
+    name: Abandoned sign-up and checkout recovery
+    summary: >-
+      When someone starts a sign-up or checkout and leaves, send a short,
+      helpful follow-up within an hour, then a second a day later, offering
+      help, answering the common objection, and linking straight back to where
+      they stopped.
+    why_it_works: >-
+      Many abandonments are interruptions, not decisions. A timely reminder
+      that removes the most common objection recovers a share of them at
+      almost no cost.
+    fits:
+      business_types: [ecommerce, b2c_app, b2b_saas, marketplace]
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: low
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - At which step do most people abandon?
+      - What is the most common reason people give for not finishing?
+      - Is there consent to contact people who did not finish?
+    suggested_workflow: >-
+      When a sign-up or checkout is abandoned by someone who consented to
+      contact, wait an hour, send a helpful reminder with a link back to the
+      exact step, send one more a day later if they have not returned, and stop
+      immediately if they complete.
+    channel_types: [email]
+    kpis: [recovered checkouts, recovery revenue, unsubscribe rate on reminders]
+
+  - key: risk-reversal-guarantee
+    category: conversion_optimization
+    name: A clear risk-reversal guarantee
+    summary: >-
+      Offer a simple, generous guarantee such as a full refund within 30 days,
+      "pay only if it works" for services, or a free switch-back for a migration,
+      and state it plainly on pricing and checkout pages.
+    why_it_works: >-
+      A guarantee moves the risk from the buyer to the seller, which removes a
+      major reason to delay. Few customers use it when the product is good,
+      and the confidence it signals persuades on its own.
+    fits:
+      business_models: [subscription, one_time, services]
+    stages: [launch, early_traction, growth]
+    objective: conversion
+    effort: low
+    cost: low
+    signal_days: 21
+    tailor_questions:
+      - What guarantee can the business honour without real financial risk?
+      - What would a buyer fear losing most if the product did not work?
+      - How will refund requests be handled quickly and gracefully?
+    channel_types: [website]
+    kpis: [conversion rate, refund rate, sales cycle length]
+
+  - key: instant-demo-booking
+    category: conversion_optimization
+    name: Instant demo booking
+    summary: >-
+      Replace the "contact sales" form with a short form that lets qualified
+      visitors book a time directly, routes them to the right person, and
+      sends a short agenda; let smaller prospects go straight to self-serve.
+    why_it_works: >-
+      Every hour between a request and a reply loses buyers. Booking on the
+      spot catches intent while it is high, and routing keeps sales time for
+      the right accounts.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, hardware]
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: low
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - Which form answers decide whether a prospect needs a call?
+      - Who takes calls, and how is availability kept up to date?
+      - What should smaller prospects be offered instead of a call?
+    channel_types: [website, outbound]
+    kpis: [form-to-meeting rate, no-show rate, time from request to meeting]
+
+  - key: headline-value-proposition-test
+    category: conversion_optimization
+    name: Test the headline and value proposition
+    summary: >-
+      Test two or three clearly different homepage headlines (a pain, an
+      outcome, a comparison) with enough traffic to reach a reliable result,
+      and carry the winning message into ads, outreach and the product.
+    why_it_works: >-
+      The headline decides whether most visitors keep reading. Testing
+      genuinely different messages, rather than small wording changes, teaches
+      the business which promise its market responds to.
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - What are three genuinely different promises the product could lead with?
+      - How much traffic does the page get, and how long until a test is reliable?
+      - What metric decides the winner, sign-ups or paying customers?
+    channel_types: [website]
+    kpis: [sign-up rate per variant, downstream paid conversion per variant, time on page]
+
+  - key: founder-staffed-live-chat
+    category: conversion_optimization
+    name: Live chat answered by the founder
+    summary: >-
+      In the early days, put a live chat on the pricing and sign-up pages
+      answered personally by the founder or a core team member during working
+      hours, with a clear note on when replies come outside them.
+    why_it_works: >-
+      A real person answering instantly removes last-minute doubts and turns
+      hesitant visitors into customers. Every conversation is also direct
+      research on why people hesitate.
+    fits:
+      business_types: [b2b_saas, ecommerce, developer_tools, agency_services, b2c_app]
+    stages: [launch, early_traction]
+    objective: conversion
+    effort: medium
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - During which hours do most visitors arrive?
+      - Who can answer product and pricing questions instantly?
+      - How will chat questions be logged and fed back into the site?
+    channel_types: [website, in-product]
+    kpis: [chats started, chat-to-customer conversion, recurring questions found]

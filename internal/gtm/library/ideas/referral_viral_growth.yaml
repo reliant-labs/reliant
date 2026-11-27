@@ -1,0 +1,217 @@
+# Referral and viral growth: loops where existing users bring in new ones.
+entries:
+  - key: double-sided-referral-rewards
+    category: referral_viral_growth
+    name: Double-sided referral rewards
+    summary: >-
+      Give both the referrer and the new customer a reward that relates to
+      the product (a free month, account credit, extra capacity) once the new
+      customer pays or activates. Put the referral link where happy customers
+      already are, right after a success moment.
+    why_it_works: >-
+      A reward for both sides makes the referrer feel generous rather than
+      salesy. Rewards in product value cost less than cash and attract people
+      who want the product, not the payout.
+    fits:
+      business_models: [subscription, usage_based, freemium, marketplace]
+    stages: [early_traction, growth, scale]
+    objective: referral
+    effort: medium
+    cost: medium
+    signal_days: 30
+    tailor_questions:
+      - What reward is valuable to customers but cheap for the business to give?
+      - What counts as a successful referral (a sign-up, activation, or first payment)?
+      - At which moment are customers happiest and most likely to share?
+      - How will self-referral and fraud be prevented?
+    suggested_workflow: >-
+      When a referred customer reaches the qualifying event, credit both
+      accounts, send each a short thank-you, and weekly report referrals,
+      conversion and top referrers so the team can thank them personally.
+    channel_types: [in-product, email]
+    kpis: [share of new customers from referrals, referral conversion rate, referrers per hundred customers]
+
+  - key: teammate-invite-loop
+    category: referral_viral_growth
+    name: Collaboration and teammate invite loops
+    summary: >-
+      Make the product better with more people: shared workspaces, comments,
+      hand-offs and approvals. Prompt invitations at the moment a user needs
+      someone else, such as when they want a review or to assign a task.
+    why_it_works: >-
+      Invitations sent because the inviter needs something are accepted far
+      more often than generic "invite your team" prompts, and each invited
+      user starts with context and a reason to engage.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app]
+      business_models: [freemium, subscription]
+    stages: [launch, early_traction, growth]
+    objective: referral
+    effort: high
+    cost: free
+    signal_days: 45
+    tailor_questions:
+      - At which moments does a user naturally need a colleague in the product?
+      - What does an invited person see first, and does it make sense without context?
+      - Does pricing penalise adding people in a way that blocks invites?
+    channel_types: [in-product, email]
+    kpis: [invites per active user, invite acceptance rate, accounts with three or more active users]
+
+  - key: made-with-badge
+    category: referral_viral_growth
+    name: A "made with" badge on outputs
+    summary: >-
+      Add a small, tasteful "made with" link to things users create and share
+      publicly (pages, forms, reports, documents, emails) on the free plan,
+      with removal as a paid feature.
+    why_it_works: >-
+      Every shared output becomes an advertisement seen by people similar to
+      the user. The badge doubles as an upgrade reason for users who want a
+      cleaner look.
+    fits:
+      business_types: [b2c_app, b2b_saas, creator_media, developer_tools]
+      business_models: [freemium]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which outputs of the product are seen by people outside the account?
+      - What badge design is noticeable without annoying users?
+      - Should removing the badge be part of the first paid tier?
+    channel_types: [in-product, website]
+    kpis: [visits from badge links, sign-ups from badge links, badge removal upgrades]
+
+  - key: shareable-results
+    category: referral_viral_growth
+    name: Results worth sharing
+    summary: >-
+      Design a result the user is proud of (a yearly recap, a score, an
+      achievement, a public profile, a before-and-after) as a shareable card
+      with a link back, and offer to share at the moment it is created.
+    why_it_works: >-
+      People share what makes them look good or helps their friends. A
+      polished, personal result is content the user wants to post, and the
+      link brings curious viewers to try it themselves.
+    fits:
+      business_types: [b2c_app, creator_media, developer_tools, hardware]
+    stages: [launch, early_traction, growth, scale]
+    objective: referral
+    effort: medium
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - What result in the product are users proudest of?
+      - How can that result be shown without exposing private data?
+      - Where do users share things like this today?
+    channel_types: [social, in-product]
+    kpis: [shares per active user, visits from shared cards, sign-ups from shared cards]
+
+  - key: referral-waitlist
+    category: referral_viral_growth
+    name: Waitlist that rewards sharing
+    summary: >-
+      Before launch, run a waitlist where each sign-up gets a personal link
+      and moves up the list for every friend who joins, with clear milestones
+      (early access, a founding badge, a launch discount).
+    why_it_works: >-
+      A waitlist with a reason to share turns anticipation into distribution.
+      Position and milestones give people a concrete reason to tell friends,
+      and the list size validates demand before launch.
+    fits:
+      business_types: [b2c_app, marketplace, hardware, creator_media, developer_tools]
+    stages: [pre_launch]
+    objective: referral
+    effort: low
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - What reward for moving up would actually motivate sharing?
+      - How soon will people on the list get access, so expectations stay honest?
+      - Where will the first wave of sign-ups come from?
+    suggested_workflow: >-
+      When someone joins, send their personal link and current position; when
+      a friend joins through it, send an update with the new position; weekly,
+      report sign-ups, share rate and the top sharers for a personal thank-you.
+    channel_types: [email, website, social]
+    kpis: [waitlist sign-ups, share rate, sign-ups per sharer]
+
+  - key: ambassador-program
+    category: referral_viral_growth
+    name: Ambassador or affiliate program
+    summary: >-
+      Recruit enthusiastic customers, creators or consultants as ambassadors
+      with a commission or perks for customers they bring, plus early access,
+      a private channel with the team, and ready-made materials they can
+      adapt. Require every ambassador to disclose the paid relationship
+      clearly wherever they recommend the product, as advertising rules in
+      most countries require.
+    why_it_works: >-
+      Ambassadors reach audiences the business cannot, with the credibility
+      of a peer. Commission aligns their effort with results, and inclusion
+      with the team keeps them engaged beyond the payout.
+    fits:
+      business_types: [b2c_app, b2b_saas, ecommerce, creator_media, developer_tools]
+    stages: [growth, scale]
+    objective: referral
+    effort: medium
+    cost: medium
+    signal_days: 60
+    tailor_questions:
+      - Who already recommends the product without being asked?
+      - What commission or perk would be meaningful to them?
+      - How will the business keep claims made by ambassadors accurate?
+    channel_types: [partner, social, email]
+    kpis: [active ambassadors, customers from ambassadors, revenue per ambassador]
+
+  - key: user-template-gallery
+    category: referral_viral_growth
+    name: A gallery of user-made templates
+    summary: >-
+      Let users publish their setups, templates or creations to a public
+      gallery with their name attached, so others can copy them into their own
+      account in one click.
+    why_it_works: >-
+      Templates attract searchers looking for a starting point, credit gives
+      creators a reason to publish and share, and every copy is a new user
+      starting with a working setup.
+    fits:
+      business_types: [b2b_saas, b2c_app, developer_tools, creator_media, open_source]
+    stages: [early_traction, growth, scale]
+    objective: acquisition
+    effort: high
+    cost: low
+    signal_days: 60
+    tailor_questions:
+      - What do users build in the product that others would want to reuse?
+      - How will the gallery handle quality and moderation?
+      - What credit or reward will motivate users to publish?
+    channel_types: [website, in-product, search]
+    kpis: [published templates, template copies, sign-ups from the gallery]
+
+  - key: gift-subscriptions
+    category: referral_viral_growth
+    name: Gift subscriptions and gift cards
+    summary: >-
+      Let customers buy the product for someone else, with a nicely designed
+      gift message and a scheduled delivery date, and promote it before
+      holidays and gift-giving moments.
+    why_it_works: >-
+      A gift is a personal recommendation with the purchase already made.
+      Seasonal promotion taps demand that already exists, and recipients who
+      enjoy the gift often renew themselves.
+    fits:
+      business_types: [b2c_app, creator_media, ecommerce, local_business]
+      business_models: [subscription, one_time, ad_supported]
+    stages: [early_traction, growth, scale]
+    objective: acquisition
+    effort: medium
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - Which gift-giving moments matter for this audience?
+      - What does a recipient need to start using the gift easily?
+      - How will the business convert recipients into paying customers when the gift ends?
+    channel_types: [email, website]
+    kpis: [gifts sold, recipient activation rate, recipient renewal rate]

@@ -1,0 +1,190 @@
+# Partnerships and distribution: borrowing someone else's audience, channel
+# or trust, and giving them something in return.
+entries:
+  - key: integration-partner-listing
+    category: partnerships_distribution
+    name: Integrate with a complementary product and get listed
+    summary: >-
+      Build a genuinely useful integration with a product the target customers
+      already use daily, get listed in that product's app directory or
+      integrations page, and ask the partner for a joint announcement to their
+      users.
+    why_it_works: >-
+      An integration puts the product where buyers already work and gives
+      the partner a reason to promote it, since integrations make their own
+      product stickier. Directory listings bring steady, high-intent visitors.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app, ecommerce]
+    stages: [early_traction, growth, scale]
+    objective: acquisition
+    effort: high
+    cost: low
+    signal_days: 60
+    tailor_questions:
+      - Which products do most target customers already use alongside this one?
+      - What would the integration let users do that they cannot do today?
+      - Does the partner have an app directory, and what does listing require?
+    channel_types: [partner, directory, marketplace]
+    kpis: [installs from the partner directory, active integration users, retention of integrated accounts]
+
+  - key: co-marketing-webinar
+    category: partnerships_distribution
+    name: Co-hosted session with a complementary business
+    summary: >-
+      Run a joint webinar, workshop or guide with a non-competing business
+      that serves the same audience. Each side promotes to its own list, the
+      content solves one problem from both angles, and both get the sign-up
+      list.
+    why_it_works: >-
+      Each partner reaches a new audience that is already qualified, at no
+      media cost. Shared content is more credible than either side's own
+      promotion.
+    fits:
+      business_types: [b2b_saas, developer_tools, agency_services, creator_media]
+    stages: [early_traction, growth, scale]
+    objective: acquisition
+    effort: medium
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which non-competing businesses serve exactly the same buyers?
+      - What problem sits between the two products that a joint session could solve?
+      - How large is each side's audience, and is the trade fair?
+    suggested_workflow: >-
+      After the session, split the registrant list by consent, send the
+      recording and slides to everyone, and route attendees who asked a
+      product question to the right team, logging results for both partners.
+    channel_types: [partner, events, email]
+    kpis: [registrants from the partner's audience, attendee-to-trial rate, partner-sourced pipeline]
+
+  - key: reseller-and-agency-partners
+    category: partnerships_distribution
+    name: Reseller and agency partner program
+    summary: >-
+      Recruit agencies, consultants and resellers who already serve the
+      target customers, with a margin or referral fee, a partner dashboard,
+      training, and leads passed to them when customers need implementation
+      help.
+    why_it_works: >-
+      Agencies and consultants are trusted advisors who decide what their
+      clients use. A partner program turns them into a sales channel, and the
+      implementation help they offer improves customer success.
+    fits:
+      business_types: [b2b_saas, developer_tools, hardware, ecommerce]
+      business_models: [subscription, usage_based, one_time]
+    stages: [growth, scale]
+    objective: acquisition
+    effort: high
+    cost: medium
+    signal_days: 90
+    tailor_questions:
+      - Which agencies or consultants already recommend tools like this?
+      - What margin or fee makes the product worth recommending?
+      - What will partners need to implement the product well?
+    channel_types: [partner, outbound]
+    kpis: [active partners, customers sourced by partners, partner-sourced revenue share]
+
+  - key: product-bundle-partnership
+    category: partnerships_distribution
+    name: Bundle with a complementary product
+    summary: >-
+      Offer a bundle with a complementary product or service, such as a
+      discount on both when bought together, a free trial of one included
+      with the other, or a joint starter kit, promoted by both businesses.
+    why_it_works: >-
+      A bundle increases perceived value and lets each business reach the
+      other's customers with a ready reason to buy.
+    fits:
+      business_types: [ecommerce, b2c_app, hardware, local_business, b2b_saas]
+    stages: [early_traction, growth]
+    objective: acquisition
+    effort: medium
+    cost: low
+    signal_days: 30
+    tailor_questions:
+      - Which product do customers most often buy next to this one?
+      - How will revenue and customer ownership be split?
+      - What would make the bundle clearly better than buying separately?
+    channel_types: [partner, email, website]
+    kpis: [bundle sales, new customers from the partner's base, bundle margin]
+
+  - key: guest-on-podcasts-and-newsletters
+    category: partnerships_distribution
+    name: Guest appearances on podcasts and newsletters
+    summary: >-
+      Pitch the founder or an expert as a guest on podcasts, guest writer for
+      newsletters, or speaker for online communities in the niche, with a
+      specific story or lesson to share and a resource to offer listeners.
+    why_it_works: >-
+      Hosts need good guests, and their audience gives the guest attention
+      and trust. A strong appearance keeps sending visitors for months as
+      episodes and issues are discovered later.
+    fits:
+      business_types: [b2b_saas, developer_tools, creator_media, agency_services, b2c_app]
+    stages: [launch, early_traction, growth, scale]
+    objective: awareness
+    effort: low
+    cost: free
+    signal_days: 30
+    tailor_questions:
+      - Which podcasts and newsletters reach the target audience?
+      - What story can the founder tell that is useful even to people who never buy?
+      - What resource can listeners get from a dedicated link?
+    suggested_workflow: >-
+      Keep a list of target shows and newsletters with their audience and
+      recent topics; each week, draft two personalised pitches that tie a
+      relevant founder story to their recent episodes, for the founder to
+      review and send, and track replies.
+    channel_types: [podcast, newsletter, partner]
+    kpis: [appearances booked, visits from guest links, sign-ups mentioning an appearance]
+
+  - key: local-cross-promotion
+    category: partnerships_distribution
+    name: Cross-promotion with neighbouring businesses
+    summary: >-
+      Partner with nearby, non-competing businesses that serve the same
+      customers to swap flyers, offer each other's customers a discount,
+      share a loyalty card, or run a joint event.
+    why_it_works: >-
+      Local customers trust recommendations from businesses they already
+      use, and the cost is close to zero. A joint offer gives both businesses
+      new foot traffic.
+    fits:
+      business_types: [local_business, ecommerce, agency_services]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: low
+    cost: free
+    signal_days: 14
+    tailor_questions:
+      - Which nearby businesses serve the same customers without competing?
+      - What offer would each business's customers value?
+      - How will each side track customers who came from the other?
+    channel_types: [partner, events]
+    kpis: [redeemed partner offers, new customers from partners, repeat visits]
+
+  - key: startup-and-education-programs
+    category: partnerships_distribution
+    name: Programs for startups, students and nonprofits
+    summary: >-
+      Offer the product free or heavily discounted to startups in partner
+      accelerators, to students through educators, or to nonprofits, with a
+      simple application and a path to normal pricing as they grow.
+    why_it_works: >-
+      Users adopt tools early and keep them as they grow. Programs through
+      accelerators and educators reach whole cohorts at once and build
+      goodwill with the organisations that advise them.
+    fits:
+      business_types: [b2b_saas, developer_tools, open_source]
+      business_models: [subscription, usage_based, freemium]
+    stages: [early_traction, growth, scale]
+    objective: acquisition
+    effort: medium
+    cost: medium
+    signal_days: 60
+    tailor_questions:
+      - Which accelerators, schools or nonprofit networks have the right members?
+      - How much free usage is generous but bounded?
+      - When and how will program members move to paid plans?
+    channel_types: [partner, email]
+    kpis: [program sign-ups, activated program accounts, program graduates converting to paid]
