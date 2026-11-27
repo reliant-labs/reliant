@@ -36,9 +36,13 @@ export function SidebarOrgRow({ children }: { children: ReactNode }) {
   return <div className="flex h-[var(--shell-bar-h)] shrink-0 items-center px-2">{children}</div>;
 }
 
-/** The org row's control: a button when it opens a menu, a plain row when it does not. */
+/**
+ * The org row's control: a button when it opens a menu, a plain row when it does not.
+ * A nav row's height (`--row-h`), like Find and the rows under it, so the narrow
+ * window's and the phone's drawer make it the same 44px touch target as the rest.
+ */
 export const SIDEBAR_ORG_TRIGGER =
-  "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-ui text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  "flex h-[var(--row-h)] min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-left text-ui text-foreground transition-colors hover:bg-foreground/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * The brand's mark at the nav's top: Forge's on the forge host (and the demo),

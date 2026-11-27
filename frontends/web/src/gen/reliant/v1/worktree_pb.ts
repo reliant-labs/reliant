@@ -2422,6 +2422,7 @@ export const WorktreeService: GenService<{
   },
   /**
    * forge:custom — authorizes through the project, and creates its main worktree when none exists
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it creates the project's main worktree row when it has none
    *
    * @generated from rpc reliant.v1.WorktreeService.ListWorktrees
    */
@@ -2533,6 +2534,7 @@ export const WorktreeService: GenService<{
   },
   /**
    * Git Read Operations
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.WorktreeService.GetWorktreeChanges
    */
@@ -2542,6 +2544,8 @@ export const WorktreeService: GenService<{
     output: typeof GetWorktreeChangesResponseSchema;
   },
   /**
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+   *
    * @generated from rpc reliant.v1.WorktreeService.GetWorktreeGitStatus
    */
   getWorktreeGitStatus: {
@@ -2550,6 +2554,8 @@ export const WorktreeService: GenService<{
     output: typeof GetWorktreeGitStatusResponseSchema;
   },
   /**
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+   *
    * @generated from rpc reliant.v1.WorktreeService.GetWorktreeCommits
    */
   getWorktreeCommits: {
@@ -2562,6 +2568,7 @@ export const WorktreeService: GenService<{
    * repo in the worktree's project. Drives the right-sidebar grouped view.
    * Single-repo and zero-repo projects collapse to a single-element (or empty)
    * response so callers don't need a special case.
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
    *
    * @generated from rpc reliant.v1.WorktreeService.ListWorktreeRepoStatuses
    */
@@ -2621,6 +2628,8 @@ export const WorktreeService: GenService<{
     output: typeof PullWorktreeResponseSchema;
   },
   /**
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read that also calls GitHub: it dispatches worktree.get_pr to the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+   *
    * @generated from rpc reliant.v1.WorktreeService.GetWorktreePR
    */
   getWorktreePR: {

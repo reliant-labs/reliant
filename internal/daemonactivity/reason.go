@@ -178,6 +178,14 @@ var userActionCommands = map[string]bool{
 	"worktree.revert":               true,
 	"worktree.stage":                true,
 	"worktree.unstage":              true,
+
+	// The merge queue's gate (internal/mergequeue/gaterun): a start is work
+	// the queue asked for, and its status is polled only while that gate
+	// runs, so each poll is the gate's own activity: a gate machine must not
+	// suspend under a running gate.
+	"pipeline.gate.cancel": true,
+	"pipeline.gate.start":  true,
+	"pipeline.gate.status": true,
 }
 
 // backgroundCommands are daemon commands that never keep a machine awake:
@@ -212,6 +220,10 @@ var backgroundCommands = map[string]bool{
 	// exec.bg_touch rides along with an agent's tool call, which is the
 	// activity; the touch itself says nothing more.
 	"exec.bg_touch": true,
+
+	// A node's machine self-check (machinepreflight.Command): a read before
+	// the node's work, which is the activity.
+	"machine.preflight": true,
 
 	"forge.deploy_plan":       true,
 	"forge.deploy_status":     true,

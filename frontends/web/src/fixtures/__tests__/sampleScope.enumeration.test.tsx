@@ -272,7 +272,7 @@ beforeEach(() => {
 describe("every page the forge tour walks reads the sample's scope, never the live backends", () => {
   it("walks every page of the journey's signed-in cut", () => {
     // The cut's own pages (fg-intro's Overview to fg-configure's Secrets), each a page of the sample app.
-    for (const page of ["", "/releases", "/observability/traces", "/observability/errors", "/observability/alerts", "/tests", "/security/vulnerabilities", "/secrets"]) {
+    for (const page of ["", "/releases", "/observability/traces", "/observability/errors", "/observability/alerts", "/analytics", "/data?env=staging", "/tests", "/security/vulnerabilities", "/secrets"]) {
       expect(TOUR_ROUTES).toContain(`${SAMPLE}${page}`);
     }
     expect(TOUR_ROUTES.every((path) => path.startsWith(`${SAMPLE}`)), TOUR_ROUTES.join("\n")).toBe(true);

@@ -84,7 +84,7 @@ export function MobileProjectList() {
         />
       ) : (
         <MobileScreenBody>
-          <p className="px-1 pb-3 text-xs text-muted-foreground">{PROJECT_DEFINITION_SHORT}</p>
+          <p className="px-1 pb-3 text-meta text-muted-foreground">{PROJECT_DEFINITION_SHORT}</p>
           <MobileCardGroup>
             <button
               type="button"
@@ -94,8 +94,8 @@ export function MobileProjectList() {
             >
               <MobileRowIcon icon={Layers} />
               <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium text-foreground">All projects</div>
-                <div className="truncate text-xs text-muted-foreground">Every project's chats in one list</div>
+                <div className="truncate text-ui font-medium text-foreground">All projects</div>
+                <div className="truncate text-meta text-muted-foreground">Every project's chats in one list</div>
               </div>
               {trailing(null)}
             </button>
@@ -110,15 +110,15 @@ export function MobileProjectList() {
               >
                 <MobileRowIcon icon={FolderGit2} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium text-foreground">
+                  <div className="truncate text-ui font-medium text-foreground">
                     {project.name}
                   </div>
                   {!isCloudProjectPath(project.path) && (
-                    <div className="truncate text-xs text-muted-foreground">
+                    <div className="truncate text-meta text-muted-foreground">
                       {project.path}
                     </div>
                   )}
-                  <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground/80">
+                  <div className="mt-0.5 flex items-center gap-1.5 text-meta text-muted-foreground/80">
                     {project.last_active && (
                       <span>Active {relativeTime(project.last_active)} ago</span>
                     )}

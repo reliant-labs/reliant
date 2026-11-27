@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -71,6 +72,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
+	"github.com/reliant-labs/reliant/internal/handlers/pipeline"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
@@ -127,6 +129,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/workersetup"
@@ -709,6 +712,27 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 		ConnectionVault: g.CredentialsConnectionvault(),
 		DB:              g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
 		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+func (g *Graph) newRecordDueScanner() (recorddue.Service, error) {
+	return NewRecordDueScanner(RecordDueScannerDeps{
+		DB: g.Database(), Temporal: g.TemporalClient(), Pipeline: g.ServerProcessConfig.GetPipeline(),
+		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+	})
+}
+
+func (g *Graph) newMergeQueue() (*MergeQueue, error) {
+	return NewMergeQueue(MergeQueueDeps{
+		DB:     g.Database(),
+		Router: g.WorkerDaemonRouter(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DataDir:      g.ServerProcessConfig.GetDataDir(),
 	})
 }
 
@@ -1014,6 +1038,8 @@ func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 		Router:     g.APIDaemonRouter(),
 		DB:         g.Database(),
 		Activity:   g.DaemonStatePublisher(),
+		Reconciler: g.ServerProcessConfig.GetReconciler(),
+		Runs:       g.RunLifecycle(),
 	})
 }
 
@@ -1088,6 +1114,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		PullRequestRecord:  g.PullRequestRecord(),
 		ChatTrace:          g.ChatTrace(),
 		Gtm:                g.Gtm(),
+		Pipeline:           g.Pipeline(),
 	})
 }
 
@@ -1200,6 +1227,7 @@ func (g *Graph) newChat() (*chat.Service, error) {
 		Logger:           g.Log,
 		Config:           g.Cfg,
 		Repo:             g.Database(),
+		TriggerReads:     store.NewTriggerEventExtStore(g.Database().ORM()),
 		Chats:            chataccess.NewFromORM(g.Database().ORM()),
 		ChatRows:         store.NewChatExtStore(g.Database().ORM()),
 		ChatViews:        store.NewChatsWithActivityExtStore(g.Database().ORM()),
@@ -1603,21 +1631,22 @@ func (g *Graph) newSettings() (*settings.Service, error) {
 // newStreaming constructs the streaming handler (internal/handlers/streaming).
 func (g *Graph) newStreaming() (*streaminghandler.Service, error) {
 	return streaminghandler.New(streaminghandler.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		ChatRows:    store.NewChatExtStore(g.Database().ORM()),
-		Senders:     store.NewThreadExtStore(g.Database().ORM()),
-		Projects:    store.NewProjectExtStore(g.Database().ORM()),
-		SpawnCalls:  store.NewToolCallExtStore(g.Database().ORM()),
-		Heads:       store.NewChatUpdateExtStore(g.Database().ORM()),
-		UserLog:     store.NewUserUpdateExtStore(g.Database().ORM()),
-		OrgFeed:     store.NewOrgUpdateExtStore(g.Database().ORM()),
-		Siblings:    store.NewMessageExtStore(g.Database().ORM()),
-		Deltas:      g.StreamingHub().Hub,
-		UserUpdates: g.UserUpdateHub(),
-		ChatUpdates: g.ChatUpdateHub(),
-		Orgs:        g.OrgResolver(),
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		Repo:         g.Database(),
+		TriggerReads: store.NewTriggerEventExtStore(g.Database().ORM()),
+		ChatRows:     store.NewChatExtStore(g.Database().ORM()),
+		Senders:      store.NewThreadExtStore(g.Database().ORM()),
+		Projects:     store.NewProjectExtStore(g.Database().ORM()),
+		SpawnCalls:   store.NewToolCallExtStore(g.Database().ORM()),
+		Heads:        store.NewChatUpdateExtStore(g.Database().ORM()),
+		UserLog:      store.NewUserUpdateExtStore(g.Database().ORM()),
+		OrgFeed:      store.NewOrgUpdateExtStore(g.Database().ORM()),
+		Siblings:     store.NewMessageExtStore(g.Database().ORM()),
+		Deltas:       g.StreamingHub().Hub,
+		UserUpdates:  g.UserUpdateHub(),
+		ChatUpdates:  g.ChatUpdateHub(),
+		Orgs:         g.OrgResolver(),
 	})
 }
 
@@ -1757,12 +1786,12 @@ func (g *Graph) newSharing() (*sharing.Service, error) {
 // trigger handler does the adopting, re-validating it as its new owner.
 func (g *Graph) newAutomationTakeover() (*automation_takeover.Service, error) {
 	return automation_takeover.New(automation_takeover.Deps{
-		Logger:   g.Log,
-		Config:   g.Cfg,
-		Repo:     g.Database(),
-		Offers:   g.Triggerowner(),
-		Triggers: g.Trigger(),
-		Now:      nil, // optional — no provider
+		Logger:       g.Log,
+		Config:       g.Cfg,
+		TriggerReads: store.NewTriggerExtStore(g.Database().ORM()),
+		Offers:       g.Triggerowner(),
+		Triggers:     g.Trigger(),
+		Now:          nil, // optional — no provider
 	})
 }
 
@@ -2105,6 +2134,22 @@ func (g *Graph) newCallerControlPlane() (*CallerControlPlane, error) {
 func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 	return NewInternalControlPlane(InternalControlPlaneDeps{
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+// newPipeline constructs the pipeline handler (internal/handlers/pipeline).
+// pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
+func (g *Graph) newPipeline() (*pipeline.Service, error) {
+	return pipeline.New(pipeline.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		// Only the switch, never the whole pipeline block: the block also
+		// holds the worker's merge-queue caller secret
+		// (pipeline.github_queue_app_caller_secret), and the API root's
+		// config reach must not include it.
+		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
+		Store:    g.Database(),
+		Now:      nil, // optional — no provider
 	})
 }
 

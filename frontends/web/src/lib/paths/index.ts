@@ -160,6 +160,11 @@ export function gtmIdeaPath(ideaId: string, ctx?: PathContext): string {
   return withOrg(`/gtm/ideas/${seg(ideaId)}`, ctx);
 }
 
+/** The strategy library (Strategy › Library), open on one entry when `entryKey` is given (`?entry=`). */
+export function gtmLibraryPath(entryKey?: string, ctx?: PathContext): string {
+  return withSearch(gtmPath("strategy", ctx), { view: "library", entry: entryKey || undefined });
+}
+
 // ── Apps (forge) ────────────────────────────────────────────────────────────
 
 /** The org's Usage & billing page (components/Usage/UsageBillingPage.tsx); `usageBillingPath` names the same URL. */

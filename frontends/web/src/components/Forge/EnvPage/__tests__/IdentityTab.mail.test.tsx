@@ -17,11 +17,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { rowItem, rowItemOrNull } from "./identityRowMenu";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { createTestQueryClient } from "@/test/renderWithQuery";
-import { IdentityApiProvider, type IdentityApi } from "@/services/controlPlane/identity/IdentityApiContext";
+import { fakeCurrentOrgId, IdentityFakeScope, type IdentityFakes } from "@/test/identityTransport";
 import type { IdentityPasswordCode, IdentityStatus, IdentityUsersPage } from "@/services/controlPlane/identity/api";
 import type { LiveEnv } from "@/services/forge/live";
 
@@ -29,6 +27,10 @@ import { IdentityTab } from "../IdentityTab";
 
 const toasts = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() }));
 vi.mock("@/lib/toast-manager", () => ({ toast: toasts }));
+vi.mock("@/services/controlPlane/orgs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/controlPlane/orgs")>()),
+  currentOrgId: () => fakeCurrentOrgId(),
+}));
 
 const NOW = Date.now();
 const LIVE = { id: "env-staging", name: "staging" } as LiveEnv;
@@ -79,7 +81,7 @@ function code(overrides: Partial<IdentityPasswordCode> = {}): IdentityPasswordCo
   return { code: CODE, expiresAtMs: Date.now() + 2 * 3_600_000, resetUrl: LINK, ...overrides };
 }
 
-function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
+function fakeApi(overrides: Partial<IdentityFakes> = {}): IdentityFakes {
   return {
     currentOrgId: vi.fn(async () => "org-a"),
     getStatus: vi.fn(async () => status()),
@@ -97,13 +99,11 @@ function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
   };
 }
 
-function renderTab(api: IdentityApi) {
+function renderTab(api: IdentityFakes) {
   return render(
-    <QueryClientProvider client={createTestQueryClient()}>
-      <IdentityApiProvider api={api}>
+    <IdentityFakeScope fakes={api}>
         <IdentityTab envName="staging" lifecycle="deployed" live={LIVE} liveLoading={false} />
-      </IdentityApiProvider>
-    </QueryClientProvider>
+      </IdentityFakeScope>
   );
 }
 

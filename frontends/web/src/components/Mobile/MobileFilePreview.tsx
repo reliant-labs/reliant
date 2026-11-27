@@ -108,7 +108,7 @@ export function MobileFilePreview({ path, worktreeId }: MobileFilePreviewProps) 
 
   if (state.status === "error") {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-sm text-destructive-ink">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-ui text-destructive-ink">
         <AlertCircle className="h-5 w-5" />
         <span>{state.message}</span>
       </div>
@@ -117,7 +117,7 @@ export function MobileFilePreview({ path, worktreeId }: MobileFilePreviewProps) 
 
   if (state.status === "unsupported") {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-sm text-muted-foreground">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 py-10 text-center text-ui text-muted-foreground">
         <FileWarning className="h-5 w-5" />
         <span>Preview unavailable for this file type ({state.info.viewerKind}).</span>
       </div>

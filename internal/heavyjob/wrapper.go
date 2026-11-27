@@ -88,6 +88,11 @@ func RunWrapper(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "▶ reliant: running `%s` in %s after %s waiting\n", opt.Label, slot, slot.Waited().Round(time.Second))
 	}
 
+	// The command line's cgroup yields CPU to the daemon's other commands
+	// and is bounded in memory while the command runs (cgroup_bounds_linux.go).
+	// Before the cap below, which moves this wrapper out of that cgroup.
+	lowered := lowerBounds(boundsOf(slot, opt.Env))
+	defer lowered.release()
 	// A hard cap, not only GOMAXPROCS: it binds what GOMAXPROCS does not
 	// reach, in a cgroup of the wrapper's own that the command starts in, so
 	// nothing of it runs uncapped (cpumax_linux.go). Never above the cap this

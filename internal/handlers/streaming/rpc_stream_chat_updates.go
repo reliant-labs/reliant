@@ -123,7 +123,7 @@ func (s *Service) StreamChatUpdates(
 	// The user-level updates about this chat that the client's
 	// project-scoped user stream drops (see chatFocusFilter). Only a
 	// project-scoped client has any.
-	focus := newChatFocusFilter(s.deps.Repo, req.Msg.GetProjectId(), chatID)
+	focus := newChatFocusFilter(s.deps.TriggerReads, req.Msg.GetProjectId(), chatID)
 	if viewer {
 		focus = nil // the owner's user-level updates are theirs
 	}
@@ -673,7 +673,7 @@ type chatFocusFilter struct {
 // newChatFocusFilter returns nil when the client's user stream is not
 // project-scoped: it then receives every update itself, and the chat stream
 // has nothing to add.
-func newChatFocusFilter(repo Repository, projectID, chatID string) *chatFocusFilter {
+func newChatFocusFilter(repo TriggerReads, projectID, chatID string) *chatFocusFilter {
 	if projectID == "" {
 		return nil
 	}

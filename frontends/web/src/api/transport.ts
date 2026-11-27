@@ -93,7 +93,6 @@ import { clientHeaderValue, upgradeRequiredInfo } from "../lib/clientVersion";
 import { pageActivity } from "../lib/pageActivity";
 import {
   DEFAULT_GRPC_TIMEOUT_MS,
-  FILE_OPERATION_TIMEOUT_MS,
   CHAT_OPERATION_TIMEOUT_MS,
   MCP_OPERATION_TIMEOUT_MS,
   UPLOAD_TIMEOUT_MS,
@@ -198,24 +197,26 @@ const normalizeInterceptor: Interceptor = errorNormalizeInterceptor({});
 /** The observability read stage (obsInterceptors.ts), on control-plane transports only. Exported for the chain-shape test. */
 export const obsReadStage: Interceptor = obsReadInterceptor();
 
-// Methods that need longer timeouts (0 = no timeout, handled by streaming layer)
-const LONG_TIMEOUT_METHODS: Record<string, number> = {
-  // File operations - may involve large files
-  ReadFile: FILE_OPERATION_TIMEOUT_MS,
-  WriteFile: FILE_OPERATION_TIMEOUT_MS,
-  ListFiles: FILE_OPERATION_TIMEOUT_MS,
+// Methods that need longer timeouts (0 = no timeout, handled by streaming layer).
+// Keys are bare method names and must name a real rpc: a key that matches
+// nothing silently leaves the method on the 10s default (transport.test.ts
+// fails on one). Exported for that test.
+export const LONG_TIMEOUT_METHODS: Record<string, number> = {
   // Chat operations that involve workflows - initial setup can take time
   StartChat: CHAT_OPERATION_TIMEOUT_MS,
   SendMessage: CHAT_OPERATION_TIMEOUT_MS,
   // MCP operations - external process startup can be slow
-  StartServer: MCP_OPERATION_TIMEOUT_MS,
   InstallServer: MCP_OPERATION_TIMEOUT_MS,
   RestartServer: MCP_OPERATION_TIMEOUT_MS,
   UpdateServerConfig: MCP_OPERATION_TIMEOUT_MS,
   UninstallServer: MCP_OPERATION_TIMEOUT_MS,
-  CallTool: MCP_OPERATION_TIMEOUT_MS,
-  // Attachment uploads - depends on file size
-  Upload: UPLOAD_TIMEOUT_MS,
+  // Attachments - the whole file rides in one unary body (base64 in JSON), so
+  // the time is the link's upload/download speed, not the server's. This was
+  // keyed `Upload`, which no rpc is named, so UploadAttachment ran on the 10s
+  // default: on 2026-11-27 four photo uploads from an iPhone were aborted at
+  // ~10s with no request ever reaching the api-server.
+  UploadAttachment: UPLOAD_TIMEOUT_MS,
+  GetAttachment: UPLOAD_TIMEOUT_MS,
   // Worktree operations - involve git commands and copied files that can exceed 30s
   CreateWorktree: WORKTREE_OPERATION_TIMEOUT_MS,
   DeleteWorktree: WORKTREE_OPERATION_TIMEOUT_MS,

@@ -18,12 +18,12 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Download, FileText, Trash2, Upload, UserRound, Workflow } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import Button from "@/components/forge-ui/button";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import { GtmAssetSource, GtmAssetStatus, type GtmAsset } from "@/gen/reliant/v1/gtm_pb";
-import { gtmServiceQueries, useConfirmAssetUpload, useCreateAssetUpload, useDeleteAsset, useGetAssetDownload, useListAssets } from "@/hooks/gtm-service-hooks_gen";
+import { useConfirmAssetUpload, useCreateAssetUpload, useDeleteAsset, useGetAssetDownload, useListAssets } from "@/hooks/gtm-service-hooks_gen";
 import { whenOrgScopeReady } from "@/lib/orgScope";
 import { toast } from "@/lib/toast-manager";
 
@@ -131,15 +131,32 @@ function AssetCard({ asset }: { asset: GtmAsset }) {
   const del = useDeleteAsset({ onSuccess: () => setDeleting(false), onError: (e) => (setDeleting(false), reportGtmWriteError(queryClient, e)) });
   const ready = asset.status === GtmAssetStatus.READY;
   const image = ready && asset.contentType.startsWith("image/");
-  const thumb = useGetAssetDownload({ orgId, assetId: asset.id }, { enabled: !!orgId && image, staleTime: 5 * 60_000, retry: false });
+  // GetAssetDownload is a mutation (it mints a short-lived URL): the
+  // thumbnail asks for one once, when the card mounts; a failure leaves the
+  // file icon. Download asks for a fresh one on each click. Minting a URL
+  // changes nothing, so neither refreshes any GTM read (invalidate: false).
+  const thumb = useGetAssetDownload({ invalidate: false, onError: () => {} });
+  const getDownload = useGetAssetDownload({ invalidate: false, onError: () => {} });
+  const askedThumb = useRef(false);
+  useEffect(() => {
+    if (!image || !orgId || askedThumb.current) return;
+    askedThumb.current = true;
+    thumb.mutate({ orgId, assetId: asset.id });
+  }, [image, orgId, asset.id, thumb]);
   const Source = SOURCE_ICON[asset.source as keyof typeof SOURCE_ICON] ?? FileText;
 
   async function download() {
+    // Opened now, inside the click, so a popup blocker allows it; pointed at
+    // the URL once it arrives, with no way back to this page.
+    const tab = window.open("", "_blank");
+    if (tab) tab.opener = null;
     try {
       await whenOrgScopeReady();
-      const res = await queryClient.fetchQuery(gtmServiceQueries.getAssetDownload({ orgId, assetId: asset.id }, { staleTime: 0 }));
-      window.open(res.url, "_blank", "noopener,noreferrer");
+      const res = await getDownload.mutateAsync({ orgId, assetId: asset.id });
+      if (tab) tab.location.href = res.downloadUrl;
+      else window.open(res.downloadUrl, "_blank", "noopener,noreferrer");
     } catch (error) {
+      tab?.close();
       if (isUnavailable(error)) toast.warning("Downloads are unavailable here until asset storage is set up.");
       else reportGtmWriteError(queryClient, error);
     }
@@ -147,8 +164,8 @@ function AssetCard({ asset }: { asset: GtmAsset }) {
 
   return (
     <li className="overflow-hidden rounded-lg border border-border bg-surface" data-testid={`gtm-asset-${asset.id}`}>
-      {image && thumb.data?.url ? (
-        <img src={thumb.data.url} alt={asset.filename} className="aspect-video w-full bg-surface-sunken object-cover" />
+      {image && thumb.data?.downloadUrl ? (
+        <img src={thumb.data.downloadUrl} alt={asset.filename} className="aspect-video w-full bg-surface-sunken object-cover" />
       ) : (
         <div className="flex aspect-video items-center justify-center bg-surface-sunken">
           <FileText className="size-6 text-ink-muted" aria-hidden="true" />

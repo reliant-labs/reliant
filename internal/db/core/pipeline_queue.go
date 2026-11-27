@@ -111,6 +111,10 @@ const (
 	// QueueIsolationChecks ran nothing on a gate machine: GitHub check runs
 	// judged the candidate.
 	QueueIsolationChecks QueueIsolationBackend = "checks"
+	// QueueIsolationRunc is a plain runc container: NOT an isolation
+	// boundary. Shadow mode only; a batch gated on it never lands
+	// (queue_batches_runc_never_lands).
+	QueueIsolationRunc QueueIsolationBackend = "runc"
 )
 
 // AllQueueIsolationBackends is every QueueIsolationBackend
@@ -119,6 +123,7 @@ var AllQueueIsolationBackends = []QueueIsolationBackend{
 	QueueIsolationVM,
 	QueueIsolationSysbox,
 	QueueIsolationChecks,
+	QueueIsolationRunc,
 }
 
 // QueueGateRunner is how a batch's gate was dispatched (owner D6).

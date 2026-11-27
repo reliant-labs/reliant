@@ -129,7 +129,8 @@ func EventToProto(ev *core.TriggerEvent) (*reliantv1.TriggerEvent, error) {
 	switch ev.Kind {
 	case core.TriggerEventKindSchedule:
 		fireID = ev.DedupeKey
-	case core.TriggerEventKindWebhook, core.TriggerEventKindIntegration, core.TriggerEventKindWorkflowEvent:
+	case core.TriggerEventKindWebhook, core.TriggerEventKindIntegration, core.TriggerEventKindWorkflowEvent,
+		core.TriggerEventKindRecordDue:
 		fireID = EventFireWorkflowID(ev.ID)
 	}
 	return &reliantv1.TriggerEvent{
@@ -206,6 +207,8 @@ func eventKindToProto(kind core.TriggerEventKind) reliantv1.TriggerEventKind {
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_MANUAL_RUN
 	case core.TriggerEventKindCLIRun:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_CLI_RUN
+	case core.TriggerEventKindRecordDue:
+		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_RECORD_DUE
 	default:
 		return reliantv1.TriggerEventKind_TRIGGER_EVENT_KIND_UNSPECIFIED
 	}
@@ -325,6 +328,8 @@ func StoredDefinition(t *reliantv1.Trigger) *reliantv1.TriggerDefinition {
 		def.Source = &reliantv1.TriggerDefinition_Integration{Integration: src.Integration}
 	case *reliantv1.Trigger_WorkflowEvent:
 		def.Source = &reliantv1.TriggerDefinition_WorkflowEvent{WorkflowEvent: src.WorkflowEvent}
+	case *reliantv1.Trigger_RecordDue:
+		def.Source = &reliantv1.TriggerDefinition_RecordDue{RecordDue: src.RecordDue}
 	}
 	return def
 }

@@ -137,6 +137,7 @@ type WorktreeServiceClient interface {
 	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it creates the project's main worktree row when it has none
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	// ListArchivedWorktrees pages through the project's archived workspaces,
 	// most recently archived first. Archived workspaces are never part of
@@ -163,13 +164,17 @@ type WorktreeServiceClient interface {
 	PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error)
 	RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error)
 	// Git Read Operations
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error)
 	// ListWorktreeRepoStatuses returns per-repo git status for every nested
 	// repo in the worktree's project. Drives the right-sidebar grouped view.
 	// Single-repo and zero-repo projects collapse to a single-element (or empty)
 	// response so callers don't need a special case.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error)
 	// Git Write Operations
 	StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error)
@@ -178,6 +183,7 @@ type WorktreeServiceClient interface {
 	CommitWorktree(context.Context, *connect.Request[v1.CommitWorktreeRequest]) (*connect.Response[v1.CommitWorktreeResponse], error)
 	PushWorktree(context.Context, *connect.Request[v1.PushWorktreeRequest]) (*connect.Response[v1.PushWorktreeResponse], error)
 	PullWorktree(context.Context, *connect.Request[v1.PullWorktreeRequest]) (*connect.Response[v1.PullWorktreeResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read that also calls GitHub: it dispatches worktree.get_pr to the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreePR(context.Context, *connect.Request[v1.GetWorktreePRRequest]) (*connect.Response[v1.GetWorktreePRResponse], error)
 	CreateWorktreePR(context.Context, *connect.Request[v1.CreateWorktreePRRequest]) (*connect.Response[v1.CreateWorktreePRResponse], error)
 }
@@ -547,6 +553,7 @@ type WorktreeServiceHandler interface {
 	// forge:custom — places the workspace on a machine and creates its checkouts there after it returns
 	CreateWorktree(context.Context, *connect.Request[v1.CreateWorktreeRequest]) (*connect.Response[v1.CreateWorktreeResponse], error)
 	// forge:custom — authorizes through the project, and creates its main worktree when none exists
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it creates the project's main worktree row when it has none
 	ListWorktrees(context.Context, *connect.Request[v1.ListWorktreesRequest]) (*connect.Response[v1.ListWorktreesResponse], error)
 	// ListArchivedWorktrees pages through the project's archived workspaces,
 	// most recently archived first. Archived workspaces are never part of
@@ -573,13 +580,17 @@ type WorktreeServiceHandler interface {
 	PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error)
 	RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error)
 	// Git Read Operations
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeGitStatus(context.Context, *connect.Request[v1.GetWorktreeGitStatusRequest]) (*connect.Response[v1.GetWorktreeGitStatusResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreeCommits(context.Context, *connect.Request[v1.GetWorktreeCommitsRequest]) (*connect.Response[v1.GetWorktreeCommitsResponse], error)
 	// ListWorktreeRepoStatuses returns per-repo git status for every nested
 	// repo in the worktree's project. Drives the right-sidebar grouped view.
 	// Single-repo and zero-repo projects collapse to a single-element (or empty)
 	// response so callers don't need a special case.
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	ListWorktreeRepoStatuses(context.Context, *connect.Request[v1.ListWorktreeRepoStatusesRequest]) (*connect.Response[v1.ListWorktreeRepoStatusesResponse], error)
 	// Git Write Operations
 	StageFiles(context.Context, *connect.Request[v1.StageFilesRequest]) (*connect.Response[v1.StageFilesResponse], error)
@@ -588,6 +599,7 @@ type WorktreeServiceHandler interface {
 	CommitWorktree(context.Context, *connect.Request[v1.CommitWorktreeRequest]) (*connect.Response[v1.CommitWorktreeResponse], error)
 	PushWorktree(context.Context, *connect.Request[v1.PushWorktreeRequest]) (*connect.Response[v1.PushWorktreeResponse], error)
 	PullWorktree(context.Context, *connect.Request[v1.PullWorktreeRequest]) (*connect.Response[v1.PullWorktreeResponse], error)
+	// forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read that also calls GitHub: it dispatches worktree.get_pr to the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
 	GetWorktreePR(context.Context, *connect.Request[v1.GetWorktreePRRequest]) (*connect.Response[v1.GetWorktreePRResponse], error)
 	CreateWorktreePR(context.Context, *connect.Request[v1.CreateWorktreePRRequest]) (*connect.Response[v1.CreateWorktreePRResponse], error)
 }
