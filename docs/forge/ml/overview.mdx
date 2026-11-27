@@ -5,7 +5,7 @@ description: "Early access, by request. Reliant for ML brings releases, observab
 keywords: ["forge ml", "forge.MLStack", "GPU cluster", "ML early access", "forge.Adopt", "forge.Install", "kueue", "dcgm"]
 ---
 
-{/* verified: 2026-11-27 · sources: forge v1.13.0 kcl/ml.k and internal/cli/testdata/render_contract/ml-stack.k (forge.MLStack, Adopt, Install, Accelerators, RecommendationDecision; rendered on forge main); control-plane#3747 (entitlement gate, merged, not in a release tag yet); forge docs/proposals/ml-workloads.md and reliant-for-ml.md (design, not features). Open and therefore NOT documented as available: forge#3030 (Adopt/Install scraping fields), forge#2893 (forge ml discover), forge#2998, control-plane#3772/#3822/#3823, reliant#3693/#3726/#3779. */}
+{/* verified: 2026-11-27 · sources: forge v1.13.0 kcl/ml.k (identical on main) and internal/cli/testdata/render_contract/ml-stack.k/.json (forge.MLStack, Adopt, Install, Accelerators, RecommendationDecision; rendered on forge main); control-plane#3747 (entitlement gate, merged, not in a release tag yet); forge docs/proposals/ml-workloads.md and reliant-for-ml.md (design, not features). Open and therefore NOT documented as available: forge#3030 (deprecates Adopt/Install scrape fields in favour of Observability.telemetry; they keep working), forge#2893 (forge ml discover), forge#2998, control-plane#3772/#3822/#3823, reliant#3693/#3726/#3779. */}
 
 <Warning>
 **Early access, by request.** ML is not generally available. It is switched on per organization, and most of what the design describes below is not built. This page says which parts exist today and which do not.
@@ -25,7 +25,7 @@ ML is available by request. To ask for it, email [support@reliantlabs.io](mailto
 
 `forge.MLStack` is available in forge v1.13.0. It lets an environment declare the ML components one cluster runs, as code in the same `deploy/kcl/<env>` files as the rest of the environment. The policy it encodes is **discover, then adopt, then install only what is missing**. For each component, the declaration says one of three things: forge reads it where it already runs (`forge.Adopt`), forge installs it from a pinned chart (`forge.Install`), or the slot is left out and forge does nothing.
 
-A stack belongs to one cluster, and only `cluster` is required. Every component slot is optional, so a stack of one component is valid and renders only that component. This example adopts the NVIDIA exporter the cluster already runs, installs Kueue because the cluster lacks a queue, and records a dismissed recommendation with a reason and an expiry:
+A stack belongs to one cluster, and only `cluster` is required. Every component slot is optional, so a stack of one component is valid and renders only that component. This example adopts the NVIDIA exporter the cluster already runs and scrapes the metrics you chose, installs Kueue because the cluster lacks a queue, and records a dismissed recommendation with a reason and an expiry:
 
 ```python
 import forge
@@ -41,7 +41,11 @@ ml_stacks = [forge.MLStack {
     observed_at = "2026-11-26"
     accelerators = [forge.Accelerators {
         vendor = "nvidia"
-        metrics = forge.Adopt {kind = "dcgm-exporter", namespace = "gpu-operator", version = "3.3.9"}
+        metrics = forge.Adopt {
+            kind = "dcgm-exporter", namespace = "gpu-operator", version = "3.3.9"
+            selector = {"app": "nvidia-dcgm-exporter"}, port = 9400
+            allow = ["DCGM_FI_DEV_GPU_UTIL", "DCGM_FI_DEV_FB_USED", "DCGM_FI_DEV_XID_ERRORS"]
+        }
     }]
     queue = forge.Install {
         kind = "kueue"
@@ -60,21 +64,27 @@ Set it on the environment's bundle, as `ml_stacks = ml_stacks`, and check it wit
 
 ### The slots
 
-An accelerator vendor goes in `accelerators` (`nvidia`, `amd`, `tpu`, `neuron`, `gaudi` or `generic`), and each carries the exporter that reports on it. A vendor's device-plugin resource, such as `nvidia.com/gpu`, is filled in for you, and a `generic` vendor names its own. The other slots are `node_health`, `queue`, `training`, `serving`, `monitoring` and `pull_cache`, and each holds an `Adopt` or an `Install`. Forge ships no per-vendor presets: the metric names you draw and alert on are your data, written in your own files.
+An accelerator vendor goes in `accelerators` (`nvidia`, `amd`, `tpu`, `neuron`, `gaudi` or `generic`), and each carries the exporter that reports on it. A vendor's device-plugin resource, such as `nvidia.com/gpu`, is filled in for you, and a `generic` vendor names its own. The other slots are `node_health`, `queue`, `training`, `serving`, `monitoring` and `pull_cache`, and each holds an `Adopt` or an `Install`. Forge ships no per-vendor presets: the metric names you draw and alert on are your data, written in your own files (see scraping below).
 
 ### Adopt and Install
 
-`forge.Adopt` is a statement that a component already runs. It records the `kind` (a component id such as `dcgm-exporter`, `kueue` or `kserve`), the `namespace`, the `version` you found and an optional `note`, and forge reads it and never upgrades, reconfigures or owns it. `forge.Install` names the same `kind` with a pinned upstream Helm `chart`, and forge delivers it to the stack's cluster.
+`forge.Adopt` is a statement that a component already runs. It records the `kind` (a component id such as `dcgm-exporter`, `kueue` or `kserve`), the `namespace`, the `version` you found and an optional `note`, and forge reads it and never upgrades, reconfigures or owns it. With a `selector` and a `port` it also scrapes the component's metrics, described next. `forge.Install` names the same `kind` with a pinned upstream Helm `chart`, and forge delivers it to the stack's cluster.
 
 How a chart is delivered follows its `delivery`. A chart that owns no CRDs, such as node-problem-detector, is `bundle`: it is rendered at build time into the environment's bundle and reconciled with it, so it is pruned when you remove the `Install`. An operator with CRDs, such as Kueue, is `bootstrap`, the default: it is applied with `forge env deploy <env> --target <chart name>` and kept out of the bundle, so pruning the bundle can never delete its CRDs and everything made from them. Every object an `Install` creates is labelled as forge's own, so discovery can tell forge's installs from the cluster's.
+
+### Scraping a component's metrics
+
+In forge v1.13.0, an `Adopt` or an `Install` that sets `selector` (pod labels that must all match) and `port` (the metrics port, 1 to 65535) is also scraped. When the environment's observability is on, it becomes a `forge.Telemetry` entry with `service_name` `ml-<kind>` (suffixed with the cluster when the environment declares several stacks), scope `platform`, the stack's cluster, `namespaces` set to the component's namespace (for an `Install`, its chart's), and one metrics scrape on that port. `allow` is a list of Prometheus metric names the scrape keeps, and without it the scrape keeps every name. The names are your data: forge ships no per-vendor list, so the ones you draw and alert on are written in your own file. `service_name` overrides the generated name when you adopt two scraped components of one kind. If the environment declares its own `Telemetry` with the same `service_name`, yours replaces the generated one, which is how you give a scrape a path, an interval or dashboards of its own.
+
+Render checks the combination: `port` needs a `selector`, `allow` and `service_name` need a `port`, and every `allow` entry must be a valid metric name. An `Adopt` with no `port` is an inventory statement only and scrapes nothing.
+
+<Note>
+**The preferred path is changing.** forge#3030 has not merged. It is being reworked to deprecate the scrape fields on `Adopt` and `Install`, keeping them working with a warning, and to point to the environment's regular `Observability.telemetry` instead. Once it lands, declare scrapes as `forge.Telemetry` entries in the environment's `observability`, and treat `Adopt` as the inventory statement of what runs. What this page describes is the released v1.13.0 behavior.
+</Note>
 
 ### What render refuses
 
 The checks run at render, so a mistake fails before anything is applied. Forge refuses a component both adopted and installed, a kind installed twice, an `Install` of a kind listed in `observed` (adopt the running one, because two DCGM exporters on one node break each other's profiling counters), two `Accelerators` of one vendor, a recommendation id decided twice, and an `Install` chart bound to a different cluster than its stack. KubeRay is adopt-only: installing it needs a `reason`, because it is a whole platform with its own scheduler and a team's queue and training defaults are the better thing to install.
-
-<Note>
-This page does not document scraping a component's metrics. `Adopt` and `Install` accept scrape fields today, but forge#3030, which is open, moves scraping to the environment's regular `Observability.telemetry` and leaves an `Adopt` as an inventory statement only. The fields above are the ones that stay.
-</Note>
 
 ## What is not available yet
 
