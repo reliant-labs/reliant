@@ -60,8 +60,8 @@ type fsListMachineDirRequest struct {
 type fsMachineDirEntry struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
-	// IsDir is true for a directory, and for a symlink to one: the view
-	// expands both the same way.
+	// IsDir is true for a directory. Symlinks are name-only entries: their
+	// targets are not inspected, since pathname checks race with link swaps.
 	IsDir     bool  `json:"is_dir"`
 	IsSymlink bool  `json:"is_symlink,omitempty"`
 	Size      int64 `json:"size"`
@@ -170,22 +170,10 @@ func readMachineDir(dir *os.File, path, viewerRoot string) ([]fsMachineDirEntry,
 		var fi fs.FileInfo
 		if de.Type()&fs.ModeSymlink != 0 {
 			e.IsSymlink = true
-			// Stat the guarded descriptor, then revalidate its identity and
-			// policy before publishing metadata. If the path changed after
-			// the open-time guard, discard the snapshot rather than retrying.
-			// Refused and dangling links remain name-only entries.
-			if target, err := openForRead(full, viewerRoot); err == nil {
-				machineSymlinkOpened(full)
-				info, statErr := target.Stat()
-				if statErr == nil && daemonpolicy.CheckViewerFile(target, full, viewerRoot) == nil {
-					// Stat the original path too: checking its resolved spelling
-					// alone does not establish that the link still names target.
-					if current, err := os.Stat(full); err == nil && os.SameFile(info, current) {
-						fi = info
-					}
-				}
-				_ = target.Close()
-			}
+			// Never resolve a symlink for metadata. Separate policy and
+			// identity checks cannot bind an attacker-mutable pathname to
+			// an opened target, even if the link is restored between checks.
+			machineSymlinkListed(full)
 		} else {
 			fi, _ = de.Info()
 		}
@@ -199,9 +187,9 @@ func readMachineDir(dir *os.File, path, viewerRoot string) ([]fsMachineDirEntry,
 	return out, truncated, nil
 }
 
-// machineSymlinkOpened runs after the open-time guard succeeds and before
-// the metadata snapshot. Tests replace it to exercise a late pathname swap.
-var machineSymlinkOpened = func(string) {}
+// machineSymlinkListed runs when a symlink entry is encountered. Tests replace
+// it to swap the target at the point where metadata used to be checked.
+var machineSymlinkListed = func(string) {}
 
 // sortDirEntries orders entries by name, as os.ReadDir does (File.ReadDir
 // returns directory order).

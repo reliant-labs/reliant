@@ -161,10 +161,10 @@ func TestFSListMachineDir_RejectsSwappedSymlinkMetadata(t *testing.T) {
 	if err := os.Symlink(project, link); err != nil {
 		t.Fatal(err)
 	}
-	previous := viewerOpened
-	t.Cleanup(func() { viewerOpened = previous })
+	previous := machineSymlinkListed
+	t.Cleanup(func() { machineSymlinkListed = previous })
 	swapped := false
-	viewerOpened = func(path string) {
+	machineSymlinkListed = func(path string) {
 		if path != link {
 			return
 		}
@@ -181,7 +181,7 @@ func TestFSListMachineDir_RejectsSwappedSymlinkMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !swapped {
-		t.Fatal("symlink metadata did not pass through the guarded open")
+		t.Fatal("symlink entry was not encountered")
 	}
 	for _, e := range got.Entries {
 		if e.Name == "link" {
@@ -194,7 +194,7 @@ func TestFSListMachineDir_RejectsSwappedSymlinkMetadata(t *testing.T) {
 	t.Fatal("swapped link must remain a name-only entry")
 }
 
-func TestFSListMachineDir_RejectsSymlinkSwapAfterOpenGuard(t *testing.T) {
+func TestFSListMachineDir_SymlinkSwapAndRestoreIsNameOnly(t *testing.T) {
 	for _, credential := range []string{".ssh", filepath.Join(".ssh", "id_rsa")} {
 		t.Run(credential, func(t *testing.T) {
 			home, project := machineFixture(t)
@@ -202,21 +202,31 @@ func TestFSListMachineDir_RejectsSymlinkSwapAfterOpenGuard(t *testing.T) {
 			if err := os.Symlink(project, link); err != nil {
 				t.Fatal(err)
 			}
-			previous := machineSymlinkOpened
-			t.Cleanup(func() { machineSymlinkOpened = previous })
+			previous := machineSymlinkListed
+			t.Cleanup(func() { machineSymlinkListed = previous })
+			previousOpened := viewerOpened
+			t.Cleanup(func() { viewerOpened = previousOpened })
+			viewerOpened = func(path string) {
+				if path == link {
+					t.Fatal("listing must not open a symlink target for metadata")
+				}
+			}
 			swapped := false
-			machineSymlinkOpened = func(path string) {
+			machineSymlinkListed = func(path string) {
 				if path != link {
 					return
 				}
-				// This hook runs only after openForRead's identity and
-				// credential checks have succeeded, but before Stat.
+				// Swap to a credential target and restore the benign target
+				// where the old pathname identity check took place. Neither
+				// target's metadata may be published, even after restoration.
 				swapped = true
-				if err := os.Remove(link); err != nil {
-					t.Fatal(err)
-				}
-				if err := os.Symlink(filepath.Join(home, credential), link); err != nil {
-					t.Fatal(err)
+				for _, target := range []string{filepath.Join(home, credential), project} {
+					if err := os.Remove(link); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Symlink(target, link); err != nil {
+						t.Fatal(err)
+					}
 				}
 			}
 			got, err := listMachineDir(t, home, project)
@@ -224,7 +234,7 @@ func TestFSListMachineDir_RejectsSymlinkSwapAfterOpenGuard(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !swapped {
-				t.Fatal("symlink did not pass the open-time guard")
+				t.Fatal("symlink swap and restoration were not exercised")
 			}
 			for _, e := range got.Entries {
 				if e.Name == "link" {
@@ -239,8 +249,8 @@ func TestFSListMachineDir_RejectsSymlinkSwapAfterOpenGuard(t *testing.T) {
 	}
 }
 
-// A symlink is listed as what it points at (a link to a directory expands),
-// marked as a link; a dangling one is still listed, as a file with no mtime.
+// Symlinks are name-only entries regardless of their target. Listing through
+// a symlink still uses the guarded directory open.
 func TestFSListMachineDir_Symlinks(t *testing.T) {
 	home, project := machineFixture(t)
 	dir := filepath.Join(home, "links")
@@ -261,11 +271,10 @@ func TestFSListMachineDir_Symlinks(t *testing.T) {
 	for _, e := range got.Entries {
 		byName[e.Name] = e
 	}
-	if e := byName["to-proj"]; !e.IsSymlink || !e.IsDir {
-		t.Errorf("link to a directory = %+v, want is_symlink and is_dir", e)
-	}
-	if e := byName["dangling"]; !e.IsSymlink || e.IsDir || e.Modified != "" {
-		t.Errorf("dangling link = %+v, want a symlink file with no mtime", e)
+	for _, name := range []string{"to-proj", "dangling"} {
+		if e := byName[name]; !e.IsSymlink || e.IsDir || e.Size != 0 || e.Modified != "" {
+			t.Errorf("link %s = %+v, want a name-only symlink", name, e)
+		}
 	}
 
 	// Listing THROUGH a symlinked directory keeps the path the user went to.
