@@ -52,7 +52,7 @@ export function MobileSearchScreen() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder={mode === "chats" ? "Search chats…" : "Search file contents…"}
             autoFocus
-            className="min-h-[44px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="min-h-[44px] flex-1 bg-transparent text-ui outline-none placeholder:text-muted-foreground"
           />
           {query && (
             <button
@@ -81,7 +81,7 @@ export function MobileSearchScreen() {
                 onClick={() => setMode(value)}
                 aria-pressed={mode === value}
                 className={cn(
-                  "flex min-h-[44px] flex-1 items-center justify-center rounded-md text-sm font-medium",
+                  "flex min-h-[44px] flex-1 items-center justify-center rounded-md text-ui font-medium",
                   // Filled primary for the selection rather than a raised
                   // surface: `--surface-raised` resolves to `--muted` in dark
                   // mode, which is this track's own color, so a raised segment

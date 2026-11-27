@@ -61,7 +61,7 @@ func TestAdoptTrigger_Generated(t *testing.T) {
 	// automation_takeover *Service wired with stubbed dependencies. Override one
 	// with automation_takeover.WithAutomationTakeoverDeps(...), or per-row via Case.Setup.
 	svc := automation_takeover.NewTestAutomationTakeover(t, automation_takeover.WithAutomationTakeoverDeps(automation_takeover.Deps{
-		Repo: &automation_takeover.MockRepository{
+		TriggerReads: &automation_takeover.MockTriggerReads{
 			GetTriggerFunc: func(context.Context, string) (*core.Trigger, error) { return nil, core.ErrTriggerNotFound },
 		},
 	}))

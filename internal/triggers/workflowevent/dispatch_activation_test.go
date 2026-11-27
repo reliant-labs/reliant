@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflowdraftstest"
 
 	"github.com/google/uuid"
@@ -89,7 +90,7 @@ func TestDispatch_ActivationFiresWithItsDeclaredInputs(t *testing.T) {
 	require.NoError(t, err)
 	launched := launchedChat(t, results, tr.ID)
 
-	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launched)
+	launchEv, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launched)
 	require.NoError(t, err)
 	start, _ := launchEv.Payload["start"].(map[string]any)
 	params, _ := start["params"].(map[string]any)
@@ -112,6 +113,24 @@ func TestDispatch_ActivationMatchesTheDeclarationNotItsProjection(t *testing.T) 
 		assert.NotEqual(t, tr.ID, r.TriggerID, "the declaration listens to failures only")
 	}
 	assert.Equal(t, 0, f.starter.count())
+}
+
+// A widened declaration must reach Dispatch even before its projection catches up.
+func TestMayReach_StaleActivationProjectionCannotDiscardAMatch(t *testing.T) {
+	for _, projection := range []Source{
+		{Workflows: []string{"old-workflow"}, Outcomes: []string{"failed"}},
+		{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}},
+	} {
+		f := newFixture(t)
+		f.dispatcher.WithWorkflows(triggers.LaunchWorkflows{Repo: f.repo})
+		f.saveDeclaringWorkflow("reactor", reactorYAML)
+		tr := f.addActivation("reactor", "on-review-failure", projection)
+		ev := f.finish(f.humanRun("code-review"), core.RunEventFailed)
+		require.True(t, MayReach([]*core.Trigger{tr}, ev))
+		results, err := f.dispatcher.Dispatch(context.Background(), ev)
+		require.NoError(t, err)
+		assert.NotEmpty(t, launchedChat(t, results, tr.ID))
+	}
 }
 
 // A declaration removed from the workflow: the activation records why on the
@@ -187,7 +206,7 @@ func TestDispatch_ActivationFilterAndInputsReadItsParams(t *testing.T) {
 	assert.Equal(t, core.TriggerEventLaunched, byTrigger[reviews.ID], "code-review is in this activation's own list")
 	assert.Equal(t, core.TriggerEventSkipped, byTrigger[builds.ID], "and not in the other's")
 
-	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launchedChat(t, results, reviews.ID))
+	launchEv, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), launchedChat(t, results, reviews.ID))
 	require.NoError(t, err)
 	start, _ := launchEv.Payload["start"].(map[string]any)
 	params, _ := start["params"].(map[string]any)

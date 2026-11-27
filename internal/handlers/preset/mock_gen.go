@@ -18,14 +18,15 @@ import (
 )
 
 // forge:section MockRepository
-// forge:hash=046baa5477c6f65dd440aa297e562a73789fabacbc0afd7484d33c136826221b
+// forge:hash=7d609a5eb61fbbbfd8fe216de1a22978bc2afe07a4e06a135807eaaae22d49a7
 
 // MockRepository is a test mock for the Repository interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockRepository.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockRepository.<Method>Func not set" error.
 type MockRepository struct {
 	contractkit.Recorder
 	CreatePresetFunc              func(context.Context, *db.Preset) (*db.Preset, error)
@@ -180,18 +181,339 @@ func (m *MockRepository) GetProjectWorkflowsJSON(ctx context.Context, projectID 
 	return nil, contractkit.MockNotSet("MockRepository", "GetProjectWorkflowsJSON")
 }
 
+// MockRepositoryCreatePresetCall is one recorded call of MockRepository.CreatePreset, one
+// field per parameter.
+type MockRepositoryCreatePresetCall struct {
+	Ctx    context.Context
+	Preset *db.Preset
+}
+
+// CreatePresetCalls returns every recorded CreatePreset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreatePreset").
+func (m *MockRepository) CreatePresetCalls() []MockRepositoryCreatePresetCall {
+	var out []MockRepositoryCreatePresetCall
+	for _, c := range m.Recorder.Calls("CreatePreset") {
+		var r MockRepositoryCreatePresetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Preset, _ = c.Args[1].(*db.Preset)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryUpdatePresetCall is one recorded call of MockRepository.UpdatePreset, one
+// field per parameter.
+type MockRepositoryUpdatePresetCall struct {
+	Ctx    context.Context
+	Preset *db.Preset
+}
+
+// UpdatePresetCalls returns every recorded UpdatePreset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdatePreset").
+func (m *MockRepository) UpdatePresetCalls() []MockRepositoryUpdatePresetCall {
+	var out []MockRepositoryUpdatePresetCall
+	for _, c := range m.Recorder.Calls("UpdatePreset") {
+		var r MockRepositoryUpdatePresetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Preset, _ = c.Args[1].(*db.Preset)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryDeletePresetCall is one recorded call of MockRepository.DeletePreset, one
+// field per parameter.
+type MockRepositoryDeletePresetCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// DeletePresetCalls returns every recorded DeletePreset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeletePreset").
+func (m *MockRepository) DeletePresetCalls() []MockRepositoryDeletePresetCall {
+	var out []MockRepositoryDeletePresetCall
+	for _, c := range m.Recorder.Calls("DeletePreset") {
+		var r MockRepositoryDeletePresetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryGetPresetBySlugCall is one recorded call of MockRepository.GetPresetBySlug, one
+// field per parameter.
+type MockRepositoryGetPresetBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetPresetBySlugCalls returns every recorded GetPresetBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPresetBySlug").
+func (m *MockRepository) GetPresetBySlugCalls() []MockRepositoryGetPresetBySlugCall {
+	var out []MockRepositoryGetPresetBySlugCall
+	for _, c := range m.Recorder.Calls("GetPresetBySlug") {
+		var r MockRepositoryGetPresetBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryGetPresetBySlugAndProjectCall is one recorded call of MockRepository.GetPresetBySlugAndProject, one
+// field per parameter.
+type MockRepositoryGetPresetBySlugAndProjectCall struct {
+	Ctx       context.Context
+	UserID    string
+	Slug      string
+	ProjectID string
+}
+
+// GetPresetBySlugAndProjectCalls returns every recorded GetPresetBySlugAndProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPresetBySlugAndProject").
+func (m *MockRepository) GetPresetBySlugAndProjectCalls() []MockRepositoryGetPresetBySlugAndProjectCall {
+	var out []MockRepositoryGetPresetBySlugAndProjectCall
+	for _, c := range m.Recorder.Calls("GetPresetBySlugAndProject") {
+		var r MockRepositoryGetPresetBySlugAndProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		r.ProjectID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListUserPresetsByProjectCall is one recorded call of MockRepository.ListUserPresetsByProject, one
+// field per parameter.
+type MockRepositoryListUserPresetsByProjectCall struct {
+	Ctx       context.Context
+	UserID    string
+	ProjectID string
+}
+
+// ListUserPresetsByProjectCalls returns every recorded ListUserPresetsByProject call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListUserPresetsByProject").
+func (m *MockRepository) ListUserPresetsByProjectCalls() []MockRepositoryListUserPresetsByProjectCall {
+	var out []MockRepositoryListUserPresetsByProjectCall
+	for _, c := range m.Recorder.Calls("ListUserPresetsByProject") {
+		var r MockRepositoryListUserPresetsByProjectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ProjectID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListPresetsByTagCall is one recorded call of MockRepository.ListPresetsByTag, one
+// field per parameter.
+type MockRepositoryListPresetsByTagCall struct {
+	Ctx       context.Context
+	UserID    string
+	Tag       string
+	ProjectID string
+}
+
+// ListPresetsByTagCalls returns every recorded ListPresetsByTag call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListPresetsByTag").
+func (m *MockRepository) ListPresetsByTagCalls() []MockRepositoryListPresetsByTagCall {
+	var out []MockRepositoryListPresetsByTagCall
+	for _, c := range m.Recorder.Calls("ListPresetsByTag") {
+		var r MockRepositoryListPresetsByTagCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Tag, _ = c.Args[2].(string)
+		r.ProjectID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryGetProjectPresetsJSONCall is one recorded call of MockRepository.GetProjectPresetsJSON, one
+// field per parameter.
+type MockRepositoryGetProjectPresetsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectPresetsJSONCalls returns every recorded GetProjectPresetsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectPresetsJSON").
+func (m *MockRepository) GetProjectPresetsJSONCalls() []MockRepositoryGetProjectPresetsJSONCall {
+	var out []MockRepositoryGetProjectPresetsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectPresetsJSON") {
+		var r MockRepositoryGetProjectPresetsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryGetSettingCall is one recorded call of MockRepository.GetSetting, one
+// field per parameter.
+type MockRepositoryGetSettingCall struct {
+	Ctx       context.Context
+	UserID    string
+	ProjectID *string
+	Key       string
+}
+
+// GetSettingCalls returns every recorded GetSetting call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetSetting").
+func (m *MockRepository) GetSettingCalls() []MockRepositoryGetSettingCall {
+	var out []MockRepositoryGetSettingCall
+	for _, c := range m.Recorder.Calls("GetSetting") {
+		var r MockRepositoryGetSettingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ProjectID, _ = c.Args[2].(*string)
+		r.Key, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryCreateSettingCall is one recorded call of MockRepository.CreateSetting, one
+// field per parameter.
+type MockRepositoryCreateSettingCall struct {
+	Ctx     context.Context
+	Setting *db.Setting
+}
+
+// CreateSettingCalls returns every recorded CreateSetting call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateSetting").
+func (m *MockRepository) CreateSettingCalls() []MockRepositoryCreateSettingCall {
+	var out []MockRepositoryCreateSettingCall
+	for _, c := range m.Recorder.Calls("CreateSetting") {
+		var r MockRepositoryCreateSettingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Setting, _ = c.Args[1].(*db.Setting)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryUpdateSettingCall is one recorded call of MockRepository.UpdateSetting, one
+// field per parameter.
+type MockRepositoryUpdateSettingCall struct {
+	Ctx     context.Context
+	Setting *db.Setting
+}
+
+// UpdateSettingCalls returns every recorded UpdateSetting call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateSetting").
+func (m *MockRepository) UpdateSettingCalls() []MockRepositoryUpdateSettingCall {
+	var out []MockRepositoryUpdateSettingCall
+	for _, c := range m.Recorder.Calls("UpdateSetting") {
+		var r MockRepositoryUpdateSettingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Setting, _ = c.Args[1].(*db.Setting)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListSettingsByKeyCall is one recorded call of MockRepository.ListSettingsByKey, one
+// field per parameter.
+type MockRepositoryListSettingsByKeyCall struct {
+	Ctx        context.Context
+	UserID     string
+	KeyPattern string
+}
+
+// ListSettingsByKeyCalls returns every recorded ListSettingsByKey call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListSettingsByKey").
+func (m *MockRepository) ListSettingsByKeyCalls() []MockRepositoryListSettingsByKeyCall {
+	var out []MockRepositoryListSettingsByKeyCall
+	for _, c := range m.Recorder.Calls("ListSettingsByKey") {
+		var r MockRepositoryListSettingsByKeyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.KeyPattern, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListVisibilityOverridesCall is one recorded call of MockRepository.ListVisibilityOverrides, one
+// field per parameter.
+type MockRepositoryListVisibilityOverridesCall struct {
+	Ctx      context.Context
+	UserID   string
+	ItemType int32
+}
+
+// ListVisibilityOverridesCalls returns every recorded ListVisibilityOverrides call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListVisibilityOverrides").
+func (m *MockRepository) ListVisibilityOverridesCalls() []MockRepositoryListVisibilityOverridesCall {
+	var out []MockRepositoryListVisibilityOverridesCall
+	for _, c := range m.Recorder.Calls("ListVisibilityOverrides") {
+		var r MockRepositoryListVisibilityOverridesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ItemType, _ = c.Args[2].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryListHiddenItemDefaultsCall is one recorded call of MockRepository.ListHiddenItemDefaults, one
+// field per parameter.
+type MockRepositoryListHiddenItemDefaultsCall struct {
+	Ctx      context.Context
+	ItemType int32
+}
+
+// ListHiddenItemDefaultsCalls returns every recorded ListHiddenItemDefaults call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListHiddenItemDefaults").
+func (m *MockRepository) ListHiddenItemDefaultsCalls() []MockRepositoryListHiddenItemDefaultsCall {
+	var out []MockRepositoryListHiddenItemDefaultsCall
+	for _, c := range m.Recorder.Calls("ListHiddenItemDefaults") {
+		var r MockRepositoryListHiddenItemDefaultsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ItemType, _ = c.Args[1].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockRepositoryGetProjectWorkflowsJSONCall is one recorded call of MockRepository.GetProjectWorkflowsJSON, one
+// field per parameter.
+type MockRepositoryGetProjectWorkflowsJSONCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectWorkflowsJSONCalls returns every recorded GetProjectWorkflowsJSON call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectWorkflowsJSON").
+func (m *MockRepository) GetProjectWorkflowsJSONCalls() []MockRepositoryGetProjectWorkflowsJSONCall {
+	var out []MockRepositoryGetProjectWorkflowsJSONCall
+	for _, c := range m.Recorder.Calls("GetProjectWorkflowsJSON") {
+		var r MockRepositoryGetProjectWorkflowsJSONCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Repository = (*MockRepository)(nil)
 
 // forge:section MockDrafts
-// forge:hash=6e10ed2e14ceb1c7c89f7bded6a39abb47bad08eec9b3e94978a60fc19923297
+// forge:hash=e59e39a8c48ca50ed11f9554f18a4373eaba5d982406b641207496b0c1dedefb
 
 // MockDrafts is a test mock for the Drafts interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDrafts.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDrafts.<Method>Func not set" error.
 type MockDrafts struct {
 	contractkit.Recorder
 	ListWorkflowDraftsByUserFunc func(context.Context, string) ([]*db.WorkflowDraft, error)
@@ -226,18 +548,83 @@ func (m *MockDrafts) GetWorkflowDraftBySlug(ctx context.Context, userID string, 
 	return nil, contractkit.MockNotSet("MockDrafts", "GetWorkflowDraftBySlug")
 }
 
+// MockDraftsListWorkflowDraftsByUserCall is one recorded call of MockDrafts.ListWorkflowDraftsByUser, one
+// field per parameter.
+type MockDraftsListWorkflowDraftsByUserCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListWorkflowDraftsByUserCalls returns every recorded ListWorkflowDraftsByUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListWorkflowDraftsByUser").
+func (m *MockDrafts) ListWorkflowDraftsByUserCalls() []MockDraftsListWorkflowDraftsByUserCall {
+	var out []MockDraftsListWorkflowDraftsByUserCall
+	for _, c := range m.Recorder.Calls("ListWorkflowDraftsByUser") {
+		var r MockDraftsListWorkflowDraftsByUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsGetUsableWorkflowBySlugCall is one recorded call of MockDrafts.GetUsableWorkflowBySlug, one
+// field per parameter.
+type MockDraftsGetUsableWorkflowBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetUsableWorkflowBySlugCalls returns every recorded GetUsableWorkflowBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetUsableWorkflowBySlug").
+func (m *MockDrafts) GetUsableWorkflowBySlugCalls() []MockDraftsGetUsableWorkflowBySlugCall {
+	var out []MockDraftsGetUsableWorkflowBySlugCall
+	for _, c := range m.Recorder.Calls("GetUsableWorkflowBySlug") {
+		var r MockDraftsGetUsableWorkflowBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDraftsGetWorkflowDraftBySlugCall is one recorded call of MockDrafts.GetWorkflowDraftBySlug, one
+// field per parameter.
+type MockDraftsGetWorkflowDraftBySlugCall struct {
+	Ctx    context.Context
+	UserID string
+	Slug   string
+}
+
+// GetWorkflowDraftBySlugCalls returns every recorded GetWorkflowDraftBySlug call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetWorkflowDraftBySlug").
+func (m *MockDrafts) GetWorkflowDraftBySlugCalls() []MockDraftsGetWorkflowDraftBySlugCall {
+	var out []MockDraftsGetWorkflowDraftBySlugCall
+	for _, c := range m.Recorder.Calls("GetWorkflowDraftBySlug") {
+		var r MockDraftsGetWorkflowDraftBySlugCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Slug, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Drafts = (*MockDrafts)(nil)
 
 // forge:section MockService
-// forge:hash=2374469de5f793f66d4bf359b78581ee4ebb9e3f4fc263a78cdbdf42ff933a3c
+// forge:hash=b40e4dd959c404dbb65944b171b5d12d2ab2d693708e288c32c1568b8f0d86ec
 
 // MockService is a test mock for the projectaccess.Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	GetProjectWithUserCheckFunc func(context.Context, string, string) (*core.Project, error)
@@ -250,6 +637,28 @@ func (m *MockService) GetProjectWithUserCheck(ctx context.Context, id string, us
 		return m.GetProjectWithUserCheckFunc(ctx, id, userID)
 	}
 	return nil, contractkit.MockNotSet("MockService", "GetProjectWithUserCheck")
+}
+
+// MockServiceGetProjectWithUserCheckCall is one recorded call of MockService.GetProjectWithUserCheck, one
+// field per parameter.
+type MockServiceGetProjectWithUserCheckCall struct {
+	Ctx    context.Context
+	ID     string
+	UserID string
+}
+
+// GetProjectWithUserCheckCalls returns every recorded GetProjectWithUserCheck call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectWithUserCheck").
+func (m *MockService) GetProjectWithUserCheckCalls() []MockServiceGetProjectWithUserCheckCall {
+	var out []MockServiceGetProjectWithUserCheckCall
+	for _, c := range m.Recorder.Calls("GetProjectWithUserCheck") {
+		var r MockServiceGetProjectWithUserCheckCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

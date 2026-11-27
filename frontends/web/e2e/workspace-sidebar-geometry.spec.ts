@@ -50,6 +50,12 @@ for (const { width, electron } of [200, 240].flatMap((width) =>
     await page.goto(`/project/${PROJECT.id}`, { waitUntil: 'domcontentloaded' });
     // The right panel is closed by default (#3010): open it the way a person does.
     await page.getByRole('button', { name: 'Toggle File Browser' }).click();
+    // The pointer still rests on the toggle, so its tooltip stays open, and at
+    // 200px it sits over the strip (it intercepted the Terminal click below
+    // and the hit-target probe). Move the pointer away, as a person does, and
+    // wait for it to close before measuring.
+    await page.mouse.move(0, 0);
+    await expect(page.getByRole('tooltip', { name: /Toggle File Browser/ })).toHaveCount(0);
     const sidebar = page.locator('[data-onboarding="right-sidebar"]');
     const tabs = sidebar.getByRole('tab');
     await expect(tabs).toHaveCount(electron ? 5 : 4);

@@ -12,21 +12,25 @@ import (
 
 // A zombie runs nothing: GroupMembers must not list it and GroupOwned must not
 // accept it as proof of the group. This test process is the zombie's parent and
-// does not reap it until the end.
-func TestGroupMembersAndOwnershipExcludeZombies(t *testing.T) {
+// does not reap it until the end. The leader runs until the test kills it, so
+// it is still running when its membership is read, however loaded the host.
+func TestGroupMembersAndOwnershipExcludeAKilledLeader(t *testing.T) {
 	if _, ok := GroupMembers(1); !ok {
 		t.Skip("needs a readable process table")
 	}
-	cmd := exec.Command("sleep", "0.2")
+	cmd := exec.Command("sleep", "60")
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = cmd.Wait() }()
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }()
 	pgid := cmd.Process.Pid
 	members, _ := GroupMembers(pgid)
 	if len(members) != 1 {
 		t.Fatalf("members = %v, want the running leader", members)
+	}
+	if err := cmd.Process.Kill(); err != nil {
+		t.Fatal(err)
 	}
 
 	deadline := time.Now().Add(conditionTimeout)

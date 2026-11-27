@@ -96,6 +96,42 @@ fi
 # ── Holding the lock from here on. ──────────────────────────────────────────
 
 shift 2
+
+# Omit DWARF in dev links unless a debugger needs it. Keep the symbol table
+# and pclntab (unlike -s), so stack traces and profiling still work.
+# The last -ldflags replaces earlier ones, including GOFLAGS: merge -w into
+# that value rather than discard the caller's -X stamps. Repeating -w is
+# harmless; text matching could mistake an -X value for the linker flag.
+# With only GOFLAGS supplying -ldflags, preserve the user's choice unchanged.
+if [ "${FORGE_DEV_DWARF:-}" != 1 ]; then
+  n=0 last=0
+  for a in "$@"; do
+    n=$((n + 1))
+    case $a in
+      -ldflags=* | --ldflags=*) last=$n ;;
+      -ldflags | --ldflags) last=$((n + 1)) ;;
+    esac
+  done
+  if [ "$last" -eq 0 ]; then
+    case " ${GOFLAGS:-} " in
+      *" -ldflags"* | *" --ldflags"*) ;;
+      *) set -- "$@" -ldflags=-w ;;
+    esac
+  elif [ "$last" -le $# ]; then
+    # Rotate the argv without splitting words or losing their order.
+    i=0
+    while [ $i -lt $# ]; do
+      i=$((i + 1))
+      a=$1
+      shift
+      if [ $i -eq "$last" ]; then
+        a="$a -w"
+      fi
+      set -- "$@" "$a"
+    done
+  fi
+fi
+
 CGO_ENABLED=0 go build -trimpath -buildvcs=false "$@" -o "$dir/bin" "$pkg"
 
 # Link the shared binary to the caller's output through a rename, so a running

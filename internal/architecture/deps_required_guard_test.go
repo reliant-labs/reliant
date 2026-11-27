@@ -3,6 +3,7 @@ package architecture
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -341,9 +342,6 @@ var _ = map[string][]string{
 	"internal/hosteduse.HTTPClient":                      {"internal/app", "internal/hosteduse"},
 	"internal/integrations/connauth.Broker":              {"internal/handlers/trigger", "internal/integrations/connauth", "internal/integrations/ghdelegated", "internal/triggers", "internal/workflow/runtime/activities/handlers"},
 	"internal/integrations/connauth.Resolver":            {"internal/integrations/connauth"},
-	"internal/integrations/ghblobs.APIBaseURL":           {"internal/app"},
-	"internal/integrations/ghblobs.HTTPClient":           {"internal/app"},
-	"internal/integrations/ghblobs.MaxBytes":             {"internal/app"},
 	"internal/integrations/ghusers.APIBaseURL":           {"internal/app", "internal/integrations/ghusers"},
 	"internal/integrations/ghusers.HTTPClient":           {"internal/app", "internal/integrations/ghusers"},
 	"internal/integrations/inputoptions.Credentials":     {"internal/integrations/inputoptions"},
@@ -479,15 +477,13 @@ func TestEveryConstructionSetsEveryRequiredDepsField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Read the baseline through git, not the live main checkout. In a merge
-	// group HEAD^1 is the queue base; locally use the branch's merge base.
-	base := os.Getenv("DEPS_GUARD_BASE")
-	if base == "" {
-		if os.Getenv("GITHUB_EVENT_NAME") == "merge_group" {
-			base = "HEAD^1"
-		} else {
-			base = strings.TrimSpace(string(depsGit(t, repo, "merge-base", "origin/main", "HEAD")))
-		}
+	// Read the baseline through git, not the live main checkout.
+	base, unavailable, err := resolveDepsGuardBase(repo, os.Getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unavailable != "" {
+		t.Skipf("skip: %s, so the guard cannot read the baseline it compares against. Set DEPS_GUARD_BASE=<rev>, or run `task test` in a full clone with origin/main fetched.", unavailable)
 	}
 	baseline := map[string][]byte{}
 	archive := tar.NewReader(bytes.NewReader(depsGit(t, repo, "archive", base)))
@@ -558,6 +554,187 @@ func newDepsFindings(current, baseline []depsFinding) []depsFinding {
 		}
 	}
 	return out
+}
+
+// depsGuardBase is the revision the guard's baseline is read at, from the
+// environment: DEPS_GUARD_BASE when set; in a GitHub merge group HEAD^1, the
+// queue base; in a Reliant merge queue gate, whose checkout has no
+// origin/main, the batch's base, GATE_BASE (or CI_BASE). "" means the
+// branch's merge base with origin/main.
+func depsGuardBase(getenv func(string) string) string {
+	if base := getenv("DEPS_GUARD_BASE"); base != "" {
+		return base
+	}
+	if getenv("GITHUB_EVENT_NAME") == "merge_group" {
+		return "HEAD^1"
+	}
+	return cmp.Or(getenv("GATE_BASE"), getenv("CI_BASE"))
+}
+
+// resolveDepsGuardBase is the commit the baseline is read at: depsGuardBase's
+// explicit revision when the environment names one, else the merge base of
+// origin/main and HEAD. When the host cannot provide that history (not a git
+// checkout, no origin/main ref, or a shallow clone missing the commit) it
+// returns why in unavailable, and the guard skips: a missing resource, not a
+// finding. Anything else that fails to resolve, in a full clone, is an error.
+func resolveDepsGuardBase(repo string, getenv func(string) string) (base, unavailable string, err error) {
+	out, err := depsGitOutput(repo, "rev-parse", "--is-shallow-repository")
+	if err != nil {
+		return "", fmt.Sprintf("git history is unavailable (%s is not a git checkout: %v)", repo, err), nil
+	}
+	shallow := strings.TrimSpace(out) == "true"
+
+	if base = depsGuardBase(getenv); base != "" {
+		if _, err := depsGitOutput(repo, "rev-parse", "--verify", "--quiet", base+"^{commit}"); err != nil {
+			if shallow {
+				return "", fmt.Sprintf("git history is unavailable (shallow clone has no commit %s)", base), nil
+			}
+			return "", "", fmt.Errorf("deps guard baseline %q is not a commit: %w", base, err)
+		}
+		return base, "", nil
+	}
+
+	if _, err := depsGitOutput(repo, "rev-parse", "--verify", "--quiet", "refs/remotes/origin/main^{commit}"); err != nil {
+		return "", "the origin/main ref is unavailable", nil
+	}
+	out, err = depsGitOutput(repo, "merge-base", "origin/main", "HEAD")
+	if err != nil {
+		if shallow {
+			return "", "git history is unavailable (shallow clone: no merge base of origin/main and HEAD)", nil
+		}
+		return "", "", fmt.Errorf("git merge-base origin/main HEAD: %w", err)
+	}
+	return strings.TrimSpace(out), "", nil
+}
+
+// depsGitOutput runs git in repo and returns its stdout; a failure carries
+// git's stderr. GIT_DIR and its kin are dropped so a git hook's environment
+// cannot point the command at another repository than repo.
+func depsGitOutput(repo string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repo
+	for _, kv := range os.Environ() {
+		switch k, _, _ := strings.Cut(kv, "="); k {
+		case "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY":
+		default:
+			cmd.Env = append(cmd.Env, kv)
+		}
+	}
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return string(out), nil
+}
+
+// The guard skips only when the host lacks the history; a base it can resolve
+// is used, and an explicit base that is not a commit in a full clone fails.
+func TestResolveDepsGuardBaseSkipsOnlyWithoutHistory(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("skip: git is not installed")
+	}
+	dir := t.TempDir()
+	run := func(d string, args ...string) string {
+		t.Helper()
+		out, err := depsGitOutput(d, append([]string{
+			"-c", "user.name=t", "-c", "user.email=t@example.com",
+			"-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false",
+		}, args...)...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(out)
+	}
+	// upstream: c1 ← c2 on main, and c1 ← f1 on feature.
+	upstream := filepath.Join(dir, "upstream")
+	if err := os.Mkdir(upstream, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	run(upstream, "init", "-q")
+	run(upstream, "commit", "-q", "--allow-empty", "-m", "c1")
+	c1 := run(upstream, "rev-parse", "HEAD")
+	run(upstream, "commit", "-q", "--allow-empty", "-m", "c2")
+	run(upstream, "checkout", "-q", "-b", "feature", c1)
+	run(upstream, "commit", "-q", "--allow-empty", "-m", "f1")
+	url := "file://" + filepath.ToSlash(upstream)
+
+	full := filepath.Join(dir, "full")
+	run(dir, "clone", "-q", "--branch", "feature", url, full)
+	// The fixer's checkout: the PR branch and origin/main, one commit each.
+	shallow := filepath.Join(dir, "shallow")
+	run(dir, "clone", "-q", "--depth", "1", "--branch", "feature", url, shallow)
+	run(shallow, "fetch", "-q", "--depth", "1", "origin", "main:refs/remotes/origin/main")
+	noOrigin := filepath.Join(dir, "no-origin")
+	run(dir, "clone", "-q", "--branch", "feature", url, noOrigin)
+	run(noOrigin, "update-ref", "-d", "refs/remotes/origin/main")
+	notGit := filepath.Join(dir, "not-git")
+	if err := os.Mkdir(notGit, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	env := func(kv ...string) func(string) string {
+		return func(k string) string {
+			for i := 0; i+1 < len(kv); i += 2 {
+				if kv[i] == k {
+					return kv[i+1]
+				}
+			}
+			return ""
+		}
+	}
+	for _, tc := range []struct {
+		name, repo  string
+		getenv      func(string) string
+		wantBase    string
+		unavailable string // substring of the skip reason; "" means resolved
+		wantErr     bool
+	}{
+		{name: "full clone merge base", repo: full, getenv: env(), wantBase: c1},
+		{name: "full clone explicit base", repo: full, getenv: env("DEPS_GUARD_BASE", "HEAD^1"), wantBase: "HEAD^1"},
+		{name: "full clone bad explicit base fails", repo: full, getenv: env("DEPS_GUARD_BASE", "no-such-rev"), wantErr: true},
+		{name: "shallow clone without merge base", repo: shallow, getenv: env(), unavailable: "shallow clone: no merge base"},
+		{name: "shallow clone without explicit base", repo: shallow, getenv: env("DEPS_GUARD_BASE", "HEAD^1"), unavailable: "shallow clone has no commit HEAD^1"},
+		{name: "shallow clone with explicit base", repo: shallow, getenv: env("DEPS_GUARD_BASE", "HEAD"), wantBase: "HEAD"},
+		{name: "no origin/main ref", repo: noOrigin, getenv: env(), unavailable: "origin/main ref is unavailable"},
+		{name: "not a git checkout", repo: notGit, getenv: env(), unavailable: "not a git checkout"},
+	} {
+		base, unavailable, err := resolveDepsGuardBase(tc.repo, tc.getenv)
+		switch {
+		case tc.wantErr:
+			if err == nil {
+				t.Errorf("%s: got base %q, skip %q, want an error", tc.name, base, unavailable)
+			}
+		case err != nil:
+			t.Errorf("%s: %v", tc.name, err)
+		case tc.unavailable != "":
+			if !strings.Contains(unavailable, tc.unavailable) || base != "" {
+				t.Errorf("%s: got base %q, skip %q, want a skip naming %q", tc.name, base, unavailable, tc.unavailable)
+			}
+		case unavailable != "" || base != tc.wantBase:
+			t.Errorf("%s: got base %q, skip %q, want base %q", tc.name, base, unavailable, tc.wantBase)
+		}
+	}
+}
+
+func TestDepsGuardBaseHonoursTheQueueBase(t *testing.T) {
+	for _, tc := range []struct {
+		env  map[string]string
+		want string
+	}{
+		{nil, ""},
+		{map[string]string{"GATE_BASE": "g"}, "g"},
+		{map[string]string{"CI_BASE": "c"}, "c"},
+		{map[string]string{"GATE_BASE": "g", "CI_BASE": "c"}, "g"},
+		{map[string]string{"GITHUB_EVENT_NAME": "merge_group", "GATE_BASE": "g"}, "HEAD^1"},
+		{map[string]string{"DEPS_GUARD_BASE": "d", "GITHUB_EVENT_NAME": "merge_group", "GATE_BASE": "g"}, "d"},
+	} {
+		if got := depsGuardBase(func(k string) string { return tc.env[k] }); got != tc.want {
+			t.Errorf("depsGuardBase(%v) = %q, want %q", tc.env, got, tc.want)
+		}
+	}
 }
 
 func TestDepsGuardIgnoresQueueBaselineButFindsRegressions(t *testing.T) {

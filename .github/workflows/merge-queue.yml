@@ -99,6 +99,20 @@ name: Merge queue
 # default-branch workflow_run listener owns the rolling pipeline:slo issue.
 # Report failures do not decide the required check; a slow runner is not the
 # change's fault, and ejecting it would cost every entry behind it a rebuild.
+#
+# SELF-HOSTED RUNNERS ON cicd (owner, 2026-11-26: "The cicd machine is
+# supposed to be exactly for this"). A merge group needs 8 jobs, and the org
+# runs about 20 at once across every repository, so groups waited for a
+# GitHub-hosted runner far longer than they ran. Every job but `visual` (it
+# runs Playwright under docker, which the cicd runners are not given) runs on
+# the runners labelled `self-hosted, cicd`: unprivileged users with no sudo,
+# no docker and no view of the machine's agent workspaces or credentials, in a
+# systemd slice that outweighs agent work for CPU, each held to 12 CPUs, with
+# HOME, /tmp, the tool cache and the workspace emptied before and after every
+# job. A root-owned job-started hook on those runners refuses any job that is
+# not a merge group or a push to main of this repository. The `runs-on`
+# expression keeps every other event (this workflow has none today) on
+# GitHub-hosted runners. To roll back, set each `runs-on` to ubuntu-latest.
 on:
   merge_group:
 
@@ -112,7 +126,7 @@ jobs:
   # The gate (header: WHAT RUNS HERE). Its result is one of the three `CI result` reads.
   merge-gate:
     name: Merge gate
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'merge_group' && fromJSON('["self-hosted","cicd"]') || 'ubuntu-latest' }}
     # A runner that dies holds the queue entry until this fires, so it stays
     # under the ruleset's 45-minute check timeout. It is 44, not 30: a web
     # change to a hub module (paths.ts, a primitive) reaches ~1100 vitest
@@ -223,6 +237,20 @@ jobs:
       - name: Summary
         if: ${{ !cancelled() }}
         run: cat "${RUNNER_TEMP}/merge-gate/summary.md" >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+      # The gate's recorded test run (scripts/merge-gate.sh `forge test begin`:
+      # lanes short and web-affected), pass or fail, as data for the Tests
+      # view. This job holds no credential to upload it: the default-branch
+      # listener test-upload-merge-queue.yml downloads it after the run and
+      # uploads it with main's code, so the candidate never holds id-token.
+      - name: Keep the recorded test run
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: merge-gate-test-runs-${{ github.run_attempt }}
+          path: .forge/tests/runs
+          include-hidden-files: true
+          retention-days: 3
+          if-no-files-found: ignore
       - name: Upload the gate's phase logs
         if: failure()
         uses: actions/upload-artifact@v4
@@ -270,7 +298,7 @@ jobs:
   # lint is still a job success.
   golangci:
     name: golangci (changed)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'merge_group' && fromJSON('["self-hosted","cicd"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     env:
       BASE: ${{ github.event.merge_group.base_sha }}
@@ -302,7 +330,7 @@ jobs:
   # `CI result` needs it. One matrix job: needs.vitest.result rolls the legs up.
   vitest:
     name: vitest (${{ matrix.shard }}/4)
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'merge_group' && fromJSON('["self-hosted","cicd"]') || 'ubuntu-latest' }}
     # Each leg runs a quarter of the files; CI result starts after the
     # slowest, inside the ruleset's 45-minute check timeout.
     timeout-minutes: 30
@@ -388,7 +416,7 @@ jobs:
     name: CI result
     needs: [merge-gate, golangci, vitest, visual]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ${{ github.event_name == 'merge_group' && fromJSON('["self-hosted","cicd"]') || 'ubuntu-latest' }}
     timeout-minutes: 5
     permissions: {}
     steps:

@@ -56,6 +56,10 @@ type Deps struct {
 	// WorktreeUse is the last time daemon work named a path in a worktree
 	// (worktreereclaim.UseLog.LastUse).
 	WorktreeUse func(path string) time.Time
+	// Pressure reports whether a volume holding the scratch or worktree root
+	// is under pressure (VolumePressure); Run then runs pressure passes. Nil:
+	// never.
+	Pressure func() bool
 }
 
 // Reclaimer runs the idle reclaim over one scratch root and one worktree root.
@@ -79,6 +83,17 @@ type Reclaimer struct {
 	Deps
 
 	mu sync.Mutex // one pass at a time
+	// pass is the running pass's floors (Config, or its pressure floors);
+	// nil outside a pass. Guarded by mu.
+	pass *Config
+}
+
+// floors is the configuration the running pass applies.
+func (r *Reclaimer) floors() Config {
+	if r.pass != nil {
+		return *r.pass
+	}
+	return r.Config
 }
 
 // DefaultScratchRoot is ~/.reliant/scratch, the directory the system prompt
@@ -115,6 +130,7 @@ func NewReclaimer(cfg Config) (*Reclaimer, error) {
 			ProcessUse:  worktreereclaim.CheckProcessUse,
 			Inspect:     worktreereclaim.InspectRegenerable,
 			NodeModules: worktreereclaim.NodeModulesTargets,
+			Pressure:    VolumePressure(scratch, worktrees),
 		},
 	}, nil
 }
@@ -154,8 +170,10 @@ func (r *Reclaimer) inUse(ctx context.Context, paths ...string) error {
 }
 
 // Run runs a pass every PassInterval until ctx is done, when the mode says
-// passes run on this daemon. reaperEnabled is whether the storage reaper runs
-// here: mode auto follows it. Nil-safe.
+// passes run on this daemon, and a pressure pass (TriggerPressure) within
+// minutes of a volume coming under pressure, then every PressurePassInterval
+// while it stays. reaperEnabled is whether the storage reaper runs here: mode
+// auto follows it. Nil-safe.
 func (r *Reclaimer) Run(ctx context.Context, reaperEnabled bool) {
 	if r == nil {
 		return
@@ -168,29 +186,44 @@ func (r *Reclaimer) Run(ctx context.Context, reaperEnabled bool) {
 	}
 	logging.InfoContext(ctx, "[idlereclaim] Idle reclaim scheduled", "mode", r.Config.Mode, "dry_run", dryRun, "interval", PassInterval,
 		"scratch_root", r.ScratchRoot, "scratch_strip_idle", r.Config.ScratchStripIdle, "scratch_remove_idle", r.Config.ScratchRemoveIdle,
-		"worktree_root", r.WorktreeRoot, "worktree_node_modules_idle", r.Config.WorktreeNodeModulesIdle)
-	timer := time.NewTimer(firstPassDelay)
-	defer timer.Stop()
+		"worktree_root", r.WorktreeRoot, "worktree_node_modules_idle", r.Config.WorktreeNodeModulesIdle,
+		"pressure_interval", PressurePassInterval, "pressure_strip_idle", PressureStripIdle)
+	started := r.now()
+	var last time.Time
+	ticker := time.NewTicker(pressureCheckEvery)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-timer.C:
+		case <-ticker.C:
 		}
-		r.Pass(ctx, dryRun, "scheduled")
-		timer.Reset(PassInterval)
+		pressure := r.Pressure != nil && r.Pressure()
+		trigger, due := nextPass(pressure, started, last, r.now())
+		if !due {
+			continue
+		}
+		last = r.now()
+		r.Pass(ctx, dryRun, trigger)
 	}
 }
 
 // Pass runs one pass and returns its report, which it also writes to
-// StateDir. dryRun decides and removes nothing. It never panics.
+// StateDir. dryRun decides and removes nothing. trigger TriggerPressure
+// applies the pressure floors. It never panics.
 func (r *Reclaimer) Pass(ctx context.Context, dryRun bool, trigger string) (rep Report) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	cfg := r.Config
+	if trigger == TriggerPressure {
+		cfg = cfg.pressureFloors()
+	}
+	r.pass = &cfg
+	defer func() { r.pass = nil }()
 	rep = Report{
 		Mode: r.Config.Mode, DryRun: dryRun, Trigger: trigger, StartedAt: r.now(),
-		ScratchStripIdle: r.Config.ScratchStripIdle.String(), ScratchRemoveIdle: r.Config.ScratchRemoveIdle.String(),
-		WorktreeNodeModulesIdle: r.Config.WorktreeNodeModulesIdle.String(),
+		ScratchStripIdle: cfg.ScratchStripIdle.String(), ScratchRemoveIdle: cfg.ScratchRemoveIdle.String(),
+		WorktreeNodeModulesIdle: cfg.WorktreeNodeModulesIdle.String(),
 		ScratchRoot:             r.ScratchRoot, WorktreeRoot: r.WorktreeRoot,
 	}
 	defer func() {

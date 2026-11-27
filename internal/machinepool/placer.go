@@ -148,6 +148,13 @@ func readMembers(ctx context.Context, r MemberReader, userID, poolID, projectID 
 	return membersOf(ctx, r, row, projectID)
 }
 
+// MembersOf is row's members for projectID as placement sees them, for a
+// caller that places work other than runs on a pool (the merge queue's gate
+// runner, internal/mergequeue/gaterun).
+func MembersOf(ctx context.Context, r MemberReader, row *core.MachinePool, projectID string) ([]Member, error) {
+	return membersOf(ctx, r, row, projectID)
+}
+
 func membersOf(ctx context.Context, r MemberReader, row *core.MachinePool, projectID string) ([]Member, error) {
 	rows, err := r.ListMachinePoolMembers(ctx, row, projectID)
 	if err != nil {

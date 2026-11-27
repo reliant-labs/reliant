@@ -20,6 +20,7 @@ const yamlKeyOutcome = "outcome"
 const yamlKeyTolerateFailure = "tolerate_failure"
 const yamlKeyObserve = "observe"
 const yamlKeyRole = "role"
+const yamlKeyPreflight = "preflight"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -33,6 +34,7 @@ var generatedNodeBaseFieldKeys = map[string]struct{}{
 	"id":               {},
 	"observe":          {},
 	"outcome":          {},
+	"preflight":        {},
 	"save_message":     {},
 	"timeout":          {},
 	"tolerate_failure": {},

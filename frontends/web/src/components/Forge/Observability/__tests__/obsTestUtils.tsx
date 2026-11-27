@@ -15,10 +15,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
-import {
-  ObservabilityApiProvider,
-  type ObservabilityApi,
-} from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 
 import ObservabilityPanel, { type ObsPlace } from "../ObservabilityPanel";
 import { FIXTURE_ENVS, FIXTURE_PROJECT } from "../__fixtures__/fixtureApi";
@@ -59,7 +57,7 @@ export function renderPanel(api: ObservabilityApi, initial: ObsSearch = {}, plac
 export function renderWithApi(api: ObservabilityApi, ui: ReactElement, client: QueryClient = createTestQueryClient()): RenderResult {
   return render(
     <QueryClientProvider client={client}>
-      <ObsQuotaProvider><ObservabilityApiProvider api={api}>{ui}</ObservabilityApiProvider></ObsQuotaProvider>
+      <ObsQuotaProvider><ObservabilityFixtures api={api}>{ui}</ObservabilityFixtures></ObsQuotaProvider>
     </QueryClientProvider>
   );
 }

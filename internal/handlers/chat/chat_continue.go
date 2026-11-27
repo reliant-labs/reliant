@@ -304,7 +304,7 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 		WorkflowName: workflowName,
 		Inputs:       inputs,
 		ExecContext:  execContext,
-		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, chat.ID),
+		Trigger:      launch.LoadChatTrigger(ctx, s.triggerReads(), chat.ID),
 		Resume:       resumeWholeChatInput(v2.ResumeInputFromDurableState(ctx, s.durable(), chat.ID, workflowID)),
 	})
 	if err != nil {

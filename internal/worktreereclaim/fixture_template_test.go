@@ -55,9 +55,12 @@ func heavyUnderShort(t *testing.T, why string) {
 
 // skipWithoutSafeInspection skips a test that needs the mount-safe, symlink-safe
 // file and tree inspection (openat2/fstatfs, Linux only). Elsewhere those
-// refuse by design and the reaper holds every worktree rather than guess.
+// refuse by design and the reaper holds every worktree rather than guess. On
+// Linux it skips only when the host's kernel or sandbox lacks the syscalls
+// (requireOpenat2, ENOSYS); any other failure there fails the test.
 func skipWithoutSafeInspection(t *testing.T) {
 	t.Helper()
+	requireOpenat2(t)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "probe")
 	if err := os.WriteFile(file, nil, 0o600); err != nil {

@@ -52,7 +52,7 @@ Now build the version that will be the "update target":
 
 # The build artifacts you need are in electron/dist/:
 # - Reliant-X.X.X-mac-arm64.zip (the update package)
-# - dev-mac.yml (the update metadata - rename to alpha-mac.yml for testing)
+# - dev-mac.yml (the update metadata - rename to latest-mac.yml for testing)
 ```
 
 ### Step 3: Set Up the Local Update Server
@@ -62,9 +62,9 @@ Now build the version that will be the "update target":
 mkdir -p ~/.reliant-update-test-server
 cp electron/dist/Reliant-*-mac-arm64.zip ~/.reliant-update-test-server/
 
-# The dev build generates dev-mac.yml, but the app looks for alpha-mac.yml
-# (because RC versions use the alpha channel), so rename it when copying:
-cp electron/dist/dev-mac.yml ~/.reliant-update-test-server/alpha-mac.yml
+# The dev build generates dev-mac.yml, but the app looks for latest-mac.yml
+# (every version follows the latest channel), so rename it when copying:
+cp electron/dist/dev-mac.yml ~/.reliant-update-test-server/latest-mac.yml
 
 # Start the local server (from project root)
 ./electron/scripts/local-update-server.sh
@@ -109,8 +109,8 @@ tail -f /tmp/reliant-update-helper.log
 ### "No update available"
 
 - Make sure the version in your "new" build is higher than the "old" build
-- Check that `alpha-mac.yml` (or `latest-mac.yml`) is in the server directory
-- Verify the server is running: `curl http://localhost:8080/alpha-mac.yml`
+- Check that `latest-mac.yml` is in the server directory
+- Verify the server is running: `curl http://localhost:8080/latest-mac.yml`
 
 ### Update downloads but doesn't install
 
@@ -125,7 +125,7 @@ tail -f /tmp/reliant-update-helper.log
 
 ## Understanding the YML Files
 
-The `latest-mac.yml` or `alpha-mac.yml` file contains update metadata:
+The `latest-mac.yml` file contains update metadata:
 
 ```yaml
 version: 0.2.5-rc35
@@ -166,5 +166,5 @@ open /Applications/Reliant.app
 | `./electron/scripts/local-update-server.sh 9000` | Start on custom port |
 | `open --env RELIANT_UPDATE_URL=http://localhost:8080/ ~/Desktop/Reliant-OLD.app` | Run old app with local server |
 | `tail -f ~/Library/Logs/Reliant/main.log` | Watch app logs |
-| `curl http://localhost:8080/alpha-mac.yml` | Test server is working |
-| `cp electron/dist/dev-mac.yml ~/.reliant-update-test-server/alpha-mac.yml` | Copy and rename YML file |
+| `curl http://localhost:8080/latest-mac.yml` | Test server is working |
+| `cp electron/dist/dev-mac.yml ~/.reliant-update-test-server/latest-mac.yml` | Copy and rename YML file |

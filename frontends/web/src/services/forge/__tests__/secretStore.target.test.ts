@@ -9,36 +9,18 @@
  *   - a hosted env with no id makes no call and says why, rather than sending
  *     an empty or made-up id;
  *   - a hosted env on a DIFFERENT control plane makes no call here.
+ *
+ * The requests a lookup target keys (ListSecrets, SetSecret with its
+ * `environmentId`) are pinned by hooks/__tests__/forge-queries.managedSecrets.test.tsx.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { transport } from "@/lib/connect";
-
-const listSecretsRpc = vi.fn();
-const setSecretRpc = vi.fn();
-
-vi.mock("@/services/controlPlane/client", () => ({
-  getControlPlaneClient: () => ({
-    listSecrets: listSecretsRpc,
-    setSecret: setSecretRpc,
-  }),
-}));
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/services/controlPlane/config", () => ({
   CONTROL_PLANE_API_URL: "http://localhost:8090",
 }));
 
-import {
-  listSecrets,
-  managedStoreTarget,
-  normalizeEndpoint,
-  setSecret,
-} from "../secretStore";
-
-beforeEach(() => {
-  listSecretsRpc.mockReset().mockResolvedValue({ secrets: [{ name: "B" }, { name: "A" }] });
-  setSecretRpc.mockReset().mockResolvedValue({ version: 3 });
-});
+import { managedStoreTarget, normalizeEndpoint } from "../secretStore";
 
 describe("managedStoreTarget", () => {
   it("targets a hosted, ensured env on this console's control plane by its environment id", () => {
@@ -100,18 +82,5 @@ describe("managedStoreTarget", () => {
 
   it("treats localhost and 127.0.0.1 as the same control plane", () => {
     expect(normalizeEndpoint("http://localhost:8090/")).toBe(normalizeEndpoint("http://127.0.0.1:8090"));
-  });
-});
-
-describe("the RPCs are keyed by environmentId", () => {
-  it("lists with environmentId and nothing else", async () => {
-    const listing = await listSecrets(transport, "denv_1");
-    expect(listSecretsRpc).toHaveBeenCalledWith({ environmentId: "denv_1" });
-    expect(listing.secrets.map((r) => r.name)).toEqual(["A", "B"]);
-  });
-
-  it("writes with environmentId", async () => {
-    await setSecret(transport, { environmentId: "denv_1", name: "K", value: "v", cas: 0 });
-    expect(setSecretRpc).toHaveBeenCalledWith({ environmentId: "denv_1", name: "K", secretValue: "v", cas: 0 });
   });
 });

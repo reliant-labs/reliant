@@ -6,7 +6,9 @@
  * run it again.
  *
  * The transitions live in services/forge/stepUp.ts (pure, tested there);
- * this hook is the wiring — the two RPCs, the held write, and a clock.
+ * this hook is the wiring — the two RPCs (on the generated SecretStoreService
+ * calls of the QueryClient it runs on, so a TransportScope's gate reaches its
+ * transport), the held write, and a clock.
  *
  * ── THE HELD WRITE ──────────────────────────────────────────────────────────
  *
@@ -22,15 +24,15 @@
  * the ref is cleared the moment the dialog settles either way.
  */
 
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 
-import { transport as appTransport } from "@/lib/connect";
-import { useTransport } from "@/lib/transportScope";
+import { secretStoreServiceMutations } from "@/hooks/controlplane/secret-store-service-hooks_gen";
 import {
-  beginStepUp,
-  completeStepUp,
   isStepUpRequired,
   sendFailureOf,
+  stepUpChallengeOf,
+  stepUpGrantOf,
   verifyFailureOf,
 } from "@/services/forge/secretStore";
 import {
@@ -94,7 +96,8 @@ export function useStepUpGate(
   options: { onGranted?: () => void; clock?: () => number } = {}
 ): StepUpGate {
   const { onGranted, clock = Date.now } = options;
-  const transport = useTransport(appTransport);
+  const queryClient = useQueryClient();
+  const writes = useMemo(() => secretStoreServiceMutations(queryClient), [queryClient]);
   const [state, dispatch] = useReducer(stepUpReducer, STEP_UP_CLOSED);
   const [grantUntil, setGrantUntil] = useState<number | null>(null);
   const held = useRef<HeldWrite | null>(null);
@@ -151,7 +154,9 @@ export function useStepUpGate(
     if (!environmentId || !canSend(stateRef.current, clock())) return;
     const gen = generation.current;
     dispatch({ type: "send" });
-    beginStepUp(transport, environmentId).then(
+    // Neither step-up call refreshes a read itself: a grant refreshes the
+    // listing through `onGranted`, the caller's.
+    writes.beginStepUp({ environmentId }, { invalidate: false }).then(stepUpChallengeOf).then(
       (challenge) => {
         if (gen !== generation.current) return;
         const expiresAt = challenge.expiresAt ? Date.parse(challenge.expiresAt) : NaN;
@@ -167,14 +172,14 @@ export function useStepUpGate(
         dispatch({ type: "send-failed", failure: sendFailureOf(err), at: clock() });
       }
     );
-  }, [transport, environmentId, clock]);
+  }, [writes, environmentId, clock]);
 
   const submit = useCallback(
     (code: string) => {
       if (!environmentId || !canSubmit(stateRef.current, code)) return;
       const gen = generation.current;
       dispatch({ type: "submit" });
-      completeStepUp(transport, environmentId, code).then(
+      writes.completeStepUp({ environmentId, code }, { invalidate: false }).then(stepUpGrantOf).then(
         (grant) => {
           if (gen !== generation.current) return;
           const until = grant.validUntil ? Date.parse(grant.validUntil) : NaN;
@@ -200,7 +205,7 @@ export function useStepUpGate(
         }
       );
     },
-    [transport, environmentId, clock, onGranted]
+    [writes, environmentId, clock, onGranted]
   );
 
   const cancel = useCallback(() => {

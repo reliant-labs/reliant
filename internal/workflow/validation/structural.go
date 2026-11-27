@@ -299,6 +299,7 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 	nodeType := node.GetType()
 
 	validateNodeRole(node, nodePath, result)
+	validateNodePreflight(node, nodePath, result)
 
 	switch nodeType {
 	case model.NodeTypeCallLLM:

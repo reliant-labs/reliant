@@ -21,13 +21,20 @@ import { categoryOwnership, recordedOwnership, OwnershipBadge } from "./ownershi
 
 const n = (value: number) => value.toLocaleString("en-US");
 
+/**
+ * `forge lint`'s passing verdict, with the count of gating linters: "✅ 35
+ * gating linter(s) passed; …" (forge v1.11), "✅ All 27 gating linters passed;
+ * …" (v1.0).
+ */
+export const GATING_LINTERS = /(\d+) gating linter(?:s|\(s\)) passed/;
+
 /** The panel's numbers, all from the fixtures. */
 export function summarize(manifest: ScaffoldManifest, cast: ScaffoldCast) {
   const t = manifest.totals;
   const cat = (id: CategoryId) => manifest.categories.find((c) => c.id === id);
   const lint = cast.steps.find((s) => s.kind === "command" && s.command.startsWith("forge lint"));
   const lintText = lint?.kind === "command" ? lint.events.map((e) => e[1]).join("") : "";
-  const gating = /All (\d+) gating linters passed/.exec(lintText);
+  const gating = GATING_LINTERS.exec(lintText);
   const scaffold = manifest.by_step["forge scaffold"] ?? {};
   return {
     youLines: t.you_wrote_lines,
