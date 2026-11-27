@@ -10,16 +10,14 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityFixtures } from "@/test/observabilityFixtures";
-import { ReleasesApiProvider, type ReleasesApi } from "@/services/forge/ReleasesApiContext";
+import { ReleasesTestScope } from "../../Releases/__tests__/releasesTestUtils";
 import { PROMOTIONS_PAGE, type ReleaseGate, type ReleasePromotion } from "@/services/forge/releases";
 
 import { createWorkloadsFixtureApi } from "../../Workloads/__fixtures__/workloadFixtures";
-import { createReleasesFixtureApi, RELEASES } from "../../Releases/__fixtures__/releaseFixtures";
+import { createReleasesFixtureApi, RELEASES, type ReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
 import { HEALTH_GATE } from "../../Releases/envPromotionsModel";
 import { EnvPromotions, PROMOTIONS_SHOWN } from "../EnvPromotions";
 
@@ -58,18 +56,14 @@ const promo = (version: string, over: Partial<ReleasePromotion> = {}): ReleasePr
   ...over,
 });
 
-function renderCard(listPromotions: ReleasesApi["listPromotions"], over: Partial<ReleasesApi> = {}) {
+function renderCard(listPromotions: ReleasesFixtureApi["listPromotions"], over: Partial<ReleasesFixtureApi> = {}) {
   const calls = { listPromotions: vi.fn(listPromotions), getRollout: vi.fn(), getBundle: vi.fn(), compareReleases: vi.fn(), getRelease: vi.fn() };
-  const api: ReleasesApi = { ...createReleasesFixtureApi(), ...calls, ...over } as ReleasesApi;
+  const api: ReleasesFixtureApi = { ...createReleasesFixtureApi(), ...calls, ...over } as ReleasesFixtureApi;
   const client = createTestQueryClient();
   const ui = (env: { id: string; name: string }) => (
-    <QueryClientProvider client={client}>
-      <ObservabilityFixtures api={createWorkloadsFixtureApi()}>
-        <ReleasesApiProvider api={api}>
-          <EnvPromotions project="control-plane" env={env} releaseHref={(version) => `/releases/${version}?env=${env.name}`} releasesHref={`/releases?env=${env.name}`} />
-        </ReleasesApiProvider>
-      </ObservabilityFixtures>
-    </QueryClientProvider>
+    <ReleasesTestScope api={api} obs={createWorkloadsFixtureApi()} client={client}>
+      <EnvPromotions project="control-plane" env={env} releaseHref={(version) => `/releases/${version}?env=${env.name}`} releasesHref={`/releases?env=${env.name}`} />
+    </ReleasesTestScope>
   );
   const result = render(ui(ENV));
   return { ...calls, switchTo: (env: { id: string; name: string }) => result.rerender(ui(env)) };
