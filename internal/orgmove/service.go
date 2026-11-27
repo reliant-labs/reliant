@@ -46,6 +46,9 @@ const (
 	// path, or of the same repository, in the target org (projects are
 	// unique per org, user and path or repository).
 	DetailTargetHasProject = "target_has_project"
+	// DetailPipelineEnrolled: a repository of the project is enrolled in
+	// the pipeline with a mode other than off; unenroll first (G1).
+	DetailPipelineEnrolled = core.ReasonProjectPipelineEnrolled
 	// DetailControlPlaneUnavailable: this deployment's control plane cannot
 	// take a move (no service, or no identity to call it with).
 	DetailControlPlaneUnavailable = "control_plane_unavailable"
@@ -154,6 +157,8 @@ func (s *service) Commit(ctx context.Context, moveID string) (Outcome, error) {
 		return Outcome{Abort: true, Detail: DetailProjectGone}, nil
 	case errors.Is(err, store.ErrOrgMoveTargetHasProject):
 		return Outcome{Abort: true, Detail: DetailTargetHasProject}, nil
+	case errors.Is(err, core.ErrProjectPipelineEnrolled):
+		return Outcome{Abort: true, Detail: DetailPipelineEnrolled}, nil
 	case errors.Is(err, core.ErrProjectOrgMoveState):
 		m, getErr := s.deps.Store.GetProjectOrgMove(ctx, moveID)
 		if getErr != nil {

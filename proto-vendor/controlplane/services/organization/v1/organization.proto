@@ -336,6 +336,25 @@ service OrganizationService {
     };
   }
 
+  // ListLinkableGitHubAppInstallations lists the installations of this
+  // deployment's GitHub App that the caller's OWN GitHub account can reach
+  // (the same GET /user/installations proof LinkGitHubAppInstallation
+  // makes), each marked linked to this org, to another, or to none: how an
+  // admin links an App that is already installed, which never passes
+  // through the setup redirect. To link one, take a state from
+  // StartGitHubAppInstall (its `state`) and pass it with the installation_id
+  // to LinkGitHubAppInstallation, which checks everything again. Admin or
+  // owner. Errors: PERMISSION_DENIED "admin_required" / "not_org_member";
+  // FAILED_PRECONDITION "github_app_not_configured", or the git credential
+  // reasons when the caller has not connected GitHub.
+  rpc ListLinkableGitHubAppInstallations(ListLinkableGitHubAppInstallationsRequest) returns (ListLinkableGitHubAppInstallationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // UnlinkGitHubAppInstallation removes the link: the org's runs can no
   // longer mint bot tokens through it. The installation itself stays on
   // GitHub. Admin or owner. Unlinking one that is not linked to the org is
@@ -353,6 +372,91 @@ service OrganizationService {
       }
     };
   }
+
+  // --- Features by request (forge docs/proposals/ml-workloads.md §4.1) ------
+  //
+  // Some features are granted to an org by Reliant, not bought or switched on
+  // by the org itself: today only "ml" (ML training and inference, early
+  // access). Reliant staff grant and revoke them with
+  // DeployAdminService.GrantOrgEntitlement / RevokeOrgEntitlement. The
+  // authoritative gate is server-side: every rpc of a gated feature refuses an
+  // org without the entitlement with PermissionDenied, reason
+  // FEATURE_NOT_ENTITLED and metadata feature=<feature>. These two rpcs let a
+  // console predict that gate and ask for access; they never grant anything.
+
+  // GetMyOrgEntitlements reports, for every feature that is granted by
+  // request, whether the org has it and whether someone in it asked for it.
+  // Any member may call it; a machine credential is refused (human_only).
+  rpc GetMyOrgEntitlements(GetMyOrgEntitlementsRequest) returns (GetMyOrgEntitlementsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // RequestOrgEntitlement asks Reliant to grant a feature to the org. It
+  // records who asked and when, once per (org, feature): a repeat answers
+  // already_requested=true and changes nothing, and asking for a feature the
+  // org already has answers already_enabled=true. Reliant staff are told, and
+  // reach out; nothing is granted by this call. Any member may call it; a
+  // machine credential is refused (human_only). An unknown feature is
+  // INVALID_ARGUMENT.
+  rpc RequestOrgEntitlement(RequestOrgEntitlementRequest) returns (RequestOrgEntitlementResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "request_org_entitlement"
+        target: {
+          kind: "org"
+          id: "org_id"
+        }
+        scope: "org_id"
+        detail: ["feature"]
+      }
+    };
+  }
+}
+
+message GetMyOrgEntitlementsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+
+message GetMyOrgEntitlementsResponse {
+  // One entry per feature granted by request, whether or not the org has it,
+  // ordered by feature. Today: "ml".
+  repeated OrgFeatureEntitlement features = 1;
+}
+
+// OrgFeatureEntitlement is what a member may know of one feature granted by
+// request: whether the org has it, and whether it was asked for.
+message OrgFeatureEntitlement {
+  // The feature key, e.g. "ml".
+  string feature = 1;
+  // True when Reliant granted it and has not revoked it.
+  bool enabled = 2;
+  // When someone in the org last asked for it; unset when nobody has.
+  google.protobuf.Timestamp requested_at = 3;
+  // When it was granted; unset unless enabled.
+  google.protobuf.Timestamp granted_at = 4;
+}
+
+message RequestOrgEntitlementRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+  // The feature key, e.g. "ml".
+  string feature = 2 [(buf.validate.field).required = true];
+  // Optional context for Reliant staff (what the org wants to run), at most
+  // 1000 characters.
+  string note = 3 [(buf.validate.field).string.max_len = 1000];
+}
+
+message RequestOrgEntitlementResponse {
+  // The feature's state after the call.
+  OrgFeatureEntitlement entitlement = 1;
+  // True when the feature had already been requested and was not re-recorded.
+  bool already_requested = 2;
+  // True when the org already has the feature: nothing was recorded.
+  bool already_enabled = 3;
 }
 
 // GitHubAppInstallation is a GitHub App installation linked to an org.
@@ -378,6 +482,10 @@ message StartGitHubAppInstallRequest {
 message StartGitHubAppInstallResponse {
   // github.com/apps/<slug>/installations/new?state=...
   string install_url = 1;
+  // The signed state install_url carries, for a client that links an
+  // installation the App already has (ListLinkableGitHubAppInstallations)
+  // without sending anyone to GitHub. It expires 30 minutes after issue.
+  string state = 2 [debug_redact = true];
 }
 
 message LinkGitHubAppInstallationRequest {
@@ -399,6 +507,35 @@ message ListGitHubAppInstallationsRequest {
 }
 message ListGitHubAppInstallationsResponse {
   repeated GitHubAppInstallation installations = 1;
+}
+
+// LinkableGitHubAppInstallation is an installation of the App the caller's
+// GitHub account can reach, and where it is linked.
+message LinkableGitHubAppInstallation {
+  // GitHub's installation id.
+  int64 installation_id = 1;
+  // The GitHub account the App is installed on, and its kind
+  // ("Organization" or "User").
+  string account_login = 2;
+  string account_type = 3;
+  // The account's avatar; "" when GitHub sent none.
+  string avatar_url = 4;
+  // "all" or "selected"; "" when GitHub did not say.
+  string repository_selection = 5;
+  // Linked to the org the request named.
+  bool linked_here = 6;
+  // Linked to some other org (which one is not said): linking it here is
+  // refused until it is unlinked there.
+  bool linked_elsewhere = 7;
+  // Set while GitHub reports the installation suspended.
+  google.protobuf.Timestamp suspended_at = 8;
+}
+
+message ListLinkableGitHubAppInstallationsRequest {
+  string org_id = 1 [(buf.validate.field).required = true];
+}
+message ListLinkableGitHubAppInstallationsResponse {
+  repeated LinkableGitHubAppInstallation installations = 1;
 }
 
 message UnlinkGitHubAppInstallationRequest {

@@ -120,9 +120,13 @@ describe("ObservabilityPanel", () => {
 
   it("leaves Sessions its own replay note when nothing has arrived: a brand-new project learns how to turn replay on", async () => {
     // The console nav picks the view (the panel draws no tabs): open it by URL.
-    renderPanel(createFixtureApi({ empty: true, sessions: "empty", signals: { services: [], truncated: false } }), { view: "sessions" });
+    // A brand-new project: no frontend the server knows of, so the note teaches how to turn replay on.
+    renderPanel(
+      createFixtureApi({ empty: true, sessions: "empty", frontendReplay: { frontends: [], unavailableEnvIds: [] }, signals: { services: [], truncated: false } }),
+      { view: "sessions" }
+    );
     const note = await screen.findByTestId("obs-sessions-replay-off");
-    expect(note).toHaveTextContent('runtime_config = {OTEL_REPLAY = "true"}');
+    await waitFor(() => expect(note).toHaveTextContent('runtime_config = {OTEL_REPLAY = "true"}'));
     expect(note).toHaveTextContent("signals = forge.ObservabilitySignals {replay = True}");
     expect(screen.queryByTestId("obs-nothing-yet")).not.toBeInTheDocument();
   });

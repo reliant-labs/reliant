@@ -15,8 +15,8 @@
  */
 
 import { act, render, renderHook, screen, within } from "@testing-library/react";
-import { QueryClientProvider, focusManager, useQuery, type QueryClient } from "@tanstack/react-query";
-import { createClient, createRouterTransport, type HandlerContext } from "@connectrpc/connect";
+import { focusManager, useQuery, type QueryClient } from "@tanstack/react-query";
+import { createRouterTransport, type HandlerContext } from "@connectrpc/connect";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,9 +27,11 @@ import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/cont
 import { ObsQuotaProvider, RESUME_JITTER_MS, useObsQuota } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { formatClock, quotaPausedError } from "@/services/controlPlane/observability/quota";
 import { SOFT_POLL_FACTOR, resetObsQuotaStore } from "@/services/controlPlane/observability/quotaStore";
-import { obsCall, obsReadInterceptor } from "@/services/controlPlane/observability/obsInterceptors";
+import { obsReadInterceptor } from "@/services/controlPlane/observability/obsInterceptors";
 import { resetObsReadScheduler } from "@/services/controlPlane/observability/readScheduler";
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { observabilityHandlers } from "@/fixtures/shop/handlers/observability";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 
 import { createFixtureApi } from "../__fixtures__/fixtureApi";
@@ -76,38 +78,34 @@ function rig(random = () => 0.5): Rig {
   const client = createTestQueryClient();
   const calls: Rig["calls"] = [];
   const mode: Rig["mode"] = { value: "ok" };
-  const base = createFixtureApi();
-  // control-plane behind the app's read stage: it records the overview reads
-  // that reach it, and refuses them the way the server does in "quota"/"soft".
-  const controlPlane = createClient(
-    ObservabilityService,
-    createRouterTransport(
-      (router) =>
-        router.service(ObservabilityService, {
-          getServiceOverview: (_req: unknown, ctx: HandlerContext) => {
-            calls.push({ poll: ctx.requestHeader.get("Forge-Poll") === "1" });
-            if (mode.value !== "ok") {
-              throw quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs: RESET, soft: mode.value === "soft" });
-            }
-            return {};
-          },
-        }),
-      { transport: { interceptors: [obsReadInterceptor()] } }
-    )
-  );
-  const api: ObservabilityApi = {
-    ...base,
-    getServiceOverview: async (req, options) => {
-      await controlPlane.getServiceOverview({}, obsCall(options));
-      return base.getServiceOverview(req);
-    },
+  const api = createFixtureApi();
+  // control-plane behind the app's read stage, answering every ObservabilityService
+  // read from the fixture (the shop pack's wire handlers over it). It records the
+  // overview reads that reach it, and refuses them the way the server does in
+  // "quota"/"soft". The test's QueryClient reads it, as the generated hooks read the app's.
+  const handlers = observabilityHandlers(api, { clock: START }) as Record<string, (req: unknown) => Promise<unknown>>;
+  const impl: Record<string, (req: unknown, ctx: HandlerContext) => Promise<unknown>> = {};
+  for (const method of ObservabilityService.methods) {
+    const handler = handlers[`${ObservabilityService.typeName}/${method.name}`];
+    if (handler) impl[method.localName] = (req) => handler(req);
+  }
+  impl.getServiceOverview = (req, ctx) => {
+    calls.push({ poll: ctx.requestHeader.get("Forge-Poll") === "1" });
+    if (mode.value !== "ok") {
+      throw quotaPausedError({ limit: "queries", lane: "interactive", resetsAtMs: RESET, soft: mode.value === "soft" });
+    }
+    return handlers[`${ObservabilityService.typeName}/GetServiceOverview`]!(req);
   };
+  const controlPlane = createRouterTransport((router) => router.service(ObservabilityService, impl as never), {
+    transport: { interceptors: [obsReadInterceptor()] },
+  });
+  const scope = createTransportScope({ id: "quota-degradation", transport: controlPlane, queryClient: client });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
+    <TransportScopeProvider scope={scope}>
       <ObservabilityApiProvider api={api}>
         <ObsQuotaProvider random={random}>{children}</ObsQuotaProvider>
       </ObservabilityApiProvider>
-    </QueryClientProvider>
+    </TransportScopeProvider>
   );
   return { client, calls, api, mode, wrapper };
 }

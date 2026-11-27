@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=4855e5df6f2020dbad08aa6d1c1bf7823a2b31a7e67f48d6ab49c981505602f0
+// forge:hash=94a42d681d51cfb1b9805f5700f16e451c603b51576a6971f3622663423c9146
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	GetAnalyticsEnabledFunc func(context.Context, string) (bool, error)
@@ -58,18 +59,83 @@ func (m *MockService) SetPrivacySettings(ctx context.Context, userID string, ana
 	return contractkit.MockNotSet("MockService", "SetPrivacySettings")
 }
 
+// MockServiceGetAnalyticsEnabledCall is one recorded call of MockService.GetAnalyticsEnabled, one
+// field per parameter.
+type MockServiceGetAnalyticsEnabledCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// GetAnalyticsEnabledCalls returns every recorded GetAnalyticsEnabled call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAnalyticsEnabled").
+func (m *MockService) GetAnalyticsEnabledCalls() []MockServiceGetAnalyticsEnabledCall {
+	var out []MockServiceGetAnalyticsEnabledCall
+	for _, c := range m.Recorder.Calls("GetAnalyticsEnabled") {
+		var r MockServiceGetAnalyticsEnabledCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetPrivacySettingsCall is one recorded call of MockService.GetPrivacySettings, one
+// field per parameter.
+type MockServiceGetPrivacySettingsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// GetPrivacySettingsCalls returns every recorded GetPrivacySettings call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPrivacySettings").
+func (m *MockService) GetPrivacySettingsCalls() []MockServiceGetPrivacySettingsCall {
+	var out []MockServiceGetPrivacySettingsCall
+	for _, c := range m.Recorder.Calls("GetPrivacySettings") {
+		var r MockServiceGetPrivacySettingsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetPrivacySettingsCall is one recorded call of MockService.SetPrivacySettings, one
+// field per parameter.
+type MockServiceSetPrivacySettingsCall struct {
+	Ctx                   context.Context
+	UserID                string
+	AnalyticsEnabled      bool
+	CrashReportingEnabled bool
+}
+
+// SetPrivacySettingsCalls returns every recorded SetPrivacySettings call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetPrivacySettings").
+func (m *MockService) SetPrivacySettingsCalls() []MockServiceSetPrivacySettingsCall {
+	var out []MockServiceSetPrivacySettingsCall
+	for _, c := range m.Recorder.Calls("SetPrivacySettings") {
+		var r MockServiceSetPrivacySettingsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.AnalyticsEnabled, _ = c.Args[2].(bool)
+		r.CrashReportingEnabled, _ = c.Args[3].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockSettings
-// forge:hash=4a84766ea777f5e98801de590fe0b501f2ad4db7a1ab17f38038848e81a94794
+// forge:hash=69b641ee1b7d8186220eb6941908fe35a5c1b06effd059ac63134e4cbbd39d36
 
 // MockSettings is a test mock for the Settings interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockSettings.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockSettings.<Method>Func not set" error.
 type MockSettings struct {
 	contractkit.Recorder
 	GetSettingFunc    func(context.Context, string, *string, string) (*core.Setting, error)
@@ -92,6 +158,50 @@ func (m *MockSettings) UpsertSetting(ctx context.Context, s *core.Setting) error
 		return m.UpsertSettingFunc(ctx, s)
 	}
 	return contractkit.MockNotSet("MockSettings", "UpsertSetting")
+}
+
+// MockSettingsGetSettingCall is one recorded call of MockSettings.GetSetting, one
+// field per parameter.
+type MockSettingsGetSettingCall struct {
+	Ctx       context.Context
+	UserID    string
+	ProjectID *string
+	Key       string
+}
+
+// GetSettingCalls returns every recorded GetSetting call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetSetting").
+func (m *MockSettings) GetSettingCalls() []MockSettingsGetSettingCall {
+	var out []MockSettingsGetSettingCall
+	for _, c := range m.Recorder.Calls("GetSetting") {
+		var r MockSettingsGetSettingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ProjectID, _ = c.Args[2].(*string)
+		r.Key, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockSettingsUpsertSettingCall is one recorded call of MockSettings.UpsertSetting, one
+// field per parameter.
+type MockSettingsUpsertSettingCall struct {
+	Ctx context.Context
+	S   *core.Setting
+}
+
+// UpsertSettingCalls returns every recorded UpsertSetting call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertSetting").
+func (m *MockSettings) UpsertSettingCalls() []MockSettingsUpsertSettingCall {
+	var out []MockSettingsUpsertSettingCall
+	for _, c := range m.Recorder.Calls("UpsertSetting") {
+		var r MockSettingsUpsertSettingCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.S, _ = c.Args[1].(*core.Setting)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

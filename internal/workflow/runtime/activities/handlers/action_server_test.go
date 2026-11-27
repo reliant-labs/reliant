@@ -123,6 +123,8 @@ func TestServerActionPassesTheRunContextToItsHandler(t *testing.T) {
 		ChatID: "chat-1", Thread: "thread-1", WorkflowID: "run-1", StepID: "say", NodePath: "loop.say",
 		LoopNodeID: "loop", LoopIteration: 3, CatalogPin: "pin-1", ActingIdentity: "app", Automation: "pr",
 		Telemetry: &types.RunTelemetry{WorkflowRef: "builtin://pr", Trigger: "github"},
+		ServerActionFrom: &types.ServerActionFrom{NodeID: "review", Type: "workflow", Role: "reviewer", Review: true, Ran: true,
+			Output: map[string]interface{}{"verdict": "pass", "session_id": "s-1"}},
 	}
 	out := runServerAction(t, a, rtx, node)
 
@@ -146,6 +148,8 @@ func TestServerActionPassesTheRunContextToItsHandler(t *testing.T) {
 	assert.NotEmpty(t, inv.ActivityID, "inside an activity the scheduled execution is named")
 	assert.Equal(t, inv.PositionKey+"/"+inv.TemporalRunID+"/"+inv.ActivityID, inv.ExecutionKey)
 	assert.EqualValues(t, 1, inv.Attempt)
+	assert.Equal(t, &serveraction.NodeRecord{NodeID: "review", Type: "workflow", Role: "reviewer", Review: true, Ran: true,
+		Output: map[string]any{"verdict": "pass", "session_id": "s-1"}}, got.From, "the engine's record of the node `from` names")
 }
 
 func TestServerActionRunFactsComeFromTheRuntime(t *testing.T) {
@@ -282,6 +286,8 @@ func TestServerActionResolverPlacesAPinnedProjectWorkflow(t *testing.T) {
 		serveraction.RunFacts{WorkflowRef: "pr", CatalogPin: loaded.CatalogPin, Trigger: "manual"})
 	require.NoError(t, err)
 	assert.Equal(t, userID, principal.UserID)
+	assert.Equal(t, daemonID, principal.DaemonID, "the machine is the chat's own record")
+	assert.Empty(t, principal.TriggerID, "a chat no activation launched has none")
 	assert.Equal(t, serveraction.SourceProject, provenance.Source)
 	assert.Equal(t, "api/.reliant/workflows/pr.yaml", provenance.Path)
 	require.NotNil(t, provenance.Repo)

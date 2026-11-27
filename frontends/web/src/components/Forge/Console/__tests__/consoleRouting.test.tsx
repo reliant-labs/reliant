@@ -30,7 +30,7 @@ import { QueryClientProvider, skipToken, useQuery } from "@tanstack/react-query"
 import { setTransport } from "@/lib/connect";
 import { queryClient } from "@/lib/query-client";
 import { mockTransport } from "@/lib/test-utils";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ObservabilityFixtures } from "@/test/observabilityFixtures";
 import { listProjectsResponse } from "@/test/projectList";
 import userEvent from "@testing-library/user-event";
 import {
@@ -286,11 +286,11 @@ function renderAt(
   });
   render(
     <QueryClientProvider client={queryClient}>
-      <ObservabilityApiProvider api={createFixtureApi({ onCall: options.onObsCall })}>
+      <ObservabilityFixtures api={createFixtureApi({ onCall: options.onObsCall })}>
         <ShellFrameContext.Provider value={{ inShell, navDocked: inShell }}>
           <RouterProvider router={router} />
         </ShellFrameContext.Provider>
-      </ObservabilityApiProvider>
+      </ObservabilityFixtures>
     </QueryClientProvider>,
   );
   return router;
@@ -406,7 +406,8 @@ describe("the project Metrics catalog", () => {
       orgId: "org-1",
       projectId: "barkshop",
       envIds: [],
-      filters: [{ key: "status", op: "eq", value: "ok" }],
+      // Decoded off the wire, as the server reads it: an eq filter carries no value list.
+      filters: [{ key: "status", op: "eq", value: "ok", values: [] }],
     })));
     const request = onObsCall.mock.calls.find(([rpc]) => rpc === "ListMetrics")?.[1];
     expect(request.window.endMs - request.window.startMs).toBe(6 * 60 * 60_000);
@@ -460,6 +461,14 @@ describe("the project Metrics catalog", () => {
 });
 
 describe("redirects from the retired URLs", () => {
+  it("redirects Speed insights in the main-app configuration without losing its search contract", async () => {
+    // renderAt supplies Site insights only, just like the main app.
+    const router = renderAt("/forge/p/alpha/speed-insights?env=e2e&device=mobile&pct=p95&metric=lcp&range=7d");
+    await landsOn(router, "/forge/p/alpha/site-insights", { env: "e2e", device: "mobile", pct: "p95", metric: "lcp", range: "7d" });
+    expect(await screen.findByTestId("page")).toHaveAttribute("data-page", "site-insights");
+    expect(router.state.matches.at(-1)?.search).toEqual(expect.objectContaining({ device: "mobile", pct: "p95", metric: "lcp", range: "7d" }));
+  });
+
   it("sends a control-plane link's env tab to the page it means, scoped to that env", async () => {
     state.currentProject = PROJECTS[0]!; // Alpha is open; the link is about Beta's "barkshop".
     const router = renderAt("/forge/env/e2e?forgeProject=barkshop&tab=releases");

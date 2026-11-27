@@ -240,6 +240,49 @@ func TestFileSystemProxy_GetFileTree_PrefixesPathsAndForwardsDepth(t *testing.T)
 	assert.True(t, sub.GetHasChildren(), "has_children hint must propagate for lazy expansion")
 }
 
+// A symlinked directory reaches the client as a DIRECTORY with its link
+// target and status, so the Files tab expands it; a link the daemon refused to
+// follow carries why. The daemon is told the workspace root, against which it
+// refuses to list a credential store reached through a link.
+func TestFileSystemProxy_GetFileTree_SymlinksAndViewerRoot(t *testing.T) {
+	daemonTree := `{"nodes":[
+		{"name":"linkdir","path":"linkdir","type":"directory","has_children":true,"symlink_target":"../shared","symlink_status":"resolved"},
+		{"name":"dangling","path":"dangling","type":"file","symlink_target":"missing","symlink_status":"broken"},
+		{"name":"creds","path":"creds","type":"directory","symlink_target":"/home/u/.ssh","symlink_status":"denied"},
+		{"name":"plain","path":"plain","type":"directory","has_children":true}
+	]}`
+	repo, projectID, base := seedFSProxyProject(t)
+	router := &fsTreeStubRouter{respJSON: []byte(daemonTree)}
+	svc := newProxy(t, router, repo)
+
+	resp, err := svc.GetFileTree(fsProxyContext(), connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, Depth: 2}))
+	require.NoError(t, err)
+
+	var sent map[string]any
+	require.NoError(t, json.Unmarshal(router.lastPayload, &sent))
+	assert.Equal(t, base, sent["viewer_root"], "the daemon judges credential stores against the workspace root")
+
+	byName := map[string]*reliantv1.FileNode{}
+	for _, f := range resp.Msg.Files {
+		byName[f.Name] = f
+	}
+	linkdir := byName["linkdir"]
+	require.NotNil(t, linkdir)
+	assert.Equal(t, reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY, linkdir.Type)
+	assert.True(t, linkdir.GetHasChildren())
+	assert.Equal(t, "../shared", linkdir.GetSymlinkTarget())
+	assert.Equal(t, reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_RESOLVED, linkdir.SymlinkStatus)
+
+	assert.Equal(t, reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_BROKEN, byName["dangling"].SymlinkStatus)
+	assert.Equal(t, reliantv1.FileNodeType_FILE_NODE_TYPE_FILE, byName["dangling"].Type)
+	assert.Equal(t, reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_DENIED, byName["creds"].SymlinkStatus)
+	assert.False(t, byName["creds"].GetHasChildren())
+
+	plain := byName["plain"]
+	assert.Equal(t, reliantv1.FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_UNSPECIFIED, plain.SymlinkStatus)
+	assert.Nil(t, plain.SymlinkTarget, "a plain directory carries no link target")
+}
+
 // Root requests carry paths already relative to the project root, so the proxy
 // must not prefix them.
 func TestFileSystemProxy_GetFileTree_RootNotPrefixed(t *testing.T) {

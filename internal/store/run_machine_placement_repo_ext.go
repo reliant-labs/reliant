@@ -85,6 +85,34 @@ RETURNING `+columnsOf[RunMachinePlacement]("run_machine_placements"),
 	return runMachinePlacementToCore(&rows[0])
 }
 
+// MoveRunMachinePlacement moves the placement of (p.WorkflowID, p.Scope) from
+// fromDaemonID to p.DaemonID (and p's pool), and returns the placement
+// recorded: the moved one, or — when it is no longer on fromDaemonID, a
+// concurrent move having taken it elsewhere — the one that stands. The only
+// move there is: a node's preflight found fromDaemonID unhealthy, so the
+// placement's identity and its slot go to another member. Absent, it is
+// recorded as p.
+func MoveRunMachinePlacement(ctx context.Context, db orm.Context, p *core.RunMachinePlacement, fromDaemonID string) (*core.RunMachinePlacement, error) {
+	var poolID *string
+	if p.MachinePoolID != "" {
+		id := p.MachinePoolID
+		poolID = &id
+	}
+	var rows []RunMachinePlacement
+	err := db.Bun().NewRaw(`
+UPDATE run_machine_placements SET daemon_id = ?3, machine_pool_id = ?2
+WHERE workflow_id = ?0 AND scope = ?1 AND daemon_id = ?4
+RETURNING `+columnsOf[RunMachinePlacement]("run_machine_placements"),
+		p.WorkflowID, p.Scope, poolID, p.DaemonID, fromDaemonID).Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("move placement of %s/%q: %w", p.WorkflowID, p.Scope, err)
+	}
+	if len(rows) == 0 {
+		return RecordRunMachinePlacement(ctx, db, p)
+	}
+	return runMachinePlacementToCore(&rows[0])
+}
+
 // GetRunPlacementChat reads what placing a run needs about its chat, from the
 // chats row alone; core.ErrChatNotFound when there is none.
 func GetRunPlacementChat(ctx context.Context, db orm.Context, chatID string) (*core.RunPlacementChat, error) {

@@ -19,6 +19,7 @@ import { transport as appTransport } from "@/lib/connect";
 import { useTransport } from "@/lib/transportScope";
 import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import { useCloudEnvStatus, useCloudEnvStatuses, useEnvironmentShape, useEnvironmentShapes, useSetWorkloadRunState } from "@/hooks/forge-queries";
+import { invalidateAllObservability } from "@/hooks/observability-queries";
 import { useEnvPromotions } from "@/hooks/release-queries";
 import { isPlacedKind, type LiveEnvKind } from "@/services/forge/live";
 import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudEnvs";
@@ -281,8 +282,9 @@ export function WorkloadPage() {
   const restart = useMutation<RestartedWorkload, Error, string>({
     // The environment the PATH names, by its control-plane id: a restart is always "in <env>".
     mutationFn: (environmentId) => restartWorkload(transport, environmentId, name),
-    // The pods roll over the next minute: re-read the workload so the Pods table follows.
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["observability"] }),
+    // The pods roll over the next minute: re-read the workload (its generated
+    // ListWorkloads/GetWorkload reads included) so the Pods table follows.
+    onSuccess: () => void invalidateAllObservability(queryClient),
   });
   const runState = useSetWorkloadRunState();
   const lock = useObsReadOnly();

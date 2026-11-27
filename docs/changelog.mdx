@@ -13,6 +13,77 @@ Regenerate with: task generate:docs:changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.35.0" description="November 27, 2026">
+### 2 new features, 4 fixes and 3 other changes
+
+Every pull request merged since v1.34.1, grouped by its conventional-commit type.
+
+#### Added
+
+- **diskwatch: trim every Go build cache by forge/pkg/gocache's policy; pin forge@eaf3a164 (supersedes #3869)** [#3909](https://github.com/reliant-labs/reliant/pull/3909)
+- **mergequeue: run candidate builds, changed paths and pipeline.yaml reads as gate pool daemon jobs** [#3924](https://github.com/reliant-labs/reliant/pull/3924)
+
+#### Changed
+
+- **db: call trigger event store within delivery transaction** [#3895](https://github.com/reliant-labs/reliant/pull/3895)
+- **perf(web): typecheck with tsgo, TypeScript's native compiler (#3881)** [#3885](https://github.com/reliant-labs/reliant/pull/3885)
+- **refactor(db): delete the six deprecated trigger-event and run-list forwards from the facade (#3630)** [#3788](https://github.com/reliant-labs/reliant/pull/3788)
+
+#### Fixed
+
+- **mergequeue: no code operations on the server roles; guard the api, worker and gateway closure** [#3898](https://github.com/reliant-labs/reliant/pull/3898)
+- **architecture: deps guard skips when git history is unavailable** [#3897](https://github.com/reliant-labs/reliant/pull/3897)
+- **web: size an attachment upload's client budget by its bytes, not a fixed 60s** [#3899](https://github.com/reliant-labs/reliant/pull/3899)
+- **coverage: restore the coverage-source blob read on the API server, bounded in memory** [#3904](https://github.com/reliant-labs/reliant/pull/3904)
+
+</Update>
+
+<Update label="v1.34.1" description="November 27, 2026">
+### 1 other change
+
+Every pull request merged since v1.34.0, grouped by its conventional-commit type.
+
+#### Changed
+
+- **web: use generated reads for Settings hosting billing** [#3880](https://github.com/reliant-labs/reliant/pull/3880)
+
+</Update>
+
+<Update label="v1.34.0" description="November 27, 2026">
+### 8 new features, 9 fixes and 2 other changes
+
+Every pull request merged since v1.33.0, grouped by its conventional-commit type.
+
+#### Added
+
+- **mergequeue: dispatch a batch's gate to a gate pool member and wait for its verdict (unused)** [#3820](https://github.com/reliant-labs/reliant/pull/3820)
+- **mergequeue: wire the gate runner, gate.allow_unisolated and a per-repo runner (inert)** [#3847](https://github.com/reliant-labs/reliant/pull/3847)
+- **mergequeue: lander with tree checks, GitHub REST port, display check (unenforced until the Queue App exists)** [#3848](https://github.com/reliant-labs/reliant/pull/3848)
+- **mergequeue: run the merge queue in the worker behind pipeline.enabled (inert)** [#3854](https://github.com/reliant-labs/reliant/pull/3854)
+- **pipeline: builtin://pipeline-pr-sweep and sweep.pr@1, the daily PR sweep (inert)** [#3859](https://github.com/reliant-labs/reliant/pull/3859)
+- **workflow: record_due trigger fires once per due pipeline row (inert)** [#3853](https://github.com/reliant-labs/reliant/pull/3853)
+- **mergequeue: gate image and a per-repo warm cache for opted-in runc gates** [#3861](https://github.com/reliant-labs/reliant/pull/3861)
+- **pipeline: pipeline-pr wakes on its record_due row** [#3863](https://github.com/reliant-labs/reliant/pull/3863)
+
+#### Changed
+
+- **pipeline: opt in to unisolated runc gates until sysbox gate machines exist** [#3858](https://github.com/reliant-labs/reliant/pull/3858)
+- **db: drop the pinned-base migration version test #3846's fixer added** [#3850](https://github.com/reliant-labs/reliant/pull/3850)
+
+#### Fixed
+
+- **pipeline: the API server takes only pipeline.enabled, so the queue's caller secret reaches the worker alone** [#3860](https://github.com/reliant-labs/reliant/pull/3860)
+- **attachments: serve uploads as attachments unless the sniffed type is inline-safe** [#3840](https://github.com/reliant-labs/reliant/pull/3840)
+- **mergequeue: one warm cache per repository, never a volume the gate backend did not create** [#3862](https://github.com/reliant-labs/reliant/pull/3862)
+- **mergequeue: the gate image carries git 2.47, which the merge queue's gitport needs** [#3866](https://github.com/reliant-labs/reliant/pull/3866)
+- **reliant main's release gate (config-deps lint, inbox test race)** [#3871](https://github.com/reliant-labs/reliant/pull/3871)
+- **mergequeue: gates get the warm cache and the batch's base commit; cliupdate tests are hermetic** [#3872](https://github.com/reliant-labs/reliant/pull/3872)
+- **workflow: name the rejected concurrency.cancel_running value** [#3837](https://github.com/reliant-labs/reliant/pull/3837)
+- **workflow: name the rejected concurrency.waiting value** [#3826](https://github.com/reliant-labs/reliant/pull/3826)
+- **electron: retire the alpha update channel; every install follows latest** [#3773](https://github.com/reliant-labs/reliant/pull/3773)
+
+</Update>
+
 <Update label="v1.33.0" description="November 26, 2026">
 ### 7 new features, 18 fixes and 17 other changes
 

@@ -14,6 +14,22 @@ enum FileNodeType {
   FILE_NODE_TYPE_DIRECTORY = 2;
 }
 
+// FileNodeSymlinkStatus says whether a symbolic link in the file tree can be
+// followed. UNSPECIFIED means the entry is not a symbolic link (or the daemon
+// predates this field).
+enum FileNodeSymlinkStatus {
+  FILE_NODE_SYMLINK_STATUS_UNSPECIFIED = 0;
+  // The link resolves to an existing file or directory.
+  FILE_NODE_SYMLINK_STATUS_RESOLVED = 1;
+  // The link's target does not exist, or the link is part of a cycle of links.
+  FILE_NODE_SYMLINK_STATUS_BROKEN = 2;
+  // The link points at a directory that contains it (itself or an ancestor).
+  FILE_NODE_SYMLINK_STATUS_LOOP = 3;
+  // The link points at a directory the tree does not list: a credential store
+  // (~/.ssh, ~/.aws, ...), or a place outside a confined caller's root.
+  FILE_NODE_SYMLINK_STATUS_DENIED = 4;
+}
+
 // FileViewerKind describes how Reliant should render a file.
 enum FileViewerKind {
   FILE_VIEWER_KIND_UNSPECIFIED = 0;
@@ -121,6 +137,15 @@ message FileNode {
   // chevron for lazily-loaded directories without fetching their children.
   // Only meaningful when children are not eagerly included (depth-limited walks).
   bool has_children = 7;
+  // symlink_target is set when the entry is a symbolic link: the link's own
+  // text, as readlink reports it. type, size and modified then describe what
+  // the link resolves to, so a link to a directory is a DIRECTORY the UI
+  // expands like any other folder.
+  optional string symlink_target = 8;
+  // symlink_status is set for a symbolic link. A link that is not RESOLVED is
+  // listed but cannot be opened or expanded (has_children is false); the UI
+  // says why.
+  FileNodeSymlinkStatus symlink_status = 9;
 }
 
 // FileMetadata contains detailed information about a file or directory

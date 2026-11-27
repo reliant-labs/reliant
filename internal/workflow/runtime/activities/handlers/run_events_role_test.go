@@ -12,7 +12,7 @@ import (
 // status activity says so (Temporal retries it) rather than dropping the
 // terminal event.
 func TestWorkflowStatusRefusesAMissingRunEventStore(t *testing.T) {
-	a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: &MockWorkflowStatusStore{}, Runs: &MockRunRecords{}, Workflows: &MockWorkflowRuns{}})
+	a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: &MockWorkflowStatusStore{}, Triggers: &MockStatusTriggers{}, Runs: &MockRunRecords{}, Workflows: &MockWorkflowRuns{}})
 	_, err := a.Execute(context.Background(), WorkflowStatusInput{ChatID: "c", WorkflowID: "w", Status: "completed"})
 	require.ErrorContains(t, err, "not configured")
 }

@@ -108,6 +108,8 @@
                   "integrations/connectors",
                   "integrations/github",
                   "integrations/gmail",
+                  "integrations/google-calendar",
+                  "integrations/google-sheets",
                   "integrations/slack",
                   "integrations/http",
                   "integrations/twilio"
@@ -212,6 +214,7 @@
               "forge/deploy/releases-and-promotion",
               "forge/deploy/release-gates",
               "forge/deploy/self-hosted-delivery",
+              "forge/deploy/autoscaling",
               "forge/deploy/escape-hatches",
               "forge/llm-provider"
             ]
@@ -234,6 +237,12 @@
                 ]
               },
               "forge/troubleshooting"
+            ]
+          },
+          {
+            "group": "ML (early access)",
+            "pages": [
+              "forge/ml/overview"
             ]
           },
           {
@@ -277,6 +286,8 @@
               "hosting/observability/where-it-goes",
               "hosting/observability/forge-obs",
               "hosting/observability/dashboards-and-alerts",
+              "hosting/observability/status-page",
+              "hosting/observability/runtime-context",
               "forge/observability/site-insights",
               "forge/observability/product-analytics",
               "forge/observability/changes",

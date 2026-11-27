@@ -11,6 +11,7 @@ const {
   isUpdatePending,
   isUpgradeOverdue,
   nextUpdateState,
+  updateFeedFor,
   withDaemonUpgrade,
 } = require("../src/update-check");
 
@@ -556,4 +557,13 @@ test("isUpgradeOverdue: security and emergency requests past their deadline", ()
   assert.equal(isUpgradeOverdue({ ...SECURITY_REQUEST, urgency: "normal" }, deadline + 1), false, "normal is never overdue");
   assert.equal(isUpgradeOverdue({ ...SECURITY_REQUEST, deadlineUnixMs: 0 }, deadline + 1), false, "no deadline");
   assert.equal(isUpgradeOverdue(null, deadline), false);
+});
+
+// The alpha channel is retired: nothing publishes alpha*.yml since RC tags
+// became rc/vX.Y.Z-rc.N, so an RC install that chose it was stuck on
+// 1.6.4-rc1. Every version, prerelease or not, reads the latest feed.
+test("every version, a prerelease included, follows the latest feed", () => {
+  for (const version of ["1.32.0", "1.6.4-rc1", "1.33.0-rc.2", "1.7.0-beta.2", "2.0.0-alpha", ""]) {
+    assert.deepEqual(updateFeedFor(version), { channel: "latest", allowPrerelease: false }, version);
+  }
 });

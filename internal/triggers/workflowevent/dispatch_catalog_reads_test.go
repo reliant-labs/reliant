@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 )
 
@@ -72,7 +73,7 @@ func TestDispatchReadsEachCatalogOncePerEvent(t *testing.T) {
 	pins := map[string]bool{}
 	for _, r := range results {
 		require.Equal(t, core.TriggerEventLaunched, r.Outcome, r.Detail)
-		ev, err := f.repo.GetTriggerEventByChatID(ctx, r.ChatID)
+		ev, err := store.GetTriggerEventByChatID(ctx, f.repo.ORM(), r.ChatID)
 		require.NoError(t, err)
 		require.NotEmpty(t, ev.Definition.CatalogPin)
 		pins[ev.Definition.CatalogPin] = true

@@ -36,6 +36,8 @@ it("is one hero with an H1, then a choice that blocks nothing", async () => {
   const router = mount("/forge/demo?section=home", true);
   const home = await screen.findByTestId("demo-home");
   expect(within(home).getByRole("heading", { level: 1 })).toHaveTextContent("Ship your app safely, see what breaks, and let an agent fix it.");
+  // The lede names what the console covers today: observability, product analytics, tests, security and data.
+  expect(within(home).getByText(/gives it one console/)).toHaveTextContent(/session replays, who uses it, its tests, its security findings and its database/);
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(screen.queryByTestId("tour-callout")).toBeNull();
   fireEvent.click(within(home).getByTestId("home-primary"));
@@ -78,7 +80,7 @@ it("on a phone the tip is a closed one-line disclosure in the page's flow, hidde
   } finally { act(() => useNavDrawer.getState().setOpen(false)); }
 });
 it("every page has an explanation, and none repeats the build-page action", async () => {
-  const paths = ["/forge/p/shop", "/forge/p/shop/releases", "/forge/p/shop/releases/v1", "/forge/p/shop/environments", "/forge/p/shop/environments/prod", "/forge/p/shop/secrets", "/forge/p/shop/domains", "/forge/p/shop/activity", "/forge/p/shop/users", "/forge/p/shop/workloads/prod/api", ...["services", "storage", "data", "security/vulnerabilities", "security/sboms", "tests", "tests/coverage", "tests/runs", "tests/flaky", "analytics", "analytics/events", "events", "observability", "site-insights", "site-insights/seo", "site-insights/accessibility"].map((page) => `/forge/p/shop/${page}`), ...["dashboards","errors","traces","logs","profiles","alerts","sessions","metrics","rpc","graph"].map(view=>`/forge/demo?view=${view}`), "/forge/demo?view=traces&trace=demo"];
+  const paths = ["/forge/p/shop", "/forge/p/shop/releases", "/forge/p/shop/releases/v1", "/forge/p/shop/environments", "/forge/p/shop/environments/prod", "/forge/p/shop/secrets", "/forge/p/shop/domains", "/forge/p/shop/activity", "/forge/p/shop/users", "/forge/p/shop/workloads/prod/api", ...["services", "storage", "data", "security/vulnerabilities", "security/sboms", "tests", "tests/coverage", "tests/runs", "tests/flaky", "analytics", "analytics/events", "events", "experiments", "observability", "site-insights", "site-insights/seo", "site-insights/accessibility"].map((page) => `/forge/p/shop/${page}`), ...["dashboards","errors","traces","logs","profiles","alerts","sessions","metrics","rpc","graph"].map(view=>`/forge/demo?view=${view}`), "/forge/demo?view=traces&trace=demo"];
   const visited = new Set<string>();
   for (const path of paths) {
     cleanup(); resetDemoSessionForTests(); mount(path);

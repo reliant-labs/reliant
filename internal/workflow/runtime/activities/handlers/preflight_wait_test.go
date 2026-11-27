@@ -127,7 +127,7 @@ func newWaitFixture(t *testing.T, noMachine bool, router toolexec.DaemonRouter) 
 	require.NoError(t, base.CreateChat(ctx, &db.Chat{ID: chatID, UserID: "u1", Title: "t", ProjectID: projectID,
 		State: db.ChatStateIdle, NoMachine: noMachine, CreatedAt: time.Now(), UpdatedAt: time.Now()}))
 	repo := &markerRepo{Repo: base}
-	a := NewPreflightDaemonCheckActivity(repo, workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
+	a := NewPreflightDaemonCheckActivity(repo, NewTriggerReads(repo.ORM()), workspaceRowsOf(repo), toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 10 * time.Millisecond
 	return a, repo, chatID
 }

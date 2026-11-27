@@ -21,15 +21,18 @@ import (
 var errReaperUnderTest = errors.New("refusing to run the storage reaper under `go test` (inject a reaperRunner)")
 
 // reaperCommandArgs is the argument list after the binary: the reliant binary
-// embeds forge's CLI, so this is `reliant forge machine storage auto-gc --policy <path>`.
-func reaperCommandArgs(policyPath string) []string {
-	return []string{"forge", "machine", "storage", "auto-gc", "--policy", policyPath}
+// embeds forge's CLI, so this is `reliant forge machine storage auto-gc --policy
+// <path>`, plus `--go-cache <dir>` for each Go build cache the daemon saw a
+// build use (gocaches.go).
+func reaperCommandArgs(policyPath string, goCaches ...string) []string {
+	return append([]string{"forge", "machine", "storage", "auto-gc", "--policy", policyPath}, goCaches...)
 }
 
 // goCacheCommandArgs is the Go-cache pass:
-// `reliant forge machine storage gocache --apply --budget <b> --policy <path>`.
-func goCacheCommandArgs(policyPath string) []string {
-	return []string{"forge", "machine", "storage", "gocache", "--apply", "--budget", goCachePassBudget.String(), "--policy", policyPath}
+// `reliant forge machine storage gocache --apply --budget <b> --policy <path>`,
+// plus `--go-cache <dir>` for each Go build cache the daemon saw a build use.
+func goCacheCommandArgs(policyPath string, goCaches ...string) []string {
+	return append([]string{"forge", "machine", "storage", "gocache", "--apply", "--budget", goCachePassBudget.String(), "--policy", policyPath}, goCaches...)
 }
 
 // execGoCacheReaper runs the Go-cache pass the same way execReaper runs the
@@ -45,7 +48,7 @@ func execGoCacheReaper(ctx context.Context, policyPath string) (reaperRun, error
 	if err != nil {
 		return reaperRun{}, fmt.Errorf("resolve own executable: %w", err)
 	}
-	return runReaperProcess(ctx, self, goCacheCommandArgs(policyPath))
+	return runReaperProcess(ctx, self, goCacheCommandArgs(policyPath, goCacheFlags(policyPath)...))
 }
 
 // execReaper runs `<this binary> forge machine storage auto-gc --policy <path>`.
@@ -66,7 +69,7 @@ func execReaper(ctx context.Context, policyPath string) (reaperRun, error) {
 	if err != nil {
 		return reaperRun{}, fmt.Errorf("resolve own executable: %w", err)
 	}
-	return runReaperProcess(ctx, self, reaperCommandArgs(policyPath))
+	return runReaperProcess(ctx, self, reaperCommandArgs(policyPath, goCacheFlags(policyPath)...))
 }
 
 // runReaperProcess runs bin with args and returns once it has exited. The child
