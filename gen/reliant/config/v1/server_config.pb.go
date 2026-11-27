@@ -284,9 +284,17 @@ type PipelineConfig struct {
 	// handler runs or the run's records are read, and the pipeline's RPCs
 	// answer FailedPrecondition. The worker and the API server read the same
 	// value; set it on both.
-	Enabled       bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Enabled bool `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// The secret the worker's merge queue signs its caller assertion with
+	// when it asks control-plane for a Reliant Queue App token
+	// (GitCredentialInternalService.MintInstallationToken, app =
+	// GITHUB_APP_QUEUE). Only the worker reads it, and the deploy gives it only
+	// to the worker. Unset (or shorter than 32 bytes), the queue never asks
+	// for a Queue App token: it lands as the Reliant App instead and marks
+	// each batch unenforced.
+	GithubQueueAppCallerSecret string `protobuf:"bytes,2,opt,name=github_queue_app_caller_secret,json=githubQueueAppCallerSecret,proto3" json:"github_queue_app_caller_secret,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *PipelineConfig) Reset() {
@@ -324,6 +332,13 @@ func (x *PipelineConfig) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+func (x *PipelineConfig) GetGithubQueueAppCallerSecret() string {
+	if x != nil {
+		return x.GithubQueueAppCallerSecret
+	}
+	return ""
 }
 
 // OrgPolicyEnforcementConfig is the platform's switch per org-policy
@@ -704,10 +719,12 @@ const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"R\x06sentry\"\xfc\x01\n" +
 	"\x10ReconcilerConfig\x12\xe7\x01\n" +
 	"\x0estall_watchdog\x18\x01 \x01(\tB\xbf\x01\x82\xce\x18\xba\x01\n" +
-	"!RELIANT_RECONCILER_STALL_WATCHDOG\x1a\x03off*zWorkflow reconciler stall watchdog: off (no work), report (log, count and record stalled runs) or enforce (also stop them)J\x03offJ\x06reportJ\aenforceR\rstallWatchdog\"\xc6\x01\n" +
+	"!RELIANT_RECONCILER_STALL_WATCHDOG\x1a\x03off*zWorkflow reconciler stall watchdog: off (no work), report (log, count and record stalled runs) or enforce (also stop them)J\x03offJ\x06reportJ\aenforceR\rstallWatchdog\"\xb3\x03\n" +
 	"\x0ePipelineConfig\x12\xb3\x01\n" +
 	"\aenabled\x18\x01 \x01(\bB\x98\x01\x82\xce\x18\x93\x01\n" +
-	"\x18RELIANT_PIPELINE_ENABLED*wRun Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses themR\aenabled\"\xaa\b\n" +
+	"\x18RELIANT_PIPELINE_ENABLED*wRun Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses themR\aenabled\x12\xea\x01\n" +
+	"\x1egithub_queue_app_caller_secret\x18\x02 \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
+	"\x1eGITHUB_QUEUE_APP_CALLER_SECRET*zWorker only: signs the merge queue's Queue App token requests to control-plane; unset lands as the Reliant App, unenforced0\x01P\x01R\x1agithubQueueAppCallerSecret\"\xaa\b\n" +
 	"\x1aOrgPolicyEnforcementConfig\x12\xca\x01\n" +
 	"\fintegrations\x18\x01 \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
 	",RELIANT_ORGS_POLICY_ENFORCEMENT_INTEGRATIONS\x1a\x05audit*THow the org integrations policy applies: off, audit (count, never refuse) or enforceJ\x03offJ\x05auditJ\aenforceR\fintegrations\x12\xbd\x01\n" +

@@ -16,10 +16,19 @@
  * it. Shifting the base two steps up for `/m/*` fixes every screen at once and
  * keeps the user's relative preference intact.
  *
+ * **A phone gets that base on every page, not only under `/m/*`.** The phone
+ * drawer's rows also open the responsive pages the phone shares with the
+ * desktop (Projects, an app's console, Connectors). Sized by path alone, the
+ * one nav drew its rows at 15.9px on the phone's chat list and 14.1px a tap
+ * later on Projects. So the phone scale follows the device (lib/phoneShape:
+ * narrow AND touch, not opted out with `?desktop=1`) as well as the path. A
+ * narrow desktop window has a mouse, and keeps desktop sizing.
+ *
  * The same maps are duplicated in `index.html`'s pre-hydration bootstrap so
  * there is no flash of small text on a cold load; keep them in sync.
  */
 
+import { isPhoneDevice } from "./phoneShape";
 import { surfaceForPath } from "./surface";
 
 /**
@@ -59,13 +68,19 @@ export const MOBILE_FONT_SIZE_MAP: Record<string, string> = {
 /**
  * Root font size for a preference step on a given path.
  *
- * Path-based rather than viewport-based, matching `surfaceForPath`: the URL is
- * the explicit signal for which surface is rendering, and a narrow desktop
- * window should keep desktop sizing.
+ * The phone surface (`/m/*`, by `surfaceForPath`) always takes the phone map;
+ * any other page takes it when the device is a phone (`phoneShaped`), so the
+ * phone's type does not change size between its own screens and the pages it
+ * shares with the desktop. A narrow desktop window is not phone-shaped and
+ * keeps desktop sizing.
  */
-export function rootFontSizeFor(fontSize: string, pathname: string): string {
+export function rootFontSizeFor(
+  fontSize: string,
+  pathname: string,
+  { phoneShaped = false }: { phoneShaped?: boolean } = {},
+): string {
   const map =
-    surfaceForPath(pathname) === "mobile" ? MOBILE_FONT_SIZE_MAP : FONT_SIZE_MAP;
+    phoneShaped || surfaceForPath(pathname) === "mobile" ? MOBILE_FONT_SIZE_MAP : FONT_SIZE_MAP;
   return map[fontSize] ?? map[DEFAULT_FONT_SIZE];
 }
 
@@ -81,5 +96,6 @@ export function applyRootFontSize(fontSize: string): void {
   document.documentElement.style.fontSize = rootFontSizeFor(
     fontSize,
     window.location.pathname,
+    { phoneShaped: isPhoneDevice(window.location.search) },
   );
 }

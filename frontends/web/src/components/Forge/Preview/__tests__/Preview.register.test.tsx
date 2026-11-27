@@ -187,12 +187,13 @@ vi.mock("@/services/controlPlane/client", () => ({
 
 const listSecrets = vi.fn<() => Promise<unknown>>(() => Promise.resolve({ secrets: [], protected: false }));
 const setSecret = vi.fn((_input: unknown) => Promise.resolve({ version: 1 }));
-vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: () => listSecrets(),
-  setSecret: (_transport: unknown, input: unknown) => setSecret(input),
-  getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
-}));
+// Answered at the transport (the generated hooks' seam), beside the registry's.
+const secretStore = () =>
+  secretStoreHandlers({
+    listSecrets: () => listSecrets() as never,
+    setSecret,
+    getSecretVersions: () => ({ summary: null, versions: [] }),
+  });
 
 vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/services/forge/cloudEnvs")>()),
@@ -203,6 +204,7 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => ({
 import { ForgeEnvPage } from "../../EnvPage/ForgeEnvPage";
 import { setTransport } from "@/lib/connect";
 import { daemonRegistryTransport } from "@/test/daemonRegistry";
+import { secretStoreHandlers } from "@/test/secretStoreTransport";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 
 // The registry's daemon list, which a daemon tab reads to learn whether a
@@ -217,6 +219,7 @@ beforeEach(() =>
         "ForgeService.GetTopology": () => getTopology(),
         "ForgeService.GetEnvShape": () => getEnvShape(),
         "ForgeService.GetEnvStatus": () => getEnvStatus(),
+        ...secretStore(),
       }
     )
   )

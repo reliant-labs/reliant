@@ -623,6 +623,7 @@ func describeIncumbentDaemon(dataDir string) string {
 }
 
 func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards Guards, mcpOpts ...mcp.ManagerOption) (*daemonClient, error) {
+	configureGates(host)
 	// Resolve CWD: the platform's working directory (DAEMON_WORKING_DIR, used
 	// in Docker and on pods), else os.Getwd().
 	cwd := strings.TrimSpace(host.WorkingDir)
@@ -678,6 +679,9 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// registered in Start: forge's storage reaper, where the reaper routine
 	// is enabled.
 	diskGuard := diskguard.New(guards.Disk, diskWatcher)
+	// A node's preflight refuses this machine while the guard refuses heavy
+	// work (cmd_machine_preflight.go).
+	SetPreflightDiskGuard(diskGuard)
 
 	// Every agent on this machine runs its commands through this daemon, so
 	// this is where their heavy ones (builds, test suites, codegen) are held

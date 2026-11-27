@@ -165,6 +165,9 @@ type MoveLedger interface {
 	FindProjectOrgMoveByRequest(ctx context.Context, actorUserID, requestKey string) (*core.ProjectOrgMove, error)
 	GetProjectOrgMove(ctx context.Context, id string) (*core.ProjectOrgMove, error)
 	ListProjectOrgMoves(ctx context.Context, f core.ProjectOrgMoveFilters) ([]*core.ProjectOrgMove, error)
+	// ProjectPipelineEnrolled is whether a repository of the project is
+	// enrolled in the pipeline with a mode other than off (G1).
+	ProjectPipelineEnrolled(ctx context.Context, projectID string) (bool, error)
 }
 
 // SharedProjects is the projects others shared with an org the caller is in

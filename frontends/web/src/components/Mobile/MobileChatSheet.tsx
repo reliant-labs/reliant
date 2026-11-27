@@ -67,8 +67,8 @@ function formatTokens(count: number): string {
 function RowText({ label, detail }: { label: string; detail?: string }) {
   return (
     <span className="min-w-0 flex-1">
-      <span className="block truncate text-sm font-medium text-foreground">{label}</span>
-      {detail && <span className="block truncate text-xs text-muted-foreground">{detail}</span>}
+      <span className="block truncate text-ui font-medium text-foreground">{label}</span>
+      {detail && <span className="block truncate text-meta text-muted-foreground">{detail}</span>}
     </span>
   );
 }
@@ -184,11 +184,11 @@ export function MobileChatSheet({
                 setRenameDraft(null);
               }}
               autoFocus
-              className="min-h-[44px] min-w-0 flex-1 rounded-md border border-border bg-background px-3 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="min-h-[44px] min-w-0 flex-1 rounded-md border border-border bg-background px-3 text-copy text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
             <button
               type="submit"
-              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground active:opacity-80"
+              className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md bg-primary px-3 text-ui font-medium text-primary-foreground active:opacity-80"
             >
               Save
             </button>
@@ -237,7 +237,7 @@ export function MobileChatSheet({
                           type="button"
                           onClick={closeThen(() => onSelectThread(thread.id))}
                           aria-pressed={selected}
-                          className="flex min-h-[44px] w-full items-center gap-3 py-2 pl-16 pr-4 text-left text-sm text-foreground active:bg-foreground/5"
+                          className="flex min-h-[44px] w-full items-center gap-3 py-2 pl-16 pr-4 text-left text-ui text-foreground active:bg-foreground/5"
                         >
                           {thread.color && (
                             <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: thread.color }} />
@@ -267,7 +267,7 @@ export function MobileChatSheet({
             <button
               type="button"
               onClick={closeThen(() => actions.compact(selectedThreadId ?? ""))}
-              className="flex min-h-[44px] shrink-0 items-center rounded-md px-3 text-sm font-medium text-primary-ink active:bg-foreground/5"
+              className="flex min-h-[44px] shrink-0 items-center rounded-md px-3 text-ui font-medium text-primary-ink active:bg-foreground/5"
             >
               Compact
             </button>

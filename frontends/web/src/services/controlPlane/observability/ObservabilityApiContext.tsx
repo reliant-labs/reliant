@@ -245,8 +245,26 @@ export type GeneratedObservabilityReads =
  */
 export type GeneratedDeliveryActivityReads = "listReleases" | "getDoraMetrics" | "listActivity";
 
-/** What a view may call through the context: everything but the reads on generated hooks. */
-export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads | GeneratedDeliveryActivityReads>;
+/**
+ * IssuesService's calls, which the views make through its generated hooks
+ * (hooks/controlplane/issues-service-hooks_gen.ts) and imperative writes; like
+ * GeneratedObservabilityReads, on ObservabilityApi only as the model-level
+ * contract the shop pack's and the fakes' handlers (fixtures/shop/handlers/issues.ts) serve.
+ */
+export type GeneratedIssuesCalls =
+  | "listIssues"
+  | "getIssue"
+  | "listIssueEvents"
+  | "listIssueTimeline"
+  | "updateIssueStatus"
+  | "addIssueComment"
+  | "updateIssueComment"
+  | "deleteIssueComment"
+  | "assignIssue"
+  | "linkIssueChat";
+
+/** What a view may call through the context: everything but the calls on generated hooks. */
+export type ObservabilityContextApi = Omit<ObservabilityApi, GeneratedObservabilityReads | GeneratedDeliveryActivityReads | GeneratedIssuesCalls>;
 
 /** The provided api, else the real client on the nearest TransportScope's transport, else on the app's. */
 export function useObservabilityApi(): ObservabilityContextApi {
