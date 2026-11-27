@@ -104,8 +104,12 @@ func New(opts Options) *Watcher {
 	if opts.worktreeReap == nil {
 		opts.worktreeReap = execWorktreeReap
 	}
+	var scanGoCaches func() []string
+	if systemEnv {
+		scanGoCaches = scanGoCacheRoots
+	}
 	return &Watcher{
-		reaper:       reaperState{sem: make(chan struct{}, 1), run: opts.reaper, goCache: execGoCacheReaper},
+		reaper:       reaperState{sem: make(chan struct{}, 1), run: opts.reaper, goCache: execGoCacheReaper, scanGoCaches: scanGoCaches},
 		worktreeReap: worktreeReapState{run: opts.worktreeReap},
 		trim:         cacheTrimState{cfg: DefaultCacheTrimConfig()},
 		systemEnv:    systemEnv,

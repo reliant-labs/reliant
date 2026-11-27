@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -128,4 +129,63 @@ func TestRead_PassesTheTokenSourcesRefusalThrough(t *testing.T) {
 	_, err := srvReader.Read(context.Background(), "alice", "acme", "shop", blob)
 	assert.ErrorIs(t, err, notConnected)
 	assert.Empty(t, g.reqs)
+}
+
+// Reads past MaxInFlight wait for a slot, so the bytes a Reader holds stay
+// bounded however many viewers ask at once.
+func TestRead_HoldsAtMostMaxInFlightReads(t *testing.T) {
+	var (
+		mu        sync.Mutex
+		now, peak int
+		release   = make(chan struct{})
+		arrived   = make(chan struct{}, 2*MaxInFlight)
+	)
+	g := &fakeGitHub{}
+	r := g.serve(t, 0, func(w http.ResponseWriter, _ *http.Request) {
+		mu.Lock()
+		now++
+		peak = max(peak, now)
+		mu.Unlock()
+		arrived <- struct{}{}
+		<-release
+		mu.Lock()
+		now--
+		mu.Unlock()
+		_, _ = w.Write([]byte("x"))
+	})
+	var wg sync.WaitGroup
+	for range 2 * MaxInFlight {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := r.Read(context.Background(), "alice", "acme", "shop", blob)
+			assert.NoError(t, err)
+		}()
+	}
+	for range MaxInFlight {
+		<-arrived
+	}
+	select {
+	case <-arrived:
+		t.Fatal("a read past MaxInFlight reached GitHub before a slot freed")
+	default:
+	}
+	close(release)
+	wg.Wait()
+	assert.Equal(t, MaxInFlight, peak)
+}
+
+func TestRead_WaitingForASlotEndsWithTheContext(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	g := &fakeGitHub{}
+	r := g.serve(t, 0, func(w http.ResponseWriter, _ *http.Request) { <-release })
+	for range MaxInFlight {
+		go func() { _, _ = r.Read(context.Background(), "alice", "acme", "shop", blob) }()
+	}
+	require.Eventually(t, func() bool { g.mu.Lock(); defer g.mu.Unlock(); return len(g.reqs) == MaxInFlight }, 5*time.Second, time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := r.Read(ctx, "alice", "acme", "shop", blob)
+	assert.ErrorIs(t, err, context.Canceled)
 }

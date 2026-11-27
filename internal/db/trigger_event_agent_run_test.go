@@ -70,15 +70,15 @@ func TestGetTriggerEventByChat_FindsTheLaunchingEventOfThatKind(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err := repo.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, chatID)
+	got, err := store.GetTriggerEventByChat(ctx, repo.ORM(), core.TriggerEventKindAgentStartRun, chatID)
 	require.NoError(t, err)
 	assert.Equal(t, "p", got.Payload["parent_chat_id"])
 
 	// A different kind did not launch this chat.
-	_, err = repo.GetTriggerEventByChat(ctx, core.TriggerEventKindChatStart, chatID)
+	_, err = store.GetTriggerEventByChat(ctx, repo.ORM(), core.TriggerEventKindChatStart, chatID)
 	assert.ErrorIs(t, err, core.ErrTriggerEventNotFound)
 	// Nor did anything launch a chat that does not exist.
-	_, err = repo.GetTriggerEventByChat(ctx, core.TriggerEventKindAgentStartRun, uuid.NewString())
+	_, err = store.GetTriggerEventByChat(ctx, repo.ORM(), core.TriggerEventKindAgentStartRun, uuid.NewString())
 	assert.ErrorIs(t, err, core.ErrTriggerEventNotFound)
 }
 

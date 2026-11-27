@@ -19,14 +19,15 @@ import (
 )
 
 // forge:section MockChatWorkflowReader
-// forge:hash=a36a68ffbf224407d3467484ee38db26cf371bb45570a81ab95f52b9560c3250
+// forge:hash=859beab8b46689c07c6a751b370472b7854dbb3de2eb3af7bd8042f03343dc69
 
 // MockChatWorkflowReader is a test mock for the ChatWorkflowReader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockChatWorkflowReader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockChatWorkflowReader.<Method>Func not set" error.
 type MockChatWorkflowReader struct {
 	contractkit.Recorder
 	GetChatFunc func(context.Context, string) (*db.Chat, error)
@@ -41,18 +42,39 @@ func (m *MockChatWorkflowReader) GetChat(ctx context.Context, id string) (*db.Ch
 	return nil, contractkit.MockNotSet("MockChatWorkflowReader", "GetChat")
 }
 
+// MockChatWorkflowReaderGetChatCall is one recorded call of MockChatWorkflowReader.GetChat, one
+// field per parameter.
+type MockChatWorkflowReaderGetChatCall struct {
+	Ctx context.Context
+	ID  string
+}
+
+// GetChatCalls returns every recorded GetChat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChat").
+func (m *MockChatWorkflowReader) GetChatCalls() []MockChatWorkflowReaderGetChatCall {
+	var out []MockChatWorkflowReaderGetChatCall
+	for _, c := range m.Recorder.Calls("GetChat") {
+		var r MockChatWorkflowReaderGetChatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ ChatWorkflowReader = (*MockChatWorkflowReader)(nil)
 
 // forge:section MockAccountAssignmentStore
-// forge:hash=1e9d5fda7df782faedff734a1422447f60e6f9de263dd39bba229dac8d3c2d3c
+// forge:hash=0af14f99ed025177a53ca930658510d1ae2c707d407afed3b221a7c98dcb163e
 
 // MockAccountAssignmentStore is a test mock for the AccountAssignmentStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAccountAssignmentStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAccountAssignmentStore.<Method>Func not set" error.
 type MockAccountAssignmentStore struct {
 	contractkit.Recorder
 	GetThreadAssignmentFunc    func(context.Context, string, string) (*core.Assignment, error)
@@ -107,18 +129,125 @@ func (m *MockAccountAssignmentStore) RecentAssignmentCounts(ctx context.Context,
 	return nil, contractkit.MockNotSet("MockAccountAssignmentStore", "RecentAssignmentCounts")
 }
 
+// MockAccountAssignmentStoreGetThreadAssignmentCall is one recorded call of MockAccountAssignmentStore.GetThreadAssignment, one
+// field per parameter.
+type MockAccountAssignmentStoreGetThreadAssignmentCall struct {
+	Ctx      context.Context
+	ThreadID string
+	Provider string
+}
+
+// GetThreadAssignmentCalls returns every recorded GetThreadAssignment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetThreadAssignment").
+func (m *MockAccountAssignmentStore) GetThreadAssignmentCalls() []MockAccountAssignmentStoreGetThreadAssignmentCall {
+	var out []MockAccountAssignmentStoreGetThreadAssignmentCall
+	for _, c := range m.Recorder.Calls("GetThreadAssignment") {
+		var r MockAccountAssignmentStoreGetThreadAssignmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		r.Provider, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountAssignmentStoreSetThreadAssignmentCall is one recorded call of MockAccountAssignmentStore.SetThreadAssignment, one
+// field per parameter.
+type MockAccountAssignmentStoreSetThreadAssignmentCall struct {
+	Ctx               context.Context
+	A                 core.Assignment
+	ExpectedAccountID string
+}
+
+// SetThreadAssignmentCalls returns every recorded SetThreadAssignment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetThreadAssignment").
+func (m *MockAccountAssignmentStore) SetThreadAssignmentCalls() []MockAccountAssignmentStoreSetThreadAssignmentCall {
+	var out []MockAccountAssignmentStoreSetThreadAssignmentCall
+	for _, c := range m.Recorder.Calls("SetThreadAssignment") {
+		var r MockAccountAssignmentStoreSetThreadAssignmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.A, _ = c.Args[1].(core.Assignment)
+		r.ExpectedAccountID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountAssignmentStoreListAccountLimitsCall is one recorded call of MockAccountAssignmentStore.ListAccountLimits, one
+// field per parameter.
+type MockAccountAssignmentStoreListAccountLimitsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListAccountLimitsCalls returns every recorded ListAccountLimits call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAccountLimits").
+func (m *MockAccountAssignmentStore) ListAccountLimitsCalls() []MockAccountAssignmentStoreListAccountLimitsCall {
+	var out []MockAccountAssignmentStoreListAccountLimitsCall
+	for _, c := range m.Recorder.Calls("ListAccountLimits") {
+		var r MockAccountAssignmentStoreListAccountLimitsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountAssignmentStoreListOwnedAccountLimitsCall is one recorded call of MockAccountAssignmentStore.ListOwnedAccountLimits, one
+// field per parameter.
+type MockAccountAssignmentStoreListOwnedAccountLimitsCall struct {
+	Ctx   context.Context
+	Owner core.AccountOwner
+}
+
+// ListOwnedAccountLimitsCalls returns every recorded ListOwnedAccountLimits call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOwnedAccountLimits").
+func (m *MockAccountAssignmentStore) ListOwnedAccountLimitsCalls() []MockAccountAssignmentStoreListOwnedAccountLimitsCall {
+	var out []MockAccountAssignmentStoreListOwnedAccountLimitsCall
+	for _, c := range m.Recorder.Calls("ListOwnedAccountLimits") {
+		var r MockAccountAssignmentStoreListOwnedAccountLimitsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.AccountOwner)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountAssignmentStoreRecentAssignmentCountsCall is one recorded call of MockAccountAssignmentStore.RecentAssignmentCounts, one
+// field per parameter.
+type MockAccountAssignmentStoreRecentAssignmentCountsCall struct {
+	Ctx        context.Context
+	AccountIDs []string
+	Since      time.Time
+}
+
+// RecentAssignmentCountsCalls returns every recorded RecentAssignmentCounts call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecentAssignmentCounts").
+func (m *MockAccountAssignmentStore) RecentAssignmentCountsCalls() []MockAccountAssignmentStoreRecentAssignmentCountsCall {
+	var out []MockAccountAssignmentStoreRecentAssignmentCountsCall
+	for _, c := range m.Recorder.Calls("RecentAssignmentCounts") {
+		var r MockAccountAssignmentStoreRecentAssignmentCountsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.AccountIDs, _ = c.Args[1].([]string)
+		r.Since, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ AccountAssignmentStore = (*MockAccountAssignmentStore)(nil)
 
 // forge:section MockAccountCredentialStore
-// forge:hash=13a93d497c55edec8cc52cf2a1adf03cc08335c7b2040177802932f989e207ea
+// forge:hash=14a1f22930d0a01360fd51a23f562c4c153aaf1c1e929440de0c71e59ea3f227
 
 // MockAccountCredentialStore is a test mock for the AccountCredentialStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAccountCredentialStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAccountCredentialStore.<Method>Func not set" error.
 type MockAccountCredentialStore struct {
 	contractkit.Recorder
 	PatchOwnedProviderAccountFunc func(context.Context, core.AccountOwner, string, core.AccountPatch) (core.ProviderAccount, error)
@@ -143,18 +272,67 @@ func (m *MockAccountCredentialStore) ConfirmOrgKeyNotice(ctx context.Context, or
 	return contractkit.MockNotSet("MockAccountCredentialStore", "ConfirmOrgKeyNotice")
 }
 
+// MockAccountCredentialStorePatchOwnedProviderAccountCall is one recorded call of MockAccountCredentialStore.PatchOwnedProviderAccount, one
+// field per parameter.
+type MockAccountCredentialStorePatchOwnedProviderAccountCall struct {
+	Ctx       context.Context
+	Owner     core.AccountOwner
+	AccountID string
+	P         core.AccountPatch
+}
+
+// PatchOwnedProviderAccountCalls returns every recorded PatchOwnedProviderAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PatchOwnedProviderAccount").
+func (m *MockAccountCredentialStore) PatchOwnedProviderAccountCalls() []MockAccountCredentialStorePatchOwnedProviderAccountCall {
+	var out []MockAccountCredentialStorePatchOwnedProviderAccountCall
+	for _, c := range m.Recorder.Calls("PatchOwnedProviderAccount") {
+		var r MockAccountCredentialStorePatchOwnedProviderAccountCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.AccountOwner)
+		r.AccountID, _ = c.Args[2].(string)
+		r.P, _ = c.Args[3].(core.AccountPatch)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountCredentialStoreConfirmOrgKeyNoticeCall is one recorded call of MockAccountCredentialStore.ConfirmOrgKeyNotice, one
+// field per parameter.
+type MockAccountCredentialStoreConfirmOrgKeyNoticeCall struct {
+	Ctx       context.Context
+	OrgID     string
+	AccountID string
+	MarkedAt  time.Time
+}
+
+// ConfirmOrgKeyNoticeCalls returns every recorded ConfirmOrgKeyNotice call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ConfirmOrgKeyNotice").
+func (m *MockAccountCredentialStore) ConfirmOrgKeyNoticeCalls() []MockAccountCredentialStoreConfirmOrgKeyNoticeCall {
+	var out []MockAccountCredentialStoreConfirmOrgKeyNoticeCall
+	for _, c := range m.Recorder.Calls("ConfirmOrgKeyNotice") {
+		var r MockAccountCredentialStoreConfirmOrgKeyNoticeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		r.MarkedAt, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ AccountCredentialStore = (*MockAccountCredentialStore)(nil)
 
 // forge:section MockOrgKeyNoticeStore
-// forge:hash=43cbb6fdda45f02290e5a7da9d9f17475457514aba7b94a5e4c204d61dba1658
+// forge:hash=cb6a9e2fd4e673b006d7833df22b8c693e3b3b52a0c23c453299511ebc081c45
 
 // MockOrgKeyNoticeStore is a test mock for the OrgKeyNoticeStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockOrgKeyNoticeStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockOrgKeyNoticeStore.<Method>Func not set" error.
 type MockOrgKeyNoticeStore struct {
 	contractkit.Recorder
 	ClaimDueOrgKeyNoticesFunc func(context.Context, int, time.Duration) ([]core.ProviderAccount, error)
@@ -179,18 +357,65 @@ func (m *MockOrgKeyNoticeStore) ConfirmOrgKeyNotice(ctx context.Context, orgID s
 	return contractkit.MockNotSet("MockOrgKeyNoticeStore", "ConfirmOrgKeyNotice")
 }
 
+// MockOrgKeyNoticeStoreClaimDueOrgKeyNoticesCall is one recorded call of MockOrgKeyNoticeStore.ClaimDueOrgKeyNotices, one
+// field per parameter.
+type MockOrgKeyNoticeStoreClaimDueOrgKeyNoticesCall struct {
+	Ctx   context.Context
+	Limit int
+	Lease time.Duration
+}
+
+// ClaimDueOrgKeyNoticesCalls returns every recorded ClaimDueOrgKeyNotices call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClaimDueOrgKeyNotices").
+func (m *MockOrgKeyNoticeStore) ClaimDueOrgKeyNoticesCalls() []MockOrgKeyNoticeStoreClaimDueOrgKeyNoticesCall {
+	var out []MockOrgKeyNoticeStoreClaimDueOrgKeyNoticesCall
+	for _, c := range m.Recorder.Calls("ClaimDueOrgKeyNotices") {
+		var r MockOrgKeyNoticeStoreClaimDueOrgKeyNoticesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Limit, _ = c.Args[1].(int)
+		r.Lease, _ = c.Args[2].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockOrgKeyNoticeStoreConfirmOrgKeyNoticeCall is one recorded call of MockOrgKeyNoticeStore.ConfirmOrgKeyNotice, one
+// field per parameter.
+type MockOrgKeyNoticeStoreConfirmOrgKeyNoticeCall struct {
+	Ctx       context.Context
+	OrgID     string
+	AccountID string
+	MarkedAt  time.Time
+}
+
+// ConfirmOrgKeyNoticeCalls returns every recorded ConfirmOrgKeyNotice call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ConfirmOrgKeyNotice").
+func (m *MockOrgKeyNoticeStore) ConfirmOrgKeyNoticeCalls() []MockOrgKeyNoticeStoreConfirmOrgKeyNoticeCall {
+	var out []MockOrgKeyNoticeStoreConfirmOrgKeyNoticeCall
+	for _, c := range m.Recorder.Calls("ConfirmOrgKeyNotice") {
+		var r MockOrgKeyNoticeStoreConfirmOrgKeyNoticeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.AccountID, _ = c.Args[2].(string)
+		r.MarkedAt, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ OrgKeyNoticeStore = (*MockOrgKeyNoticeStore)(nil)
 
 // forge:section MockAccountStore
-// forge:hash=c9e7b0153a6f998395c1a5d20c8ec5decf2681ee22f0661455a49814fed486b7
+// forge:hash=0172dfa2d8973a104308168d81bf1d9403aa97c2dc23b30d19e665e56e25f606
 
 // MockAccountStore is a test mock for the AccountStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAccountStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAccountStore.<Method>Func not set" error.
 type MockAccountStore struct {
 	contractkit.Recorder
 	PatchOwnedProviderAccountFunc   func(context.Context, core.AccountOwner, string, core.AccountPatch) (core.ProviderAccount, error)
@@ -285,18 +510,213 @@ func (m *MockAccountStore) RecentAssignmentCounts(ctx context.Context, accountID
 	return nil, contractkit.MockNotSet("MockAccountStore", "RecentAssignmentCounts")
 }
 
+// MockAccountStorePatchOwnedProviderAccountCall is one recorded call of MockAccountStore.PatchOwnedProviderAccount, one
+// field per parameter.
+type MockAccountStorePatchOwnedProviderAccountCall struct {
+	Ctx       context.Context
+	Owner     core.AccountOwner
+	AccountID string
+	P         core.AccountPatch
+}
+
+// PatchOwnedProviderAccountCalls returns every recorded PatchOwnedProviderAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PatchOwnedProviderAccount").
+func (m *MockAccountStore) PatchOwnedProviderAccountCalls() []MockAccountStorePatchOwnedProviderAccountCall {
+	var out []MockAccountStorePatchOwnedProviderAccountCall
+	for _, c := range m.Recorder.Calls("PatchOwnedProviderAccount") {
+		var r MockAccountStorePatchOwnedProviderAccountCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.AccountOwner)
+		r.AccountID, _ = c.Args[2].(string)
+		r.P, _ = c.Args[3].(core.AccountPatch)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountStoreClearOtherThreadAssignmentsCall is one recorded call of MockAccountStore.ClearOtherThreadAssignments, one
+// field per parameter.
+type MockAccountStoreClearOtherThreadAssignmentsCall struct {
+	Ctx      context.Context
+	UserID   string
+	ThreadID string
+	Provider string
+}
+
+// ClearOtherThreadAssignmentsCalls returns every recorded ClearOtherThreadAssignments call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ClearOtherThreadAssignments").
+func (m *MockAccountStore) ClearOtherThreadAssignmentsCalls() []MockAccountStoreClearOtherThreadAssignmentsCall {
+	var out []MockAccountStoreClearOtherThreadAssignmentsCall
+	for _, c := range m.Recorder.Calls("ClearOtherThreadAssignments") {
+		var r MockAccountStoreClearOtherThreadAssignmentsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.ThreadID, _ = c.Args[2].(string)
+		r.Provider, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountStoreListThreadAssignmentsCall is one recorded call of MockAccountStore.ListThreadAssignments, one
+// field per parameter.
+type MockAccountStoreListThreadAssignmentsCall struct {
+	Ctx      context.Context
+	ThreadID string
+}
+
+// ListThreadAssignmentsCalls returns every recorded ListThreadAssignments call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListThreadAssignments").
+func (m *MockAccountStore) ListThreadAssignmentsCalls() []MockAccountStoreListThreadAssignmentsCall {
+	var out []MockAccountStoreListThreadAssignmentsCall
+	for _, c := range m.Recorder.Calls("ListThreadAssignments") {
+		var r MockAccountStoreListThreadAssignmentsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountStoreLatestServingAccountCall is one recorded call of MockAccountStore.LatestServingAccount, one
+// field per parameter.
+type MockAccountStoreLatestServingAccountCall struct {
+	Ctx      context.Context
+	ThreadID string
+}
+
+// LatestServingAccountCalls returns every recorded LatestServingAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("LatestServingAccount").
+func (m *MockAccountStore) LatestServingAccountCalls() []MockAccountStoreLatestServingAccountCall {
+	var out []MockAccountStoreLatestServingAccountCall
+	for _, c := range m.Recorder.Calls("LatestServingAccount") {
+		var r MockAccountStoreLatestServingAccountCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountStoreGetThreadAssignmentCall is one recorded call of MockAccountStore.GetThreadAssignment, one
+// field per parameter.
+type MockAccountStoreGetThreadAssignmentCall struct {
+	Ctx      context.Context
+	ThreadID string
+	Provider string
+}
+
+// GetThreadAssignmentCalls returns every recorded GetThreadAssignment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetThreadAssignment").
+func (m *MockAccountStore) GetThreadAssignmentCalls() []MockAccountStoreGetThreadAssignmentCall {
+	var out []MockAccountStoreGetThreadAssignmentCall
+	for _, c := range m.Recorder.Calls("GetThreadAssignment") {
+		var r MockAccountStoreGetThreadAssignmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ThreadID, _ = c.Args[1].(string)
+		r.Provider, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountStoreSetThreadAssignmentCall is one recorded call of MockAccountStore.SetThreadAssignment, one
+// field per parameter.
+type MockAccountStoreSetThreadAssignmentCall struct {
+	Ctx               context.Context
+	A                 core.Assignment
+	ExpectedAccountID string
+}
+
+// SetThreadAssignmentCalls returns every recorded SetThreadAssignment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetThreadAssignment").
+func (m *MockAccountStore) SetThreadAssignmentCalls() []MockAccountStoreSetThreadAssignmentCall {
+	var out []MockAccountStoreSetThreadAssignmentCall
+	for _, c := range m.Recorder.Calls("SetThreadAssignment") {
+		var r MockAccountStoreSetThreadAssignmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.A, _ = c.Args[1].(core.Assignment)
+		r.ExpectedAccountID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountStoreListAccountLimitsCall is one recorded call of MockAccountStore.ListAccountLimits, one
+// field per parameter.
+type MockAccountStoreListAccountLimitsCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// ListAccountLimitsCalls returns every recorded ListAccountLimits call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAccountLimits").
+func (m *MockAccountStore) ListAccountLimitsCalls() []MockAccountStoreListAccountLimitsCall {
+	var out []MockAccountStoreListAccountLimitsCall
+	for _, c := range m.Recorder.Calls("ListAccountLimits") {
+		var r MockAccountStoreListAccountLimitsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountStoreListOwnedAccountLimitsCall is one recorded call of MockAccountStore.ListOwnedAccountLimits, one
+// field per parameter.
+type MockAccountStoreListOwnedAccountLimitsCall struct {
+	Ctx   context.Context
+	Owner core.AccountOwner
+}
+
+// ListOwnedAccountLimitsCalls returns every recorded ListOwnedAccountLimits call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListOwnedAccountLimits").
+func (m *MockAccountStore) ListOwnedAccountLimitsCalls() []MockAccountStoreListOwnedAccountLimitsCall {
+	var out []MockAccountStoreListOwnedAccountLimitsCall
+	for _, c := range m.Recorder.Calls("ListOwnedAccountLimits") {
+		var r MockAccountStoreListOwnedAccountLimitsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Owner, _ = c.Args[1].(core.AccountOwner)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountStoreRecentAssignmentCountsCall is one recorded call of MockAccountStore.RecentAssignmentCounts, one
+// field per parameter.
+type MockAccountStoreRecentAssignmentCountsCall struct {
+	Ctx        context.Context
+	AccountIDs []string
+	Since      time.Time
+}
+
+// RecentAssignmentCountsCalls returns every recorded RecentAssignmentCounts call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RecentAssignmentCounts").
+func (m *MockAccountStore) RecentAssignmentCountsCalls() []MockAccountStoreRecentAssignmentCountsCall {
+	var out []MockAccountStoreRecentAssignmentCountsCall
+	for _, c := range m.Recorder.Calls("RecentAssignmentCounts") {
+		var r MockAccountStoreRecentAssignmentCountsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.AccountIDs, _ = c.Args[1].([]string)
+		r.Since, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ AccountStore = (*MockAccountStore)(nil)
 
 // forge:section MockAccountRoutingStore
-// forge:hash=2bd1ed2f756fd34f0c127d3cd7953dc2040af67cec267a8f0c14c81b1a584045
+// forge:hash=d3eda865cd564268f5b7d45afc202dbd829265962370270d670a19bf89ccb17d
 
 // MockAccountRoutingStore is a test mock for the AccountRoutingStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAccountRoutingStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAccountRoutingStore.<Method>Func not set" error.
 type MockAccountRoutingStore struct {
 	contractkit.Recorder
 	GetSettingValueFunc func(context.Context, string, string) (string, bool)
@@ -319,6 +739,44 @@ func (m *MockAccountRoutingStore) ORM() *orm.Client {
 		return m.ORMFunc()
 	}
 	return nil
+}
+
+// MockAccountRoutingStoreGetSettingValueCall is one recorded call of MockAccountRoutingStore.GetSettingValue, one
+// field per parameter.
+type MockAccountRoutingStoreGetSettingValueCall struct {
+	Ctx    context.Context
+	UserID string
+	Key    string
+}
+
+// GetSettingValueCalls returns every recorded GetSettingValue call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetSettingValue").
+func (m *MockAccountRoutingStore) GetSettingValueCalls() []MockAccountRoutingStoreGetSettingValueCall {
+	var out []MockAccountRoutingStoreGetSettingValueCall
+	for _, c := range m.Recorder.Calls("GetSettingValue") {
+		var r MockAccountRoutingStoreGetSettingValueCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Key, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAccountRoutingStoreORMCall is one recorded call of MockAccountRoutingStore.ORM, one
+// field per parameter.
+type MockAccountRoutingStoreORMCall struct {
+}
+
+// ORMCalls returns every recorded ORM call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ORM").
+func (m *MockAccountRoutingStore) ORMCalls() []MockAccountRoutingStoreORMCall {
+	var out []MockAccountRoutingStoreORMCall
+	for range m.Recorder.Calls("ORM") {
+		var r MockAccountRoutingStoreORMCall
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

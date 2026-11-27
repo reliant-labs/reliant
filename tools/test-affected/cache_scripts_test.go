@@ -453,6 +453,56 @@ printf '%s|%s|%s|%s|%s|%s|%s|%s\n' "$gofull" "$webfull" "$elec" "$dgen" "$typech
 	}
 }
 
+// Exercise HEAD's compiler selection, not a fixture-authored typecheck command.
+func TestTypecheckPinnedTscRejectsInvalidSource(t *testing.T) {
+	pkg, err := os.ReadFile(filepath.Join(repoRoot, "frontends/web/package.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest struct {
+		Scripts map[string]string `json:"scripts"`
+	}
+	if err := json.Unmarshal(pkg, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if got := manifest.Scripts["typecheck"]; got != "tsc -b" {
+		t.Fatalf("typecheck = %q, want tsc -b", got)
+	}
+	root := scriptFixture(t, "web-typecheck.sh")
+	// Absolute: repoRoot is relative to this package, and the fixture links to
+	// the compiler from a temporary directory, where a relative target dangles.
+	compiler, err := filepath.Abs(filepath.Join(repoRoot, "frontends/web/node_modules/typescript/bin/tsc"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(compiler); os.IsNotExist(err) {
+		t.Skip("install frontends/web dependencies to run the pinned TypeScript regression")
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	(&orderRepo{t: t}).git(root, "init", "-q")
+	putFixture(t, root, "frontends/web/package.json", string(pkg), 0644)
+	putFixture(t, root, "frontends/web/tsconfig.json", `{"compilerOptions":{"composite":true,"declaration":true,"outDir":"node_modules/.tmp/tsc","tsBuildInfoFile":"node_modules/.tmp/state.tsbuildinfo","types":[]},"include":["src.ts"]}`, 0644)
+	putFixture(t, root, "frontends/web/src.ts", "export const n: number = 1;", 0644)
+	bin := filepath.Join(root, "frontends/web/node_modules/.bin")
+	if err := os.MkdirAll(bin, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(compiler, filepath.Join(bin, "tsc")); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runFixture(root, "web-typecheck.sh", nil); err != nil {
+		t.Fatalf("valid source rejected by HEAD's typecheck: %v %s", err, out)
+	}
+	if _, err := os.Stat(filepath.Join(root, "frontends/web/node_modules/.tmp/state.tsbuildinfo")); err != nil {
+		t.Fatalf("successful typecheck produced no incremental state: %v", err)
+	}
+	putFixture(t, root, "frontends/web/src.ts", `export const n: number = "invalid";`, 0644)
+	if out, err := runFixture(root, "web-typecheck.sh", nil); err == nil || !strings.Contains(string(out), "TS2322") {
+		t.Fatalf("HEAD's incremental typecheck accepted invalid source: %v %s", err, out)
+	}
+}
+
 func TestTypecheckBackdatedCrossCheckoutAndHardlinks(t *testing.T) {
 	if testing.Short() {
 		t.Skip("real TypeScript compiler; runs in full scoped tests")

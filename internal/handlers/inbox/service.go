@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
-	"golang.org/x/sync/singleflight"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -115,7 +114,7 @@ type Service struct {
 	// storageCache holds each user's storage view for storageViewTTL.
 	storageCache sync.Map
 	// inboxReads shares one user's concurrent ListInbox reads (sharedRead).
-	inboxReads singleflight.Group
+	inboxReads freshFlight[*inboxReads]
 	// adminOrgs holds each user's administered orgs (adminOrgIDs) for adminOrgsTTL.
 	adminOrgs sync.Map
 	// teamOrgs holds whether an org is a team (two or more live members) for

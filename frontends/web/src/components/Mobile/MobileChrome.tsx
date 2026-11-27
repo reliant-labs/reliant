@@ -34,7 +34,7 @@ import { cn } from "../../lib/utils";
  * Top navigation bar for a mobile screen.
  *
  * 56px rather than the previous 42px, and the title is `text-xl font-semibold`
- * against `text-sm` row labels. Before this the title and the rows beneath it
+ * against `text-ui` row labels. Before this the title and the rows beneath it
  * rendered at the same size, so a screen had no typographic hierarchy at all —
  * only two shades of grey.
  */
@@ -78,7 +78,7 @@ export function MobileScreenHeader({
           {title}
         </h1>
         {subtitle && (
-          <div className="truncate text-xs text-muted-foreground">{subtitle}</div>
+          <div className="truncate text-meta text-muted-foreground">{subtitle}</div>
         )}
       </div>
       {trailing}
@@ -146,7 +146,7 @@ export function MobileScreenBody({
  */
 export function MobileSectionLabel({ children }: { children: ReactNode }) {
   return (
-    <h2 className="mb-2 px-1 text-xs font-medium text-muted-foreground">
+    <h2 className="mb-2 px-1 text-meta font-medium text-muted-foreground">
       {children}
     </h2>
   );
@@ -241,9 +241,9 @@ export function MobileEmptyState({
         <span className="mb-4 flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary-ink">
           <Icon className="h-7 w-7" />
         </span>
-        <p className="text-base font-semibold text-foreground">{title}</p>
+        <p className="text-section font-semibold text-foreground">{title}</p>
         {description && (
-          <p className="mt-1.5 max-w-[17rem] text-sm text-muted-foreground">
+          <p className="mt-1.5 max-w-[17rem] text-ui text-muted-foreground">
             {description}
           </p>
         )}
@@ -262,4 +262,4 @@ export function MobileEmptyState({
  * on blue.
  */
 export const MOBILE_PRIMARY_ACTION =
-  "no-color flex min-h-[48px] items-center justify-center gap-2 rounded-lg bg-primary px-5 text-sm font-medium text-primary-foreground active:opacity-80 disabled:opacity-60";
+  "no-color flex min-h-[48px] items-center justify-center gap-2 rounded-lg bg-primary px-5 text-ui font-medium text-primary-foreground active:opacity-80 disabled:opacity-60";

@@ -117,8 +117,8 @@ function SectionRow({
     >
       <MobileRowIcon icon={section.icon} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-foreground">{section.label}</p>
-        <p className="truncate text-xs text-muted-foreground">
+        <p className="text-ui font-medium text-foreground">{section.label}</p>
+        <p className="truncate text-meta text-muted-foreground">
           {section.description}
         </p>
       </div>
@@ -133,7 +133,9 @@ export function MobileSettingsScreen() {
   // A visit that arrived with somewhere to go back to (the claim page's
   // "Subscribe to keep both") opens on that section and returns there, instead
   // of dropping the person on the list with nothing to say where they were.
-  const { section, returnTo } = useSearch({ strict: false }) as { section?: string; returnTo?: string };
+  // `tab=hosting` (and the `org` the link was for) open billing on the App
+  // hosting card, as desktop's `/settings/billing?tab=hosting` does.
+  const { section, returnTo, tab, org } = useSearch({ strict: false }) as { section?: string; returnTo?: string; tab?: string; org?: string };
   const comeBackTo = isSafeReturnTo(returnTo) ? returnTo : undefined;
 
   // Computed per render (not module scope) so `hasControlPlane` — read at
@@ -239,7 +241,17 @@ export function MobileSettingsScreen() {
       case "ai":
         return <MobileAISettingsScreen onBack={onBack} />;
       case "billing":
-        return <MobileBillingScreen onBack={onBack} backLabel={comeBackTo ? "Back to your claim" : undefined} />;
+        return (
+          <MobileBillingScreen
+            onBack={onBack}
+            backLabel={comeBackTo ? "Back to your claim" : undefined}
+            focusHosting={tab === "hosting"}
+            hostingOrgId={org}
+            onDismissHostingOrg={() =>
+              void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, org: undefined }), replace: true })
+            }
+          />
+        );
       case "github":
         return <MobileGitHubScreen onBack={onBack} />;
       case "notifications":
@@ -288,7 +300,7 @@ export function MobileSettingsScreen() {
             rather than as a caption someone forgot to place. */}
         <div className="flex gap-3 rounded-lg border border-border bg-muted/40 p-4">
           <Monitor className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
+          <p className="text-meta leading-relaxed text-muted-foreground">
             Agent sandboxes are in the main menu. MCP servers, prompts, keyboard
             shortcuts, developer tools, app access, and port access rules
             aren&apos;t available here. Manage those on desktop.

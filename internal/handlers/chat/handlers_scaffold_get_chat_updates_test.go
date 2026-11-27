@@ -29,7 +29,7 @@ func TestGetChatUpdates_Generated(t *testing.T) {
 		return 7, nil
 	}
 	repo.GetChatCompactedThroughFunc = func(context.Context, string) (int64, error) { return 0, nil }
-	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo, Chats: chataccesstest.For(repo), Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
+	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{TriggerReads: &chat.MockTriggerReads{}, Repo: repo, Chats: chataccesstest.For(repo), Questions: &chat.MockQuestions{}, Spawns: &chat.MockSpawns{}, Selections: &chatselection.MockStore{}, Mailbox: &chat.MockMailbox{}, AgentMessages: &chat.MockAgentMessages{}, Messages: &chat.MockMessages{}, ToolBlocks: &chat.MockToolBlocks{}, Senders: &chat.MockSenders{}}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.GetChatUpdatesRequest, pb.GetChatUpdatesResponse]{
 		{

@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Emailing an org's owners and admins about a rejected org key
@@ -148,7 +149,7 @@ type orgKeyNoticeConfirmer interface {
 // startAndConfirmOrgKeyNotice starts n's workflow and, once Temporal has
 // accepted it (or already had it), records that on the account. Either step
 // failing leaves the mark unconfirmed, so it is started again later.
-func startAndConfirmOrgKeyNotice(ctx context.Context, store orgKeyNoticeConfirmer, q orgKeyNoticeQueue, n controlplane.OrgKeyRejectedNotice) error {
+func startAndConfirmOrgKeyNotice(ctx context.Context, noticeStore orgKeyNoticeConfirmer, q orgKeyNoticeQueue, n controlplane.OrgKeyRejectedNotice) error {
 	markedAt, err := time.Parse(time.RFC3339Nano, n.IncidentKey)
 	if err != nil {
 		return fmt.Errorf("read the incident of the notice: %w", err)
@@ -156,7 +157,7 @@ func startAndConfirmOrgKeyNotice(ctx context.Context, store orgKeyNoticeConfirme
 	if err := startOrgKeyNotice(ctx, q.starter, q.taskQueue, n); err != nil {
 		return fmt.Errorf("start the notice: %w", err)
 	}
-	if err := store.ConfirmOrgKeyNotice(ctx, n.OrgID, n.AccountID, markedAt); err != nil {
+	if err := noticeStore.ConfirmOrgKeyNotice(ctx, n.OrgID, n.AccountID, markedAt); err != nil {
 		return fmt.Errorf("record that the notice started: %w", err)
 	}
 	return nil
@@ -179,8 +180,8 @@ const orgKeyNoticeSweepLease = time.Hour
 // never confirmed (ClaimDueOrgKeyNotices) and starts each, and reports how many
 // it started. The reason is not kept
 // with the mark beyond needs_reauth_reason, which is what it sends.
-func sweepOrgKeyNotices(ctx context.Context, store OrgKeyNoticeStore, q orgKeyNoticeQueue) int {
-	pending, err := store.ClaimDueOrgKeyNotices(ctx, orgKeyNoticeSweepBatch, orgKeyNoticeSweepLease)
+func sweepOrgKeyNotices(ctx context.Context, noticeStore OrgKeyNoticeStore, q orgKeyNoticeQueue) int {
+	pending, err := noticeStore.ClaimDueOrgKeyNotices(ctx, orgKeyNoticeSweepBatch, orgKeyNoticeSweepLease)
 	if err != nil {
 		logging.WarnContext(ctx, "Could not list the rejected org keys whose notice never started", "error", err)
 		return 0
@@ -190,7 +191,7 @@ func sweepOrgKeyNotices(ctx context.Context, store OrgKeyNoticeStore, q orgKeyNo
 		if acct.NeedsReauthAt == nil || acct.OrgID == "" {
 			continue
 		}
-		if err := startAndConfirmOrgKeyNotice(ctx, store, q, orgKeyNotice(acct.OrgID, acct, acct.NeedsReauthReason)); err != nil {
+		if err := startAndConfirmOrgKeyNotice(ctx, noticeStore, q, orgKeyNotice(acct.OrgID, acct, acct.NeedsReauthReason)); err != nil {
 			logging.WarnContext(ctx, "Could not start a rejected org key's notice; the next sweep retries it",
 				"orgID", acct.OrgID, "accountID", acct.ID, "error", err)
 			continue
@@ -218,7 +219,9 @@ func noticeSweeps(cfg *Config, q orgKeyNoticeQueue) []func(context.Context) {
 		sweeps = append(sweeps, func(ctx context.Context) { sweepOrgKeyNotices(ctx, cfg.OrgAccounts, q) })
 	}
 	if cfg.Database != nil {
-		sweeps = append(sweeps, func(ctx context.Context) { sweepPauseNotices(ctx, newPauseStores(cfg.Database, cfg.Database.ORM()), q) })
+		sweeps = append(sweeps, func(ctx context.Context) {
+			sweepPauseNotices(ctx, newPauseStores(store.NewTriggerExtStore(cfg.Database.ORM()), cfg.Database.ORM()), q)
+		})
 	}
 	return sweeps
 }

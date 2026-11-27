@@ -51,7 +51,7 @@ func TestAutomationFailureFallbackAndDetail(t *testing.T) {
 			repoRuns := &MockRunRecords{
 				SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 			}
-			a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows})
+			a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Triggers: &MockStatusTriggers{}, Runs: repoRuns, Workflows: repoWorkflows})
 			a.ensureAutomationFailureMessage(ctx, WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
 			a.ensureAutomationFailureMessage(ctx, WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
 			require.Equal(t, "Node gate failed: [REDACTED: credential-bearing diagnostic omitted]", detail)
@@ -101,7 +101,7 @@ func TestAutomationFailureSuppressesAmbiguousSingleLineAssignments(t *testing.T)
 					return nil
 				},
 			}
-			NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
+			NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Triggers: &MockStatusTriggers{}, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "chat", WorkflowID: "root"})
 			require.True(t, saved)
 		}
 	}
@@ -135,7 +135,7 @@ func TestAutomationFailureNamesTheDeclaringSaveMessage(t *testing.T) {
 	repoRuns := &MockRunRecords{
 		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 	}
-	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(),
+	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Triggers: &MockStatusTriggers{}, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(),
 		WorkflowStatusInput{ChatID: "c", WorkflowID: "root", Status: "completed", Outcome: "failure", OutcomeNode: "stopped"})
 	require.Equal(t, "Node stopped failed: declared the run's outcome: failure: "+text, detail)
 	require.Zero(t, repo.CallCount("SaveMessageToThreadOnce"))
@@ -149,7 +149,7 @@ func TestAutomationFailureNamesADeclaringNodeWithNoAttempt(t *testing.T) {
 	repoRuns := &MockRunRecords{
 		SetLaunchEventRunFailureDetailFunc: func(_ context.Context, _, s string) error { detail = s; return nil },
 	}
-	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(),
+	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Triggers: &MockStatusTriggers{}, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(),
 		WorkflowStatusInput{ChatID: "c", WorkflowID: "root", Status: "completed", Outcome: "failure", OutcomeNode: "verdict"})
 	require.Equal(t, "Node verdict declared the run's outcome: failure.", detail)
 }
@@ -176,6 +176,6 @@ func TestAutomationFailurePreservesAuthoredFailureMessage(t *testing.T) {
 	repo.ListContentBlocksFunc = func(context.Context, string) ([]*db.MessageContentBlock, error) {
 		return []*db.MessageContentBlock{{BlockType: pb.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: &text}}, nil
 	}
-	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "c", WorkflowID: "root"})
+	NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: repo, Triggers: &MockStatusTriggers{}, Runs: repoRuns, Workflows: repoWorkflows}).ensureAutomationFailureMessage(context.Background(), WorkflowStatusInput{ChatID: "c", WorkflowID: "root"})
 	require.Zero(t, repo.CallCount("SaveMessageToThreadOnce"))
 }

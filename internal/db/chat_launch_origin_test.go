@@ -38,7 +38,7 @@ func recordLaunchEvent(t *testing.T, repo *Repo, chatID string, kind core.Trigge
 	// The launcher writes chats.origin from the launch event (the chat's
 	// earliest) when it creates the chat; a test that records the event by
 	// hand stamps it the same way.
-	launch, err := repo.GetTriggerEventByChatID(context.Background(), chatID)
+	launch, err := store.GetTriggerEventByChatID(context.Background(), repo.ORM(), chatID)
 	require.NoError(t, err)
 	setTestChatOrigin(t, repo, chatID, core.ChatOriginOf(launch.Kind))
 }
@@ -127,10 +127,10 @@ func TestChatLaunchOriginUsesEarliestEventAndSurvivesTriggerDeletion(t *testing.
 	assert.Equal(t, "schedule", chat.LaunchKind, "deleting the trigger keeps the origin kind")
 	assert.Nil(t, chat.TriggerID, "ON DELETE SET NULL clears the trigger id")
 
-	ev, err := repo.GetTriggerEventByChatID(ctx, "origin-two-events")
+	ev, err := store.GetTriggerEventByChatID(ctx, repo.ORM(), "origin-two-events")
 	require.NoError(t, err)
 	assert.Equal(t, core.TriggerEventKindSchedule, ev.Kind)
-	_, err = repo.GetTriggerEventByChatID(ctx, "no-chat")
+	_, err = store.GetTriggerEventByChatID(ctx, repo.ORM(), "no-chat")
 	assert.ErrorIs(t, err, core.ErrTriggerEventNotFound)
 }
 

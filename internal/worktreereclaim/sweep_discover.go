@@ -279,10 +279,18 @@ func scanCheckout(ctx context.Context, root string) checkoutScan {
 			s.Truncated = true
 			return nil
 		}
-		if t := info.ModTime(); t.After(s.Newest) {
+		mode := info.Mode()
+		// Files and symlinks date a change; a directory's mtime only says an
+		// entry in it was added, removed or renamed. An added entry dates
+		// itself, and a removal is what clean-up does: the reclaimer's and
+		// the idle reclaim's own node_modules strip moved the parent
+		// directory's mtime, and every stripped checkout read as changed
+		// "1h ago" for the next day (git status still sees a removed
+		// tracked or untracked file). The checkout's own directory is read
+		// by idleSince.
+		if t := info.ModTime(); !mode.IsDir() && t.After(s.Newest) {
 			s.Newest = t
 		}
-		mode := info.Mode()
 		if !mode.IsDir() && !mode.IsRegular() && mode&os.ModeSymlink == 0 && s.Special == "" {
 			s.Special = p
 		}

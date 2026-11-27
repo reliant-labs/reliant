@@ -825,11 +825,11 @@ func TestLoadChatTriggerReturnsTheLaunchEvent(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got := LoadChatTrigger(ctx, repo, result.Chat.ID)
+	got := LoadChatTrigger(ctx, store.NewTriggerEventExtStore(repo.ORM()), result.Chat.ID)
 	assert.Equal(t, "chat.start", got.Kind)
 	assert.Equal(t, result.EventID, got.EventID)
 
-	legacy := LoadChatTrigger(ctx, repo, "no-such-chat")
+	legacy := LoadChatTrigger(ctx, store.NewTriggerEventExtStore(repo.ORM()), "no-such-chat")
 	assert.Equal(t, "chat.start", legacy.Kind, "a chat with no event reads as an interactive start")
 }
 
