@@ -697,11 +697,12 @@ const SURFACES: Surface[] = [
     ready: (page) => page.getByText('Subscriber-led growth this half').first(),
   },
   {
-    // The org's strategy library: placeholder entries, and the pending prune request's banner.
+    // The strategy library: real idea-bank entries that fit the sample org's
+    // business (it opens on "fits my business"); the first of them by category.
     name: 'gtm-strategy-library',
     path: '/gtm/strategy?view=library',
     on: ['desktop', 'mobile'],
-    ready: (page) => page.getByText('Coffee tasting pop-up (placeholder)').first(),
+    ready: (page) => page.getByText('Annual prepay discount').first(),
   },
   {
     name: 'gtm-channels',
@@ -723,15 +724,15 @@ const SURFACES: Surface[] = [
   },
   {
     // The sample's Show HN item is dated today, so it is on the month grid at
-    // desktop width and first in the phone's "Coming up" list, which is the
-    // only place it is legible at 390px (the grid is narrow and scrolls).
+    // desktop width and first in the phone's agenda, which is the only place it
+    // is legible at 390px. The agenda shows below 768px (max-width: 767px).
     name: 'gtm-calendar',
     path: '/gtm/calendar',
     on: ['desktop', 'mobile'],
     ready: (page) =>
-      page.viewportSize()!.width > 768
-        ? page.getByText('Show HN: the grind-size calculator we built for subscribers').first()
-        : page.getByRole('region', { name: 'Coming up' }).getByText('Show HN: the grind-size calculator we built for subscribers'),
+      page.viewportSize()!.width <= 767
+        ? page.getByTestId('gtm-calendar-agenda').getByText('Show HN: the grind-size calculator we built for subscribers')
+        : page.getByText('Show HN: the grind-size calculator we built for subscribers').first(),
   },
   {
     name: 'gtm-positioning',

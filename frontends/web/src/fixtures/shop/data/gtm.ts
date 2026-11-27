@@ -12,12 +12,14 @@
  *
  * Time is relative to the `now` it is built with (the pack clock): the items
  * sit from 10 days before today to 20 days after it, whatever day it is, so
- * the calendar and the phone's "Coming up" list are never empty, and an item
+ * the calendar and the phone's agenda are never empty, and an item
  * is in its past or future state by whether its moment has gone by.
  *
- * The strategy library holds a few made-up PLACEHOLDER entries, written for
- * this pack: a real org imports its own library, and none of that lives here.
- * Only the 13 category names are real, and they are generic.
+ * The strategy library is a subset of Reliant's REAL embedded idea bank
+ * (internal/gtm/library/ideas/*.yaml), which is generic and the same for
+ * every org: ./gtmLibrary.gen.ts, written by scripts/gtm/gen-library-fixture.mjs
+ * from the YAML, never by hand. Some sample ideas cite its entries by key and
+ * answer their tailor questions, as an agent proposing from the bank would.
  */
 
 import { create, type MessageInitShape } from "@bufbuild/protobuf";
@@ -25,6 +27,8 @@ import { timestampFromDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
   GtmAssetSchema,
+  GtmBusinessModel,
+  GtmBusinessType,
   GtmAssetSource,
   GtmAssetStatus,
   GtmCampaignSchema,
@@ -38,7 +42,6 @@ import {
   GtmClaimSourceKind,
   GtmClaimStatus,
   GtmConnectionState,
-  GtmCredentialKind,
   GtmEvidenceSchema,
   GtmIdeaKind,
   GtmIdeaSchema,
@@ -47,16 +50,12 @@ import {
   GtmItemFormat,
   GtmItemSchema,
   GtmItemStatus,
-  GtmLibraryDepth,
-  GtmLibraryImportSchema,
-  GtmLibraryPruneRequestSchema,
-  GtmLibraryStepSchema,
   GtmPositioningSchema,
-  GtmPruneRequestStatus,
   GtmStrategyCategory,
   GtmStrategyLibraryEntrySchema,
   GtmStrategySchema,
   GtmStrategyStatus,
+  GtmTailorAnswerSchema,
   type GtmAsset,
   type GtmCampaign,
   type GtmChannel,
@@ -64,14 +63,13 @@ import {
   type GtmEvidence,
   type GtmIdea,
   type GtmItem,
-  type GtmLibraryImport,
-  type GtmLibraryPruneRequest,
   type GtmPositioning,
   type GtmStrategy,
   type GtmStrategyLibraryEntry,
 } from "@/gen/reliant/v1/gtm_pb";
 
 import { DEMO_ORG } from "../shopStory";
+import { GTM_BANK_SUBSET, type GtmBankEntry } from "./gtmLibrary.gen";
 import { APP_USER } from "../user";
 
 /** The person every "by a person" field names (a display name, so the pages read well). */
@@ -100,8 +98,6 @@ export const GTM_CHANNEL_IDS = {
   podcasts: "gtm-ch-podcast-guests",
 } as const;
 
-export const GTM_PRUNE_REQUEST_ID = "gtm-prune-sample-1";
-
 /** The 13 library categories' generic display names, by enum: the one part of a catalog that may live in this repo. */
 export const GTM_CATEGORY_LABELS: Record<number, string> = {
   [GtmStrategyCategory.PRICING_OFFERS_INCENTIVES]: "Pricing, offers & incentives",
@@ -119,6 +115,62 @@ export const GTM_CATEGORY_LABELS: Record<number, string> = {
   [GtmStrategyCategory.MARKET_RESEARCH_POSITIONING]: "Market research & positioning",
 };
 
+/** A bank slug as its proto enum value: `community_events` is GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS. */
+function enumOf<E extends Record<string, string | number>>(e: E, slug: string, what: string): E[keyof E] {
+  const value = e[slug.toUpperCase() as keyof E];
+  if (typeof value !== "number") throw new Error(`gtm fixture: the bank's ${what} "${slug}" has no proto enum value`);
+  return value as E[keyof E];
+}
+
+/** One bank entry as the GtmService serves it (PR-5's libraryEntry mapping). */
+export function gtmLibraryEntry(e: GtmBankEntry): GtmStrategyLibraryEntry {
+  return create(GtmStrategyLibraryEntrySchema, {
+    key: e.key,
+    category: enumOf(GtmStrategyCategory, e.category, "category"),
+    name: e.name,
+    summaryMd: e.summary,
+    whyItWorksMd: e.why_it_works,
+    businessTypes: e.business_types.map((t) => enumOf(GtmBusinessType, t, "business type")),
+    businessModels: e.business_models.map((m) => enumOf(GtmBusinessModel, m, "business model")),
+    stages: [...e.stages],
+    objective: e.objective,
+    effort: e.effort,
+    cost: e.cost,
+    signalDays: e.signal_days,
+    tailorQuestions: [...e.tailor_questions],
+    suggestedWorkflowMd: e.suggested_workflow,
+    channelTypes: [...e.channel_types],
+    kpis: [...e.kpis],
+  });
+}
+
+/** The fixture's library: the bank subset, in bank order. */
+export const gtmLibrary = (): GtmStrategyLibraryEntry[] => GTM_BANK_SUBSET.map(gtmLibraryEntry);
+
+/** A bank entry of the subset by key; a key it does not hold throws (a fixture bug, not a runtime path). */
+function bankEntry(key: string): GtmBankEntry {
+  const found = GTM_BANK_SUBSET.find((e) => e.key === key);
+  if (!found) throw new Error(`gtm fixture: the bank subset does not hold "${key}" (scripts/gtm/gen-library-fixture.mjs KEYS)`);
+  return found;
+}
+
+/**
+ * An idea's citation of a bank entry: its key, an answer to EACH of its
+ * tailor questions (in the entry's order, for this coffee business), and
+ * optionally the entry's suggested workflow tailored to the business.
+ */
+function cites(key: string, answers: readonly string[], suggestedWorkflowMd = "") {
+  const entry = bankEntry(key);
+  if (answers.length !== entry.tailor_questions.length) {
+    throw new Error(`gtm fixture: "${key}" asks ${entry.tailor_questions.length} questions, ${answers.length} answered`);
+  }
+  return {
+    libraryKey: key,
+    tailorAnswers: entry.tailor_questions.map((question, i) => create(GtmTailorAnswerSchema, { question, answer: answers[i]! })),
+    suggestedWorkflowMd,
+  };
+}
+
 export interface GtmSampleData {
   strategies: GtmStrategy[];
   channels: GtmChannel[];
@@ -126,10 +178,8 @@ export interface GtmSampleData {
   campaigns: GtmCampaign[];
   items: GtmItem[];
   assets: GtmAsset[];
-  /** Keyed by `key`, in no particular order (the list rpc sorts). */
-  library: GtmStrategyLibraryEntry[];
-  libraryImports: GtmLibraryImport[];
-  pruneRequests: GtmLibraryPruneRequest[];
+  /** The idea bank's subset, in bank order (category, then the bank's own order). Read-only: no rpc writes it. */
+  library: readonly GtmStrategyLibraryEntry[];
   positioning: GtmPositioning;
   claims: GtmClaim[];
 }
@@ -179,7 +229,7 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
       goalMd: "Subscribers who get a third box tend to stay. A draft from the agent: a brewing guide after the first box, and a monthly note on what is roasting.",
       targetMetric: "60% of new subscribers reach a third box (sample target)",
       periodStart: dateOnly(7), periodEnd: dateOnly(97), status: GtmStrategyStatus.DRAFT, category: GtmStrategyCategory.RETENTION_EXPANSION,
-      libraryKey: "sample-annual-nudge", revision: 1, createdBy: "Chat: retention review (sample)", updatedBy: "Chat: retention review (sample)", createdAt: ts(at(-3, 14)), updatedAt: ts(at(-3, 14)),
+      libraryKey: "annual-prepay-discount", revision: 1, createdBy: "Chat: retention review (sample)", updatedBy: "Chat: retention review (sample)", createdAt: ts(at(-3, 14)), updatedAt: ts(at(-3, 14)),
     }),
   ];
 
@@ -240,6 +290,12 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
   const ideas: GtmIdea[] = [
     idea({
       id: "gtm-idea-roast-date-post", kind: GtmIdeaKind.CONTENT, status: GtmIdeaStatus.PROPOSED, ...agent, sourceChatId: "sample-chat-weekly-ideas",
+      ...cites("founder-long-form-blog", [
+        "That a best-before date tells you nothing about how coffee tastes: the roast date does, and most bags hide it.",
+        "How to read a roast date, why beans taste best a week or two after roasting, and how grind size changes a cup.",
+        "One post every two weeks; the roaster writes it on the quiet morning after the Monday roast.",
+        "The roast note email, the help page, and a short post on the home-brewing forums.",
+      ], "Keep a running list of post ideas from subscriber emails and support questions about brewing. Every two weeks, propose the three strongest with an outline each; once the roaster writes a draft, check it for one clear next step (start a Weekly Box) and broken links."),
       campaignId: GTM_CAMPAIGN_IDS.tastingClub, title: "Explain roast dates in one post",
       bodyMd: [
         "The roast-date help page gets a lot of visits but few visitors go on to start a subscription. One plain post that reads a roast date off a bag could close that gap.",
@@ -281,6 +337,11 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
     }, at(-18, 11), at(-15, 16)),
     idea({
       id: "gtm-idea-pause-email", kind: GtmIdeaKind.GTM, status: GtmIdeaStatus.PROPOSED, ...agent, sourceChatId: "sample-chat-analytics-review",
+      ...cites("win-back-campaign", [
+        "Most left the week they went away (sample: 38% name travel); pausing a box from the app shipped since, so that reason is fixed.",
+        "Yes: a returning subscriber keeps their size, grind and delivery day, and the next box ships on that day.",
+        "No offer needed: the news that a box can now be paused is the reason to come back.",
+      ], "Monthly, list subscribers who cancelled three to twelve months ago and have not unsubscribed, pick out those whose cancellation named travel, and draft a short note about pausing a box, with an unsubscribe link, for a person to review before it is sent."),
       campaignId: GTM_CAMPAIGN_IDS.tastingClub, title: "Email subscribers about pausing a box",
       bodyMd: [
         "Many cancellations happen the week someone goes on holiday. Subscribers may not know a box can be paused from the app.",
@@ -357,16 +418,51 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
     }, at(-12, 10), at(-9, 10)),
     idea({
       id: "gtm-idea-referral", kind: GtmIdeaKind.GTM, status: GtmIdeaStatus.REJECTED, ...agent, sourceChatId: "sample-chat-weekly-ideas", revision: 2,
+      ...cites("double-sided-referral-rewards", [
+        "A free bag of the month's origin for both sides: it costs a little roasting time and the shipping.",
+        "The friend's first paid box, not just a sign-up.",
+        "The week after the third box, when subscribers write in most about how much they like it.",
+        "One reward per new delivery address, and none for the subscriber's own second account.",
+      ]),
       title: "Offer referral credits",
       bodyMd: "Give both sides a bag of beans when a referral subscribes.\n\nRejected: credits need a finance review first.",
       evidence: [],
     }, at(-26, 9), at(-24, 11)),
     idea({
       id: "gtm-idea-monthly-roast-note", kind: GtmIdeaKind.CONTENT, status: GtmIdeaStatus.DONE, ...agent, sourceChatId: "sample-chat-launch-planning", revision: 3,
+      ...cites("own-newsletter", [
+        "What is roasting this month, how each origin tastes, and one brewing tip, even for readers who never subscribe.",
+        "The head roaster writes it; one short issue a month is a pace they can keep.",
+        "On the order confirmation page, in every box's card, and at the foot of the help pages.",
+      ], "Through the month, collect the roaster's tasting notes and subscriber questions into a draft file. Two days before the send, assemble a draft issue in the usual structure for the roaster to edit, and after sending record opens, clicks and replies."),
       title: "Monthly roast note",
       bodyMd: "Roll the month's new origins into one email with a line on how each one tastes.",
       evidence: [evidence("Roast note opens per month (sample)", "**2,900**", at(-30, 9))],
     }, at(-60, 9), at(-32, 9)),
+    idea({
+      id: "gtm-idea-cupping-night", kind: GtmIdeaKind.GTM, status: GtmIdeaStatus.PROPOSED, ...agent, sourceChatId: "sample-chat-weekly-ideas", campaignId: GTM_CAMPAIGN_IDS.tastingClub,
+      title: "A monthly cupping night at the roastery",
+      bodyMd: "An evening a month at the roastery: taste the month's Tasting Club origin side by side with two others, a short talk from the roaster, and a sign-up card on every table.",
+      evidence: [evidence("Subscribers within 20 minutes of the roastery (sample)", "**410**", at(-3, 10))],
+      ...cites("host-local-meetup-series", [
+        "Most subscribers live in the city around the roastery (sample: 410 within 20 minutes).",
+        "How to taste coffee like a roaster: what acidity, body and sweetness mean in the cup.",
+        "The bakery next door, which already sells the beans and has room for thirty people.",
+        "The head roaster, a local barista trainer, and a green-bean importer.",
+      ], "Three weeks before each cupping night, draft the event page and a call for a guest taster; remind past attendees a week and a day before; afterwards send a thank-you with the tasting notes and a short survey, and add new attendees to the subscriber list with their consent."),
+    }, at(-3, 10, 30)),
+    idea({
+      id: "gtm-idea-founder-office-calls", kind: GtmIdeaKind.GTM, status: GtmIdeaStatus.PROPOSED, ...agent, sourceChatId: "sample-chat-analytics-review", campaignId: GTM_CAMPAIGN_IDS.weeklyBox,
+      title: "The founder calls twenty office managers",
+      bodyMd: "Before building an office plan, the founder calls twenty office managers who already order coffee for their teams, to learn what they buy, how often, and what goes wrong.",
+      evidence: [evidence("Office orders placed through the consumer site last quarter (sample)", "**27**", at(-6, 9))],
+      ...cites("founder-led-sales-first-customers", [
+        "Offices of ten to fifty people that order coffee every week and run out before the order arrives.",
+        "Six hours a week for the next month.",
+        "That they order on a schedule, pay by invoice, and would switch for beans that arrive before they run out.",
+        "In a shared notes file, one page per call, with their own words quoted.",
+      ]),
+    }, at(-6, 9, 20)),
   ];
 
   // ── Items: from 10 days ago to 20 days ahead ──────────────────────────────
@@ -508,66 +604,8 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
     }),
   ];
 
-  // ── The strategy library: PLACEHOLDERS, written for this pack ─────────────
-  const entry = (fields: MessageInitShape<typeof GtmStrategyLibraryEntrySchema> & Pick<GtmStrategyLibraryEntry, "key" | "name">): GtmStrategyLibraryEntry =>
-    create(GtmStrategyLibraryEntrySchema, { sourceRevision: "sample-rev-2", importedAt: ts(at(-1, 9)), importedBy: GTM_SAMPLE_PERSON, ...fields });
-  const SC = GtmStrategyCategory;
-  const library: GtmStrategyLibraryEntry[] = [
-    entry({
-      key: "sample-tasting-popup", category: SC.PARTNERSHIPS_DISTRIBUTION, depth: GtmLibraryDepth.PLAY, name: "Coffee tasting pop-up (placeholder)",
-      summaryMd: "Placeholder entry: a Saturday tasting table at a partner café, three coffees and a sign-up card.",
-      stage: "EARLY", cost: "LOW", difficulty: "MEDIUM", fits: ["B2C"], hours: 8, signalDays: 14, northStar: "Tasting-event attendees who subscribe", objective: "Local awareness",
-      hypothesisMd: "People who taste a coffee in person subscribe more often than people who read about it (placeholder).", channelTypes: ["blog", "x", "reddit"], kpis: ["Attendees", "New subscribers"],
-      steps: [create(GtmLibraryStepSchema, { who: "you", title: "Agree a Saturday with a partner café" }), create(GtmLibraryStepSchema, { who: "agent", title: "Draft the invitation and the sign-up card" })],
-    }),
-    entry({
-      key: "sample-brew-cards", category: SC.PRODUCT_LED_GROWTH, depth: GtmLibraryDepth.PLAY, name: "Brewing card in every box (placeholder)",
-      summaryMd: "Placeholder entry: a printed card per box with a starting grind, dose and time for each brew method.",
-      stage: "GROWTH", cost: "MEDIUM", difficulty: "MEDIUM", fits: ["B2C", "B2B"], hours: 6, northStar: "Subscribers who reach a third box", channelTypes: ["blog", "youtube"], kpis: ["Third-box rate"],
-    }),
-    entry({
-      key: "sample-cupping-call", category: SC.COMMUNITY_EVENTS, depth: GtmLibraryDepth.TACTIC, name: "Monthly cupping call (placeholder)",
-      summaryMd: "Placeholder entry: an open video call each month where members taste the same coffee and compare notes.",
-      stage: "EARLY", cost: "FREE", difficulty: "EASY", fits: ["B2C"], hours: 2, northStar: "Returning attendees", channelTypes: ["email", "linkedin"], kpis: ["Attendees"],
-    }),
-    entry({
-      key: "sample-faq-pages", category: SC.ORGANIC_CONTENT_SEO, depth: GtmLibraryDepth.TACTIC, name: "Answer pages for common questions (placeholder)",
-      summaryMd: "Placeholder entry: one short page per question support hears every week, linked from the help page.",
-      stage: "PRE_LAUNCH", cost: "FREE", difficulty: "EASY", fits: ["B2B", "B2C"], hours: 3, northStar: "Visits from search to answer pages", channelTypes: ["blog"], kpis: ["Organic visits"],
-    }),
-    entry({
-      key: "sample-annual-nudge", category: SC.PRICING_OFFERS_INCENTIVES, depth: GtmLibraryDepth.TACTIC, name: "Annual plan reminder (placeholder)",
-      summaryMd: "Placeholder entry: a single reminder of the annual option after a subscriber's third month.",
-      stage: "GROWTH", cost: "FREE", difficulty: "EASY", fits: ["B2C", "MARKETPLACE"], hours: 1, northStar: "Subscribers on an annual plan", channelTypes: ["email"], kpis: ["Annual conversions"],
-    }),
-    entry({
-      key: "sample-quote-wall", category: SC.TRUST_REPUTATION, depth: GtmLibraryDepth.TACTIC, name: "Customer quote wall (placeholder)",
-      summaryMd: "Placeholder entry: short quotes from real users, with their permission, on the pricing page.",
-      stage: "EARLY", cost: "LOW", difficulty: "EASY", fits: ["B2B", "B2C"], hours: 2, northStar: "Pricing page conversion", channelTypes: ["blog", "linkedin"], kpis: ["Pricing page conversion"],
-    }),
-  ];
-
-  // ── Library audit rows and a pending prune request ─────────────────────────
-  const libraryImports: GtmLibraryImport[] = [
-    create(GtmLibraryImportSchema, {
-      id: "gtm-import-3", orgId: DEMO_ORG, actorUserId: GTM_SAMPLE_PERSON, credentialKind: GtmCredentialKind.TOKEN, sourceRevision: "sample-rev-2",
-      created: 0, updated: 0, unchanged: 4, pruned: 0, pruneRequestId: GTM_PRUNE_REQUEST_ID, createdAt: ts(at(-1, 9)),
-    }),
-    create(GtmLibraryImportSchema, {
-      id: "gtm-import-2", orgId: DEMO_ORG, actorUserId: GTM_SAMPLE_PERSON, credentialKind: GtmCredentialKind.TOKEN, sourceRevision: "sample-rev-1b",
-      created: 0, updated: 2, unchanged: 4, pruned: 0, createdAt: ts(at(-4, 16)),
-    }),
-    create(GtmLibraryImportSchema, {
-      id: "gtm-import-1", orgId: DEMO_ORG, actorUserId: GTM_SAMPLE_PERSON, credentialKind: GtmCredentialKind.TOKEN, sourceRevision: "sample-rev-1",
-      created: 6, updated: 0, unchanged: 0, pruned: 0, createdAt: ts(at(-9, 11)),
-    }),
-  ];
-  const pruneRequests: GtmLibraryPruneRequest[] = [
-    create(GtmLibraryPruneRequestSchema, {
-      id: GTM_PRUNE_REQUEST_ID, orgId: DEMO_ORG, requestedBy: GTM_SAMPLE_PERSON, credentialKind: GtmCredentialKind.TOKEN, sourceRevision: "sample-rev-2",
-      removeKeys: ["sample-annual-nudge", "sample-quote-wall"], status: GtmPruneRequestStatus.PENDING, createdAt: ts(at(-1, 9)), expiresAt: ts(at(6, 9)),
-    }),
-  ];
+  // ── The strategy library: a subset of the real embedded idea bank ─────────
+  const library = gtmLibrary();
 
   // ── Positioning ────────────────────────────────────────────────────────────
   const positioning = create(GtmPositioningSchema, {
@@ -582,6 +620,9 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
       "(Sample positioning for a fictional company.)",
     ].join("\n"),
     audiences: ["Home brewers", "Office managers", "Gift buyers", "Café owners"],
+    // What "fits my business" reads in the library: an online shop on subscriptions.
+    businessType: GtmBusinessType.ECOMMERCE,
+    businessModels: [GtmBusinessModel.SUBSCRIPTION],
     updatedBy: GTM_SAMPLE_PERSON, revision: 3, updatedAt: ts(at(-5, 10)),
   });
 
@@ -607,7 +648,7 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
     }, at(-30)),
     claim({
       id: "gtm-claim-compostable", text: "The bags are compostable.", category: C.CAPABILITY, status: GtmClaimStatus.VERIFIED,
-      sourceUrl: "https://example.com/sample/packaging", sourceKind: SK.CODE, ...verified(7, 11),
+      sourceUrl: "https://example.com/sample/packaging", sourceKind: SK.DOCS, ...verified(7, 11),
     }, at(-30)),
     claim({
       id: "gtm-claim-delivery-time", text: "Orders usually arrive within 4 days.", category: C.TIMING, status: GtmClaimStatus.VERIFIED,
@@ -628,5 +669,5 @@ export function gtmSampleData(nowMs: number): GtmSampleData {
     }, at(-90)),
   ];
 
-  return { strategies, channels, ideas, campaigns, items, assets, library, libraryImports, pruneRequests, positioning, claims };
+  return { strategies, channels, ideas, campaigns, items, assets, library, positioning, claims };
 }
