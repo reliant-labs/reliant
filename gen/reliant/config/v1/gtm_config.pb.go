@@ -42,8 +42,15 @@ type GtmConfig struct {
 	// org-bound token with obs:read only, minted by the owner. Unset, the
 	// analytics read reports itself unavailable.
 	AnalyticsToken string `protobuf:"bytes,2,opt,name=analytics_token,json=analyticsToken,proto3" json:"analytics_token,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Whether GTM's agent may copy a chat attachment into the asset library
+	// (attach_gtm_asset from an attachment id). Off by default. When on, it
+	// takes only an attachment the caller owns that is stamped with the GTM org
+	// (attachments.org_id: the owner was a member of it when it was stored); an
+	// attachment stamped with none, every one uploaded before attachments
+	// recorded an org included, is never taken.
+	AttachFromChatEnabled bool `protobuf:"varint,3,opt,name=attach_from_chat_enabled,json=attachFromChatEnabled,proto3" json:"attach_from_chat_enabled,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *GtmConfig) Reset() {
@@ -88,6 +95,13 @@ func (x *GtmConfig) GetAnalyticsToken() string {
 		return x.AnalyticsToken
 	}
 	return ""
+}
+
+func (x *GtmConfig) GetAttachFromChatEnabled() bool {
+	if x != nil {
+		return x.AttachFromChatEnabled
+	}
+	return false
 }
 
 // GtmAssetsConfig is the bucket GTM's assets (the files attached to items and
@@ -209,12 +223,14 @@ var File_reliant_config_v1_gtm_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_gtm_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/gtm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xd5\x02\n" +
+	"\"reliant/config/v1/gtm_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x99\x04\n" +
 	"\tGtmConfig\x12\x94\x01\n" +
 	"\x0fallowed_org_ids\x18\x01 \x03(\tBl\x82\xce\x18h\n" +
 	"\x13GTM_ALLOWED_ORG_IDS*QComma-separated organization ids GTM is enabled for (none: GTM is off everywhere)R\rallowedOrgIds\x12\xb0\x01\n" +
 	"\x0fanalytics_token\x18\x02 \x01(\tB\x86\x01\x82\xce\x18\x81\x01\n" +
-	"\x13GTM_ANALYTICS_TOKEN*fControl-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)0\x01P\x01R\x0eanalyticsToken\"\xa2\n" +
+	"\x13GTM_ANALYTICS_TOKEN*fControl-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)0\x01P\x01R\x0eanalyticsToken\x12\xc1\x01\n" +
+	"\x18attach_from_chat_enabled\x18\x03 \x01(\bB\x87\x01\x82\xce\x18\x82\x01\n" +
+	"\x1cGTM_ATTACH_FROM_CHAT_ENABLED*bLet GTM's agent copy an attachment stamped with the GTM org into the asset library (default false)R\x15attachFromChatEnabled\"\xa2\n" +
 	"\n" +
 	"\x0fGtmAssetsConfig\x12\x83\x01\n" +
 	"\bendpoint\x18\x01 \x01(\tBg\x82\xce\x18c\n" +

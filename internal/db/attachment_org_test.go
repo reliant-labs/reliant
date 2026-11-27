@@ -15,7 +15,7 @@ import (
 )
 
 // TestAttachmentOrgColumn proves, against a database, what
-// db/migrations/20261127021500_attachments_org_id (and its validate and index
+// db/migrations/20261127161000_attachments_org_id (and its validate and index
 // files) enforce: org_id is nullable, so a legacy row with none is accepted;
 // a blank org_id is refused by attachments_org_id_not_blank, validated; the
 // (user_id, org_id) index exists; and CreateAttachment writes the org through.

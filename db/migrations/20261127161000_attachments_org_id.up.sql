@@ -21,8 +21,8 @@
 -- backfill from. An org-scoped read never matches a NULL row.
 --
 -- The CHECK is added NOT VALID, so the ACCESS EXCLUSIVE lock covers only the
--- catalog change; 20261127021505_attachments_org_id_validate validates it.
--- 20261127021510_attachments_user_org_index adds the (user_id, org_id)
+-- catalog change; 20261127161005_attachments_org_id_validate validates it.
+-- 20261127161010_attachments_user_org_index adds the (user_id, org_id)
 -- index CONCURRENTLY, in a file of its own. lock_timeout bounds the wait
 -- behind a long transaction.
 SET LOCAL lock_timeout = '5s';

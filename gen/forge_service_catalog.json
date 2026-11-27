@@ -1665,6 +1665,11 @@
               "Name": "content",
               "ProtoType": "bytes",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "CreateFileReferenceResponse": [
@@ -1724,6 +1729,11 @@
               "Name": "mime_type",
               "ProtoType": "string",
               "IsOptional": false
+            },
+            {
+              "Name": "org_id",
+              "ProtoType": "string",
+              "IsOptional": true
             }
           ],
           "UploadAttachmentResponse": [
@@ -1798,6 +1808,11 @@
             {
               "name": "content",
               "kind": "bytes"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.CreateFileReferenceResponse": [
@@ -1848,6 +1863,11 @@
             {
               "name": "mime_type",
               "kind": "string"
+            },
+            {
+              "name": "org_id",
+              "kind": "string",
+              "optional": true
             }
           ],
           "reliant.v1.UploadAttachmentResponse": [
@@ -58433,6 +58453,11 @@
             {
               "name": "spawn_depth_exhausted",
               "kind": "bool"
+            },
+            {
+              "name": "entitled_features",
+              "kind": "string",
+              "repeated": true
             }
           ],
           "reliant.v1.ToolResultMsg": [
@@ -64976,6 +65001,19 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Attachment",
+      "field": "Orgs",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/attachment.OrgResolver",
+      "methods": [],
+      "candidates": [
+        "OrgResolver"
+      ],
+      "providers": [
+        "OrgResolver"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "AutomationTakeover",
       "field": "Offers",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Offers",
@@ -65026,6 +65064,15 @@
         "APIDaemonRouter"
       ],
       "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Catalog",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
     },
     {
       "consumer": "Catalog",
@@ -68523,6 +68570,15 @@
     },
     {
       "consumer": "Trigger",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "Trigger",
       "field": "Intake",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/trigger.EventIntake",
       "methods": [],
@@ -69483,6 +69539,14 @@
     },
     {
       "code": "binding_unresolved",
+      "component": "Catalog.Gate",
+      "source": {
+        "path": "internal/handlers/catalog/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
       "component": "ChatTrace.Spans",
       "source": {
         "path": "internal/handlers/chat_trace/service.go",
@@ -69868,6 +69932,14 @@
     {
       "code": "binding_unresolved",
       "component": "Trigger.Fires",
+      "source": {
+        "path": "internal/handlers/trigger/service.go",
+        "symbol": "New"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "Trigger.Gate",
       "source": {
         "path": "internal/handlers/trigger/service.go",
         "symbol": "New"
