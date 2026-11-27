@@ -82,6 +82,32 @@ func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunList
 	return store.ListRuns(ctx, r.ORM(), filters)
 }
 
+// ListUnlaunchedTriggerEvents is the run log's other half: the trigger
+// events that started no run, under the same filters and keyset as ListRuns.
+//
+// Deprecated: use store.RunListExtStore.ListUnlaunchedTriggerEvents; the run
+// handler reads it through Deps.RunLists.
+func (r *Repo) ListUnlaunchedTriggerEvents(ctx context.Context, filters RunListFilters) ([]*UnlaunchedTriggerEvent, bool, error) {
+	return store.ListUnlaunchedTriggerEvents(ctx, r.ORM(), filters)
+}
+
+// LastRunPerWorkflow is store.LastRunPerWorkflow.
+//
+// Deprecated: use store.RunListExtStore.LastRunPerWorkflow.
+func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
+	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
+}
+
+// LastRunPerWorkflowAndOrg is the newest run of each (workflow, org) pair:
+// LastRunPerWorkflow's candidates, before a caller drops the orgs a person
+// may no longer see (store.LastRunPerWorkflowAndOrg).
+//
+// Deprecated: use store.RunListExtStore.LastRunPerWorkflowAndOrg; the run
+// handler reads it through Deps.RunLists.
+func (r *Repo) LastRunPerWorkflowAndOrg(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
+	return store.LastRunPerWorkflowAndOrg(ctx, r.ORM(), filters)
+}
+
 // ==================== Messages ====================
 
 // CreateMessage creates a message record in the database.
@@ -685,16 +711,6 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 	}
 
 	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldThreadID, threadID))
-}
-
-// ClaimUserActivation records messageID as userID's activation when it is
-// their first typed message ever and no activation is recorded, reporting
-// whether this call recorded it (store.ClaimUserActivation).
-func (r *Repo) ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error) {
-	if userID == "" || chatID == "" || messageID == "" {
-		return false, fmt.Errorf("user, chat and message IDs are required")
-	}
-	return store.ClaimUserActivation(ctx, r.ORM(), userID, chatID, messageID)
 }
 
 // GetMessagesByContextWindow loads messages from a specific context window.
@@ -2750,17 +2766,6 @@ func (r *Repo) LockUserOrgs(ctx context.Context, userID string, reads ...OrgRead
 	return store.LockUserOrgs(ctx, r.ORM(), userID, reads...)
 }
 
-func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
-	return store.GetTrigger(ctx, r.ORM(), id)
-}
-
-func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
-	if f.UserID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
-	}
-	return store.ListTriggersForUser(ctx, r.ORM(), f)
-}
-
 // CreateTriggerEvent records one firing. The insert is ON CONFLICT
 // (kind, dedupe_key) DO NOTHING, so created=false means a firing for that
 // key already existed and nothing was written. That constraint is what
@@ -2786,20 +2791,26 @@ func (r *Repo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEve
 	return store.GetTriggerEventByDedupe(ctx, r.ORM(), kind, dedupeKey)
 }
 
-func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
+// UpdateTriggerEventOutcome is store.UpdateTriggerEventOutcome.
+//
+// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventOutcome; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
+func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
+	if id == "" {
+		return fmt.Errorf("trigger event ID cannot be empty")
 	}
-	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
+	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
-// GetTriggerEventByChat returns the event of the given kind that launched
-// chatID (core.ErrTriggerEventNotFound when none did).
-func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
+// UpdateTriggerEventPayload is store.UpdateTriggerEventPayload.
+//
+// Deprecated: use store.TriggerEventExtStore.UpdateTriggerEventPayload; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
+func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
+	if id == "" {
+		return fmt.Errorf("trigger event ID cannot be empty")
 	}
-	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
+	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
 }
 
 // ClaimRunEvents leases up to max undispatched events until leaseUntil.
@@ -2813,14 +2824,12 @@ func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, ma
 	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
 }
 
-// FiringsSinceLastSuccess returns each trigger's firings since its newest
-// success, newest first, capped at perTrigger: the current failure episode.
-// The events carry no body (payload, sender, origin): an episode is counted.
-func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
+// ClaimPendingTriggerEvent is store.ClaimPendingTriggerEvent.
+//
+// Deprecated: use store.TriggerEventExtStore.ClaimPendingTriggerEvent; a launch reads the
+// ledger through launch.Deps.TriggerEvents.
+func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any, def *core.TriggerEventDefinition) (bool, error) {
+	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload, def)
 }
 
 // ==================== Step Executions ====================

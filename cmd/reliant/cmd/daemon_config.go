@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
+	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
@@ -106,6 +107,8 @@ func daemonHost(cfg *config.DaemonConfig) daemonruntime.Host {
 			UserMaxConcurrent: int(cfg.GetEgressUserMaxConcurrent()),
 			HostMaxConcurrent: int(cfg.GetEgressHostMaxConcurrent()),
 		},
+		GateImage:     cfg.GetGateImage(),
+		GateVulnDBDir: cfg.GetGateVulnDbDir(),
 	}
 }
 
@@ -131,10 +134,18 @@ func daemonGuards(cfg *config.DaemonConfig) daemonruntime.Guards {
 	if idleReap == 0 {
 		idleReap = -1
 	}
+	// Like a disk threshold, a memory bound it cannot read is logged and
+	// keeps its default.
+	memoryHigh, err := heavyjob.ParseMemoryHigh(cfg.GetHeavyMemoryHigh())
+	if err != nil {
+		logging.Warn("Heavy commands keep the default memory bound", "setting", "heavy_memory_high (RELIANT_HEAVY_MEMORY_HIGH)", "error", err)
+	}
 	return daemonruntime.Guards{
 		Disk:               disk,
 		HeavyCommands:      commands,
 		HeavyShare:         int(cfg.GetHeavyShare()),
+		HeavyCPUWeight:     int(cfg.GetHeavyCpuWeight()),
+		HeavyMemoryHigh:    memoryHigh,
 		CommandThreads:     int(cfg.GetCommandThreads()),
 		BackgroundIdleReap: idleReap,
 	}

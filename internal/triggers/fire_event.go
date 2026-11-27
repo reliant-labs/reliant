@@ -557,6 +557,8 @@ func kindLabel(kind core.TriggerEventKind) string {
 	switch kind {
 	case core.TriggerEventKindWorkflowEvent:
 		return "workflow-event"
+	case core.TriggerEventKindRecordDue:
+		return "record-due"
 	default:
 		return string(kind)
 	}

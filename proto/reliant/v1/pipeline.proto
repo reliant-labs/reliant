@@ -1,0 +1,217 @@
+// Copyright (c) 2026 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// PipelineService enrols a repository in Reliant's PR pipeline and merge
+// queue, sets how far the pipeline acts on it, and reads where it stands
+// (pipeline redesign §4.1, §4.6; build plan task M2). It is withheld from the
+// public SDK (proto/public-api.txt) until the pipeline ships.
+//
+// Off by default: while the server's pipeline.enabled switch is off, every
+// rpc is FailedPrecondition naming the switch.
+//
+// Who may call:
+//   - EnrolRepository and SetPipelineMode: an owner or admin of the
+//     project's organization (asked fresh), signed in to the app as a person
+//     or holding a personal access token they minted for themselves. A
+//     token bound to a machine, an org automation token and an OAuth
+//     client's token are PermissionDenied.
+//   - GetPipelineState and ListQueue: a member of the repository's
+//     organization.
+service PipelineService {
+  // EnrolRepository enrols a repository of the project's organization, with
+  // mode off: nothing acts on it until SetPipelineMode. The repository's
+  // provider keys (the GitHub App installation and the repository's stable
+  // id) are the caller's own GitHub access to it, the keys PR records are
+  // kept under. Enrolling again is idempotent for the same project; a
+  // repository another project enrolled is AlreadyExists.
+  rpc EnrolRepository(EnrolRepositoryRequest) returns (EnrolRepositoryResponse) {
+    option idempotency_level = IDEMPOTENT;
+    option (forge.v1.method) = {
+      activity: {
+        verb: "enrol"
+        target: {
+          kind: "pipeline_repo"
+          id: "response.repository.id"
+          label: "response.repository.repository"
+        }
+        detail: ["project_id"]
+      }
+    };
+  }
+
+  // SetPipelineMode sets an enrolled repository's mode, if it is still at
+  // expected_version (Aborted otherwise: read it again and decide again).
+  rpc SetPipelineMode(SetPipelineModeRequest) returns (SetPipelineModeResponse) {
+    option (forge.v1.method) = {
+      activity: {
+        verb: "set_mode"
+        target: {
+          kind: "pipeline_repo"
+          id: "repo_id"
+          label: "response.repository.repository"
+        }
+        detail: ["mode"]
+      }
+    };
+  }
+
+  // GetPipelineState returns an enrolled repository, how many of its pull
+  // requests are in each pipeline state, its newest merge-queue batches and
+  // the newest verdict on its base branch.
+  rpc GetPipelineState(GetPipelineStateRequest) returns (GetPipelineStateResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+
+  // ListQueue lists an enrolled repository's merge queue: the entries
+  // waiting and batched, in pick order, and the batch being built or gated.
+  rpc ListQueue(ListQueueRequest) returns (ListQueueResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message EnrolRepositoryRequest {
+  // project_id is the project the repository is enrolled under. It must
+  // belong to an organization.
+  string project_id = 1 [(buf.validate.field).required = true];
+  // provider is the code host; github, the only one, when empty.
+  string provider = 2;
+  // repository is owner/name.
+  string repository = 3 [(buf.validate.field).required = true];
+}
+
+message EnrolRepositoryResponse {
+  PipelineRepository repository = 1;
+}
+
+message SetPipelineModeRequest {
+  string repo_id = 1 [(buf.validate.field).required = true];
+  // mode is off, shadow or on.
+  string mode = 2 [(buf.validate.field).string = {
+    in: [
+      "off",
+      "shadow",
+      "on"
+    ]
+  }];
+  // expected_version is the repository's version as the caller read it.
+  int64 expected_version = 3;
+}
+
+message SetPipelineModeResponse {
+  PipelineRepository repository = 1;
+}
+
+message GetPipelineStateRequest {
+  // repo_id names the enrolled repository; or
+  string repo_id = 1;
+  // repository names it by owner/name, among the enrolments of the
+  // organizations the caller is a member of. Used when repo_id is empty.
+  string repository = 2;
+}
+
+message GetPipelineStateResponse {
+  PipelineRepository repository = 1;
+  // pr_states counts the repository's pull requests in each pipeline state,
+  // in state order; a state with none is absent.
+  repeated PipelineStateCount pr_states = 2;
+  // latest_batches are the newest merge-queue batches, newest first.
+  repeated PipelineQueueBatch latest_batches = 3;
+  // main_health is the newest verdict on the base branch; unset when none.
+  PipelineMainHealth main_health = 4;
+}
+
+message ListQueueRequest {
+  string repo_id = 1 [(buf.validate.field).required = true];
+}
+
+message ListQueueResponse {
+  // entries are the waiting and batched entries, in pick order.
+  repeated PipelineQueueEntry entries = 1;
+  // current_batch is the newest batch still building, gating or passed;
+  // unset when none.
+  PipelineQueueBatch current_batch = 2;
+}
+
+// PipelineRepository is one enrolled repository.
+message PipelineRepository {
+  string id = 1;
+  string org_id = 2;
+  string project_id = 3;
+  string provider = 4;
+  // account_key is the provider account deliveries come through (the
+  // GitHub App installation id).
+  string account_key = 5;
+  // repository_id is the provider's stable id of the repository.
+  string repository_id = 6;
+  // repository is owner/name as last observed.
+  string repository = 7;
+  string base_branch = 8;
+  // mode is off, shadow or on.
+  string mode = 9;
+  // config_sha is the base-branch commit .reliant/pipeline.yaml was last
+  // read at; empty until read.
+  string config_sha = 10;
+  // queue_state is running, paused or degraded.
+  string queue_state = 11;
+  string created_by_user_id = 12;
+  google.protobuf.Timestamp created_at = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  // version is what SetPipelineMode's expected_version names.
+  int64 version = 15;
+}
+
+message PipelineStateCount {
+  string state = 1;
+  int32 count = 2;
+}
+
+// PipelineQueueEntry is one approved pull request head in the queue.
+message PipelineQueueEntry {
+  string id = 1;
+  string record_id = 2;
+  // number is the pull request's number.
+  int32 number = 3;
+  string head_sha = 4;
+  int32 priority = 5;
+  google.protobuf.Timestamp enqueued_at = 6;
+  // batch_id is the batch a batched entry is in.
+  string batch_id = 7;
+  // state is waiting or batched.
+  string state = 8;
+}
+
+// PipelineQueueBatch is one candidate a gate judges.
+message PipelineQueueBatch {
+  string id = 1;
+  string base_sha = 2;
+  string candidate_sha = 3;
+  // kind is normal, bisect, rerun, revert, verify, emergency or
+  // emergency_verify.
+  string kind = 4;
+  // state is building, gating, passed, failed, unproven, landed or abandoned.
+  string state = 5;
+  int32 attempt = 6;
+  string isolation_backend = 7;
+  string gate_runner = 8;
+  string landed_sha = 9;
+  google.protobuf.Timestamp started_at = 10;
+  google.protobuf.Timestamp finished_at = 11;
+}
+
+// PipelineMainHealth is one verdict on a commit of the base branch.
+message PipelineMainHealth {
+  string sha = 1;
+  string source = 2;
+  string verdict = 3;
+  string signature = 4;
+  string batch_id = 5;
+  google.protobuf.Timestamp observed_at = 6;
+}

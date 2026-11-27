@@ -41,6 +41,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ForgeService } from "@/gen/reliant/v1/forge_pb";
 import { connectClient, setTransport } from "@/lib/connect";
 import { mockTransport, type MockHandlers } from "@/lib/test-utils";
+import { secretStoreHandlers } from "@/test/secretStoreTransport";
 import type { LiveEnv } from "@/services/forge/live";
 
 // ── The daemon is not merely offline: TOUCHING IT IS A TEST FAILURE. ────────
@@ -80,12 +81,9 @@ const listSecrets = vi.fn();
 const setSecret = vi.fn();
 const ensureEnvironment = vi.fn();
 
-vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/services/forge/secretStore")>()),
-  listSecrets: (_transport: unknown, ...args: unknown[]) => listSecrets(...(args as [])),
-  setSecret: (_transport: unknown, ...args: unknown[]) => setSecret(...(args as [])),
-  getSecretVersions: () => Promise.resolve({ summary: null, versions: [] }),
-}));
+// SecretStoreService answers at the transport, beside the ForgeService tripwires.
+const secretStore = () =>
+  secretStoreHandlers({ listSecrets, setSecret, getSecretVersions: () => ({ summary: null, versions: [] }) });
 
 // EnsureEnvironment is the row-creating call. It must not fire from a secrets
 // write in ANY state: in state 1 the row exists, and in state 3 creating it
@@ -152,7 +150,7 @@ afterEach(() => setTransport(null));
 
 beforeEach(() => {
   daemonCalls.length = 0;
-  setTransport(mockTransport(forgeServiceTripwires()));
+  setTransport(mockTransport({ ...forgeServiceTripwires(), ...secretStore() }));
   vi.clearAllMocks();
   listSecrets.mockResolvedValue({
     secrets: [

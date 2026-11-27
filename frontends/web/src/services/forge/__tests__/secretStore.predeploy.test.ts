@@ -32,20 +32,25 @@
  * remains.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { transport } from "@/lib/connect";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createElement, type ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderHook } from "@testing-library/react";
+import { setTransport, transport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const ensureEnvironmentRpc = vi.fn();
 const setSecretRpc = vi.fn();
 
-// One fake transport for both services. `getControlPlaneClient` is called with
-// the service descriptor, so returning a single object with every method on it
-// is enough — and it means an ensure fired by ANY module under test is
-// observable here, which is what the "no second ensure" assertions rest on.
+// `getControlPlaneClient` is called with the service descriptor, so returning
+// a single object with the ensure on it is enough — and it means an ensure
+// fired by ANY module under test that way is observable here, which is what
+// the "no second ensure" assertions rest on. SetSecret runs on its generated
+// hook, so it is answered at the transport, beside an EnsureEnvironment
+// tripwire for a generated caller.
 vi.mock("@/services/controlPlane/client", () => ({
   getControlPlaneClient: () => ({
     ensureEnvironment: ensureEnvironmentRpc,
-    setSecret: setSecretRpc,
   }),
 }));
 
@@ -54,7 +59,8 @@ vi.mock("@/services/controlPlane/config", () => ({
 }));
 
 import * as secretStore from "../secretStore";
-import { availabilityExplanation, managedStoreTarget, setSecret } from "../secretStore";
+import { availabilityExplanation, managedStoreTarget } from "../secretStore";
+import { useSetManagedSecret } from "@/hooks/forge-queries";
 import { registerCandidate, registerEnvironment } from "../register";
 
 beforeEach(() => {
@@ -63,7 +69,14 @@ beforeEach(() => {
     created: true,
   });
   setSecretRpc.mockReset().mockResolvedValue({ version: 1 });
+  setTransport(
+    mockTransport({
+      "SecretStoreService.SetSecret": (req: unknown) => setSecretRpc(req),
+      "DeployService.EnsureEnvironment": (req: unknown) => ensureEnvironmentRpc(req),
+    })
+  );
 });
+afterEach(() => setTransport(null));
 
 describe("the secret store has no ensure path of its own", () => {
   // Pinned as an ABSENCE, which is the only way to state it. A second ensure
@@ -81,7 +94,10 @@ describe("the secret store has no ensure path of its own", () => {
   });
 
   it("writes only against an environment id the caller already has", async () => {
-    await setSecret(transport, { environmentId: "denv_existing", name: "API_KEY", value: "v", cas: 0 });
+    const client = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+    const { result } = renderHook(() => useSetManagedSecret("denv_existing"), { wrapper });
+    await result.current.mutateAsync({ name: "API_KEY", value: "v", cas: 0 });
 
     expect(setSecretRpc).toHaveBeenCalledTimes(1);
     expect(setSecretRpc.mock.calls[0][0].environmentId).toBe("denv_existing");

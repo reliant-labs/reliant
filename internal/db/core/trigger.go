@@ -34,12 +34,16 @@ const (
 	// TriggerKindWorkflowEvent fires when a run of one of the owner's
 	// workflows finishes, fails or blocks. Config is WorkflowEventConfig.
 	TriggerKindWorkflowEvent TriggerKind = "workflow_event"
+	// TriggerKindRecordDue fires when a record of a registered table falls
+	// due (RecordDueTables): the server's due scan fires one event per due
+	// record. Config is RecordDueConfig. Declared in a workflow only.
+	TriggerKindRecordDue TriggerKind = "record_due"
 )
 
 // IsEventDriven reports whether a kind fires on an arriving event (and so is
 // recorded as a pending event before its launch) rather than on a schedule.
 func (k TriggerKind) IsEventDriven() bool {
-	return k == TriggerKindWebhook || k == TriggerKindIntegration || k == TriggerKindWorkflowEvent
+	return k == TriggerKindWebhook || k == TriggerKindIntegration || k == TriggerKindWorkflowEvent || k == TriggerKindRecordDue
 }
 
 // EventKind is the trigger_events kind a firing of this trigger kind records.
@@ -90,12 +94,16 @@ const (
 	// a conversation, so like agent.start_run it lists under Runs, not in the
 	// sidebar, until adopted. Its dedupe key is the chat id, like chat.start.
 	TriggerEventKindCLIRun TriggerEventKind = "cli.run"
+	// TriggerEventKindRecordDue is a record falling due. Its dedupe key is
+	// "<trigger id>:<record id>@<due at>": one event per record and due time.
+	TriggerEventKindRecordDue TriggerEventKind = "record_due"
 )
 
 // IsInbound reports whether events of this kind are recorded by a receiver as
 // pending and launched later by the fire workflow.
 func (k TriggerEventKind) IsInbound() bool {
-	return k == TriggerEventKindWebhook || k == TriggerEventKindIntegration || k == TriggerEventKindWorkflowEvent
+	return k == TriggerEventKindWebhook || k == TriggerEventKindIntegration || k == TriggerEventKindWorkflowEvent ||
+		k == TriggerEventKindRecordDue
 }
 
 // Unattended reports whether a run launched by an event of this kind has no
@@ -143,6 +151,8 @@ var eventKindUnattended = map[TriggerEventKind]bool{
 	TriggerEventKindBuilderTest:   false,
 	TriggerEventKindManualRun:     false,
 	TriggerEventKindCLIRun:        false,
+	// A due scan fired it: nobody pressed anything.
+	TriggerEventKindRecordDue: true,
 }
 
 // eventKindOrigin takes a position on every TriggerEventKind: who started a
@@ -158,6 +168,7 @@ var eventKindOrigin = map[TriggerEventKind]ChatOrigin{
 	TriggerEventKindManualRun:     ChatOriginManualRun,
 	TriggerEventKindBuilderTest:   ChatOriginBuilderTest,
 	TriggerEventKindCLIRun:        ChatOriginCLI,
+	TriggerEventKindRecordDue:     ChatOriginAutomation,
 }
 
 // ChatOriginOf is the origin of a chat launched by an event of this kind. A
@@ -444,6 +455,20 @@ type WorkflowEventConfig struct {
 	// Outcomes are finished | failed | blocked; empty matches all three.
 	Outcomes []string `json:"outcomes,omitempty"`
 }
+
+// RecordDueConfig is Trigger.Config for TriggerKindRecordDue.
+type RecordDueConfig struct {
+	// Table is the registered table whose due records fire it.
+	Table string `json:"table"`
+}
+
+// RecordDueTablePRPipeline is pr_pipeline: a PR's place in the PR pipeline,
+// due when next_action_at has passed.
+const RecordDueTablePRPipeline = "pr_pipeline"
+
+// RecordDueTables are the tables a record_due trigger may name: those the
+// due scan knows how to scan.
+var RecordDueTables = []string{RecordDueTablePRPipeline}
 
 // Workflow-event outcomes.
 const (

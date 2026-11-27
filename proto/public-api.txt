@@ -91,6 +91,7 @@ withhold OrgProviderAccountService # an org's AI accounts are administered by it
 withhold OrgUsageService          # an org's admins read its usage in the app; not part of the first public surface
 withhold OrgPolicyImpactService  # a proposed org policy is previewed by its admins as people (human_only)
 withhold PackageCommandsService   # daemon-facing wiring
+withhold PipelineService          # the PR pipeline's enrolment and status (MVP); published once the pipeline ships
 withhold PlanService              # not part of the first public surface
 withhold PresetService            # not part of the first public surface
 withhold ProjectService           # not part of the first public surface

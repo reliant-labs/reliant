@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=8d2a0e85d4c3016a31fce29746b15b351ef247b16f0e665303d60a2279f92fdf
+// forge:hash=2d89fa39009dc0dff2e631039e6e4366d4c4bb3d939a1382008f75220bd974fc
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	GetChatRowWithUserCheckFunc func(context.Context, string, string) (*core.ChatRow, error)
@@ -48,18 +49,63 @@ func (m *MockService) GetChatWithUserCheck(ctx context.Context, id string, userI
 	return nil, contractkit.MockNotSet("MockService", "GetChatWithUserCheck")
 }
 
+// MockServiceGetChatRowWithUserCheckCall is one recorded call of MockService.GetChatRowWithUserCheck, one
+// field per parameter.
+type MockServiceGetChatRowWithUserCheckCall struct {
+	Ctx    context.Context
+	ID     string
+	UserID string
+}
+
+// GetChatRowWithUserCheckCalls returns every recorded GetChatRowWithUserCheck call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChatRowWithUserCheck").
+func (m *MockService) GetChatRowWithUserCheckCalls() []MockServiceGetChatRowWithUserCheckCall {
+	var out []MockServiceGetChatRowWithUserCheckCall
+	for _, c := range m.Recorder.Calls("GetChatRowWithUserCheck") {
+		var r MockServiceGetChatRowWithUserCheckCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetChatWithUserCheckCall is one recorded call of MockService.GetChatWithUserCheck, one
+// field per parameter.
+type MockServiceGetChatWithUserCheckCall struct {
+	Ctx    context.Context
+	ID     string
+	UserID string
+}
+
+// GetChatWithUserCheckCalls returns every recorded GetChatWithUserCheck call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChatWithUserCheck").
+func (m *MockService) GetChatWithUserCheckCalls() []MockServiceGetChatWithUserCheckCall {
+	var out []MockServiceGetChatWithUserCheckCall
+	for _, c := range m.Recorder.Calls("GetChatWithUserCheck") {
+		var r MockServiceGetChatWithUserCheckCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockStore
-// forge:hash=4c190e0c3e4a38b059040131ac9adb9dc9400cb868659bdc877ccecdf73550de
+// forge:hash=2ca509639edaf26049febabe571f09ce15c65a2895cfe71b24b38241a5908b5f
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
 	GetChatRowWithUserCheckFunc func(context.Context, string, string) (*core.ChatRow, error)
@@ -82,6 +128,50 @@ func (m *MockStore) GetChatWithUserCheck(ctx context.Context, id string, userID 
 		return m.GetChatWithUserCheckFunc(ctx, id, userID)
 	}
 	return nil, contractkit.MockNotSet("MockStore", "GetChatWithUserCheck")
+}
+
+// MockStoreGetChatRowWithUserCheckCall is one recorded call of MockStore.GetChatRowWithUserCheck, one
+// field per parameter.
+type MockStoreGetChatRowWithUserCheckCall struct {
+	Ctx    context.Context
+	ID     string
+	UserID string
+}
+
+// GetChatRowWithUserCheckCalls returns every recorded GetChatRowWithUserCheck call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChatRowWithUserCheck").
+func (m *MockStore) GetChatRowWithUserCheckCalls() []MockStoreGetChatRowWithUserCheckCall {
+	var out []MockStoreGetChatRowWithUserCheckCall
+	for _, c := range m.Recorder.Calls("GetChatRowWithUserCheck") {
+		var r MockStoreGetChatRowWithUserCheckCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetChatWithUserCheckCall is one recorded call of MockStore.GetChatWithUserCheck, one
+// field per parameter.
+type MockStoreGetChatWithUserCheckCall struct {
+	Ctx    context.Context
+	ID     string
+	UserID string
+}
+
+// GetChatWithUserCheckCalls returns every recorded GetChatWithUserCheck call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChatWithUserCheck").
+func (m *MockStore) GetChatWithUserCheckCalls() []MockStoreGetChatWithUserCheckCall {
+	var out []MockStoreGetChatWithUserCheckCall
+	for _, c := range m.Recorder.Calls("GetChatWithUserCheck") {
+		var r MockStoreGetChatWithUserCheckCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.UserID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
