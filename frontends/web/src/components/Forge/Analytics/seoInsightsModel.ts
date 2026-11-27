@@ -10,8 +10,8 @@
  *
  * INDEXABILITY is judged against what the host is MEANT to be (design D5): a
  * preview host is meant to stay out of search, so its noindex reads "Not
- * indexed (preview)" and costs nothing. The wire carries no expected value,
- * so it is read from the engine's findings: `indexing_mismatch` means the
+ * indexed (preview)" and costs nothing. The target supplies the preview
+ * expectation; engine findings also establish it: `indexing_mismatch` means the
  * host was meant to be indexed and is not (an error); `preview_indexable`
  * means it was meant to be noindex and is indexable (a platform defect the
  * score ignores); a noindex home page with neither is noindex by design.
@@ -124,7 +124,7 @@ const NOINDEX = /(^|[\s,])(noindex|none)($|[\s,])/i;
 const isNoindex = (page: AuditPage) => NOINDEX.test(page.head.robots) || NOINDEX.test(page.head.xRobotsTag);
 
 /** The host's expected and actual indexing (design D5). */
-export function indexabilityOf(audit: SiteAudit): Indexability {
+export function indexabilityOf(audit: SiteAudit, preview?: boolean): Indexability {
   const seo = findingsOf(audit, "seo");
   const mismatch = seo.filter((f) => f.code === "indexing_mismatch");
   if (mismatch.length > 0) {
@@ -135,9 +135,12 @@ export function indexabilityOf(audit: SiteAudit): Indexability {
     return { expected: "noindex", actual: "index", label: "Indexable (preview, meant to be noindex)", problem: false, platform: true };
   }
   const home = audit.pages.find((page) => page.route === "/") ?? audit.pages[0];
-  if (!home) return { expected: "index", actual: "unknown", label: "Not judged", problem: false, platform: false };
-  if (isNoindex(home)) return { expected: "noindex", actual: "noindex", label: "Not indexed (preview)", problem: false, platform: false };
-  return { expected: "index", actual: home.head.indexable === false ? "noindex" : "index", label: "Indexed", problem: false, platform: false };
+  if (!home) return { expected: preview ? "noindex" : "index", actual: "unknown", label: "Not judged", problem: false, platform: false };
+  const noindex = isNoindex(home) || home.head.indexable === false;
+  const expectedNoindex = preview ?? noindex;
+  if (noindex) return { expected: expectedNoindex ? "noindex" : "index", actual: "noindex", label: expectedNoindex ? "Not indexed (preview)" : "Not indexed, meant to be", problem: !expectedNoindex, platform: false };
+  if (preview) return { expected: "noindex", actual: "index", label: "Indexable (preview, meant to be noindex)", problem: false, platform: true };
+  return { expected: "index", actual: "index", label: "Indexed", problem: false, platform: false };
 }
 
 // ── Site checks ─────────────────────────────────────────────────────────────
@@ -181,7 +184,7 @@ const hostOf = (url: string): string => {
 };
 
 /** robots.txt, the sitemap, indexability, the canonical host, hreflang and structured data, in that order. */
-export function siteChecks(audit: SiteAudit): SiteCheck[] {
+export function siteChecks(audit: SiteAudit, preview?: boolean): SiteCheck[] {
   const seo = sortSeoFindings(findingsOf(audit, "seo"));
   const of = (id: Exclude<CheckId, "indexing">) => seo.filter((f) => CHECK_CODES[id](f.code));
 
@@ -206,7 +209,7 @@ export function siteChecks(audit: SiteAudit): SiteCheck[] {
           ? plural(sitemap.length, "finding")
           : "Valid";
 
-  const indexing = indexabilityOf(audit);
+  const indexing = indexabilityOf(audit, preview);
   const indexingFindings = seo.filter((f) => f.code === "indexing_mismatch" || f.code === "preview_indexable");
 
   const canonical = of("canonical");

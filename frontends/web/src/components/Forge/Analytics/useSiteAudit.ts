@@ -37,14 +37,8 @@ export function useAuditSites(project: string): { sites: AuditSite[]; loading: b
   const live = useLiveView(project);
   const envs = useMemo(() => liveStateEnvs(live.data?.envs ?? []), [live.data]);
   const statuses = useCloudEnvStatuses(envs.map((env) => env.id));
-  const statusKey = envs.map((env) => `${env.id}:${statuses.get(env.id)?.data ? 1 : 0}`).join(",");
   const loading = live.isLoading || envs.some((env) => statuses.get(env.id)?.isLoading);
-  const sites = useMemo(
-    () => auditSitesOf(envs, new Map(envs.map((env) => [env.id, statuses.get(env.id)?.data?.workloads ?? []]))),
-    // `statuses` is a fresh Map per render; `statusKey` changes when any status lands.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [envs, statusKey]
-  );
+  const sites = auditSitesOf(envs, new Map(envs.map((env) => [env.id, statuses.get(env.id)?.data?.workloads ?? []])));
   return { sites, loading };
 }
 
