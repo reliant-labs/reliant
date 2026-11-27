@@ -133,9 +133,10 @@ function AssetCard({ asset }: { asset: GtmAsset }) {
   const image = ready && asset.contentType.startsWith("image/");
   // GetAssetDownload is a mutation (it mints a short-lived URL): the
   // thumbnail asks for one once, when the card mounts; a failure leaves the
-  // file icon. Download asks for a fresh one on each click.
-  const thumb = useGetAssetDownload({ onError: () => {} });
-  const getDownload = useGetAssetDownload({ onError: () => {} });
+  // file icon. Download asks for a fresh one on each click. Minting a URL
+  // changes nothing, so neither refreshes any GTM read (invalidate: false).
+  const thumb = useGetAssetDownload({ invalidate: false, onError: () => {} });
+  const getDownload = useGetAssetDownload({ invalidate: false, onError: () => {} });
   const askedThumb = useRef(false);
   useEffect(() => {
     if (!image || !orgId || askedThumb.current) return;
