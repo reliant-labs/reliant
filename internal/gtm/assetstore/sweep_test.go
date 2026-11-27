@@ -94,20 +94,135 @@ func TestSweepStalePending(t *testing.T) {
 	sw := assetstore.NewSweeper(assetstore.SweeperDeps{DB: e.env.ORM, Assets: assetstore.New(e.mem)})
 	res, err := sw.SweepStalePending(ctx, e.now)
 	require.NoError(t, err)
-	assert.Equal(t, assetstore.SweepResult{Deleted: 3}, res, "both orgs' stale PENDING assets, the one exactly 24h old too")
+	assert.Equal(t, assetstore.SweepResult{Deleted: 3, StagingDeleted: 1}, res,
+		"both orgs' stale PENDING assets, the one exactly 24h old too; and the READY one's leftover staging object")
 
 	for _, row := range []*store.GtmAsset{staleA, staleB, edge} {
 		r, own, staging := e.exists(t, row)
 		assert.False(t, r || own || staging, "%s: row and both objects deleted", row.ID)
 	}
-	for _, row := range []*store.GtmAsset{fresh, ready} {
-		r, own, staging := e.exists(t, row)
-		assert.True(t, r && own && staging, "%s: kept whole", row.ID)
-	}
+	r, own, staging := e.exists(t, fresh)
+	assert.True(t, r && own && staging, "a fresh PENDING asset is kept whole")
+	r, own, staging = e.exists(t, ready)
+	assert.True(t, r && own, "a READY asset and its own key are kept")
+	assert.False(t, staging, "its leftover staging object goes")
 
 	res, err = sw.SweepStalePending(ctx, e.now)
 	require.NoError(t, err)
-	assert.Zero(t, res.Deleted, "nothing left to sweep")
+	assert.Zero(t, res, "nothing left to sweep")
+}
+
+// raceStore is a gtm.Store whose DeletePendingAsset first runs race: what
+// another process does to the row between the sweep's list and its delete.
+type raceStore struct {
+	gtm.Store
+	race func()
+}
+
+func (s raceStore) DeletePendingAsset(ctx context.Context, orgID, id string, createdBefore time.Time) (bool, error) {
+	s.race()
+	return s.Store.DeletePendingAsset(ctx, orgID, id, createdBefore)
+}
+
+// The sweep's delete is conditional: a row that a confirm made READY, or
+// that is no longer that old, between the list and the delete keeps its
+// row and both objects.
+func TestSweepStalePendingConditionalDelete(t *testing.T) {
+	for name, race := range map[string]string{
+		"made READY": `UPDATE gtm_assets SET status = 'GTM_ASSET_STATUS_READY', sha256 = '` + sha + `' WHERE id = $1`,
+		"newer":      `UPDATE gtm_assets SET created_at = now() WHERE id = $1`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newSweepEnv(t)
+			row := e.asset(t, orgA, "racing", gtm.AssetPending, 25*time.Hour)
+			raced := 0
+			st := raceStore{Store: e.st, race: func() {
+				raced++
+				_, err := e.env.SQL.Exec(race, row.ID)
+				require.NoError(t, err)
+			}}
+			// Leftover staging is not this test's subject: a store whose
+			// Stat finds nothing keeps the READY half of the pass out of it.
+			sw := assetstore.NewSweeper(assetstore.SweeperDeps{DB: e.env.ORM, Store: st, Assets: noStat{assetstore.New(e.mem)}})
+			res, err := sw.SweepStalePending(context.Background(), e.now)
+			require.NoError(t, err)
+			assert.Equal(t, 1, raced, "the row was listed, and the race ran before its delete")
+			assert.Zero(t, res.Deleted)
+			r, own, staging := e.exists(t, row)
+			assert.True(t, r && own && staging, "the row and both objects survive")
+		})
+	}
+}
+
+// noStat is an AssetStore whose Stat finds nothing.
+type noStat struct{ gtm.AssetStore }
+
+func (noStat) Stat(context.Context, string) (int64, error) { return 0, gtm.ErrObjectNotFound }
+
+// listStale reads PENDING rows only: a batch's worth of older READY rows
+// does not crowd out the stale PENDING one.
+func TestSweepStalePendingSkipsReadyRows(t *testing.T) {
+	e := newSweepEnv(t)
+	var ready []*store.GtmAsset
+	for i := range 120 {
+		ready = append(ready, e.asset(t, orgA, fmt.Sprintf("ready-%03d", i), gtm.AssetReady, 30*time.Hour+time.Duration(i)*time.Second))
+	}
+	pending := e.asset(t, orgB, "pending", gtm.AssetPending, 25*time.Hour)
+	sw := assetstore.NewSweeper(assetstore.SweeperDeps{DB: e.env.ORM, Assets: assetstore.New(e.mem)})
+	res, err := sw.SweepStalePending(context.Background(), e.now)
+	require.NoError(t, err)
+	assert.Equal(t, 1, res.Deleted)
+	r, _, _ := e.exists(t, pending)
+	assert.False(t, r, "the stale PENDING row is swept")
+	for _, row := range ready {
+		r, own, _ := e.exists(t, row)
+		require.True(t, r && own, "%s: a READY asset is kept", row.ID)
+	}
+}
+
+// A READY asset's leftover staging object is deleted once the asset is
+// StalePendingAge old, while it is in ReadyStagingWindow; nothing else of
+// it is touched.
+func TestSweepReadyStaging(t *testing.T) {
+	e := newSweepEnv(t)
+	old := e.asset(t, orgA, "old", gtm.AssetReady, 25*time.Hour)
+	clean := e.asset(t, orgB, "clean", gtm.AssetReady, 26*time.Hour)
+	require.NoError(t, e.mem.Delete(context.Background(), clean.ObjectKey+".upload"))
+	young := e.asset(t, orgA, "young", gtm.AssetReady, time.Hour)
+	aged := e.asset(t, orgA, "aged", gtm.AssetReady, assetstore.StalePendingAge+assetstore.ReadyStagingWindow+time.Hour)
+
+	sw := assetstore.NewSweeper(assetstore.SweeperDeps{DB: e.env.ORM, Assets: assetstore.New(e.mem)})
+	res, err := sw.SweepStalePending(context.Background(), e.now)
+	require.NoError(t, err)
+	assert.Equal(t, assetstore.SweepResult{StagingDeleted: 1}, res)
+
+	r, own, staging := e.exists(t, old)
+	assert.True(t, r && own, "the asset and its own key stay")
+	assert.False(t, staging, "its leftover staging object goes")
+	r, own, _ = e.exists(t, clean)
+	assert.True(t, r && own)
+	for _, row := range []*store.GtmAsset{young, aged} {
+		r, own, staging := e.exists(t, row)
+		assert.True(t, r && own && staging, "%s: outside the window, untouched", row.ID)
+	}
+}
+
+// The READY half pages by (created_at, id): past one batch, and through
+// rows that share a created_at.
+func TestSweepReadyStagingPages(t *testing.T) {
+	e := newSweepEnv(t)
+	var rows []*store.GtmAsset
+	for i := range 130 {
+		rows = append(rows, e.asset(t, orgA, fmt.Sprintf("r-%03d", i), gtm.AssetReady, 25*time.Hour+time.Duration(i/10)*time.Second))
+	}
+	sw := assetstore.NewSweeper(assetstore.SweeperDeps{DB: e.env.ORM, Assets: assetstore.New(e.mem)})
+	res, err := sw.SweepStalePending(context.Background(), e.now)
+	require.NoError(t, err)
+	assert.Equal(t, 130, res.StagingDeleted)
+	for _, row := range rows {
+		_, _, staging := e.exists(t, row)
+		require.False(t, staging, row.ID)
+	}
 }
 
 func TestSweepStalePendingPages(t *testing.T) {
@@ -160,7 +275,8 @@ func TestSweepRunStopsWithItsContext(t *testing.T) {
 	sw := assetstore.NewSweeper(assetstore.SweeperDeps{DB: e.env.ORM, Assets: assetstore.New(e.mem)})
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { sw.Run(ctx, time.Hour); close(done) }()
+	// A non-positive interval is DefaultSweepInterval, not a ticker panic.
+	go func() { sw.Run(ctx, 0); close(done) }()
 	require.Eventually(t, func() bool {
 		page, err := e.mem.List(context.Background(), "gtm/", blobstore.ListOptions{})
 		return err == nil && !strings.Contains(fmt.Sprint(page.Objects), "stale")

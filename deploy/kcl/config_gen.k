@@ -587,7 +587,7 @@ schema ReliantConfigGtm:
     analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
 
 # forge:section schema ReliantConfigGtmAssets
-# forge:hash=273956fdf14ce0c25b167e09aae9737690286342725f650c840ffea6fa31f116
+# forge:hash=aa31dd62419529568504133c60f108974cf667c9c1af3ed815099d04038ba310
 # ReliantConfigGtmAssets is the gtm_assets block (GtmAssetsConfig) — author its values in config.k as `gtm_assets.<field> = ...`.
 schema ReliantConfigGtmAssets:
     # GTM assets bucket: the S3 API base URL this process dials (forge.bucket_env)
@@ -604,12 +604,6 @@ schema ReliantConfigGtmAssets:
     secret_access_key: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_assets_secret_access_key" }
     # GTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)
     path_style: bool = False
-    # Largest GTM asset a person uploads, in bytes (at most 64 MiB)
-    max_asset_bytes: int = 26214400
-    # Largest GTM asset copied from a chat attachment, in bytes (at most 64 MiB)
-    max_copied_asset_bytes: int = 67108864
-    # Bytes one organization's GTM assets may hold together
-    org_quota_bytes: int = 2147483648
 
 # forge:section schema ReliantConfig
 # forge:hash=1c1e07eef49d9a70bc8584f434f849b6b558c9acf67fcb07b5dd6adb7b601df7
@@ -748,15 +742,12 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
         "GTM_ALLOWED_ORG_IDS" = c.gtm.allowed_org_ids
 
         # forge:section reliantConfigEnvMap values gtm_assets
-        # forge:hash=b913ebdb46e2180d2fca5e7d6c59cfca5c961f221039f2e2139682634681b423
+        # forge:hash=df09f2cd8c717d18def5efeb17400faa0b36c07b51fc648bfc1e49706ceae3f6
         "GTM_ASSETS_ENDPOINT" = c.gtm_assets.endpoint
         "GTM_ASSETS_PUBLIC_ENDPOINT" = c.gtm_assets.public_endpoint
         "GTM_ASSETS_REGION" = c.gtm_assets.region
         "GTM_ASSETS_BUCKET" = c.gtm_assets.bucket
         "GTM_ASSETS_PATH_STYLE" = "true" if c.gtm_assets.path_style else "false"
-        "GTM_ASSETS_MAX_BYTES" = str(c.gtm_assets.max_asset_bytes)
-        "GTM_ASSETS_MAX_COPIED_BYTES" = str(c.gtm_assets.max_copied_asset_bytes)
-        "GTM_ASSETS_ORG_QUOTA_BYTES" = str(c.gtm_assets.org_quota_bytes)
 
         # forge:section reliantConfigEnvMap values (end)
         # forge:hash=e1769827ac16f2cb38e2dd9a87b234861e5af33f295889268d5884a88256e96c
@@ -2277,15 +2268,12 @@ ROOTS: {str: Root} = {
             "GTM_ALLOWED_ORG_IDS",
 
             # forge:section root api env gtm_assets
-            # forge:hash=8b1578acf3e0de8fdf36e7a4d31ce2c767f02ed0ee218f75ec16b0a57d2e8107
+            # forge:hash=6b1496425e12ca8e6f61500f352f08cccd51b0c9e9576febbec6b2d4ca0c293d
             "GTM_ASSETS_ENDPOINT",
             "GTM_ASSETS_PUBLIC_ENDPOINT",
             "GTM_ASSETS_REGION",
             "GTM_ASSETS_BUCKET",
             "GTM_ASSETS_PATH_STYLE",
-            "GTM_ASSETS_MAX_BYTES",
-            "GTM_ASSETS_MAX_COPIED_BYTES",
-            "GTM_ASSETS_ORG_QUOTA_BYTES",
 
             # forge:section root api env (root)
             # forge:hash=5305b56f25d75cda0413c1c63d9abe6b9b80e689bc28041cc9fcd22b02b3dd2e
@@ -2561,15 +2549,12 @@ ROOTS: {str: Root} = {
             "GTM_ALLOWED_ORG_IDS",
 
             # forge:section root gateway env gtm_assets
-            # forge:hash=b04ab4a2e2db0993bbe06edc69c33f3603296724d4f8641fe4c57486ed77a410
+            # forge:hash=5dc0807525373695372fd0dfa462637dd84a3c81a04fdba1ad04f419e5feefec
             "GTM_ASSETS_ENDPOINT",
             "GTM_ASSETS_PUBLIC_ENDPOINT",
             "GTM_ASSETS_REGION",
             "GTM_ASSETS_BUCKET",
             "GTM_ASSETS_PATH_STYLE",
-            "GTM_ASSETS_MAX_BYTES",
-            "GTM_ASSETS_MAX_COPIED_BYTES",
-            "GTM_ASSETS_ORG_QUOTA_BYTES",
 
             # forge:section root gateway env (root)
             # forge:hash=751acacff603d412b87b85659d2724d1b9ea693dd4d7863993d4f5276f14383d
@@ -2738,15 +2723,12 @@ ROOTS: {str: Root} = {
             "GTM_ALLOWED_ORG_IDS",
 
             # forge:section root worker env gtm_assets
-            # forge:hash=686e6156f9ce137a3e9c7224548f82957c6d354233687ad2225a530f32ca8ebe
+            # forge:hash=d3c6fca485848e343e54c716d63812e5bb9df072cf921db1395585df3f36a559
             "GTM_ASSETS_ENDPOINT",
             "GTM_ASSETS_PUBLIC_ENDPOINT",
             "GTM_ASSETS_REGION",
             "GTM_ASSETS_BUCKET",
             "GTM_ASSETS_PATH_STYLE",
-            "GTM_ASSETS_MAX_BYTES",
-            "GTM_ASSETS_MAX_COPIED_BYTES",
-            "GTM_ASSETS_ORG_QUOTA_BYTES",
 
             # forge:section root worker env (root)
             # forge:hash=84aaf81e7e16a419f918f4ddcce4e4a5c2fb7ca9a2e408ffd246c84e9dc5f6f3

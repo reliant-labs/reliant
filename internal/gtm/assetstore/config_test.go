@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/gtm"
 	"github.com/reliant-labs/reliant/internal/gtm/assetstore"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -33,9 +32,6 @@ func load(t *testing.T, env map[string]string) (*config.ReliantConfig, error) {
 	for k := range bucketEnv {
 		t.Setenv(k, "")
 	}
-	for _, k := range []string{"GTM_ASSETS_MAX_BYTES", "GTM_ASSETS_MAX_COPIED_BYTES", "GTM_ASSETS_ORG_QUOTA_BYTES"} {
-		t.Setenv(k, "")
-	}
 	for k, v := range env {
 		t.Setenv(k, v)
 	}
@@ -44,15 +40,11 @@ func load(t *testing.T, env map[string]string) (*config.ReliantConfig, error) {
 	return config.LoadReliantConfig(cmd)
 }
 
-func TestConfigDefaultsAreOffAndTheServiceLimits(t *testing.T) {
+func TestConfigDefaultIsOff(t *testing.T) {
 	cfg, err := load(t, nil)
 	require.NoError(t, err)
-	a := cfg.GetGtmAssets()
-	assert.Equal(t, gtm.MaxAssetBytes, a.GetMaxAssetBytes())
-	assert.Equal(t, gtm.MaxCopiedAssetBytes, a.GetMaxCopiedAssetBytes())
-	assert.Equal(t, gtm.MaxOrgAssetBytes, a.GetOrgQuotaBytes())
 
-	store, err := assetstore.StoreFromConfig(a)
+	store, err := assetstore.StoreFromConfig(cfg.GetGtmAssets())
 	require.NoError(t, err)
 	assert.Nil(t, store, "no bucket: assets are off")
 	assert.Nil(t, assetstore.New(store))
@@ -85,13 +77,4 @@ func TestConfigRefusesAnIncompleteBucket(t *testing.T) {
 			assert.Contains(t, err.Error(), "GTM_ASSETS_BUCKET requires")
 		})
 	}
-}
-
-func TestConfigRefusesLimitsPastTheTable(t *testing.T) {
-	_, err := load(t, map[string]string{"GTM_ASSETS_MAX_BYTES": "67108865"})
-	require.Error(t, err)
-	_, err = load(t, map[string]string{"GTM_ASSETS_MAX_COPIED_BYTES": "0"})
-	require.Error(t, err)
-	_, err = load(t, map[string]string{"GTM_ASSETS_ORG_QUOTA_BYTES": "-1"})
-	require.Error(t, err)
 }
