@@ -429,6 +429,7 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceGetConfigHealthProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("GetConfigHealth")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -922,6 +923,7 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceGetConfigHealthProcedure,
 		svc.GetConfigHealth,
 		connect.WithSchema(settingsServiceMethods.ByName("GetConfigHealth")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.SettingsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

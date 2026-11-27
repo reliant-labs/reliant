@@ -15,7 +15,7 @@ import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { createStorageFixtureApi, type StorageFixtureApi } from "../__fixtures__/fixtureStorageApi";
+import { createStorageFixture, type StorageFixture } from "../__fixtures__/fixtureStorageService";
 import { STORAGE_BUCKETS_DOCS_URL } from "../StorageStates";
 import { callsOf, PROD, renderBrowser, STAGING } from "./storageTestUtils";
 
@@ -27,7 +27,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => ({
 afterEach(() => window.sessionStorage.clear());
 
 /** Hold ListBrowsableBuckets until `release`, so the loading state can be looked at. */
-function deferBuckets(api: StorageFixtureApi) {
+function deferBuckets(api: StorageFixture) {
   const discover = api.listBrowsableBuckets;
   let release!: () => void;
   const pending = new Promise<void>((resolve) => {
@@ -44,7 +44,7 @@ function deferBuckets(api: StorageFixtureApi) {
 const rateLimited = () => new ConnectError("slow down", Code.ResourceExhausted, new Headers({ "x-forge-error-reason": "rate_limited" }));
 
 /** Only the bucket list was asked for: no listing, metadata, preview or download. */
-function readNothing(api: StorageFixtureApi) {
+function readNothing(api: StorageFixture) {
   for (const method of ["listObjects", "getObjectMetadata", "previewObject", "presignObjectDownload"] as const) {
     expect(callsOf(api, method), method).toHaveLength(0);
   }
@@ -52,7 +52,7 @@ function readNothing(api: StorageFixtureApi) {
 
 describe("a project that declares no bucket", () => {
   it("says so, names the environment, explains what is listed and links to how to declare one", async () => {
-    const api = createStorageFixtureApi({ noBuckets: true });
+    const api = createStorageFixture({ noBuckets: true });
     renderBrowser(api, {}, STAGING);
     const empty = await screen.findByTestId("storage-no-buckets");
     expect(empty).toHaveTextContent("This project declares no storage buckets in staging");
@@ -72,7 +72,7 @@ describe("a project that declares no bucket", () => {
 
 describe("loading", () => {
   it("shows the skeleton, not the empty state, until the bucket list resolves", async () => {
-    const api = createStorageFixtureApi({ noBuckets: true });
+    const api = createStorageFixture({ noBuckets: true });
     const release = deferBuckets(api);
     renderBrowser(api, {}, STAGING);
     expect(screen.getByTestId("storage-buckets-loading")).toHaveAttribute("aria-busy", "true");
@@ -87,7 +87,7 @@ describe("loading", () => {
 
 describe("a failed bucket list", () => {
   it("shows the error with a retry, never the empty state, and the empty state once a retry succeeds with none", async () => {
-    const api = createStorageFixtureApi({ noBuckets: true });
+    const api = createStorageFixture({ noBuckets: true });
     const discover = api.listBrowsableBuckets;
     let failing = true;
     api.listBrowsableBuckets = async (...args) => {
@@ -107,7 +107,7 @@ describe("a failed bucket list", () => {
   });
 
   it("says an unrecorded environment's buckets aren't known yet, not that it has none", async () => {
-    renderBrowser(createStorageFixtureApi({ fail: { method: "listBrowsableBuckets", code: Code.FailedPrecondition, reason: "shape_unknown" } }), {}, STAGING);
+    renderBrowser(createStorageFixture({ fail: { method: "listBrowsableBuckets", code: Code.FailedPrecondition, reason: "shape_unknown" } }), {}, STAGING);
     expect(await screen.findByTestId("storage-buckets-error")).toHaveAttribute("data-kind", "shape-unknown");
     expect(screen.queryByTestId("storage-no-buckets")).not.toBeInTheDocument();
   });
@@ -115,7 +115,7 @@ describe("a failed bucket list", () => {
 
 describe("an audited environment", () => {
   it("shows the empty state only after the bucket list succeeded, asks no reason and reads nothing", async () => {
-    const api = createStorageFixtureApi({ noBuckets: true });
+    const api = createStorageFixture({ noBuckets: true });
     const release = deferBuckets(api);
     renderBrowser(api, {}, PROD);
     expect(screen.getByTestId("storage-buckets-loading")).toBeInTheDocument();
@@ -130,7 +130,7 @@ describe("an audited environment", () => {
   });
 
   it("with buckets, still asks the reason before any read, and never shows the empty state", async () => {
-    const api = createStorageFixtureApi();
+    const api = createStorageFixture();
     const release = deferBuckets(api);
     renderBrowser(api, { bucket: "uploads" }, PROD);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -149,7 +149,7 @@ describe("an audited environment", () => {
   });
 
   it("shows a failed bucket list as an error, asking no reason", async () => {
-    const api = createStorageFixtureApi({ fail: { method: "listBrowsableBuckets", code: Code.PermissionDenied } });
+    const api = createStorageFixture({ fail: { method: "listBrowsableBuckets", code: Code.PermissionDenied } });
     renderBrowser(api, {}, PROD);
     expect(await screen.findByTestId("storage-buckets-error")).toHaveAttribute("data-kind", "denied");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());

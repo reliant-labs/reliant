@@ -124,7 +124,7 @@ func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
 	require.NoError(t, err)
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
 	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "%v", err)
-	stored, err := env.repo.GetTrigger(context.Background(), id)
+	stored, err := store.GetTrigger(context.Background(), env.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.False(t, stored.Enabled, "an enabled trigger nothing delivers to looks working and is not")
 	fa.err = nil

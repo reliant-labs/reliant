@@ -49,7 +49,7 @@ func TestDispatch_PausesATriggerWhoseCreatorLeftItsOrg(t *testing.T) {
 	res := resultFor(t, results, tr.ID)
 	assert.Equal(t, core.TriggerEventFailed, res.Outcome)
 	assert.Contains(t, res.Detail, "no longer a member of its organization")
-	stored, err := f.repo.GetTrigger(ctx, tr.ID)
+	stored, err := store.GetTrigger(ctx, f.repo.ORM(), tr.ID)
 	require.NoError(t, err)
 	assert.False(t, stored.Enabled)
 	assert.Equal(t, core.TriggerPausedCreatorLeftOrg, stored.PausedReason)

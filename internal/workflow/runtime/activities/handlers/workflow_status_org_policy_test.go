@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/orgpolicy"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // endRun reports the chat's launch run ended failed with errText.
@@ -26,7 +27,7 @@ func (f *streakFixture) endRun(chatID, errText string) {
 
 func (f *streakFixture) trigger() *core.Trigger {
 	f.t.Helper()
-	tr, err := f.h.Repo().GetTrigger(context.Background(), f.triggerID)
+	tr, err := store.GetTrigger(context.Background(), f.h.Repo().ORM(), f.triggerID)
 	require.NoError(f.t, err)
 	return tr
 }

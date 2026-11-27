@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockAuthority
-// forge:hash=42535a928722b4eb4033f32c1ab76c3cc8db92e223145f8921f7447658183272
+// forge:hash=b911721492a9849aa228e0c5b5854be34b536045520edb382315b7af0d6f9b02
 
 // MockAuthority is a test mock for the Authority interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAuthority.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAuthority.<Method>Func not set" error.
 type MockAuthority struct {
 	contractkit.Recorder
 	IntrospectFunc        func(context.Context, string) (*fat.Principal, error)
@@ -107,6 +108,176 @@ func (m *MockAuthority) RevokeEphemeral(ctx context.Context, userID string) (int
 		return m.RevokeEphemeralFunc(ctx, userID)
 	}
 	return 0, contractkit.MockNotSet("MockAuthority", "RevokeEphemeral")
+}
+
+// MockAuthorityIntrospectCall is one recorded call of MockAuthority.Introspect, one
+// field per parameter.
+type MockAuthorityIntrospectCall struct {
+	Ctx   context.Context
+	Token string
+}
+
+// IntrospectCalls returns every recorded Introspect call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Introspect").
+func (m *MockAuthority) IntrospectCalls() []MockAuthorityIntrospectCall {
+	var out []MockAuthorityIntrospectCall
+	for _, c := range m.Recorder.Calls("Introspect") {
+		var r MockAuthorityIntrospectCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Token, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAuthorityIntrospectAccountCall is one recorded call of MockAuthority.IntrospectAccount, one
+// field per parameter.
+type MockAuthorityIntrospectAccountCall struct {
+	Ctx   context.Context
+	Token string
+}
+
+// IntrospectAccountCalls returns every recorded IntrospectAccount call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IntrospectAccount").
+func (m *MockAuthority) IntrospectAccountCalls() []MockAuthorityIntrospectAccountCall {
+	var out []MockAuthorityIntrospectAccountCall
+	for _, c := range m.Recorder.Calls("IntrospectAccount") {
+		var r MockAuthorityIntrospectAccountCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Token, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAuthorityMintForUserCall is one recorded call of MockAuthority.MintForUser, one
+// field per parameter.
+type MockAuthorityMintForUserCall struct {
+	Ctx context.Context
+	Req MintRequest
+}
+
+// MintForUserCalls returns every recorded MintForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MintForUser").
+func (m *MockAuthority) MintForUserCalls() []MockAuthorityMintForUserCall {
+	var out []MockAuthorityMintForUserCall
+	for _, c := range m.Recorder.Calls("MintForUser") {
+		var r MockAuthorityMintForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(MintRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAuthorityListForUserCall is one recorded call of MockAuthority.ListForUser, one
+// field per parameter.
+type MockAuthorityListForUserCall struct {
+	Ctx    context.Context
+	UserID string
+	Scope  fat.Scope
+}
+
+// ListForUserCalls returns every recorded ListForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListForUser").
+func (m *MockAuthority) ListForUserCalls() []MockAuthorityListForUserCall {
+	var out []MockAuthorityListForUserCall
+	for _, c := range m.Recorder.Calls("ListForUser") {
+		var r MockAuthorityListForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.Scope, _ = c.Args[2].(fat.Scope)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAuthorityRevokeForUserCall is one recorded call of MockAuthority.RevokeForUser, one
+// field per parameter.
+type MockAuthorityRevokeForUserCall struct {
+	Ctx     context.Context
+	UserID  string
+	TokenID string
+}
+
+// RevokeForUserCalls returns every recorded RevokeForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RevokeForUser").
+func (m *MockAuthority) RevokeForUserCalls() []MockAuthorityRevokeForUserCall {
+	var out []MockAuthorityRevokeForUserCall
+	for _, c := range m.Recorder.Calls("RevokeForUser") {
+		var r MockAuthorityRevokeForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.TokenID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAuthorityUpdateForUserCall is one recorded call of MockAuthority.UpdateForUser, one
+// field per parameter.
+type MockAuthorityUpdateForUserCall struct {
+	Ctx     context.Context
+	UserID  string
+	TokenID string
+	Name    *string
+	Scopes  fat.Set
+}
+
+// UpdateForUserCalls returns every recorded UpdateForUser call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateForUser").
+func (m *MockAuthority) UpdateForUserCalls() []MockAuthorityUpdateForUserCall {
+	var out []MockAuthorityUpdateForUserCall
+	for _, c := range m.Recorder.Calls("UpdateForUser") {
+		var r MockAuthorityUpdateForUserCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.TokenID, _ = c.Args[2].(string)
+		r.Name, _ = c.Args[3].(*string)
+		r.Scopes, _ = c.Args[4].(fat.Set)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAuthorityRevokeResourceCall is one recorded call of MockAuthority.RevokeResource, one
+// field per parameter.
+type MockAuthorityRevokeResourceCall struct {
+	Ctx      context.Context
+	Resource fat.Resource
+}
+
+// RevokeResourceCalls returns every recorded RevokeResource call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RevokeResource").
+func (m *MockAuthority) RevokeResourceCalls() []MockAuthorityRevokeResourceCall {
+	var out []MockAuthorityRevokeResourceCall
+	for _, c := range m.Recorder.Calls("RevokeResource") {
+		var r MockAuthorityRevokeResourceCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Resource, _ = c.Args[1].(fat.Resource)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAuthorityRevokeEphemeralCall is one recorded call of MockAuthority.RevokeEphemeral, one
+// field per parameter.
+type MockAuthorityRevokeEphemeralCall struct {
+	Ctx    context.Context
+	UserID string
+}
+
+// RevokeEphemeralCalls returns every recorded RevokeEphemeral call, oldest first, with
+// its arguments typed. It reads the same log as Calls("RevokeEphemeral").
+func (m *MockAuthority) RevokeEphemeralCalls() []MockAuthorityRevokeEphemeralCall {
+	var out []MockAuthorityRevokeEphemeralCall
+	for _, c := range m.Recorder.Calls("RevokeEphemeral") {
+		var r MockAuthorityRevokeEphemeralCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

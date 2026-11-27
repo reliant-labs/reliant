@@ -67,7 +67,7 @@ func TestTriggerQueries(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetTrigger(%s): %v", id, err)
 		}
-		twin, err := env.Repo.GetTrigger(ctx, id)
+		twin, err := store.GetTrigger(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("Repo.GetTrigger(%s): %v", id, err)
 		}
@@ -103,15 +103,9 @@ func TestTriggerQueries(t *testing.T) {
 	}
 	project := storetest.SeedProjectID
 	for _, f := range []core.TriggerFilters{{UserID: storetest.SeedUserID}, {UserID: storetest.SeedUserID, ProjectID: &project}, {UserID: "nobody"}} {
-		port, err := store.ListTriggersForUser(ctx, env.ORM, f)
-		if err != nil {
+		if _, err := store.ListTriggersForUser(ctx, env.ORM, f); err != nil {
 			t.Fatalf("ListTriggersForUser(%+v): %v", f, err)
 		}
-		twin, err := env.Repo.ListTriggers(ctx, f)
-		if err != nil {
-			t.Fatalf("Repo.ListTriggers(%+v): %v", f, err)
-		}
-		sameValue(t, "ListTriggersForUser", port, twin)
 	}
 	if mine, _ := store.ListTriggersForUser(ctx, env.ORM, core.TriggerFilters{UserID: storetest.SeedUserID, ProjectID: &project}); !reflect.DeepEqual(ids(mine), []string{"trg-b", "trg-a"}) {
 		t.Fatalf("ListTriggersForUser(project) = %v, want [trg-b trg-a], newest first", ids(mine))
@@ -136,14 +130,14 @@ func TestTriggerQueries(t *testing.T) {
 
 	// ReplaceTrigger writes the definition and stamps updated_at, and never
 	// the identity columns.
-	edited, _ := env.Repo.GetTrigger(ctx, "trg-a")
+	edited, _ := store.GetTrigger(ctx, env.Repo.ORM(), "trg-a")
 	edited.Name, edited.Enabled, edited.DaemonID, edited.NoMachine = "a-edited", false, "", true
 	edited.Kind, edited.UserID = core.TriggerKindWebhook, "someone-else"
 	edited.UpdatedAt = base.Add(30 * time.Minute)
 	if err := store.ReplaceTrigger(ctx, env.ORM, edited); err != nil {
 		t.Fatalf("ReplaceTrigger: %v", err)
 	}
-	twin, _ := env.Repo.GetTrigger(ctx, "trg-a")
+	twin, _ := store.GetTrigger(ctx, env.Repo.ORM(), "trg-a")
 	if twin.Name != "a-edited" || twin.Enabled || twin.DaemonID != "" || !twin.NoMachine || !twin.UpdatedAt.After(edited.UpdatedAt) || twin.Kind != core.TriggerKindSchedule || twin.UserID != storetest.SeedUserID {
 		t.Fatalf("after ReplaceTrigger Repo.GetTrigger = %+v, want the edit, updated_at stamped, kind and owner kept", twin)
 	}
@@ -159,11 +153,11 @@ func TestTriggerQueries(t *testing.T) {
 	}
 
 	// SetTriggerEnabled stamps updated_at.
-	replaced, _ := env.Repo.GetTrigger(ctx, "trg-a")
+	replaced, _ := store.GetTrigger(ctx, env.Repo.ORM(), "trg-a")
 	if err := store.SetTriggerEnabled(ctx, env.ORM, "trg-a", true); err != nil {
 		t.Fatalf("SetTriggerEnabled: %v", err)
 	}
-	if twin, _ := env.Repo.GetTrigger(ctx, "trg-a"); !twin.Enabled || !twin.UpdatedAt.After(replaced.UpdatedAt) {
+	if twin, _ := store.GetTrigger(ctx, env.Repo.ORM(), "trg-a"); !twin.Enabled || !twin.UpdatedAt.After(replaced.UpdatedAt) {
 		t.Fatalf("after SetTriggerEnabled = %+v, want enabled and updated_at stamped", twin)
 	}
 	if err := store.SetTriggerEnabled(ctx, env.ORM, "missing", true); !errors.Is(err, core.ErrTriggerNotFound) {
@@ -228,7 +222,7 @@ func TestTriggerQueries(t *testing.T) {
 	if err := store.SetTriggerProjection(ctx, env.ORM, "trg-act2", core.TriggerProjection{}); err != nil {
 		t.Fatalf("SetTriggerProjection(empty): %v", err)
 	}
-	if twin, _ := env.Repo.GetTrigger(ctx, "trg-act"); twin.Filter != "trigger.ok" || string(twin.Config) != `{"cron": ["0 * * * *"]}` || !twin.UpdatedAt.After(act.UpdatedAt) {
+	if twin, _ := store.GetTrigger(ctx, env.Repo.ORM(), "trg-act"); twin.Filter != "trigger.ok" || string(twin.Config) != `{"cron": ["0 * * * *"]}` || !twin.UpdatedAt.After(act.UpdatedAt) {
 		t.Fatalf("after SetTriggerProjection = %+v (config %s)", twin, twin.Config)
 	}
 	if got, _ := store.GetTrigger(ctx, env.ORM, "trg-act2"); got.Filter != "" || string(got.Config) != `{}` {
@@ -287,7 +281,7 @@ func TestTriggerQueries(t *testing.T) {
 	if err := store.RemoveTrigger(ctx, env.ORM, "trg-c"); err != nil {
 		t.Fatalf("RemoveTrigger: %v", err)
 	}
-	if _, err := env.Repo.GetTrigger(ctx, "trg-c"); !errors.Is(err, core.ErrTriggerNotFound) {
+	if _, err := store.GetTrigger(ctx, env.Repo.ORM(), "trg-c"); !errors.Is(err, core.ErrTriggerNotFound) {
 		t.Fatalf("Repo.GetTrigger after RemoveTrigger err = %v", err)
 	}
 	if err := store.RemoveTrigger(ctx, env.ORM, "trg-c"); err != nil {

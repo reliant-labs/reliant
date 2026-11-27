@@ -37,20 +37,42 @@ import (
 // rootRunIDKey holds the root run's id in the workflow context.
 type rootRunIDKey struct{}
 
+// RootRunID is the run id (forge.ai.run.id) of the root run an execution
+// started with input belongs to, temporalRunID being that execution's
+// Temporal run id: the id its node observations (node_observations.run_id)
+// and spans carry. It is the rule startRunTelemetry applies, for a reader
+// outside the workflow — the reconciler, which decodes input from the
+// execution's start event.
+func RootRunID(input WorkflowInput, temporalRunID string) string {
+	var carried *types.RunTelemetry
+	if input.ExecContext != nil {
+		carried = input.ExecContext.Telemetry
+	}
+	return rootRunID(input.Resume, carried, temporalRunID)
+}
+
+// rootRunID is the root run's id: a resuming execution's carried id (a
+// continue-as-new successor), else its checkpoint's (a restart), else — a
+// fresh run, or a resume with neither — its own Temporal run id.
+func rootRunID(resume *ResumeInput, carried *types.RunTelemetry, temporalRunID string) string {
+	if resume != nil {
+		if carried != nil && carried.RunID != "" {
+			return carried.RunID
+		}
+		if resume.RunID != "" {
+			return resume.RunID
+		}
+	}
+	return temporalRunID
+}
+
 // startRunTelemetry decides the root run's telemetry, records it on execCtx,
 // keeps the root run id in the returned context (rootRunIDFrom) and names the
 // run on the workflow's own span (RunWorkflow:DynamicWorkflow). Deterministic:
 // it reads only the input and workflow info, and issues no command.
 func startRunTelemetry(ctx workflow.Context, input WorkflowInput, execCtx *ExecutionContext) workflow.Context {
 	info := workflow.GetInfo(ctx)
-	runID := info.WorkflowExecution.RunID
-	if input.Resume != nil {
-		if prev := execCtx.Telemetry; prev != nil && prev.RunID != "" {
-			runID = prev.RunID
-		} else if input.Resume.RunID != "" {
-			runID = input.Resume.RunID
-		}
-	}
+	runID := rootRunID(input.Resume, execCtx.Telemetry, info.WorkflowExecution.RunID)
 	trigger := "manual"
 	if input.Trigger != nil && input.Trigger.Kind != "" {
 		trigger = input.Trigger.Kind

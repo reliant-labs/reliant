@@ -80,6 +80,8 @@ type AutomationTakeoverServiceClient interface {
 	// ListTriggerOffers lists the live offers made to the caller, each with
 	// the offered trigger (param values withheld).
 	// forge:custom — only the caller's live offers; a dead one is settled as it is read
+	// Declared NO_SIDE_EFFECTS though it settles an offer found dead as it is read (an idempotent repair): the repair is idempotent and
+	// no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
 	ListTriggerOffers(context.Context, *connect.Request[v1.ListTriggerOffersRequest]) (*connect.Response[v1.ListTriggerOffersResponse], error)
 	// RevokeTriggerOffer withdraws a pending offer (an org admin) or declines
 	// it (its offeree). Anyone else's is NOT_FOUND.
@@ -101,6 +103,7 @@ func NewAutomationTakeoverServiceClient(httpClient connect.HTTPClient, baseURL s
 			httpClient,
 			baseURL+AutomationTakeoverServiceListOrphanedAutomationsProcedure,
 			connect.WithSchema(automationTakeoverServiceMethods.ByName("ListOrphanedAutomations")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		adoptTrigger: connect.NewClient[v1.AdoptTriggerRequest, v1.AdoptTriggerResponse](
@@ -119,6 +122,7 @@ func NewAutomationTakeoverServiceClient(httpClient connect.HTTPClient, baseURL s
 			httpClient,
 			baseURL+AutomationTakeoverServiceListTriggerOffersProcedure,
 			connect.WithSchema(automationTakeoverServiceMethods.ByName("ListTriggerOffers")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		revokeTriggerOffer: connect.NewClient[v1.RevokeTriggerOfferRequest, v1.RevokeTriggerOfferResponse](
@@ -192,6 +196,8 @@ type AutomationTakeoverServiceHandler interface {
 	// ListTriggerOffers lists the live offers made to the caller, each with
 	// the offered trigger (param values withheld).
 	// forge:custom — only the caller's live offers; a dead one is settled as it is read
+	// Declared NO_SIDE_EFFECTS though it settles an offer found dead as it is read (an idempotent repair): the repair is idempotent and
+	// no reliant client enables Connect's useHttpGet, so nothing caches or replays it.
 	ListTriggerOffers(context.Context, *connect.Request[v1.ListTriggerOffersRequest]) (*connect.Response[v1.ListTriggerOffersResponse], error)
 	// RevokeTriggerOffer withdraws a pending offer (an org admin) or declines
 	// it (its offeree). Anyone else's is NOT_FOUND.
@@ -209,6 +215,7 @@ func NewAutomationTakeoverServiceHandler(svc AutomationTakeoverServiceHandler, o
 		AutomationTakeoverServiceListOrphanedAutomationsProcedure,
 		svc.ListOrphanedAutomations,
 		connect.WithSchema(automationTakeoverServiceMethods.ByName("ListOrphanedAutomations")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	automationTakeoverServiceAdoptTriggerHandler := connect.NewUnaryHandler(
@@ -227,6 +234,7 @@ func NewAutomationTakeoverServiceHandler(svc AutomationTakeoverServiceHandler, o
 		AutomationTakeoverServiceListTriggerOffersProcedure,
 		svc.ListTriggerOffers,
 		connect.WithSchema(automationTakeoverServiceMethods.ByName("ListTriggerOffers")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	automationTakeoverServiceRevokeTriggerOfferHandler := connect.NewUnaryHandler(

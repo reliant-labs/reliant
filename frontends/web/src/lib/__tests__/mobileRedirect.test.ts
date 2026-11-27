@@ -188,6 +188,23 @@ describe('mobilePathFor', () => {
     expect(mobilePathFor('/settings/billing', 'returnTo=https%3A%2F%2Fevil.example')).toBe('/m/settings?section=billing')
   })
 
+  it('opens billing on the App hosting card for a hosting link, with the org it was for', () => {
+    // "Set up hosting billing" after creating an org, a deploy queued on billing.
+    expect(mobilePathFor('/settings/billing', 'tab=hosting&org=org-b')).toBe(
+      '/m/settings?section=billing&tab=hosting&org=org-b',
+    )
+    // A hosting checkout's return: the marker is the desktop checkout window's,
+    // not the phone's, so it is not carried.
+    expect(mobilePathFor('/settings/billing', 'tab=hosting&checkout=success')).toBe(
+      '/m/settings?section=billing&tab=hosting',
+    )
+    expect(mobilePathFor('/settings/billing', 'tab=hosting&from=forge&returnTo=%2Fforge%2Fenv%2Fprod')).toBe(
+      '/m/settings?section=billing&returnTo=%2Fforge%2Fenv%2Fprod&tab=hosting',
+    )
+    // Only the hosting tab is kept: the phone's billing screen has no others.
+    expect(mobilePathFor('/settings/billing', 'tab=plans&org=org-b')).toBe('/m/settings?section=billing')
+  })
+
   it('lands everything without a twin on the chat list', () => {
     for (const pathname of ['/', '/workflow/new', '/project/abc/settings']) {
       expect(mobilePathFor(pathname), pathname).toBe('/m/chats')

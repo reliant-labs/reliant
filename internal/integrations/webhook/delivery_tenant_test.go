@@ -160,7 +160,7 @@ func TestDeliveryInboxReplayCannotWidenSignedTwilioRoutes(t *testing.T) {
 	}, envelope.Verified)
 	assert.NotContains(t, string(payload), twilioSign(twTokenA, twEvents, form))
 	calls := len(secrets.asked)
-	disabled, err := f.Repo.GetTrigger(ctx, "alice-disabled-after-receipt")
+	disabled, err := store.GetTrigger(ctx, f.Repo.ORM(), "alice-disabled-after-receipt")
 	require.NoError(t, err)
 	disabled.Enabled = false
 	require.NoError(t, triggertest.Update(ctx, f.Repo, disabled))
