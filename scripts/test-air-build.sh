@@ -66,7 +66,7 @@ chmod +x "$T/bin/go"
 # A PATH without Homebrew, so macOS takes /usr/bin/lockf and Linux flock(1).
 export PATH="$T/bin:/usr/bin:/bin"
 export AIR_BUILD_DIR="$T/air"
-unset AIR_BUILD_LOCKED
+unset AIR_BUILD_LOCKED GOFLAGS FORGE_DEV_DWARF
 shared="$T/air/cmd_app/bin"
 lockpath="$T/air/cmd_app/lock"
 
@@ -191,11 +191,11 @@ ok "a lock holder killed mid-build does not wedge the next caller"
 # Flags after the output path reach go build, before -o: the air configs
 # pass $FORGE_GO_BUILD_FLAGS there (forge env up's cover build). Without
 # any, the build is the plain one.
-[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -o $T/air/cmd_app/bin ./cmd/app" ] ||
+[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -ldflags=-w -o $T/air/cmd_app/bin ./cmd/app" ] ||
   FAIL "a caller with no flags ran: go $(cat "$T/argv")"
 (cd "$R" && sh scripts/air-build.sh ./cmd/app tmp/h/app -cover -covermode=atomic -coverpkg=example.com/app/...) >"$T/out" 2>&1 ||
   { FAIL "a caller with build flags failed"; cat "$T/out"; }
-[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -cover -covermode=atomic -coverpkg=example.com/app/... -o $T/air/cmd_app/bin ./cmd/app" ] ||
+[ "$(cat "$T/argv")" = "build -trimpath -buildvcs=false -cover -covermode=atomic -coverpkg=example.com/app/... -ldflags=-w -o $T/air/cmd_app/bin ./cmd/app" ] ||
   FAIL "build flags did not reach go build: go $(cat "$T/argv")"
 ok "flags after the output path reach go build"
 
