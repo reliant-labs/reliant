@@ -1,8 +1,12 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * GTM › Campaigns: each campaign's goal and period, and a board of what it
- * holds (its ideas, posts and emails) by stage. The campaign is `?campaign=`.
+ * GTM › Campaigns: each campaign's strategy, goal and period; for the one
+ * selected (`?campaign=`), its coverage (GetCampaign.coverage: the channels
+ * and formats it planned against its items, "Reddit · Short post: planned,
+ * nothing drafted"), its files, and a board of what it holds (its ideas,
+ * posts and emails) by stage. A person creates and edits campaigns here:
+ * strategy, period, status, planned channels and formats.
  *
  * Cards move between Drafting and In review (UpdateItem status, on the
  * revision on screen), a paused one back to Drafting. A move into Approved
@@ -13,24 +17,29 @@
  */
 
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Pencil, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import Badge from "@/components/forge-ui/badge";
+import Button from "@/components/forge-ui/button";
 import EmptyState from "@/components/forge-ui/empty_state";
 import KanbanBoard, { type KanbanColumn } from "@/components/forge-ui/kanban_board";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { GtmIdeaStatus, GtmItemKind, GtmItemStatus, type GtmCampaign, type GtmIdea, type GtmItem } from "@/gen/reliant/v1/gtm_pb";
-import { useListCampaigns, useListIdeas, useListItems, useUpdateItem } from "@/hooks/gtm-service-hooks_gen";
+import { GtmIdeaStatus, GtmItemStatus, type GtmCampaign, type GtmChannel, type GtmIdea, type GtmItem, type GtmStrategy } from "@/gen/reliant/v1/gtm_pb";
+import { useGetCampaign, useListCampaigns, useListIdeas, useListItems, useListStrategies, useUpdateItem } from "@/hooks/gtm-service-hooks_gen";
 import { gtmIdeaPath } from "@/lib/paths";
 import { toast } from "@/lib/toast-manager";
 
 import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
-import { ItemDialog } from "../shared/ItemDialog";
-import { canApprove } from "../shared/lifecycle";
+import { AssetPanel } from "../shared/Assets";
+import { ItemDialog, useGtmChannels } from "../shared/ItemDialog";
+import { canApprove, isEmailItem } from "../shared/lifecycle";
 import { PersonActionDialog, PersonOnlyTag } from "../shared/PersonAction";
-import { CAMPAIGN_STATUS, formatDay, formatWhen, IDEA_STATUS, isItemOut, ITEM_KIND, kindAndChannel, tsMs } from "../shared/ui";
+import { CAMPAIGN_STATUS, formatAndChannel, formatDay, formatLabel, formatWhen, IDEA_STATUS, isItemOut, tsMs } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
+import { CampaignForm } from "./CampaignForm";
+import { CoveragePanel } from "./Coverage";
 
 type Stage = "ideas" | "drafting" | "review" | "approved" | "out";
 
@@ -76,12 +85,12 @@ export function countsOf(ideas: readonly GtmIdea[], items: readonly GtmItem[], c
   const mine = items.filter((i) => i.campaignId === campaignId);
   return {
     ideas: ideas.filter((i) => i.campaignId === campaignId && i.status !== GtmIdeaStatus.REJECTED).length,
-    posts: mine.filter((i) => i.kind !== GtmItemKind.EMAIL).length,
-    emails: mine.filter((i) => i.kind === GtmItemKind.EMAIL).length,
+    posts: mine.filter((i) => !isEmailItem(i)).length,
+    emails: mine.filter((i) => isEmailItem(i)).length,
   };
 }
 
-export function columnsOf(ideas: readonly GtmIdea[], items: readonly GtmItem[], campaignId: string): KanbanColumn[] {
+export function columnsOf(ideas: readonly GtmIdea[], items: readonly GtmItem[], campaignId: string, channels: readonly GtmChannel[] = []): KanbanColumn[] {
   const cols: KanbanColumn[] = STAGES.map((s) => ({ id: s.id, title: s.title, tone: s.tone, cards: [] }));
   const col = (id: Stage) => cols.find((c) => c.id === id)!;
   for (const idea of ideas) {
@@ -95,8 +104,8 @@ export function columnsOf(ideas: readonly GtmIdea[], items: readonly GtmItem[], 
     col(STAGE_OF[item.status] ?? "drafting").cards.push({
       id: ITEM_CARD + item.id,
       title: item.title,
-      description: `${kindAndChannel(item.kind, item.channel)} · ${formatWhen(item.scheduledAt)}`,
-      tags: [ITEM_KIND[item.kind] ?? "Item"],
+      description: `${formatAndChannel(item.format, channels.find((c) => c.id === item.channelId))} · ${formatWhen(item.scheduledAt)}`,
+      tags: [formatLabel(item.format)],
     });
   }
   return cols;
@@ -109,6 +118,9 @@ export function CampaignsView() {
   const campaignsQ = useListCampaigns({ orgId, pageSize: PAGE.campaigns }, { enabled: !!orgId });
   const ideasQ = useListIdeas({ orgId, pageSize: PAGE.ideas }, { enabled: !!orgId });
   const itemsQ = useListItems({ orgId, pageSize: PAGE.items }, { enabled: !!orgId });
+  const strategiesQ = useListStrategies({ orgId, pageSize: 200 }, { enabled: !!orgId });
+  const channels = useGtmChannels();
+  const [editing, setEditing] = useState<"new" | GtmCampaign | null>(null);
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as Record<string, unknown>;
   const [openItemId, setOpenItemId] = useState<string | null>(null);
@@ -121,7 +133,9 @@ export function CampaignsView() {
   const ideas = useMemo(() => ideasQ.data?.ideas ?? [], [ideasQ.data]);
   const items = useMemo(() => itemsQ.data?.items ?? [], [itemsQ.data]);
   const selected = campaigns.find((c) => c.id === search.campaign) ?? campaigns[0];
-  const columns = useMemo(() => (selected ? columnsOf(ideas, items, selected.id) : []), [ideas, items, selected]);
+  const columns = useMemo(() => (selected ? columnsOf(ideas, items, selected.id, channels) : []), [ideas, items, selected, channels]);
+  const detailQ = useGetCampaign({ orgId, id: selected?.id ?? "" }, { enabled: !!orgId && !!selected });
+  const strategyOf = (c: GtmCampaign) => strategiesQ.data?.strategies.find((s) => s.id === c.strategyId);
   const select = (id: string) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, campaign: id }) } as never);
 
   // The moves a person may make on the board (shared/lifecycle.ts): DRAFT <-> REVIEW,
@@ -135,7 +149,7 @@ export function CampaignsView() {
     const moveTo = (status: GtmItemStatus) => move.mutate({ orgId, id: item.id, expectedRevision: item.revision, status });
     if (to === "out") {
       toast.info(
-        item.kind === GtmItemKind.EMAIL
+        isEmailItem(item)
           ? "Emails go out through the agent, after you approve its card in the chat. Nothing sends from this board."
           : "Posting happens outside GTM. Nothing publishes from this board.",
       );
@@ -157,7 +171,22 @@ export function CampaignsView() {
   }
 
   const truncated = [ideasQ.data, itemsQ.data, campaignsQ.data].some((r) => !!r?.nextPageToken);
-  const header = <PageHeader title="Campaigns" meta={<span>Each campaign's ideas, posts and emails, by stage.</span>} className="" />;
+  const header = (
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+      <PageHeader title="Campaigns" meta={<span>Each campaign's plan, what covers it, and its ideas, posts and emails by stage.</span>} className="" />
+      <Button variant="primary" size="sm" leftIcon={<Plus />} onClick={() => setEditing("new")} aria-haspopup="dialog">
+        New campaign
+      </Button>
+    </div>
+  );
+  const form = editing && (
+    <CampaignForm
+      campaign={editing === "new" ? undefined : editing}
+      channels={channels}
+      onClose={() => setEditing(null)}
+      onSaved={(id) => id && select(id)}
+    />
+  );
   if (campaignsQ.isPending) {
     return (
       <>
@@ -178,7 +207,8 @@ export function CampaignsView() {
     return (
       <>
         {header}
-        <EmptyState title="No campaigns yet" description="Ask the agent to plan one in a chat; it saves campaigns here." />
+        <EmptyState title="No campaigns yet" description="Create one, or ask the agent to plan one in a chat; it saves campaigns here." />
+        {form}
       </>
     );
   }
@@ -188,9 +218,21 @@ export function CampaignsView() {
       {header}
       <div className="grid gap-3 md:grid-cols-2" role="radiogroup" aria-label="Campaign">
         {campaigns.map((c) => (
-          <CampaignCard key={c.id} campaign={c} counts={countsOf(ideas, items, c.id)} selected={c.id === selected.id} onSelect={() => select(c.id)} />
+          <CampaignCard key={c.id} campaign={c} strategy={strategyOf(c)} counts={countsOf(ideas, items, c.id)} selected={c.id === selected.id} onSelect={() => select(c.id)} />
         ))}
       </div>
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" leftIcon={<Pencil />} onClick={() => setEditing(selected)} aria-haspopup="dialog">
+          Edit {selected.name}
+        </Button>
+      </div>
+      {detailQ.isError ? (
+        <p className="text-sm text-ink-muted">The campaign's coverage could not be read.</p>
+      ) : detailQ.data ? (
+        <CoveragePanel name={selected.name} rows={detailQ.data.coverage} channels={channels} />
+      ) : null}
+      {detailQ.data?.truncated && <p className="text-xs text-ink-muted">This campaign's ideas and items are shown up to the first 200 of each.</p>}
+      <AssetPanel key={selected.id} owner={{ campaignId: selected.id }} label="Campaign files" />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
         <span>Drag a card between Drafting and In review, or focus it and press Alt+Arrow.</span>
         <span className="inline-flex items-center gap-1.5">
@@ -217,6 +259,7 @@ export function CampaignsView() {
         />
       </div>
       <ItemDialog item={items.find((i) => i.id === openItemId) ?? null} onClose={() => setOpenItemId(null)} />
+      {form}
       {approving && (
         <PersonActionDialog
           open
@@ -231,7 +274,19 @@ export function CampaignsView() {
   );
 }
 
-function CampaignCard({ campaign, counts, selected, onSelect }: { campaign: GtmCampaign; counts: Counts; selected: boolean; onSelect: () => void }) {
+function CampaignCard({
+  campaign,
+  strategy,
+  counts,
+  selected,
+  onSelect,
+}: {
+  campaign: GtmCampaign;
+  strategy: GtmStrategy | undefined;
+  counts: Counts;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const status = CAMPAIGN_STATUS[campaign.status];
   return (
     <button
@@ -247,6 +302,7 @@ function CampaignCard({ campaign, counts, selected, onSelect }: { campaign: GtmC
         <span className="text-sm font-semibold text-ink">{campaign.name}</span>
         {status && <Badge label={status.label} variant={status.variant} size="sm" />}
       </span>
+      {strategy && <span className="mt-0.5 block text-xs text-ink-muted">Strategy: {strategy.name}</span>}
       {campaign.goal && <span className="mt-1 block text-sm text-ink-muted">{campaign.goal}</span>}
       <span className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
         {(campaign.periodStart || campaign.periodEnd) && (
