@@ -286,6 +286,8 @@ func TestServerActionResolverPlacesAPinnedProjectWorkflow(t *testing.T) {
 		serveraction.RunFacts{WorkflowRef: "pr", CatalogPin: loaded.CatalogPin, Trigger: "manual"})
 	require.NoError(t, err)
 	assert.Equal(t, userID, principal.UserID)
+	assert.Equal(t, daemonID, principal.DaemonID, "the machine is the chat's own record")
+	assert.Empty(t, principal.TriggerID, "a chat no activation launched has none")
 	assert.Equal(t, serveraction.SourceProject, provenance.Source)
 	assert.Equal(t, "api/.reliant/workflows/pr.yaml", provenance.Path)
 	require.NotNil(t, provenance.Repo)

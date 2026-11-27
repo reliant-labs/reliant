@@ -29,8 +29,8 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 		// forge #2834: reading an environment's Changes snapshot. A standard
 		// org permission (developer bundle and up), clipped like the rest.
 		fat.ScopeChangesRead,
-		// forge #3037: recording a release's SBOM. A standard org permission
-		// (CI bundle and up), clipped like the rest.
+		// forge #2991: uploading a release's SBOMs. A standard org permission
+		// (ci bundle and up) that acts as no one, clipped like the rest.
 		fat.ScopeSBOMWrite)
 	if got := fat.SetOf(exchangeableScopes...); !reflect.DeepEqual(got, want) {
 		t.Fatalf("exchangeable = %s, want %s", got, want)
