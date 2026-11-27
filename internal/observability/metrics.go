@@ -638,5 +638,7 @@ func initMetrics() {
 		// Temporal
 		TemporalWorkflowsTotal,
 		TemporalActivityDuration,
+		// Pipeline server actions
+		PipelineGitHubWrites,
 	)
 }

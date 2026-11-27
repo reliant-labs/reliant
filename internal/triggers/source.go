@@ -75,6 +75,12 @@ func sourceToProto(t *core.Trigger, out *reliantv1.Trigger) error {
 			Workflows: cfg.Workflows,
 			Outcomes:  cfg.Outcomes,
 		}}
+	case core.TriggerKindRecordDue:
+		var cfg core.RecordDueConfig
+		if err := unmarshalConfig(t, &cfg); err != nil {
+			return err
+		}
+		out.Source = &reliantv1.Trigger_RecordDue{RecordDue: &reliantv1.RecordDueSource{Table: cfg.Table}}
 	}
 	return nil
 }

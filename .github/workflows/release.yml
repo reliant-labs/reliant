@@ -138,15 +138,19 @@ jobs:
           TAG_NAME="${{ inputs.prebuild_version || github.ref_name }}"
           echo "Tag: $TAG_NAME"
 
-          if [[ $TAG_NAME =~ -rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+ ]]; then
-            echo "Detected prerelease tag - using alpha config"
-            echo "config=electron-builder.alpha.js" >> $GITHUB_OUTPUT
-            echo "channel=alpha" >> $GITHUB_OUTPUT
-          else
-            echo "Detected stable release - using production config"
-            echo "config=electron-builder.js" >> $GITHUB_OUTPUT
-            echo "channel=latest" >> $GITHUB_OUTPUT
+          # The alpha channel is retired: every install follows `latest`
+          # (electron/src/update-check.js, updateFeedFor). RC tags are
+          # rc/vX.Y.Z-rc.N and never reach this workflow, so a prerelease-named
+          # v* tag is a mistake. Refuse it rather than publish an RC to every
+          # stable install. (A dispatch from a branch is named by the branch,
+          # which may match by accident; it builds for latest like any other.)
+          if [[ "${{ github.ref_type }}" == "tag" && $TAG_NAME =~ -rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+ ]]; then
+            echo "::error::$TAG_NAME is a prerelease tag, and the alpha channel is retired. Release candidates are rc/vX.Y.Z-rc.N tags (rc-train); a v* tag publishes to the latest channel every install reads."
+            exit 1
           fi
+          echo "Stable release - using production config"
+          echo "config=electron-builder.js" >> $GITHUB_OUTPUT
+          echo "channel=latest" >> $GITHUB_OUTPUT
 
       - name: Install pnpm
         # The version that wrote frontends/web/pnpm-lock.yaml, read from the
@@ -1364,12 +1368,11 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-builds
-          # The Windows update feed is <channel>.yml (latest.yml / alpha.yml), not
+          # The Windows update feed is <channel>.yml (latest.yml), not
           # *-win.yml: publishing a prebuild needs it (scripts/release-prebuild.sh).
           path: |
             electron/dist/*.exe
             electron/dist/latest.yml
-            electron/dist/alpha.yml
             electron/dist/*.blockmap
           retention-days: 90
 
@@ -1619,11 +1622,8 @@ jobs:
           # Linux arm64 has a feed of its own, `<channel>-linux-arm64.yml`. It
           # was missing from this list through v1.8.6, so arm64 Linux clients
           # read a cached feed for up to a day after every release.
-          if [[ "$CHANNEL" == "latest" ]]; then
-            FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest-linux-arm64.yml" "${BASE_URL}/latest.yml")
-          else
-            FILES+=("${BASE_URL}/alpha-mac.yml" "${BASE_URL}/alpha-linux.yml" "${BASE_URL}/alpha-linux-arm64.yml" "${BASE_URL}/alpha.yml")
-          fi
+          # Only `latest` is published (prepare refuses a prerelease tag).
+          FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest-linux-arm64.yml" "${BASE_URL}/latest.yml")
 
           # Purge versioned download URLs per platform
           if [[ "$MACOS_RESULT" == "success" ]]; then

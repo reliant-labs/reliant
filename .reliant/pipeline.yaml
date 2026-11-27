@@ -1,0 +1,76 @@
+# The Reliant pipeline's configuration for reliant: pipeline.yaml version 1
+# (internal/pipeline/config; pipeline redesign §10.2). The pipeline reads it
+# only from main, never from a pull request's head, and nothing reads it until
+# the repository is enrolled, in shadow first.
+version: 1
+
+# The fast tier on each PR head: the affected-only merge gate
+# (dev-docs/merge-and-release-gates.md).
+check: "task ci:merge"
+
+# The full suite every batch candidate must pass before it lands. The stages
+# always run lint, test, build, sbom_scan, in that order; a failed stage stops
+# the later ones. Exit 0 pass, 1 fail, 2 unproven, per stage. task reports a
+# failing command as 201, so the test stage passes --exit-code: scripts/gate.sh's
+# own 0/1/2.
+gate:
+  runner: machine # an isolated gate machine (the sysbox backend)
+  pool: gate
+  # Owner decision (2026-11-26): until a dedicated sysbox gate machine
+  # exists, a batch gated on plain runc (contained, not isolated) may land.
+  # Such a batch is recorded unisolated_accepted, its gate uses a warm
+  # per-repository cache, and suites that start containers skip as
+  # "docker unavailable (gate)". Remove this once sysbox gate machines
+  # exist: that closes both gaps.
+  allow_unisolated: true
+  # The test stage's lanes run concurrently: the release gate's go part is the
+  # slowest (40-70 minutes on a loaded host). An exceeded timeout is unproven,
+  # never red.
+  timeout: 90m
+  stages:
+    # Off: the test stage's `lint` lane already runs the release gate's
+    # unscoped forge lint (golangci-lint over the whole module, buf lint, every
+    # whole-project lane, the frontends), concurrently with the tests. A
+    # separate lint stage would run it twice, and before the tests instead of
+    # beside them.
+    lint: off
+    # Today's main push suite (scripts/gate.sh): the release gate's four parts,
+    # Playwright, the electron package smoke, migration order and the repo
+    # checks.
+    test: {run: "task --exit-code gate"}
+    build: {run: "go build ./..."}
+    # Owner decision (2026-11-26): off, explicitly, until forge's
+    # `forge vuln gate` (forge#3001) has merged and every gate machine holds a
+    # grype database. Until then a scan could only be unproven, and the queue
+    # lands nothing unproven. The stage shows as off on every report, never as
+    # passed; turning it on is a recorded setting change.
+    sbom_scan: off
+
+# What `task generate:forge` writes (forge.yaml's generate hooks included): a
+# candidate whose conflicts touch only these is regenerated, not sent back for
+# a fix. The docs generators' output is not listed: regen does not run them.
+generated:
+  - "gen/**"
+  - "frontends/web/src/gen/**"
+  - "sdk/go/gen/**"
+  - "sdk/ts/src/gen/**"
+  - "**/*_gen.go"
+  - "**/*_gen.ts"
+  - "**/*_gen.sql"
+  - "**/*_gen.json"
+  - "**/*_gen.json.sha256"
+  - "**/*_gen.k"
+  - "**/*.pb.go"
+  - "**/*_pb.ts"
+  - "internal/workflow/yaml/bindings_generated.go"
+  - "internal/llm/tools/toolcatalog/catalog_generated.go"
+  - "internal/integrations/manifest/schema/*.schema.json"
+  - "internal/integrations/webhook/github/zz_projection_generated.go"
+  - "internal/integrations/catalog/github/events/**"
+  - "internal/integrations/catalog/github/schemas/**"
+  - "internal/integrations/catalog/github/manifest.yaml"
+  - ".forge/scaffolded/**"
+  - ".forge/hashes/**"
+  - ".forge/disowned.json"
+  - ".forge/migrations.json"
+regen: "task generate:forge"

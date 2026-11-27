@@ -41,8 +41,9 @@ it("submits explicit org/policy/budget and does not treat checkout success as ac
   expect(screen.getByText("CPU: $0.09/vCPU-hr")).toBeInTheDocument();
   expect(screen.queryByText(/cents/)).not.toBeInTheDocument();
   await consent();
-  await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-a", policyVersion: "p1", infraBudgetCents: 2500n, successUrl: "https://app.test/settings/billing?tab=usage#app-hosting", cancelUrl: "https://app.test/settings/billing?tab=usage#app-hosting" })));
-  await waitFor(() => expect(mocks.open).toHaveBeenCalled());
+  await waitFor(() => expect(mocks.checkout).toHaveBeenCalledWith(expect.objectContaining({ orgId: "org-a", policyVersion: "p1", infraBudgetCents: 2500n, successUrl: "https://app.test/settings/billing?tab=usage&checkout=success#app-hosting", cancelUrl: "https://app.test/settings/billing?tab=usage&checkout=cancelled#app-hosting" })));
+  // The desktop checkout window settles on the success URL's `checkout` marker.
+  await waitFor(() => expect(mocks.open).toHaveBeenCalledWith("https://checkout.stripe.test/session", "https://app.test/settings/billing?tab=usage&checkout=success#app-hosting"));
   expect(screen.queryByText("App hosting billing is active.")).not.toBeInTheDocument();
 });
 it("clears consent on org switch and keys the new read to that org", async () => {
