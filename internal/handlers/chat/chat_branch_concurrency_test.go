@@ -56,7 +56,7 @@ var branchTestTime = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 func newBranchTestService(repo *db.Repo, role Repository) *Service {
 	return &Service{
 		deps: Deps{
-			Repo: role, Chats: chataccesstest.For(role),
+			Repo: role, Chats: chataccesstest.For(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -64,7 +64,7 @@ func newBranchTestService(repo *db.Repo, role Repository) *Service {
 			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
-		threads: threads.New(threads.Deps{Repo: role}),
+		threads: threads.New(threads.Deps{Repo: role, AmbientMemory: store.NewThreadExtStore(repo.ORM())}),
 	}
 }
 

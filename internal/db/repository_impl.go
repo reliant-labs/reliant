@@ -27,6 +27,27 @@ import (
 
 // ==================== Chats ====================
 
+// GetChat returns the chat with its computed state.
+//
+// Deprecated: use store.ChatsWithActivityExtStore.GetChat.
+func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
+	return store.GetChat(ctx, r.ORM(), id)
+}
+
+// GetChatWithUserCheck returns the chat only when userID owns it.
+//
+// Deprecated: use store.ChatsWithActivityExtStore.GetChatWithUserCheck.
+func (r *Repo) GetChatWithUserCheck(ctx context.Context, id, userID string) (*Chat, error) {
+	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
+}
+
+// ResolveThreadAmbientMemoryExclusion reads and latches the thread's memory exclusion policy.
+//
+// Deprecated: use store.ThreadExtStore.ResolveThreadAmbientMemoryExclusion.
+func (r *Repo) ResolveThreadAmbientMemoryExclusion(ctx context.Context, chatID, threadID string, requested bool) (bool, error) {
+	return store.ResolveThreadAmbientMemoryExclusion(ctx, r.ORM(), chatID, threadID, requested)
+}
+
 func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 	if chat == nil {
 		return fmt.Errorf("chat cannot be nil")

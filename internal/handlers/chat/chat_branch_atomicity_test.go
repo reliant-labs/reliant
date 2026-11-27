@@ -120,7 +120,7 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: true}
 	service := &Service{
 		deps: Deps{
-			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),
+			Repo: failingRepo, Chats: chataccesstest.For(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -128,7 +128,7 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
-		threads: threads.New(threads.Deps{Repo: failingRepo}),
+		threads: threads.New(threads.Deps{Repo: failingRepo, AmbientMemory: store.NewThreadExtStore(repo.ORM())}),
 	}
 
 	// Baseline: chats that exist before the branch attempt.
@@ -183,7 +183,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	failingRepo := &branchAtomicityRepo{Repository: repo, shouldFail: false}
 	service := &Service{
 		deps: Deps{
-			Repo: failingRepo, Chats: chataccesstest.For(failingRepo),
+			Repo: failingRepo, Chats: chataccesstest.For(repo),
 			Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 			Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 			ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
@@ -191,7 +191,7 @@ func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 			Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}),
 			AgentMessages: store.NewAgentMessageExtStore(repo.ORM()),
 		},
-		threads: threads.New(threads.Deps{Repo: failingRepo}),
+		threads: threads.New(threads.Deps{Repo: failingRepo, AmbientMemory: store.NewThreadExtStore(repo.ORM())}),
 	}
 
 	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
