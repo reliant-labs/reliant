@@ -64,10 +64,11 @@ func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID st
 // (threads.worktree_id: a sub-agent spawned into it) whose own latest run is
 // live — pending, active, or paused awaiting a resume — or nil. A sub-agent
 // that finished (completed, failed, cancelled) does not count: its worktree
-// is its parent's to clean up. Only the thread's newest run is read, as
-// LatestSpawnRunForThread does: spawn(agent_id=...) resumes an agent as a new
-// run on the same thread, so an older row is history. It is the sub-agent
-// counterpart of GetLiveChatIDForWorktree, which sees bound chats only.
+// is its parent's to clean up. Read the run the thread is bound to via
+// UpdateThreadWorkflow: spawn(agent_id=...) resumes an agent as a new run on
+// the same thread, so an older row is history regardless of its timestamp.
+// It is the sub-agent counterpart of GetLiveChatIDForWorktree, which sees
+// bound chats only.
 func GetLiveBoundThreadRunForWorktree(ctx context.Context, db orm.Context, worktreeID string) (*core.BoundThreadRun, error) {
 	var rows []struct {
 		ThreadID   string `bun:"thread_id"`
@@ -77,12 +78,7 @@ func GetLiveBoundThreadRunForWorktree(ctx context.Context, db orm.Context, workt
 	}
 	err := db.Bun().NewRaw(`SELECT t.id AS thread_id, w.id AS workflow_id, w.state, w.stop_reason
 FROM threads t
-JOIN LATERAL (
-    SELECT f.id, f.state, f.stop_reason FROM workflows f
-    WHERE f.chat_id = t.chat_id AND f.thread = t.id
-    ORDER BY f.created_at DESC, f.id DESC
-    LIMIT 1
-) w ON true
+JOIN workflows w ON w.id = t.workflow_id AND w.chat_id = t.chat_id AND w.thread = t.id
 WHERE t.worktree_id = ?0 AND (w.state IN (?1, ?2) OR (w.state = ?3 AND w.stop_reason = ?4))
 ORDER BY t.created_at DESC, t.id
 LIMIT 1`, worktreeID, int32(core.WorkflowStatePending), int32(core.WorkflowStateActive),

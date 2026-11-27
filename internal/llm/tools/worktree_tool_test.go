@@ -593,7 +593,7 @@ func TestWorktreeTool_Delete_Refusals(t *testing.T) {
 }
 
 // bindSubAgent spawns a sub-agent thread into wt, its runs created in order
-// (the last is its current run), as spawn(worktree=...) binds it.
+// and the thread bound to each new run, as spawn(worktree=...) binds it.
 func (f *worktreeToolFixture) bindSubAgent(t *testing.T, wt *db.Worktree, runs ...db.WorkflowStatus) (threadID string, runIDs []string) {
 	t.Helper()
 	ctx := context.Background()
@@ -611,6 +611,8 @@ func (f *worktreeToolFixture) bindSubAgent(t *testing.T, wt *db.Worktree, runs .
 			ID: id, ChatID: f.chatID, WorkflowName: "builtin://agent",
 			Thread: threadID, Status: status, CreatedAt: at.Add(time.Duration(i) * time.Minute),
 		}))
+		_, err := store.UpdateThreadWorkflow(ctx, f.repo.ORM(), threadID, id)
+		require.NoError(t, err)
 		runIDs = append(runIDs, id)
 	}
 	return threadID, runIDs
