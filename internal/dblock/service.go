@@ -21,6 +21,7 @@ package dblock
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 
@@ -49,7 +50,9 @@ const (
 
 // Deps is what the lock service is built from.
 type Deps struct {
+	// forge:optional-dep
 	Logger *slog.Logger
+	// forge:optional-dep
 	Config *config.Config
 
 	// Sessions is the pool the lock's connection comes from. Required.
@@ -83,8 +86,32 @@ func (l *locker) TryLock(ctx context.Context, key Key) (release func(), ok bool,
 	if err != nil {
 		return nil, false, err
 	}
+	return tryOn(ctx, conn, int64(key))
+}
+
+// TryLockNamed is TryLock for a job with one lock per instance, named by
+// text rather than drawn from the Key registry: the merge queue's lead of one
+// repository ("mergequeue:<repo id>"). The key is Postgres's
+// hashtextextended(name, 0), so every replica derives the same one. Name such
+// locks with a prefix of their own, so two jobs' names cannot meet.
+func (l *locker) TryLockNamed(ctx context.Context, name string) (release func(), ok bool, err error) {
+	conn, err := l.deps.Sessions.Conn(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	var key int64
+	if err := conn.QueryRowContext(ctx, `SELECT hashtextextended($1, 0)`, name).Scan(&key); err != nil {
+		_ = conn.Close()
+		return nil, false, err
+	}
+	return tryOn(ctx, conn, key)
+}
+
+// tryOn takes the session-level lock on key on conn, which it owns: closed
+// unless the lock is held, and then by the release.
+func tryOn(ctx context.Context, conn *sql.Conn, key int64) (release func(), ok bool, err error) {
 	var got bool
-	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, int64(key)).Scan(&got); err != nil {
+	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&got); err != nil {
 		_ = conn.Close()
 		return nil, false, err
 	}
@@ -93,7 +120,7 @@ func (l *locker) TryLock(ctx context.Context, key Key) (release func(), ok bool,
 		return func() {}, false, nil
 	}
 	return func() {
-		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, int64(key))
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, key)
 		_ = conn.Close()
 	}, true, nil
 }

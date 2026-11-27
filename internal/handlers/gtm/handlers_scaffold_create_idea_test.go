@@ -28,6 +28,8 @@ func TestCreateIdea_Generated(t *testing.T) {
 			Req: connect.NewRequest(&pb.CreateIdeaRequest{
 				OrgId: testOrg, Kind: pb.GtmIdeaKind_GTM_IDEA_KIND_PRODUCT, Title: "Dark mode", BodyMd: "b",
 				Evidence: []*pb.GtmEvidence{{Kind: "note", Title: "asked"}}, SourceChatId: "forged", CampaignId: "c1",
+				LibraryKey: "local-meetup", TailorAnswers: []*pb.GtmTailorAnswer{{Question: "Where?", Answer: "Berlin"}},
+				SuggestedWorkflowMd: "wf",
 			}),
 			Ctx: gtm.AuthedContext(t),
 			Setup: func(t *testing.T) {
@@ -35,14 +37,22 @@ func TestCreateIdea_Generated(t *testing.T) {
 					asPerson(t, a)
 					assert.Equal(t, gtmsvc.CreateIdeaInput{
 						Kind: gtmsvc.IdeaKindProduct, Title: "Dark mode", BodyMD: "b", CampaignID: "c1",
-						Evidence: []gtmsvc.Evidence{{Kind: "note", Title: "asked"}},
+						Evidence:   []gtmsvc.Evidence{{Kind: "note", Title: "asked"}},
+						LibraryKey: "local-meetup", TailorAnswers: []gtmsvc.TailorAnswer{{Question: "Where?", Answer: "Berlin"}},
+						SuggestedWorkflowMD: "wf",
 					}, in)
-					return gtmsvc.Idea{ID: "i1", Status: gtmsvc.IdeaProposed, Source: gtmsvc.IdeaSourceHuman}, nil
+					return gtmsvc.Idea{
+						ID: "i1", Status: gtmsvc.IdeaProposed, Source: gtmsvc.IdeaSourceHuman, LibraryKey: in.LibraryKey,
+						TailorAnswers: in.TailorAnswers, SuggestedWorkflowMD: in.SuggestedWorkflowMD,
+					}, nil
 				}
 			},
 			Check: func(t *testing.T, resp *connect.Response[pb.CreateIdeaResponse]) {
 				assert.Equal(t, pb.GtmIdeaStatus_GTM_IDEA_STATUS_PROPOSED, resp.Msg.GetIdea().GetStatus())
 				assert.Equal(t, pb.GtmIdeaSource_GTM_IDEA_SOURCE_HUMAN, resp.Msg.GetIdea().GetSource())
+				assert.Equal(t, "local-meetup", resp.Msg.GetIdea().GetLibraryKey())
+				assert.Equal(t, "Berlin", resp.Msg.GetIdea().GetTailorAnswers()[0].GetAnswer())
+				assert.Equal(t, "wf", resp.Msg.GetIdea().GetSuggestedWorkflowMd())
 			},
 		},
 		{

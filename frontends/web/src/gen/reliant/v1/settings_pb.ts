@@ -2817,6 +2817,7 @@ export const SettingsService: GenService<{
   },
   /**
    * GetConfigHealth retrieves configuration errors and warnings
+   * forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it heals a legacy Reliant LLM key (drivers.HealReliantKey), a credential write
    *
    * @generated from rpc reliant.v1.SettingsService.GetConfigHealth
    */

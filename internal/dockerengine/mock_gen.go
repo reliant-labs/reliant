@@ -15,14 +15,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=6ab7d2f187e7820970016027a385ca195a80393b2fb4e5af2024527c46d0d408
+// forge:hash=fd7a3918068e4385f151bafdf568fb612668adfe685184230df45ec9fb6f9e83
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	DiskUsageFunc       func(context.Context) (Usage, error)
@@ -45,6 +46,44 @@ func (m *MockService) PruneBuildCache(ctx context.Context, olderThan time.Durati
 		return m.PruneBuildCacheFunc(ctx, olderThan)
 	}
 	return 0, contractkit.MockNotSet("MockService", "PruneBuildCache")
+}
+
+// MockServiceDiskUsageCall is one recorded call of MockService.DiskUsage, one
+// field per parameter.
+type MockServiceDiskUsageCall struct {
+	Ctx context.Context
+}
+
+// DiskUsageCalls returns every recorded DiskUsage call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DiskUsage").
+func (m *MockService) DiskUsageCalls() []MockServiceDiskUsageCall {
+	var out []MockServiceDiskUsageCall
+	for _, c := range m.Recorder.Calls("DiskUsage") {
+		var r MockServiceDiskUsageCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServicePruneBuildCacheCall is one recorded call of MockService.PruneBuildCache, one
+// field per parameter.
+type MockServicePruneBuildCacheCall struct {
+	Ctx       context.Context
+	OlderThan time.Duration
+}
+
+// PruneBuildCacheCalls returns every recorded PruneBuildCache call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PruneBuildCache").
+func (m *MockService) PruneBuildCacheCalls() []MockServicePruneBuildCacheCall {
+	var out []MockServicePruneBuildCacheCall
+	for _, c := range m.Recorder.Calls("PruneBuildCache") {
+		var r MockServicePruneBuildCacheCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OlderThan, _ = c.Args[1].(time.Duration)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

@@ -76,6 +76,10 @@ message ReliantConfig {
   WorktreeReclaimConfig worktree_reclaim = 5;
   MachineOrgConfig machine_org = 6;
   IdleReclaimConfig idle_reclaim = 7;
+  // gtm (8) and gtm_assets (9) moved to ServerProcessConfig, so only the
+  // server roles that read them are handed their settings and secrets.
+  reserved 8, 9;
+  reserved "gtm", "gtm_assets";
 }
 
 // MachineOrgConfig is how the gateway keeps a machine's project checkouts in

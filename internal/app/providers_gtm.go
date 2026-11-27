@@ -298,9 +298,22 @@ func gtmAnalytics(cp *configv1.ControlPlaneConfig, cfg *configv1.GtmConfig, log 
 		log.Warn("gtm: product analytics unavailable: the control-plane URL was refused", "error", err)
 		return nil
 	}
+	// One token for the whole analytics read path, the panel query and the
+	// environment lookup alike (obs:read, deploy:read); nothing else sends it.
+	token := func() string { return cfg.GetAnalyticsToken() }
+	// The environment filter resolves a name to the org's environment ids
+	// through the control plane's DeployService. Without it a query that
+	// names an environment is refused, never read across every one.
+	var envs analytics.EnvResolver
+	if deploy, err := analytics.NewDeployClient(endpoint.URL); err != nil {
+		log.Warn("gtm: product analytics environment filter unavailable", "error", err)
+	} else {
+		envs = analytics.NewEnvResolver(analytics.EnvResolverDeps{CP: deploy, Token: token, Log: log})
+	}
 	return analytics.NewInstrumented(analytics.Deps{
 		CP:    client,
-		Token: func() string { return cfg.GetAnalyticsToken() },
+		Token: token,
+		Envs:  envs,
 		Log:   log,
 	})
 }

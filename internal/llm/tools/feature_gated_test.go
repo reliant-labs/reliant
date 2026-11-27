@@ -13,9 +13,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools/toolcatalog"
 )
 
-// No real tool is gated yet, so these gate websearch for the length of each
-// test (GateToolForTest). That swaps process-wide state, so none of them runs
-// in parallel; Go runs every parallel test after them.
+// These gate websearch for the length of each test (GateToolForTest), so the
+// machinery is tested on a tool whose tags and placement they pick; the
+// shipped GTM tools are covered in gtm_tools_test.go. That swaps process-wide
+// state, so none of them runs in parallel; Go runs every parallel test after
+// them.
 
 // gatedTool is the registry tool the tests gate. It carries the web tag,
 // which fetch also carries, so a tag load shows one tool hidden and one not.

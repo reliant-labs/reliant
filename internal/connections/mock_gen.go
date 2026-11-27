@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockSealer
-// forge:hash=20b0707a6888a325676dea9659b7ef6e956f85f37c576136de92d2f2f374e931
+// forge:hash=7e0bea0aa361f0e1bda6dade48cbfe2618098d27653b8addcec7f15753ece06c
 
 // MockSealer is a test mock for the Sealer interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockSealer.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockSealer.<Method>Func not set" error.
 type MockSealer struct {
 	contractkit.Recorder
 	SealFunc       func(context.Context, vault.Tenant, []byte, []byte) ([]byte, error)
@@ -59,18 +60,91 @@ func (m *MockSealer) OpenSecret(ctx context.Context, tenant vault.Tenant, cipher
 	return *new(vault.Secret), contractkit.MockNotSet("MockSealer", "OpenSecret")
 }
 
+// MockSealerSealCall is one recorded call of MockSealer.Seal, one
+// field per parameter.
+type MockSealerSealCall struct {
+	Ctx       context.Context
+	Tenant    vault.Tenant
+	Plaintext []byte
+	Aad       []byte
+}
+
+// SealCalls returns every recorded Seal call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Seal").
+func (m *MockSealer) SealCalls() []MockSealerSealCall {
+	var out []MockSealerSealCall
+	for _, c := range m.Recorder.Calls("Seal") {
+		var r MockSealerSealCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Tenant, _ = c.Args[1].(vault.Tenant)
+		r.Plaintext, _ = c.Args[2].([]byte)
+		r.Aad, _ = c.Args[3].([]byte)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockSealerOpenCall is one recorded call of MockSealer.Open, one
+// field per parameter.
+type MockSealerOpenCall struct {
+	Ctx        context.Context
+	Tenant     vault.Tenant
+	Ciphertext []byte
+	Aad        []byte
+}
+
+// OpenCalls returns every recorded Open call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Open").
+func (m *MockSealer) OpenCalls() []MockSealerOpenCall {
+	var out []MockSealerOpenCall
+	for _, c := range m.Recorder.Calls("Open") {
+		var r MockSealerOpenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Tenant, _ = c.Args[1].(vault.Tenant)
+		r.Ciphertext, _ = c.Args[2].([]byte)
+		r.Aad, _ = c.Args[3].([]byte)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockSealerOpenSecretCall is one recorded call of MockSealer.OpenSecret, one
+// field per parameter.
+type MockSealerOpenSecretCall struct {
+	Ctx        context.Context
+	Tenant     vault.Tenant
+	Ciphertext []byte
+	Aad        []byte
+}
+
+// OpenSecretCalls returns every recorded OpenSecret call, oldest first, with
+// its arguments typed. It reads the same log as Calls("OpenSecret").
+func (m *MockSealer) OpenSecretCalls() []MockSealerOpenSecretCall {
+	var out []MockSealerOpenSecretCall
+	for _, c := range m.Recorder.Calls("OpenSecret") {
+		var r MockSealerOpenSecretCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Tenant, _ = c.Args[1].(vault.Tenant)
+		r.Ciphertext, _ = c.Args[2].([]byte)
+		r.Aad, _ = c.Args[3].([]byte)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Sealer = (*MockSealer)(nil)
 
 // forge:section MockAuthenticator
-// forge:hash=dfe500102d0423dbface3ac42142e1884dae65a41514815720e6589340c3684c
+// forge:hash=e5b5d0dbdfc1951d4b34b3f8458f512de277d314cd807a0286e1c90eda4a8dce
 
 // MockAuthenticator is a test mock for the Authenticator interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAuthenticator.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAuthenticator.<Method>Func not set" error.
 type MockAuthenticator struct {
 	contractkit.Recorder
 	ApplyFunc func(*http.Request, vault.Secret, *Redactor) error
@@ -83,6 +157,28 @@ func (m *MockAuthenticator) Apply(req *http.Request, secret vault.Secret, redact
 		return m.ApplyFunc(req, secret, redact)
 	}
 	return contractkit.MockNotSet("MockAuthenticator", "Apply")
+}
+
+// MockAuthenticatorApplyCall is one recorded call of MockAuthenticator.Apply, one
+// field per parameter.
+type MockAuthenticatorApplyCall struct {
+	Req    *http.Request
+	Secret vault.Secret
+	Redact *Redactor
+}
+
+// ApplyCalls returns every recorded Apply call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Apply").
+func (m *MockAuthenticator) ApplyCalls() []MockAuthenticatorApplyCall {
+	var out []MockAuthenticatorApplyCall
+	for _, c := range m.Recorder.Calls("Apply") {
+		var r MockAuthenticatorApplyCall
+		r.Req, _ = c.Args[0].(*http.Request)
+		r.Secret, _ = c.Args[1].(vault.Secret)
+		r.Redact, _ = c.Args[2].(*Redactor)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

@@ -11,7 +11,7 @@ chrome, on its real client over the shop fixture pack (`src/fixtures/shop`).
 `env=prod` exercises audited access; `case=deny|denied|empty|buckets-down|shape|rate|loading|slow`
 selects other states (overlays in `src/fixtures/shop/overlays/browsers.ts`). `dark=1` and
 `scheme=pure-black` select appearance. Downloads are refused there, as everywhere on
-the pack: no URL is minted. The component tests use `__fixtures__/fixtureStorageApi.ts`.
+the pack: no URL is minted. The component tests use `__fixtures__/fixtureStorageService.ts`.
 
 ## Source and verification
 

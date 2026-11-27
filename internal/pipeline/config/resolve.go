@@ -81,6 +81,9 @@ type ResolvedGate struct {
 	// ([ParseInfraPatterns]) and added to these.
 	InfraPatterns     []*regexp.Regexp
 	InfraPatternsFile string
+	// AllowUnisolated is gate.allow_unisolated: a pass outside an isolation
+	// boundary may land.
+	AllowUnisolated bool
 }
 
 type ResolvedQueue struct {
@@ -284,6 +287,7 @@ func resolveGate(g *Gate, def ResolvedGate, p Project) ResolvedGate {
 		Timeout:           def.Timeout,
 		Checks:            slices.Clone(g.Checks),
 		InfraPatternsFile: g.InfraPatternsFile,
+		AllowUnisolated:   g.AllowUnisolated != nil && *g.AllowUnisolated,
 	}
 	out.Stages = resolveStages(g, out.Runner, p)
 	if test := out.Stage(StageTest); test.State == StageOn {

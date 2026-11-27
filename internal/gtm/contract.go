@@ -2,8 +2,9 @@
 
 // Package gtm is the GTM domain: an org's strategies and the campaigns under
 // them, ideas, items (posts, emails, videos: the calendar) in a format and on
-// a channel, the assets attached to items and campaigns, the org's strategy
-// library, positioning and claims registry. Both the Connect
+// a channel, the assets attached to items and campaigns, positioning and
+// claims registry, and the strategy library (the embedded, read-only idea
+// bank of internal/gtm/library). Both the Connect
 // handler (internal/handlers/gtm) and the agent tools call it, so access and
 // validation are decided here, once.
 //
@@ -24,7 +25,7 @@
 //     date and never publishes) and UNVERIFIED claims, and touches nothing
 //     else. The item lifecycle is checkTransition's. An agent creates and
 //     edits DRAFT strategies and MANUAL channels; integrations, strategy
-//     status, library imports and published URLs are a person's.
+//     status and published URLs are a person's.
 //  5. Nothing here publishes. SENT is written only by the approved email
 //     path: SendItemEmail, or a person's ResolveInDoubtSend for a send that
 //     left without its record.
@@ -56,7 +57,9 @@ type Service interface {
 	// GetIdea returns one idea.
 	GetIdea(ctx context.Context, actor Actor, in GetIdeaInput) (Idea, error)
 	// CreateIdea creates a PROPOSED idea. An agent's idea has source AGENT and
-	// the actor's chat as its source chat.
+	// the actor's chat as its source chat. An idea drawn from the idea bank
+	// names its entry (LibraryKey: a key the bank does not hold is
+	// InvalidArgument) and answers its tailor questions (TailorAnswers).
 	CreateIdea(ctx context.Context, actor Actor, in CreateIdeaInput) (Idea, error)
 	// UpdateIdea changes an idea's fields. An agent edits PROPOSED ideas only.
 	UpdateIdea(ctx context.Context, actor Actor, in UpdateIdeaInput) (Idea, error)
@@ -113,7 +116,8 @@ type Service interface {
 
 	// GetPositioning returns the org's positioning; revision 0 when it has none.
 	GetPositioning(ctx context.Context, actor Actor) (Positioning, error)
-	// UpdatePositioning replaces the org's positioning whole. Expected
+	// UpdatePositioning replaces the org's positioning whole, its business
+	// type and models included (what FitsMyBusiness reads). Expected
 	// revision 0 creates it.
 	UpdatePositioning(ctx context.Context, actor Actor, in UpdatePositioningInput) (Positioning, error)
 
@@ -143,7 +147,7 @@ type Service interface {
 	UpdateStrategy(ctx context.Context, actor Actor, in UpdateStrategyInput) (Strategy, error)
 
 	// ListChannels lists the org's channels by key, seeding the defaults
-	// (DefaultChannels) for an org that has none, idempotently.
+	// (DefaultChannels()) for an org that has none, idempotently.
 	ListChannels(ctx context.Context, actor Actor, in ListChannelsInput) (ListChannelsResult, error)
 	// GetChannel returns one channel, seeding as ListChannels does.
 	GetChannel(ctx context.Context, actor Actor, in GetChannelInput) (Channel, error)
@@ -181,35 +185,16 @@ type Service interface {
 	// same checks as ConfirmAssetUpload. PR-7's attach_gtm_asset calls it.
 	AttachFromAttachment(ctx context.Context, actor Actor, in AttachFromAttachmentInput) (Asset, error)
 
-	// ListStrategyLibrary lists the org's strategy library, by category
-	// then name.
+	// ListStrategyLibrary lists the strategy library, the embedded idea
+	// bank (internal/gtm/library; read-only, the same for every org): by
+	// category then name, paged, or with Diverse a spread across
+	// categories. FitsMyBusiness keeps the entries that fit the org's
+	// positioning (business_type, business_models).
 	ListStrategyLibrary(ctx context.Context, actor Actor, in ListStrategyLibraryInput) (ListStrategyLibraryResult, error)
-	// GetStrategyLibraryEntry returns one library entry by key.
+	// GetStrategyLibraryEntry returns one bank entry by key; a key the bank
+	// does not hold is ErrNotFound.
 	GetStrategyLibraryEntry(ctx context.Context, actor Actor, in GetStrategyLibraryEntryInput) (LibraryEntry, error)
-	// ImportStrategyLibrary upserts a batch of entries by key, optionally
-	// pruning the org's keys not in AllKeys, and records the call
-	// (ListLibraryImports). A person's act, the one a token may make
-	// (Actor.ViaToken): a token only upserts, and its prune stages a
-	// request (PruneRequestID, WouldRemove) that a person confirms or
-	// cancels; a person-class prune removes at once. Every key named has its
-	// imported_at moved, changed or not.
-	ImportStrategyLibrary(ctx context.Context, actor Actor, in ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error)
-	// ListLibraryImports lists the org's import audit, newest first.
-	ListLibraryImports(ctx context.Context, actor Actor, in ListLibraryImportsInput) (ListLibraryImportsResult, error)
-	// ListLibraryPruneRequests lists the org's prune requests, newest
-	// first; a PENDING one past LibraryPruneRequestTTL is EXPIRED.
-	ListLibraryPruneRequests(ctx context.Context, actor Actor, in ListLibraryPruneRequestsInput) (ListLibraryPruneRequestsResult, error)
-	// ConfirmLibraryPrune carries out a PENDING prune request: a person
-	// through a person-class credential only. It removes only the request's
-	// keys still in the library and not imported again since the request
-	// was made, and records it CONFIRMED. A request already decided is
-	// ErrPruneRequestNotPending; an expired one ErrPruneRequestExpired
-	// (recorded EXPIRED).
-	ConfirmLibraryPrune(ctx context.Context, actor Actor, in ConfirmLibraryPruneInput) (ConfirmLibraryPruneResult, error)
-	// CancelLibraryPrune records a PENDING prune request CANCELLED, removing
-	// nothing; refused as ConfirmLibraryPrune is.
-	CancelLibraryPrune(ctx context.Context, actor Actor, in CancelLibraryPruneInput) (LibraryPruneRequest, error)
-	// UseLibraryStrategy makes a DRAFT strategy from a library entry, and
+	// UseLibraryStrategy makes a DRAFT strategy from a bank entry, and
 	// optionally a first DRAFT campaign planning the matching channels.
 	UseLibraryStrategy(ctx context.Context, actor Actor, in UseLibraryStrategyInput) (UseLibraryStrategyResult, error)
 }
@@ -248,8 +233,12 @@ type AssetStore interface {
 	// presigning, so a READY row whose bytes are gone is not served.
 	Stat(ctx context.Context, key string) (size int64, err error)
 	// PresignGet returns a presigned GET of key, shaped by opts. Every
-	// response it signs MUST carry X-Content-Type-Options: nosniff,
-	// Content-Type opts.ContentType, and a Content-Disposition (inline or
+	// response it signs MUST carry Content-Type opts.ContentType, and
+	// X-Content-Type-Options: nosniff where the backend supports it (an
+	// S3-style presigned GET overrides only the standard response headers;
+	// there the Content-Type override and the attachment disposition carry
+	// the guarantee), and a
+	// Content-Disposition (inline or
 	// attachment, per opts.Inline) whose filename is opts.Filename encoded
 	// per RFC 6266 (an ASCII filename= fallback and filename*=UTF-8''
 	// percent-encoded), so no stored name can break out of the header.
@@ -450,43 +439,6 @@ type Store interface {
 	DeletePendingAsset(ctx context.Context, orgID, id string, createdBefore time.Time) (bool, error)
 	// DeleteAsset removes orgID's asset id; a missing one is not an error.
 	DeleteAsset(ctx context.Context, orgID, id string) error
-
-	// ListLibrary returns the library entries f matches, by category then
-	// name then key.
-	ListLibrary(ctx context.Context, f LibraryFilter) ([]*store.GtmStrategyLibrary, error)
-	// GetLibraryEntry returns orgID's entry key.
-	GetLibraryEntry(ctx context.Context, orgID, key string) (*store.GtmStrategyLibrary, error)
-	// CreateLibraryEntry inserts row.
-	CreateLibraryEntry(ctx context.Context, row *store.GtmStrategyLibrary) error
-	// UpdateLibraryEntry rewrites the entry row.ID of row.OrgID whole.
-	UpdateLibraryEntry(ctx context.Context, row *store.GtmStrategyLibrary) error
-	// PruneLibrary removes orgID's entries whose key is not in keep, and
-	// says how many.
-	PruneLibrary(ctx context.Context, orgID string, keep []string) (int64, error)
-	// TouchLibraryEntries stamps orgID's entries keys as imported again:
-	// source_revision, imported_by and imported_at, nothing else.
-	TouchLibraryEntries(ctx context.Context, orgID string, keys []string, sourceRevision, importedBy string, at time.Time) error
-	// LibraryKeysNotIn returns orgID's entry keys that are not in keep,
-	// sorted.
-	LibraryKeysNotIn(ctx context.Context, orgID string, keep []string) ([]string, error)
-	// PruneLibraryKeys removes orgID's entries keys whose imported_at is at
-	// or before importedAtOrBefore, and says how many.
-	PruneLibraryKeys(ctx context.Context, orgID string, keys []string, importedAtOrBefore time.Time) (int64, error)
-
-	// CreateLibraryImport inserts an import audit row.
-	CreateLibraryImport(ctx context.Context, row *store.GtmLibraryImport) error
-	// ListLibraryImports returns the audit rows f matches, newest first.
-	ListLibraryImports(ctx context.Context, f LibraryImportFilter) ([]*store.GtmLibraryImport, error)
-	// CreatePruneRequest inserts a PENDING prune request.
-	CreatePruneRequest(ctx context.Context, row *store.GtmLibraryPruneRequest) error
-	// GetPruneRequest returns orgID's prune request id.
-	GetPruneRequest(ctx context.Context, orgID, id string) (*store.GtmLibraryPruneRequest, error)
-	// ListPruneRequests returns the prune requests f matches, newest first.
-	ListPruneRequests(ctx context.Context, f PruneRequestFilter) ([]*store.GtmLibraryPruneRequest, error)
-	// DecidePruneRequest moves orgID's PENDING request id to status:
-	// CONFIRMED and CANCELLED record decidedBy and at, EXPIRED neither. A
-	// request that is not PENDING is ErrPruneRequestNotPending.
-	DecidePruneRequest(ctx context.Context, orgID, id string, status PruneRequestStatus, decidedBy string, at time.Time) error
 }
 
 // Deps are the service's collaborators.

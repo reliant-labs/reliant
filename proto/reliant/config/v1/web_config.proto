@@ -83,6 +83,12 @@ message ReliantWebConfig {
     description: "This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default."
   }];
 
+  // 34: the next free number (24 and 11-15, 17 are reserved).
+  string gtm_assets_origin = 34 [(forge.v1.config) = {
+    env_var: "GTM_ASSETS_ORIGIN"
+    description: "The origin (scheme://host[:port]) the GTM assets bucket's presigned URLs name, which a browser PUTs uploads to and loads previews from. With path-style addressing (GTM_ASSETS_PATH_STYLE) it is GTM_ASSETS_PUBLIC_ENDPOINT's origin; with virtual-hosted S3 it is https://<bucket>.s3.<region>.amazonaws.com. Set to an https origin, or loopback http: the runtime Content-Security-Policy allows it for connect-src and media-src (vite-plugin-csp.ts). Unset, or plain http off loopback: GTM uploads and video previews to a bucket off this origin and loopback are blocked."
+  }];
+
   string forge_app_host = 23 [(forge.v1.config) = {
     env_var: "FORGE_APP_HOST"
     default_value: "forge.reliantlabs.io"

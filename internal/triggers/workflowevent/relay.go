@@ -105,13 +105,26 @@ type WorkflowStarter interface {
 	ExecuteWorkflow(ctx context.Context, options client.StartWorkflowOptions, workflow any, args ...any) (client.WorkflowRun, error)
 }
 
+// RouteStore lists an owner's triggers, for the relay to tell which run events
+// reach none of them. *db.Repo satisfies it.
+type RouteStore interface {
+	ListTriggersForUser(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+}
+
 // Relay moves outbox rows into dispatch workflows. Several relays (one per
 // worker) can run at once: rows are leased with SKIP LOCKED, and a row whose
 // relay died mid-handoff is leased again once its lease expires.
+//
+// With routes (WithRoutes), a row no trigger of its owner listens to
+// (MayReach) is marked dispatched without a dispatch workflow: its dispatch
+// would list the triggers, match none and record nothing. Most run events are
+// such rows (prod, 2026-11-26: 2,229 of 3,013 in 6h reached no trigger), and
+// each cost a Temporal workflow, an activity and a database read per trigger.
 type Relay struct {
 	store     RelayStore
 	starter   WorkflowStarter
 	taskQueue string
+	routes    RouteStore
 
 	Interval  time.Duration // poll interval
 	Lease     time.Duration // how long a claimed row is held before another relay may take it
@@ -128,6 +141,13 @@ func NewRelay(store RelayStore, starter WorkflowStarter, taskQueue string) *Rela
 		Interval: 2 * time.Second, Lease: time.Minute, Batch: 50, Retention: 7 * 24 * time.Hour,
 		now: time.Now,
 	}
+}
+
+// WithRoutes lets the relay settle the rows no trigger listens to without a
+// dispatch workflow. Without it, every row is dispatched.
+func (r *Relay) WithRoutes(routes RouteStore) *Relay {
+	r.routes = routes
+	return r
 }
 
 // Run drives the relay until ctx is done (a lifecyclekit.Runner).
@@ -156,17 +176,22 @@ func (r *Relay) Run(ctx context.Context) error {
 }
 
 // RelayOnce hands every currently claimable row to its dispatch workflow and
-// returns how many it handed off.
+// returns how many it handed off: each is marked dispatched, whether to its
+// workflow or, reaching no trigger, to nobody.
 func (r *Relay) RelayOnce(ctx context.Context) (int, error) {
 	now := r.now().UTC()
 	rows, err := r.store.ClaimRunEvents(ctx, now, now.Add(r.Lease), r.Batch)
 	if err != nil {
 		return 0, err
 	}
+	reach := r.reaching(ctx, rows)
 	handed := 0
 	var errs []error
 	for _, ev := range rows {
-		if err := r.start(ctx, ev.ID); err != nil {
+		if !reach[ev.ID] {
+			// Nothing to start: its dispatch would match no trigger and
+			// record nothing. Marked below like a started row.
+		} else if err := r.start(ctx, ev.ID); err != nil {
 			// Left claimed; the lease expires and a later pass retries it.
 			errs = append(errs, err)
 			continue
@@ -178,6 +203,37 @@ func (r *Relay) RelayOnce(ctx context.Context) (int, error) {
 		handed++
 	}
 	return handed, errors.Join(errs...)
+}
+
+// reaching is, by row id, whether each row may reach one of its owner's
+// triggers (MayReach). Each owner's triggers are listed once per pass. A row
+// whose owner's triggers cannot be listed counts as reaching: its dispatch
+// then decides, as it did before the relay looked.
+func (r *Relay) reaching(ctx context.Context, rows []*core.RunEvent) map[string]bool {
+	reach := make(map[string]bool, len(rows))
+	if r.routes == nil {
+		for _, ev := range rows {
+			reach[ev.ID] = true
+		}
+		return reach
+	}
+	listed := map[string][]*core.Trigger{}
+	for _, ev := range rows {
+		candidates, ok := listed[ev.UserID]
+		if !ok {
+			var err error
+			candidates, err = r.routes.ListTriggersForUser(ctx, core.TriggerFilters{UserID: ev.UserID})
+			if err != nil {
+				logging.WarnContext(ctx, "[workflowevent] could not list a run event owner's triggers; dispatching it",
+					"run_event_id", ev.ID, "error", err)
+				reach[ev.ID] = true
+				continue
+			}
+			listed[ev.UserID] = candidates
+		}
+		reach[ev.ID] = MayReach(candidates, ev)
+	}
+	return reach
 }
 
 func (r *Relay) start(ctx context.Context, runEventID string) error {

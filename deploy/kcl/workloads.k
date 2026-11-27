@@ -210,6 +210,14 @@ daemon_gateway = fw.Workload {
 
 ALL: [fw.Workload] = [migrate, api_server, temporal_worker, daemon_gateway]
 
+# The GTM assets bucket's connection: forge.Bucket "gtm-assets", as the seven
+# GTM_ASSETS_* leaves of GtmAssetsConfig (gtm_config.proto). The api-server and
+# the worker read it (the worker runs the agent's attach_gtm_asset). It is NOT
+# on their declarations above: control-plane binds those too, and every env
+# that merges this must declare the bucket. An env merges it into those two
+# workloads' env (dev/main.k does); one that does not has GTM assets off.
+GTM_ASSETS_ENV = forge.bucket_env("GTM_ASSETS", "gtm-assets")
+
 # ── What reliant builds and ships, but never runs ───────────────────────────
 #
 # Artifacts, not processes: each is `kind = "tool"` on `forge.BuildOnly`, so

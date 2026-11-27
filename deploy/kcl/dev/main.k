@@ -175,12 +175,13 @@ _migrate = _migrate | {env = _env(_migrate)}
 
 _api = wl.api_server | _host_only | {
     runtime = _host(".air.api.toml", [ports.api, ports.api_health])
-    env = {PUBLIC_URL = "http://localhost:${ports.api}"}
+    env = {PUBLIC_URL = "http://localhost:${ports.api}", **wl.GTM_ASSETS_ENV}
 }
 _api = _api | {env = _env(_api)}
 
 _worker = wl.temporal_worker | _host_only | {
     runtime = _host(".air.worker.toml", [ports.worker_health])
+    env = wl.GTM_ASSETS_ENV
 }
 _worker = _worker | {env = _env(_worker)}
 
@@ -221,6 +222,15 @@ _bundle = forge.Bundle {
     }
     workloads = [_migrate, _api, _worker, _gateway] + ([wl.debug_image] if _debug_image else [])
     frontends = [_web]
+    # GTM's assets (internal/gtm/assetstore), on the host MinIO below. Private:
+    # every read is a presigned GET. The web app PUTs uploads to it directly.
+    buckets = [
+        forge.Bucket {
+            name = "gtm-assets"
+            cors_origins = [_web_origin]
+            runtime = forge.BucketOnMinIO {infra = "minio"}
+        }
+    ]
     infra = [
         forge.HostInfra {
             name = "postgres"
@@ -258,6 +268,14 @@ _bundle = forge.Bundle {
             name = "mail"
             engine = "mailpit"
             port = ports.mail
+        }
+        # The object store behind `buckets` (a supervised minio binary, no
+        # docker); its root credentials are generated into secrets/dev.yaml.
+        forge.HostInfra {
+            name = "minio"
+            engine = "minio"
+            port = ports.minio
+            minio_console_port = ports.minio_console
         }
     ]
     # THE USERS (deploy/kcl/identity.k), run on the dev IdP above. `forge env

@@ -58,7 +58,7 @@ func TestAgentActivationApprovalOnCapabilityChange(t *testing.T) {
 	history, err := store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, created.ID)
 	require.NoError(t, err)
 	require.Equal(t, "card", history[0].Approval)
-	stored, err := env.repo.GetTrigger(env.ctx, created.ID)
+	stored, err := store.GetTrigger(env.ctx, env.repo.ORM(), created.ID)
 	require.NoError(t, err)
 	identity, other := flipIdentity(string(stored.ActingIdentity.OrOwner()))
 	require.Contains(t, history[0].CapabilitiesAdded, "identity:"+identity)
@@ -148,7 +148,7 @@ func TestAgentActivationApprovalModes(t *testing.T) {
 	require.Equal(t, "auto:never", history[0].Approval)
 	require.Contains(t, history[0].CapabilitiesAdded, "machine:"+machine)
 
-	stored, err := env.repo.GetTrigger(env.ctx, created.ID)
+	stored, err := store.GetTrigger(env.ctx, env.repo.ORM(), created.ID)
 	require.NoError(t, err)
 	identity, other := flipIdentity(string(stored.ActingIdentity.OrOwner()))
 	widen := tools.ActivationParams{TriggerID: created.ID, ActingIdentity: &other}
@@ -213,13 +213,13 @@ func TestAgentActivationDeleteAlwaysNeedsCard(t *testing.T) {
 	unattended := automationpolicy.WithExecution(env.ctx, automationpolicy.Execution{Unattended: true})
 	_, err = env.svc.ManageActivation(unattended, env.userID, tools.ToolDeleteTrigger, id, card.Hash)
 	require.ErrorContains(t, err, automationpolicy.Refusal())
-	_, err = env.repo.GetTrigger(env.ctx, created.ID)
+	_, err = store.GetTrigger(env.ctx, env.repo.ORM(), created.ID)
 	require.NoError(t, err, "nothing was deleted without a card")
 
 	deleted, err := env.svc.ManageActivation(env.ctx, env.userID, tools.ToolDeleteTrigger, id, card.Hash)
 	require.NoError(t, err)
 	require.Equal(t, created.ID, deleted.ID)
 	require.Equal(t, "nightly", deleted.Name)
-	_, err = env.repo.GetTrigger(env.ctx, created.ID)
+	_, err = store.GetTrigger(env.ctx, env.repo.ORM(), created.ID)
 	require.Error(t, err, "the activation is gone")
 }

@@ -3,6 +3,9 @@
 package analytics
 
 import (
+	"errors"
+	"strings"
+
 	"github.com/reliant-labs/reliant/internal/gtm"
 )
 
@@ -13,7 +16,8 @@ import (
 //
 //   - The validation refusals are a *gtm.ValidationError to errors.As (so
 //     gtm.ErrInvalidArgument), which ReadProductAnalytics passes through.
-//   - Every control-plane failure wraps gtm.ErrAnalyticsFailed.
+//   - Every control-plane failure wraps gtm.ErrAnalyticsFailed; a part of
+//     the read that is not configured wraps gtm.ErrAnalyticsUnavailable.
 //   - The client-construction errors are plain.
 var (
 	errNoOrg              = invalidError{field: "org", reason: "no org to read product analytics for"}
@@ -28,6 +32,15 @@ var (
 	errTimedOut          = failedError{detail: "the query timed out"}
 	errQueryRefused      = failedError{detail: "the control plane refused the query"}
 	errBadResponse       = failedError{detail: "the control plane's answer was not understood"}
+	// errTokenNeedsDeployRead is ListEnvironments refusing the token: an
+	// environment filter needs deploy:read beside obs:read. The read never
+	// falls back to every environment.
+	errTokenNeedsDeployRead = failedError{detail: "the analytics token needs the deploy:read scope to filter by environment"}
+	errEnvLookupFailed      = failedError{detail: "the control plane's environments could not be listed"}
+
+	// errEnvFilterUnavailable is a query naming an environment in a process
+	// with no environment resolver (or no token for it).
+	errEnvFilterUnavailable = unavailableError{detail: "filtering by environment is not configured"}
 
 	errInsecureControlPlaneURL = clientError("analytics: the control-plane URL must be https (http only to a loopback host)")
 	errUnsafeRedirect          = clientError("analytics: refused a control-plane redirect off https or to another host")
@@ -71,6 +84,32 @@ func ErrQueryRefused() error { return errQueryRefused }
 // ErrBadResponse is an answer this package cannot read.
 func ErrBadResponse() error { return errBadResponse }
 
+// ErrTokenNeedsDeployRead is DeployService.ListEnvironments refusing the
+// analytics token (PermissionDenied): it lacks deploy:read.
+func ErrTokenNeedsDeployRead() error { return errTokenNeedsDeployRead }
+
+// envNotQueryable is QueryPanel refusing a read over the ids an
+// Environment resolved to (PermissionDenied or InvalidArgument), whose
+// cached resolution was dropped. name is a validated environment name, so
+// the text stays fixed but for it.
+func envNotQueryable(name string) error {
+	return failedError{detail: "environment " + name + " could not be queried; it may have been recreated, retry"}
+}
+
+// IsEnvNotQueryable reports whether err is the error a read returns when the
+// control plane refused the environment it named.
+func IsEnvNotQueryable(err error) bool {
+	var f failedError
+	return errors.As(err, &f) && strings.HasPrefix(f.detail, "environment ") && strings.HasSuffix(f.detail, "; it may have been recreated, retry")
+}
+
+// ErrEnvLookupFailed is any other ListEnvironments failure.
+func ErrEnvLookupFailed() error { return errEnvLookupFailed }
+
+// ErrEnvFilterUnavailable is an Environment filter with no resolver
+// configured (gtm.ErrAnalyticsUnavailable).
+func ErrEnvFilterUnavailable() error { return errEnvFilterUnavailable }
+
 // ErrInsecureControlPlaneURL is a control-plane URL the analytics token
 // would cross in the clear: anything but https, or http to a loopback host.
 func ErrInsecureControlPlaneURL() error { return errInsecureControlPlaneURL }
@@ -103,6 +142,16 @@ type failedError struct{ detail string }
 func (e failedError) Error() string { return gtm.ErrAnalyticsFailed.Error() + ": " + e.detail }
 
 func (e failedError) Unwrap() error { return gtm.ErrAnalyticsFailed }
+
+// unavailableError is a part of the read that is not configured:
+// gtm.ErrAnalyticsUnavailable with a fixed detail.
+type unavailableError struct{ detail string }
+
+func (e unavailableError) Error() string {
+	return gtm.ErrAnalyticsUnavailable.Error() + ": " + e.detail
+}
+
+func (e unavailableError) Unwrap() error { return gtm.ErrAnalyticsUnavailable }
 
 // clientError is a refusal to build or follow a client connection.
 type clientError string

@@ -299,6 +299,7 @@ service SettingsService {
   // ============================================
 
   // GetConfigHealth retrieves configuration errors and warnings
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: writes as it reads: it heals a legacy Reliant LLM key (drivers.HealReliantKey), a credential write
   rpc GetConfigHealth(GetConfigHealthRequest) returns (GetConfigHealthResponse) {}
 }
 

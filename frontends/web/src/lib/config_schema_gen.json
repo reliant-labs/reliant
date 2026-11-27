@@ -127,6 +127,11 @@
       "source": "config"
     },
     {
+      "name": "GTM_ASSETS_ORIGIN",
+      "type": "string",
+      "source": "config"
+    },
+    {
       "name": "IDENTIFY_USER",
       "type": "string",
       "source": "runtime"

@@ -35,7 +35,7 @@ func TestStreamUserUpdates_DoesNoPerChatWork(t *testing.T) {
 	deltaHub := &countingDeltaHub{}
 	userHub := newChanUserHub()
 	project := catchupProject
-	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{
+	events := userStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: &MockTriggerReads{},
 		Repo: newCatchupChatRepo(0), Deltas: deltaHub, UserUpdates: userHub, ChatUpdates: chatHub,
 	}))), &reliantv1.StreamUserUpdatesRequest{ProjectId: &project})
 
@@ -80,7 +80,7 @@ func TestStreamChatUpdates_ForwardsTheOpenChatsCrossProjectUserUpdates(t *testin
 	userHub := newChanUserHub()
 	repo := focusRepo{catchupChatRepo: newCatchupChatRepo(10), parents: map[string]string{child: raceTestChatID}}
 	project := catchupProject
-	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: repo, Deltas: noopHub{}, UserUpdates: userHub}))),
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: fixtureTriggerReads(repo), Repo: repo, Deltas: noopHub{}, UserUpdates: userHub}))),
 		&reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID, SinceSeq: 10, ProjectId: &project})
 
 	nextEvent(t, events, "caught_up", func(ev *reliantv1.ChatStreamEvent) bool { return ev.GetCaughtUp() != nil })
@@ -118,7 +118,7 @@ func TestStreamChatUpdates_ForwardsTheOpenChatsCrossProjectUserUpdates(t *testin
 func TestStreamChatUpdates_WithoutAProjectScopeForwardsNothing(t *testing.T) {
 	// A user stream with no project receives every update itself.
 	userHub := newChanUserHub()
-	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: newCatchupChatRepo(10), Deltas: noopHub{}, UserUpdates: userHub}))),
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: &MockTriggerReads{}, Repo: newCatchupChatRepo(10), Deltas: noopHub{}, UserUpdates: userHub}))),
 		&reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID, SinceSeq: 10})
 
 	nextEvent(t, events, "caught_up", func(ev *reliantv1.ChatStreamEvent) bool { return ev.GetCaughtUp() != nil })
@@ -133,7 +133,7 @@ func TestStreamChatUpdates_ResumeFromCursorStreamsLiveUpdatesAfterIt(t *testing.
 	// A reopen at the chat's current cursor: nothing to replay, caught_up at
 	// the cursor, then live updates past it — and none at or below it.
 	chatHub := &chanChatHub{subscribed: make(chan struct{}), events: make(chan streaming.UpdateEvent[db.ChatUpdate], 4)}
-	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{Repo: newCatchupChatRepo(40), Deltas: noopHub{}, ChatUpdates: chatHub}))),
+	events := chatStreamEvents(t, NewTestStreaming(t, WithStreamingDeps(withRoles(Deps{TriggerReads: &MockTriggerReads{}, Repo: newCatchupChatRepo(40), Deltas: noopHub{}, ChatUpdates: chatHub}))),
 		&reliantv1.StreamChatUpdatesRequest{ChatId: raceTestChatID, SinceSeq: 40})
 
 	caughtUp := nextEvent(t, events, "caught_up", func(ev *reliantv1.ChatStreamEvent) bool { return ev.GetCaughtUp() != nil }).GetCaughtUp()

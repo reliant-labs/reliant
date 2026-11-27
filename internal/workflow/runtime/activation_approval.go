@@ -330,18 +330,13 @@ func (a activationApprovalAsk) oneByOne(gctx workflow.Context, calls []*pb.ToolC
 	}
 }
 
-// toolSendGtmEmail sends an approved GTM email item (internal/gtm/email);
-// every call needs the owner's card.
-//
-// TODO(PR-7): names.ToolSendGtmEmail replaces this literal once the tool is
-// registered.
-const toolSendGtmEmail = "send_gtm_email"
-
 func isActivationCall(name string) bool {
 	switch name {
 	case names.ToolCreateTriggerActivation, names.ToolUpdateTriggerActivation, names.ToolEnableTrigger, names.ToolPauseTrigger, names.ToolDeleteTrigger,
 		names.ToolManageMachine, names.ToolManageMachinePool, names.ToolProposeConnection, names.ToolManageChange,
-		toolSendGtmEmail:
+		// Sends an approved GTM email item (internal/gtm/email); every call
+		// needs the owner's card.
+		names.ToolSendGtmEmail:
 		return true
 	}
 	return false

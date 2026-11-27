@@ -9,8 +9,9 @@ import (
 	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// UpdatePositioning replaces the org's positioning whole; expected revision 0
-// creates it.
+// UpdatePositioning replaces the org's positioning whole, business type and
+// models included (a caller reads, changes and writes it back); expected
+// revision 0 creates it.
 func (s *Service) UpdatePositioning(
 	ctx context.Context,
 	req *connect.Request[pb.UpdatePositioningRequest],
@@ -24,6 +25,8 @@ func (s *Service) UpdatePositioning(
 		ExpectedRevision: m.GetExpectedRevision(),
 		PositioningMD:    m.GetPositioningMd(),
 		Audiences:        m.GetAudiences(),
+		BusinessType:     enumIn[gtmsvc.BusinessType](m.GetBusinessType()),
+		BusinessModels:   enumsIn[gtmsvc.BusinessModel](m.GetBusinessModels()),
 	})
 	if err != nil {
 		return nil, wireErr(err)

@@ -15,14 +15,15 @@ import (
 )
 
 // forge:section MockWorkspaceWaker
-// forge:hash=5d52bfed7839185006a2398788bcb3ef8db1957812d6d3d89a1535e8f1d10a0d
+// forge:hash=a5eb81fbb18fc8eca0227ce7e0a23e7522ac39ace787ecabdb6b3f9d373a2582
 
 // MockWorkspaceWaker is a test mock for the WorkspaceWaker interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockWorkspaceWaker.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockWorkspaceWaker.<Method>Func not set" error.
 type MockWorkspaceWaker struct {
 	contractkit.Recorder
 	EnsureAwakeFunc func(context.Context, string, string) error
@@ -37,18 +38,41 @@ func (m *MockWorkspaceWaker) EnsureAwake(ctx context.Context, userID string, dae
 	return contractkit.MockNotSet("MockWorkspaceWaker", "EnsureAwake")
 }
 
+// MockWorkspaceWakerEnsureAwakeCall is one recorded call of MockWorkspaceWaker.EnsureAwake, one
+// field per parameter.
+type MockWorkspaceWakerEnsureAwakeCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// EnsureAwakeCalls returns every recorded EnsureAwake call, oldest first, with
+// its arguments typed. It reads the same log as Calls("EnsureAwake").
+func (m *MockWorkspaceWaker) EnsureAwakeCalls() []MockWorkspaceWakerEnsureAwakeCall {
+	var out []MockWorkspaceWakerEnsureAwakeCall
+	for _, c := range m.Recorder.Calls("EnsureAwake") {
+		var r MockWorkspaceWakerEnsureAwakeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ WorkspaceWaker = (*MockWorkspaceWaker)(nil)
 
 // forge:section MockDaemonReadiness
-// forge:hash=6a7b7c649947b783ca03bfe13b65daea984529b87d3ea27b1d9577172c9d78ef
+// forge:hash=a2914441202f8fbcca28cbf10342b27b7969aaa4de8bd25687519b1cedff5a0e
 
 // MockDaemonReadiness is a test mock for the DaemonReadiness interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDaemonReadiness.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDaemonReadiness.<Method>Func not set" error.
 type MockDaemonReadiness struct {
 	contractkit.Recorder
 	IsReadyFunc func(context.Context, string, string) (bool, error)
@@ -73,18 +97,63 @@ func (m *MockDaemonReadiness) Resume(ctx context.Context, userID string, daemonI
 	return contractkit.MockNotSet("MockDaemonReadiness", "Resume")
 }
 
+// MockDaemonReadinessIsReadyCall is one recorded call of MockDaemonReadiness.IsReady, one
+// field per parameter.
+type MockDaemonReadinessIsReadyCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// IsReadyCalls returns every recorded IsReady call, oldest first, with
+// its arguments typed. It reads the same log as Calls("IsReady").
+func (m *MockDaemonReadiness) IsReadyCalls() []MockDaemonReadinessIsReadyCall {
+	var out []MockDaemonReadinessIsReadyCall
+	for _, c := range m.Recorder.Calls("IsReady") {
+		var r MockDaemonReadinessIsReadyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockDaemonReadinessResumeCall is one recorded call of MockDaemonReadiness.Resume, one
+// field per parameter.
+type MockDaemonReadinessResumeCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// ResumeCalls returns every recorded Resume call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Resume").
+func (m *MockDaemonReadiness) ResumeCalls() []MockDaemonReadinessResumeCall {
+	var out []MockDaemonReadinessResumeCall
+	for _, c := range m.Recorder.Calls("Resume") {
+		var r MockDaemonReadinessResumeCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ DaemonReadiness = (*MockDaemonReadiness)(nil)
 
 // forge:section MockDaemonResumer
-// forge:hash=654878f68ea9528b8221ca2d14f74275e11558777ee6f3342fca0e5d91e86179
+// forge:hash=f4869e83e55deca3bbbb5c308641c91be9cdc15c3913bed579baa823b5b6cc7c
 
 // MockDaemonResumer is a test mock for the DaemonResumer interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockDaemonResumer.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockDaemonResumer.<Method>Func not set" error.
 type MockDaemonResumer struct {
 	contractkit.Recorder
 	ResumeDaemonFunc func(context.Context, string, string) error
@@ -99,18 +168,41 @@ func (m *MockDaemonResumer) ResumeDaemon(ctx context.Context, userID string, dae
 	return contractkit.MockNotSet("MockDaemonResumer", "ResumeDaemon")
 }
 
+// MockDaemonResumerResumeDaemonCall is one recorded call of MockDaemonResumer.ResumeDaemon, one
+// field per parameter.
+type MockDaemonResumerResumeDaemonCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// ResumeDaemonCalls returns every recorded ResumeDaemon call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResumeDaemon").
+func (m *MockDaemonResumer) ResumeDaemonCalls() []MockDaemonResumerResumeDaemonCall {
+	var out []MockDaemonResumerResumeDaemonCall
+	for _, c := range m.Recorder.Calls("ResumeDaemon") {
+		var r MockDaemonResumerResumeDaemonCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ DaemonResumer = (*MockDaemonResumer)(nil)
 
 // forge:section MockAuditSink
-// forge:hash=e0257ea92ea48aedbb8b6e372aa6077b420f7911d681df66b22c7195a690a8c4
+// forge:hash=0b67422caf83c5bcc899ec9e2738d58f1ffa0736bc485f25d3efa6c4ec217ef5
 
 // MockAuditSink is a test mock for the AuditSink interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAuditSink.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAuditSink.<Method>Func not set" error.
 type MockAuditSink struct {
 	contractkit.Recorder
 	BeginFunc    func(context.Context, AuditEntry) string
@@ -135,18 +227,65 @@ func (m *MockAuditSink) Complete(ctx context.Context, id string, denied bool, er
 	}
 }
 
+// MockAuditSinkBeginCall is one recorded call of MockAuditSink.Begin, one
+// field per parameter.
+type MockAuditSinkBeginCall struct {
+	Ctx   context.Context
+	Entry AuditEntry
+}
+
+// BeginCalls returns every recorded Begin call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Begin").
+func (m *MockAuditSink) BeginCalls() []MockAuditSinkBeginCall {
+	var out []MockAuditSinkBeginCall
+	for _, c := range m.Recorder.Calls("Begin") {
+		var r MockAuditSinkBeginCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Entry, _ = c.Args[1].(AuditEntry)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAuditSinkCompleteCall is one recorded call of MockAuditSink.Complete, one
+// field per parameter.
+type MockAuditSinkCompleteCall struct {
+	Ctx      context.Context
+	ID       string
+	Denied   bool
+	ErrMsg   string
+	Duration time.Duration
+}
+
+// CompleteCalls returns every recorded Complete call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Complete").
+func (m *MockAuditSink) CompleteCalls() []MockAuditSinkCompleteCall {
+	var out []MockAuditSinkCompleteCall
+	for _, c := range m.Recorder.Calls("Complete") {
+		var r MockAuditSinkCompleteCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ID, _ = c.Args[1].(string)
+		r.Denied, _ = c.Args[2].(bool)
+		r.ErrMsg, _ = c.Args[3].(string)
+		r.Duration, _ = c.Args[4].(time.Duration)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ AuditSink = (*MockAuditSink)(nil)
 
 // forge:section MockGrantResolver
-// forge:hash=58cdd4af359650824fbc37ec27a343f02dd8dbb672a768a1a5af8c497f47a3e1
+// forge:hash=9ba239a5be9ae20ac5d085c9e5bbecef71610d37ad2bf0b4b7d5517d5f9bc963
 
 // MockGrantResolver is a test mock for the GrantResolver interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockGrantResolver.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockGrantResolver.<Method>Func not set" error.
 type MockGrantResolver struct {
 	contractkit.Recorder
 	ResolveFunc func(context.Context, string) (*Session, error)
@@ -161,18 +300,39 @@ func (m *MockGrantResolver) Resolve(ctx context.Context, grantID string) (*Sessi
 	return nil, contractkit.MockNotSet("MockGrantResolver", "Resolve")
 }
 
+// MockGrantResolverResolveCall is one recorded call of MockGrantResolver.Resolve, one
+// field per parameter.
+type MockGrantResolverResolveCall struct {
+	Ctx     context.Context
+	GrantID string
+}
+
+// ResolveCalls returns every recorded Resolve call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Resolve").
+func (m *MockGrantResolver) ResolveCalls() []MockGrantResolverResolveCall {
+	var out []MockGrantResolverResolveCall
+	for _, c := range m.Recorder.Calls("Resolve") {
+		var r MockGrantResolverResolveCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.GrantID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ GrantResolver = (*MockGrantResolver)(nil)
 
 // forge:section MockCallLimiter
-// forge:hash=1ea00e06e21d1fca15e817cb80fa1becee44a59a44672be9076a2ac0b206447d
+// forge:hash=976d2ba865a0cbd5b8e4e7ff9f9181e043f75a9c66e31dd80b62aca49078da73
 
 // MockCallLimiter is a test mock for the CallLimiter interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockCallLimiter.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockCallLimiter.<Method>Func not set" error.
 type MockCallLimiter struct {
 	contractkit.Recorder
 	AcquireFunc func(string) (func(), error)
@@ -185,6 +345,24 @@ func (m *MockCallLimiter) Acquire(grantID string) (func(), error) {
 		return m.AcquireFunc(grantID)
 	}
 	return nil, contractkit.MockNotSet("MockCallLimiter", "Acquire")
+}
+
+// MockCallLimiterAcquireCall is one recorded call of MockCallLimiter.Acquire, one
+// field per parameter.
+type MockCallLimiterAcquireCall struct {
+	GrantID string
+}
+
+// AcquireCalls returns every recorded Acquire call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Acquire").
+func (m *MockCallLimiter) AcquireCalls() []MockCallLimiterAcquireCall {
+	var out []MockCallLimiterAcquireCall
+	for _, c := range m.Recorder.Calls("Acquire") {
+		var r MockCallLimiterAcquireCall
+		r.GrantID, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

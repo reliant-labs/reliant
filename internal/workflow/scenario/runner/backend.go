@@ -1330,6 +1330,9 @@ var infrastructureActivities = []string{
 	// the run would check, not what a scenario tests.
 	"PreflightRequirements",
 	"MachineResumeWake",
+	// A scenario has no machine to check: a node's preflight passes (the
+	// stub's empty answer is a machine that passed).
+	"MachinePreflight",
 	// A scenario has no machine pools: the stub places nothing, so a pool
 	// or labels-only `daemon:` leaves the run unpinned.
 	machinepool.PlaceRunActivityName,

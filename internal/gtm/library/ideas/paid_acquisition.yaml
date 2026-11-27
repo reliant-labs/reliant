@@ -1,0 +1,191 @@
+# Paid acquisition: buying attention. Start small, measure cost per real
+# customer rather than per click, and stop what does not pay back.
+entries:
+  - key: high-intent-search-ads
+    category: paid_acquisition
+    name: Search ads on high-intent terms only
+    summary: >-
+      Run search ads only on terms that signal a buyer ready to act: the
+      problem plus "software", "service near me", "pricing", "alternative to",
+      or the exact job. Send each ad group to a page that matches the search
+      and exclude broad, research-only terms.
+    why_it_works: >-
+      Search intent is the strongest signal paid media offers. Restricting to
+      high-intent terms keeps the budget small and the cost per customer
+      measurable, and the search terms report shows how buyers describe the
+      problem.
+    fits:
+      business_types: [b2b_saas, local_business, ecommerce, agency_services, developer_tools]
+    stages: [early_traction, growth, scale]
+    objective: acquisition
+    effort: medium
+    cost: medium
+    signal_days: 14
+    tailor_questions:
+      - Which exact phrases do recent customers say they searched before finding the business?
+      - What can the business afford to pay for one new customer?
+      - Which landing page matches each group of search terms?
+    suggested_workflow: >-
+      Weekly, pull the search terms report, list terms that spent money with
+      no conversions as candidates to exclude, list converting terms not yet
+      targeted exactly, and send both lists for a person to apply.
+    channel_types: [paid-ads, search, website]
+    kpis: [cost per customer, conversion rate per ad group, search impression share on core terms]
+
+  - key: retargeting-engaged-visitors
+    category: paid_acquisition
+    name: Retargeting engaged visitors
+    summary: >-
+      Where tracking consent allows, show ads only to people who already took
+      a meaningful step (visited pricing, read two articles, started sign-up)
+      with a message that answers the likely next question, such as a
+      customer story, a guarantee or a demo. Cap frequency and stop after a
+      few weeks.
+    why_it_works: >-
+      Most visitors are not ready on the first visit. Retargeting people who
+      showed intent is cheap and reminds them at a time they are still
+      deciding, while frequency caps keep it from becoming irritating.
+    stages: [early_traction, growth, scale]
+    objective: conversion
+    effort: low
+    cost: low
+    signal_days: 14
+    tailor_questions:
+      - Which on-site actions best predict a future customer?
+      - What question or doubt stops people right before they buy?
+      - What frequency and duration would feel helpful rather than intrusive?
+    channel_types: [paid-ads, social]
+    kpis: [cost per conversion from retargeting, conversion rate of retargeted visitors, frequency]
+
+  - key: sponsor-niche-newsletters
+    category: paid_acquisition
+    name: Sponsor niche newsletters
+    summary: >-
+      Buy sponsorship slots in small, focused newsletters the target audience
+      reads. Test one issue each in several newsletters with a dedicated link,
+      then book a run in the ones that convert. Write the sponsor copy in the
+      newsletter's own tone.
+    why_it_works: >-
+      A niche newsletter's readers trust its writer, and a sponsor slot
+      borrows that trust. Small newsletters often cost far less per engaged
+      reader than broad ad networks.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app, creator_media, ecommerce]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: low
+    cost: medium
+    signal_days: 7
+    tailor_questions:
+      - Which newsletters do current customers read?
+      - What offer or resource can sponsor readers get from a dedicated link?
+      - What is the most the business can pay for a sign-up from this channel?
+    channel_types: [newsletter, paid-ads]
+    kpis: [cost per sign-up per newsletter, click-through rate, customers from sponsored issues]
+
+  - key: podcast-sponsorships
+    category: paid_acquisition
+    name: Podcast sponsorships with host-read ads
+    summary: >-
+      Sponsor podcasts in the niche with ads read by the host, a memorable
+      short link or code, and a script that lets the host speak from their own
+      experience of the product. Run at least three episodes per show before
+      judging.
+    why_it_works: >-
+      Listeners trust hosts they hear every week, and a host-read ad feels
+      like a recommendation. Repetition matters, which is why a single
+      episode rarely shows the real effect.
+    fits:
+      business_types: [b2b_saas, developer_tools, b2c_app, ecommerce, creator_media]
+    stages: [growth, scale]
+    objective: awareness
+    effort: low
+    cost: high
+    signal_days: 30
+    tailor_questions:
+      - Which podcasts do customers listen to?
+      - Can the host try the product first and talk about it honestly?
+      - How will the business measure listeners who do not use the code?
+    channel_types: [podcast, paid-ads]
+    kpis: [code and link uses, mentions in the sign-up source survey, cost per customer]
+
+  - key: founder-creative-paid-social
+    category: paid_acquisition
+    name: Paid social with founder-made creative
+    summary: >-
+      Run small paid social campaigns using simple, authentic creative: the
+      founder explaining the problem on camera, a customer's own words, or a
+      plain screen recording, rather than polished ads. Test several hooks
+      with a small budget each and scale only the winner.
+    why_it_works: >-
+      On social feeds, native-looking content outperforms ads that look like
+      ads. Testing hooks cheaply finds the message that resonates, which is
+      useful for every other channel too.
+    fits:
+      business_types: [b2c_app, ecommerce, creator_media, local_business, hardware]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: medium
+    cost: medium
+    signal_days: 7
+    tailor_questions:
+      - What are three different hooks (a pain, a result, a surprise) to test?
+      - Who will appear in the creative, and can they do it naturally?
+      - What daily budget per hook is enough to see a signal within a week?
+    suggested_workflow: >-
+      Every day of a test, pull spend, clicks and conversions per hook, and
+      at the end of the week send a comparison with the cost per conversion of
+      each and a recommendation of which to stop and which to scale, for a
+      person to decide.
+    channel_types: [paid-ads, social, video]
+    kpis: [cost per conversion per hook, click-through rate, return on ad spend]
+
+  - key: small-budget-channel-test
+    category: paid_acquisition
+    name: A structured small-budget channel test
+    summary: >-
+      Before committing a real budget, run a two to four week test across two
+      or three paid channels with the same offer and landing page, a fixed
+      small budget each, and a decision rule written in advance (for example,
+      scale if cost per customer is below a set amount).
+    why_it_works: >-
+      Most paid spend is wasted on channels nobody tested properly. A fixed
+      budget and a rule decided before the data arrives prevent sunk-cost
+      decisions and make the results comparable.
+    stages: [early_traction, growth]
+    objective: research
+    effort: medium
+    cost: medium
+    signal_days: 21
+    tailor_questions:
+      - Which two or three paid channels reach the target audience best?
+      - What cost per customer would make a channel worth scaling?
+      - How will a sign-up be traced back to the channel it came from?
+    channel_types: [paid-ads, website]
+    kpis: [cost per customer per channel, conversion rate per channel, payback period]
+
+  - key: sponsored-community-placements
+    category: paid_acquisition
+    name: Sponsored placements in focused communities
+    summary: >-
+      Pay for visible, clearly labelled placements in focused communities and
+      forums where the audience gathers (a sponsored post, a pinned resource,
+      a job board slot), offering something useful such as a guide or a free
+      tier rather than a hard sell.
+    why_it_works: >-
+      Focused communities concentrate the right audience at a modest price.
+      Leading with value matches community norms, so the placement is welcome
+      rather than resented.
+    fits:
+      business_types: [developer_tools, open_source, b2b_saas, creator_media]
+    stages: [launch, early_traction, growth]
+    objective: acquisition
+    effort: low
+    cost: medium
+    signal_days: 14
+    tailor_questions:
+      - Which communities does the audience trust most?
+      - What useful resource can the placement offer?
+      - What do the community's moderators allow for sponsors?
+    channel_types: [community, forum, paid-ads]
+    kpis: [click-through rate, sign-ups per placement, community sentiment]

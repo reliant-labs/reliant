@@ -31,6 +31,7 @@ var (
 		store.GtmIdeaFieldKind, store.GtmIdeaFieldTitle, store.GtmIdeaFieldBodyMd, store.GtmIdeaFieldEvidence,
 		store.GtmIdeaFieldStatus, store.GtmIdeaFieldSource, store.GtmIdeaFieldSourceChatID,
 		store.GtmIdeaFieldCampaignID, store.GtmIdeaFieldRevision,
+		store.GtmIdeaFieldLibraryKey, store.GtmIdeaFieldTailorAnswers, store.GtmIdeaFieldSuggestedWorkflowMd,
 	}
 	campaignUpdateCols = []string{
 		store.GtmCampaignFieldName, store.GtmCampaignFieldGoal, store.GtmCampaignFieldPeriodStart,
@@ -58,6 +59,7 @@ var (
 	positioningUpdateCols = []string{
 		store.GtmPositioningFieldPositioningMd, store.GtmPositioningFieldAudiences,
 		store.GtmPositioningFieldUpdatedBy, store.GtmPositioningFieldRevision,
+		store.GtmPositioningFieldBusinessType, store.GtmPositioningFieldBusinessModels,
 	}
 	claimUpdateCols = []string{
 		store.GtmClaimFieldStatus, store.GtmClaimFieldSourceURL, store.GtmClaimFieldSourceKind,

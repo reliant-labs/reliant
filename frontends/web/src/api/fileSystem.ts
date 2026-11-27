@@ -371,7 +371,8 @@ export async function getFilePreviewBlob(path: string, worktreeId?: string): Pro
     worktreeId,
     chatId: await activeChatIdForAPI(),
   }, transientReadOptions));
-  return new Blob([response.content], { type: response.contentType });
+  // Decoded protobuf bytes are never SharedArrayBuffer-backed, which is all Blob refuses.
+  return new Blob([response.content as Uint8Array<ArrayBuffer>], { type: response.contentType });
 }
 
 export interface DownloadedFile {
@@ -396,7 +397,8 @@ export async function downloadFile(path: string, worktreeId?: string): Promise<D
     chatId: await activeChatIdForAPI(),
   });
   return {
-    blob: new Blob([response.content], { type: response.contentType || "application/octet-stream" }),
+    // Decoded protobuf bytes are never SharedArrayBuffer-backed, which is all Blob refuses.
+    blob: new Blob([response.content as Uint8Array<ArrayBuffer>], { type: response.contentType || "application/octet-stream" }),
     filename: response.filename,
   };
 }

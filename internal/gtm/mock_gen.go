@@ -19,61 +19,57 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=2edacae03f9e54379334b2f54799477e11685ef6e4704d00a141749f78d4f71c
+// forge:hash=0e12c6b4eca9e7a7990ac4c137525b6558f162b483076ee51bacef8dfb216b31
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
-	GetAccessFunc                func(context.Context, Actor) (Access, error)
-	ListIdeasFunc                func(context.Context, Actor, ListIdeasInput) (ListIdeasResult, error)
-	GetIdeaFunc                  func(context.Context, Actor, GetIdeaInput) (Idea, error)
-	CreateIdeaFunc               func(context.Context, Actor, CreateIdeaInput) (Idea, error)
-	UpdateIdeaFunc               func(context.Context, Actor, UpdateIdeaInput) (Idea, error)
-	SetIdeaStatusFunc            func(context.Context, Actor, SetIdeaStatusInput) (Idea, error)
-	ListCampaignsFunc            func(context.Context, Actor, ListCampaignsInput) (ListCampaignsResult, error)
-	GetCampaignFunc              func(context.Context, Actor, GetCampaignInput) (CampaignDetail, error)
-	CreateCampaignFunc           func(context.Context, Actor, CreateCampaignInput) (Campaign, error)
-	UpdateCampaignFunc           func(context.Context, Actor, UpdateCampaignInput) (Campaign, error)
-	ListItemsFunc                func(context.Context, Actor, ListItemsInput) (ListItemsResult, error)
-	GetItemFunc                  func(context.Context, Actor, GetItemInput) (Item, error)
-	CreateItemFunc               func(context.Context, Actor, CreateItemInput) (Item, error)
-	UpdateItemFunc               func(context.Context, Actor, UpdateItemInput) (Item, error)
-	SendItemEmailFunc            func(context.Context, Actor, SendItemEmailInput) (Item, error)
-	ResolveInDoubtSendFunc       func(context.Context, Actor, ResolveInDoubtSendInput) (Item, error)
-	GetPositioningFunc           func(context.Context, Actor) (Positioning, error)
-	UpdatePositioningFunc        func(context.Context, Actor, UpdatePositioningInput) (Positioning, error)
-	ListClaimsFunc               func(context.Context, Actor, ListClaimsInput) (ListClaimsResult, error)
-	UpsertClaimFunc              func(context.Context, Actor, UpsertClaimInput) (UpsertClaimResult, error)
-	CheckClaimsFunc              func(context.Context, Actor, CheckClaimsInput) (CheckClaimsResult, error)
-	ReadProductAnalyticsFunc     func(context.Context, Actor, AnalyticsQuery) (AnalyticsResult, error)
-	ListStrategiesFunc           func(context.Context, Actor, ListStrategiesInput) (ListStrategiesResult, error)
-	GetStrategyFunc              func(context.Context, Actor, GetStrategyInput) (StrategyDetail, error)
-	CreateStrategyFunc           func(context.Context, Actor, CreateStrategyInput) (Strategy, error)
-	UpdateStrategyFunc           func(context.Context, Actor, UpdateStrategyInput) (Strategy, error)
-	ListChannelsFunc             func(context.Context, Actor, ListChannelsInput) (ListChannelsResult, error)
-	GetChannelFunc               func(context.Context, Actor, GetChannelInput) (Channel, error)
-	CreateChannelFunc            func(context.Context, Actor, CreateChannelInput) (Channel, error)
-	UpdateChannelFunc            func(context.Context, Actor, UpdateChannelInput) (Channel, error)
-	ListAssetsFunc               func(context.Context, Actor, ListAssetsInput) (ListAssetsResult, error)
-	GetAssetFunc                 func(context.Context, Actor, GetAssetInput) (Asset, error)
-	CreateAssetUploadFunc        func(context.Context, Actor, CreateAssetUploadInput) (AssetUpload, error)
-	ConfirmAssetUploadFunc       func(context.Context, Actor, ConfirmAssetUploadInput) (Asset, error)
-	GetAssetDownloadFunc         func(context.Context, Actor, GetAssetDownloadInput) (AssetDownload, error)
-	DeleteAssetFunc              func(context.Context, Actor, DeleteAssetInput) error
-	AttachFromAttachmentFunc     func(context.Context, Actor, AttachFromAttachmentInput) (Asset, error)
-	ListStrategyLibraryFunc      func(context.Context, Actor, ListStrategyLibraryInput) (ListStrategyLibraryResult, error)
-	GetStrategyLibraryEntryFunc  func(context.Context, Actor, GetStrategyLibraryEntryInput) (LibraryEntry, error)
-	ImportStrategyLibraryFunc    func(context.Context, Actor, ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error)
-	ListLibraryImportsFunc       func(context.Context, Actor, ListLibraryImportsInput) (ListLibraryImportsResult, error)
-	ListLibraryPruneRequestsFunc func(context.Context, Actor, ListLibraryPruneRequestsInput) (ListLibraryPruneRequestsResult, error)
-	ConfirmLibraryPruneFunc      func(context.Context, Actor, ConfirmLibraryPruneInput) (ConfirmLibraryPruneResult, error)
-	CancelLibraryPruneFunc       func(context.Context, Actor, CancelLibraryPruneInput) (LibraryPruneRequest, error)
-	UseLibraryStrategyFunc       func(context.Context, Actor, UseLibraryStrategyInput) (UseLibraryStrategyResult, error)
+	GetAccessFunc               func(context.Context, Actor) (Access, error)
+	ListIdeasFunc               func(context.Context, Actor, ListIdeasInput) (ListIdeasResult, error)
+	GetIdeaFunc                 func(context.Context, Actor, GetIdeaInput) (Idea, error)
+	CreateIdeaFunc              func(context.Context, Actor, CreateIdeaInput) (Idea, error)
+	UpdateIdeaFunc              func(context.Context, Actor, UpdateIdeaInput) (Idea, error)
+	SetIdeaStatusFunc           func(context.Context, Actor, SetIdeaStatusInput) (Idea, error)
+	ListCampaignsFunc           func(context.Context, Actor, ListCampaignsInput) (ListCampaignsResult, error)
+	GetCampaignFunc             func(context.Context, Actor, GetCampaignInput) (CampaignDetail, error)
+	CreateCampaignFunc          func(context.Context, Actor, CreateCampaignInput) (Campaign, error)
+	UpdateCampaignFunc          func(context.Context, Actor, UpdateCampaignInput) (Campaign, error)
+	ListItemsFunc               func(context.Context, Actor, ListItemsInput) (ListItemsResult, error)
+	GetItemFunc                 func(context.Context, Actor, GetItemInput) (Item, error)
+	CreateItemFunc              func(context.Context, Actor, CreateItemInput) (Item, error)
+	UpdateItemFunc              func(context.Context, Actor, UpdateItemInput) (Item, error)
+	SendItemEmailFunc           func(context.Context, Actor, SendItemEmailInput) (Item, error)
+	ResolveInDoubtSendFunc      func(context.Context, Actor, ResolveInDoubtSendInput) (Item, error)
+	GetPositioningFunc          func(context.Context, Actor) (Positioning, error)
+	UpdatePositioningFunc       func(context.Context, Actor, UpdatePositioningInput) (Positioning, error)
+	ListClaimsFunc              func(context.Context, Actor, ListClaimsInput) (ListClaimsResult, error)
+	UpsertClaimFunc             func(context.Context, Actor, UpsertClaimInput) (UpsertClaimResult, error)
+	CheckClaimsFunc             func(context.Context, Actor, CheckClaimsInput) (CheckClaimsResult, error)
+	ReadProductAnalyticsFunc    func(context.Context, Actor, AnalyticsQuery) (AnalyticsResult, error)
+	ListStrategiesFunc          func(context.Context, Actor, ListStrategiesInput) (ListStrategiesResult, error)
+	GetStrategyFunc             func(context.Context, Actor, GetStrategyInput) (StrategyDetail, error)
+	CreateStrategyFunc          func(context.Context, Actor, CreateStrategyInput) (Strategy, error)
+	UpdateStrategyFunc          func(context.Context, Actor, UpdateStrategyInput) (Strategy, error)
+	ListChannelsFunc            func(context.Context, Actor, ListChannelsInput) (ListChannelsResult, error)
+	GetChannelFunc              func(context.Context, Actor, GetChannelInput) (Channel, error)
+	CreateChannelFunc           func(context.Context, Actor, CreateChannelInput) (Channel, error)
+	UpdateChannelFunc           func(context.Context, Actor, UpdateChannelInput) (Channel, error)
+	ListAssetsFunc              func(context.Context, Actor, ListAssetsInput) (ListAssetsResult, error)
+	GetAssetFunc                func(context.Context, Actor, GetAssetInput) (Asset, error)
+	CreateAssetUploadFunc       func(context.Context, Actor, CreateAssetUploadInput) (AssetUpload, error)
+	ConfirmAssetUploadFunc      func(context.Context, Actor, ConfirmAssetUploadInput) (Asset, error)
+	GetAssetDownloadFunc        func(context.Context, Actor, GetAssetDownloadInput) (AssetDownload, error)
+	DeleteAssetFunc             func(context.Context, Actor, DeleteAssetInput) error
+	AttachFromAttachmentFunc    func(context.Context, Actor, AttachFromAttachmentInput) (Asset, error)
+	ListStrategyLibraryFunc     func(context.Context, Actor, ListStrategyLibraryInput) (ListStrategyLibraryResult, error)
+	GetStrategyLibraryEntryFunc func(context.Context, Actor, GetStrategyLibraryEntryInput) (LibraryEntry, error)
+	UseLibraryStrategyFunc      func(context.Context, Actor, UseLibraryStrategyInput) (UseLibraryStrategyResult, error)
 }
 
 // GetAccess records the call and delegates to GetAccessFunc when set.
@@ -427,51 +423,6 @@ func (m *MockService) GetStrategyLibraryEntry(ctx context.Context, actor Actor, 
 	return LibraryEntry{}, contractkit.MockNotSet("MockService", "GetStrategyLibraryEntry")
 }
 
-// ImportStrategyLibrary records the call and delegates to ImportStrategyLibraryFunc when set.
-func (m *MockService) ImportStrategyLibrary(ctx context.Context, actor Actor, in ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error) {
-	m.Recorder.Record("ImportStrategyLibrary", ctx, actor, in)
-	if m.ImportStrategyLibraryFunc != nil {
-		return m.ImportStrategyLibraryFunc(ctx, actor, in)
-	}
-	return ImportStrategyLibraryResult{}, contractkit.MockNotSet("MockService", "ImportStrategyLibrary")
-}
-
-// ListLibraryImports records the call and delegates to ListLibraryImportsFunc when set.
-func (m *MockService) ListLibraryImports(ctx context.Context, actor Actor, in ListLibraryImportsInput) (ListLibraryImportsResult, error) {
-	m.Recorder.Record("ListLibraryImports", ctx, actor, in)
-	if m.ListLibraryImportsFunc != nil {
-		return m.ListLibraryImportsFunc(ctx, actor, in)
-	}
-	return ListLibraryImportsResult{}, contractkit.MockNotSet("MockService", "ListLibraryImports")
-}
-
-// ListLibraryPruneRequests records the call and delegates to ListLibraryPruneRequestsFunc when set.
-func (m *MockService) ListLibraryPruneRequests(ctx context.Context, actor Actor, in ListLibraryPruneRequestsInput) (ListLibraryPruneRequestsResult, error) {
-	m.Recorder.Record("ListLibraryPruneRequests", ctx, actor, in)
-	if m.ListLibraryPruneRequestsFunc != nil {
-		return m.ListLibraryPruneRequestsFunc(ctx, actor, in)
-	}
-	return ListLibraryPruneRequestsResult{}, contractkit.MockNotSet("MockService", "ListLibraryPruneRequests")
-}
-
-// ConfirmLibraryPrune records the call and delegates to ConfirmLibraryPruneFunc when set.
-func (m *MockService) ConfirmLibraryPrune(ctx context.Context, actor Actor, in ConfirmLibraryPruneInput) (ConfirmLibraryPruneResult, error) {
-	m.Recorder.Record("ConfirmLibraryPrune", ctx, actor, in)
-	if m.ConfirmLibraryPruneFunc != nil {
-		return m.ConfirmLibraryPruneFunc(ctx, actor, in)
-	}
-	return ConfirmLibraryPruneResult{}, contractkit.MockNotSet("MockService", "ConfirmLibraryPrune")
-}
-
-// CancelLibraryPrune records the call and delegates to CancelLibraryPruneFunc when set.
-func (m *MockService) CancelLibraryPrune(ctx context.Context, actor Actor, in CancelLibraryPruneInput) (LibraryPruneRequest, error) {
-	m.Recorder.Record("CancelLibraryPrune", ctx, actor, in)
-	if m.CancelLibraryPruneFunc != nil {
-		return m.CancelLibraryPruneFunc(ctx, actor, in)
-	}
-	return LibraryPruneRequest{}, contractkit.MockNotSet("MockService", "CancelLibraryPrune")
-}
-
 // UseLibraryStrategy records the call and delegates to UseLibraryStrategyFunc when set.
 func (m *MockService) UseLibraryStrategy(ctx context.Context, actor Actor, in UseLibraryStrategyInput) (UseLibraryStrategyResult, error) {
 	m.Recorder.Record("UseLibraryStrategy", ctx, actor, in)
@@ -481,18 +432,895 @@ func (m *MockService) UseLibraryStrategy(ctx context.Context, actor Actor, in Us
 	return UseLibraryStrategyResult{}, contractkit.MockNotSet("MockService", "UseLibraryStrategy")
 }
 
+// MockServiceGetAccessCall is one recorded call of MockService.GetAccess, one
+// field per parameter.
+type MockServiceGetAccessCall struct {
+	Ctx   context.Context
+	Actor Actor
+}
+
+// GetAccessCalls returns every recorded GetAccess call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAccess").
+func (m *MockService) GetAccessCalls() []MockServiceGetAccessCall {
+	var out []MockServiceGetAccessCall
+	for _, c := range m.Recorder.Calls("GetAccess") {
+		var r MockServiceGetAccessCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListIdeasCall is one recorded call of MockService.ListIdeas, one
+// field per parameter.
+type MockServiceListIdeasCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ListIdeasInput
+}
+
+// ListIdeasCalls returns every recorded ListIdeas call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListIdeas").
+func (m *MockService) ListIdeasCalls() []MockServiceListIdeasCall {
+	var out []MockServiceListIdeasCall
+	for _, c := range m.Recorder.Calls("ListIdeas") {
+		var r MockServiceListIdeasCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ListIdeasInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetIdeaCall is one recorded call of MockService.GetIdea, one
+// field per parameter.
+type MockServiceGetIdeaCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    GetIdeaInput
+}
+
+// GetIdeaCalls returns every recorded GetIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIdea").
+func (m *MockService) GetIdeaCalls() []MockServiceGetIdeaCall {
+	var out []MockServiceGetIdeaCall
+	for _, c := range m.Recorder.Calls("GetIdea") {
+		var r MockServiceGetIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(GetIdeaInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateIdeaCall is one recorded call of MockService.CreateIdea, one
+// field per parameter.
+type MockServiceCreateIdeaCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    CreateIdeaInput
+}
+
+// CreateIdeaCalls returns every recorded CreateIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateIdea").
+func (m *MockService) CreateIdeaCalls() []MockServiceCreateIdeaCall {
+	var out []MockServiceCreateIdeaCall
+	for _, c := range m.Recorder.Calls("CreateIdea") {
+		var r MockServiceCreateIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(CreateIdeaInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateIdeaCall is one recorded call of MockService.UpdateIdea, one
+// field per parameter.
+type MockServiceUpdateIdeaCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    UpdateIdeaInput
+}
+
+// UpdateIdeaCalls returns every recorded UpdateIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateIdea").
+func (m *MockService) UpdateIdeaCalls() []MockServiceUpdateIdeaCall {
+	var out []MockServiceUpdateIdeaCall
+	for _, c := range m.Recorder.Calls("UpdateIdea") {
+		var r MockServiceUpdateIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(UpdateIdeaInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSetIdeaStatusCall is one recorded call of MockService.SetIdeaStatus, one
+// field per parameter.
+type MockServiceSetIdeaStatusCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    SetIdeaStatusInput
+}
+
+// SetIdeaStatusCalls returns every recorded SetIdeaStatus call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SetIdeaStatus").
+func (m *MockService) SetIdeaStatusCalls() []MockServiceSetIdeaStatusCall {
+	var out []MockServiceSetIdeaStatusCall
+	for _, c := range m.Recorder.Calls("SetIdeaStatus") {
+		var r MockServiceSetIdeaStatusCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(SetIdeaStatusInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListCampaignsCall is one recorded call of MockService.ListCampaigns, one
+// field per parameter.
+type MockServiceListCampaignsCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ListCampaignsInput
+}
+
+// ListCampaignsCalls returns every recorded ListCampaigns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListCampaigns").
+func (m *MockService) ListCampaignsCalls() []MockServiceListCampaignsCall {
+	var out []MockServiceListCampaignsCall
+	for _, c := range m.Recorder.Calls("ListCampaigns") {
+		var r MockServiceListCampaignsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ListCampaignsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetCampaignCall is one recorded call of MockService.GetCampaign, one
+// field per parameter.
+type MockServiceGetCampaignCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    GetCampaignInput
+}
+
+// GetCampaignCalls returns every recorded GetCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetCampaign").
+func (m *MockService) GetCampaignCalls() []MockServiceGetCampaignCall {
+	var out []MockServiceGetCampaignCall
+	for _, c := range m.Recorder.Calls("GetCampaign") {
+		var r MockServiceGetCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(GetCampaignInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateCampaignCall is one recorded call of MockService.CreateCampaign, one
+// field per parameter.
+type MockServiceCreateCampaignCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    CreateCampaignInput
+}
+
+// CreateCampaignCalls returns every recorded CreateCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateCampaign").
+func (m *MockService) CreateCampaignCalls() []MockServiceCreateCampaignCall {
+	var out []MockServiceCreateCampaignCall
+	for _, c := range m.Recorder.Calls("CreateCampaign") {
+		var r MockServiceCreateCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(CreateCampaignInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateCampaignCall is one recorded call of MockService.UpdateCampaign, one
+// field per parameter.
+type MockServiceUpdateCampaignCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    UpdateCampaignInput
+}
+
+// UpdateCampaignCalls returns every recorded UpdateCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateCampaign").
+func (m *MockService) UpdateCampaignCalls() []MockServiceUpdateCampaignCall {
+	var out []MockServiceUpdateCampaignCall
+	for _, c := range m.Recorder.Calls("UpdateCampaign") {
+		var r MockServiceUpdateCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(UpdateCampaignInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListItemsCall is one recorded call of MockService.ListItems, one
+// field per parameter.
+type MockServiceListItemsCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ListItemsInput
+}
+
+// ListItemsCalls returns every recorded ListItems call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListItems").
+func (m *MockService) ListItemsCalls() []MockServiceListItemsCall {
+	var out []MockServiceListItemsCall
+	for _, c := range m.Recorder.Calls("ListItems") {
+		var r MockServiceListItemsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ListItemsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetItemCall is one recorded call of MockService.GetItem, one
+// field per parameter.
+type MockServiceGetItemCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    GetItemInput
+}
+
+// GetItemCalls returns every recorded GetItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetItem").
+func (m *MockService) GetItemCalls() []MockServiceGetItemCall {
+	var out []MockServiceGetItemCall
+	for _, c := range m.Recorder.Calls("GetItem") {
+		var r MockServiceGetItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(GetItemInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateItemCall is one recorded call of MockService.CreateItem, one
+// field per parameter.
+type MockServiceCreateItemCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    CreateItemInput
+}
+
+// CreateItemCalls returns every recorded CreateItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateItem").
+func (m *MockService) CreateItemCalls() []MockServiceCreateItemCall {
+	var out []MockServiceCreateItemCall
+	for _, c := range m.Recorder.Calls("CreateItem") {
+		var r MockServiceCreateItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(CreateItemInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateItemCall is one recorded call of MockService.UpdateItem, one
+// field per parameter.
+type MockServiceUpdateItemCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    UpdateItemInput
+}
+
+// UpdateItemCalls returns every recorded UpdateItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateItem").
+func (m *MockService) UpdateItemCalls() []MockServiceUpdateItemCall {
+	var out []MockServiceUpdateItemCall
+	for _, c := range m.Recorder.Calls("UpdateItem") {
+		var r MockServiceUpdateItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(UpdateItemInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceSendItemEmailCall is one recorded call of MockService.SendItemEmail, one
+// field per parameter.
+type MockServiceSendItemEmailCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    SendItemEmailInput
+}
+
+// SendItemEmailCalls returns every recorded SendItemEmail call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SendItemEmail").
+func (m *MockService) SendItemEmailCalls() []MockServiceSendItemEmailCall {
+	var out []MockServiceSendItemEmailCall
+	for _, c := range m.Recorder.Calls("SendItemEmail") {
+		var r MockServiceSendItemEmailCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(SendItemEmailInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceResolveInDoubtSendCall is one recorded call of MockService.ResolveInDoubtSend, one
+// field per parameter.
+type MockServiceResolveInDoubtSendCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ResolveInDoubtSendInput
+}
+
+// ResolveInDoubtSendCalls returns every recorded ResolveInDoubtSend call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ResolveInDoubtSend").
+func (m *MockService) ResolveInDoubtSendCalls() []MockServiceResolveInDoubtSendCall {
+	var out []MockServiceResolveInDoubtSendCall
+	for _, c := range m.Recorder.Calls("ResolveInDoubtSend") {
+		var r MockServiceResolveInDoubtSendCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ResolveInDoubtSendInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetPositioningCall is one recorded call of MockService.GetPositioning, one
+// field per parameter.
+type MockServiceGetPositioningCall struct {
+	Ctx   context.Context
+	Actor Actor
+}
+
+// GetPositioningCalls returns every recorded GetPositioning call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPositioning").
+func (m *MockService) GetPositioningCalls() []MockServiceGetPositioningCall {
+	var out []MockServiceGetPositioningCall
+	for _, c := range m.Recorder.Calls("GetPositioning") {
+		var r MockServiceGetPositioningCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdatePositioningCall is one recorded call of MockService.UpdatePositioning, one
+// field per parameter.
+type MockServiceUpdatePositioningCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    UpdatePositioningInput
+}
+
+// UpdatePositioningCalls returns every recorded UpdatePositioning call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdatePositioning").
+func (m *MockService) UpdatePositioningCalls() []MockServiceUpdatePositioningCall {
+	var out []MockServiceUpdatePositioningCall
+	for _, c := range m.Recorder.Calls("UpdatePositioning") {
+		var r MockServiceUpdatePositioningCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(UpdatePositioningInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListClaimsCall is one recorded call of MockService.ListClaims, one
+// field per parameter.
+type MockServiceListClaimsCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ListClaimsInput
+}
+
+// ListClaimsCalls returns every recorded ListClaims call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListClaims").
+func (m *MockService) ListClaimsCalls() []MockServiceListClaimsCall {
+	var out []MockServiceListClaimsCall
+	for _, c := range m.Recorder.Calls("ListClaims") {
+		var r MockServiceListClaimsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ListClaimsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpsertClaimCall is one recorded call of MockService.UpsertClaim, one
+// field per parameter.
+type MockServiceUpsertClaimCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    UpsertClaimInput
+}
+
+// UpsertClaimCalls returns every recorded UpsertClaim call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpsertClaim").
+func (m *MockService) UpsertClaimCalls() []MockServiceUpsertClaimCall {
+	var out []MockServiceUpsertClaimCall
+	for _, c := range m.Recorder.Calls("UpsertClaim") {
+		var r MockServiceUpsertClaimCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(UpsertClaimInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCheckClaimsCall is one recorded call of MockService.CheckClaims, one
+// field per parameter.
+type MockServiceCheckClaimsCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    CheckClaimsInput
+}
+
+// CheckClaimsCalls returns every recorded CheckClaims call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CheckClaims").
+func (m *MockService) CheckClaimsCalls() []MockServiceCheckClaimsCall {
+	var out []MockServiceCheckClaimsCall
+	for _, c := range m.Recorder.Calls("CheckClaims") {
+		var r MockServiceCheckClaimsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(CheckClaimsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceReadProductAnalyticsCall is one recorded call of MockService.ReadProductAnalytics, one
+// field per parameter.
+type MockServiceReadProductAnalyticsCall struct {
+	Ctx   context.Context
+	Actor Actor
+	Q     AnalyticsQuery
+}
+
+// ReadProductAnalyticsCalls returns every recorded ReadProductAnalytics call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReadProductAnalytics").
+func (m *MockService) ReadProductAnalyticsCalls() []MockServiceReadProductAnalyticsCall {
+	var out []MockServiceReadProductAnalyticsCall
+	for _, c := range m.Recorder.Calls("ReadProductAnalytics") {
+		var r MockServiceReadProductAnalyticsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.Q, _ = c.Args[2].(AnalyticsQuery)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListStrategiesCall is one recorded call of MockService.ListStrategies, one
+// field per parameter.
+type MockServiceListStrategiesCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ListStrategiesInput
+}
+
+// ListStrategiesCalls returns every recorded ListStrategies call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStrategies").
+func (m *MockService) ListStrategiesCalls() []MockServiceListStrategiesCall {
+	var out []MockServiceListStrategiesCall
+	for _, c := range m.Recorder.Calls("ListStrategies") {
+		var r MockServiceListStrategiesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ListStrategiesInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetStrategyCall is one recorded call of MockService.GetStrategy, one
+// field per parameter.
+type MockServiceGetStrategyCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    GetStrategyInput
+}
+
+// GetStrategyCalls returns every recorded GetStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetStrategy").
+func (m *MockService) GetStrategyCalls() []MockServiceGetStrategyCall {
+	var out []MockServiceGetStrategyCall
+	for _, c := range m.Recorder.Calls("GetStrategy") {
+		var r MockServiceGetStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(GetStrategyInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateStrategyCall is one recorded call of MockService.CreateStrategy, one
+// field per parameter.
+type MockServiceCreateStrategyCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    CreateStrategyInput
+}
+
+// CreateStrategyCalls returns every recorded CreateStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateStrategy").
+func (m *MockService) CreateStrategyCalls() []MockServiceCreateStrategyCall {
+	var out []MockServiceCreateStrategyCall
+	for _, c := range m.Recorder.Calls("CreateStrategy") {
+		var r MockServiceCreateStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(CreateStrategyInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateStrategyCall is one recorded call of MockService.UpdateStrategy, one
+// field per parameter.
+type MockServiceUpdateStrategyCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    UpdateStrategyInput
+}
+
+// UpdateStrategyCalls returns every recorded UpdateStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateStrategy").
+func (m *MockService) UpdateStrategyCalls() []MockServiceUpdateStrategyCall {
+	var out []MockServiceUpdateStrategyCall
+	for _, c := range m.Recorder.Calls("UpdateStrategy") {
+		var r MockServiceUpdateStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(UpdateStrategyInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListChannelsCall is one recorded call of MockService.ListChannels, one
+// field per parameter.
+type MockServiceListChannelsCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ListChannelsInput
+}
+
+// ListChannelsCalls returns every recorded ListChannels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChannels").
+func (m *MockService) ListChannelsCalls() []MockServiceListChannelsCall {
+	var out []MockServiceListChannelsCall
+	for _, c := range m.Recorder.Calls("ListChannels") {
+		var r MockServiceListChannelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ListChannelsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetChannelCall is one recorded call of MockService.GetChannel, one
+// field per parameter.
+type MockServiceGetChannelCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    GetChannelInput
+}
+
+// GetChannelCalls returns every recorded GetChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChannel").
+func (m *MockService) GetChannelCalls() []MockServiceGetChannelCall {
+	var out []MockServiceGetChannelCall
+	for _, c := range m.Recorder.Calls("GetChannel") {
+		var r MockServiceGetChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(GetChannelInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateChannelCall is one recorded call of MockService.CreateChannel, one
+// field per parameter.
+type MockServiceCreateChannelCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    CreateChannelInput
+}
+
+// CreateChannelCalls returns every recorded CreateChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateChannel").
+func (m *MockService) CreateChannelCalls() []MockServiceCreateChannelCall {
+	var out []MockServiceCreateChannelCall
+	for _, c := range m.Recorder.Calls("CreateChannel") {
+		var r MockServiceCreateChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(CreateChannelInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUpdateChannelCall is one recorded call of MockService.UpdateChannel, one
+// field per parameter.
+type MockServiceUpdateChannelCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    UpdateChannelInput
+}
+
+// UpdateChannelCalls returns every recorded UpdateChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateChannel").
+func (m *MockService) UpdateChannelCalls() []MockServiceUpdateChannelCall {
+	var out []MockServiceUpdateChannelCall
+	for _, c := range m.Recorder.Calls("UpdateChannel") {
+		var r MockServiceUpdateChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(UpdateChannelInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListAssetsCall is one recorded call of MockService.ListAssets, one
+// field per parameter.
+type MockServiceListAssetsCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ListAssetsInput
+}
+
+// ListAssetsCalls returns every recorded ListAssets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAssets").
+func (m *MockService) ListAssetsCalls() []MockServiceListAssetsCall {
+	var out []MockServiceListAssetsCall
+	for _, c := range m.Recorder.Calls("ListAssets") {
+		var r MockServiceListAssetsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ListAssetsInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetAssetCall is one recorded call of MockService.GetAsset, one
+// field per parameter.
+type MockServiceGetAssetCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    GetAssetInput
+}
+
+// GetAssetCalls returns every recorded GetAsset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAsset").
+func (m *MockService) GetAssetCalls() []MockServiceGetAssetCall {
+	var out []MockServiceGetAssetCall
+	for _, c := range m.Recorder.Calls("GetAsset") {
+		var r MockServiceGetAssetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(GetAssetInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCreateAssetUploadCall is one recorded call of MockService.CreateAssetUpload, one
+// field per parameter.
+type MockServiceCreateAssetUploadCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    CreateAssetUploadInput
+}
+
+// CreateAssetUploadCalls returns every recorded CreateAssetUpload call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateAssetUpload").
+func (m *MockService) CreateAssetUploadCalls() []MockServiceCreateAssetUploadCall {
+	var out []MockServiceCreateAssetUploadCall
+	for _, c := range m.Recorder.Calls("CreateAssetUpload") {
+		var r MockServiceCreateAssetUploadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(CreateAssetUploadInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceConfirmAssetUploadCall is one recorded call of MockService.ConfirmAssetUpload, one
+// field per parameter.
+type MockServiceConfirmAssetUploadCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ConfirmAssetUploadInput
+}
+
+// ConfirmAssetUploadCalls returns every recorded ConfirmAssetUpload call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ConfirmAssetUpload").
+func (m *MockService) ConfirmAssetUploadCalls() []MockServiceConfirmAssetUploadCall {
+	var out []MockServiceConfirmAssetUploadCall
+	for _, c := range m.Recorder.Calls("ConfirmAssetUpload") {
+		var r MockServiceConfirmAssetUploadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ConfirmAssetUploadInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetAssetDownloadCall is one recorded call of MockService.GetAssetDownload, one
+// field per parameter.
+type MockServiceGetAssetDownloadCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    GetAssetDownloadInput
+}
+
+// GetAssetDownloadCalls returns every recorded GetAssetDownload call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAssetDownload").
+func (m *MockService) GetAssetDownloadCalls() []MockServiceGetAssetDownloadCall {
+	var out []MockServiceGetAssetDownloadCall
+	for _, c := range m.Recorder.Calls("GetAssetDownload") {
+		var r MockServiceGetAssetDownloadCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(GetAssetDownloadInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceDeleteAssetCall is one recorded call of MockService.DeleteAsset, one
+// field per parameter.
+type MockServiceDeleteAssetCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    DeleteAssetInput
+}
+
+// DeleteAssetCalls returns every recorded DeleteAsset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteAsset").
+func (m *MockService) DeleteAssetCalls() []MockServiceDeleteAssetCall {
+	var out []MockServiceDeleteAssetCall
+	for _, c := range m.Recorder.Calls("DeleteAsset") {
+		var r MockServiceDeleteAssetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(DeleteAssetInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceAttachFromAttachmentCall is one recorded call of MockService.AttachFromAttachment, one
+// field per parameter.
+type MockServiceAttachFromAttachmentCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    AttachFromAttachmentInput
+}
+
+// AttachFromAttachmentCalls returns every recorded AttachFromAttachment call, oldest first, with
+// its arguments typed. It reads the same log as Calls("AttachFromAttachment").
+func (m *MockService) AttachFromAttachmentCalls() []MockServiceAttachFromAttachmentCall {
+	var out []MockServiceAttachFromAttachmentCall
+	for _, c := range m.Recorder.Calls("AttachFromAttachment") {
+		var r MockServiceAttachFromAttachmentCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(AttachFromAttachmentInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceListStrategyLibraryCall is one recorded call of MockService.ListStrategyLibrary, one
+// field per parameter.
+type MockServiceListStrategyLibraryCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    ListStrategyLibraryInput
+}
+
+// ListStrategyLibraryCalls returns every recorded ListStrategyLibrary call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStrategyLibrary").
+func (m *MockService) ListStrategyLibraryCalls() []MockServiceListStrategyLibraryCall {
+	var out []MockServiceListStrategyLibraryCall
+	for _, c := range m.Recorder.Calls("ListStrategyLibrary") {
+		var r MockServiceListStrategyLibraryCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(ListStrategyLibraryInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceGetStrategyLibraryEntryCall is one recorded call of MockService.GetStrategyLibraryEntry, one
+// field per parameter.
+type MockServiceGetStrategyLibraryEntryCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    GetStrategyLibraryEntryInput
+}
+
+// GetStrategyLibraryEntryCalls returns every recorded GetStrategyLibraryEntry call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetStrategyLibraryEntry").
+func (m *MockService) GetStrategyLibraryEntryCalls() []MockServiceGetStrategyLibraryEntryCall {
+	var out []MockServiceGetStrategyLibraryEntryCall
+	for _, c := range m.Recorder.Calls("GetStrategyLibraryEntry") {
+		var r MockServiceGetStrategyLibraryEntryCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(GetStrategyLibraryEntryInput)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceUseLibraryStrategyCall is one recorded call of MockService.UseLibraryStrategy, one
+// field per parameter.
+type MockServiceUseLibraryStrategyCall struct {
+	Ctx   context.Context
+	Actor Actor
+	In    UseLibraryStrategyInput
+}
+
+// UseLibraryStrategyCalls returns every recorded UseLibraryStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UseLibraryStrategy").
+func (m *MockService) UseLibraryStrategyCalls() []MockServiceUseLibraryStrategyCall {
+	var out []MockServiceUseLibraryStrategyCall
+	for _, c := range m.Recorder.Calls("UseLibraryStrategy") {
+		var r MockServiceUseLibraryStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.In, _ = c.Args[2].(UseLibraryStrategyInput)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockConnections
-// forge:hash=2738b65332e9def90a32bb8feea30466eb050ae1ad96fe22616cd996cd39b2ce
+// forge:hash=5a122848a04bfb859cf23ce43f5bf1cff25dff4ac05db9082e9d5a0a413d56a6
 
 // MockConnections is a test mock for the Connections interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockConnections.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockConnections.<Method>Func not set" error.
 type MockConnections struct {
 	contractkit.Recorder
 	StateFunc func(context.Context, Actor, string, string) (ConnectionState, error)
@@ -507,18 +1335,43 @@ func (m *MockConnections) State(ctx context.Context, actor Actor, integrationKin
 	return "", contractkit.MockNotSet("MockConnections", "State")
 }
 
+// MockConnectionsStateCall is one recorded call of MockConnections.State, one
+// field per parameter.
+type MockConnectionsStateCall struct {
+	Ctx             context.Context
+	Actor           Actor
+	IntegrationKind string
+	ConnectionID    string
+}
+
+// StateCalls returns every recorded State call, oldest first, with
+// its arguments typed. It reads the same log as Calls("State").
+func (m *MockConnections) StateCalls() []MockConnectionsStateCall {
+	var out []MockConnectionsStateCall
+	for _, c := range m.Recorder.Calls("State") {
+		var r MockConnectionsStateCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.IntegrationKind, _ = c.Args[2].(string)
+		r.ConnectionID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Connections = (*MockConnections)(nil)
 
 // forge:section MockAssetStore
-// forge:hash=6997739bbbc1c4091d62fa02bf1ede1aeab1dff6b07c9e79c3932be4e98037b9
+// forge:hash=be88a5e3f8c9291bef809bb06f2e65a8cce000d838fe8fc01963953cc510b8ad
 
 // MockAssetStore is a test mock for the AssetStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAssetStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAssetStore.<Method>Func not set" error.
 type MockAssetStore struct {
 	contractkit.Recorder
 	PresignPutFunc func(context.Context, string, PutOptions) (PresignedRequest, error)
@@ -583,18 +1436,147 @@ func (m *MockAssetStore) PresignGet(ctx context.Context, key string, opts GetOpt
 	return PresignedRequest{}, contractkit.MockNotSet("MockAssetStore", "PresignGet")
 }
 
+// MockAssetStorePresignPutCall is one recorded call of MockAssetStore.PresignPut, one
+// field per parameter.
+type MockAssetStorePresignPutCall struct {
+	Ctx  context.Context
+	Key  string
+	Opts PutOptions
+}
+
+// PresignPutCalls returns every recorded PresignPut call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PresignPut").
+func (m *MockAssetStore) PresignPutCalls() []MockAssetStorePresignPutCall {
+	var out []MockAssetStorePresignPutCall
+	for _, c := range m.Recorder.Calls("PresignPut") {
+		var r MockAssetStorePresignPutCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Key, _ = c.Args[1].(string)
+		r.Opts, _ = c.Args[2].(PutOptions)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAssetStoreOpenCall is one recorded call of MockAssetStore.Open, one
+// field per parameter.
+type MockAssetStoreOpenCall struct {
+	Ctx context.Context
+	Key string
+}
+
+// OpenCalls returns every recorded Open call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Open").
+func (m *MockAssetStore) OpenCalls() []MockAssetStoreOpenCall {
+	var out []MockAssetStoreOpenCall
+	for _, c := range m.Recorder.Calls("Open") {
+		var r MockAssetStoreOpenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Key, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAssetStorePutCall is one recorded call of MockAssetStore.Put, one
+// field per parameter.
+type MockAssetStorePutCall struct {
+	Ctx  context.Context
+	Key  string
+	R    io.Reader
+	Opts PutOptions
+}
+
+// PutCalls returns every recorded Put call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Put").
+func (m *MockAssetStore) PutCalls() []MockAssetStorePutCall {
+	var out []MockAssetStorePutCall
+	for _, c := range m.Recorder.Calls("Put") {
+		var r MockAssetStorePutCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Key, _ = c.Args[1].(string)
+		r.R, _ = c.Args[2].(io.Reader)
+		r.Opts, _ = c.Args[3].(PutOptions)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAssetStoreDeleteCall is one recorded call of MockAssetStore.Delete, one
+// field per parameter.
+type MockAssetStoreDeleteCall struct {
+	Ctx context.Context
+	Key string
+}
+
+// DeleteCalls returns every recorded Delete call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Delete").
+func (m *MockAssetStore) DeleteCalls() []MockAssetStoreDeleteCall {
+	var out []MockAssetStoreDeleteCall
+	for _, c := range m.Recorder.Calls("Delete") {
+		var r MockAssetStoreDeleteCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Key, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAssetStoreStatCall is one recorded call of MockAssetStore.Stat, one
+// field per parameter.
+type MockAssetStoreStatCall struct {
+	Ctx context.Context
+	Key string
+}
+
+// StatCalls returns every recorded Stat call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Stat").
+func (m *MockAssetStore) StatCalls() []MockAssetStoreStatCall {
+	var out []MockAssetStoreStatCall
+	for _, c := range m.Recorder.Calls("Stat") {
+		var r MockAssetStoreStatCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Key, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockAssetStorePresignGetCall is one recorded call of MockAssetStore.PresignGet, one
+// field per parameter.
+type MockAssetStorePresignGetCall struct {
+	Ctx  context.Context
+	Key  string
+	Opts GetOptions
+}
+
+// PresignGetCalls returns every recorded PresignGet call, oldest first, with
+// its arguments typed. It reads the same log as Calls("PresignGet").
+func (m *MockAssetStore) PresignGetCalls() []MockAssetStorePresignGetCall {
+	var out []MockAssetStorePresignGetCall
+	for _, c := range m.Recorder.Calls("PresignGet") {
+		var r MockAssetStorePresignGetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Key, _ = c.Args[1].(string)
+		r.Opts, _ = c.Args[2].(GetOptions)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ AssetStore = (*MockAssetStore)(nil)
 
 // forge:section MockAttachments
-// forge:hash=ff605f2615479de31692989883109e58da9e4eb33612ed541ea17fa8f12fd089
+// forge:hash=42ad7903451f4f5800498f1e3556ed9848ba8865c44367896851826f2a42660c
 
 // MockAttachments is a test mock for the Attachments interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAttachments.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAttachments.<Method>Func not set" error.
 type MockAttachments struct {
 	contractkit.Recorder
 	OpenFunc func(context.Context, Actor, string) (AttachmentFile, io.ReadCloser, error)
@@ -609,18 +1591,41 @@ func (m *MockAttachments) Open(ctx context.Context, actor Actor, attachmentID st
 	return AttachmentFile{}, nil, contractkit.MockNotSet("MockAttachments", "Open")
 }
 
+// MockAttachmentsOpenCall is one recorded call of MockAttachments.Open, one
+// field per parameter.
+type MockAttachmentsOpenCall struct {
+	Ctx          context.Context
+	Actor        Actor
+	AttachmentID string
+}
+
+// OpenCalls returns every recorded Open call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Open").
+func (m *MockAttachments) OpenCalls() []MockAttachmentsOpenCall {
+	var out []MockAttachmentsOpenCall
+	for _, c := range m.Recorder.Calls("Open") {
+		var r MockAttachmentsOpenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.AttachmentID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Attachments = (*MockAttachments)(nil)
 
 // forge:section MockGate
-// forge:hash=5244b0c72bcd02d887d8d564b1c63d9e721ab9f96f59f4f395b76f9e7928bbbf
+// forge:hash=ba0378b4687ddd9e2c4e43f34fc7d981fa0b70e3cb4531622dffe38095307372
 
 // MockGate is a test mock for the Gate interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockGate.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockGate.<Method>Func not set" error.
 type MockGate struct {
 	contractkit.Recorder
 	AllowedFunc func(context.Context, featuregate.Feature, string, string) (bool, error)
@@ -635,18 +1640,43 @@ func (m *MockGate) Allowed(ctx context.Context, f featuregate.Feature, userID st
 	return false, contractkit.MockNotSet("MockGate", "Allowed")
 }
 
+// MockGateAllowedCall is one recorded call of MockGate.Allowed, one
+// field per parameter.
+type MockGateAllowedCall struct {
+	Ctx    context.Context
+	F      featuregate.Feature
+	UserID string
+	OrgID  string
+}
+
+// AllowedCalls returns every recorded Allowed call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Allowed").
+func (m *MockGate) AllowedCalls() []MockGateAllowedCall {
+	var out []MockGateAllowedCall
+	for _, c := range m.Recorder.Calls("Allowed") {
+		var r MockGateAllowedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(featuregate.Feature)
+		r.UserID, _ = c.Args[2].(string)
+		r.OrgID, _ = c.Args[3].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Gate = (*MockGate)(nil)
 
 // forge:section MockClock
-// forge:hash=d1feadfcd72cae882cbb95281aa0c5c028d33f7e82504f60a854db7575ebc8b0
+// forge:hash=5749c316d8980d0721de642304b9d60c8b623bf6a7478b529f05d8f02a41ac48
 
 // MockClock is a test mock for the Clock interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockClock.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockClock.<Method>Func not set" error.
 type MockClock struct {
 	contractkit.Recorder
 	NowFunc func() time.Time
@@ -661,18 +1691,35 @@ func (m *MockClock) Now() time.Time {
 	return *new(time.Time)
 }
 
+// MockClockNowCall is one recorded call of MockClock.Now, one
+// field per parameter.
+type MockClockNowCall struct {
+}
+
+// NowCalls returns every recorded Now call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Now").
+func (m *MockClock) NowCalls() []MockClockNowCall {
+	var out []MockClockNowCall
+	for range m.Recorder.Calls("Now") {
+		var r MockClockNowCall
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Clock = (*MockClock)(nil)
 
 // forge:section MockAnalytics
-// forge:hash=e8dfc1f76be1e7ca1794f3ac5dfa36d8c9b6a78be7e9df4852a3e87a1844d797
+// forge:hash=5e5d810abea07dcf85843e8862e7361c4f7edda217715cd4eda73bd737cc09c9
 
 // MockAnalytics is a test mock for the Analytics interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockAnalytics.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockAnalytics.<Method>Func not set" error.
 type MockAnalytics struct {
 	contractkit.Recorder
 	QueryFunc func(context.Context, string, AnalyticsQuery) (AnalyticsResult, error)
@@ -687,18 +1734,41 @@ func (m *MockAnalytics) Query(ctx context.Context, orgID string, q AnalyticsQuer
 	return AnalyticsResult{}, contractkit.MockNotSet("MockAnalytics", "Query")
 }
 
+// MockAnalyticsQueryCall is one recorded call of MockAnalytics.Query, one
+// field per parameter.
+type MockAnalyticsQueryCall struct {
+	Ctx   context.Context
+	OrgID string
+	Q     AnalyticsQuery
+}
+
+// QueryCalls returns every recorded Query call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Query").
+func (m *MockAnalytics) QueryCalls() []MockAnalyticsQueryCall {
+	var out []MockAnalyticsQueryCall
+	for _, c := range m.Recorder.Calls("Query") {
+		var r MockAnalyticsQueryCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.Q, _ = c.Args[2].(AnalyticsQuery)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Analytics = (*MockAnalytics)(nil)
 
 // forge:section MockEmail
-// forge:hash=35d0f9ad9922d0c6ed12c12e01d30b8749cae0693062622a56a3a10878e098b9
+// forge:hash=50f674ded07ba2f4a7b002a6320867db0a4f14ef099b617d8900bb32b202bd1f
 
 // MockEmail is a test mock for the Email interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockEmail.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockEmail.<Method>Func not set" error.
 type MockEmail struct {
 	contractkit.Recorder
 	SendFunc func(context.Context, Actor, EmailRun, EmailMessage) (string, error)
@@ -713,75 +1783,86 @@ func (m *MockEmail) Send(ctx context.Context, actor Actor, run EmailRun, msg Ema
 	return "", contractkit.MockNotSet("MockEmail", "Send")
 }
 
+// MockEmailSendCall is one recorded call of MockEmail.Send, one
+// field per parameter.
+type MockEmailSendCall struct {
+	Ctx   context.Context
+	Actor Actor
+	Run   EmailRun
+	Msg   EmailMessage
+}
+
+// SendCalls returns every recorded Send call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Send").
+func (m *MockEmail) SendCalls() []MockEmailSendCall {
+	var out []MockEmailSendCall
+	for _, c := range m.Recorder.Calls("Send") {
+		var r MockEmailSendCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Actor, _ = c.Args[1].(Actor)
+		r.Run, _ = c.Args[2].(EmailRun)
+		r.Msg, _ = c.Args[3].(EmailMessage)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Email = (*MockEmail)(nil)
 
 // forge:section MockStore
-// forge:hash=193e90c28fd1d1ecc06ac00ad53333ccdb8bb2de21d8bf7c0768891b0deed495
+// forge:hash=5b674c28234c3130585b9628bdcd8d5988a69c25e4a3e08ad89e2105e679594c
 
 // MockStore is a test mock for the Store interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockStore.<Method>Func not set" error.
 type MockStore struct {
 	contractkit.Recorder
-	InTxFunc                func(context.Context, func(ctx context.Context) error) error
-	ListIdeasFunc           func(context.Context, IdeaFilter) ([]*store.GtmIdea, error)
-	GetIdeaFunc             func(context.Context, string, string) (*store.GtmIdea, error)
-	CreateIdeaFunc          func(context.Context, *store.GtmIdea) error
-	UpdateIdeaFunc          func(context.Context, *store.GtmIdea, int32) error
-	ListCampaignsFunc       func(context.Context, CampaignFilter) ([]*store.GtmCampaign, error)
-	GetCampaignFunc         func(context.Context, string, string) (*store.GtmCampaign, error)
-	CreateCampaignFunc      func(context.Context, *store.GtmCampaign) error
-	UpdateCampaignFunc      func(context.Context, *store.GtmCampaign, int32) error
-	ListItemsFunc           func(context.Context, ItemFilter) ([]*store.GtmItem, error)
-	GetItemFunc             func(context.Context, string, string) (*store.GtmItem, error)
-	HoldItemSendFunc        func(context.Context, string, string, int32, string, time.Time) error
-	ReleaseItemSendFunc     func(context.Context, string, string, int32, string, time.Time, bool) error
-	CreateItemFunc          func(context.Context, *store.GtmItem) error
-	UpdateItemFunc          func(context.Context, *store.GtmItem, int32) error
-	GetPositioningFunc      func(context.Context, string) (*store.GtmPositioning, error)
-	CreatePositioningFunc   func(context.Context, *store.GtmPositioning) error
-	UpdatePositioningFunc   func(context.Context, *store.GtmPositioning, int32) error
-	ListClaimsFunc          func(context.Context, ClaimFilter) ([]*store.GtmClaim, error)
-	GetClaimFunc            func(context.Context, string, string) (*store.GtmClaim, error)
-	CreateClaimFunc         func(context.Context, *store.GtmClaim) error
-	UpdateClaimFunc         func(context.Context, *store.GtmClaim, int32) error
-	ListStrategiesFunc      func(context.Context, StrategyFilter) ([]*store.GtmStrategy, error)
-	GetStrategyFunc         func(context.Context, string, string) (*store.GtmStrategy, error)
-	CreateStrategyFunc      func(context.Context, *store.GtmStrategy) error
-	UpdateStrategyFunc      func(context.Context, *store.GtmStrategy, int32) error
-	ListChannelsFunc        func(context.Context, ChannelFilter) ([]*store.GtmChannel, error)
-	CountChannelsFunc       func(context.Context, string) (int64, error)
-	GetChannelFunc          func(context.Context, string, string) (*store.GtmChannel, error)
-	SeedChannelsFunc        func(context.Context, []*store.GtmChannel) error
-	CreateChannelFunc       func(context.Context, *store.GtmChannel) error
-	UpdateChannelFunc       func(context.Context, *store.GtmChannel, int32) error
-	CampaignItemCountsFunc  func(context.Context, string, string) ([]ItemCount, error)
-	ListAssetsFunc          func(context.Context, AssetFilter) ([]*store.GtmAsset, error)
-	GetAssetFunc            func(context.Context, string, string) (*store.GtmAsset, error)
-	SumAssetBytesFunc       func(context.Context, string, time.Time) (int64, error)
-	ListExpiredAssetsFunc   func(context.Context, string, time.Time, int) ([]*store.GtmAsset, error)
-	CreateAssetFunc         func(context.Context, *store.GtmAsset) error
-	MarkAssetReadyFunc      func(context.Context, string, string, string, int64, string, time.Time) error
-	DeletePendingAssetFunc  func(context.Context, string, string, time.Time) (bool, error)
-	DeleteAssetFunc         func(context.Context, string, string) error
-	ListLibraryFunc         func(context.Context, LibraryFilter) ([]*store.GtmStrategyLibrary, error)
-	GetLibraryEntryFunc     func(context.Context, string, string) (*store.GtmStrategyLibrary, error)
-	CreateLibraryEntryFunc  func(context.Context, *store.GtmStrategyLibrary) error
-	UpdateLibraryEntryFunc  func(context.Context, *store.GtmStrategyLibrary) error
-	PruneLibraryFunc        func(context.Context, string, []string) (int64, error)
-	TouchLibraryEntriesFunc func(context.Context, string, []string, string, string, time.Time) error
-	LibraryKeysNotInFunc    func(context.Context, string, []string) ([]string, error)
-	PruneLibraryKeysFunc    func(context.Context, string, []string, time.Time) (int64, error)
-	CreateLibraryImportFunc func(context.Context, *store.GtmLibraryImport) error
-	ListLibraryImportsFunc  func(context.Context, LibraryImportFilter) ([]*store.GtmLibraryImport, error)
-	CreatePruneRequestFunc  func(context.Context, *store.GtmLibraryPruneRequest) error
-	GetPruneRequestFunc     func(context.Context, string, string) (*store.GtmLibraryPruneRequest, error)
-	ListPruneRequestsFunc   func(context.Context, PruneRequestFilter) ([]*store.GtmLibraryPruneRequest, error)
-	DecidePruneRequestFunc  func(context.Context, string, string, PruneRequestStatus, string, time.Time) error
+	InTxFunc               func(context.Context, func(ctx context.Context) error) error
+	ListIdeasFunc          func(context.Context, IdeaFilter) ([]*store.GtmIdea, error)
+	GetIdeaFunc            func(context.Context, string, string) (*store.GtmIdea, error)
+	CreateIdeaFunc         func(context.Context, *store.GtmIdea) error
+	UpdateIdeaFunc         func(context.Context, *store.GtmIdea, int32) error
+	ListCampaignsFunc      func(context.Context, CampaignFilter) ([]*store.GtmCampaign, error)
+	GetCampaignFunc        func(context.Context, string, string) (*store.GtmCampaign, error)
+	CreateCampaignFunc     func(context.Context, *store.GtmCampaign) error
+	UpdateCampaignFunc     func(context.Context, *store.GtmCampaign, int32) error
+	ListItemsFunc          func(context.Context, ItemFilter) ([]*store.GtmItem, error)
+	GetItemFunc            func(context.Context, string, string) (*store.GtmItem, error)
+	HoldItemSendFunc       func(context.Context, string, string, int32, string, time.Time) error
+	ReleaseItemSendFunc    func(context.Context, string, string, int32, string, time.Time, bool) error
+	CreateItemFunc         func(context.Context, *store.GtmItem) error
+	UpdateItemFunc         func(context.Context, *store.GtmItem, int32) error
+	GetPositioningFunc     func(context.Context, string) (*store.GtmPositioning, error)
+	CreatePositioningFunc  func(context.Context, *store.GtmPositioning) error
+	UpdatePositioningFunc  func(context.Context, *store.GtmPositioning, int32) error
+	ListClaimsFunc         func(context.Context, ClaimFilter) ([]*store.GtmClaim, error)
+	GetClaimFunc           func(context.Context, string, string) (*store.GtmClaim, error)
+	CreateClaimFunc        func(context.Context, *store.GtmClaim) error
+	UpdateClaimFunc        func(context.Context, *store.GtmClaim, int32) error
+	ListStrategiesFunc     func(context.Context, StrategyFilter) ([]*store.GtmStrategy, error)
+	GetStrategyFunc        func(context.Context, string, string) (*store.GtmStrategy, error)
+	CreateStrategyFunc     func(context.Context, *store.GtmStrategy) error
+	UpdateStrategyFunc     func(context.Context, *store.GtmStrategy, int32) error
+	ListChannelsFunc       func(context.Context, ChannelFilter) ([]*store.GtmChannel, error)
+	CountChannelsFunc      func(context.Context, string) (int64, error)
+	GetChannelFunc         func(context.Context, string, string) (*store.GtmChannel, error)
+	SeedChannelsFunc       func(context.Context, []*store.GtmChannel) error
+	CreateChannelFunc      func(context.Context, *store.GtmChannel) error
+	UpdateChannelFunc      func(context.Context, *store.GtmChannel, int32) error
+	CampaignItemCountsFunc func(context.Context, string, string) ([]ItemCount, error)
+	ListAssetsFunc         func(context.Context, AssetFilter) ([]*store.GtmAsset, error)
+	GetAssetFunc           func(context.Context, string, string) (*store.GtmAsset, error)
+	SumAssetBytesFunc      func(context.Context, string, time.Time) (int64, error)
+	ListExpiredAssetsFunc  func(context.Context, string, time.Time, int) ([]*store.GtmAsset, error)
+	CreateAssetFunc        func(context.Context, *store.GtmAsset) error
+	MarkAssetReadyFunc     func(context.Context, string, string, string, int64, string, time.Time) error
+	DeletePendingAssetFunc func(context.Context, string, string, time.Time) (bool, error)
+	DeleteAssetFunc        func(context.Context, string, string) error
 }
 
 // InTx records the call and delegates to InTxFunc when set.
@@ -1153,130 +2234,894 @@ func (m *MockStore) DeleteAsset(ctx context.Context, orgID string, id string) er
 	return contractkit.MockNotSet("MockStore", "DeleteAsset")
 }
 
-// ListLibrary records the call and delegates to ListLibraryFunc when set.
-func (m *MockStore) ListLibrary(ctx context.Context, f LibraryFilter) ([]*store.GtmStrategyLibrary, error) {
-	m.Recorder.Record("ListLibrary", ctx, f)
-	if m.ListLibraryFunc != nil {
-		return m.ListLibraryFunc(ctx, f)
-	}
-	return nil, contractkit.MockNotSet("MockStore", "ListLibrary")
+// MockStoreInTxCall is one recorded call of MockStore.InTx, one
+// field per parameter.
+type MockStoreInTxCall struct {
+	Ctx context.Context
+	Fn  func(ctx context.Context) error
 }
 
-// GetLibraryEntry records the call and delegates to GetLibraryEntryFunc when set.
-func (m *MockStore) GetLibraryEntry(ctx context.Context, orgID string, key string) (*store.GtmStrategyLibrary, error) {
-	m.Recorder.Record("GetLibraryEntry", ctx, orgID, key)
-	if m.GetLibraryEntryFunc != nil {
-		return m.GetLibraryEntryFunc(ctx, orgID, key)
+// InTxCalls returns every recorded InTx call, oldest first, with
+// its arguments typed. It reads the same log as Calls("InTx").
+func (m *MockStore) InTxCalls() []MockStoreInTxCall {
+	var out []MockStoreInTxCall
+	for _, c := range m.Recorder.Calls("InTx") {
+		var r MockStoreInTxCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Fn, _ = c.Args[1].(func(ctx context.Context) error)
+		out = append(out, r)
 	}
-	return nil, contractkit.MockNotSet("MockStore", "GetLibraryEntry")
+	return out
 }
 
-// CreateLibraryEntry records the call and delegates to CreateLibraryEntryFunc when set.
-func (m *MockStore) CreateLibraryEntry(ctx context.Context, row *store.GtmStrategyLibrary) error {
-	m.Recorder.Record("CreateLibraryEntry", ctx, row)
-	if m.CreateLibraryEntryFunc != nil {
-		return m.CreateLibraryEntryFunc(ctx, row)
-	}
-	return contractkit.MockNotSet("MockStore", "CreateLibraryEntry")
+// MockStoreListIdeasCall is one recorded call of MockStore.ListIdeas, one
+// field per parameter.
+type MockStoreListIdeasCall struct {
+	Ctx context.Context
+	F   IdeaFilter
 }
 
-// UpdateLibraryEntry records the call and delegates to UpdateLibraryEntryFunc when set.
-func (m *MockStore) UpdateLibraryEntry(ctx context.Context, row *store.GtmStrategyLibrary) error {
-	m.Recorder.Record("UpdateLibraryEntry", ctx, row)
-	if m.UpdateLibraryEntryFunc != nil {
-		return m.UpdateLibraryEntryFunc(ctx, row)
+// ListIdeasCalls returns every recorded ListIdeas call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListIdeas").
+func (m *MockStore) ListIdeasCalls() []MockStoreListIdeasCall {
+	var out []MockStoreListIdeasCall
+	for _, c := range m.Recorder.Calls("ListIdeas") {
+		var r MockStoreListIdeasCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(IdeaFilter)
+		out = append(out, r)
 	}
-	return contractkit.MockNotSet("MockStore", "UpdateLibraryEntry")
+	return out
 }
 
-// PruneLibrary records the call and delegates to PruneLibraryFunc when set.
-func (m *MockStore) PruneLibrary(ctx context.Context, orgID string, keep []string) (int64, error) {
-	m.Recorder.Record("PruneLibrary", ctx, orgID, keep)
-	if m.PruneLibraryFunc != nil {
-		return m.PruneLibraryFunc(ctx, orgID, keep)
-	}
-	return 0, contractkit.MockNotSet("MockStore", "PruneLibrary")
+// MockStoreGetIdeaCall is one recorded call of MockStore.GetIdea, one
+// field per parameter.
+type MockStoreGetIdeaCall struct {
+	Ctx   context.Context
+	OrgID string
+	ID    string
 }
 
-// TouchLibraryEntries records the call and delegates to TouchLibraryEntriesFunc when set.
-func (m *MockStore) TouchLibraryEntries(ctx context.Context, orgID string, keys []string, sourceRevision string, importedBy string, at time.Time) error {
-	m.Recorder.Record("TouchLibraryEntries", ctx, orgID, keys, sourceRevision, importedBy, at)
-	if m.TouchLibraryEntriesFunc != nil {
-		return m.TouchLibraryEntriesFunc(ctx, orgID, keys, sourceRevision, importedBy, at)
+// GetIdeaCalls returns every recorded GetIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetIdea").
+func (m *MockStore) GetIdeaCalls() []MockStoreGetIdeaCall {
+	var out []MockStoreGetIdeaCall
+	for _, c := range m.Recorder.Calls("GetIdea") {
+		var r MockStoreGetIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
 	}
-	return contractkit.MockNotSet("MockStore", "TouchLibraryEntries")
+	return out
 }
 
-// LibraryKeysNotIn records the call and delegates to LibraryKeysNotInFunc when set.
-func (m *MockStore) LibraryKeysNotIn(ctx context.Context, orgID string, keep []string) ([]string, error) {
-	m.Recorder.Record("LibraryKeysNotIn", ctx, orgID, keep)
-	if m.LibraryKeysNotInFunc != nil {
-		return m.LibraryKeysNotInFunc(ctx, orgID, keep)
-	}
-	return nil, contractkit.MockNotSet("MockStore", "LibraryKeysNotIn")
+// MockStoreCreateIdeaCall is one recorded call of MockStore.CreateIdea, one
+// field per parameter.
+type MockStoreCreateIdeaCall struct {
+	Ctx context.Context
+	Row *store.GtmIdea
 }
 
-// PruneLibraryKeys records the call and delegates to PruneLibraryKeysFunc when set.
-func (m *MockStore) PruneLibraryKeys(ctx context.Context, orgID string, keys []string, importedAtOrBefore time.Time) (int64, error) {
-	m.Recorder.Record("PruneLibraryKeys", ctx, orgID, keys, importedAtOrBefore)
-	if m.PruneLibraryKeysFunc != nil {
-		return m.PruneLibraryKeysFunc(ctx, orgID, keys, importedAtOrBefore)
+// CreateIdeaCalls returns every recorded CreateIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateIdea").
+func (m *MockStore) CreateIdeaCalls() []MockStoreCreateIdeaCall {
+	var out []MockStoreCreateIdeaCall
+	for _, c := range m.Recorder.Calls("CreateIdea") {
+		var r MockStoreCreateIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmIdea)
+		out = append(out, r)
 	}
-	return 0, contractkit.MockNotSet("MockStore", "PruneLibraryKeys")
+	return out
 }
 
-// CreateLibraryImport records the call and delegates to CreateLibraryImportFunc when set.
-func (m *MockStore) CreateLibraryImport(ctx context.Context, row *store.GtmLibraryImport) error {
-	m.Recorder.Record("CreateLibraryImport", ctx, row)
-	if m.CreateLibraryImportFunc != nil {
-		return m.CreateLibraryImportFunc(ctx, row)
-	}
-	return contractkit.MockNotSet("MockStore", "CreateLibraryImport")
+// MockStoreUpdateIdeaCall is one recorded call of MockStore.UpdateIdea, one
+// field per parameter.
+type MockStoreUpdateIdeaCall struct {
+	Ctx      context.Context
+	Row      *store.GtmIdea
+	Expected int32
 }
 
-// ListLibraryImports records the call and delegates to ListLibraryImportsFunc when set.
-func (m *MockStore) ListLibraryImports(ctx context.Context, f LibraryImportFilter) ([]*store.GtmLibraryImport, error) {
-	m.Recorder.Record("ListLibraryImports", ctx, f)
-	if m.ListLibraryImportsFunc != nil {
-		return m.ListLibraryImportsFunc(ctx, f)
+// UpdateIdeaCalls returns every recorded UpdateIdea call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateIdea").
+func (m *MockStore) UpdateIdeaCalls() []MockStoreUpdateIdeaCall {
+	var out []MockStoreUpdateIdeaCall
+	for _, c := range m.Recorder.Calls("UpdateIdea") {
+		var r MockStoreUpdateIdeaCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmIdea)
+		r.Expected, _ = c.Args[2].(int32)
+		out = append(out, r)
 	}
-	return nil, contractkit.MockNotSet("MockStore", "ListLibraryImports")
+	return out
 }
 
-// CreatePruneRequest records the call and delegates to CreatePruneRequestFunc when set.
-func (m *MockStore) CreatePruneRequest(ctx context.Context, row *store.GtmLibraryPruneRequest) error {
-	m.Recorder.Record("CreatePruneRequest", ctx, row)
-	if m.CreatePruneRequestFunc != nil {
-		return m.CreatePruneRequestFunc(ctx, row)
-	}
-	return contractkit.MockNotSet("MockStore", "CreatePruneRequest")
+// MockStoreListCampaignsCall is one recorded call of MockStore.ListCampaigns, one
+// field per parameter.
+type MockStoreListCampaignsCall struct {
+	Ctx context.Context
+	F   CampaignFilter
 }
 
-// GetPruneRequest records the call and delegates to GetPruneRequestFunc when set.
-func (m *MockStore) GetPruneRequest(ctx context.Context, orgID string, id string) (*store.GtmLibraryPruneRequest, error) {
-	m.Recorder.Record("GetPruneRequest", ctx, orgID, id)
-	if m.GetPruneRequestFunc != nil {
-		return m.GetPruneRequestFunc(ctx, orgID, id)
+// ListCampaignsCalls returns every recorded ListCampaigns call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListCampaigns").
+func (m *MockStore) ListCampaignsCalls() []MockStoreListCampaignsCall {
+	var out []MockStoreListCampaignsCall
+	for _, c := range m.Recorder.Calls("ListCampaigns") {
+		var r MockStoreListCampaignsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(CampaignFilter)
+		out = append(out, r)
 	}
-	return nil, contractkit.MockNotSet("MockStore", "GetPruneRequest")
+	return out
 }
 
-// ListPruneRequests records the call and delegates to ListPruneRequestsFunc when set.
-func (m *MockStore) ListPruneRequests(ctx context.Context, f PruneRequestFilter) ([]*store.GtmLibraryPruneRequest, error) {
-	m.Recorder.Record("ListPruneRequests", ctx, f)
-	if m.ListPruneRequestsFunc != nil {
-		return m.ListPruneRequestsFunc(ctx, f)
-	}
-	return nil, contractkit.MockNotSet("MockStore", "ListPruneRequests")
+// MockStoreGetCampaignCall is one recorded call of MockStore.GetCampaign, one
+// field per parameter.
+type MockStoreGetCampaignCall struct {
+	Ctx   context.Context
+	OrgID string
+	ID    string
 }
 
-// DecidePruneRequest records the call and delegates to DecidePruneRequestFunc when set.
-func (m *MockStore) DecidePruneRequest(ctx context.Context, orgID string, id string, status PruneRequestStatus, decidedBy string, at time.Time) error {
-	m.Recorder.Record("DecidePruneRequest", ctx, orgID, id, status, decidedBy, at)
-	if m.DecidePruneRequestFunc != nil {
-		return m.DecidePruneRequestFunc(ctx, orgID, id, status, decidedBy, at)
+// GetCampaignCalls returns every recorded GetCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetCampaign").
+func (m *MockStore) GetCampaignCalls() []MockStoreGetCampaignCall {
+	var out []MockStoreGetCampaignCall
+	for _, c := range m.Recorder.Calls("GetCampaign") {
+		var r MockStoreGetCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
 	}
-	return contractkit.MockNotSet("MockStore", "DecidePruneRequest")
+	return out
+}
+
+// MockStoreCreateCampaignCall is one recorded call of MockStore.CreateCampaign, one
+// field per parameter.
+type MockStoreCreateCampaignCall struct {
+	Ctx context.Context
+	Row *store.GtmCampaign
+}
+
+// CreateCampaignCalls returns every recorded CreateCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateCampaign").
+func (m *MockStore) CreateCampaignCalls() []MockStoreCreateCampaignCall {
+	var out []MockStoreCreateCampaignCall
+	for _, c := range m.Recorder.Calls("CreateCampaign") {
+		var r MockStoreCreateCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmCampaign)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateCampaignCall is one recorded call of MockStore.UpdateCampaign, one
+// field per parameter.
+type MockStoreUpdateCampaignCall struct {
+	Ctx      context.Context
+	Row      *store.GtmCampaign
+	Expected int32
+}
+
+// UpdateCampaignCalls returns every recorded UpdateCampaign call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateCampaign").
+func (m *MockStore) UpdateCampaignCalls() []MockStoreUpdateCampaignCall {
+	var out []MockStoreUpdateCampaignCall
+	for _, c := range m.Recorder.Calls("UpdateCampaign") {
+		var r MockStoreUpdateCampaignCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmCampaign)
+		r.Expected, _ = c.Args[2].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListItemsCall is one recorded call of MockStore.ListItems, one
+// field per parameter.
+type MockStoreListItemsCall struct {
+	Ctx context.Context
+	F   ItemFilter
+}
+
+// ListItemsCalls returns every recorded ListItems call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListItems").
+func (m *MockStore) ListItemsCalls() []MockStoreListItemsCall {
+	var out []MockStoreListItemsCall
+	for _, c := range m.Recorder.Calls("ListItems") {
+		var r MockStoreListItemsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(ItemFilter)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetItemCall is one recorded call of MockStore.GetItem, one
+// field per parameter.
+type MockStoreGetItemCall struct {
+	Ctx   context.Context
+	OrgID string
+	ID    string
+}
+
+// GetItemCalls returns every recorded GetItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetItem").
+func (m *MockStore) GetItemCalls() []MockStoreGetItemCall {
+	var out []MockStoreGetItemCall
+	for _, c := range m.Recorder.Calls("GetItem") {
+		var r MockStoreGetItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreHoldItemSendCall is one recorded call of MockStore.HoldItemSend, one
+// field per parameter.
+type MockStoreHoldItemSendCall struct {
+	Ctx      context.Context
+	OrgID    string
+	ID       string
+	Revision int32
+	Hash     string
+	At       time.Time
+}
+
+// HoldItemSendCalls returns every recorded HoldItemSend call, oldest first, with
+// its arguments typed. It reads the same log as Calls("HoldItemSend").
+func (m *MockStore) HoldItemSendCalls() []MockStoreHoldItemSendCall {
+	var out []MockStoreHoldItemSendCall
+	for _, c := range m.Recorder.Calls("HoldItemSend") {
+		var r MockStoreHoldItemSendCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.Revision, _ = c.Args[3].(int32)
+		r.Hash, _ = c.Args[4].(string)
+		r.At, _ = c.Args[5].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreReleaseItemSendCall is one recorded call of MockStore.ReleaseItemSend, one
+// field per parameter.
+type MockStoreReleaseItemSendCall struct {
+	Ctx        context.Context
+	OrgID      string
+	ID         string
+	Revision   int32
+	Hash       string
+	At         time.Time
+	Invalidate bool
+}
+
+// ReleaseItemSendCalls returns every recorded ReleaseItemSend call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ReleaseItemSend").
+func (m *MockStore) ReleaseItemSendCalls() []MockStoreReleaseItemSendCall {
+	var out []MockStoreReleaseItemSendCall
+	for _, c := range m.Recorder.Calls("ReleaseItemSend") {
+		var r MockStoreReleaseItemSendCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.Revision, _ = c.Args[3].(int32)
+		r.Hash, _ = c.Args[4].(string)
+		r.At, _ = c.Args[5].(time.Time)
+		r.Invalidate, _ = c.Args[6].(bool)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateItemCall is one recorded call of MockStore.CreateItem, one
+// field per parameter.
+type MockStoreCreateItemCall struct {
+	Ctx context.Context
+	Row *store.GtmItem
+}
+
+// CreateItemCalls returns every recorded CreateItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateItem").
+func (m *MockStore) CreateItemCalls() []MockStoreCreateItemCall {
+	var out []MockStoreCreateItemCall
+	for _, c := range m.Recorder.Calls("CreateItem") {
+		var r MockStoreCreateItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmItem)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateItemCall is one recorded call of MockStore.UpdateItem, one
+// field per parameter.
+type MockStoreUpdateItemCall struct {
+	Ctx      context.Context
+	Row      *store.GtmItem
+	Expected int32
+}
+
+// UpdateItemCalls returns every recorded UpdateItem call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateItem").
+func (m *MockStore) UpdateItemCalls() []MockStoreUpdateItemCall {
+	var out []MockStoreUpdateItemCall
+	for _, c := range m.Recorder.Calls("UpdateItem") {
+		var r MockStoreUpdateItemCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmItem)
+		r.Expected, _ = c.Args[2].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetPositioningCall is one recorded call of MockStore.GetPositioning, one
+// field per parameter.
+type MockStoreGetPositioningCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// GetPositioningCalls returns every recorded GetPositioning call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetPositioning").
+func (m *MockStore) GetPositioningCalls() []MockStoreGetPositioningCall {
+	var out []MockStoreGetPositioningCall
+	for _, c := range m.Recorder.Calls("GetPositioning") {
+		var r MockStoreGetPositioningCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreatePositioningCall is one recorded call of MockStore.CreatePositioning, one
+// field per parameter.
+type MockStoreCreatePositioningCall struct {
+	Ctx context.Context
+	Row *store.GtmPositioning
+}
+
+// CreatePositioningCalls returns every recorded CreatePositioning call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreatePositioning").
+func (m *MockStore) CreatePositioningCalls() []MockStoreCreatePositioningCall {
+	var out []MockStoreCreatePositioningCall
+	for _, c := range m.Recorder.Calls("CreatePositioning") {
+		var r MockStoreCreatePositioningCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmPositioning)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdatePositioningCall is one recorded call of MockStore.UpdatePositioning, one
+// field per parameter.
+type MockStoreUpdatePositioningCall struct {
+	Ctx      context.Context
+	Row      *store.GtmPositioning
+	Expected int32
+}
+
+// UpdatePositioningCalls returns every recorded UpdatePositioning call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdatePositioning").
+func (m *MockStore) UpdatePositioningCalls() []MockStoreUpdatePositioningCall {
+	var out []MockStoreUpdatePositioningCall
+	for _, c := range m.Recorder.Calls("UpdatePositioning") {
+		var r MockStoreUpdatePositioningCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmPositioning)
+		r.Expected, _ = c.Args[2].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListClaimsCall is one recorded call of MockStore.ListClaims, one
+// field per parameter.
+type MockStoreListClaimsCall struct {
+	Ctx context.Context
+	F   ClaimFilter
+}
+
+// ListClaimsCalls returns every recorded ListClaims call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListClaims").
+func (m *MockStore) ListClaimsCalls() []MockStoreListClaimsCall {
+	var out []MockStoreListClaimsCall
+	for _, c := range m.Recorder.Calls("ListClaims") {
+		var r MockStoreListClaimsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(ClaimFilter)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetClaimCall is one recorded call of MockStore.GetClaim, one
+// field per parameter.
+type MockStoreGetClaimCall struct {
+	Ctx   context.Context
+	OrgID string
+	ID    string
+}
+
+// GetClaimCalls returns every recorded GetClaim call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetClaim").
+func (m *MockStore) GetClaimCalls() []MockStoreGetClaimCall {
+	var out []MockStoreGetClaimCall
+	for _, c := range m.Recorder.Calls("GetClaim") {
+		var r MockStoreGetClaimCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateClaimCall is one recorded call of MockStore.CreateClaim, one
+// field per parameter.
+type MockStoreCreateClaimCall struct {
+	Ctx context.Context
+	Row *store.GtmClaim
+}
+
+// CreateClaimCalls returns every recorded CreateClaim call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateClaim").
+func (m *MockStore) CreateClaimCalls() []MockStoreCreateClaimCall {
+	var out []MockStoreCreateClaimCall
+	for _, c := range m.Recorder.Calls("CreateClaim") {
+		var r MockStoreCreateClaimCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmClaim)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateClaimCall is one recorded call of MockStore.UpdateClaim, one
+// field per parameter.
+type MockStoreUpdateClaimCall struct {
+	Ctx      context.Context
+	Row      *store.GtmClaim
+	Expected int32
+}
+
+// UpdateClaimCalls returns every recorded UpdateClaim call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateClaim").
+func (m *MockStore) UpdateClaimCalls() []MockStoreUpdateClaimCall {
+	var out []MockStoreUpdateClaimCall
+	for _, c := range m.Recorder.Calls("UpdateClaim") {
+		var r MockStoreUpdateClaimCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmClaim)
+		r.Expected, _ = c.Args[2].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListStrategiesCall is one recorded call of MockStore.ListStrategies, one
+// field per parameter.
+type MockStoreListStrategiesCall struct {
+	Ctx context.Context
+	F   StrategyFilter
+}
+
+// ListStrategiesCalls returns every recorded ListStrategies call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListStrategies").
+func (m *MockStore) ListStrategiesCalls() []MockStoreListStrategiesCall {
+	var out []MockStoreListStrategiesCall
+	for _, c := range m.Recorder.Calls("ListStrategies") {
+		var r MockStoreListStrategiesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(StrategyFilter)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetStrategyCall is one recorded call of MockStore.GetStrategy, one
+// field per parameter.
+type MockStoreGetStrategyCall struct {
+	Ctx   context.Context
+	OrgID string
+	ID    string
+}
+
+// GetStrategyCalls returns every recorded GetStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetStrategy").
+func (m *MockStore) GetStrategyCalls() []MockStoreGetStrategyCall {
+	var out []MockStoreGetStrategyCall
+	for _, c := range m.Recorder.Calls("GetStrategy") {
+		var r MockStoreGetStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateStrategyCall is one recorded call of MockStore.CreateStrategy, one
+// field per parameter.
+type MockStoreCreateStrategyCall struct {
+	Ctx context.Context
+	Row *store.GtmStrategy
+}
+
+// CreateStrategyCalls returns every recorded CreateStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateStrategy").
+func (m *MockStore) CreateStrategyCalls() []MockStoreCreateStrategyCall {
+	var out []MockStoreCreateStrategyCall
+	for _, c := range m.Recorder.Calls("CreateStrategy") {
+		var r MockStoreCreateStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmStrategy)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateStrategyCall is one recorded call of MockStore.UpdateStrategy, one
+// field per parameter.
+type MockStoreUpdateStrategyCall struct {
+	Ctx      context.Context
+	Row      *store.GtmStrategy
+	Expected int32
+}
+
+// UpdateStrategyCalls returns every recorded UpdateStrategy call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateStrategy").
+func (m *MockStore) UpdateStrategyCalls() []MockStoreUpdateStrategyCall {
+	var out []MockStoreUpdateStrategyCall
+	for _, c := range m.Recorder.Calls("UpdateStrategy") {
+		var r MockStoreUpdateStrategyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmStrategy)
+		r.Expected, _ = c.Args[2].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListChannelsCall is one recorded call of MockStore.ListChannels, one
+// field per parameter.
+type MockStoreListChannelsCall struct {
+	Ctx context.Context
+	F   ChannelFilter
+}
+
+// ListChannelsCalls returns every recorded ListChannels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListChannels").
+func (m *MockStore) ListChannelsCalls() []MockStoreListChannelsCall {
+	var out []MockStoreListChannelsCall
+	for _, c := range m.Recorder.Calls("ListChannels") {
+		var r MockStoreListChannelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(ChannelFilter)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCountChannelsCall is one recorded call of MockStore.CountChannels, one
+// field per parameter.
+type MockStoreCountChannelsCall struct {
+	Ctx   context.Context
+	OrgID string
+}
+
+// CountChannelsCalls returns every recorded CountChannels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CountChannels").
+func (m *MockStore) CountChannelsCalls() []MockStoreCountChannelsCall {
+	var out []MockStoreCountChannelsCall
+	for _, c := range m.Recorder.Calls("CountChannels") {
+		var r MockStoreCountChannelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetChannelCall is one recorded call of MockStore.GetChannel, one
+// field per parameter.
+type MockStoreGetChannelCall struct {
+	Ctx   context.Context
+	OrgID string
+	ID    string
+}
+
+// GetChannelCalls returns every recorded GetChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetChannel").
+func (m *MockStore) GetChannelCalls() []MockStoreGetChannelCall {
+	var out []MockStoreGetChannelCall
+	for _, c := range m.Recorder.Calls("GetChannel") {
+		var r MockStoreGetChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreSeedChannelsCall is one recorded call of MockStore.SeedChannels, one
+// field per parameter.
+type MockStoreSeedChannelsCall struct {
+	Ctx  context.Context
+	Rows []*store.GtmChannel
+}
+
+// SeedChannelsCalls returns every recorded SeedChannels call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SeedChannels").
+func (m *MockStore) SeedChannelsCalls() []MockStoreSeedChannelsCall {
+	var out []MockStoreSeedChannelsCall
+	for _, c := range m.Recorder.Calls("SeedChannels") {
+		var r MockStoreSeedChannelsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Rows, _ = c.Args[1].([]*store.GtmChannel)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateChannelCall is one recorded call of MockStore.CreateChannel, one
+// field per parameter.
+type MockStoreCreateChannelCall struct {
+	Ctx context.Context
+	Row *store.GtmChannel
+}
+
+// CreateChannelCalls returns every recorded CreateChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateChannel").
+func (m *MockStore) CreateChannelCalls() []MockStoreCreateChannelCall {
+	var out []MockStoreCreateChannelCall
+	for _, c := range m.Recorder.Calls("CreateChannel") {
+		var r MockStoreCreateChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmChannel)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreUpdateChannelCall is one recorded call of MockStore.UpdateChannel, one
+// field per parameter.
+type MockStoreUpdateChannelCall struct {
+	Ctx      context.Context
+	Row      *store.GtmChannel
+	Expected int32
+}
+
+// UpdateChannelCalls returns every recorded UpdateChannel call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UpdateChannel").
+func (m *MockStore) UpdateChannelCalls() []MockStoreUpdateChannelCall {
+	var out []MockStoreUpdateChannelCall
+	for _, c := range m.Recorder.Calls("UpdateChannel") {
+		var r MockStoreUpdateChannelCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmChannel)
+		r.Expected, _ = c.Args[2].(int32)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCampaignItemCountsCall is one recorded call of MockStore.CampaignItemCounts, one
+// field per parameter.
+type MockStoreCampaignItemCountsCall struct {
+	Ctx        context.Context
+	OrgID      string
+	CampaignID string
+}
+
+// CampaignItemCountsCalls returns every recorded CampaignItemCounts call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CampaignItemCounts").
+func (m *MockStore) CampaignItemCountsCalls() []MockStoreCampaignItemCountsCall {
+	var out []MockStoreCampaignItemCountsCall
+	for _, c := range m.Recorder.Calls("CampaignItemCounts") {
+		var r MockStoreCampaignItemCountsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.CampaignID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListAssetsCall is one recorded call of MockStore.ListAssets, one
+// field per parameter.
+type MockStoreListAssetsCall struct {
+	Ctx context.Context
+	F   AssetFilter
+}
+
+// ListAssetsCalls returns every recorded ListAssets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListAssets").
+func (m *MockStore) ListAssetsCalls() []MockStoreListAssetsCall {
+	var out []MockStoreListAssetsCall
+	for _, c := range m.Recorder.Calls("ListAssets") {
+		var r MockStoreListAssetsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.F, _ = c.Args[1].(AssetFilter)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreGetAssetCall is one recorded call of MockStore.GetAsset, one
+// field per parameter.
+type MockStoreGetAssetCall struct {
+	Ctx   context.Context
+	OrgID string
+	ID    string
+}
+
+// GetAssetCalls returns every recorded GetAsset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAsset").
+func (m *MockStore) GetAssetCalls() []MockStoreGetAssetCall {
+	var out []MockStoreGetAssetCall
+	for _, c := range m.Recorder.Calls("GetAsset") {
+		var r MockStoreGetAssetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreSumAssetBytesCall is one recorded call of MockStore.SumAssetBytes, one
+// field per parameter.
+type MockStoreSumAssetBytesCall struct {
+	Ctx          context.Context
+	OrgID        string
+	PendingAfter time.Time
+}
+
+// SumAssetBytesCalls returns every recorded SumAssetBytes call, oldest first, with
+// its arguments typed. It reads the same log as Calls("SumAssetBytes").
+func (m *MockStore) SumAssetBytesCalls() []MockStoreSumAssetBytesCall {
+	var out []MockStoreSumAssetBytesCall
+	for _, c := range m.Recorder.Calls("SumAssetBytes") {
+		var r MockStoreSumAssetBytesCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.PendingAfter, _ = c.Args[2].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreListExpiredAssetsCall is one recorded call of MockStore.ListExpiredAssets, one
+// field per parameter.
+type MockStoreListExpiredAssetsCall struct {
+	Ctx           context.Context
+	OrgID         string
+	CreatedBefore time.Time
+	Limit         int
+}
+
+// ListExpiredAssetsCalls returns every recorded ListExpiredAssets call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ListExpiredAssets").
+func (m *MockStore) ListExpiredAssetsCalls() []MockStoreListExpiredAssetsCall {
+	var out []MockStoreListExpiredAssetsCall
+	for _, c := range m.Recorder.Calls("ListExpiredAssets") {
+		var r MockStoreListExpiredAssetsCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.CreatedBefore, _ = c.Args[2].(time.Time)
+		r.Limit, _ = c.Args[3].(int)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreCreateAssetCall is one recorded call of MockStore.CreateAsset, one
+// field per parameter.
+type MockStoreCreateAssetCall struct {
+	Ctx context.Context
+	Row *store.GtmAsset
+}
+
+// CreateAssetCalls returns every recorded CreateAsset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("CreateAsset").
+func (m *MockStore) CreateAssetCalls() []MockStoreCreateAssetCall {
+	var out []MockStoreCreateAssetCall
+	for _, c := range m.Recorder.Calls("CreateAsset") {
+		var r MockStoreCreateAssetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Row, _ = c.Args[1].(*store.GtmAsset)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreMarkAssetReadyCall is one recorded call of MockStore.MarkAssetReady, one
+// field per parameter.
+type MockStoreMarkAssetReadyCall struct {
+	Ctx          context.Context
+	OrgID        string
+	ID           string
+	ContentType  string
+	Size         int64
+	Sha256       string
+	CreatedAfter time.Time
+}
+
+// MarkAssetReadyCalls returns every recorded MarkAssetReady call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MarkAssetReady").
+func (m *MockStore) MarkAssetReadyCalls() []MockStoreMarkAssetReadyCall {
+	var out []MockStoreMarkAssetReadyCall
+	for _, c := range m.Recorder.Calls("MarkAssetReady") {
+		var r MockStoreMarkAssetReadyCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.ContentType, _ = c.Args[3].(string)
+		r.Size, _ = c.Args[4].(int64)
+		r.Sha256, _ = c.Args[5].(string)
+		r.CreatedAfter, _ = c.Args[6].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreDeletePendingAssetCall is one recorded call of MockStore.DeletePendingAsset, one
+// field per parameter.
+type MockStoreDeletePendingAssetCall struct {
+	Ctx           context.Context
+	OrgID         string
+	ID            string
+	CreatedBefore time.Time
+}
+
+// DeletePendingAssetCalls returns every recorded DeletePendingAsset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeletePendingAsset").
+func (m *MockStore) DeletePendingAssetCalls() []MockStoreDeletePendingAssetCall {
+	var out []MockStoreDeletePendingAssetCall
+	for _, c := range m.Recorder.Calls("DeletePendingAsset") {
+		var r MockStoreDeletePendingAssetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		r.CreatedBefore, _ = c.Args[3].(time.Time)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockStoreDeleteAssetCall is one recorded call of MockStore.DeleteAsset, one
+// field per parameter.
+type MockStoreDeleteAssetCall struct {
+	Ctx   context.Context
+	OrgID string
+	ID    string
+}
+
+// DeleteAssetCalls returns every recorded DeleteAsset call, oldest first, with
+// its arguments typed. It reads the same log as Calls("DeleteAsset").
+func (m *MockStore) DeleteAssetCalls() []MockStoreDeleteAssetCall {
+	var out []MockStoreDeleteAssetCall
+	for _, c := range m.Recorder.Calls("DeleteAsset") {
+		var r MockStoreDeleteAssetCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OrgID, _ = c.Args[1].(string)
+		r.ID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

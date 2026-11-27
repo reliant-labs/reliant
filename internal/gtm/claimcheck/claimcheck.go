@@ -7,6 +7,8 @@
 // competitor names and absolutes. The Extractor seam is where an LLM
 // extractor that writes its mentions back can plug in later; the Go backend
 // never calls a model.
+//
+//forge:exclude-contract: pure extraction and matching over values the caller passes in; no state, no I/O, nothing to mock
 package claimcheck
 
 import (

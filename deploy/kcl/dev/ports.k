@@ -38,3 +38,8 @@ idp = _port(21070)
 # The dev mail catcher (mailpit) the IdP sends to; its web UI is on this port
 # + 7000.
 mail = _port(21080)
+# The dev object store (MinIO, a host process): the GTM assets bucket. The S3
+# API is what presigned URLs name, so the browser reaches it here too; the
+# console is on the next port.
+minio = _port(21090)
+minio_console = _port(21091)

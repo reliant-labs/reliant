@@ -20,7 +20,7 @@ import (
 )
 
 // The GTM tools are an agent's hands on an org's go-to-market workspace
-// (internal/gtm): ideas, strategies and the strategy library, campaigns, the
+// (internal/gtm): ideas, strategies and the idea bank, campaigns, the
 // calendar of items, channels, positioning, claims and product analytics.
 //
 // Every tool resolves the calling chat (resolveRunCaller) and acts as
@@ -242,7 +242,6 @@ const (
 	gtmItemFormat     = "GTM_ITEM_FORMAT_"
 	gtmStrategyStatus = "GTM_STRATEGY_STATUS_"
 	gtmCategory       = "GTM_STRATEGY_CATEGORY_"
-	gtmDepth          = "GTM_LIBRARY_DEPTH_"
 	gtmChannelMode    = "GTM_CHANNEL_MODE_"
 	gtmChannelStatus  = "GTM_CHANNEL_STATUS_"
 	gtmChannelSource  = "GTM_CHANNEL_SOURCE_"
@@ -348,24 +347,28 @@ type gtmEvidenceView struct {
 }
 
 type gtmIdeaView struct {
-	ID            string            `json:"id"`
-	Kind          string            `json:"kind"`
-	Title         string            `json:"title"`
-	BodyMD        string            `json:"body_md,omitempty"`
-	BodyTruncated bool              `json:"body_truncated,omitempty"`
-	Status        string            `json:"status"`
-	Source        string            `json:"source"`
-	CampaignID    string            `json:"campaign_id,omitempty"`
-	Evidence      []gtmEvidenceView `json:"evidence,omitempty"`
-	Revision      int32             `json:"revision"`
-	UpdatedAt     string            `json:"updated_at"`
+	ID            string             `json:"id"`
+	Kind          string             `json:"kind"`
+	Title         string             `json:"title"`
+	BodyMD        string             `json:"body_md,omitempty"`
+	BodyTruncated bool               `json:"body_truncated,omitempty"`
+	Status        string             `json:"status"`
+	Source        string             `json:"source"`
+	CampaignID    string             `json:"campaign_id,omitempty"`
+	Evidence      []gtmEvidenceView  `json:"evidence,omitempty"`
+	LibraryKey    string             `json:"library_key,omitempty"`
+	TailorAnswers []gtm.TailorAnswer `json:"tailor_answers,omitempty"`
+	// SuggestedWorkflowMD is on a full read only.
+	SuggestedWorkflowMD string `json:"suggested_workflow_md,omitempty"`
+	Revision            int32  `json:"revision"`
+	UpdatedAt           string `json:"updated_at"`
 }
 
 func gtmIdea(i gtm.Idea, full bool) gtmIdeaView {
 	v := gtmIdeaView{
 		ID: i.ID, Kind: gtmShort(gtmIdeaKind, string(i.Kind)), Title: i.Title, BodyMD: i.BodyMD,
 		Status: gtmShort(gtmIdeaStatus, string(i.Status)), Source: gtmShort(gtmIdeaSource, string(i.Source)),
-		CampaignID: i.CampaignID, Revision: i.Revision, UpdatedAt: gtmTimeOut(&i.UpdatedAt),
+		CampaignID: i.CampaignID, LibraryKey: i.LibraryKey, Revision: i.Revision, UpdatedAt: gtmTimeOut(&i.UpdatedAt),
 	}
 	if !full {
 		v.BodyMD, v.BodyTruncated = gtmPreview(i.BodyMD)
@@ -374,6 +377,7 @@ func gtmIdea(i gtm.Idea, full bool) gtmIdeaView {
 	for _, e := range i.Evidence {
 		v.Evidence = append(v.Evidence, gtmEvidenceView{Kind: e.Kind, Title: e.Title, URL: e.URL, SummaryMD: e.SummaryMD})
 	}
+	v.TailorAnswers, v.SuggestedWorkflowMD = i.TailorAnswers, i.SuggestedWorkflowMD
 	return v
 }
 
@@ -450,27 +454,36 @@ func gtmItem(i gtm.Item, full bool) gtmItemView {
 	return v
 }
 
+// gtmMaxChannels caps list_gtm_channels (the service reads channels
+// unpaged, up to gtm.MaxChannels).
+const gtmMaxChannels = gtmMaxPage
+
 type gtmChannelView struct {
-	ID                   string   `json:"id"`
-	Key                  string   `json:"key"`
-	Name                 string   `json:"name"`
-	Mode                 string   `json:"mode"`
-	IntegrationKind      string   `json:"integration_kind,omitempty"`
-	ConnectionState      string   `json:"connection_state,omitempty"`
-	ManualInstructionsMD string   `json:"manual_instructions_md,omitempty"`
-	ChannelTypes         []string `json:"channel_types,omitempty"`
-	Status               string   `json:"status"`
-	Source               string   `json:"source,omitempty"`
-	Revision             int32    `json:"revision"`
+	ID                    string   `json:"id"`
+	Key                   string   `json:"key"`
+	Name                  string   `json:"name"`
+	Mode                  string   `json:"mode"`
+	IntegrationKind       string   `json:"integration_kind,omitempty"`
+	ConnectionState       string   `json:"connection_state,omitempty"`
+	ManualInstructionsMD  string   `json:"manual_instructions_md,omitempty"`
+	InstructionsTruncated bool     `json:"manual_instructions_truncated,omitempty"`
+	ChannelTypes          []string `json:"channel_types,omitempty"`
+	Status                string   `json:"status"`
+	Source                string   `json:"source,omitempty"`
+	Revision              int32    `json:"revision"`
 }
 
-func gtmChannel(c gtm.Channel) gtmChannelView {
-	return gtmChannelView{
+func gtmChannel(c gtm.Channel, full bool) gtmChannelView {
+	v := gtmChannelView{
 		ID: c.ID, Key: c.Key, Name: c.Name, Mode: gtmShort(gtmChannelMode, string(c.Mode)), IntegrationKind: c.IntegrationKind,
 		ConnectionState: gtmShort(gtmConnection, string(c.ConnectionState)), ManualInstructionsMD: c.ManualInstructionsMD,
 		ChannelTypes: c.ChannelTypes, Status: gtmShort(gtmChannelStatus, string(c.Status)),
 		Source: gtmShort(gtmChannelSource, string(c.Source)), Revision: c.Revision,
 	}
+	if !full {
+		v.ManualInstructionsMD, v.InstructionsTruncated = gtmPreview(c.ManualInstructionsMD)
+	}
+	return v
 }
 
 // =============================================================================
@@ -525,16 +538,35 @@ type GtmEvidenceParam struct {
 }
 
 type SaveGtmIdeaParams struct {
-	ID               string              `json:"id,omitempty" jsonschema:"description=The idea to edit. Omit to create one."`
-	ExpectedRevision int32               `json:"expected_revision,omitempty" jsonschema:"description=The revision you read. Required to edit."`
-	Kind             string              `json:"kind,omitempty" jsonschema:"enum=PRODUCT,enum=GTM,enum=CONTENT,description=Required to create."`
-	Title            *string             `json:"title,omitempty" jsonschema:"description=Required to create."`
-	BodyMD           *string             `json:"body_md,omitempty" jsonschema:"description=The idea in markdown: what and why."`
-	Evidence         *[]GtmEvidenceParam `json:"evidence,omitempty" jsonschema:"description=What backs it (analytics readouts\\, links\\, notes). On an edit it replaces the whole list."`
-	CampaignID       *string             `json:"campaign_id,omitempty" jsonschema:"description=A campaign to link it to. On an edit an empty string unlinks it."`
+	ID                  string              `json:"id,omitempty" jsonschema:"description=The idea to edit. Omit to create one."`
+	ExpectedRevision    int32               `json:"expected_revision,omitempty" jsonschema:"description=The revision you read. Required to edit."`
+	Kind                string              `json:"kind,omitempty" jsonschema:"enum=PRODUCT,enum=GTM,enum=CONTENT,description=Required to create."`
+	Title               *string             `json:"title,omitempty" jsonschema:"description=Required to create."`
+	BodyMD              *string             `json:"body_md,omitempty" jsonschema:"description=The idea in markdown: what and why."`
+	Evidence            *[]GtmEvidenceParam `json:"evidence,omitempty" jsonschema:"description=What backs it (analytics readouts\\, links\\, notes). On an edit it replaces the whole list."`
+	CampaignID          *string             `json:"campaign_id,omitempty" jsonschema:"description=A campaign to link it to. On an edit an empty string unlinks it."`
+	LibraryKey          *string             `json:"library_key,omitempty" jsonschema:"description=The idea-bank entry it comes from (list_gtm_strategy_library key). Never guess one. On an edit an empty string clears it."`
+	TailorAnswers       *[]GtmTailorAnswer  `json:"tailor_answers,omitempty" jsonschema:"description=That entry's tailor_questions\\, each answered for this business (at most 20; each answer at most 2000 characters). On an edit it replaces the whole list."`
+	SuggestedWorkflowMD *string             `json:"suggested_workflow_md,omitempty" jsonschema:"description=How the idea could run as an automation\\, in markdown\\, tool-agnostic: the entry's suggested workflow tailored to this business. A suggestion only: nothing is created from it. On an edit an empty string clears it."`
 }
 
-const saveGtmIdeaDescription = "Propose a GTM idea, or edit one you can still edit. A new idea is PROPOSED with source AGENT and stays PROPOSED: accepting, rejecting or finishing one is a person's call, and an agent edits only PROPOSED ideas. Edit with id and expected_revision; fields you omit are left alone. Back an idea with evidence (read_product_analytics readouts, links)."
+type GtmTailorAnswer struct {
+	Question string `json:"question" jsonschema:"required,description=The entry's tailor question\\, as the entry words it."`
+	Answer   string `json:"answer" jsonschema:"required,description=The answer for this business."`
+}
+
+func gtmTailorAnswers(in *[]GtmTailorAnswer) *[]gtm.TailorAnswer {
+	if in == nil {
+		return nil
+	}
+	out := make([]gtm.TailorAnswer, 0, len(*in))
+	for _, a := range *in {
+		out = append(out, gtm.TailorAnswer{Question: strings.TrimSpace(a.Question), Answer: a.Answer})
+	}
+	return &out
+}
+
+const saveGtmIdeaDescription = "Propose a GTM idea, or edit one you can still edit. A new idea is PROPOSED with source AGENT and stays PROPOSED: accepting, rejecting or finishing one is a person's call, and an agent edits only PROPOSED ideas. An idea drawn from the idea bank (list_gtm_strategy_library) cites its library_key, answers that entry's tailor_questions in tailor_answers, and may carry suggested_workflow_md, the entry's suggested automation tailored to this business (a suggestion: nothing is created from it). Edit with id and expected_revision; fields you omit are left alone. Back an idea with evidence (read_product_analytics readouts, links)."
 
 func saveGtmIdea(ctx context.Context, svc GTMService, actor gtm.Actor, p SaveGtmIdeaParams) ToolResponse {
 	var evidence *[]gtm.Evidence
@@ -550,9 +582,13 @@ func saveGtmIdea(ctx context.Context, svc GTMService, actor gtm.Actor, p SaveGtm
 		if p.Title == nil || p.Kind == "" {
 			return gtmInvalid("A new idea needs kind and title")
 		}
-		in := gtm.CreateIdeaInput{Kind: gtm.IdeaKind(gtmLong(gtmIdeaKind, p.Kind)), Title: *p.Title, BodyMD: ptr.From(p.BodyMD), CampaignID: ptr.From(p.CampaignID)}
+		in := gtm.CreateIdeaInput{Kind: gtm.IdeaKind(gtmLong(gtmIdeaKind, p.Kind)), Title: *p.Title, BodyMD: ptr.From(p.BodyMD), CampaignID: ptr.From(p.CampaignID),
+			LibraryKey: strings.TrimSpace(ptr.From(p.LibraryKey)), SuggestedWorkflowMD: ptr.From(p.SuggestedWorkflowMD)}
 		if evidence != nil {
 			in.Evidence = *evidence
+		}
+		if answers := gtmTailorAnswers(p.TailorAnswers); answers != nil {
+			in.TailorAnswers = *answers
 		}
 		idea, err := svc.CreateIdea(ctx, actor, in)
 		if err != nil {
@@ -560,7 +596,8 @@ func saveGtmIdea(ctx context.Context, svc GTMService, actor gtm.Actor, p SaveGtm
 		}
 		return gtmJSON(gtmIdea(idea, true))
 	}
-	in := gtm.UpdateIdeaInput{ID: id, ExpectedRevision: p.ExpectedRevision, Title: p.Title, BodyMD: p.BodyMD, Evidence: evidence, CampaignID: p.CampaignID}
+	in := gtm.UpdateIdeaInput{ID: id, ExpectedRevision: p.ExpectedRevision, Title: p.Title, BodyMD: p.BodyMD, Evidence: evidence, CampaignID: p.CampaignID,
+		LibraryKey: trimPtr(p.LibraryKey), TailorAnswers: gtmTailorAnswers(p.TailorAnswers), SuggestedWorkflowMD: p.SuggestedWorkflowMD}
 	if p.Kind != "" {
 		k := gtm.IdeaKind(gtmLong(gtmIdeaKind, p.Kind))
 		in.Kind = &k
@@ -573,7 +610,7 @@ func saveGtmIdea(ctx context.Context, svc GTMService, actor gtm.Actor, p SaveGtm
 }
 
 // =============================================================================
-// Strategies and the strategy library
+// Strategies and the idea bank
 // =============================================================================
 
 type ListGtmStrategiesParams struct {
@@ -624,7 +661,7 @@ func listGtmStrategies(ctx context.Context, svc GTMService, actor gtm.Actor, p L
 type SaveGtmStrategyParams struct {
 	ID                  string  `json:"id,omitempty" jsonschema:"description=The strategy to edit. Omit to create one."`
 	ExpectedRevision    int32   `json:"expected_revision,omitempty" jsonschema:"description=The revision you read. Required to edit."`
-	FromLibraryKey      string  `json:"from_library_key,omitempty" jsonschema:"description=Create the strategy from this strategy-library entry (list_gtm_strategy_library): name\\, goal\\, target metric and category come from it. Create only; the other fields then do not apply."`
+	FromLibraryKey      string  `json:"from_library_key,omitempty" jsonschema:"description=Create the strategy from this idea-bank entry (list_gtm_strategy_library): name\\, goal\\, target metric and category come from it. Create only; the other fields then do not apply."`
 	CreateFirstCampaign bool    `json:"create_first_campaign,omitempty" jsonschema:"description=With from_library_key: also create its first DRAFT campaign\\, planning the org's channels that match the entry."`
 	CampaignName        *string `json:"campaign_name,omitempty" jsonschema:"description=With create_first_campaign: the campaign's name. Default: the entry's name."`
 	Name                *string `json:"name,omitempty" jsonschema:"description=Required to create (unless from_library_key)."`
@@ -635,7 +672,7 @@ type SaveGtmStrategyParams struct {
 	Category            *string `json:"category,omitempty" jsonschema:"description=One of PRICING_OFFERS_INCENTIVES REFERRAL_VIRAL_GROWTH PAID_ACQUISITION ORGANIC_CONTENT_SEO OUTBOUND_SALES_PROSPECTING PARTNERSHIPS_DISTRIBUTION LAUNCHES_PR COMMUNITY_EVENTS PRODUCT_LED_GROWTH CONVERSION_OPTIMIZATION RETENTION_EXPANSION TRUST_REPUTATION MARKET_RESEARCH_POSITIONING. On an edit an empty string clears it."`
 }
 
-const saveGtmStrategyDescription = "Draft a GTM strategy, or edit a DRAFT one. Every strategy you create is a DRAFT and you edit DRAFT strategies only: a person makes it ACTIVE, DONE or ARCHIVED, and edits it after that. Create from scratch with name (and goal_md, target_metric, period_start, period_end, category), or from a strategy-library entry with from_library_key, optionally with its first campaign. Edit with id and expected_revision; fields you omit are left alone."
+const saveGtmStrategyDescription = "Draft a GTM strategy, or edit a DRAFT one. Every strategy you create is a DRAFT and you edit DRAFT strategies only: a person makes it ACTIVE, DONE or ARCHIVED, and edits it after that. Create from scratch with name (and goal_md, target_metric, period_start, period_end, category), or from an idea-bank entry with from_library_key, optionally with its first campaign. Edit with id and expected_revision; fields you omit are left alone."
 
 func saveGtmStrategy(ctx context.Context, svc GTMService, actor gtm.Actor, p SaveGtmStrategyParams) ToolResponse {
 	id, key := strings.TrimSpace(p.ID), strings.TrimSpace(p.FromLibraryKey)
@@ -653,7 +690,7 @@ func saveGtmStrategy(ctx context.Context, svc GTMService, actor gtm.Actor, p Sav
 		}
 		res, err := svc.UseLibraryStrategy(ctx, actor, gtm.UseLibraryStrategyInput{LibraryKey: key, CreateFirstCampaign: p.CreateFirstCampaign, CampaignName: p.CampaignName})
 		if err != nil {
-			return gtmFailure(err, fmt.Sprintf("No strategy-library entry %q. %s lists them; never guess keys.", key, ToolListGtmStrategyLibrary), true)
+			return gtmFailure(err, fmt.Sprintf("No idea-bank entry %q. %s lists them; never guess keys.", key, ToolListGtmStrategyLibrary), true)
 		}
 		out := struct {
 			Strategy gtmStrategyView  `json:"strategy"`
@@ -692,62 +729,59 @@ func saveGtmStrategy(ctx context.Context, svc GTMService, actor gtm.Actor, p Sav
 }
 
 type ListGtmStrategyLibraryParams struct {
-	Key        string `json:"key,omitempty" jsonschema:"description=One entry's key: returns it whole (hypothesis\\, steps\\, KPIs\\, experiments\\, stop conditions). Omit to list."`
-	Category   string `json:"category,omitempty" jsonschema:"description=Only this category: PRICING_OFFERS_INCENTIVES REFERRAL_VIRAL_GROWTH PAID_ACQUISITION ORGANIC_CONTENT_SEO OUTBOUND_SALES_PROSPECTING PARTNERSHIPS_DISTRIBUTION LAUNCHES_PR COMMUNITY_EVENTS PRODUCT_LED_GROWTH CONVERSION_OPTIMIZATION RETENTION_EXPANSION TRUST_REPUTATION or MARKET_RESEARCH_POSITIONING."`
-	Depth      string `json:"depth,omitempty" jsonschema:"enum=PLAY,enum=TACTIC,description=PLAY entries are full plays; TACTIC entries are light."`
-	Stage      string `json:"stage,omitempty" jsonschema:"description=Only entries for this stage\\, as the library words it."`
-	Cost       string `json:"cost,omitempty" jsonschema:"description=Only entries of this cost\\, as the library words it."`
-	Difficulty string `json:"difficulty,omitempty" jsonschema:"description=Only entries of this difficulty\\, as the library words it."`
-	Fit        string `json:"fit,omitempty" jsonschema:"description=Only entries whose fits include this."`
-	Query      string `json:"query,omitempty" jsonschema:"description=Words to match in the name and summary."`
-	PageSize   int    `json:"page_size,omitempty" jsonschema:"description=Entries per page: default 20; at most 50."`
-	PageToken  string `json:"page_token,omitempty" jsonschema:"description=next_page_token from the previous page."`
+	Key            string   `json:"key,omitempty" jsonschema:"description=One entry's key: returns it whole (why it works\\, suggested workflow\\, KPIs\\, channel types). Omit to list."`
+	Diverse        bool     `json:"diverse,omitempty" jsonschema:"description=Return a spread across categories instead of a page: call with diverse=true first when generating ideas."`
+	Categories     []string `json:"categories,omitempty" jsonschema:"description=Only these categories (at most 13): PRICING_OFFERS_INCENTIVES REFERRAL_VIRAL_GROWTH PAID_ACQUISITION ORGANIC_CONTENT_SEO OUTBOUND_SALES_PROSPECTING PARTNERSHIPS_DISTRIBUTION LAUNCHES_PR COMMUNITY_EVENTS PRODUCT_LED_GROWTH CONVERSION_OPTIMIZATION RETENTION_EXPANSION TRUST_REPUTATION MARKET_RESEARCH_POSITIONING."`
+	BusinessTypes  []string `json:"business_types,omitempty" jsonschema:"description=Only entries that fit one of these business types (or any): B2B_SAAS B2C_APP DEVELOPER_TOOLS ECOMMERCE MARKETPLACE AGENCY_SERVICES CREATOR_MEDIA LOCAL_BUSINESS OPEN_SOURCE HARDWARE."`
+	BusinessModels []string `json:"business_models,omitempty" jsonschema:"description=Only entries that fit one of these business models (or any): SUBSCRIPTION USAGE_BASED ONE_TIME FREEMIUM FREE_OSS MARKETPLACE SERVICES AD_SUPPORTED."`
+	Stage          string   `json:"stage,omitempty" jsonschema:"enum=pre_launch,enum=launch,enum=early_traction,enum=growth,enum=scale,description=Only entries that fit this stage (or any)."`
+	Objective      string   `json:"objective,omitempty" jsonschema:"enum=awareness,enum=acquisition,enum=activation,enum=conversion,enum=retention,enum=expansion,enum=referral,enum=research,description=Only entries with this objective."`
+	Effort         string   `json:"effort,omitempty" jsonschema:"enum=low,enum=medium,enum=high,description=Only entries of this effort."`
+	Cost           string   `json:"cost,omitempty" jsonschema:"enum=free,enum=low,enum=medium,enum=high,description=Only entries of this cost."`
+	Query          string   `json:"query,omitempty" jsonschema:"description=Words that must all appear in the name or summary."`
+	FitsMyBusiness *bool    `json:"fits_my_business,omitempty" jsonschema:"description=Keep only entries that fit the org's business type and models (get_gtm_positioning). Default true; false browses the whole bank."`
+	Limit          int      `json:"limit,omitempty" jsonschema:"description=Entries to return: default 20; at most 50."`
+	PageToken      string   `json:"page_token,omitempty" jsonschema:"description=next_page_token from the previous page (not with diverse)."`
 }
 
-const listGtmStrategyLibraryDescription = "Browse the org's strategy library: the plays and tactics the org imported, by category then name, with filters for category, depth, stage, cost, difficulty, fit and a text query; read one whole with key. Use it to recommend strategies that fit the org's positioning (get_gtm_positioning) and product analytics (read_product_analytics), then draft one with save_gtm_strategy from_library_key. Read-only: the library is imported by a person, never edited here."
+const listGtmStrategyLibraryDescription = `Browse the GTM idea bank: generic go-to-market plays across 13 categories, filtered by default to the ones that fit the org's business (fits_my_business, from get_gtm_positioning's business type and models). The entries are generic jumping-off points to tailor to this business, not scripts to follow. Read one whole with key. If the org has not set its business type and business models in Positioning (get_gtm_positioning shows neither), fits_my_business filters nothing, so ask the person to set them.
+When generating ideas, call it with diverse=true first, then narrow with categories, business_types, business_models, stage, objective, effort, cost or query. Propose ideas from AT LEAST 4 different categories, including in-person and community ones (meetups, conferences, hackathons, networking) and founder-led, high-touch outreach, unless the business makes them impossible; when you skip one, say why. Each idea you propose (save_gtm_idea) cites the entry's library_key and answers that entry's tailor_questions in tailor_answers, one answer per question, for this business. An entry can also seed a draft strategy (save_gtm_strategy from_library_key). Read-only.`
 
 type gtmLibraryView struct {
 	Key              string   `json:"key"`
 	Name             string   `json:"name"`
-	Category         string   `json:"category,omitempty"`
-	Depth            string   `json:"depth,omitempty"`
+	Category         string   `json:"category"`
 	SummaryMD        string   `json:"summary_md,omitempty"`
 	SummaryTruncated bool     `json:"summary_truncated,omitempty"`
-	Stage            string   `json:"stage,omitempty"`
+	BusinessTypes    []string `json:"business_types,omitempty"`
+	BusinessModels   []string `json:"business_models,omitempty"`
+	Stages           []string `json:"stages,omitempty"`
+	Objective        string   `json:"objective,omitempty"`
+	Effort           string   `json:"effort,omitempty"`
 	Cost             string   `json:"cost,omitempty"`
-	Difficulty       string   `json:"difficulty,omitempty"`
-	Fits             []string `json:"fits,omitempty"`
-	ChannelTypes     []string `json:"channel_types,omitempty"`
+	SignalDays       int      `json:"signal_days,omitempty"`
+	TailorQuestions  []string `json:"tailor_questions,omitempty"`
 }
 
 type gtmLibraryEntryView struct {
 	gtmLibraryView
-	Level         string            `json:"level,omitempty"`
-	Objective     string            `json:"objective,omitempty"`
-	NorthStar     string            `json:"north_star,omitempty"`
-	HypothesisMD  string            `json:"hypothesis_md,omitempty"`
-	CostNote      string            `json:"cost_note,omitempty"`
-	Hours         int32             `json:"hours,omitempty"`
-	SignalDays    int32             `json:"signal_days,omitempty"`
-	WindowDays    int32             `json:"window_days,omitempty"`
-	LaunchDays    int32             `json:"launch_days,omitempty"`
-	ExpectedDelta float64           `json:"expected_delta,omitempty"`
-	Lifecycle     []string          `json:"lifecycle,omitempty"`
-	Integrations  []string          `json:"integrations,omitempty"`
-	Prerequisites []string          `json:"prerequisites,omitempty"`
-	KPIs          []string          `json:"kpis,omitempty"`
-	Tactics       []string          `json:"tactics,omitempty"`
-	Automates     []string          `json:"automates,omitempty"`
-	Experiments   []string          `json:"experiments,omitempty"`
-	StopWhen      []string          `json:"stop_when,omitempty"`
-	Steps         []gtm.LibraryStep `json:"steps,omitempty"`
-	Extra         map[string]any    `json:"extra,omitempty"`
+	WhyItWorksMD        string   `json:"why_it_works_md,omitempty"`
+	SuggestedWorkflowMD string   `json:"suggested_workflow_md,omitempty"`
+	ChannelTypes        []string `json:"channel_types,omitempty"`
+	KPIs                []string `json:"kpis,omitempty"`
 }
+
+const (
+	gtmBusinessType  = "GTM_BUSINESS_TYPE_"
+	gtmBusinessModel = "GTM_BUSINESS_MODEL_"
+)
 
 func gtmLibrary(e gtm.LibraryEntry, full bool) gtmLibraryView {
 	v := gtmLibraryView{
-		Key: e.Key, Name: e.Name, Category: gtmShort(gtmCategory, string(e.Category)), Depth: gtmShort(gtmDepth, string(e.Depth)),
-		SummaryMD: e.SummaryMD, Stage: e.Stage, Cost: e.Cost, Difficulty: e.Difficulty, Fits: e.Fits, ChannelTypes: e.ChannelTypes,
+		Key: e.Key, Name: e.Name, Category: gtmShort(gtmCategory, string(e.Category)), SummaryMD: e.SummaryMD,
+		BusinessTypes: gtmShorts(gtmBusinessType, e.BusinessTypes), BusinessModels: gtmShorts(gtmBusinessModel, e.BusinessModels),
+		Stages: e.Stages, Objective: e.Objective, Effort: e.Effort, Cost: e.Cost, SignalDays: e.SignalDays,
+		TailorQuestions: e.TailorQuestions,
 	}
 	if !full {
 		v.SummaryMD, v.SummaryTruncated = gtmPreview(e.SummaryMD)
@@ -755,33 +789,53 @@ func gtmLibrary(e gtm.LibraryEntry, full bool) gtmLibraryView {
 	return v
 }
 
+// gtmLongs is vs as the service's enum values, prefixed.
+func gtmLongs[T ~string](prefix string, vs []string) []T {
+	out := make([]T, 0, len(vs))
+	for _, v := range vs {
+		if l := gtmLong(prefix, v); l != "" {
+			out = append(out, T(l))
+		}
+	}
+	return out
+}
+
 func listGtmStrategyLibrary(ctx context.Context, svc GTMService, actor gtm.Actor, p ListGtmStrategyLibraryParams) ToolResponse {
 	if key := strings.TrimSpace(p.Key); key != "" {
 		e, err := svc.GetStrategyLibraryEntry(ctx, actor, gtm.GetStrategyLibraryEntryInput{Key: key})
 		if err != nil {
-			return gtmFailure(err, fmt.Sprintf("No strategy-library entry %q. %s lists them; never guess keys.", key, ToolListGtmStrategyLibrary), false)
+			return gtmFailure(err, fmt.Sprintf("No idea-bank entry %q. %s lists them; never guess keys.", key, ToolListGtmStrategyLibrary), false)
 		}
 		return gtmJSON(gtmLibraryEntryView{
-			gtmLibraryView: gtmLibrary(e, true), Level: e.Level, Objective: e.Objective, NorthStar: e.NorthStar,
-			HypothesisMD: e.HypothesisMD, CostNote: e.CostNote, Hours: e.Hours, SignalDays: e.SignalDays, WindowDays: e.WindowDays,
-			LaunchDays: e.LaunchDays, ExpectedDelta: e.ExpectedDelta, Lifecycle: e.Lifecycle, Integrations: e.Integrations,
-			Prerequisites: e.Prerequisites, KPIs: e.KPIs, Tactics: e.Tactics, Automates: e.Automates, Experiments: e.Experiments,
-			StopWhen: e.StopWhen, Steps: e.Steps, Extra: e.Extra,
+			gtmLibraryView: gtmLibrary(e, true), WhyItWorksMD: e.WhyItWorksMD, SuggestedWorkflowMD: e.SuggestedWorkflowMD,
+			ChannelTypes: e.ChannelTypes, KPIs: e.KPIs,
 		})
 	}
+	if p.Diverse && p.PageToken != "" {
+		return NewTextErrorResponse("page_token does not apply to diverse: a diverse call returns one spread.")
+	}
+	fits := p.FitsMyBusiness == nil || *p.FitsMyBusiness
 	res, err := svc.ListStrategyLibrary(ctx, actor, gtm.ListStrategyLibraryInput{
-		Category: gtm.StrategyCategory(gtmLong(gtmCategory, p.Category)), Depth: gtm.LibraryDepth(gtmLong(gtmDepth, p.Depth)),
-		Stage: strings.TrimSpace(p.Stage), Cost: strings.TrimSpace(p.Cost), Difficulty: strings.TrimSpace(p.Difficulty),
-		Fit: strings.TrimSpace(p.Fit), Query: strings.TrimSpace(p.Query), PageSize: gtmPage(p.PageSize), PageToken: p.PageToken,
+		Categories:     gtmLongs[gtm.StrategyCategory](gtmCategory, p.Categories),
+		BusinessTypes:  gtmLongs[gtm.BusinessType](gtmBusinessType, p.BusinessTypes),
+		BusinessModels: gtmLongs[gtm.BusinessModel](gtmBusinessModel, p.BusinessModels),
+		Stage:          strings.ToLower(strings.TrimSpace(p.Stage)), Objective: strings.ToLower(strings.TrimSpace(p.Objective)),
+		Effort: strings.ToLower(strings.TrimSpace(p.Effort)),
+		Cost:   strings.ToLower(strings.TrimSpace(p.Cost)), Query: strings.TrimSpace(p.Query),
+		FitsMyBusiness: fits, Diverse: p.Diverse, PageSize: gtmPage(p.Limit), PageToken: p.PageToken,
 	})
 	if err != nil {
 		return gtmFailure(err, "Not found.", false)
 	}
 	out := struct {
-		Entries       []gtmLibraryView `json:"entries"`
-		NextPageToken string           `json:"next_page_token,omitempty"`
-	}{Entries: []gtmLibraryView{}, NextPageToken: res.NextPageToken}
-	for _, e := range res.Entries {
+		Entries        []gtmLibraryView `json:"entries"`
+		FitsMyBusiness bool             `json:"fits_my_business"`
+		NextPageToken  string           `json:"next_page_token,omitempty"`
+	}{Entries: []gtmLibraryView{}, FitsMyBusiness: fits, NextPageToken: res.NextPageToken}
+	for i, e := range res.Entries {
+		if i == gtmMaxPage {
+			break
+		}
 		out.Entries = append(out.Entries, gtmLibrary(e, false))
 	}
 	return gtmJSON(out)
@@ -817,10 +871,11 @@ func listGtmCampaigns(ctx context.Context, svc GTMService, actor gtm.Actor, p Li
 		}
 		out := struct {
 			gtmCampaignView
-			Ideas     []gtmIdeaView     `json:"ideas"`
-			Items     []gtmItemView     `json:"items"`
-			Truncated bool              `json:"truncated,omitempty"`
-			Coverage  []gtmCoverageView `json:"coverage"`
+			Ideas             []gtmIdeaView     `json:"ideas"`
+			Items             []gtmItemView     `json:"items"`
+			Truncated         bool              `json:"truncated,omitempty"`
+			Coverage          []gtmCoverageView `json:"coverage"`
+			CoverageTruncated bool              `json:"coverage_truncated,omitempty"`
 		}{gtmCampaignView: gtmCampaign(d.Campaign), Ideas: []gtmIdeaView{}, Items: []gtmItemView{}, Truncated: d.Truncated, Coverage: []gtmCoverageView{}}
 		for i, idea := range d.Ideas {
 			if i == gtmDetailCap {
@@ -836,7 +891,11 @@ func listGtmCampaigns(ctx context.Context, svc GTMService, actor gtm.Actor, p Li
 			}
 			out.Items = append(out.Items, gtmItem(it, false))
 		}
-		for _, c := range d.Coverage {
+		for i, c := range d.Coverage {
+			if i == gtmDetailCap {
+				out.CoverageTruncated = true
+				break
+			}
 			row := gtmCoverageView{ChannelID: c.ChannelID, Format: gtmShort(gtmItemFormat, string(c.Format)), Planned: c.Planned, Total: c.Total}
 			if len(c.Counts) > 0 {
 				row.Counts = map[string]int{}
@@ -1090,7 +1149,7 @@ type ListGtmChannelsParams struct {
 	Mode   string `json:"mode,omitempty" jsonschema:"enum=INTEGRATED,enum=MANUAL,description=Only INTEGRATED channels (sent through a Reliant integration\\, e.g. gmail) or MANUAL ones (a person posts by hand)."`
 }
 
-const listGtmChannelsDescription = "List the org's GTM channels, the places items go out (blog, email, hacker-news, reddit, linkedin, x, youtube and any the org added), by key, or read one with id. Each shows its id, key, name, mode (INTEGRATED through a Reliant integration such as gmail, or MANUAL: a person posts by hand following manual_instructions_md), connection_state for an integrated one (whether the user's integration is connected now), status and revision."
+const listGtmChannelsDescription = "List the org's GTM channels, the places items go out (blog, email, hacker-news, reddit, linkedin, x, youtube and any the org added), by key, or read one with id (a list shows at most 50, with the start of each one's instructions; status and mode filter it). Each shows its id, key, name, mode (INTEGRATED through a Reliant integration such as gmail, or MANUAL: a person posts by hand following manual_instructions_md), connection_state for an integrated one (whether the user's integration is connected now), status and revision."
 
 func listGtmChannels(ctx context.Context, svc GTMService, actor gtm.Actor, p ListGtmChannelsParams) ToolResponse {
 	if id := strings.TrimSpace(p.ID); id != "" {
@@ -1098,7 +1157,7 @@ func listGtmChannels(ctx context.Context, svc GTMService, actor gtm.Actor, p Lis
 		if err != nil {
 			return gtmFailure(err, gtmNotFound("channel", id, ToolListGtmChannels), false)
 		}
-		return gtmJSON(gtmChannel(c))
+		return gtmJSON(gtmChannel(c, true))
 	}
 	res, err := svc.ListChannels(ctx, actor, gtm.ListChannelsInput{
 		Status: gtm.ChannelStatus(gtmLong(gtmChannelStatus, p.Status)), Mode: gtm.ChannelMode(gtmLong(gtmChannelMode, p.Mode)),
@@ -1107,10 +1166,15 @@ func listGtmChannels(ctx context.Context, svc GTMService, actor gtm.Actor, p Lis
 		return gtmFailure(err, "Not found.", false)
 	}
 	out := struct {
-		Channels []gtmChannelView `json:"channels"`
+		Channels  []gtmChannelView `json:"channels"`
+		Truncated bool             `json:"truncated,omitempty"`
 	}{Channels: []gtmChannelView{}}
-	for _, c := range res.Channels {
-		out.Channels = append(out.Channels, gtmChannel(c))
+	for i, c := range res.Channels {
+		if i == gtmMaxChannels {
+			out.Truncated = true
+			break
+		}
+		out.Channels = append(out.Channels, gtmChannel(c, false))
 	}
 	return gtmJSON(out)
 }
@@ -1121,7 +1185,7 @@ type SaveGtmChannelParams struct {
 	Key                  *string   `json:"key,omitempty" jsonschema:"description=A slug unique in the org: lowercase letters\\, digits and hyphens\\, at most 32. Required to add."`
 	Name                 *string   `json:"name,omitempty" jsonschema:"description=Required to add."`
 	ManualInstructionsMD *string   `json:"manual_instructions_md,omitempty" jsonschema:"description=How a person posts on it by hand\\, in markdown."`
-	ChannelTypes         *[]string `json:"channel_types,omitempty" jsonschema:"description=The generic kinds of place it is (e.g. forum or social)\\, which strategy-library entries match on. On an edit it replaces the list."`
+	ChannelTypes         *[]string `json:"channel_types,omitempty" jsonschema:"description=The generic kinds of place it is (e.g. forum or social)\\, which idea-bank entries match on. On an edit it replaces the list."`
 	Status               string    `json:"status,omitempty" jsonschema:"enum=ACTIVE,enum=PAUSED,enum=ARCHIVED,description=ACTIVE (the default for a new channel)\\, PAUSED or ARCHIVED."`
 }
 
@@ -1149,7 +1213,7 @@ func saveGtmChannel(ctx context.Context, svc GTMService, actor gtm.Actor, p Save
 		if err != nil {
 			return gtmFailure(err, "Not found.", true)
 		}
-		return gtmJSON(gtmChannel(c))
+		return gtmJSON(gtmChannel(c, true))
 	}
 	c, err := svc.UpdateChannel(ctx, actor, gtm.UpdateChannelInput{
 		ID: id, ExpectedRevision: p.ExpectedRevision, Key: trimPtr(p.Key), Name: p.Name,
@@ -1158,7 +1222,7 @@ func saveGtmChannel(ctx context.Context, svc GTMService, actor gtm.Actor, p Save
 	if err != nil {
 		return gtmFailure(err, gtmNotFound("channel", id, ToolListGtmChannels), true)
 	}
-	return gtmJSON(gtmChannel(c))
+	return gtmJSON(gtmChannel(c, true))
 }
 
 // =============================================================================
@@ -1167,7 +1231,7 @@ func saveGtmChannel(ctx context.Context, svc GTMService, actor gtm.Actor, p Save
 
 type GetGtmPositioningParams struct{}
 
-const getGtmPositioningDescription = "Read the org's positioning (what the product is, for whom, and why, in markdown) and its audiences: the brief every GTM draft starts from. Read-only: a person edits it."
+const getGtmPositioningDescription = "Read the org's positioning (what the product is, for whom, and why, in markdown), its audiences, and its business type and business models (what list_gtm_strategy_library's fits_my_business matches entries against): the brief every GTM draft starts from. Read-only: a person edits it."
 
 func getGtmPositioning(ctx context.Context, svc GTMService, actor gtm.Actor, _ GetGtmPositioningParams) ToolResponse {
 	pos, err := svc.GetPositioning(ctx, actor)
@@ -1175,12 +1239,15 @@ func getGtmPositioning(ctx context.Context, svc GTMService, actor gtm.Actor, _ G
 		return gtmFailure(err, "Not found.", false)
 	}
 	out := struct {
-		PositioningMD string   `json:"positioning_md"`
-		Audiences     []string `json:"audiences"`
-		Revision      int32    `json:"revision"`
-		UpdatedAt     string   `json:"updated_at,omitempty"`
-		Note          string   `json:"note,omitempty"`
-	}{PositioningMD: pos.PositioningMD, Audiences: pos.Audiences, Revision: pos.Revision, UpdatedAt: gtmTimeOut(&pos.UpdatedAt)}
+		PositioningMD  string   `json:"positioning_md"`
+		Audiences      []string `json:"audiences"`
+		BusinessType   string   `json:"business_type,omitempty"`
+		BusinessModels []string `json:"business_models,omitempty"`
+		Revision       int32    `json:"revision"`
+		UpdatedAt      string   `json:"updated_at,omitempty"`
+		Note           string   `json:"note,omitempty"`
+	}{PositioningMD: pos.PositioningMD, Audiences: pos.Audiences, Revision: pos.Revision, UpdatedAt: gtmTimeOut(&pos.UpdatedAt),
+		BusinessType: gtmShort(gtmBusinessType, string(pos.BusinessType)), BusinessModels: gtmShorts(gtmBusinessModel, pos.BusinessModels)}
 	if out.Audiences == nil {
 		out.Audiences = []string{}
 	}
@@ -1247,21 +1314,27 @@ func checkGtmClaims(ctx context.Context, svc GTMService, actor gtm.Actor, p Chec
 // =============================================================================
 
 type ReadProductAnalyticsParams struct {
-	Template string   `json:"template" jsonschema:"required,enum=event_counts,enum=event_trend,enum=property_breakdown,enum=funnel,description=Which aggregate to read; see the tool description."`
-	Events   []string `json:"events,omitempty" jsonschema:"description=Event names (letters\\, digits and _ . : - only). event_counts: optional\\, at most 10. event_trend: 1 to 10. property_breakdown: exactly one. funnel: the 2 to 10 steps in order."`
-	Property string   `json:"property,omitempty" jsonschema:"description=property_breakdown only: the property to group the event by."`
-	From     string   `json:"from,omitempty" jsonschema:"description=Window start (RFC 3339 or YYYY-MM-DD). Default: 7 days before to."`
-	To       string   `json:"to,omitempty" jsonschema:"description=Window end\\, exclusive (RFC 3339 or YYYY-MM-DD). Default: now."`
-	Days     int      `json:"days,omitempty" jsonschema:"description=Instead of from: the window is the days before to."`
-	Limit    int      `json:"limit,omitempty" jsonschema:"description=Rows: default 50; at most 200."`
+	Template    string   `json:"template" jsonschema:"required,enum=event_counts,enum=event_trend,enum=property_breakdown,enum=funnel,description=Which aggregate to read; see the tool description."`
+	Events      []string `json:"events,omitempty" jsonschema:"description=Event names (letters\\, digits and _ . : - only). event_counts: optional\\, at most 10. event_trend: 1 to 10. property_breakdown: exactly one. funnel: the 2 to 10 steps in order."`
+	Property    string   `json:"property,omitempty" jsonschema:"description=property_breakdown only: the property to group the event by."`
+	From        string   `json:"from,omitempty" jsonschema:"description=Window start (RFC 3339 or YYYY-MM-DD). Default: 7 days before to."`
+	To          string   `json:"to,omitempty" jsonschema:"description=Window end\\, exclusive (RFC 3339 or YYYY-MM-DD). Default: now."`
+	Days        int      `json:"days,omitempty" jsonschema:"description=Instead of from: the window is the days before to."`
+	Limit       int      `json:"limit,omitempty" jsonschema:"description=Rows: default 50; at most 200."`
+	Environment string   `json:"environment,omitempty" jsonschema:"description=Only this deploy environment\\, by name (e.g. prod)\\, matched exactly. Default: all environments."`
+	ProjectID   string   `json:"project_id,omitempty" jsonschema:"description=Only this project's events (with environment: that project's environment of that name). Default: every project."`
 }
+
+// gtmAllEnvironments labels a result read across every environment.
+const gtmAllEnvironments = "all environments"
 
 const readProductAnalyticsDescription = `Read aggregate product analytics for the org's own product: server-built templates over its product events, never raw SQL and never another org. Templates:
 - event_counts: the top events by count in the window (optionally only the events named).
 - event_trend: daily counts of 1 to 10 events.
 - property_breakdown: one event's count grouped by the values of one property.
 - funnel: how many accounts reached each of 2 to 10 steps in order, with each step's rate of step 1.
-Limits: event_counts, event_trend and property_breakdown read at most 30 days, a funnel at most 90 days; at most 200 rows (truncated says when rows were cut). Groups seen by fewer than 3 signed-in people are hidden and counted in hidden_groups. Events from the dev, staging and prod environments are mixed together. Results are aggregates only: there are no user ids or other identifiers. Cite what you read as evidence on an idea (save_gtm_idea evidence).`
+Limits: event_counts, event_trend and property_breakdown read at most 30 days, a funnel at most 90 days; at most 200 rows (truncated says when rows were cut). Groups seen by fewer than 3 signed-in people are hidden and counted in hidden_groups.
+Scope: environment (a deploy environment's name, e.g. "prod") and project_id narrow the read. Without them, results cover all environments and are labelled "all environments": that includes preview and local environments and events with no environment, so name environment "prod" for production numbers. An environment name is matched exactly, across all of the org's projects unless project_id is given; a name that matches nothing is refused with the list of available environment names. Results are aggregates only: there are no user ids or other identifiers. Cite what you read as evidence on an idea (save_gtm_idea evidence).`
 
 func readProductAnalytics(ctx context.Context, svc GTMService, actor gtm.Actor, p ReadProductAnalyticsParams) ToolResponse {
 	from, err := gtmTime("from", p.From)
@@ -1272,7 +1345,10 @@ func readProductAnalytics(ctx context.Context, svc GTMService, actor gtm.Actor, 
 	if err != nil {
 		return NewTextErrorResponse(err.Error())
 	}
-	q := gtm.AnalyticsQuery{Template: gtm.AnalyticsTemplate(strings.ToLower(strings.TrimSpace(p.Template))), Events: p.Events, Property: strings.TrimSpace(p.Property), Limit: p.Limit}
+	q := gtm.AnalyticsQuery{
+		Template: gtm.AnalyticsTemplate(strings.ToLower(strings.TrimSpace(p.Template))), Events: p.Events, Property: strings.TrimSpace(p.Property), Limit: p.Limit,
+		Environment: strings.TrimSpace(p.Environment), ProjectID: strings.TrimSpace(p.ProjectID),
+	}
 	if to != nil {
 		q.To = *to
 	}
@@ -1308,9 +1384,14 @@ func readProductAnalytics(ctx context.Context, svc GTMService, actor gtm.Actor, 
 		From         string `json:"from"`
 		To           string `json:"to"`
 		Rows         []row  `json:"rows"`
+		Environment  string `json:"environment"`
+		ProjectID    string `json:"project_id,omitempty"`
 		Truncated    bool   `json:"truncated,omitempty"`
 		HiddenGroups int    `json:"hidden_groups"`
-	}{Template: string(res.Template), From: gtmTimeOut(&res.From), To: gtmTimeOut(&res.To), Rows: []row{}, Truncated: res.Truncated, HiddenGroups: res.HiddenGroups}
+	}{Template: string(res.Template), From: gtmTimeOut(&res.From), To: gtmTimeOut(&res.To), Rows: []row{}, Environment: res.Environment, ProjectID: res.ProjectID, Truncated: res.Truncated, HiddenGroups: res.HiddenGroups}
+	if out.Environment == "" {
+		out.Environment = gtmAllEnvironments
+	}
 	for _, r := range res.Rows {
 		v := row{Event: r.Event, Step: r.Step, Count: r.Count, Rate: r.Rate}
 		if !r.Day.IsZero() {
@@ -1369,6 +1450,9 @@ type SendGtmEmailParams struct {
 
 const sendGtmEmailDescription = "Send an APPROVED GTM email item (format EMAIL or COLD_OUTREACH) through the owner's Gmail, once. Every send shows the owner an approval card with exactly what goes out: recipients, subject, body and the sending account. It is sent only if they approve that card and the item has not changed since. You cannot approve the item yourself: a person sets it to APPROVED in the GTM pages of the Reliant web app. The email is built from the stored item, so edit it with save_gtm_item (which takes it back to review) rather than here. Refused in an unattended run, for an item that is not APPROVED, already SENT, or at another revision, and when no Gmail account is connected; you cannot connect one. A send that may have gone out without being recorded holds the item until a person checks the sent mail."
 
+// gtmUnattendedSend is send_gtm_email's refusal in an unattended run.
+const gtmUnattendedSend = "sending a GTM email needs the owner's approval card, and an unattended run cannot show one; nothing was sent"
+
 // sendGtmEmailTool is send_gtm_email: an AutomationApprovalTool whose
 // PrepareAutomation raises the owner's card for every attended call and
 // refuses an unattended one, and whose execution sends only what the card
@@ -1424,13 +1508,19 @@ func (t *sendGtmEmailTool) decode(call ToolCall) (SendGtmEmailParams, error) {
 }
 
 // PrepareAutomation implements AutomationApprovalTool. A send ALWAYS needs
-// the owner's card: an attended call returns the card with needsApproval
-// true, and anything the sender refuses (an unattended run among it) is the
-// refusal. It never answers "no approval needed".
+// the owner's card: an unattended call is refused before anything is read,
+// an attended one returns the card with needsApproval true, and anything the
+// sender refuses is the refusal, in sanitized words. It never answers "no
+// approval needed".
 func (t *sendGtmEmailTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCall, unattended bool) (ActivationPreview, bool, error) {
 	actor, failure := gtmActor(ctx, t.repo)
 	if failure != nil {
 		return ActivationPreview{}, false, RefuseActivation("the calling chat could not be resolved", fmt.Errorf("%s", failure.Content))
+	}
+	if unattended {
+		// Refused here, whatever the sender would say: nobody can see a card.
+		err := errors.New(gtmUnattendedSend)
+		return ActivationPreview{}, false, RefuseActivation(gtmUnattendedSend, err)
 	}
 	if t.sender == nil {
 		return ActivationPreview{}, false, RefuseActivation("GTM email is unavailable on this server", errors.New("no GTM email sender"))
@@ -1439,9 +1529,12 @@ func (t *sendGtmEmailTool) PrepareAutomation(ctx *rctx.ToolContext, call ToolCal
 	if err != nil {
 		return ActivationPreview{}, false, err
 	}
-	title, hash, err := t.sender.PrepareSend(ctx.Context, actor, strings.TrimSpace(p.ItemID), p.ExpectedRevision, unattended)
+	itemID := strings.TrimSpace(p.ItemID)
+	title, hash, err := t.sender.PrepareSend(ctx.Context, actor, itemID, p.ExpectedRevision, false)
 	if err != nil {
-		return ActivationPreview{}, false, RefuseActivation(err.Error(), err)
+		// The reason is shown to the agent and the owner: the domain's own
+		// words, never raw store or driver text (gtmErrorText).
+		return ActivationPreview{}, false, RefuseActivation(gtmErrorText(err, gtmNotFound("item", itemID, ToolListGtmCalendar)), err)
 	}
 	if hash == "" {
 		err := errors.New("the send could not be bound to an approval")
