@@ -13,7 +13,7 @@
  */
 
 import { Pencil, Plug, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 import Button from "@/components/forge-ui/button";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
@@ -46,11 +46,21 @@ export function ChannelsPage() {
   );
 }
 
-function ChannelName({ channel }: { channel: GtmChannel }) {
+/**
+ * A channel's name, who added it (when given) and its key. The tag rides on
+ * the name's line, which truncates the name before the tag would wrap under
+ * it; the key is what moves to a second line.
+ */
+function ChannelName({ channel, channels, tag }: { channel: GtmChannel; channels: GtmChannel[]; tag?: ReactNode }) {
   return (
-    <span className="flex min-w-0 items-center gap-2">
-      <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: channelColor(channel) }} />
-      <span className="font-medium text-ink">{channel.name}</span>
+    <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+      <span className="flex min-w-0 max-w-full items-center gap-2">
+        <span aria-hidden="true" className="size-2.5 shrink-0 rounded-full" style={{ background: channelColor(channel, channels) }} />
+        <span className="truncate font-medium text-ink" title={channel.name}>
+          {channel.name}
+        </span>
+        {tag && <span className="shrink-0 whitespace-nowrap">{tag}</span>}
+      </span>
       <Mono value={channel.key} copy={false} className="text-xs text-ink-muted" />
     </span>
   );
@@ -61,10 +71,12 @@ export function ChannelsView() {
   const channelsQ = useListChannels({ orgId }, { enabled: !!orgId });
   const itemsQ = useListItems({ orgId, pageSize: USAGE_PAGE }, { enabled: !!orgId });
   const campaignsQ = useListCampaigns({ orgId, pageSize: USAGE_PAGE }, { enabled: !!orgId });
-  // undefined: closed; null: a new channel; a channel: editing it.
-  const [editing, setEditing] = useState<GtmChannel | null | undefined>(undefined);
+  // undefined: closed; null: a new channel; an id: editing that channel, read
+  // live from the list so that after a conflict it is on the current revision.
+  const [editing, setEditing] = useState<string | null | undefined>(undefined);
 
   const channels = useMemo(() => channelsQ.data?.channels ?? [], [channelsQ.data]);
+  const editingChannel = typeof editing === "string" ? channels.find((c) => c.id === editing) : undefined;
   const usage = useMemo(() => {
     const u = new Map<string, { items: number; campaigns: number }>();
     const bump = (id: string, k: "items" | "campaigns") => {
@@ -94,7 +106,7 @@ export function ChannelsView() {
     interactive: true,
     width: "70px",
     render: (_, row) => (
-      <Button variant="ghost" size="xs" leftIcon={<Pencil />} onClick={() => setEditing(row)} aria-haspopup="dialog" aria-label={`Edit ${row.name}`}>
+      <Button variant="ghost" size="xs" leftIcon={<Pencil />} onClick={() => setEditing(row.id)} aria-haspopup="dialog" aria-label={`Edit ${row.name}`}>
         Edit
       </Button>
     ),
@@ -106,11 +118,19 @@ export function ChannelsView() {
     render: (_, row) => <span className="block whitespace-normal text-ink-muted">{usageText(row.id)}</span>,
   };
 
+  const statusColumn: DataTableColumn<ChannelRow> = {
+    key: "status",
+    header: "Status",
+    width: "100px",
+    render: (_, row) => <Tag>{STATUS_LABEL[row.status] ?? "Unknown"}</Tag>,
+  };
+
   const integratedColumns: DataTableColumn<ChannelRow>[] = [
-    { key: "name", header: "Channel", stackTitle: true, render: (_, row) => <ChannelName channel={row} /> },
+    { key: "name", header: "Channel", stackTitle: true, render: (_, row) => <ChannelName channel={row} channels={channels} /> },
     { key: "integrationKind", header: "Goes out through", width: "150px", render: (_, row) => <span className="text-ink-muted">{integrationLabel(row.integrationKind)}</span> },
     { key: "connectionState", header: "Your connection", width: "150px", render: (_, row) => <ConnectionBadge state={row.connectionState} /> },
     usageColumn,
+    statusColumn,
     {
       key: "connect",
       header: "Connect",
@@ -136,12 +156,7 @@ export function ChannelsView() {
       key: "name",
       header: "Channel",
       stackTitle: true,
-      render: (_, row) => (
-        <span className="flex flex-wrap items-center gap-2">
-          <ChannelName channel={row} />
-          <ChannelSourceTag source={row.source} />
-        </span>
-      ),
+      render: (_, row) => <ChannelName channel={row} channels={channels} tag={<ChannelSourceTag source={row.source} />} />,
     },
     {
       key: "manualInstructionsMd",
@@ -160,7 +175,7 @@ export function ChannelsView() {
       ),
     },
     usageColumn,
-    { key: "status", header: "Status", width: "100px", render: (_, row) => <Tag>{STATUS_LABEL[row.status] ?? "Unknown"}</Tag> },
+    statusColumn,
     editColumn,
   ];
 
@@ -221,7 +236,11 @@ export function ChannelsView() {
         </>
       )}
 
-      {editing !== undefined && <ChannelForm channel={editing ?? undefined} onClose={() => setEditing(undefined)} />}
+      {editing === null && <ChannelForm key="new" onClose={() => setEditing(undefined)} />}
+      {editingChannel && (
+        // Keyed on the revision: a conflict re-reads the list, and the form starts again from the current version.
+        <ChannelForm key={`${editingChannel.id}@${editingChannel.revision}`} channel={editingChannel} onClose={() => setEditing(undefined)} />
+      )}
     </>
   );
 }

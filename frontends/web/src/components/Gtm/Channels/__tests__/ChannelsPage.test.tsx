@@ -21,6 +21,7 @@ import {
   GtmChannelStatus,
   GtmConnectionState,
   GtmItemSchema,
+  type UpdateChannelRequest,
 } from "@/gen/reliant/v1/gtm_pb";
 
 import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
@@ -95,6 +96,8 @@ describe("the channel lists", () => {
     expect(within(integrated).getByText("Not connected")).toBeInTheDocument();
     expect(within(integrated).getByText("Gmail")).toBeInTheDocument();
     expect(within(integrated).getByText("Only a person")).toBeInTheDocument();
+    expect(within(integrated).getByRole("columnheader", { name: "Status" })).toBeInTheDocument();
+    expect(within(integrated).getByText("Active")).toBeInTheDocument();
     const connect = within(integrated).getByRole("link", { name: "Connect Gmail for Email" });
     expect(connect.getAttribute("href")).toMatch(/\/connectors$/);
 
@@ -122,6 +125,9 @@ describe("the channel lists", () => {
     await within(manual).findByText("Discord");
     expect(within(manual).getAllByText("Added by agent")).toHaveLength(1);
     expect(within(manual).getAllByText("Default")).toHaveLength(1);
+    // The tag sits on the name's line (the name truncates first), not on a line of its own.
+    const name = within(manual).getByText("Discord");
+    expect(name.parentElement).toContainElement(within(manual).getByText("Added by agent"));
   });
 });
 
@@ -165,6 +171,28 @@ describe("writing a channel", () => {
     expect(screen.getByRole("button", { name: "Add channel" })).toBeDisabled();
     fireEvent.change(within(form).getByLabelText("Integration"), { target: { value: "gmail" } });
     expect(screen.getByRole("button", { name: "Add channel" })).toBeEnabled();
+  });
+
+  it("after a conflict, edits the channel as it is now, on its current revision", async () => {
+    let server = hn;
+    const update = vi.fn((req: unknown) => {
+      if ((req as UpdateChannelRequest).expectedRevision === 3) {
+        server = create(GtmChannelSchema, { ...hn, manualInstructionsMd: "Post a Show HN, then reply to comments.", revision: 4 });
+        throw new ConnectError("revision moved", Code.Aborted);
+      }
+      return { channel: server };
+    });
+    renderGtm(<ChannelsView />, { ...reads, "GtmService.ListChannels": () => ({ channels: [email, server, discord] }), "GtmService.UpdateChannel": update }, at);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit Hacker News" }));
+    fireEvent.change(within(await screen.findByTestId("gtm-channel-form")).getByLabelText("Channel types"), { target: { value: "forum news" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(toasts.warning).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(within(screen.getByTestId("gtm-channel-form")).getByLabelText("How to post on it")).toHaveValue("Post a Show HN, then reply to comments."),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 4, manualInstructionsMd: "Post a Show HN, then reply to comments." }));
   });
 
   it("says so when another channel holds the key", async () => {
