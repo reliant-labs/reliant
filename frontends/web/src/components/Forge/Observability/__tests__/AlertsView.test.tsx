@@ -11,8 +11,9 @@ import { describe, expect, it, vi } from "vitest";
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import type { DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
+import type { AlertInstance, DeclaredAlertRule } from "@/services/controlPlane/observability/alertingTypes";
 
+import { alertInView } from "../AlertsView";
 import { FIXTURE_DECLARED } from "../__fixtures__/fixtureAlerting";
 import { createFixtureApi, FIXTURE_ENVS, FIXTURE_PROJECT } from "../__fixtures__/fixtureApi";
 import type { ObsPlace } from "../obsPlace";
@@ -51,6 +52,57 @@ describe("firing", () => {
     renderPanel(createFixtureApi(), { view: "alerts" }, PROD);
     await screen.findByTestId("obs-alert-CheckoutP95High");
     expect(screen.queryByTestId("obs-alert-ServiceErrorRateHigh")).not.toBeInTheDocument();
+  });
+
+  it("on a project page, hides what fires on another project's environment or on none (an org-level rule)", async () => {
+    const api = createFixtureApi();
+    const elsewhere = (envId: string, rule: string): AlertInstance => ({
+      envId,
+      rule,
+      fingerprint: `fp-${rule}`,
+      labels: { alertname: rule, severity: "critical" },
+      annotations: {},
+      state: "firing",
+      activeAtMs: Date.now() - 60_000,
+      firingAtMs: Date.now() - 60_000,
+      lastEvalAtMs: Date.now(),
+      lastValue: 1,
+    });
+    const scoped: typeof api = {
+      ...api,
+      listAlerts: async (orgId, envId) => [...(await api.listAlerts(orgId, envId)), ...(envId ? [] : [elsewhere("", "MlRunLossSpike"), elsewhere("env-other-prod", "OtherProjectDown")])],
+    };
+    renderPanel(scoped, { view: "alerts" }, PROJECT);
+    await screen.findByTestId("obs-alert-CheckoutP95High", {}, { timeout: 10_000 });
+    expect(screen.getByTestId("obs-alert-ServiceErrorRateHigh")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-alert-MlRunLossSpike")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("obs-alert-OtherProjectDown")).not.toBeInTheDocument();
+    expect(screen.getByTestId("obs-alerts-tab-firing")).toHaveTextContent("2");
+  });
+
+  it("history on a project page leaves out an org-level rule's state changes", async () => {
+    const api = createFixtureApi();
+    const withOrgRule: typeof api = {
+      ...api,
+      listAlertHistory: async (orgId, opts) => [
+        { envId: "", rule: "MlRunLossSpike", fingerprint: "fp-ml", labels: {}, transition: "firing" as const, value: 1, atMs: Date.now() - 60_000 },
+        ...(await api.listAlertHistory(orgId, opts)),
+      ],
+    };
+    renderPanel(withOrgRule, { view: "alerts", alerts: "history", range: "24h" }, PROJECT);
+    const rows = await screen.findAllByTestId("obs-alert-event");
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.some((r) => r.textContent?.includes("MlRunLossSpike"))).toBe(false);
+  });
+
+  it("scopes by place: env pages trust the server, projects keep to their environments, the org keeps everything", () => {
+    expect(alertInView(PROD, [])("")).toBe(true);
+    const project = alertInView(PROJECT, []);
+    expect([project("env-prod"), project("env-dev"), project(""), project("env-other-prod")]).toEqual([true, true, false, false]);
+    expect(alertInView(PROJECT, ["env-staging"])("env-prod")).toBe(false);
+    const org: ObsPlace = { kind: "org", environments: ENVIRONMENTS, apps: [FIXTURE_PROJECT] };
+    expect(alertInView(org, [])("")).toBe(true);
+    expect(alertInView(org, ["env-prod"])("")).toBe(false);
   });
 
   it("says nothing fires, and how many rules are watching, when it is quiet", async () => {

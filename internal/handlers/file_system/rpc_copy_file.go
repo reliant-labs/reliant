@@ -43,7 +43,7 @@ func (s *Service) CopyFile(
 		Message     string `json:"message"`
 		Destination string `json:"destination"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.copy", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.copy", cmdReq, &cmdResp, fsCommandTimeoutMs); err != nil {
 		return nil, err
 	}
 

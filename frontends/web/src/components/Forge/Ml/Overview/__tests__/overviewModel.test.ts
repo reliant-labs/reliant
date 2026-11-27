@@ -13,22 +13,22 @@ import {
   MlFindingState,
   MlRunSchema,
   MlRunState,
-  MlSeverity,
+  MlFindingSeverity,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { activeRuns, needsAttention, productiveShare, wasteUsd } from "../overviewModel";
 
-const finding = (id: string, severity: MlSeverity, usd: number, category = MlFindingCategory.WASTE, state = MlFindingState.OPEN) =>
+const finding = (id: string, severity: MlFindingSeverity, usd: number, category = MlFindingCategory.WASTE, state = MlFindingState.OPEN) =>
   create(MlFindingSchema, { id, severity, category, state, impact: { usdPerDay: usd } });
 
 describe("the ML overview", () => {
   it("lists what needs attention: worst severity, then most money; no telemetry gaps, nothing closed", () => {
     const got = needsAttention([
-      finding("cheap-critical", MlSeverity.CRITICAL, 10),
-      finding("rich-warning", MlSeverity.WARNING, 2000),
-      finding("rich-critical", MlSeverity.CRITICAL, 900),
-      finding("gap", MlSeverity.CRITICAL, 0, MlFindingCategory.COVERAGE),
-      finding("fixed", MlSeverity.CRITICAL, 5000, MlFindingCategory.HEALTH, MlFindingState.FIXED),
+      finding("cheap-critical", MlFindingSeverity.CRITICAL, 10),
+      finding("rich-warning", MlFindingSeverity.WARNING, 2000),
+      finding("rich-critical", MlFindingSeverity.CRITICAL, 900),
+      finding("gap", MlFindingSeverity.CRITICAL, 0, MlFindingCategory.COVERAGE),
+      finding("fixed", MlFindingSeverity.CRITICAL, 5000, MlFindingCategory.HEALTH, MlFindingState.FIXED),
     ]).map((f) => f.id);
     expect(got).toEqual(["rich-critical", "cheap-critical", "rich-warning"]);
   });

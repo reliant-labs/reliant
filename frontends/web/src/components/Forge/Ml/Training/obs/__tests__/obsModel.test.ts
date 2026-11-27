@@ -8,8 +8,6 @@ import { describe, expect, it } from "vitest";
 import {
   GetMlRunResponseSchema,
   MlCollection,
-  MlCollectiveStateSchema,
-  MlLogLineSchema,
   MlPhaseSchema,
   MlRankSchema,
   MlSeriesSchema,
@@ -17,13 +15,8 @@ import {
 
 import { compareRow, configDiff, delta, deltaTone, mergeAttempts } from "../../compare/compareModel";
 import {
-  collectiveRows,
   ema,
-  filterLogs,
   filterSections,
-  firstErrors,
-  flightVerdict,
-  highlightCounts,
   METRIC_SECTIONS,
   rankHeatmap,
   redoneBands,
@@ -63,6 +56,9 @@ describe("metrics workspace", () => {
     expect(ema([3, 4], 0)).toEqual([3, 4]);
   });
 
+});
+
+describe("redone steps", () => {
   it("shades the steps each resume redid", () => {
     const phase = create(MlPhaseSchema, { attempts: [{ n: 1, startStep: 0n, endStep: 12_400n }, { n: 2, startStep: 12_000n, endStep: 32_750n }, { n: 3, startStep: 32_000n, endStep: 41_200n }] });
     expect(redoneBands(phase).map((b) => [b.from, b.to])).toEqual([
@@ -84,34 +80,6 @@ describe("system", () => {
   it("finds the straggler", () => {
     const ranks = [create(MlRankSchema, { rank: 0, stepTimeMsP50: 10 }), create(MlRankSchema, { rank: 37, stepTimeMsP50: 10, computeMsP50: 9, straggler: true })];
     expect(stragglersOf(ranks).map((r) => r.rank)).toEqual([37]);
-  });
-});
-
-describe("logs", () => {
-  const line = (o: Record<string, unknown>) => create(MlLogLineSchema, { level: "info", rank: 0, attempt: 1, message: "", pod: "p", ...o });
-  const lines = [line({ message: "step 1" }), line({ level: "error", message: "NCCL WARN watchdog", highlight: "watchdog", rank: 3 }), line({ level: "error", attempt: 2, message: "Xid 79", highlight: "xid" }), line({ level: "error", attempt: 2, message: "later" })];
-
-  it("counts highlights and pins each attempt's first error", () => {
-    expect(highlightCounts(lines).map((c) => [c.highlight, c.count])).toEqual([
-      ["watchdog", 1],
-      ["xid", 1],
-    ]);
-    expect(firstErrors(lines).map((l) => l.message)).toEqual(["NCCL WARN watchdog", "Xid 79"]);
-  });
-
-  it("filters by rank, errors, highlight and text", () => {
-    expect(filterLogs(lines, { rank: 3, errorsOnly: false, highlight: null, q: "" })).toHaveLength(1);
-    expect(filterLogs(lines, { rank: null, errorsOnly: true, highlight: null, q: "" })).toHaveLength(3);
-    expect(filterLogs(lines, { rank: null, errorsOnly: false, highlight: "*", q: "" })).toHaveLength(2);
-    expect(filterLogs(lines, { rank: null, errorsOnly: false, highlight: null, q: "xid" })).toHaveLength(1);
-  });
-});
-
-describe("flight recorder", () => {
-  it("puts the mismatched rank first and names it", () => {
-    const c = [0, 1, 2].map((r) => create(MlCollectiveStateSchema, { rank: r, lastSeq: r === 1 ? 88_212n : 88_213n, op: "ALLREDUCE", state: r === 1 ? "completed" : "started", mismatched: r === 1 }));
-    expect(collectiveRows(c)[0].rank).toBe(1);
-    expect(flightVerdict(c)).toBe("Not all ranks joined collective 88213 (ALLREDUCE): missing rank 1");
   });
 });
 

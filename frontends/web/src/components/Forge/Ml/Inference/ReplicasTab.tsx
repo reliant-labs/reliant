@@ -30,7 +30,7 @@ import {
   SubjectLink,
   tail,
   tsMs,
-  useMl,
+  useMlEvents,
   useMlSearch,
   type MlColumn,
 } from "../kit";
@@ -46,7 +46,7 @@ export function ReplicasTab({ d, events }: { d: GetMlInferenceServiceResponse; e
   const now = Date.now();
   const releaseOf = (revisionId: string) => d.revisions.find((r) => r.id === revisionId)?.release ?? tail(revisionId);
   const selected = d.replicas.find((r) => r.id === search.sel);
-  const util = useServingSeries({ kind: MlSubjectKind.INFERENCE_SERVICE, id: svc.id, label: svc.name }, ["gpu.util"], "replica");
+  const util = useServingSeries({ kind: MlSubjectKind.INFERENCE_SERVICE, id: svc.id }, ["gpu.util"], "replica");
 
   const columns: MlColumn<MlReplica>[] = [
     { key: "pod", header: "Replica", render: (r) => <span className="font-mono text-code">{short(r.pod)}</span>, sort: (r) => r.pod },
@@ -129,7 +129,7 @@ export function ReplicasTab({ d, events }: { d: GetMlInferenceServiceResponse; e
 function ReplicaPanel({ replica, release, onClose }: { replica: MlReplica; release: string; onClose: () => void }) {
   const subject = { kind: MlSubjectKind.REPLICA, id: replica.id, label: short(replica.pod) };
   const series = useServingSeries(subject, ["engine.kv_cache_ratio", "gpu.util", "serve.ttft"]);
-  const events = useMl("listMlEvents", { subject });
+  const events = useMlEvents(subject, { range: "24h" });
   const evs = events.data?.kind === "ok" ? events.data.data.events : [];
   const now = Date.now();
   return (

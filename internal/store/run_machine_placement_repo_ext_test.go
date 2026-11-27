@@ -21,6 +21,7 @@ import (
 // pool placed there (a trigger's) or with a live run placement there (a
 // workflow's), and a labels read counts every live run on the machine.
 func TestRunMachinePlacements(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Date(2026, 11, 19, 9, 0, 0, 0, time.UTC)
@@ -137,6 +138,32 @@ func TestRunMachinePlacements(t *testing.T) {
 	}
 	if _, err := store.GetRunMachinePlacement(ctx, env.ORM, "rp-nodes", "deploy"); !errors.Is(err, core.ErrRunMachinePlacementNotFound) {
 		t.Fatalf("an unplaced node = %v, want not found", err)
+	}
+
+	// The one move: a node's preflight failed on its member, so the
+	// placement goes to another, and its slot with it. A move from a member
+	// it is no longer on (a concurrent move won) answers where it is; a move
+	// of nothing recorded records it.
+	move := func(chat, scope, from, to string) *core.RunMachinePlacement {
+		t.Helper()
+		got, err := store.MoveRunMachinePlacement(ctx, env.ORM, &core.RunMachinePlacement{WorkflowID: chat, Scope: scope, UserID: storetest.SeedUserID,
+			ChatID: chat, MachinePoolID: poolID, Selector: map[string]string{"pool": "gate"}, DaemonID: to}, from)
+		if err != nil {
+			t.Fatalf("MoveRunMachinePlacement %s/%q: %v", chat, scope, err)
+		}
+		return got
+	}
+	if got := move("rp-nodes", "test", "rp-a", "rp-b"); got.DaemonID != "rp-b" || got.MachinePoolID != pool.ID {
+		t.Fatalf("move = %+v, want the placement on b", got)
+	}
+	if got := move("rp-nodes", "test", "rp-a", "rp-c"); got.DaemonID != "rp-b" {
+		t.Fatalf("a stale move = %+v, want the placement left on b", got)
+	}
+	if n, err := store.CountMachinePoolMemberLiveRuns(ctx, env.ORM, pool.ID, "rp-b"); err != nil || n != 1 {
+		t.Fatalf("live runs on b after the move = %d, %v; want 1", n, err)
+	}
+	if got := move("rp-nodes", "lint", "rp-a", "rp-b"); got.DaemonID != "rp-b" || got.Scope != "lint" {
+		t.Fatalf("a move of nothing recorded = %+v, want it recorded on b", got)
 	}
 
 	// The chat read placement makes: owner, project, trigger placement.

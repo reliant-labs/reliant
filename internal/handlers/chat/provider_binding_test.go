@@ -25,7 +25,7 @@ func (bindingLocalDirectory) LocalDaemons(context.Context, string) ([]local.Daem
 func TestLocalRootPickerClearsBindingAndResumeReconcilesIt(t *testing.T) {
 	ctx, fx, repo, temporal, svc := selectionFixture(t, db.Active())
 	svc.deps.LocalModels = bindingLocalDirectory{}
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	_, err = svc.storeChatProvider(ctx, "test-user", chat, "builtin://agent", "codex")
 	require.NoError(t, err)
@@ -40,7 +40,7 @@ func TestLocalRootPickerClearsBindingAndResumeReconcilesIt(t *testing.T) {
 
 func TestOrdinaryBoundSendCannotMoveModelsOrClearBinding(t *testing.T) {
 	ctx, fx, repo, _, svc := selectionFixture(t, db.Active())
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	_, err = svc.storeChatProvider(ctx, "test-user", chat, "builtin://agent", "codex")
 	require.NoError(t, err)
@@ -81,7 +81,7 @@ func TestFreshStoredModelDoesNotBindChat(t *testing.T) {
 		setSelection(t, ctx, repo, fx.chatID, map[string]any{"model": model})
 		_, err := chatselection.New(chatselection.Deps{Store: store.NewChatSelectionExtStore(repo.ORM())}).SetPolicy(ctx, fx.chatID, "test-user", "builtin://agent", chatselection.ProviderPolicy{OnLimit: chatselection.OnLimitFallback, FallbackModel: "gpt-6.1-sol@codex"}, 0)
 		require.NoError(t, err)
-		chat, err := repo.GetChat(ctx, fx.chatID)
+		chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 		require.NoError(t, err)
 		inputs, err := svc.launcher().BuildChatWorkflowInputs(ctx, "test-user", chat, "builtin://agent", nil, nil)
 		require.NoError(t, err)
@@ -98,7 +98,7 @@ func TestExplicitSwitchBindingSurvivesSelectionWritesAndFreshLaunch(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, "codex", svc.chatProvider(ctx, fx.chatID))
 	setSelection(t, ctx, repo, fx.chatID, map[string]any{"mode": "auto"})
-	chat, err := repo.GetChat(ctx, fx.chatID)
+	chat, err := store.GetChat(ctx, repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	inputs, err := svc.launcher().BuildChatWorkflowInputs(ctx, "test-user", chat, "builtin://agent", nil, nil)
 	require.NoError(t, err)

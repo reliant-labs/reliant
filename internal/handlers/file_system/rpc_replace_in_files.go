@@ -49,7 +49,7 @@ func (s *Service) ReplaceInFiles(
 			Replacements int    `json:"replacements"`
 		} `json:"changes"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.target, "fs.find_replace", cmdReq, &cmdResp, 60000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.find_replace", cmdReq, &cmdResp, fsScanTimeoutMs); err != nil {
 		return nil, err
 	}
 

@@ -1,10 +1,10 @@
 package db
 
 import (
-	"encoding/json"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // ============================================================================
@@ -103,87 +103,15 @@ func (u ToolCallUpdate) Type() UpdateType { return UpdateTypeToolCall }
 // MESSAGE UPDATES
 // ============================================================================
 
-// MessageUpdateData is the payload for update_type="message" chat_updates —
-// the row that renders as a message in the transcript. Four call sites build
-// this payload (SaveMessage's hot path in internal/threads, EnrichMessageUpdate,
-// SaveMessageToThreadWithID, and the tool-denial message in
-// internal/handlers/approval/approval.go); route all of them through this struct
-// instead of a hand-built map so a field rename (e.g. ordinal -> seq) fails to
-// compile at every call site instead of silently vanishing from the JSON.
-//
-// The four writers populate different subsets of these fields. Model that
-// with omitempty + pointers rather than forcing every caller to supply every
-// field — a nil pointer omits the key entirely, matching a writer that never
-// set it, while a non-nil pointer to a zero value (0, or an empty slice)
-// still serializes, matching a writer that always sets it. Do not infer "this
-// field is unused" from one caller; check all four before removing one.
-type MessageUpdateData struct {
-	UpdateType string `json:"update_type"` // always "message"
-	ID         string `json:"id"`
-	// Role is the MessageRole proto enum (int32) on three writers, and the
-	// literal string "tool" on the approval-denial writer. That
-	// inconsistency predates this struct; interface{} preserves each
-	// caller's existing wire value rather than silently normalizing it.
-	Role          interface{}              `json:"role"`
-	Seq           int64                    `json:"seq"`
-	Ordinal       int64                    `json:"ordinal"`
-	Thread        string                   `json:"thread"`
-	ContentBlocks []map[string]interface{} `json:"content_blocks"`
-	CreatedAt     string                   `json:"created_at"`
+// MessageUpdateData is the message update payload defined in core.
+type MessageUpdateData = core.MessageUpdateData
 
-	ChatID          string `json:"chat_id,omitempty"`
-	UpdatedAt       string `json:"updated_at,omitempty"`
-	ContextWindowID string `json:"context_window_id,omitempty"`
-	StreamingState  string `json:"streaming_state,omitempty"`
-	// ContextSequence is a pointer because 0 is a valid sequence: only a nil
-	// pointer (the approval-denial writer, which never sets it) omits the key.
-	ContextSequence *int `json:"context_sequence,omitempty"`
-	// Attachments is a pointer to a slice so a writer that always emits
-	// attachments (even as "[]") is distinguishable from the approval-denial
-	// writer, which never sets this field at all.
-	Attachments         *[]map[string]interface{} `json:"attachments,omitempty"`
-	ThreadTokenCount    *int                      `json:"thread_token_count,omitempty"`
-	CompactionThreshold *int                      `json:"compaction_threshold,omitempty"`
-	DisplayStyle        *int32                    `json:"display_style,omitempty"`
-	TokenCount          *int                      `json:"token_count,omitempty"`
-	// Sender attributes a message another agent wrote. It is parsed straight
-	// into reliantv1.Message.sender on the client, hence the proto JSON names.
-	Sender *MessageSenderPayload `json:"sender,omitempty"`
-}
+// MessageSenderPayload is the sender payload defined in core.
+type MessageSenderPayload = core.MessageSenderPayload
 
-// MessageSenderPayload is the JSON form of reliantv1.MessageSender.
-type MessageSenderPayload struct {
-	ThreadID string `json:"thread_id"`
-	Title    string `json:"title,omitempty"`
-	Kind     int32  `json:"kind"`
-	Subject  string `json:"subject,omitempty"`
-}
-
-// NewMessageSenderPayload builds the sender of a live message update. title
-// is the sender thread's title, nil when it has none or the thread is gone:
-// the attribution is still worth showing without it. subject is the sending
-// agent's one-line subject, "" when it gave none. It returns nil for a
-// message with no sender.
-func NewMessageSenderPayload(senderThreadID string, title *string, kind reliantv1.AgentMessageKind, subject string) *MessageSenderPayload {
-	if senderThreadID == "" {
-		return nil
-	}
-	p := &MessageSenderPayload{ThreadID: senderThreadID, Kind: int32(kind), Subject: subject}
-	if title != nil {
-		p.Title = *title
-	}
-	return p
-}
-
-func (u MessageUpdateData) Type() UpdateType { return UpdateTypeMessage }
-
-// Marshal serializes the update to the JSON string CreateChatUpdate expects.
-func (u MessageUpdateData) Marshal() (string, error) {
-	data, err := json.Marshal(u)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
+// NewMessageSenderPayload builds the sender of a live message update.
+func NewMessageSenderPayload(threadID string, title *string, kind reliantv1.AgentMessageKind, subject string) *MessageSenderPayload {
+	return core.NewMessageSenderPayload(threadID, title, kind, subject)
 }
 
 // ============================================================================
@@ -204,50 +132,18 @@ const (
 // TYPED UPDATE INTERFACE
 // ============================================================================
 
-// TypedChatUpdate is the interface for all typed chat updates
-type TypedChatUpdate interface {
-	Type() UpdateType
-}
+// TypedChatUpdate is the interface for all typed chat updates; core's.
+type TypedChatUpdate = core.TypedChatUpdate
 
-// MarshalUpdate marshals a typed update to JSON
-func MarshalUpdate(update TypedChatUpdate) (string, error) {
-	data, err := json.Marshal(update)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
+// MarshalUpdate marshals a typed update to JSON.
+func MarshalUpdate(update TypedChatUpdate) (string, error) { return core.MarshalUpdate(update) }
 
 // ============================================================================
 // QUESTION UPDATES
 // ============================================================================
 
-// QuestionUpdate represents a question status update
-type QuestionUpdate struct {
-	UpdateType UpdateType `json:"update_type"`
-	QuestionID string     `json:"question_id"`
-	ChatID     string     `json:"chat_id"`
-	WorkflowID string     `json:"workflow_id"`
-	// ThreadID is the thread that raised the question. Without it a supervision
-	// surface reading this feed can see THAT a gate opened but not which of a
-	// run's fanned-out threads is waiting.
-	ThreadID string `json:"thread_id"`
-	StepID   string `json:"step_id"`
-	Status   string `json:"status"`
-	Metadata string `json:"metadata,omitempty"`
-	// Async marks a question asked without waiting: no thread is parked on
-	// it, so a client must not treat it as the chat's or a thread's pending
-	// gate (the composer, the pill), only as an answerable timeline card.
-	Async bool `json:"async,omitempty"`
-	// ToolCallID is the ask_user tool call that raised the question, when
-	// one did: the timeline card it belongs to.
-	ToolCallID string `json:"tool_call_id,omitempty"`
-	// WithdrawnReason is set on the "resolved" update of a question its
-	// agent withdrew: the timeline card shows it instead of an answer.
-	WithdrawnReason string `json:"withdrawn_reason,omitempty"`
-}
-
-func (u QuestionUpdate) Type() UpdateType { return UpdateTypeQuestion }
+// QuestionUpdate is a question status update; core's.
+type QuestionUpdate = core.QuestionUpdate
 
 // ============================================================================
 // STREAM FINALIZED UPDATES
@@ -316,10 +212,8 @@ func (u AgentMessagesDrainedUpdate) Type() UpdateType { return UpdateTypeAgentMe
 // ENTITY ID GENERATORS
 // ============================================================================
 
-// EntityIDForQuestion generates entity ID for question updates
-func EntityIDForQuestion(questionID string) string {
-	return "question-" + questionID + "-" + formatTimestamp()
-}
+// EntityIDForQuestion generates entity ID for question updates; core's.
+func EntityIDForQuestion(questionID string) string { return core.EntityIDForQuestion(questionID) }
 
 // EntityIDForAgentMessagesDrained generates the entity ID for a drain
 // announcement. The timestamp makes it unique per drain -- see

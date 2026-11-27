@@ -5,10 +5,11 @@ import "@/components/Forge/Ml/__tests__/jsdomShims";
 /**
  * The run's observability tabs and the run comparison, mounted over the shop
  * fixture pack with the scope a run page builds (runScopeOf over GetMlRun):
- * each draws its evidence from trainingTelemetry.ts.
+ * each reads ObservabilityService, which the pack answers from
+ * trainingTelemetry.ts (model/ml/telemetry.ts).
  */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { createMemoryHistory, createRootRoute, createRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,7 +20,7 @@ import { createFixtureTransport } from "@/fixtures/transport";
 import { shopAppPack } from "@/fixtures/shop/app";
 import { SHOP_READ_ONLY_MESSAGE } from "@/fixtures/shop/index";
 import { DEMO_ORG, demoNow, resetDemoNowForTests } from "@/fixtures/shop/shopStory";
-import { PROFILES, RUNS, TRACES } from "@/fixtures/shop/model/ml/world";
+import { RUNS, TRACES } from "@/fixtures/shop/model/ml/world";
 
 vi.mock("@/lib/analytics", () => ({ trackEvent: () => {} }));
 vi.mock("@/services/controlPlane/orgs", () => ({ currentOrgId: async () => DEMO_ORG }));
@@ -81,6 +82,18 @@ describe("training observability tabs", () => {
     expect(screen.getByTestId("ml-metric-eval/gsm8k")).toBeInTheDocument();
   });
 
+  it("metrics: on the step axis by default, the redone steps shaded; ?axis=time plots wall time", async () => {
+    mount(() => <Scoped tab={MetricsTab} phase="sft" />);
+    expect(await screen.findByTestId("ml-metric-train/loss")).toBeInTheDocument();
+    expect(screen.getByTestId("ml-metrics-axis-step")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("ml-metrics-legend")).toHaveTextContent("steps redone after a failure");
+    cleanup();
+    mount(() => <Scoped tab={MetricsTab} phase="sft" />, "?axis=time");
+    expect(await screen.findByTestId("ml-metric-train/loss")).toBeInTheDocument();
+    expect(screen.getByTestId("ml-metrics-axis-time")).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByTestId("ml-metrics-legend")).not.toHaveTextContent("steps redone");
+  });
+
   it("metrics: ?q keeps only matching tiles", async () => {
     mount(() => <Scoped tab={MetricsTab} phase="sft" />, "?q=mfu");
     expect(await screen.findByTestId("ml-metric-throughput/mfu")).toBeInTheDocument();
@@ -98,32 +111,25 @@ describe("training observability tabs", () => {
     expect(screen.getByTestId("ml-system-ranks")).toHaveTextContent("64 ranks");
   });
 
-  it("logs: highlight chips, pinned first errors, rank-tagged lines with trace links", async () => {
+  it("logs: Observability's logs explorer over the phase's pods", async () => {
     mount(() => <Scoped tab={LogsTab} phase="sft" />);
-    expect(await screen.findByTestId("ml-logs-chip-watchdog")).toBeInTheDocument();
-    expect(screen.getByTestId("ml-logs-chip-xid")).toBeInTheDocument();
-    expect(screen.getByTestId("ml-logs-pinned")).toHaveTextContent("attempt 1");
-    expect(within(screen.getByTestId("ml-logs-lines")).getAllByTestId("ml-log-trace").length).toBeGreaterThan(0);
+    expect(await screen.findByTestId("obs-logs-table")).toBeInTheDocument();
+    expect(screen.getByTestId("obs-logs")).toBeInTheDocument();
   });
 
-  it("traces: the slow-step list opens a trace with its rank lanes", async () => {
+  it("traces: Observability's trace explorer lists the attempt's slow steps and opens one", async () => {
+    mount(() => <Scoped tab={TracesTab} phase="sft" attempt={3} />);
+    // The list is virtualized (no rows in jsdom); its summary counts the attempt's kept traces.
+    expect(await screen.findByText(/Plotting all \d+ matching traces/)).toBeInTheDocument();
+    cleanup();
     mount(() => <Scoped tab={TracesTab} phase="sft" attempt={3} />, `?sel=${TRACES.slowStep}`);
-    expect(await screen.findByTestId("ml-traces-table")).toHaveTextContent("rank 37 late at all_reduce");
-    expect(await screen.findByTestId("ml-traces-selected")).toHaveTextContent("rank 37");
-    expect(await screen.findByTestId("ml-run-trace")).toBeInTheDocument();
+    expect(await screen.findByTestId("trace-detail")).toBeInTheDocument();
   });
 
-  it("profiles: captures, HTA summary, kernels and the flamegraph", async () => {
-    mount(() => <Scoped tab={ProfilesTab} phase="sft" attempt={3} />, `?sel=${PROFILES.kineto}`);
-    expect(await screen.findByTestId("ml-profiles-table")).toHaveTextContent("PyTorch profiler (Kineto)");
-    expect(await screen.findByTestId("ml-profile-hta")).toHaveTextContent("compute");
-    expect(screen.getByTestId("ml-profile-kernels")).toHaveTextContent("flash_fwd_kernel");
-    expect(screen.getByTestId("ml-profile-top")).toBeInTheDocument();
-  });
-
-  it("profiles: the flight recorder marks rank 37", async () => {
-    mount(() => <Scoped tab={ProfilesTab} phase="sft" attempt={1} />);
-    expect(await screen.findByTestId("ml-profile-flight-verdict")).toHaveTextContent("missing rank 37");
+  it("profiles: the trainer's flamegraph from the attempt's captures", async () => {
+    mount(() => <Scoped tab={ProfilesTab} phase="sft" attempt={3} />);
+    expect(await screen.findByTestId("obs-speedscope")).toBeInTheDocument();
+    expect(screen.queryByTestId("obs-profiles-empty")).toBeNull();
   });
 });
 
@@ -136,5 +142,7 @@ describe("run comparison", () => {
     expect(screen.getByTestId("ml-compare-config-table")).toHaveTextContent("lr");
     expect(screen.getByTestId("ml-compare-system")).toHaveTextContent(RUNS.v1.name);
     expect(await screen.findByTestId("ml-compare-train/loss")).toBeInTheDocument();
+    // Every run reports its step, so runs from different weeks line up by step.
+    await waitFor(() => expect(screen.getByTestId("ml-compare-axis")).toHaveTextContent("step axis"));
   });
 });

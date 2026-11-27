@@ -15,7 +15,6 @@ import {
   type MlRevision,
   type MlSeries,
   type MlSliDelta,
-  type MlTraceSummary,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import type { HeatmapRow, MlTone } from "../kit";
@@ -191,18 +190,3 @@ export function peakOf(series: readonly MlSeries[]): { value: number; series?: M
       }
   return best;
 }
-
-// ── Traces ────────────────────────────────────────────────────────────────────
-
-/** The slow-request buckets present, with counts (for the filter chips). */
-export function traceBuckets(traces: readonly MlTraceSummary[]): { bucket: string; count: number }[] {
-  const m = new Map<string, number>();
-  for (const t of traces) {
-    const b = t.attributes.bucket;
-    if (b) m.set(b, (m.get(b) ?? 0) + 1);
-  }
-  return [...m.entries()].map(([bucket, count]) => ({ bucket, count })).sort((a, b) => b.count - a.count);
-}
-
-/** The traces in a bucket (`?filter`), or all. */
-export const filterTraces = (traces: readonly MlTraceSummary[], filter: string | undefined) => (filter && traces.some((t) => t.attributes.bucket === filter) ? traces.filter((t) => t.attributes.bucket === filter) : [...traces]);

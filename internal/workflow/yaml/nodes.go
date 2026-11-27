@@ -78,6 +78,12 @@ func unmarshalNode(node *yaml.Node) (*reliantv1.Node, error) {
 				return nil, fmt.Errorf("node %s: %w", v2node.Id, err)
 			}
 			v2node.Observe = o
+		case yamlKeyPreflight:
+			p, err := unmarshalNodePreflight(val)
+			if err != nil {
+				return nil, fmt.Errorf("node %s: %w", v2node.Id, err)
+			}
+			v2node.Preflight = p
 		}
 	}
 
@@ -86,6 +92,14 @@ func unmarshalNode(node *yaml.Node) (*reliantv1.Node, error) {
 	}
 
 	binding, hasBinding := generatedNodeBindingForType(v2node.Type)
+	if nodeRoleIsBaseKey(binding) {
+		if val := getYAMLField(node, yamlKeyRole); val != nil {
+			if val.Kind != yaml.ScalarNode {
+				return nil, fmt.Errorf("node %s: %s must be a string", v2node.Id, yamlKeyRole)
+			}
+			v2node.Role = val.Value
+		}
+	}
 	if !hasBinding {
 		return v2node, nil
 	}
@@ -174,6 +188,14 @@ func unmarshalStructuralArgs(node *yaml.Node, v2node *reliantv1.Node, binding ge
 	yamlMap, err := yamlMappingToMap(node, true)
 	if err != nil {
 		return err
+	}
+	if nodeRoleIsBaseKey(binding) {
+		delete(yamlMap, yamlKeyRole)
+	}
+	if v2node.GetType() == reviewNodeType {
+		if err := refuseReviewEngineKeys(yamlMap); err != nil {
+			return err
+		}
 	}
 
 	hasInputArgsMapField := false
@@ -312,10 +334,24 @@ func validateActivityNodeTopLevelKeys(node *yaml.Node, binding generatedNodeBind
 		allowed[key] = struct{}{}
 	}
 	allowed[yamlKeyArgs] = struct{}{}
+	if nodeRoleIsBaseKey(binding) {
+		allowed[yamlKeyRole] = struct{}{}
+	}
 	for key := range binding.argFieldKeys {
 		allowed[key] = struct{}{}
 	}
 	return validateMappingKeys(node, allowed, "node")
+}
+
+// nodeRoleIsBaseKey reports whether a node's `role:` key is the node's own
+// role (Node.role) rather than one of its args. It is not in the generated
+// base-field set because a save_message node has always taken its message's
+// role flat (`type: save_message, role: user, content: ...`), and that keeps
+// meaning what it meant: for a kind with an arg named role, the key is the
+// arg. A role is only valid on a review node, which has no such arg.
+func nodeRoleIsBaseKey(binding generatedNodeBinding) bool {
+	_, isArg := binding.argFieldKeys[yamlKeyRole]
+	return !isArg
 }
 
 func collectActivityArgsNode(node *yaml.Node, binding generatedNodeBinding) (*yaml.Node, error) {
@@ -938,8 +974,18 @@ func marshalNode(v2node *reliantv1.Node) (*yaml.Node, error) {
 		m.Content = append(m.Content, scalarNode(yamlKeyObserve, ""), marshalNodeObserve(v2node.Observe))
 	}
 
+	// preflight (node base level) — the machine's self-check.
+	if v2node.Preflight != nil {
+		m.Content = append(m.Content, scalarNode(yamlKeyPreflight, ""), marshalNodePreflight(v2node.Preflight))
+	}
+
 	// Marshal args based on generated descriptor binding.
 	binding, hasBinding := generatedNodeBindingForType(v2node.Type)
+
+	// role (node base level) — the engine role the node acts in.
+	if v2node.Role != "" && nodeRoleIsBaseKey(binding) {
+		m.Content = append(m.Content, scalarNode(yamlKeyRole, ""), scalarNode(v2node.Role, ""))
+	}
 	if hasBinding {
 		if binding.isStructural {
 			argsNodes, err := marshalStructuralArgsGeneric(v2node)

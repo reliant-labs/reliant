@@ -15,6 +15,7 @@ import (
 // after the cutoff, counts as held: not a driver's retry ladder, not a wait
 // that was cleared, not one older than the bound.
 func TestListChatsHeldOnUsageLimit(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Second)

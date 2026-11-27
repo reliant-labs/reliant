@@ -35,6 +35,8 @@ import {
   tail,
   tsMs,
   useMl,
+  useMlEvents,
+  useMlSeries,
   type MlColumn,
 } from "../kit";
 import { allocShare, eventCountSeries, heatmapOf, isStale, plural } from "./fleetModel";
@@ -89,7 +91,7 @@ function OverviewBody({ data }: { data: GetMlFleetResponse }) {
         <PoolsTable pools={data.pools} priced={priced} clusterName={(id) => data.clusters.find((c) => c.id === id)?.name ?? id} />
       </Panel>
       <Grid cols={2}>
-        <UtilisationPanel nowMs={nowMs} />
+        <UtilisationPanel nowMs={nowMs} pools={data.pools} />
         <HealthPanel data={data} nowMs={nowMs} />
       </Grid>
       <Panel title="Top idle-allocated" note="allocated GPUs doing nothing, most money first" flush testId="ml-fleet-idle">
@@ -191,16 +193,22 @@ function ClustersStrip({ clusters, nowMs }: { clusters: readonly MlCluster[]; no
   );
 }
 
-function UtilisationPanel({ nowMs }: { nowMs: number }) {
-  const heat = useMl("queryMlSeries", { subject: ORG, keys: ["pool.busy"], groupBy: "pool", maxPoints: 48 });
-  const alloc = useMl("queryMlSeries", { subject: ORG, keys: ["fleet.alloc_vs_busy"], maxPoints: 96 });
-  const events = useMl("listMlEvents", { subject: ORG, kinds: [] });
+const BUSY_KEYS = ["pool.busy"];
+const ALLOC_KEYS = ["fleet.alloc_vs_busy"];
+
+function UtilisationPanel({ nowMs, pools }: { nowMs: number; pools: readonly MlPool[] }) {
+  const heat = useMlSeries(ORG, BUSY_KEYS, { groupBy: "pool" });
+  const alloc = useMlSeries(ORG, ALLOC_KEYS);
+  const events = useMlEvents(ORG);
   return (
     <Panel title="Utilisation" note="last 24h · busy share by pool, and allocated against busy GPUs" testId="ml-fleet-util">
       <div className="space-y-4">
         <MlRead query={heat} what="pool utilisation">
           {(d) => {
-            const { rows, columns } = heatmapOf(d.series, (s) => (s.subject ? mlHref("fleet", ["pools", ...s.subject.id.split("/")]) : null));
+            const { rows, columns } = heatmapOf(d.series, (s) => {
+              const pool = pools.find((p) => p.name === s.group);
+              return pool ? mlHref("fleet", ["pools", pool.clusterId, pool.name]) : null;
+            });
             return rows.length ? <Heatmap rows={rows} columns={columns} format={(v) => fmtPct(v)} labelWidth={96} testId="ml-fleet-heatmap" /> : <EmptyNote>No utilisation reported.</EmptyNote>;
           }}
         </MlRead>
@@ -225,7 +233,7 @@ function UtilisationPanel({ nowMs }: { nowMs: number }) {
 }
 
 function HealthPanel({ data, nowMs }: { data: GetMlFleetResponse; nowMs: number }) {
-  const events = useMl("listMlEvents", { subject: ORG, kinds: [] });
+  const events = useMlEvents(ORG);
   return (
     <Panel title="Health" note="open device and node problems, worst score first" testId="ml-fleet-health">
       <div className="-mx-4 space-y-3">

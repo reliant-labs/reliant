@@ -12,24 +12,21 @@ import { describe, expect, it } from "vitest";
 
 import {
   GetMlRunResponseSchema,
-  ListMlAlertsResponseSchema,
-  ListMlEventsResponseSchema,
   ListMlExperimentsResponseSchema,
   ListMlRunsResponseSchema,
   MlCheckpointStatus,
   MlEventKind,
+  MlEventSchema,
   MlRunState,
   MlSubjectKind,
   type GetMlRunResponse,
-  type ListMlAlertsRequest,
-  type ListMlEventsRequest,
   type ListMlExperimentsRequest,
   type ListMlRunsRequest,
   type GetMlRunRequest,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import { timestampMs } from "@bufbuild/protobuf/wkt";
 
-import { recoveryGapSeconds, trainingAnswers, V3_RECOVERIES, V3_SPECS } from "@/fixtures/shop/model/ml/training";
+import { recoveryGapSeconds, trainingAnswers, trainingEventsAndAlerts, V3_RECOVERIES, V3_SPECS } from "@/fixtures/shop/model/ml/training";
 import { ALERTS, attemptId, BAD_NODE, checkpointId, EXPERIMENTS, HOT_NODE, RUNS, SPARE_NODE, V3_ATTEMPTS } from "@/fixtures/shop/model/ml/world";
 import { scopedNumbers } from "../trainingModel";
 
@@ -147,8 +144,8 @@ describe("training fixture: the wire", () => {
     const runs = create(ListMlRunsResponseSchema, trainingAnswers.listMlRuns!({ orgId: "o" } as ListMlRunsRequest, now)!);
     expect(() => toBinary(ListMlRunsResponseSchema, runs)).not.toThrow();
     for (const r of runs.runs) expect(() => toBinary(GetMlRunResponseSchema, getRun(r.id)), r.name).not.toThrow();
-    const ev = create(ListMlEventsResponseSchema, trainingAnswers.listMlEvents!({ orgId: "o", subject: { kind: MlSubjectKind.RUN, id: RUNS.v3.id, label: "" }, kinds: [] } as unknown as ListMlEventsRequest, now)!);
-    expect(() => toBinary(ListMlEventsResponseSchema, ev)).not.toThrow();
+    const ev = trainingEventsAndAlerts.events!({ subject: { kind: MlSubjectKind.RUN, id: RUNS.v3.id, label: "" }, kinds: [] }, now)!.events.map((e) => create(MlEventSchema, e));
+    for (const e of ev) expect(() => toBinary(MlEventSchema, e)).not.toThrow();
   });
 });
 
@@ -164,7 +161,7 @@ describe("training fixture: lists, events, alerts", () => {
   });
 
   const events = (kind: MlSubjectKind, id: string) =>
-    create(ListMlEventsResponseSchema, trainingAnswers.listMlEvents!({ orgId: "o", subject: { kind, id, label: "" }, kinds: [] } as unknown as ListMlEventsRequest, now) ?? {}).events;
+    (trainingEventsAndAlerts.events!({ subject: { kind, id, label: "" }, kinds: [] }, now)?.events ?? []).map((e) => create(MlEventSchema, e));
 
   it("scopes events to the subject, newest first", () => {
     const a2 = events(MlSubjectKind.ATTEMPT, attemptId(RUNS.v3.id, "sft", 2));
@@ -178,12 +175,11 @@ describe("training fixture: lists, events, alerts", () => {
     expect(events(MlSubjectKind.ORG, "").length).toBeGreaterThan(5);
   });
 
-  it("lists the run's alert rules, and only training rules for the org", () => {
-    const alerts = (kind: MlSubjectKind, id: string) => create(ListMlAlertsResponseSchema, trainingAnswers.listMlAlerts!({ orgId: "o", subject: { kind, id, label: "" } } as unknown as ListMlAlertsRequest, now) ?? {}).alerts;
+  it("lists the run's alert rules, every one also in the org's list", () => {
+    const alerts = (kind: MlSubjectKind, id: string) => trainingEventsAndAlerts.alerts!({ subject: { kind, id, label: "" } }, now)?.alerts ?? [];
     expect(alerts(MlSubjectKind.RUN, RUNS.v3.id).map((a) => a.id)).toContain(ALERTS.xidFatal);
     const org = alerts(MlSubjectKind.ORG, "").map((a) => a.id);
-    expect(org).not.toContain(ALERTS.xidFatal);
-    expect(org).not.toContain(ALERTS.gpuThermal);
+    expect(org).toEqual(alerts(MlSubjectKind.RUN, RUNS.v3.id).map((a) => a.id));
     expect(org).toContain(ALERTS.straggler);
     expect(alerts(MlSubjectKind.RUN, RUNS.v3.id).find((a) => a.id === ALERTS.lossSpike)?.autoActionEnabled).toBe(false);
   });

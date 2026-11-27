@@ -29,6 +29,8 @@ These fields are available on **all** node types. They provide shared functional
 | `outcome` | string | No | The verdict reaching this node stamps on the run: success or failure. The last node that runs with one decides the run's outcome (enum: success\|failure) |
 | `tolerate_failure` | boolean | No | Make the node optional: when it fails the run continues, and nodes.`<id>`.failed is true with the reason in nodes.`<id>`.error |
 | `observe` | NodeObserve | No | What the node records when it finishes: span attributes, events (a decision is an event named decision) and metrics, as templates over output.*. Never fails the node |
+| `role` | string | No | The engine role this node acts in. Only reviewer, and only on a review node, which requires it (enum: reviewer) |
+| `preflight` | NodePreflight | No | Check the machine before the node's work starts (disk, /tmp, uid, tools, load); a machine that fails is never given the node, which moves to another member of its pool without spending an attempt. true, or a mapping of overrides |
 
 ### Thread Configuration
 
@@ -410,6 +412,34 @@ Commit a worktree's changes and push them to a feature branch. Refuses the defau
 | `lease_refused` | boolean | - |
 | `remote_sha` | string | - |
 | `lease_unsupported` | boolean | - |
+
+---
+
+## Review
+
+`type: review`
+
+A read-only reviewer agent, in a fresh session, that returns a structured verdict
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `prompt` | string | No | - | The reviewer's task: inline text, or builtin://`<path>`.md for a prompt the engine ships |
+| `with` | map | No | - | Data for the reviewer, handed to it as JSON after the prompt; values may be templates |
+| `model` | model | No | - | The reviewer's model: a tag (flagship, fast, cheap) or an explicit model ID. Defaults to flagship |
+| `max_turns` | integer | No | - | The most turns the reviewer may take before it must have submitted a verdict (default 100) (range: 1-500) |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `verdict` | string | - |
+| `findings` | array | - |
+| `risk_tier` | string | - |
+| `summary` | string | - |
+| `session_id` | string | - |
+| `role` | string | - |
 
 ---
 

@@ -4,9 +4,12 @@
 
 import type { ReactNode } from "react";
 
-import { MlAxis, MlSubjectKind, type MlEvent, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { useMemo } from "react";
 
-import { fmtUnit, lastValue, MlChart, useMl, type MlTone } from "../kit";
+import { MlSubjectKind, type MlEvent, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import type { SubjectRef } from "@/services/controlPlane/ml/telemetry";
+
+import { fmtUnit, lastValue, mergeSeries, MlChart, useMlSeries, type MlTone } from "../kit";
 import { notApplicable } from "./inferenceModel";
 
 /** Every chart on a service page shares one cursor. */
@@ -14,9 +17,21 @@ export const SYNC = "ml-inference-service";
 
 export const serviceSubject = (id: string, label = id) => ({ kind: MlSubjectKind.INFERENCE_SERVICE, id, label });
 
-/** A TIME-axis series read of a serving subject. */
-export function useServingSeries(subject: { kind: MlSubjectKind; id: string; label: string }, keys: readonly string[], groupBy?: string) {
-  return useMl("queryMlSeries", { subject, keys: [...keys], axis: MlAxis.TIME, ...(groupBy ? { groupBy } : {}) });
+/** The latency histograms: read as p50 / p95 / p99, one series each. */
+const LATENCY_KEYS: ReadonlySet<string> = new Set(["serve.ttft", "serve.itl", "serve.e2e", "serve.queue_time"]);
+const LATENCY_STATS = ["p50", "p95", "p99"];
+
+/** A serving subject's metrics over the last 24h: latencies as their percentiles, everything else as is. */
+export function useServingSeries(subject: SubjectRef, keys: readonly string[], groupBy?: string) {
+  const id = keys.join(",");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const latency = useMemo(() => keys.filter((k) => LATENCY_KEYS.has(k)), [id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const plain = useMemo(() => keys.filter((k) => !LATENCY_KEYS.has(k)), [id]);
+  const a = useMlSeries(subject, latency, { groupBy, stats: LATENCY_STATS, enabled: latency.length > 0 });
+  const b = useMlSeries(subject, plain, { groupBy, enabled: plain.length > 0 });
+  const none = { data: { kind: "ok" as const, data: { series: [] } }, error: null, isLoading: false, isFetching: false, refetch: b.refetch };
+  return mergeSeries(latency.length ? a : none, plain.length ? b : none);
 }
 
 /**

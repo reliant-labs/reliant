@@ -6,7 +6,9 @@
  * a header of the numbers that say whether serving is healthy.
  */
 
-import { MlAlertState, MlSubjectKind, type MlAlertRule, type MlEvent, type MlInferenceService } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlSubjectKind, type MlEvent, type MlInferenceService } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+
+import { subjectOfAlertLabels } from "@/services/controlPlane/ml/telemetry";
 
 import { MlFrame, MlRead } from "../MlParts";
 import {
@@ -23,13 +25,16 @@ import {
   mlHref,
   MlTable,
   Panel,
-  severityOf,
   Sparkline,
   StatusDot,
   SubjectLink,
   tail,
   tsMs,
   useMl,
+  useMlAlerts,
+  useMlEvents,
+  MlAlertsTable,
+  ORG_SUBJECT,
   verdictOf,
   type MlColumn,
 } from "../kit";
@@ -166,20 +171,13 @@ function NaCell({ value, format, why }: { value: number; format: (v: number) => 
 }
 
 function ServingAlerts() {
-  const alerts = useMl("listMlAlerts", { subject: { kind: MlSubjectKind.ORG, id: "", label: "" } });
+  const alerts = useMlAlerts(ORG_SUBJECT);
   return (
     <Panel title="Alerts on serving" note="Firing and pending; a regression halts promotion and notifies — Reliant never rolls back on its own" flush>
       <MlRead query={alerts} what="alerts">
         {(data) => {
-          const rows = data.alerts.filter((a) => isServing(a.subject?.kind) && a.state !== MlAlertState.OK);
-          if (rows.length === 0) return <div className="px-4"><EmptyNote>Nothing firing on serving.</EmptyNote></div>;
-          const cols: MlColumn<MlAlertRule>[] = [
-            { key: "state", header: "State", render: (a) => <StatusDot tone={a.state === MlAlertState.FIRING ? severityOf(a.severity).tone : "info"} label={a.state === MlAlertState.FIRING ? "Firing" : "Pending"} /> },
-            { key: "name", header: "Alert", render: (a) => a.name },
-            { key: "on", header: "On", render: (a) => (a.subject ? <SubjectLink subject={{ kind: a.subject.kind, id: a.subject.id }}>{a.subject.label || a.subject.id}</SubjectLink> : "—") },
-            { key: "to", header: "Routed to", render: (a) => <span className="text-ink-muted">{a.routedTo || "—"}</span> },
-          ];
-          return <MlTable columns={cols} rows={rows} rowKey={(a) => a.id} rowHref={(a) => (a.subject ? mlHref("inference", [a.subject.id], { tab: "alerts" }) : null)} />;
+          const rows = data.alerts.filter((a) => isServing(subjectOfAlertLabels(a.labels)?.kind));
+          return <MlAlertsTable alerts={rows} now={Date.now()} showSubject empty={<EmptyNote>Nothing firing on serving.</EmptyNote>} />;
         }}
       </MlRead>
     </Panel>
@@ -187,7 +185,7 @@ function ServingAlerts() {
 }
 
 function ServingEvents() {
-  const events = useMl("listMlEvents", { subject: { kind: MlSubjectKind.ORG, id: "", label: "" } });
+  const events = useMlEvents(ORG_SUBJECT, { range: "7d" });
   return (
     <Panel title="Recent serving events" note="Releases, Changes ramps, restarts and findings" flush>
       <MlRead query={events} what="events">

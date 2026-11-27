@@ -47,7 +47,7 @@ func TestReconciler_ReapsOrphanedThreadsEveryPass(t *testing.T) {
 	repo.workflowsByStatus[db.Active()] = nil
 	repo.workflowsByStatus[db.Paused()] = nil
 
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: nil, Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: &mockReconcilerTemporalClient{}, Config: nil, Mailbox: repo, Orphans: repo})
 
 	reconciled, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
@@ -66,7 +66,7 @@ func TestReconciler_ReapThreadsRunsAfterWorkflowReapSameBefore(t *testing.T) {
 
 	tempClient := &mockReconcilerTemporalClient{}
 	tempClient.setPollersActive(true)
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: nil, Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: nil, Mailbox: repo, Orphans: repo})
 
 	_, _ = reconciler.ReconcileRunningWorkflows(context.Background())
 
@@ -87,7 +87,7 @@ func TestReconciler_ReapThreadsFailureIsReportedAndDoesNotAbortThePass(t *testin
 
 	tempClient := &mockReconcilerTemporalClient{}
 	tempClient.setPollersActive(true)
-	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: nil, Mailbox: repo, Orphans: repo})
+	reconciler := New(Deps{Store: repo, RunEvents: repo, Chats: repo, ToolCalls: repo, Workflows: repo, Daemons: repo, Questions: repo, Temporal: tempClient, Config: nil, Mailbox: repo, Orphans: repo})
 
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 

@@ -14,6 +14,13 @@ var concurrencyWaiting = map[string]reliantv1.WorkflowConcurrencyWaiting{
 	"latest": reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST,
 }
 
+// concurrencyCancelRunning maps the YAML spelling of concurrency.cancel_running.
+var concurrencyCancelRunning = map[string]reliantv1.WorkflowConcurrencyCancelRunning{
+	"never":            reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_NEVER,
+	"on_new_key_event": reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT,
+	"on_new_head":      reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_HEAD,
+}
+
 func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurrency, error) {
 	if node.Kind != yaml.MappingNode {
 		return nil, fmt.Errorf("concurrency must be a mapping with max_running, per_member, max_running_per_key, or a combination")
@@ -49,7 +56,7 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 		case "waiting":
 			waiting, ok := concurrencyWaiting[value.Value]
 			if value.Kind != yaml.ScalarNode || !ok {
-				return nil, fmt.Errorf("concurrency.waiting must be fifo or latest")
+				return nil, fmt.Errorf("concurrency.waiting must be fifo or latest, not %q", value.Value)
 			}
 			policy.Waiting = waiting
 		case "key":
@@ -63,8 +70,14 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 				return nil, fmt.Errorf("concurrency.priority must be a non-empty CEL expression over trigger, e.g. \"'main-red' in trigger.payload.labels ? 10 : 0\"")
 			}
 			policy.Priority = value.Value
+		case "cancel_running":
+			cancel, ok := concurrencyCancelRunning[value.Value]
+			if value.Kind != yaml.ScalarNode || !ok {
+				return nil, fmt.Errorf("concurrency.cancel_running must be never, on_new_key_event or on_new_head, not %q", value.Value)
+			}
+			policy.CancelRunning = cancel
 		default:
-			return nil, fmt.Errorf("unknown concurrency field %q (max_running, per_member, max_running_per_key, waiting, key, priority)", name)
+			return nil, fmt.Errorf("unknown concurrency field %q (max_running, per_member, max_running_per_key, waiting, key, priority, cancel_running)", name)
 		}
 	}
 	if !seen["max_running"] && !seen["per_member"] && !seen["max_running_per_key"] {
@@ -76,7 +89,22 @@ func unmarshalWorkflowConcurrency(node *yaml.Node) (*reliantv1.WorkflowConcurren
 	if policy.Key != "" && policy.Waiting != reliantv1.WorkflowConcurrencyWaiting_WORKFLOW_CONCURRENCY_WAITING_LATEST && policy.MaxRunningPerKey == 0 {
 		return nil, fmt.Errorf("concurrency.key needs waiting: latest (it groups the waiting firings that replace each other) or max_running_per_key (it groups the running runs that are capped)")
 	}
+	if cancelsRunning(policy) && (policy.Key == "" || policy.MaxRunningPerKey != 1) {
+		return nil, fmt.Errorf("concurrency.cancel_running needs key and max_running_per_key: 1: it cancels the one run holding a key's slot, " +
+			"so key must name the group (e.g. key: '{{ trigger.payload.data.pull_request.number }}') and the slot must hold exactly one run")
+	}
 	return policy, nil
+}
+
+// cancelsRunning reports whether concurrency.cancel_running lets a newer
+// firing cancel a running run (anything but unset or never).
+func cancelsRunning(policy *reliantv1.WorkflowConcurrency) bool {
+	switch policy.GetCancelRunning() {
+	case reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT,
+		reliantv1.WorkflowConcurrencyCancelRunning_WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_HEAD:
+		return true
+	}
+	return false
 }
 
 // marshalWorkflowConcurrency is the inverse of unmarshalWorkflowConcurrency.
@@ -105,6 +133,11 @@ func marshalWorkflowConcurrency(policy *reliantv1.WorkflowConcurrency) (*yaml.No
 	}
 	if policy.Priority != "" {
 		node.Content = append(node.Content, scalarNode("priority", ""), scalarNode(policy.Priority, "!!str"))
+	}
+	for spelling, cancel := range concurrencyCancelRunning {
+		if policy.CancelRunning == cancel {
+			node.Content = append(node.Content, scalarNode("cancel_running", ""), scalarNode(spelling, ""))
+		}
 	}
 	return node, nil
 }

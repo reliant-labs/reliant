@@ -77,7 +77,7 @@ func newStartDaemonEnv(t *testing.T) *startDaemonEnv {
 				Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 				Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 				ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
-				Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Router: router,
+				Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()), Temporal: temporal, Router: router,
 			}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}),
 			runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 		},
@@ -117,7 +117,7 @@ func TestStartChatWithDaemonIDPinsTheChatAndTheRun(t *testing.T) {
 	resp, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(chosen) })
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, chat.ActiveDaemonID)
 	assert.Equal(t, chosen, *chat.ActiveDaemonID)
@@ -132,7 +132,7 @@ func TestStartChatWithoutDaemonIDLeavesSelectionToTheRuntime(t *testing.T) {
 	resp, err := e.start(t, nil)
 	require.NoError(t, err)
 
-	chat, err := e.repo.GetChat(e.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	assert.Nil(t, chat.ActiveDaemonID)
 	require.Len(t, e.temporal.inputs, 1)
@@ -188,7 +188,7 @@ func TestStartChatBranchRejectsADaemonThatConflictsWithItsWorktree(t *testing.T)
 	assert.Empty(t, e.router.selectors)
 	assert.Empty(t, e.temporal.inputs)
 
-	chat, err := e.repo.GetChat(e.ctx, fx.chatID)
+	chat, err := store.GetChat(e.ctx, e.repo.ORM(), fx.chatID)
 	require.NoError(t, err)
 	assert.Equal(t, pinned, *chat.ActiveDaemonID, "the branch keeps its worktree's daemon")
 }

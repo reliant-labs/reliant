@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/dbtest"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/questions"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/triggertest"
 )
 
@@ -41,7 +42,7 @@ func newInboxFixture(t *testing.T) *inboxFixture {
 // enabled.
 func (f *inboxFixture) withSweeper(t *testing.T, sweeper Sweeper) {
 	t.Helper()
-	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Sweeper: sweeper}))
+	f.inbox = NewTestInbox(t, withDeps(Deps{Repo: f.repo, Registrations: store.NewTriggerRegistrationExtStore(f.repo.ORM()), Sweeper: sweeper}))
 }
 
 // otherUser returns a context and project for a second, unrelated user in the
@@ -316,7 +317,7 @@ func TestListInbox_AutomationRunOutOfTheChatListStillReachesTheUser(t *testing.T
 	f.question(t, "q-review", "chat-review", now)
 	f.approval(t, "appr-review", "chat-review", now)
 
-	chat, err := f.repo.GetChat(f.ctx, "chat-review")
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), "chat-review")
 	require.NoError(t, err)
 	require.Equal(t, core.ChatOriginAutomation, chat.Origin)
 	require.False(t, chat.ListInSidebar, "the run is not in the chat list")
@@ -619,7 +620,7 @@ func TestListInbox_ArchivedChatsAreNotWaitingOnAnyone(t *testing.T) {
 	f.approval(t, "a-arch", "c-arch", now)
 	require.Len(t, f.list(t, nil).Items, 1)
 
-	chat, err := f.repo.GetChat(f.ctx, "c-arch")
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), "c-arch")
 	require.NoError(t, err)
 	chat.State = db.ChatStateArchived
 	require.NoError(t, f.repo.UpdateChat(f.ctx, chat))

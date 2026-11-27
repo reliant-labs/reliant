@@ -4,13 +4,14 @@
  * The Inference fixtures hold together: replica, revision and placement ids
  * are coherent with the world (Fleet's pods and devices), traffic shares sum
  * to 1, the headline numbers come from the curves the charts draw, and every
- * request trace the list names can be opened.
+ * request trace ObservabilityService lists for a service can be opened.
  */
 
 import { toBinary } from "@bufbuild/protobuf";
 import { describe, expect, it } from "vitest";
 
-import { MlEarlyAccessService, MlCollection, MlSubjectKind, type GetMlInferenceServiceResponse, type GetMlTraceResponse, type ListMlTracesResponse, type QueryMlSeriesResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlEarlyAccessService, MlCollection, MlSubjectKind, type GetMlInferenceServiceResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { mlObs } from "@/fixtures/shop/model/ml/__tests__/mlObs";
 import { answerMl } from "@/fixtures/shop/handlers/ml";
 import { INFERENCE_REPLICAS, PREV_FP8_REVISION, replicaId } from "@/fixtures/shop/model/ml/inference";
 import { CLUSTERS, gpuUuid, POOLS, REVISIONS, SERVICES, TRACES, VERSIONS } from "@/fixtures/shop/model/ml/world";
@@ -20,6 +21,7 @@ const now = () => NOW;
 const method = (name: string) => MlEarlyAccessService.methods.find((m) => m.localName === name)!;
 const ask = <T>(name: string, req: object) => answerMl(method(name), { orgId: "org", ...req }, now) as unknown as T;
 const svc = (id: string) => ask<GetMlInferenceServiceResponse>("getMlInferenceService", { serviceId: id });
+const obs = mlObs(NOW);
 
 describe("inference fixtures", () => {
   it("lists three services, every one with an rps sparkline and a verdict", () => {
@@ -84,40 +86,35 @@ describe("inference fixtures", () => {
     expect(d.servingCost!.gpuHours24h).toBe(192);
   });
 
-  it("answers series per replica and marks speculative decoding not applicable on the control", () => {
-    const res = ask<QueryMlSeriesResponse>("queryMlSeries", { subject: { kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id }, keys: ["engine.kv_cache_ratio"], groupBy: "replica" });
-    expect(res.series).toHaveLength(4);
-    const peak = Math.max(...res.series.flatMap((s) => s.y.filter(Number.isFinite)));
+  it("answers series per replica and marks speculative decoding not applicable on the control", async () => {
+    const series = await obs.series({ kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id }, ["engine.kv_cache_ratio"], { groupBy: "replica" });
+    expect(series).toHaveLength(4);
+    const peak = Math.max(...series.flatMap((s) => s.y.filter(Number.isFinite)));
     expect(peak).toBeGreaterThan(0.9);
-    const spec = ask<QueryMlSeriesResponse>("queryMlSeries", { subject: { kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id }, keys: ["engine.spec_decode_acceptance"] });
-    expect(spec.series[0].collection).toBe(MlCollection.NOT_APPLICABLE);
-    const fp8 = ask<QueryMlSeriesResponse>("queryMlSeries", { subject: { kind: MlSubjectKind.REVISION, id: REVISIONS.prodFp8 }, keys: ["engine.spec_decode_acceptance"] });
-    expect(fp8.series[0].collection).toBe(MlCollection.COLLECTED);
+    const spec = await obs.series({ kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id }, ["engine.spec_decode_acceptance"]);
+    expect(spec[0].collection).toBe(MlCollection.NOT_APPLICABLE);
+    const fp8 = await obs.series({ kind: MlSubjectKind.REVISION, id: REVISIONS.prodFp8 }, ["engine.spec_decode_acceptance"]);
+    expect(fp8[0].collection).toBe(MlCollection.COLLECTED);
   });
 
-  it("opens every request trace it lists, and the slow one has the spec's spans with join keys", () => {
-    const list = ask<ListMlTracesResponse>("listMlTraces", { subject: { kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id } });
-    expect(list.traces.length).toBe(20);
-    expect(list.traces.map((t) => t.traceId)).toContain(TRACES.slowRequest);
-    for (const t of list.traces) {
-      const trace = ask<GetMlTraceResponse>("getMlTrace", { traceId: t.traceId });
-      expect(trace.spans.length).toBeGreaterThan(5);
-      // Encodable on the wire (whole-nanosecond timestamps, int32s).
-      expect(() => toBinary(method("getMlTrace").output, trace as never)).not.toThrow();
-    }
+  it("opens every request trace it lists, and the slow one has the spec's spans with join keys", async () => {
+    const list = await obs.traces({ kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.prod.id });
+    expect(list.length).toBe(20);
+    expect(list.map((t) => t.traceId)).toContain(TRACES.slowRequest);
+    for (const t of list) expect((await obs.trace(t.traceId)).spans.length).toBeGreaterThan(5);
     for (const id of [SERVICES.prod.id, SERVICES.staging.id, SERVICES.reranker.id]) expect(() => toBinary(method("getMlInferenceService").output, svc(id) as never)).not.toThrow();
-    const slow = ask<GetMlTraceResponse>("getMlTrace", { traceId: TRACES.slowRequest });
+    const slow = await obs.trace(TRACES.slowRequest);
     const names = slow.spans.map((s) => s.name);
     for (const n of ["POST /chat", "epp.schedule", "llm_request", "queued", "prefill", "decode", "dcgm.sample"]) expect(names).toContain(n);
     const vllm = slow.spans.find((s) => s.name === "llm_request")!;
-    expect(vllm.nodeId).toBe(`${CLUSTERS.serve.id}/ip-10-40-1-21`);
-    expect(vllm.deviceUuid).toBe(gpuUuid("ip-10-40-1-21", 2));
-    expect(vllm.runId).toBe("");
-    expect(slow.summary!.durationMs).toBeGreaterThan(4200);
-    expect(slow.summary!.durationMs).toBeLessThan(4400);
-    expect(ask<GetMlTraceResponse>("getMlTrace", { traceId: TRACES.normalRequest }).spans.length).toBeGreaterThan(5);
-    const rr = ask<ListMlTracesResponse>("listMlTraces", { subject: { kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.reranker.id } });
-    expect(rr.traces).toHaveLength(0);
-    expect(rr.missingFindingId).toBe("f-inference-tracing-off-reranker");
+    expect(vllm.attributes["k8s.node.name"]).toBe("ip-10-40-1-21");
+    expect(vllm.attributes.UUID).toBe(gpuUuid("ip-10-40-1-21", 2));
+    expect(vllm.attributes["ml.run.id"]).toBeUndefined();
+    const summary = list.find((t) => t.traceId === TRACES.slowRequest)!;
+    expect(summary.durationMs).toBeGreaterThan(4200);
+    expect(summary.durationMs).toBeLessThan(4400);
+    expect((await obs.trace(TRACES.normalRequest)).spans.length).toBeGreaterThan(5);
+    // The reranker's runtime is not traced: no traces, never made-up ones.
+    expect(await obs.traces({ kind: MlSubjectKind.INFERENCE_SERVICE, id: SERVICES.reranker.id })).toHaveLength(0);
   });
 });

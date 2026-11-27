@@ -12,12 +12,12 @@ import { FilterBar, FilterChip } from "@/components/forge-ui/filter_bar";
 import type { MlEvent, MlEventKind } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { MlRead } from "../../MlParts";
-import { Chip, EmptyNote, eventKindOf, fmtAgo, fmtStep, fmtTime, num, Panel, StatusDot, SubjectLink, tsMs, useMl } from "../../kit";
-import type { RunScope } from "../runScope";
+import { Chip, EmptyNote, eventKindOf, fmtAgo, fmtStep, fmtTime, num, Panel, StatusDot, SubjectLink, tsMs, useMlEvents } from "../../kit";
+import { scopeRange, type RunScope } from "../runScope";
 import { mergeEvents } from "../trainingModel";
 
 export function EventsTab({ scope, now }: { scope: RunScope; now: number }) {
-  const read = useMl("listMlEvents", { subject: scope.subject, limit: 500 });
+  const read = useMlEvents(scope.subject, { range: scopeRange(scope) });
   return (
     <MlRead query={read} what="this run's events">
       {(data) => <EventsBody events={data.events} now={now} scopeLabel={scope.subject.label} />}

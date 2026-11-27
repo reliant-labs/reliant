@@ -15,10 +15,15 @@
 
 import { toBinary, type DescMessage, type Message } from "@bufbuild/protobuf";
 import { timestampMs, type Timestamp } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError, createClient, type Client } from "@connectrpc/connect";
+import { Code, ConnectError, createClient, type Client, type Transport } from "@connectrpc/connect";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { MlEarlyAccessService, MlSubjectKind, type MlSubject } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+
+import { eventOfRecord } from "@/components/Forge/Ml/kit/telemetry";
+import { listAlerts } from "@/services/controlPlane/observability/alertingApi";
+import { searchLogs } from "@/services/controlPlane/observability/api";
+import { eventQuery, subjectFilters, subjectOfAlertLabels, type SubjectRef } from "@/services/controlPlane/ml/telemetry";
 
 import { createShopTransport } from "..";
 import { RUNS } from "../model/ml";
@@ -29,10 +34,19 @@ const org = { orgId: DEMO_ORG };
 type Ml = Client<typeof MlEarlyAccessService>;
 
 let ml: Ml;
+let transport: Transport;
 beforeAll(() => {
   resetDemoNowForTests(NOW);
-  ml = createClient(MlEarlyAccessService, createShopTransport());
+  transport = createShopTransport();
+  ml = createClient(MlEarlyAccessService, transport);
 });
+
+/** A subject's ML events as the ML tab reads them: SearchLogs over its `event.name: ml.*` records, through the real client. */
+async function eventsOf(subject: SubjectRef) {
+  const window = { startMs: NOW - 30 * 86_400_000, endMs: NOW + 1 };
+  const res = await searchLogs({ orgId: DEMO_ORG, envIds: [], filters: subjectFilters(subject, "logs"), window, query: eventQuery(), services: [], severities: [], limit: 1000 }, {}, transport);
+  return res.records.map(eventOfRecord);
+}
 afterAll(() => resetDemoNowForTests(null));
 
 /** Every MlSubject inside `value`, with where it was found. */
@@ -158,7 +172,7 @@ async function everyAnswer(): Promise<[string, Message][]> {
   for (const r of runs.runs) {
     add(`run ${r.name}`, await ml.getMlRun({ ...org, run: r.id }));
     const subject = { kind: MlSubjectKind.RUN, id: r.id, label: r.name };
-    add(`events ${r.name}`, await ml.listMlEvents({ ...org, subject }));
+    for (const e of await eventsOf(subject)) add(`events ${r.name}`, e);
     add(`lineage ${r.name}`, await ml.getMlLineage({ ...org, subject }));
   }
   add("suites", await ml.listMlEvalSuites(org));
@@ -173,8 +187,7 @@ async function everyAnswer(): Promise<[string, Message][]> {
   const services = await ml.listMlInferenceServices(org);
   add("services", services);
   for (const s of services.services) add(`service ${s.id}`, await ml.getMlInferenceService({ ...org, serviceId: s.id }));
-  add("org events", await ml.listMlEvents({ ...org, subject: { kind: MlSubjectKind.ORG, id: "" } }));
-  add("org alerts", await ml.listMlAlerts({ ...org, subject: { kind: MlSubjectKind.ORG, id: "" } }));
+  for (const e of await eventsOf({ kind: MlSubjectKind.ORG, id: "" })) add("org events", e);
   return out;
 }
 
@@ -186,6 +199,17 @@ describe("the ML fixture world", () => {
     expect((await ml.listMlModels(org)).models.length).toBeGreaterThan(0);
     expect((await ml.listMlInferenceServices(org)).services.length).toBeGreaterThan(0);
     expect((await ml.getMlStack(org)).clusters.length).toBe(2);
+  });
+
+  it("serves the ML world's events and alerts through ObservabilityService and AlertingService", async () => {
+    const events = await eventsOf({ kind: MlSubjectKind.RUN, id: RUNS.v3.id });
+    expect(events.length).toBeGreaterThan(5);
+    expect(events.every((e) => e.kind !== 0)).toBe(true);
+    const alerts = await listAlerts(DEMO_ORG, undefined, transport);
+    const ml = alerts.filter((a) => subjectOfAlertLabels(a.labels));
+    expect(ml.some((a) => a.labels.ml_run_id === RUNS.v3.id && a.state === "firing")).toBe(true);
+    // An environment's list is shop's alone: the ML world's alerts belong to no environment.
+    expect((await listAlerts(DEMO_ORG, "env-prod", transport)).every((a) => !subjectOfAlertLabels(a.labels))).toBe(true);
   });
 
   it("finds the hero run by its id and by its name", async () => {

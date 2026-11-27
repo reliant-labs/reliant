@@ -288,7 +288,7 @@ What failed, for the nodes of a workflow's [`on_failure` handler](/workflows/pat
 | `failure.node_id` | string | The node that failed; empty when the run failed outside any node |
 | `failure.node_path` | string | Its dotted path through loops and sub-workflows (`loop.body.node`) |
 | `failure.error` | string | The failure as one line |
-| `failure.error_code` | string | `node_error`, `outcome` (the graph reached an `outcome: failure` node) or `panic` |
+| `failure.error_code` | string | `node_error`, `outcome` (the graph reached an `outcome: failure` node), `panic`, or `run_timeout` (the workflow's `timeout` passed) |
 | `failure.attempt` | int | The loop iteration the node was in, 1-based; 1 outside a loop |
 
 All five are always present, so a handler never fails reporting a failure. Reads of the main graph's `nodes.*` inside the handler must be guarded (`has()` or `.?`): the nodes after the failed one never ran.

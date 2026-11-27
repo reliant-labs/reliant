@@ -10,6 +10,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/serveraction"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -436,10 +437,24 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	// on, the run's requirements are then checked there once, before the
 	// first step there runs (preflight_requirements.go). A batch being
 	// settled runs nothing on the machine.
-	if machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult); machine && !settleInterrupted {
-		target := e.daemonSelector(node)
-		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), target, toolNames, toolsKnown)
-		if err := e.pauseCtrl.CheckPlacedRequirements(e.ctx, target); err != nil {
+	//
+	// A node that sets preflight has that machine check itself first
+	// (node_preflight.go), after the wake and before the requirements: a
+	// machine that fails is swapped for another member of its pool, and the
+	// requirements are checked on the machine that passed.
+	machine, toolNames, toolsKnown := machineStepTools(stepType, evalResult)
+	preflight := node.GetPreflight() != nil
+	if (machine || preflight) && !settleInterrupted {
+		e.pauseCtrl.WakeMachineBeforeStep(e.ctx, e.getActivityCtx(), e.daemonSelector(node), toolNames, toolsKnown)
+	}
+	if preflight && !settleInterrupted {
+		if _, err := preflightNode(e.ctx, e.GetChatID(), e.GetWorkflowID(), e.nodePlacementScope(node), node, e.nodeDaemonSelector(node), e.daemonSelector(node)); err != nil {
+			e.logger.Warn("No machine passed the node's preflight", "error", err, "stepID", node.GetId())
+			return e.startFailedStepMsg(node, event, err.Error())
+		}
+	}
+	if machine && !settleInterrupted {
+		if err := e.pauseCtrl.CheckPlacedRequirements(e.ctx, e.daemonSelector(node)); err != nil {
 			e.logger.Warn("Placed machine does not meet the run's requirements", "error", err, "stepID", node.GetId())
 			return e.startFailedStepMsg(node, event, err.Error())
 		}
@@ -939,6 +954,10 @@ func (e *StepExecutor) startAction(
 ) (workflow.Future, string, bool) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
+	// A model call in a review node's session is offered the reviewer's
+	// tools and nothing else, whatever its definition declares (review_node.go).
+	clampReviewerStep(e.execContext, node.GetType(), evalResult)
+
 	// Special handling for ExecuteTools - intercept "spawn" tool calls
 	if node.GetType() == model.NodeTypeExecuteTools {
 		// expected_response_tools is `repeated string`, so ResolveCELFields
@@ -1038,6 +1057,7 @@ func (e *StepExecutor) startAction(
 
 	// Build structured input: pass the proto Node directly for proper protojson roundtrip
 	rtx := e.buildRuntimeContext(node)
+	rtx.ServerActionFrom = e.serverActionFrom(evalResult)
 	rtx.AssistantMessageID = preallocatedMessageID
 	rtx.CutOffMessageID = e.takeCutOffTurn(node.GetId())
 	rtx.SaveMessage = e.saveMessageRequest(node)
@@ -1432,6 +1452,12 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	rtx.Unattended = IsUnattended(e.workflowInputs)
 	rtx.ActingIdentity = ActingIdentity(e.workflowInputs)
 	rtx.Automation, _ = e.workflowInputs[InputKeyAutomation].(string)
+	// A Reliant server action places the run's definition (its provenance)
+	// through the catalog the run started with. Only those nodes carry it,
+	// so every other action's input is unchanged.
+	if model.NodeType(node) == model.NodeTypeAction && serveraction.IsRef(model.CelStringRaw(node.GetAction().GetUses())) {
+		rtx.CatalogPin = catalogPinFrom(e.ctx)
+	}
 
 	// What load_tool has granted on this thread so far. call_llm offers it,
 	// within what the node declares; this is how a tool loaded on one turn is
@@ -1569,6 +1595,13 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 // that declares a selector never falls back, even when it resolves to
 // nothing. nil means no selector.
 func (e *StepExecutor) daemonSelector(node *reliantv1.Node) *DaemonSelectorValue {
+	// A node its preflight moved off an unhealthy machine routes to the
+	// machine that passed (node_preflight.go).
+	if node.GetPreflight() != nil {
+		if moved, ok := runPlacementsFrom(e.ctx).movedSelector(e.GetWorkflowID(), e.nodePlacementScope(node)); ok {
+			return moved
+		}
+	}
 	if node.GetDaemon() == nil {
 		if e.execContext == nil {
 			return nil

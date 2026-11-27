@@ -328,7 +328,6 @@ type CreateWorkflowWithThreadStore interface {
 // CreateWorktreeStore is what CreateWorktreeActivity reads and writes; it
 // forwards the store to repo.AdoptFromDaemon and workspacecreate.
 type CreateWorktreeStore interface {
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	repopkg.AdoptStore
 	workspacecreate.Store
 	// Installs is each machine's checkout of the project: the owner's is
@@ -404,7 +403,6 @@ type ExecuteToolsStore interface {
 	// in its metadata joins the result only if the chat's user owns it.
 	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)
 	EmitToolCallUpdate(ctx context.Context, chatID string, update db.ToolCallUpdate) error
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	toolbindings.SettingsReader
 	ThreadWorktreeReader
 	db.ToolCallStatusStore
@@ -489,14 +487,11 @@ type PreflightDaemonCheckStore interface {
 type QuestionCreateStore interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
-	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 }
 
 // QuestionResolveStore is what QuestionResolveActivity reads and writes.
 type QuestionResolveStore interface {
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
-	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 }
 
 // QuestionWriter creates and resolves questions and announces the chat's
@@ -588,7 +583,10 @@ type TriggerPauser interface {
 
 // WorkflowStatusDeps is what NewWorkflowStatusActivity takes.
 type WorkflowStatusDeps struct {
-	Repo      WorkflowStatusStore
+	Repo WorkflowStatusStore
+	// Updates tells the chat's clients to re-read its workflow executions
+	// (chatupdates.Service). Nil announces nothing.
+	Updates   ChatRefetcher
 	Runs      RunRecords
 	Workflows WorkflowRuns
 	Attention AttentionRecorder
@@ -636,7 +634,6 @@ type WorkflowStatusStore interface {
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	threads.Repository
 	ChatTransitioner
@@ -739,4 +736,16 @@ type ThreadStatusDeps struct {
 	Store ThreadStatusStore
 	// Mailbox resolves the mail a finished thread left behind.
 	Mailbox MailboxResolver
+}
+
+// UserRefetcher tells a user's clients to re-read data of a given type (a
+// user_updates refetch). chatupdates.Service satisfies it.
+type UserRefetcher interface {
+	EmitUserRefetch(ctx context.Context, userID string, refetchType core.RefetchType, opts core.RefetchOpts) error
+}
+
+// ChatRefetcher tells the clients watching a chat to re-read data of a given
+// type (a chat_updates refetch). chatupdates.Service satisfies it.
+type ChatRefetcher interface {
+	EmitChatRefetch(ctx context.Context, chatID string, refetchType core.RefetchType) error
 }

@@ -8,15 +8,18 @@
  * multiples of utilisation, SM, power against its limit, GPU and HBM
  * temperature, NVLink and network, one line per node. Both: the straggler
  * panel (why rank N is slow: clock-event reasons, temperatures, power), what
- * is allocated against what is used, and the step-time distribution against
- * the previous attempt.
+ * is allocated against what is used, and step time p50 / p95 / p99. Every
+ * series is an ObservabilityService metric filtered to the attempt's ml.*
+ * attributes.
  */
 
 import { useMemo, useState } from "react";
 
 import Button from "@/components/forge-ui/button";
 import { FilterBar, FilterChip } from "@/components/forge-ui/filter_bar";
-import { MlAxis, MlSubjectKind, type MlRank, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlSubjectKind, type MlRank, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+
+import type { RangePreset } from "@/services/controlPlane/observability/window";
 
 import { MlRead } from "../../MlParts";
 import {
@@ -27,9 +30,9 @@ import {
   fmtPct,
   fmtUnit,
   Grid,
-  Histogram,
   KpiStrip,
   lastValue,
+  MlChart,
   Meter,
   MlLink,
   MlTable,
@@ -37,13 +40,14 @@ import {
   StatusDot,
   SubjectLink,
   subjectHref,
-  useMl,
+  tail,
   useMlSearch,
+  useMlSeries,
   type MlColumn,
 } from "../../kit";
 import { RankHeat } from "../obs/RankHeat";
 import { attemptOfScope, attemptSubjectOf, firstCrossing, rankHeatmap, stragglersOf } from "../obs/obsModel";
-import type { RunScope } from "../runScope";
+import { scopeRange, type RunScope } from "../runScope";
 
 const SYNC = "ml-run-system";
 
@@ -65,7 +69,10 @@ const NODE_TILES = [
   { title: "Host CPU", keys: ["system/host_cpu"] },
 ] as const;
 
-const AGG_KEYS = ["system/gpu_util", "system/sm_active", "system/gpu_mem_used_gb", "system/power_w", "system/power_limit_w", "system/gpu_temp_c", "system/hbm_temp_c", "system/host_cpu", "system/host_mem", "system/shm_used_gb", "system/clock_event_hw_slowdown"];
+const AGG_KEYS = ["system/gpu_util", "system/sm_active", "system/gpu_mem_used_gb", "system/power_w", "system/power_limit_w", "system/gpu_temp_c", "system/hbm_temp_c", "system/host_cpu", "system/host_mem", "system/shm_used_gb", "system/clock_event_hw_slowdown", "memory/allocated_gb", "memory/reserved_gb"];
+const SLOWDOWN_KEYS = ["system/clock_event_hw_slowdown"];
+const STEP_TIME_KEYS = ["timers/step_ms"];
+const STEP_TIME_STATS = ["p50", "p95", "p99"];
 const STRAGGLER_KEYS = ["system/gpu_temp_c", "system/hbm_temp_c", "system/power_w", "system/power_limit_w", "system/clock_event_hw_slowdown", "system/sm_active"];
 
 const clock = (sec: number) => new Date(sec * 1000).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -110,9 +117,10 @@ export function SystemTab({ scope }: { scope: RunScope }) {
 }
 
 function SystemBody({ scope, ranks, attemptSubject, view, onRank }: { scope: RunScope; ranks: readonly MlRank[]; attemptSubject: { kind: MlSubjectKind; id: string; label: string }; view: "ranks" | "nodes"; onRank: (rank: number) => void }) {
-  const agg = useMl("queryMlSeries", { subject: attemptSubject, keys: [...AGG_KEYS, "memory/allocated_gb", "memory/reserved_gb"], axis: MlAxis.TIME, maxPoints: 60 });
+  const range = scopeRange(scope);
+  const agg = useMlSeries(attemptSubject, AGG_KEYS, { range });
   // Which ranks were slowed, and since when: HW slowdown per rank (a fallback when GetMlRun carries no ranks).
-  const slow = useMl("queryMlSeries", { subject: attemptSubject, keys: ["system/clock_event_hw_slowdown"], axis: MlAxis.TIME, groupBy: "rank", maxPoints: 96 });
+  const slow = useMlSeries(attemptSubject, SLOWDOWN_KEYS, { groupBy: "rank", range });
   const slowSeries = slow.data?.kind === "ok" ? slow.data.data.series : [];
   const flagged = stragglersOf(ranks);
   const slowRank = slowSeries.filter((s) => (lastValue(s) ?? 0) > 0.3).map((s) => Number(/\d+/.exec(s.group)?.[0]));
@@ -145,18 +153,18 @@ function SystemBody({ scope, ranks, attemptSubject, view, onRank }: { scope: Run
       />
       {view === "ranks" ? (
         <Grid cols={2}>
-          <RankHeatmap subject={attemptSubject} ranks={ranks} straggler={stragglerRank} selected={scope.rank} onRank={onRank} />
+          <RankHeatmap subject={attemptSubject} range={range} ranks={ranks} straggler={stragglerRank} selected={scope.rank} onRank={onRank} />
           <div className="space-y-4">
             <StragglerPanel scope={scope} rank={stragglerRank} detail={straggler} since={since} />
-            <StepHistogram subject={attemptSubject} />
+            <StepTime subject={attemptSubject} range={range} />
           </div>
         </Grid>
       ) : (
         <>
-          <NodeMultiples subject={attemptSubject} hotNode={straggler?.nodeId} />
+          <NodeMultiples subject={attemptSubject} range={range} hotNode={straggler?.nodeId} />
           <Grid cols={2}>
             <StragglerPanel scope={scope} rank={stragglerRank} detail={straggler} since={since} />
-            <StepHistogram subject={attemptSubject} />
+            <StepTime subject={attemptSubject} range={range} />
           </Grid>
         </>
       )}
@@ -171,10 +179,11 @@ function SystemBody({ scope, ranks, attemptSubject, view, onRank }: { scope: Run
   );
 }
 
-function RankHeatmap({ subject, ranks, straggler, selected, onRank }: { subject: { kind: MlSubjectKind; id: string; label: string }; ranks: readonly MlRank[]; straggler: number | null; selected: number | null; onRank: (rank: number) => void }) {
+function RankHeatmap({ subject, range, ranks, straggler, selected, onRank }: { subject: { kind: MlSubjectKind; id: string; label: string }; range: RangePreset; ranks: readonly MlRank[]; straggler: number | null; selected: number | null; onRank: (rank: number) => void }) {
   const nodeByRank = new Map(ranks.map((r) => [r.rank, shortNode(r.nodeId)]));
   const [metric, setMetric] = useState<(typeof HEAT_METRICS)[number]>(HEAT_METRICS[0]);
-  const heat = useMl("queryMlSeries", { subject, keys: [metric.key], axis: MlAxis.TIME, groupBy: "rank", maxPoints: 48 });
+  const keys = useMemo(() => [metric.key], [metric.key]);
+  const heat = useMlSeries(subject, keys, { groupBy: "rank", range });
   return (
     <Panel
       title="Ranks over time"
@@ -216,7 +225,7 @@ function RankHeatmap({ subject, ranks, straggler, selected, onRank }: { subject:
 function StragglerPanel({ scope, rank, detail, since }: { scope: RunScope; rank: number | null; detail: MlRank | null; since: number | null }) {
   const attempt = attemptOfScope(scope);
   const rankSubject = rank !== null && attempt && scope.phase ? { kind: MlSubjectKind.RANK, id: `${scope.run.id}/${scope.phase.key}/${attempt.n}/${rank}`, label: `rank ${rank}` } : null;
-  const series = useMl("queryMlSeries", { subject: rankSubject ?? { kind: MlSubjectKind.RUN, id: scope.run.id, label: scope.run.name }, keys: STRAGGLER_KEYS, axis: MlAxis.TIME, maxPoints: 120 }, { enabled: !!rankSubject });
+  const series = useMlSeries(rankSubject ?? { kind: MlSubjectKind.RUN, id: scope.run.id }, STRAGGLER_KEYS, { enabled: !!rankSubject, range: scopeRange(scope) });
   if (!rankSubject) {
     return (
       <Panel title="Straggler" testId="ml-system-straggler">
@@ -276,20 +285,20 @@ function StragglerPanel({ scope, rank, detail, since }: { scope: RunScope; rank:
   );
 }
 
-function StepHistogram({ subject }: { subject: { kind: MlSubjectKind; id: string; label: string } }) {
-  const h = useMl("queryMlHistograms", { subject, keys: ["train.step_time"] });
+function StepTime({ subject, range }: { subject: { kind: MlSubjectKind; id: string; label: string }; range: RangePreset }) {
+  const q = useMlSeries(subject, STEP_TIME_KEYS, { stats: STEP_TIME_STATS, range });
   return (
-    <Panel title="Step time distribution" note="this attempt, the previous one outlined" testId="ml-system-histogram">
-      <MlRead query={h} what="step time histogram">
-        {(data) => (data.histograms[0] ? <Histogram histogram={data.histograms[0]} height={110} /> : <EmptyNote>No step times recorded.</EmptyNote>)}
+    <Panel title="Step time" note="p50 / p95 / p99 across the attempt's ranks" testId="ml-system-histogram">
+      <MlRead query={q} what="step time">
+        {(data) => <MlChart series={data.series} label="Step time" height={110} syncKey={SYNC} what="Step time" />}
       </MlRead>
     </Panel>
   );
 }
 
-function NodeMultiples({ subject, hotNode }: { subject: { kind: MlSubjectKind; id: string; label: string }; hotNode?: string }) {
+function NodeMultiples({ subject, range, hotNode }: { subject: { kind: MlSubjectKind; id: string; label: string }; range: RangePreset; hotNode?: string }) {
   const keys = useMemo(() => [...new Set(NODE_TILES.flatMap((t) => t.keys))], []);
-  const nodes = useMl("queryMlSeries", { subject, keys, axis: MlAxis.TIME, groupBy: "node", maxPoints: 120 });
+  const nodes = useMlSeries(subject, keys, { groupBy: "node", range });
   return (
     <Panel title="Per node" note="one line per node; the straggler's node in amber" testId="ml-system-nodes">
       <MlRead query={nodes} what="per-node telemetry">
@@ -299,7 +308,7 @@ function NodeMultiples({ subject, hotNode }: { subject: { kind: MlSubjectKind; i
               const s = data.series.filter((x) => (tile.keys as readonly string[]).includes(x.key));
               // The limit draws as one muted line; the hot node's lines in warning.
               const shown = tile.keys.length > 1 ? [...s.filter((x) => x.key === tile.keys[0]), ...s.filter((x) => x.key === tile.keys[1]).slice(0, 1)] : s;
-              const tones = shown.map((x) => (x.key === "system/power_limit_w" ? ("neutral" as const) : hotNode && x.subject?.id === hotNode ? ("warning" as const) : undefined));
+              const tones = shown.map((x) => (x.key === "system/power_limit_w" ? ("neutral" as const) : hotNode && x.group === tail(hotNode) ? ("warning" as const) : undefined));
               return <ChartTile key={tile.title} title={tile.title} series={shown} tones={tones} syncKey={SYNC} height={100} value="" />;
             })}
           </div>

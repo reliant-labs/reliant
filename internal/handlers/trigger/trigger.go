@@ -65,7 +65,7 @@ func (s *Service) ownedTrigger(ctx context.Context, id string) (*core.Trigger, e
 	}
 	userID := auth.MustGetUserID(ctx)
 
-	trigger, err := s.deps.Repo.GetTrigger(ctx, id)
+	trigger, err := s.deps.Triggers.GetTrigger(ctx, id)
 	if err != nil {
 		// core.ErrTriggerNotFound is a NotFound kind, so it passes as itself.
 		return nil, triggerDBError("get trigger", err)
@@ -434,14 +434,14 @@ func (s *Service) validateNoMachineWorkflow(ctx context.Context, userID string, 
 func (s *Service) render(ctx context.Context, t *core.Trigger) *reliantv1.Trigger {
 	// The write paths hand over the row they just stored, which has no joined
 	// names; re-read it so every response carries them.
-	if fresh, err := s.deps.Repo.GetTrigger(ctx, t.ID); err == nil {
+	if fresh, err := s.deps.Triggers.GetTrigger(ctx, t.ID); err == nil {
 		t = fresh
 	}
 	recent, err := s.deps.Firings.RecentTriggerFirings(ctx, t.UserID, []string{t.ID}, triggers.HealthWindow)
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve a trigger's recent firings", "trigger_id", t.ID, "error", err)
 	}
-	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, t.UserID, []string{t.ID})
+	regs, err := s.deps.Registrations.ListTriggerRegistrationsForUser(ctx, t.UserID, []string{t.ID})
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve a trigger's source state", "trigger_id", t.ID, "error", err)
 	}

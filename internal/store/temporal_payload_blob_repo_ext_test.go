@@ -16,6 +16,7 @@ import (
 // release's hand SQL wrote are read, refreshed and collected by the port, and
 // the other way round.
 func TestTemporalPayloadBlobsInterleaveWithTheHandPath(t *testing.T) {
+	t.Parallel()
 	env := storetest.New(t)
 	ctx := context.Background()
 

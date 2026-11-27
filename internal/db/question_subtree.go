@@ -52,7 +52,7 @@ func (r *Repo) WithdrawAsyncQuestion(ctx context.Context, chatID, threadID, ques
 
 	// Best-effort, as for every closed question: the row is what the gates
 	// and the inbox read; the feed is what clients render.
-	if err := r.EmitQuestionUpdate(ctx, closed.ChatID, QuestionUpdate{
+	if err := r.UpdateWriter().EmitQuestionUpdate(ctx, closed.ChatID, QuestionUpdate{
 		QuestionID:      closed.ID,
 		ChatID:          closed.ChatID,
 		WorkflowID:      closed.WorkflowID,
@@ -65,7 +65,7 @@ func (r *Repo) WithdrawAsyncQuestion(ctx context.Context, chatID, threadID, ques
 		logging.WarnContext(ctx, "Failed to announce a withdrawn question", "questionID", closed.ID, "error", err)
 	}
 	if chat, err := store.GetChat(ctx, r.ORM(), closed.ChatID); err == nil && chat != nil {
-		if err := r.EmitUserRefetch(ctx, chat.UserID, RefetchInbox, RefetchOpts{ChatID: &closed.ChatID}); err != nil {
+		if err := r.UpdateWriter().EmitUserRefetch(ctx, chat.UserID, RefetchInbox, RefetchOpts{ChatID: &closed.ChatID}); err != nil {
 			logging.WarnContext(ctx, "Failed to tell the inbox a question was withdrawn", "questionID", closed.ID, "error", err)
 		}
 	}

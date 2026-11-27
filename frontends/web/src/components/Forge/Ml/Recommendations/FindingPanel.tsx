@@ -108,17 +108,17 @@ export function FindingPanel({ finding: f, onClose }: { finding: MlFinding; onCl
           ]}
         />
       </Section>
-      {(f.evidenceSeries.length > 0 || f.evidenceTable?.rows.length || f.evidenceFacts.length > 0 || f.podStart) && (
+      {(f.evidenceSeries.length > 0 || f.evidenceTable?.rows.length || f.evidenceFacts.length > 0 || f.startBreakdown) && (
         <Section title="Evidence">
           <div className="space-y-3">
             {f.evidenceSeries.length > 0 && <MlChart series={f.evidenceSeries} events={f.evidenceEvents} label={f.evidenceSeries[0].label || "Evidence"} height={150} legend testId="ml-finding-chart" />}
-            {f.podStart && (
+            {f.startBreakdown && (
               <div className="space-y-1">
                 <p className="text-meta text-ink-muted">
-                  Pod start p50 by stage · {f.podStart.sampleCount} starts of {f.podStart.workload}
+                  Pod start p50 by stage · {f.startBreakdown.sampleCount} starts of {f.startBreakdown.workload}
                 </p>
                 <StackedBar
-                  segments={f.podStart.stages.map((s) => ({ label: s.stage, value: s.p50Seconds, tone: s.findingId === f.id ? "warning" : undefined, title: `${s.stage}: p50 ${fmtDuration(s.p50Seconds)}, p95 ${fmtDuration(s.p95Seconds)}${s.topCause ? ` · ${s.topCause}` : ""}` }))}
+                  segments={f.startBreakdown.stages.map((s) => ({ label: s.stage, value: s.p50Seconds, tone: s.findingId === f.id ? "warning" : undefined, title: `${s.stage}: p50 ${fmtDuration(s.p50Seconds)}, p95 ${fmtDuration(s.p95Seconds)}${s.topCause ? ` · ${s.topCause}` : ""}` }))}
                   format={(v) => fmtDuration(v)}
                 />
               </div>

@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -97,6 +98,7 @@ type Reconciler struct {
 	repo       ReconcilerStore
 	runEvents  runevents.Store
 	chats      Chats
+	toolCalls  ToolCallLists
 	workflows  WorkflowLoader
 	daemons    DaemonReader
 	approvals  Approvals
@@ -178,6 +180,20 @@ type Reconciler struct {
 	// approvalFeedRepaired is set once announceApprovalResolutions has run to
 	// completion in this process (see it).
 	approvalFeedRepaired atomic.Bool
+
+	// The stall watchdog (stall_watchdog.go): its mode, idle ceiling, the
+	// run lifecycle it stops a stalled execution through, where it records
+	// what it found, the converter that decodes a run's start input (for the
+	// run id it records under), and its in-memory streaks (same rationale as
+	// progressObservations). clock is time.Now outside tests.
+	stallMode         StallWatchdogMode
+	stallMaxIdle      time.Duration
+	runs              RunTerminator
+	observations      StallRecorder
+	dataConverter     converter.DataConverter
+	clock             func() time.Time
+	stallMu           sync.Mutex
+	stallObservations map[string]*stallObservation
 }
 
 // SetApprovals gives the approval sweep the store it reads and closes through;
@@ -321,6 +337,12 @@ const (
 // wedge; the attempt count only decides when to go and read it.
 const DefaultWedgeAttemptThreshold = 2
 
+// The task types pollersActive gates on: workflow and activity pollers.
+const (
+	pollerTaskWorkflow = "workflow"
+	pollerTaskActivity = "activity"
+)
+
 // wedgeObservationTaskType is the debounce identity used for wedged workflow
 // tasks, distinct from the "workflow"/"activity" stuck-in-Scheduled classes.
 const wedgeObservationTaskType = "wedged-workflow-task"
@@ -463,6 +485,15 @@ type ReconcilerConfig struct {
 	// drift and silent-termination repair, orphan descendant/thread reaps,
 	// stranded-spawn repairs, orphaned mailbox resolution — is unaffected.
 	Interventions bool
+
+	// StallWatchdog is the stall watchdog's mode (stall_watchdog.go),
+	// reconciler.stall_watchdog in the server config. Zero is off.
+	StallWatchdog StallWatchdogMode
+
+	// StallMaxIdle is the stall watchdog's idle ceiling: how long a run may
+	// go without progress, with nothing in flight, before it is stalled.
+	// Default: DefaultStallMaxIdle.
+	StallMaxIdle time.Duration
 }
 
 // DefaultConfig returns the default reconciler configuration
@@ -519,10 +550,41 @@ func New(deps Deps) *Reconciler {
 	if cfg.ProgressStallWindow <= 0 {
 		cfg.ProgressStallWindow = def.ProgressStallWindow
 	}
+	stallMode := cfg.StallWatchdog
+	if stallMode == "" {
+		stallMode = StallWatchdogOff
+	}
+	if _, err := ParseStallWatchdogMode(string(stallMode)); err != nil {
+		logging.Error("[Reconciler] Unknown stall watchdog mode; the watchdog stays off", "mode", string(stallMode))
+		stallMode = StallWatchdogOff
+	}
+	if stallMode == StallWatchdogEnforce && deps.Runs == nil {
+		logging.Error("[Reconciler] Stall watchdog set to enforce with no run terminator; it reports instead")
+		stallMode = StallWatchdogReport
+	}
+	if stallMode != StallWatchdogOff {
+		logging.Info("[Reconciler] Stall watchdog is ON", "mode", string(stallMode))
+	}
+	stallMaxIdle := cfg.StallMaxIdle
+	if stallMaxIdle <= 0 {
+		stallMaxIdle = DefaultStallMaxIdle
+	}
+	dataConverter := deps.DataConverter
+	if dataConverter == nil {
+		dataConverter = rtemporal.NewFlexibleDataConverter()
+	}
 	return &Reconciler{
+		stallMode:               stallMode,
+		stallMaxIdle:            stallMaxIdle,
+		runs:                    deps.Runs,
+		observations:            deps.Observations,
+		dataConverter:           dataConverter,
+		clock:                   time.Now,
+		stallObservations:       make(map[string]*stallObservation),
 		repo:                    repo,
 		runEvents:               deps.RunEvents,
 		chats:                   chats,
+		toolCalls:               deps.ToolCalls,
 		questions:               deps.Questions,
 		mailbox:                 deps.Mailbox,
 		orphans:                 deps.Orphans,
@@ -620,6 +682,10 @@ type TemporalWorkflowState struct {
 	PendingActivityCount   int  // pending activities (any state)
 	PendingChildrenCount   int  // pending Temporal child workflows
 	PendingNexusCount      int  // pending nexus operations
+	// PendingActivities is the pending-activity census the stall watchdog
+	// bounds a run's in-flight work by (stall_watchdog.go). Filled only
+	// while the watchdog is on.
+	PendingActivities []PendingActivity
 
 	// WasTerminated distinguishes a hard TERMINATE from the other closed
 	// statuses that also map to Failed (FAILED, TIMED_OUT). It matters
@@ -659,7 +725,9 @@ type ReconciliationResult struct {
 	NeedsRecovery    bool // True if workflow is lost and needs user action
 	RecoveredByReset bool // True if a stuck task was recovered via workflow reset
 	ProgressStalled  bool // True if a confirmed progress stall was terminated + marked failed
-	Error            error
+	// StallTerminated: the stall watchdog (enforce) stopped this execution.
+	StallTerminated bool
+	Error           error
 }
 
 // passStats aggregates anomaly counts for one reconcile pass so
@@ -907,6 +975,9 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 		state.PendingActivityCount = len(descResp.PendingActivities)
 		state.PendingChildrenCount = len(descResp.PendingChildren)
 		state.PendingNexusCount = len(descResp.PendingNexusOperations)
+		if r.stallMode != StallWatchdogOff {
+			state.PendingActivities = pendingActivitiesOf(descResp.PendingActivities)
+		}
 
 		// Wedge check FIRST: a workflow task with a high attempt count is
 		// being dispatched over and over. It must not be classified as merely
@@ -1105,6 +1176,15 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	suspicious := wf.Status == db.Active() && temporalState.quiescent()
 	if !suspicious {
 		r.clearProgressObservation(wf.ID)
+	}
+
+	// Stall watchdog (off unless reconciler.stall_watchdog says otherwise):
+	// a running run with nothing in flight that parks it and no progress
+	// past its threshold. See stall_watchdog.go.
+	if r.watchStall(ctx, wf, temporalState, pollers, stats) {
+		result.StallTerminated = true
+		result.WasStale = true
+		return result
 	}
 
 	// Wedged workflow task: the workflow task is dispatched and fails over
@@ -2342,7 +2422,7 @@ func closeStatusLabel(status enums.WorkflowExecutionStatus) string {
 // repaired by Cleanup — including its instruction to verify effects before
 // re-running.
 func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *passStats) (int, error) {
-	stranded, err := r.repo.ListStrandedSpawnToolCalls(ctx)
+	stranded, err := r.toolCalls.ListStrandedSpawnToolCalls(ctx)
 	if err != nil {
 		logPassFailure(ctx, "[Reconciler] Failed to list stranded spawn tool calls", err)
 		return 0, fmt.Errorf("failed to list stranded spawn tool calls: %w", err)
@@ -2467,7 +2547,7 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 // address disjoint rows regardless of which runs first, and re-running
 // either moves nothing. The ordering is not relied upon.
 func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *passStats) (int, error) {
-	stranded, err := r.repo.ListStrandedBackgroundSpawnToolCalls(ctx)
+	stranded, err := r.toolCalls.ListStrandedBackgroundSpawnToolCalls(ctx)
 	if err != nil {
 		logPassFailure(ctx, "[Reconciler] Failed to list stranded background spawn tool calls", err)
 		return 0, fmt.Errorf("failed to list stranded background spawn tool calls: %w", err)
@@ -3019,6 +3099,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		// Nothing running: any leftover debounce/streak entries are moot.
 		r.pruneStuckObservations(nil)
 		r.pruneProgressObservations(nil)
+		r.pruneStallObservations(nil)
 		r.resetGuard.Prune(nil)
 		return reconciled, errors
 	}
@@ -3067,6 +3148,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	}
 	r.pruneStuckObservations(runningIDs)
 	r.pruneProgressObservations(runningIDs)
+	r.pruneStallObservations(runningIDs)
 	r.resetGuard.Prune(runningIDs)
 
 	if reconciled > 0 {

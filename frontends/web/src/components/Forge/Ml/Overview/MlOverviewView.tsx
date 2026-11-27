@@ -15,7 +15,7 @@
 import { useMemo, type ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 
-import { MlAxis, MlSubjectKind, type MlRun } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlSubjectKind, type MlRun } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 import type { MlOutcome } from "@/services/controlPlane/ml/types";
 
 import { MlFrame, MlRead } from "../MlParts";
@@ -50,6 +50,8 @@ import {
   SubjectLink,
   tsMs,
   useMl,
+  useMlEvents,
+  useMlSeries,
   verdictOf,
   type HeatmapRow,
 } from "../kit";
@@ -283,8 +285,11 @@ function Objective({ run }: { run: MlRun }) {
   );
 }
 
+const BUSY_KEYS = ["pool.busy"];
+const ALLOC_KEYS = ["fleet.allocated", "fleet.busy"];
+
 function FleetHeatmap() {
-  const q = useMl("queryMlSeries", { subject: ORG, keys: ["pool.busy"], axis: MlAxis.TIME, groupBy: "pool", maxPoints: 48 });
+  const q = useMlSeries(ORG, BUSY_KEYS, { groupBy: "pool" });
   return (
     <MlRead query={q} what="fleet utilisation">
       {(d) => {
@@ -295,7 +300,6 @@ function FleetHeatmap() {
           id: s.group || s.label,
           label: s.group || s.label,
           cells: s.y.map((v) => (Number.isFinite(v) ? v : null)),
-          href: s.subject?.id ? mlHref("fleet", ["pools", ...s.subject.id.split("/")]) : undefined,
         }));
         return <Heatmap rows={rows} columns={cols} format={(v) => fmtPct(v)} labelWidth={120} cellHeight={18} testId="ml-overview-heatmap-grid" />;
       }}
@@ -304,8 +308,8 @@ function FleetHeatmap() {
 }
 
 function AllocVsBusy() {
-  const q = useMl("queryMlSeries", { subject: ORG, keys: ["fleet.allocated", "fleet.busy"], axis: MlAxis.TIME });
-  const events = useMl("listMlEvents", { subject: ORG, limit: 200 });
+  const q = useMlSeries(ORG, ALLOC_KEYS);
+  const events = useMlEvents(ORG, { range: "24h" });
   const ev = events.data?.kind === "ok" ? events.data.data.events : [];
   return (
     <MlRead query={q} what="fleet utilisation">
@@ -315,7 +319,7 @@ function AllocVsBusy() {
 }
 
 function RecentChanges({ now }: { now: number }) {
-  const q = useMl("listMlEvents", { subject: ORG, limit: 200 });
+  const q = useMlEvents(ORG);
   return (
     <MlRead query={q} what="recent changes">
       {(d) => {

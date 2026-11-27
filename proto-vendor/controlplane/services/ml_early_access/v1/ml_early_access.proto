@@ -114,6 +114,17 @@ service MlEarlyAccessService {
     };
   }
 
+  // Deprecated: the first early-access shape. Use GetMlFleet and GetMlPool.
+  // It answers as it always has (the ml gate, then Unimplemented).
+  rpc GetMlMachines(GetMlMachinesRequest) returns (GetMlMachinesResponse) {
+    option deprecated = true;
+    option idempotency_level = NO_SIDE_EFFECTS;
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // GetMlStack reports, per connected cluster, the telemetry and ML
   // components coverage checklist: adopted (found, theirs), installed by
   // forge, or missing, with the inventory discovery found.
@@ -192,126 +203,11 @@ service MlEarlyAccessService {
     };
   }
 
-  // --- Telemetry by subject --------------------------------------------------
-
-  // QueryMlSeries reads time series of one subject (a run, phase, attempt,
-  // node, device, pool, service, queue, ...) by metric key, on a time or a
-  // step axis. A key the subject does not report comes back marked not
-  // collected, naming the missing source; never as zeros.
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc QueryMlSeries(QueryMlSeriesRequest) returns (QueryMlSeriesResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
-  // ListMlEvents lists the events of a subject and everything under it
-  // (Kueue, scheduler, pods, nodes, devices, the orchestrator, training,
-  // releases, people), newest first: the overlays every chart draws.
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc ListMlEvents(ListMlEventsRequest) returns (ListMlEventsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
-  // ListMlLogs lists the merged log lines of a subject's pods, tagged with
-  // rank, pod and node, with the lines worth reading (NCCL timeouts, Xids,
-  // OOMs, tracebacks) highlighted.
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc ListMlLogs(ListMlLogsRequest) returns (ListMlLogsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
-  // ListMlTraces lists sampled traces of a subject: training steps,
-  // checkpoint saves, data pipelines, inference requests; slowest first.
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc ListMlTraces(ListMlTracesRequest) returns (ListMlTracesResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
-  // GetMlTrace reads one trace's spans.
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc GetMlTrace(GetMlTraceRequest) returns (GetMlTraceResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
-  // ListMlProfiles lists a subject's profiler captures (PyTorch profiler,
-  // Nsight, memory snapshots, NCCL flight-recorder dumps, continuous CPU).
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc ListMlProfiles(ListMlProfilesRequest) returns (ListMlProfilesResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
-  // GetMlProfile reads one capture with its summary and, where it has one,
-  // its flamegraph.
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc GetMlProfile(GetMlProfileRequest) returns (GetMlProfileResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
   // GetMlLineage reads the lineage graph around a subject: datasets →
   // phases → checkpoints → model versions → releases → inference services.
   //
   // forge:custom — an early-access read with no table behind it yet.
   rpc GetMlLineage(GetMlLineageRequest) returns (GetMlLineageResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
-  // QueryMlHistograms reads distributions of a subject: step time, latency
-  // (TTFT, ITL, e2e, queue), admission wait, checkpoint save time.
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc QueryMlHistograms(QueryMlHistogramsRequest) returns (QueryMlHistogramsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-    option (forge.v1.method) = {
-      auth_required: true
-      idempotent: true
-    };
-  }
-
-  // ListMlAlerts lists the alert rules that watch a subject (the defaults
-  // forge declares, and the org's own), their state, and the remediation each
-  // may take on its own (rewind to the last good checkpoint, cordon a bad node
-  // and start a new attempt). Releases are never rolled back automatically.
-  //
-  // forge:custom — an early-access read with no table behind it yet.
-  rpc ListMlAlerts(ListMlAlertsRequest) returns (ListMlAlertsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
@@ -731,16 +627,18 @@ message MlFleetSummary {
 }
 
 message MlCluster {
-  string id = 1;
+  string id = 6;
   string name = 2;
   // "gke", "eks", "aks", "other".
   string provider = 3;
   string location = 4;
-  string kubernetes_version = 5;
-  google.protobuf.Timestamp last_seen_at = 6;
-  int32 node_count = 7;
-  int32 gpu_count = 8;
-  MlHealth health = 9;
+  string kubernetes_version = 7;
+  google.protobuf.Timestamp last_seen_at = 5;
+  int32 node_count = 8;
+  int32 gpu_count = 9;
+  MlHealth health = 10;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  string cluster_id = 1 [deprecated = true];
 }
 
 enum MlCapacityType {
@@ -829,35 +727,43 @@ message MlShare {
 
 message MlNode {
   // "<cluster_id>/<node_name>".
-  string id = 1;
-  string name = 2;
-  string cluster_id = 3;
-  string pool_id = 4;
-  string provider_id = 5;
-  string instance_type = 6;
-  string zone = 7;
+  string id = 12;
+  string name = 1;
+  string cluster_id = 13;
+  string pool_id = 14;
+  string provider_id = 15;
+  string instance_type = 16;
+  string zone = 17;
   // A re-imaged node is a new incarnation; history is kept.
-  int32 incarnation = 8;
-  MlHealth health = 9;
+  int32 incarnation = 18;
+  MlHealth health_state = 19;
   // 0-100, higher is worse.
-  double health_score = 10;
-  string health_reason = 11;
-  bool cordoned = 12;
-  int32 gpus = 13;
-  int32 gpus_allocatable = 14;
-  int32 gpus_allocated = 15;
-  double busy_ratio = 16;
-  string driver_version = 17;
-  string cuda_version = 18;
-  string kernel_version = 19;
-  string os_image = 20;
-  google.protobuf.Timestamp booted_at = 21;
+  double health_score = 20;
+  string health_reason = 21;
+  bool cordoned = 11;
+  int32 gpus = 22;
+  int32 gpus_allocatable = 23;
+  int32 gpus_allocated = 24;
+  double busy_ratio = 25;
+  string driver_version = 7;
+  string cuda_version = 26;
+  string kernel_version = 27;
+  string os_image = 28;
+  google.protobuf.Timestamp booted_at = 29;
   // Summaries: no fields here, only in GetMlNode / GetMlDevice.
-  repeated MlDevice devices = 22;
-  repeated MlNodeCondition conditions = 23;
+  repeated MlDevice devices = 30;
+  repeated MlNodeCondition conditions = 31;
   // "none", "mig", "time-slicing", "mps".
-  string sharing = 24;
-  string nvlink_domain = 25;
+  string sharing = 8;
+  string nvlink_domain = 32;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  int32 accelerator_count = 2 [deprecated = true];
+  int32 accelerators_allocatable = 3 [deprecated = true];
+  int32 accelerators_allocated = 4 [deprecated = true];
+  double utilization_percent = 5 [deprecated = true];
+  double memory_used_percent = 6 [deprecated = true];
+  MlNodeHealth health = 9 [deprecated = true];
+  repeated MlHealthFlag flags = 10 [deprecated = true];
 }
 
 message MlNodeCondition {
@@ -1069,7 +975,9 @@ message GetMlStackRequest {
 }
 
 message GetMlStackResponse {
-  repeated MlClusterSetup clusters = 1;
+  repeated MlClusterSetup clusters = 2;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  repeated MlStackComponent components = 1 [deprecated = true];
 }
 
 enum MlComponentState {
@@ -1309,35 +1217,51 @@ message MlEvidenceRow {
   MlSubject subject = 2;
 }
 
+// MlFindingSeverity is how bad a finding is. (It predates MlSeverity, with
+// the same values, and stays the type of MlFinding.severity.)
+enum MlFindingSeverity {
+  ML_FINDING_SEVERITY_UNSPECIFIED = 0;
+  ML_FINDING_SEVERITY_CRITICAL = 1;
+  ML_FINDING_SEVERITY_WARNING = 2;
+  ML_FINDING_SEVERITY_INFO = 3;
+}
+
 message MlFinding {
   string id = 1;
   string rule_id = 2;
-  MlFindingCategory category = 3;
-  MlSeverity severity = 4;
-  string title = 5;
-  string summary = 6;
+  MlFindingCategory category = 14;
+  MlFindingSeverity severity = 3;
+  string title = 4;
+  string summary = 5;
   // Why it matters, in a sentence with its numbers.
-  string why = 7;
-  MlImpact impact = 8;
-  repeated MlSubject subjects = 9;
-  repeated string cluster_ids = 10;
-  MlFindingState state = 11;
-  string assignee = 12;
-  string pr_url = 13;
-  google.protobuf.Timestamp first_seen_at = 14;
-  google.protobuf.Timestamp last_seen_at = 15;
+  string why = 15;
+  MlImpact impact = 16;
+  repeated MlSubject subjects = 17;
+  repeated string cluster_ids = 18;
+  MlFindingState state = 19;
+  string assignee = 20;
+  string pr_url = 21;
+  google.protobuf.Timestamp first_seen_at = 11;
+  google.protobuf.Timestamp last_seen_at = 12;
   // The rule as a person reads it, with the metric it reads.
-  string rule = 16;
-  repeated MlSeries evidence_series = 17;
-  MlEvidenceTable evidence_table = 18;
-  repeated MlFact evidence_facts = 19;
-  repeated MlEvent evidence_events = 20;
-  MlFix fix = 21;
+  string rule = 22;
+  repeated MlSeries evidence_series = 23;
+  MlEvidenceTable evidence_table = 24;
+  repeated MlFact evidence_facts = 25;
+  repeated MlEvent evidence_events = 26;
+  MlFix fix = 27;
   // How the fix is verified: "the rule clears for 24h".
-  string verify = 22;
-  string dismiss_reason = 23;
-  google.protobuf.Timestamp snoozed_until = 24;
-  MlPodStart pod_start = 25;
+  string verify = 28;
+  string dismiss_reason = 29;
+  google.protobuf.Timestamp snoozed_until = 30;
+  MlPodStart start_breakdown = 31;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  string cluster_id = 6 [deprecated = true];
+  string subject = 7 [deprecated = true];
+  repeated MlEvidence evidence = 8 [deprecated = true];
+  string fix_kcl = 9 [deprecated = true];
+  string fix_command = 10 [deprecated = true];
+  MlPodStartBreakdown pod_start = 13 [deprecated = true];
 }
 
 // ============================================================================
@@ -1385,11 +1309,11 @@ enum MlRunState {
   ML_RUN_STATE_QUEUED = 1;
   ML_RUN_STATE_RUNNING = 2;
   // Running, with an active problem (MlRun.badges says which).
-  ML_RUN_STATE_DEGRADED = 3;
-  ML_RUN_STATE_PAUSED = 4;
-  ML_RUN_STATE_SUCCEEDED = 5;
-  ML_RUN_STATE_FAILED = 6;
-  ML_RUN_STATE_CANCELLED = 7;
+  ML_RUN_STATE_DEGRADED = 6;
+  ML_RUN_STATE_PAUSED = 7;
+  ML_RUN_STATE_SUCCEEDED = 3;
+  ML_RUN_STATE_FAILED = 4;
+  ML_RUN_STATE_CANCELLED = 5;
   ML_RUN_STATE_UNKNOWN = 8;
 }
 
@@ -1408,46 +1332,54 @@ enum MlRunBadge {
 message MlRun {
   string id = 1;
   string name = 2;
-  string experiment_id = 3;
-  string project = 4;
-  string owner = 5;
-  string sweep_id = 6;
-  int32 trial = 7;
-  repeated string tags = 8;
-  MlRunState state = 9;
-  repeated MlRunBadge badges = 10;
+  string experiment_id = 18;
+  string project = 3;
+  string owner = 19;
+  string sweep_id = 20;
+  int32 trial = 21;
+  repeated string tags = 22;
+  MlRunState state = 7;
+  repeated MlRunBadge badges = 23;
   // The training template and the release that carried it.
-  string template = 11;
-  string template_release = 12;
-  string commit = 13;
-  google.protobuf.Timestamp created_at = 14;
-  google.protobuf.Timestamp started_at = 15;
-  google.protobuf.Timestamp ended_at = 16;
-  string current_phase_key = 17;
+  string template = 4;
+  string template_release = 24;
+  string commit = 25;
+  google.protobuf.Timestamp created_at = 26;
+  google.protobuf.Timestamp started_at = 10;
+  google.protobuf.Timestamp ended_at = 27;
+  string current_phase_key = 28;
   // Of the current phase.
-  int64 step = 18;
-  int64 total_steps = 19;
-  int64 tokens_seen = 20;
-  int64 tokens_planned = 21;
+  int64 step = 29;
+  int64 total_steps = 30;
+  int64 tokens_seen = 31;
+  int64 tokens_planned = 32;
   // Unset when not running or not estimable.
-  optional double eta_seconds = 22;
-  int32 accelerators = 23;
-  string accelerator_product = 24;
+  optional double eta_seconds = 33;
+  int32 accelerators = 34;
+  string accelerator_product = 13;
   // Productive share of allocated accelerator time, 0-1.
-  double goodput = 25;
-  MlCost cost = 26;
-  int32 restarts = 27;
-  int32 preemptions = 28;
+  double goodput = 35;
+  MlCost cost = 36;
+  int32 restarts = 14;
+  int32 preemptions = 15;
   // Headline scalars: "val/loss", "train/loss", "eval/mmlu_pro", "mfu".
-  map<string, double> summary = 29;
-  map<string, string> params = 30;
-  string objective_key = 31;
+  map<string, double> summary = 37;
+  map<string, string> params = 8;
+  string objective_key = 38;
   // The objective's recent values, for a sparkline.
-  MlSeries objective = 32;
-  repeated MlPhase phases = 33;
-  repeated string cluster_ids = 34;
+  MlSeries objective = 39;
+  repeated MlPhase phases = 40;
+  repeated string cluster_ids = 41;
   // How it was launched: "forge ml run", "observed", "mlflow import".
-  string launched_via = 35;
+  string launched_via = 42;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  string orchestrator = 5 [deprecated = true];
+  string cluster_id = 6 [deprecated = true];
+  string launched_by = 9 [deprecated = true];
+  google.protobuf.Timestamp finished_at = 11 [deprecated = true];
+  int32 accelerator_count = 12 [deprecated = true];
+  repeated MlMetricSeries metrics = 16 [deprecated = true];
+  string output_model_digest = 17 [deprecated = true];
 }
 
 enum MlPhaseKind {
@@ -1888,255 +1820,6 @@ message MlTokenStats {
   repeated MlShare by_source = 7;
 }
 
-// --- Telemetry by subject ----------------------------------------------------
-
-message QueryMlSeriesRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  MlSubject subject = 2 [(buf.validate.field).required = true];
-  // Metric keys; a key ending in "/*" reads every key under that prefix.
-  repeated string keys = 3;
-  MlAxis axis = 4;
-  // The window, for the time axis; unset for the subject's lifetime.
-  optional google.protobuf.Timestamp from = 5;
-  optional google.protobuf.Timestamp to = 6;
-  // One series per member: "rank", "device", "attempt", "node", "pool",
-  // "replica", "revision"; empty for one series per key.
-  optional string group_by = 7;
-  // The most points per series the caller wants.
-  optional int32 max_points = 8;
-}
-
-message QueryMlSeriesResponse {
-  repeated MlSeries series = 1;
-}
-
-message ListMlEventsRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  MlSubject subject = 2 [(buf.validate.field).required = true];
-  optional google.protobuf.Timestamp from = 3;
-  optional google.protobuf.Timestamp to = 4;
-  repeated MlEventKind kinds = 5;
-  optional int32 limit = 6;
-}
-
-message ListMlEventsResponse {
-  repeated MlEvent events = 1;
-}
-
-message ListMlLogsRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  MlSubject subject = 2 [(buf.validate.field).required = true];
-  optional google.protobuf.Timestamp from = 3;
-  optional google.protobuf.Timestamp to = 4;
-  optional int32 rank = 5;
-  // "error", "warn", "info", "debug".
-  optional string min_level = 6;
-  optional string query = 7;
-  optional bool highlights_only = 8;
-  optional int32 limit = 9;
-}
-
-message ListMlLogsResponse {
-  repeated MlLogLine lines = 1;
-  bool truncated = 2;
-}
-
-message MlLogLine {
-  google.protobuf.Timestamp time = 1;
-  // -1 when the line is not from a rank (an init container, the launcher).
-  int32 rank = 2;
-  string pod = 3;
-  string node_id = 4;
-  string container = 5;
-  string level = 6;
-  string message = 7;
-  // "nccl", "xid", "oom", "traceback", "shm", "nan", "watchdog"; empty for
-  // an ordinary line.
-  string highlight = 8;
-  string event_id = 9;
-  int32 attempt = 10;
-  string run_id = 11;
-  string phase_key = 12;
-  string trace_id = 13;
-}
-
-enum MlTraceKind {
-  ML_TRACE_KIND_UNSPECIFIED = 0;
-  ML_TRACE_KIND_TRAIN_STEP = 1;
-  ML_TRACE_KIND_CHECKPOINT = 2;
-  ML_TRACE_KIND_DATA_PIPELINE = 3;
-  ML_TRACE_KIND_INFERENCE_REQUEST = 4;
-  ML_TRACE_KIND_EVAL = 5;
-  ML_TRACE_KIND_POD_START = 6;
-}
-
-message ListMlTracesRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  MlSubject subject = 2 [(buf.validate.field).required = true];
-  optional MlTraceKind kind = 3;
-  optional int32 limit = 4;
-}
-
-message ListMlTracesResponse {
-  repeated MlTraceSummary traces = 1;
-  // Why there are none, when there are none: "training-uninstrumented".
-  string missing_finding_id = 2;
-}
-
-message MlTraceSummary {
-  string trace_id = 1;
-  MlTraceKind kind = 2;
-  string title = 3;
-  google.protobuf.Timestamp start = 4;
-  double duration_ms = 5;
-  // Against the median of its kind, e.g. 1.8.
-  double vs_median = 6;
-  // The span that took most of it.
-  string dominant_span = 7;
-  MlSubject subject = 8;
-  int64 step = 9;
-  int32 rank = 10;
-  bool error = 11;
-  map<string, string> attributes = 12;
-}
-
-message GetMlTraceRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  string trace_id = 2 [(buf.validate.field).required = true];
-}
-
-message GetMlTraceResponse {
-  MlTraceSummary summary = 1;
-  repeated MlSpan spans = 2;
-  bool truncated = 3;
-}
-
-enum MlSpanStatus {
-  ML_SPAN_STATUS_UNSPECIFIED = 0;
-  ML_SPAN_STATUS_OK = 1;
-  ML_SPAN_STATUS_ERROR = 2;
-}
-
-message MlSpan {
-  string span_id = 1;
-  string parent_span_id = 2;
-  string name = 3;
-  string service = 4;
-  // "server", "client", "internal", "producer", "consumer".
-  string kind = 5;
-  google.protobuf.Timestamp start = 6;
-  double duration_ms = 7;
-  MlSpanStatus status = 8;
-  string status_message = 9;
-  map<string, string> attributes = 10;
-  repeated MlSpanEvent events = 11;
-  // The join keys every ML span carries, so one trace joins the device,
-  // kubelet, scheduler and Kueue telemetry of the same moment. Empty when
-  // the span is not in a run (an inference request carries replica, node
-  // and device only).
-  string run_id = 12;
-  string phase_key = 13;
-  int32 attempt = 14;
-  int32 rank = 15;
-  string node_id = 16;
-  string device_uuid = 17;
-  string pod = 18;
-}
-
-message MlSpanEvent {
-  google.protobuf.Timestamp time = 1;
-  string name = 2;
-  map<string, string> attributes = 3;
-}
-
-enum MlProfileKind {
-  ML_PROFILE_KIND_UNSPECIFIED = 0;
-  ML_PROFILE_KIND_PYTORCH_PROFILER = 1;
-  ML_PROFILE_KIND_NSIGHT_SYSTEMS = 2;
-  ML_PROFILE_KIND_NSIGHT_COMPUTE = 3;
-  ML_PROFILE_KIND_MEMORY_SNAPSHOT = 4;
-  ML_PROFILE_KIND_FLIGHT_RECORDER = 5;
-  ML_PROFILE_KIND_PY_SPY = 6;
-  ML_PROFILE_KIND_CPU_CONTINUOUS = 7;
-  // Always-on, low-rate GPU kernel sampling (CUPTI range profiling).
-  ML_PROFILE_KIND_GPU_CONTINUOUS = 8;
-}
-
-message ListMlProfilesRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  MlSubject subject = 2 [(buf.validate.field).required = true];
-}
-
-message ListMlProfilesResponse {
-  repeated MlProfile profiles = 1;
-}
-
-message MlProfile {
-  string id = 1;
-  MlProfileKind kind = 2;
-  // "declared window", "auto on regression", "manual", "watchdog".
-  string trigger = 3;
-  MlSubject subject = 4;
-  int64 from_step = 5;
-  int64 to_step = 6;
-  repeated int32 ranks = 7;
-  int64 size_bytes = 8;
-  google.protobuf.Timestamp captured_at = 9;
-  // Where to open it: Perfetto for a trace, a download for Nsight.
-  string open_url = 10;
-  string open_label = 11;
-  MlProfileSummary summary = 12;
-  // A speedscope JSON flamegraph (GetMlProfile only).
-  string flamegraph_json = 13;
-  // Per-rank last collective, for a flight-recorder dump.
-  repeated MlCollectiveState collectives = 14;
-  string captured_by = 15;
-}
-
-// MlProfileSummary is what we compute from a capture (Holistic Trace
-// Analysis): where the time went, the top kernels, overlap and gaps.
-message MlProfileSummary {
-  double compute_share = 1;
-  double comm_share = 2;
-  double memcpy_share = 3;
-  double idle_share = 4;
-  // Communication hidden behind compute, 0-1.
-  double comm_overlap = 5;
-  bool launch_bound = 6;
-  repeated MlKernel top_kernels = 7;
-  double peak_memory_gb = 8;
-  repeated MlFact notes = 9;
-}
-
-message MlKernel {
-  string name = 1;
-  double share = 2;
-  int64 calls = 3;
-  double mean_us = 4;
-  // "gemm", "attention", "nccl", "elementwise", "memcpy".
-  string category = 5;
-}
-
-message MlCollectiveState {
-  int32 rank = 1;
-  int64 last_seq = 2;
-  string op = 3;
-  int64 size_bytes = 4;
-  // "completed", "started", "scheduled", "not-started".
-  string state = 5;
-  bool mismatched = 6;
-  string pod = 7;
-}
-
-message GetMlProfileRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  string profile_id = 2 [(buf.validate.field).required = true];
-}
-
-message GetMlProfileResponse {
-  MlProfile profile = 1;
-}
-
 // --- Lineage ---------------------------------------------------------------
 
 enum MlLineageEdgeKind {
@@ -2388,21 +2071,23 @@ message ListMlModelsResponse {
 }
 
 message MlModel {
-  string id = 1;
-  string name = 2;
-  string project = 3;
+  string id = 5;
+  string name = 1;
+  string project = 2;
   // The OCI repository.
-  string repository = 4;
-  string description = 5;
-  string latest_version_id = 6;
-  int32 version_count = 7;
-  repeated MlAlias aliases = 8;
-  int32 serving_services = 9;
-  double serving_rps = 10;
+  string repository = 3;
+  string description = 6;
+  string latest_version_id = 7;
+  int32 version_count = 8;
+  repeated MlAlias aliases = 9;
+  int32 serving_services = 10;
+  double serving_rps = 11;
   // The latest gate result: "pass", "fail", "".
-  string last_gate_status = 11;
-  string last_gate_version_id = 12;
-  google.protobuf.Timestamp updated_at = 13;
+  string last_gate_status = 12;
+  string last_gate_version_id = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  repeated MlModelVersion versions = 4 [deprecated = true];
 }
 
 message MlAlias {
@@ -2446,26 +2131,31 @@ enum MlVersionSource {
 
 message MlModelVersion {
   // "<model_id>/<version>".
-  string id = 1;
-  string model_id = 2;
+  string id = 8;
+  string model_id = 9;
   // "v3".
-  string version = 3;
-  string digest = 4;
-  google.protobuf.Timestamp created_at = 5;
-  MlVersionSource source = 6;
-  string run_id = 7;
-  string phase_key = 8;
-  int32 attempt = 9;
-  string checkpoint_id = 10;
-  string base_model = 11;
-  MlModelCard card = 12;
+  string version = 10;
+  string digest = 1;
+  google.protobuf.Timestamp created_at = 3;
+  MlVersionSource source = 11;
+  string run_id = 4;
+  string phase_key = 12;
+  int32 attempt = 13;
+  string checkpoint_id = 14;
+  string base_model = 15;
+  MlModelCard card = 16;
   // "pass", "fail", "pending", "".
-  string gate_status = 13;
-  int32 gate_passed = 14;
-  int32 gate_total = 15;
-  repeated string aliases = 16;
-  repeated MlServingPlacement serving = 17;
-  string created_by = 18;
+  string gate_status = 17;
+  int32 gate_passed = 18;
+  int32 gate_total = 19;
+  repeated string aliases = 20;
+  repeated MlServingPlacement serving = 21;
+  string created_by = 22;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  string tag = 2 [deprecated = true];
+  int64 size_bytes = 5 [deprecated = true];
+  map<string, double> eval_metrics = 6 [deprecated = true];
+  repeated string serving_in = 7 [deprecated = true];
 }
 
 message MlModelCard {
@@ -2567,48 +2257,61 @@ message ListMlInferenceServicesResponse {
 enum MlReleaseVerdict {
   ML_RELEASE_VERDICT_UNSPECIFIED = 0;
   ML_RELEASE_VERDICT_PASS = 1;
-  ML_RELEASE_VERDICT_REGRESSED = 2;
-  ML_RELEASE_VERDICT_NOT_PROVEN = 3;
-  ML_RELEASE_VERDICT_PENDING = 4;
+  ML_RELEASE_VERDICT_REGRESSED = 4;
+  ML_RELEASE_VERDICT_NOT_PROVEN = 5;
+  ML_RELEASE_VERDICT_PENDING = 6;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  ML_RELEASE_VERDICT_FAIL = 2 [deprecated = true];
+  ML_RELEASE_VERDICT_INCONCLUSIVE = 3 [deprecated = true];
 }
 
 message MlInferenceService {
-  string id = 1;
-  string name = 2;
-  string project = 3;
-  string env = 4;
-  string cluster_id = 5;
-  string pool_id = 6;
-  string model_id = 7;
-  string model_version_id = 8;
+  string id = 18;
+  string name = 1;
+  string project = 2;
+  string env = 19;
+  string cluster_id = 4;
+  string pool_id = 20;
+  string model_id = 21;
+  string model_version_id = 22;
   // The revision taking most traffic.
-  string revision_id = 9;
-  string release = 10;
+  string revision_id = 23;
+  string release = 6;
   // "vLLM 0.8.5", "SGLang 0.4", "TGI 3.0", "Triton".
-  string runtime = 11;
-  int32 accelerators = 12;
-  string accelerator_product = 13;
-  int32 replicas = 14;
-  int32 replicas_desired = 15;
-  double rps = 16;
-  double ttft_p95_ms = 17;
-  double itl_p95_ms = 18;
-  double e2e_p95_ms = 19;
-  double queue_p95_ms = 20;
-  double error_ratio = 21;
-  double slo_attainment = 22;
-  double slo_target = 23;
-  double kv_cache_ratio = 24;
-  double busy_ratio = 25;
-  double tokens_per_second = 26;
-  double usd_per_million_tokens = 27;
+  string runtime = 5;
+  int32 accelerators = 24;
+  string accelerator_product = 25;
+  int32 replicas = 8;
+  int32 replicas_desired = 26;
+  double rps = 27;
+  double ttft_p95_ms = 9;
+  double itl_p95_ms = 28;
+  double e2e_p95_ms = 29;
+  double queue_p95_ms = 30;
+  double error_ratio = 31;
+  double slo_attainment = 32;
+  double slo_target = 33;
+  double kv_cache_ratio = 34;
+  double busy_ratio = 35;
+  double tokens_per_second = 11;
+  double usd_per_million_tokens = 36;
   // Last 24h.
-  MlCost cost = 28;
-  MlReleaseVerdict verdict = 29;
+  MlCost cost = 37;
+  MlReleaseVerdict verdict = 38;
   // Requests per second over the last 24h, for a sparkline.
-  MlSeries rps_series = 30;
+  MlSeries rps_series = 39;
   // A Changes comparison is running on it.
-  bool comparing = 31;
+  bool comparing = 40;
+  // Deprecated: fields of the first early-access shape, kept for wire compatibility.
+  string environment = 3 [deprecated = true];
+  string model_digest = 7 [deprecated = true];
+  double queue_wait_p95_ms = 10 [deprecated = true];
+  double accelerator_utilization_percent = 12 [deprecated = true];
+  double kv_cache_usage_percent = 13 [deprecated = true];
+  MlPodStartBreakdown cold_start = 14 [deprecated = true];
+  MlReleaseVerdict release_verdict = 15 [deprecated = true];
+  string release_verdict_summary = 16 [deprecated = true];
+  google.protobuf.Timestamp release_checked_at = 17 [deprecated = true];
 }
 
 message GetMlInferenceServiceRequest {
@@ -2733,80 +2436,138 @@ message MlOnlineEval {
 }
 
 // ============================================================================
-// Histograms and alerts
+// Deprecated: the first early-access shape (kept for wire compatibility)
 // ============================================================================
 
-message QueryMlHistogramsRequest {
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message GetMlMachinesRequest {
+  option deprecated = true;
   string org_id = 1 [(buf.validate.field).required = true];
-  MlSubject subject = 2 [(buf.validate.field).required = true];
-  // "train.step_time", "serve.ttft", "serve.itl", "serve.e2e",
-  // "queue.admission_wait", "ckpt.save_time".
-  repeated string keys = 3;
-  optional google.protobuf.Timestamp from = 4;
-  optional google.protobuf.Timestamp to = 5;
+  // One connected cluster; unset for every cluster of the org.
+  optional string cluster_id = 2;
 }
 
-message QueryMlHistogramsResponse {
-  repeated MlHistogram histograms = 1;
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message GetMlMachinesResponse {
+  option deprecated = true;
+  repeated MlCluster clusters = 1;
+  repeated MlNodePool pools = 2;
+  // When the inventory these come from was observed.
+  google.protobuf.Timestamp observed_at = 3;
 }
 
-message MlHistogram {
-  string key = 1;
-  string label = 2;
-  string unit = 3;
-  repeated MlHistogramBucket buckets = 4;
-  double p50 = 5;
-  double p95 = 6;
-  double p99 = 7;
-  int64 count = 8;
-  // A comparison distribution (the previous revision, attempt 1), if any.
-  string compare_label = 9;
-  repeated MlHistogramBucket compare_buckets = 10;
-  MlCollection collection = 11;
-  string missing_source = 12;
-}
-
-message MlHistogramBucket {
-  double lower = 1;
-  double upper = 2;
-  int64 count = 3;
-}
-
-message ListMlAlertsRequest {
-  string org_id = 1 [(buf.validate.field).required = true];
-  MlSubject subject = 2 [(buf.validate.field).required = true];
-}
-
-message ListMlAlertsResponse {
-  repeated MlAlertRule alerts = 1;
-}
-
-enum MlAlertState {
-  ML_ALERT_STATE_UNSPECIFIED = 0;
-  ML_ALERT_STATE_OK = 1;
-  ML_ALERT_STATE_PENDING = 2;
-  ML_ALERT_STATE_FIRING = 3;
-  ML_ALERT_STATE_SILENCED = 4;
-}
-
-message MlAlertRule {
-  string id = 1;
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlNodePool {
+  option deprecated = true;
+  string cluster_id = 1;
   string name = 2;
-  // As declared: "train/loss z-score > 6 for 3 steps".
-  string expression = 3;
-  MlSeverity severity = 4;
-  MlAlertState state = 5;
-  MlSubject subject = 6;
-  // "forge default" or the KCL path that declares it.
-  string declared_in = 7;
-  google.protobuf.Timestamp last_fired_at = 8;
-  int32 fired_7d = 9;
-  // What it may do on its own: "rewind to the last good checkpoint",
-  // "cordon the node and start a new attempt"; empty to notify only.
-  string auto_action = 10;
-  // Whether the auto action is on (opt-in).
-  bool auto_action_enabled = 11;
-  // "Slack #ml-oncall", "Inbox".
-  string routed_to = 12;
-  string last_action = 13;
+  // "nvidia", "amd", "google" or "aws".
+  string accelerator_vendor = 3;
+  // The product, e.g. "NVIDIA H100 80GB HBM3".
+  string accelerator_product = 4;
+  int32 accelerators_total = 5;
+  int32 accelerators_allocated = 6;
+  // Allocated, but under 5% utilisation for at least an hour.
+  int32 accelerators_idle = 7;
+  repeated MlNode nodes = 8;
+  // Pool-wide utilisation against allocation over the last 24h, oldest first.
+  repeated MlUtilizationPoint utilization = 9;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+enum MlNodeHealth {
+  option deprecated = true;
+  ML_NODE_HEALTH_UNSPECIFIED = 0;
+  ML_NODE_HEALTH_HEALTHY = 1;
+  // Something to watch (a correctable error rate, a driver skew), not a fault.
+  ML_NODE_HEALTH_DEGRADED = 2;
+  // A device is faulty (a fatal Xid, an uncorrectable ECC error,
+  // allocatable below capacity): the node should not get new work.
+  ML_NODE_HEALTH_BAD = 3;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlHealthFlag {
+  option deprecated = true;
+  // "xid", "ecc_dbe", "row_remap_failure", "condition" or
+  // "allocatable_below_capacity".
+  string kind = 1;
+  // The code, e.g. "79" for an Xid.
+  string code = 2;
+  // The device it concerns, e.g. "GPU-3"; empty for the node as a whole.
+  string device = 3;
+  string message = 4;
+  google.protobuf.Timestamp first_seen_at = 5;
+  google.protobuf.Timestamp last_seen_at = 6;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlUtilizationPoint {
+  option deprecated = true;
+  google.protobuf.Timestamp time = 1;
+  // Mean utilisation of the pool's accelerators, 0-100.
+  double utilization_percent = 2;
+  // Share of the pool's accelerators allocated to pods, 0-100.
+  double allocated_percent = 3;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlStackComponent {
+  option deprecated = true;
+  string cluster_id = 1;
+  // e.g. "dcgm-exporter", "kueue", "node-problem-detector".
+  string name = 2;
+  // "telemetry", "health", "scheduling", "training", "serving" or "drivers".
+  string category = 3;
+  MlComponentState state = 4;
+  string version = 5;
+  // How it got there, e.g. "GPU Operator v24.9.0".
+  string via = 6;
+  string namespace = 7;
+  // The KCL that declares it (Adopt or Install), as forge ml discover
+  // proposes it.
+  string declaration = 8;
+  string note = 9;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlEvidence {
+  option deprecated = true;
+  string label = 1;
+  string value = 2;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlPodStartBreakdown {
+  option deprecated = true;
+  string workload = 1;
+  int32 sample_count = 2;
+  // In order: e.g. "scheduling", "image pull", "container start",
+  // "model load", "ready".
+  repeated MlStartStage stages = 3;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlStartStage {
+  option deprecated = true;
+  string name = 1;
+  double p50_seconds = 2;
+  double p95_seconds = 3;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlMetricSeries {
+  option deprecated = true;
+  // e.g. "loss", "eval/accuracy", "accelerator_utilization".
+  string name = 1;
+  string unit = 2;
+  repeated MlMetricPoint points = 3;
+}
+
+// Deprecated: not part of the reshaped contract; kept for wire compatibility.
+message MlMetricPoint {
+  option deprecated = true;
+  int64 step = 1;
+  google.protobuf.Timestamp time = 2;
+  double value = 3;
 }

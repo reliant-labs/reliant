@@ -6,7 +6,8 @@ import Badge from "@/components/forge-ui/badge";
 import Combobox, { type ComboboxOption } from "@/components/forge-ui/combobox";
 import Input from "@/components/forge-ui/input";
 import ToggleSwitch from "@/components/forge-ui/toggle_switch";
-import { obsKeys, useObsReadApi } from "@/hooks/observability-queries";
+import { obsKeys } from "@/hooks/observability-queries";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { obsRetry, obsRetryDelay } from "@/services/controlPlane/observability/errors";
 import type { RPCCatalog } from "@/services/controlPlane/observability/graphTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
@@ -50,7 +51,7 @@ function filterOptions(catalog: RPCCatalog | undefined, scopedCatalog: RPCCatalo
 export function GraphView({ scope, range, search, navigate, subject }: {
   scope: ObsScope; range: RangePreset; search: ObsSearch; navigate: ObsNavigate; subject: string;
 }) {
-  const api = useObsReadApi();
+  const api = useObservabilityApi();
   const { environments } = useObsAskContext();
   const envNames = useMemo(() => new Map(environments.map((e) => [e.id, e.name])), [environments]);
   // A window stays frozen while selecting nodes/methods. The panel remounts

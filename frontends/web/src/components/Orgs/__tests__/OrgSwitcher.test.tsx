@@ -27,6 +27,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { setTransport } from "@/lib/connect";
 import { mockTransport, type MockHandlers } from "@/lib/test-utils";
 import { orgKeys } from "@/services/controlPlane/orgs";
+import { secretStoreServiceKeys } from "@/hooks/controlplane/secret-store-service-hooks_gen";
 import { myOrgsHandlers } from "@/test/orgsTransport";
 
 import { ActiveOrgBinding } from "../ActiveOrgBinding";
@@ -178,6 +179,34 @@ describe("OrgSwitcher", () => {
     // its onSwitch's to reset (followActiveOrg), which this harness omits.
     expect(queryClient.getQueryData(["chats", "list"])).toEqual(["a chat"]);
     expect(screen.getByTestId("org-switcher-name")).toHaveTextContent("Side Project");
+  });
+
+  it("drops generated secret listings and version histories when switching orgs", async () => {
+    listMyOrganizations.mockResolvedValue({ orgs: [ACME, SIDE], defaultOrgId: "org-a" });
+    const { queryClient } = renderWithQuery(<Harness />);
+    await screen.findByTestId("org-switcher");
+    await waitFor(() => expect(getActiveOrgId()).toBe("org-a"));
+
+    // Seed after the initial binding settles: this must test the switch, not
+    // first-load cleanup or the test client's immediate garbage collection.
+    queryClient.setQueryDefaults(secretStoreServiceKeys.all, { gcTime: Infinity });
+    const listingKey = secretStoreServiceKeys.listSecrets({ environmentId: "acme-env" });
+    const historyKey = secretStoreServiceKeys.getSecretVersions({ environmentId: "acme-env", name: "API_KEY" });
+    const listing = { secrets: [{ name: "API_KEY" }], protected: false };
+    const history = { versions: [{ version: "1" }] };
+    queryClient.setQueryData(listingKey, listing);
+    queryClient.setQueryData(historyKey, history);
+    expect(queryClient.getQueryData(listingKey)).toEqual(listing);
+    expect(queryClient.getQueryData(historyKey)).toEqual(history);
+
+    await userEvent.click(screen.getByTestId("org-switcher"));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: /Side Project/ }));
+
+    await waitFor(() => expect(getActiveOrgId()).toBe("org-b"));
+    await waitFor(() => {
+      expect(queryClient.getQueryData(listingKey)).toBeUndefined();
+      expect(queryClient.getQueryData(historyKey)).toBeUndefined();
+    });
   });
 
   it("tells the product app about a tab's first org, then about each switch, once", async () => {

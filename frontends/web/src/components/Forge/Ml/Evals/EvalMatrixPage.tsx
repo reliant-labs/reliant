@@ -32,6 +32,7 @@ import {
   SubjectLink,
   tsMs,
   useMl,
+  useMlEvents,
   useMlSearch,
 } from "../kit";
 import { EvalMatrix } from "./EvalMatrix";
@@ -50,7 +51,7 @@ import {
   spendOf,
 } from "./evalsModel";
 
-function dataOf<T>(q: UseQueryResult<MlOutcome<T>, unknown>): T | undefined {
+function dataOf<T>(q: Pick<UseQueryResult<MlOutcome<T>, unknown>, "data">): T | undefined {
   return q.data?.kind === "ok" ? q.data.data : undefined;
 }
 
@@ -75,7 +76,7 @@ export function EvalMatrixPage() {
     () => byEnded(allRuns).find((r) => r.suiteId === periodic?.suiteId && r.subject?.kind === MlSubjectKind.MODEL_VERSION && !r.phase?.id),
     [allRuns, periodic],
   );
-  const events = useMl("listMlEvents", { subject: { kind: MlSubjectKind.PHASE, id: trainingPhase } }, { enabled: !!trainingPhase });
+  const events = useMlEvents({ kind: MlSubjectKind.PHASE, id: trainingPhase }, { enabled: !!trainingPhase, range: "30d" });
   const marks = useMemo(() => (dataOf(events)?.events ?? []).filter((e) => STEP_MARKS.has(e.kind) && Number(e.step) > 0), [events]);
   const panels = useMemo(() => scoreVsStep(allRuns, periodicSuite, periodic?.phase?.id ?? "", reference), [allRuns, periodicSuite, periodic, reference]);
 

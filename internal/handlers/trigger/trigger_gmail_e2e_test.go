@@ -130,7 +130,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 		assert.Equal(t, "code", q.Get("response_type"))
 		assert.Equal(t, "https://reliant.example/integrations/oauth/gmail/callback", q.Get("redirect_uri"))
 		assert.ElementsMatch(t, []string{
-			"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly",
+			"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.compose", "https://www.googleapis.com/auth/gmail.readonly",
 		}, strings.Fields(q.Get("scope")), "space-joined Google scopes")
 		done, err := conns.CompleteOAuth(ctx, userID, q.Get("state"), "4/code-"+email)
 		require.NoError(t, err)
@@ -152,7 +152,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	intake := triggers.NewIntake(triggers.NewStores(repo), temporalClient, taskQueue)
 	syncer, fires := TemporalBackend(temporalClient, triggers.NewStores(repo), taskQueue, registry.IsPolled)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{
-		Repo: repo, Firings: extstore.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: extstore.NewTriggerExtStore(repo.ORM()), TriggerWrites: extstore.NewTriggerWritesExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
+		Repo: repo, Firings: extstore.NewTriggerEventExtStore(repo.ORM()), WebhookSecrets: extstore.NewTriggerExtStore(repo.ORM()), TriggerWrites: extstore.NewTriggerWritesExtStore(repo.ORM()), Triggers: extstore.NewTriggerExtStore(repo.ORM()), FiringReads: extstore.NewTriggerEventExtStore(repo.ORM()), Registrations: extstore.NewTriggerRegistrationExtStore(repo.ORM()), Projects: projectaccesstest.For(repo), Syncer: syncer, Fires: fires,
 		Integrations: &configv1.IntegrationsConfig{PublicUrl: "https://reliant.example"}, Catalog: registry, Intake: intake,
 	}))
 
@@ -245,7 +245,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	assert.Equal(t, "Invoice 1234 from Acme", data["subject"], "trigger.payload.data.subject reached the run")
 	assert.Equal(t, "Billing <billing@acme.example>", data["from"])
 	assert.NotContains(t, data, "text", "no body in the payload")
-	chat, err := repo.GetChat(ctx, *launched.ChatID)
+	chat, err := extstore.GetChat(ctx, repo.ORM(), *launched.ChatID)
 	require.NoError(t, err)
 	assert.Equal(t, ann.userID, chat.UserID)
 	// The newsletter was recorded and skipped by the CEL filter.
@@ -298,16 +298,17 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	// polls (so a dismissal holds).
 	inboxService, err := inbox.New(inbox.Deps{
 		Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo,
-		Chats:       extstore.NewChatsWithActivityExtStore(repo.ORM()),
-		ProjectRows: extstore.NewProjectExtStore(repo.ORM()),
-		Machines:    extstore.NewDaemonExtStore(repo.ORM()),
-		OrgKeys:     db.TestOrgAccounts(t, repo),
-		Items:       extstore.NewInboxDismissalExtStore(repo.ORM()),
-		Firings:     extstore.NewTriggerEventExtStore(repo.ORM()),
-		Notices:     extstore.NewTriggerExtStore(repo.ORM()),
-		Storage:     worktreesweep.NewStores(repo, extstore.NewWorktreeExtStore(repo.ORM())),
-		Recoveries:  extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
-		Marks:       extstore.NewWorktreeExtStore(repo.ORM()),
+		Chats:         extstore.NewChatsWithActivityExtStore(repo.ORM()),
+		ProjectRows:   extstore.NewProjectExtStore(repo.ORM()),
+		Machines:      extstore.NewDaemonExtStore(repo.ORM()),
+		OrgKeys:       db.TestOrgAccounts(t, repo),
+		Items:         extstore.NewInboxDismissalExtStore(repo.ORM()),
+		Firings:       extstore.NewTriggerEventExtStore(repo.ORM()),
+		Notices:       extstore.NewTriggerExtStore(repo.ORM()),
+		Registrations: extstore.NewTriggerRegistrationExtStore(repo.ORM()),
+		Storage:       worktreesweep.NewStores(repo, extstore.NewWorktreeExtStore(repo.ORM())),
+		Recoveries:    extstore.NewWorktreeRecoveryExtStore(repo.ORM()),
+		Marks:         extstore.NewWorktreeExtStore(repo.ORM()),
 	})
 	require.NoError(t, err)
 	failing := func(userID string) []*reliantv1.InboxItem {
@@ -453,7 +454,7 @@ func (g *fakeGoogle) serve(w http.ResponseWriter, r *http.Request) {
 			access, refresh := "ya29."+uuid.NewString(), "1//"+uuid.NewString()
 			g.tokens[access], g.refreshes[refresh] = email, email
 			_ = json.NewEncoder(w).Encode(map[string]any{"access_token": access, "refresh_token": refresh, "expires_in": 3599,
-				"token_type": "Bearer", "scope": "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly"})
+				"token_type": "Bearer", "scope": "https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.compose https://www.googleapis.com/auth/gmail.readonly"})
 		case "refresh_token":
 			g.nRefresh++
 			email, ok := g.refreshes[r.PostForm.Get("refresh_token")]

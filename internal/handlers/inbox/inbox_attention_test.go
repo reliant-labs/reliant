@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,11 +86,11 @@ func TestInboxAttention_MixedTriggerKeepsUnmanagedFailureBeforeManagedSuccess(t 
 	assert.Equal(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED, items[0].GetAutomationFailing().Health.Status)
 	assert.Zero(t, items[0].GetAutomationFailing().Health.ConsecutiveFailures)
 	// Filtering happens before cap, not only after it.
-	episode, err := f.repo.FiringsSinceLastUnmanagedSuccess(f.ctx, f.userID, []string{"mixed"}, 1)
+	episode, err := store.FiringsSinceLastUnmanagedSuccess(f.ctx, f.repo.ORM(), f.userID, []string{"mixed"}, 1)
 	require.NoError(t, err)
 	require.Len(t, episode["mixed"], 1)
 	assert.Equal(t, "event-unmanaged-failed", episode["mixed"][0].Event.ID)
-	other, err := f.repo.FiringsSinceLastUnmanagedSuccess(f.ctx, "someone-else", []string{"mixed"}, 10)
+	other, err := store.FiringsSinceLastUnmanagedSuccess(f.ctx, f.repo.ORM(), "someone-else", []string{"mixed"}, 10)
 	require.NoError(t, err)
 	assert.Empty(t, other)
 	attentionFiring(t, f, "unmanaged-success", "mixed", db.Completed(), at.Add(2*time.Minute))

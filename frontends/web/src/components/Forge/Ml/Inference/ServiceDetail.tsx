@@ -9,7 +9,7 @@
  * release, Changes ramp, scale and restart markers.
  */
 
-import { MlAlertState, MlSubjectKind, type GetMlInferenceServiceResponse, type MlEvent, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { MlSubjectKind, type GetMlInferenceServiceResponse, type MlEvent, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { MlFrame, MlRead } from "../MlParts";
 import {
@@ -23,7 +23,6 @@ import {
   fmtUsd,
   Grid,
   Heatmap,
-  Histogram,
   KpiStrip,
   MlChart,
   MlTabs,
@@ -35,6 +34,8 @@ import {
   tail,
   useActiveTab,
   useMl,
+  useMlAlerts,
+  useMlEvents,
   verdictOf,
   type HeatmapRow,
   type MlTabDef,
@@ -85,11 +86,11 @@ function ServiceBody({ d }: { d: GetMlInferenceServiceResponse }) {
   const subject = serviceSubject(svc.id, `${svc.name} (${svc.env})`);
   const current = d.revisions.find((r) => r.id === svc.revisionId);
   const ttftDelta = deltaFor(current, "TTFT p95");
-  const eventsQ = useMl("listMlEvents", { subject });
-  const alertsQ = useMl("listMlAlerts", { subject });
+  const eventsQ = useMlEvents(subject, { range: "24h" });
+  const alertsQ = useMlAlerts(subject);
   const events = eventsQ.data?.kind === "ok" ? eventsQ.data.data.events : [];
   const alerts = alertsQ.data?.kind === "ok" ? alertsQ.data.data.alerts : [];
-  const firing = alerts.filter((a) => a.state === MlAlertState.FIRING).length;
+  const firing = alerts.filter((a) => a.state === "firing").length;
   const slo = sloTone(svc.sloAttainment, svc.sloTarget);
   const generative = Number.isFinite(svc.ttftP95Ms);
 
@@ -158,7 +159,6 @@ function OverviewTab({ d, events }: { d: GetMlInferenceServiceResponse; events: 
   const subject = serviceSubject(svc.id);
   const series = useServingSeries(subject, OVERVIEW_KEYS);
   const byFinish = useServingSeries(subject, ["serve.rps"], "finish_reason");
-  const hist = useMl("queryMlHistograms", { subject, keys: ["serve.ttft", "serve.itl", "serve.e2e"] });
   return (
     <div className="space-y-4">
       <MlRead query={series} what="latency">
@@ -206,24 +206,6 @@ function OverviewTab({ d, events }: { d: GetMlInferenceServiceResponse; events: 
           {d.adapters.length ? <StackedBar segments={d.adapters.map((a, i) => ({ label: a.name, value: a.value, color: i }))} format={fmtCompact} testId="ml-inference-adapters" /> : <EmptyNote>No LoRA adapters serve on this service.</EmptyNote>}
         </Panel>
       </Grid>
-      <Panel title="Distributions" note="24h; dashed outline: the previous revision">
-        <MlRead query={hist} what="latency distributions">
-          {({ histograms }) => {
-            const shown = histograms.filter((h) => h.buckets.length > 0);
-            if (shown.length === 0) return <EmptyNote>No distributions for this service.</EmptyNote>;
-            return (
-              <Grid cols={3}>
-                {shown.map((h) => (
-                  <div key={h.key} className="min-w-0 space-y-1">
-                    <h3 className="text-ui font-medium text-ink">{h.label}</h3>
-                    <Histogram histogram={h} height={110} testId={`ml-inference-hist-${h.key}`} />
-                  </div>
-                ))}
-              </Grid>
-            );
-          }}
-        </MlRead>
-      </Panel>
     </div>
   );
 }

@@ -191,6 +191,35 @@ message NodeObserve {
   repeated ObserveMetric metrics = 3;
 }
 
+// NodePreflight is a node's machine self-check (Node.preflight). Its presence
+// turns the check on; each field overrides one default and is left unset to
+// keep it. The fields are plain values, not the Cel* wrappers: the check runs
+// before the node's work, on the machine placement chose, and its thresholds
+// are the author's, not the run's data.
+//
+// What fails a machine: less free disk than min_free_disk on the filesystem
+// of the daemon's home (its workspace) or of /tmp, or a filesystem the disk
+// guard would refuse heavy work on; /tmp that is not a writable directory
+// with mode 1777; a daemon running as root (unless allow_root), or as a uid
+// that does not own its home; a tool missing from PATH (git always, plus
+// tools); and a 5-minute load average per CPU above max_load.
+message NodePreflight {
+  // Tools that must be on the daemon's PATH, beside git (always checked).
+  repeated string tools = 1 [(reliant) = {description: "Tools that must be on the machine's PATH; git is always checked"}];
+  // MinFreeDisk is the least free space, on each checked filesystem, a
+  // machine may have: a size such as "10GiB" or "500MB". Unset: 5GiB.
+  string min_free_disk = 2 [(reliant) = {description: "The least free disk a machine may have on its workspace and /tmp filesystems, such as 10GiB or 500MB. Default 5GiB"}];
+  // MaxLoad is the most 5-minute load average per CPU a machine may run
+  // at. Unset (0): 2.
+  double max_load = 3 [(reliant) = {description: "The highest 5-minute load average per CPU a machine may have. Default 2"}];
+  // AllowRoot accepts a daemon that runs as root.
+  bool allow_root = 4 [(reliant) = {description: "Accept a machine whose daemon runs as root"}];
+  // MaxMachines bounds how many machines the node tries before it fails
+  // with no healthy machine. Unset (0): 3. Every member of a smaller pool
+  // is tried; a node that is not on a pool has one machine.
+  int32 max_machines = 5 [(reliant) = {description: "How many machines the node tries before it fails with no healthy machine. Default 3"}];
+}
+
 // ObserveEvent is one span event a node records.
 message ObserveEvent {
   // Name is the event's name, e.g. "decision".
@@ -361,6 +390,27 @@ message Node {
   // the workflow's observe (the node wins). See NodeObserve.
   NodeObserve observe = 30 [(reliant) = {description: "What the node records when it finishes: span attributes, events (a decision is an event named decision) and metrics, as templates over output.*. Never fails the node"}];
 
+  // Role is the engine role this node acts in. A closed set: today only
+  // "reviewer", and only on a `review` node, which requires it. Empty means
+  // no role. A role is a fact the server reads (a verdict-writing server
+  // action checks that the node it reads came from a node with
+  // role: reviewer), so it is validated, never free text: a role on any other
+  // node fails validation, and the runtime clears one it finds there.
+  string role = 31 [(reliant) = {
+    description: "The engine role this node acts in. Only reviewer, and only on a review node, which requires it"
+    enum_values: "reviewer"
+  }];
+
+  // Preflight makes the machine the node is placed on check itself before
+  // the node's work starts: free disk, a usable /tmp, the daemon's uid, the
+  // tools on PATH and the load. A machine that fails is never given the
+  // node: a node placed on a machine pool moves to another member (the
+  // failed one excluded for this node), and the move is not one of the
+  // node's attempts. Present means on (`preflight: true` is the message
+  // with every default); unset changes nothing. Only valid on a node that
+  // runs on a machine. See NodePreflight.
+  NodePreflight preflight = 34 [(reliant) = {description: "Check the machine before the node's work starts (disk, /tmp, uid, tools, load); a machine that fails is never given the node, which moves to another member of its pool without spending an attempt. true, or a mapping of overrides"}];
+
   // Type-specific arguments. Exactly one must be set, matching the type field.
   // SecretRefs are the declared secrets this node's activity resolves, written by
   // the parser from the workflow's `secrets:` block and never authored. An action
@@ -387,6 +437,7 @@ message Node {
     ActionArgs action = 26;
     ComputeArgs compute = 27;
     GitPublishArgs git_publish = 28;
+    ReviewArgs review = 29;
   }
 }
 
@@ -1395,6 +1446,67 @@ message SubWorkflowArgs {
   }];
 }
 
+// ReviewArgs configures a review node: a reviewer agent that reads, and only
+// reads, then returns a structured verdict.
+//
+// The engine owns everything that makes the verdict trustworthy, and none of
+// it is configurable here:
+//   - a fresh session: every execution of the node, each round of a loop
+//     included, runs the agent in a thread of its own (ambient memory
+//     excluded), never one another node or an earlier round wrote to; what
+//     earlier rounds found reaches it only through `with`;
+//   - read-only tools: a fixed allowlist the engine also enforces at every
+//     model call in the session, with nothing loadable and no spawn;
+//   - verdict-only output: the node's output is a ReviewOutput, checked
+//     against a fixed schema, and anything else fails the node.
+// The node requires role: reviewer.
+//
+// Output fields accessible via nodes.<id>.*: see ReviewOutput.
+message ReviewArgs {
+  option (node_meta) = {
+    node_type: "review"
+    display_name: "Review"
+    description: "A read-only reviewer agent, in a fresh session, that returns a structured verdict"
+    is_structural: true
+    category: "agentic"
+    icon: "eye"
+  };
+
+  // Prompt is the reviewer's task: inline text (templates allowed), or a
+  // builtin:// reference to a prompt file the engine ships
+  // (builtin://pipeline/review.md). A path in the repository is not accepted:
+  // the reviewer's instructions must not come from the change under review.
+  CelString prompt = 1 [(reliant) = {
+    description: "The reviewer's task: inline text, or builtin://<path>.md for a prompt the engine ships"
+    example: "builtin://pipeline/review.md"
+    required: true
+  }];
+  // With is the data the reviewer works from, handed to it as JSON after the
+  // prompt. Values may be templates.
+  map<string, google.protobuf.Value> with = 2 [(reliant) = {
+    description: "Data for the reviewer, handed to it as JSON after the prompt; values may be templates"
+    example: "{\"head\": \"{{ trigger.record.head_sha }}\"}"
+    type_hint: "JSON object"
+  }];
+  // Model overrides the reviewer's model (default: the flagship tag).
+  CelModelSelector model = 3 [(reliant) = {
+    description: "The reviewer's model: a tag (flagship, fast, cheap) or an explicit model ID. Defaults to flagship"
+    example: "flagship"
+  }];
+  // MaxTurns bounds the reviewer's agent loop (default 100). A reviewer that
+  // reaches it without a verdict fails the node.
+  CelInt max_turns = 4 [(reliant) = {
+    description: "The most turns the reviewer may take before it must have submitted a verdict (default 100)"
+    min_value: 1
+    max_value: 500
+  }];
+  // Project sets the working directory the reviewer reads in.
+  ProjectConfig project = 5 [(reliant) = {
+    description: "Working directory override for the reviewer"
+    visibility_contexts: "advanced"
+  }];
+}
+
 // LoopArgs configures a loop node — repeats a sub-workflow while a condition is true.
 // Extends SubWorkflowArgs with loop-specific fields.
 //
@@ -2248,6 +2360,39 @@ message WorkflowOutput {
   google.protobuf.Struct outputs = 1;
 }
 
+// ReviewOutput is the output of a review node: the reviewer's verdict, checked
+// against this shape, plus two facts the engine (never the model) records.
+message ReviewOutput {
+  // Verdict is pass, changes or close.
+  string verdict = 1;
+  // Findings are the reviewer's findings, blockers and nits.
+  repeated ReviewFinding findings = 2;
+  // RiskTier is the reviewer's risk call, low, medium or high; empty when it
+  // made none.
+  string risk_tier = 3;
+  // Summary is the reviewer's one-paragraph summary.
+  string summary = 4;
+  // SessionId is the thread the reviewer ran in: a server action checks it
+  // against the sessions that pushed to the change under review.
+  string session_id = 5;
+  // Role is the role of the node that produced this verdict (reviewer).
+  string role = 6;
+}
+
+// ReviewFinding is one finding in a ReviewOutput.
+message ReviewFinding {
+  // Id is stable across review rounds, so a later round can say a blocker is fixed.
+  string id = 1;
+  // Severity is blocker or nit.
+  string severity = 2;
+  // Path is the file the finding is about, when it is about one.
+  string path = 3;
+  // Line is the 1-based line in path, when the finding names one.
+  int32 line = 4;
+  // Body says what is wrong and why.
+  string body = 5;
+}
+
 // LoopOutput is the output from loop nodes.
 // Sequential mode: user-defined outputs are in outputs; _iterations is the system field.
 // Parallel mode: _results is a map of key → sub-workflow outputs; _completed/_failed are counts.
@@ -2450,6 +2595,18 @@ message Workflow {
   // node wins), events concatenated (defaults first). Sub-workflows follow
   // their own defaults. See NodeObserve.
   NodeObserve observe = 27;
+  // Timeout bounds a run of this workflow, as a literal Go duration ("3h",
+  // "90m"): more than zero and at most 7 days. It is measured from the run's
+  // start, across continue-as-new, and it keeps counting while the run is
+  // paused, waits for an approval, a question, a machine or capacity: it is
+  // what ends a run that is stuck. When it passes, the run is cancelled the
+  // way a stop cancels it, then ends FAILED with the error "run timeout <d>
+  // exceeded" (failure.error_code "run_timeout"); on_failure and finally
+  // still run, outside the timeout, each bounded as on any ending. It bounds
+  // the run whose root this workflow is; a workflow run by ref or spawned
+  // inside another run is bounded by that run's timeout instead. Unset, the
+  // default, means no bound.
+  CelString timeout = 28;
 }
 
 // WorkflowCheck is a GitHub check run whose lifecycle the engine owns, posted
@@ -2564,7 +2721,8 @@ message WorkflowConcurrency {
   // Waiting is what happens to firings that wait: fifo (the default) keeps
   // every one, in arrival order; latest keeps only the newest waiting firing
   // per key, and each older one it replaces is recorded skipped with the
-  // detail "superseded", never failed. Running runs are never touched.
+  // detail "superseded", never failed. Waiting never touches running runs;
+  // cancel_running does.
   WorkflowConcurrencyWaiting waiting = 2;
   // Key groups firings, a template over `trigger` like a webhook dedupe_key,
   // e.g. '{{ trigger.payload.attributes.repository }}'. Under waiting: latest
@@ -2588,6 +2746,24 @@ message WorkflowConcurrency {
   // does not hold back firings of other keys behind it. Alone (no max_running
   // or per_member), only the per-key cap applies.
   uint32 max_running_per_key = 6;
+  // CancelRunning lets a newer firing of a key stop the run that holds the
+  // key's slot, instead of waiting behind it. Requires key and
+  // max_running_per_key: 1, so the slot holds exactly one run to stop.
+  //
+  // on_new_key_event: every firing whose key renders cancels each launched run
+  // of its key that enrolled before it and still holds the slot.
+  // on_new_head: the same, but only when the firing carries a GitHub pull
+  // request head (payload.data.pull_request.head.sha) and the running run's
+  // firing carries a different one. A firing with no head (an issue comment, a
+  // schedule) never cancels, and neither does one against a run whose firing
+  // had no head: a head that did not move is no reason to stop.
+  //
+  // The cancel is the run lifecycle's own (the one a user's stop takes): the
+  // run is cancelled cooperatively, so its finally: runs, and its firing
+  // settles run_status cancelled with outcome_detail "superseded by event
+  // <id>". The new firing then takes the slot under waiting. Unset or never:
+  // running runs are never touched.
+  WorkflowConcurrencyCancelRunning cancel_running = 7;
 }
 
 // WorkflowConcurrencyWaiting is how a capacity-bound workflow treats waiting
@@ -2599,4 +2775,18 @@ enum WorkflowConcurrencyWaiting {
   WORKFLOW_CONCURRENCY_WAITING_FIFO = 1;
   // LATEST: a new firing supersedes the older waiting firings of its key.
   WORKFLOW_CONCURRENCY_WAITING_LATEST = 2;
+}
+
+// WorkflowConcurrencyCancelRunning is when a newer firing of a key cancels the
+// run holding the key's slot. In YAML: never, on_new_key_event or on_new_head.
+enum WorkflowConcurrencyCancelRunning {
+  // UNSPECIFIED is NEVER.
+  WORKFLOW_CONCURRENCY_CANCEL_RUNNING_UNSPECIFIED = 0;
+  // NEVER: running runs finish; newer firings wait.
+  WORKFLOW_CONCURRENCY_CANCEL_RUNNING_NEVER = 1;
+  // ON_NEW_KEY_EVENT: any newer firing of the key cancels the running run.
+  WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_KEY_EVENT = 2;
+  // ON_NEW_HEAD: a newer firing whose pull request head differs from the
+  // running run's firing cancels it.
+  WORKFLOW_CONCURRENCY_CANCEL_RUNNING_ON_NEW_HEAD = 3;
 }

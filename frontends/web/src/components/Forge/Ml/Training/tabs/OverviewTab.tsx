@@ -21,21 +21,26 @@ import {
   fmtTime,
   fmtUsd,
   MlChart,
-  num,
   Panel,
   severityOf,
   StackedBar,
   StatusDot,
   SubjectLink,
   tsMs,
-  useMl,
+  num,
+  useMlEvents,
+  useMlSearch,
+  useMlSeries,
+  xAxisOf,
   type MlBand,
 } from "../../kit";
 import { phaseId } from "../../kit/ids";
-import type { RunScope } from "../runScope";
+import { scopeRange, type RunScope } from "../runScope";
 import { costSegments, scopeCost, seriesPhase } from "../trainingModel";
 
-const CHART_EVENTS = new Set([MlEventKind.CHECKPOINT, MlEventKind.RESTART, MlEventKind.LOSS_SPIKE, MlEventKind.XID, MlEventKind.NCCL_TIMEOUT, MlEventKind.STRAGGLER, MlEventKind.QUEUE_EVICTED, MlEventKind.EVAL]);
+const LOSS_KEYS = ["train/loss", "val/loss"];
+const THROUGHPUT_KEYS = ["throughput/tokens_per_s", "throughput/mfu"];
+const CHART_EVENTS = [MlEventKind.CHECKPOINT, MlEventKind.RESTART, MlEventKind.LOSS_SPIKE, MlEventKind.XID, MlEventKind.NCCL_TIMEOUT, MlEventKind.STRAGGLER, MlEventKind.QUEUE_EVICTED, MlEventKind.EVAL];
 
 /** The subject a tab's series read: the scope's, but a run-wide scope reads its current phase (steps restart per phase). */
 export function seriesSubject(scope: RunScope) {
@@ -47,19 +52,26 @@ export function seriesSubject(scope: RunScope) {
 export function OverviewTab({ scope }: { scope: RunScope }) {
   const { detail, run, phase, attempt } = scope;
   const subject = seriesSubject(scope);
-  const loss = useMl("queryMlSeries", { subject, keys: ["train/loss", "val/loss"], axis: MlAxis.STEP, maxPoints: 400 });
-  const tput = useMl("queryMlSeries", { subject, keys: ["throughput/tokens_per_s", "throughput/mfu"], axis: MlAxis.STEP, maxPoints: 400 });
-  const events = useMl("listMlEvents", { subject, kinds: [...CHART_EVENTS] });
+  const range = scopeRange(scope);
+  const [search] = useMlSearch();
+  const axis = xAxisOf(search.axis);
+  const loss = useMlSeries(subject, LOSS_KEYS, { axis, range });
+  const tput = useMlSeries(subject, THROUGHPUT_KEYS, { axis, range });
+  const events = useMlEvents(subject, { kinds: CHART_EVENTS, range });
   const evs = events.data?.kind === "ok" ? events.data.data.events : [];
   const p = seriesPhase(detail, phase);
-  const bands: MlBand[] = (p?.segments ?? [])
-    .filter((s) => /spike|shard|warmup|anneal/i.test(`${s.name} ${s.note}`))
-    .map((s) => ({ from: num(s.fromStep), to: num(s.toStep), label: s.name, tone: /spike|shard/i.test(`${s.name} ${s.note}`) ? "warning" : "neutral" }));
   const cost = scopeCost(run, phase, attempt, scope.phaseScoped);
   const segs = costSegments(cost);
   const productive = segs.find((s) => s.label === "Productive");
   const syncKey = `run-overview-${run.id}`;
   const lossSeries = named(loss.data?.kind === "ok" ? loss.data.data.series : []);
+  const stepped = lossSeries.some((s) => s.axis === MlAxis.STEP);
+  // The phase's data segments (a spike, a shard swap, warmup) are stretches of steps.
+  const bands: MlBand[] = stepped
+    ? (p?.segments ?? [])
+        .filter((s) => /spike|shard|warmup|anneal/i.test(`${s.name} ${s.note}`))
+        .map((s) => ({ from: num(s.fromStep), to: num(s.toStep), label: s.name, tone: /spike|shard/i.test(`${s.name} ${s.note}`) ? "warning" : "neutral" }))
+    : [];
   const tputSeries = named(tput.data?.kind === "ok" ? tput.data.data.series : []);
   const workloadAttempt = attempt ?? [...(p?.attempts ?? [])].sort((a, b) => b.n - a.n)[0] ?? null;
 
@@ -112,7 +124,7 @@ export function OverviewTab({ scope }: { scope: RunScope }) {
 
       </div>
       <div className="min-w-0 space-y-4">
-        <Panel title="Loss" note={`${p?.key ?? ""} · step axis · markers: checkpoints, restarts, spikes`} testId="ml-run-loss">
+        <Panel title="Loss" note={`${p?.key ?? ""} · ${stepped ? "step" : "time"} axis · markers: checkpoints, restarts, spikes`} testId="ml-run-loss">
           <MlChart series={lossSeries} events={evs} bands={bands} label="Loss" height={200} syncKey={syncKey} what="Loss" testId="ml-run-loss-chart" />
         </Panel>
 

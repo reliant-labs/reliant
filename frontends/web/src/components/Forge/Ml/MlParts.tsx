@@ -201,11 +201,14 @@ function NotEntitled() {
   return null;
 }
 
+/** What <MlRead> draws: an ML read's outcome under React Query's loading and failure fields (an ML rpc's, or a telemetry read's, kit/telemetry.ts). */
+export type MlQuery<T> = Pick<UseQueryResult<MlOutcome<T>, unknown>, "data" | "error" | "isLoading" | "isFetching" | "refetch">;
+
 /**
  * One ML read, in its states: loading, a failure, not entitled (reported to
  * the gate), no data yet, or `children` with the data.
  */
-export function MlRead<T>({ query, what, children }: { query: UseQueryResult<MlOutcome<T>, unknown>; what: string; children: (data: T) => ReactNode }) {
+export function MlRead<T>({ query, what, children }: { query: MlQuery<T>; what: string; children: (data: T) => ReactNode }) {
   if (query.isLoading) {
     return (
       <Card padding="none">

@@ -29,7 +29,7 @@ func (s *Service) ListTriggers(
 		return nil, err
 	}
 	filters := core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId, Org: scope}
-	stored, err := s.deps.Repo.ListTriggers(ctx, filters)
+	stored, err := s.deps.Triggers.ListTriggersForUser(ctx, filters)
 	if err != nil {
 		return nil, triggerDBError("list triggers", err)
 	}
@@ -49,7 +49,7 @@ func (s *Service) ListTriggers(
 		recent = nil
 	}
 	// And one for every polled trigger's source state, which health folds in.
-	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, userID, ids)
+	regs, err := s.deps.Registrations.ListTriggerRegistrationsForUser(ctx, userID, ids)
 	if err != nil {
 		logging.WarnContext(ctx, "could not resolve triggers' source state", "error", err)
 		regs = nil

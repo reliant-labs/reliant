@@ -2,18 +2,16 @@
 
 /**
  * A service's Cost (GPU-hours, $ per hour, $ per 1M input and output tokens,
- * idle replicas) and Alerts (the rules on it, their state and where they
- * route). Reliant never rolls back on its own: a regression halts promotion
+ * idle replicas) and Alerts (what AlertingService has pending or firing on
+ * it). Reliant never rolls back on its own: a regression halts promotion
  * and notifies; the previous release keeps serving.
  */
 
-import type { UseQueryResult } from "@tanstack/react-query";
+import type { GetMlInferenceServiceResponse, MlEvent } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import type { AlertInstance } from "@/services/controlPlane/observability/alertingTypes";
 
-import { MlAlertState, type GetMlInferenceServiceResponse, type ListMlAlertsResponse, type MlAlertRule, type MlEvent } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
-import type { MlOutcome } from "@/services/controlPlane/ml/types";
-
-import { MlRead } from "../MlParts";
-import { costCategoryOf, EmptyNote, FactList, fmtAgo, fmtGpuHours, fmtUsd, Grid, MlTable, Panel, severityOf, StackedBar, StatusDot, tsMs, type MlColumn } from "../kit";
+import { MlRead, type MlQuery } from "../MlParts";
+import { costCategoryOf, EmptyNote, FactList, fmtGpuHours, fmtUsd, Grid, MlAlertsTable, Panel, StackedBar } from "../kit";
 import { byKey } from "./inferenceModel";
 import { serviceSubject, SeriesTile, useServingSeries } from "./parts";
 
@@ -68,52 +66,17 @@ export function CostTab({ d, events }: { d: GetMlInferenceServiceResponse; event
   );
 }
 
-export function AlertsTab({ alerts, query }: { alerts: readonly MlAlertRule[]; query: UseQueryResult<MlOutcome<ListMlAlertsResponse>, unknown> }) {
-  const now = Date.now();
-  const columns: MlColumn<MlAlertRule>[] = [
-    {
-      key: "state",
-      header: "State",
-      render: (a) => {
-        const s = a.state === MlAlertState.FIRING ? { tone: severityOf(a.severity).tone, label: "Firing" } : a.state === MlAlertState.PENDING ? { tone: "info" as const, label: "Pending" } : a.state === MlAlertState.SILENCED ? { tone: "neutral" as const, label: "Silenced" } : { tone: "success" as const, label: "OK" };
-        return <StatusDot tone={s.tone} label={s.label} />;
-      },
-      sort: (a) => -a.state,
-    },
-    { key: "name", header: "Alert", render: (a) => <span className="text-ink">{a.name}</span> },
-    { key: "expr", header: "Condition", render: (a) => <span className="block max-w-sm truncate font-mono text-code text-ink-muted" title={a.expression}>{a.expression}</span> },
-    { key: "sev", header: "Severity", render: (a) => <span className="text-ink-muted">{severityOf(a.severity).label}</span> },
-    { key: "fired", header: "Last fired", render: (a) => <span className="tabular-nums text-ink-muted">{fmtAgo(tsMs(a.lastFiredAt), now)}</span> },
-    { key: "n", header: "Fired 7d", numeric: true, render: (a) => a.fired7d },
-    { key: "to", header: "Routed to", render: (a) => a.routedTo || "—" },
-    { key: "action", header: "On its own", render: (a) => <span className="text-ink-muted">{a.autoAction ? `${a.autoAction}${a.autoActionEnabled ? "" : " (off)"}` : "notify only"}</span> },
-    { key: "decl", header: "Declared in", render: (a) => <span className="font-mono text-code text-ink-muted">{a.declaredIn}</span> },
-  ];
+export function AlertsTab({ alerts, query }: { alerts: readonly AlertInstance[]; query: MlQuery<unknown> }) {
   return (
     <div className="space-y-3">
       <p className="text-ui text-ink-muted" data-testid="ml-inference-no-rollback">
         Reliant never rolls back automatically: a regression halts promotion and notifies, and the previous release keeps serving. Roll forward with a fix.
       </p>
-      <MlRead query={query} what="alerts">
-        {() =>
-          alerts.length === 0 ? (
-            <EmptyNote>No alert rules on this service.</EmptyNote>
-          ) : (
-            <Panel title="Alert rules" flush>
-              <MlTable columns={columns} rows={alerts} rowKey={(a) => a.id} initialSort={{ key: "state" }} testId="ml-inference-alerts" />
-              <ul className="space-y-1 border-t border-border-subtle px-4 py-3 text-meta text-ink-muted">
-                {alerts
-                  .filter((a) => a.lastAction)
-                  .map((a) => (
-                    <li key={a.id}>
-                      <span className="text-ink">{a.name}:</span> {a.lastAction}
-                    </li>
-                  ))}
-              </ul>
-            </Panel>
-          )
-        }
-      </MlRead>
+      <Panel title="Alerts" note="pending and firing on this service" flush>
+        <MlRead query={query} what="alerts">
+          {() => <MlAlertsTable alerts={alerts} now={Date.now()} showSubject testId="ml-inference-alerts" empty={<EmptyNote>Nothing is pending or firing on this service.</EmptyNote>} />}
+        </MlRead>
+      </Panel>
     </div>
   );
 }

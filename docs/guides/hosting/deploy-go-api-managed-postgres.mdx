@@ -175,7 +175,6 @@ The environment declares the database, and the platform fills `DATABASE_URL` in 
 ## What this does not do
 
 - It does not roll back. You recover by deploying an earlier release, and migrations run before every rollout, so keep them backward-compatible: [Safe migrations](/deep-dives/safe-migrations).
-- It does not autoscale. The API runs one replica.
 - It does not decide who may call what. Access checks are handler code you write.
 - Backups need the platform's backup storage to be ready: [Managed Postgres](/hosting/managed-postgres#backups-and-point-in-time-restore).
 
@@ -198,17 +197,7 @@ The environment declares the database, and the platform fills `DATABASE_URL` in 
 
 ## Next steps
 
-<CardGroup cols={2}>
-  <Card title="Promote staging to production" icon="arrow-up-right" href="/guides/hosting/promote-release-staging-to-production">
-    Deploy the same release to staging first, then promote it by digest.
-  </Card>
-  <Card title="Gate prod on release health" icon="shield-check" href="/guides/hosting/gate-production-deploy-release-health">
-    Refuse a production promotion until staging's check passes.
-  </Card>
-  <Card title="Managed Postgres" icon="database" href="/hosting/managed-postgres">
-    Backups, point-in-time restore and keeping data when you delete an environment.
-  </Card>
-  <Card title="Releases and promotion" icon="tags" href="/forge/deploy/releases-and-promotion">
-    Plans, approvals, compare-and-set promotions and rollback floors.
-  </Card>
-</CardGroup>
+- [Promote staging to production](/guides/hosting/promote-release-staging-to-production): deploy the same release to staging first, then promote it by digest
+- [Gate prod on release health](/guides/hosting/gate-production-deploy-release-health): refuse a production promotion until staging's check passes
+- [Managed Postgres](/hosting/managed-postgres): backups, point-in-time restore and keeping data when you delete an environment
+- [Releases and promotion](/forge/deploy/releases-and-promotion): plans, approvals, compare-and-set promotions and rollback floors

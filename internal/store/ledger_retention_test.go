@@ -110,6 +110,7 @@ func chatSeqs(t *testing.T, env *storetest.Env, chatID string) map[int64]reliant
 // of every kind of update, ages most of it, compacts, and holds every reader
 // to what it read before — while the rows nothing reads are gone.
 func TestCompactChatUpdates_ReadersReadWhatTheyReadBefore(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	const chat = "chat-compact"
 	seedChat(t, env, chat)
@@ -213,6 +214,7 @@ func TestCompactChatUpdates_ReadersReadWhatTheyReadBefore(t *testing.T) {
 // has aged keeps it (the high-water mark) and is never due again; a chat with
 // nothing aged is not due at all.
 func TestCompactChatUpdates_BatchesAndIdleChats(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	const chat = "chat-backlog"
 	seedChat(t, env, chat)
@@ -267,6 +269,7 @@ func TestCompactChatUpdates_BatchesAndIdleChats(t *testing.T) {
 // watermark raised and nothing deleted. The next pass resumes from where
 // compaction FINISHED, not from the watermark, and does that batch again.
 func TestCompactChatUpdates_InterruptedBatchIsRedone(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	const chat = "chat-interrupted"
 	seedChat(t, env, chat)
@@ -430,6 +433,7 @@ func deferredRoots(t *testing.T, env *storetest.Env) []string {
 // finished workflow is touched — root or child — and the chat timeline (the
 // BASIC read) is exactly what it was.
 func TestPruneStepExecutions_PrunesOnlyWhatIsFinishedAndOld(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	seedChat(t, env, "chat-prune")
 	old, recent := retentionAged, retentionRecent
@@ -475,6 +479,7 @@ func TestPruneStepExecutions_PrunesOnlyWhatIsFinishedAndOld(t *testing.T) {
 // pruned the root is no longer deferred, and a pass with nothing left to do
 // does nothing.
 func TestPruneStepExecutions_DeferredRootIsRevisited(t *testing.T) {
+	t.Parallel()
 	env, ctx := storetest.New(t), context.Background()
 	seedChat(t, env, "chat-defer")
 	old := retentionAged

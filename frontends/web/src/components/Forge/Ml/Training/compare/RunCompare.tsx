@@ -5,8 +5,10 @@
  * the body only (MlTrainingView frames it): a summary row per run with
  * deltas against the baseline (`?baseline`, else the first), the config keys
  * that differ, the runs' loss, eval, grad-norm and tokens/s curves overlaid
- * on one synced cursor (each run one line, its attempts merged), and the
- * system diff (MFU and where each run's step goes).
+ * on one synced cursor (ObservabilityService metrics, one QueryPanel read
+ * per run; each run one line, its attempts merged): by step when every run
+ * reports its step, else by time since each run started; and the system diff
+ * (MFU and where each run's step goes).
  */
 
 import { useMemo } from "react";
@@ -14,15 +16,18 @@ import { useQueries } from "@tanstack/react-query";
 
 import { FilterBar, FilterChip } from "@/components/forge-ui/filter_bar";
 import { mlKeys } from "@/hooks/ml-queries";
-import { MlAxis, MlSubjectKind, type GetMlRunResponse, type MlSeries, type QueryMlSeriesResponse } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { MlSubjectKind, type GetMlRunResponse, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { ML_STEP_KEY, subjectFilters } from "@/services/controlPlane/ml/telemetry";
+import { resolveWindow } from "@/services/controlPlane/observability/window";
 import type { MlMethod, MlRequest, MlResponse } from "@/services/controlPlane/ml/mlApi";
 import { useMlApi } from "@/services/controlPlane/ml/MlApiContext";
 import type { MlOutcome } from "@/services/controlPlane/ml/types";
 
 import { MlNoData, useMlGate } from "../../MlParts";
-import { EmptyNote, fmtCompact, fmtGpuHours, fmtPct, fmtStep, fmtUsd, Grid, Meter, MlTable, Panel, SubjectLink, useMlSearch, type MlColumn } from "../../kit";
+import { EmptyNote, fmtCompact, fmtDuration, fmtGpuHours, fmtPct, fmtStep, fmtUsd, Grid, Meter, MlTable, Panel, seriesOfPanel, seriesPanel, SubjectLink, useMlSearch, type MlColumn } from "../../kit";
 import { MetricTile } from "../obs/MetricTile";
-import { COMPARE_TASKS, compareRow, configDiff, delta, deltaTone, mergeAttempts, type CompareRow } from "./compareModel";
+import { alignRuns, COMPARE_TASKS, compareRow, configDiff, delta, deltaTone, mergeAttempts, type CompareRow } from "./compareModel";
 
 const SYNC = "ml-run-compare";
 const PALETTE = ["--chart-1", "--chart-2", "--chart-3", "--chart-4", "--chart-5", "--chart-6"] as const;
@@ -34,6 +39,28 @@ const CURVES = [
   { title: "MMLU-Pro (eval-periodic)", key: "eval/mmlu_pro" },
   { title: "Step time", key: "timers/step_ms" },
 ] as const;
+const CURVE_KEYS = CURVES.map((c) => c.key);
+/** The curves and the step they were at (ML_STEP_KEY), so they can be drawn by step. */
+const READ_KEYS = [...CURVE_KEYS, ML_STEP_KEY];
+const CURVES_PANEL = seriesPanel(READ_KEYS);
+
+/** Each run's curves and step (one QueryPanel read per run, filtered to its ml.run.id), on the time axis. */
+function useRunCurves(runIds: readonly string[]) {
+  const { orgId } = useMlGate();
+  const api = useObservabilityApi();
+  return useQueries({
+    queries: runIds.map((id) => ({
+      queryKey: [...mlKeys.all(orgId), "compare-curves", id] as const,
+      queryFn: async ({ signal }: { signal: AbortSignal }) => {
+        const res = await api.queryPanel({ orgId, envIds: [], filters: subjectFilters({ kind: MlSubjectKind.RUN, id }, "metrics"), window: resolveWindow("30d"), panel: CURVES_PANEL, services: [], stepSeconds: 0 }, { signal });
+        return seriesOfPanel(res, READ_KEYS);
+      },
+      enabled: !!orgId,
+      staleTime: 30_000,
+      retry: false,
+    })),
+  });
+}
 
 /** Several reads of one rpc, one per request, cached as useMl caches each. */
 function useMlMany<M extends MlMethod>(method: M, reqs: readonly MlRequest<M>[]) {
@@ -50,14 +77,17 @@ function useMlMany<M extends MlMethod>(method: M, reqs: readonly MlRequest<M>[])
   });
 }
 
+/** An elapsed-time x (seconds since a run started) as "+3h 20m". */
+const elapsed = (x: number) => `+${fmtDuration(x)}`;
+
 const okOf = <T,>(d: MlOutcome<T> | undefined): T | undefined => (d?.kind === "ok" ? d.data : undefined);
 
 export function RunCompare({ ids }: { ids: string[] }) {
   const [search, setSearch] = useMlSearch();
   const runReqs = useMemo(() => ids.map((run) => ({ run })), [ids]);
   const runs = useMlMany("getMlRun", runReqs);
-  const seriesReqs = useMemo(() => ids.map((id) => ({ subject: { kind: MlSubjectKind.RUN, id, label: id }, keys: CURVES.map((c) => c.key), axis: MlAxis.STEP, maxPoints: 200 })), [ids]);
-  const series = useMlMany("queryMlSeries", seriesReqs);
+  const loaded = runs.map((q) => okOf(q.data as MlOutcome<GetMlRunResponse> | undefined)?.run?.id).filter((id): id is string => !!id);
+  const series = useRunCurves(loaded);
 
   if (ids.length < 2) {
     return (
@@ -71,7 +101,7 @@ export function RunCompare({ ids }: { ids: string[] }) {
   const details = runs.map((q) => okOf(q.data as MlOutcome<GetMlRunResponse> | undefined)).filter((d): d is GetMlRunResponse => !!d?.run);
   const missing = ids.filter((id) => !details.some((d) => d.run!.id === id || d.run!.name === id));
   const baselineId = details.find((d) => d.run!.id === search.baseline || d.run!.name === search.baseline)?.run!.id ?? details[0]?.run!.id;
-  const seriesById = new Map<string, readonly MlSeries[]>(ids.map((id, i) => [id, okOf(series[i]?.data as MlOutcome<QueryMlSeriesResponse> | undefined)?.series ?? []]));
+  const aligned = alignRuns(new Map<string, readonly MlSeries[]>(loaded.map((id, i) => [id, series[i]?.data ?? []])));
   return (
     <div className="space-y-4" data-testid="ml-run-compare">
       <FilterBar label="Baseline" testId="ml-compare-baseline" trailing={missing.length ? <span className="text-meta text-warning-ink">Not found: {missing.join(", ")}</span> : undefined}>
@@ -87,7 +117,7 @@ export function RunCompare({ ids }: { ids: string[] }) {
         <ConfigDiff details={details} />
         <SystemDiff details={details} />
       </Grid>
-      <Curves details={details} seriesById={seriesById} ids={ids} />
+      <Curves details={details} seriesById={aligned.series} byStep={aligned.byStep} />
     </div>
   );
 }
@@ -203,13 +233,13 @@ function SystemDiff({ details }: { details: readonly GetMlRunResponse[] }) {
   );
 }
 
-function Curves({ details, seriesById, ids }: { details: readonly GetMlRunResponse[]; seriesById: ReadonlyMap<string, readonly MlSeries[]>; ids: readonly string[] }) {
+function Curves({ details, seriesById, byStep }: { details: readonly GetMlRunResponse[]; seriesById: ReadonlyMap<string, readonly MlSeries[]>; byStep: boolean }) {
   const colors = useMemo(() => new Map(details.map((d, i) => [d.run!.name, PALETTE[i % PALETTE.length] as string])), [details]);
   return (
     <section className="space-y-2" data-testid="ml-compare-curves">
       <div className="flex flex-wrap items-baseline gap-3">
         <h2 className="text-section text-ink">Curves</h2>
-        <span className="text-meta text-ink-muted">step axis, each run's current phase; attempts merged</span>
+        <span className="text-meta text-ink-muted" data-testid="ml-compare-axis">{byStep ? "step axis" : "time since each run started"}, each run's current phase; attempts merged</span>
         <ul className="flex flex-wrap gap-x-4 text-meta text-ink-muted">
           {[...colors.entries()].map(([name, c]) => (
             <li key={name} className="inline-flex items-center gap-1.5">
@@ -222,11 +252,10 @@ function Curves({ details, seriesById, ids }: { details: readonly GetMlRunRespon
       <div className="grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {CURVES.map((c) => {
           const lines = details.flatMap((d) => {
-            const id = ids.find((x) => x === d.run!.id || x === d.run!.name) ?? d.run!.id;
-            const m = mergeAttempts(seriesById.get(id) ?? [], c.key, d.run!.name);
+            const m = mergeAttempts(seriesById.get(d.run!.id) ?? [], c.key, d.run!.name);
             return m ? [m] : [];
           });
-          return <MetricTile key={c.key} title={c.title} series={lines} syncKey={SYNC} colors={colors} testId={`ml-compare-${c.key}`} />;
+          return <MetricTile key={c.key} title={c.title} series={lines} syncKey={SYNC} colors={colors} {...(byStep ? {} : { xFormat: elapsed })} testId={`ml-compare-${c.key}`} />;
         })}
       </div>
     </section>

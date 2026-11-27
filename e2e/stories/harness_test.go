@@ -430,7 +430,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Worktrees:        store.NewWorktreeExtStore(s.Repo.ORM()),
 		ProjectRows:      store.NewProjectExtStore(s.Repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(s.Repo.ORM()),
 		Backoff:       providerbackofftest.New(t, s.Repo),
-		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		Mailbox:       agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo.UpdateWriter()}),
 		AgentMessages: store.NewAgentMessageExtStore(s.Repo.ORM()),
 		Questions:     store.NewQuestionExtStore(s.Repo.ORM()),
 		Spawns:        store.NewToolCallExtStore(s.Repo.ORM()),
@@ -450,7 +450,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		ChatRows:  store.NewChatExtStore(s.Repo.ORM()),
 		ChatViews: store.NewChatsWithActivityExtStore(s.Repo.ORM()),
 		Resolver:  questions.NewFromRepo(s.Repo), Questions: store.NewQuestionExtStore(s.Repo.ORM()),
-		Mailbox:  agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo}),
+		Mailbox:  agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(s.Repo.ORM()), Announcer: s.Repo.UpdateWriter()}),
 		Signals:  pause,
 		Messages: chatSvc,
 	})
@@ -471,7 +471,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		Chats:          store.NewChatExtStore(s.Repo.ORM()),
 		Owners:         triggerOwners(t, s.Repo),
 		Firings:        store.NewTriggerEventExtStore(s.Repo.ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(s.Repo.ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(s.Repo.ORM()), TriggerWrites: store.NewTriggerWritesExtStore(s.Repo.ORM()), Triggers: store.NewTriggerExtStore(s.Repo.ORM()), FiringReads: store.NewTriggerEventExtStore(s.Repo.ORM()), Registrations: store.NewTriggerRegistrationExtStore(s.Repo.ORM()),
 		Projects: projectaccess.NewFromORM(s.Repo.ORM()),
 		OrgMoves: store.NewProjectOrgMoveExtStore(s.Repo.ORM()),
 		Pools:    store.NewMachinePoolExtStore(s.Repo.ORM()),
@@ -913,7 +913,7 @@ func TextOf(m MessageWithBlocks) string {
 // Chat fetches the chat row.
 func (h *Harness) Chat(chatID string) *db.Chat {
 	h.T.Helper()
-	row, err := h.Stack.Repo.GetChat(h.Ctx, chatID)
+	row, err := store.GetChat(h.Ctx, h.Stack.Repo.ORM(), chatID)
 	require.NoError(h.T, err, "get chat")
 	return row
 }

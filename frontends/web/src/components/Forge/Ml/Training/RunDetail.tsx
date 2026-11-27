@@ -14,7 +14,7 @@ import { MlSubjectKind, type GetMlRunResponse } from "@/gen/controlplane/service
 import { FilterChip } from "@/components/forge-ui/filter_bar";
 
 import { MlFrame, MlRead, type MlCrumb } from "../MlParts";
-import { endReasonOf, useCompareTray, fmtAgo, fmtCompact, fmtDuration, fmtGpuHours, fmtPct, fmtStep, fmtUsd, KpiStrip, MlLink, MlTabs, mlHref, num, Panel, SubjectLink, tsMs, useActiveTab, useMl, useMlSearch, type MlTabDef } from "../kit";
+import { endReasonOf, useCompareTray, fmtAgo, fmtCompact, fmtDuration, fmtGpuHours, fmtPct, fmtStep, fmtUsd, KpiStrip, MlLink, MlTabs, mlHref, num, Panel, SubjectLink, tsMs, useActiveTab, useMl, useMlSearch, xAxisOf, type MlTabDef } from "../kit";
 import { runScopeOf, type RunScope } from "./runScope";
 import { DemoAction, RunState } from "./parts";
 import { RunTimeline, type TimelineAxis } from "./RunTimeline";
@@ -57,7 +57,8 @@ function RunDetailBody({ detail, phaseKey }: { detail: GetMlRunResponse; phaseKe
   const [now] = useState(() => Date.now());
   const scope = runScopeOf(detail, phaseKey, search.attempt, search.rank);
   const { run } = scope;
-  const axis: TimelineAxis = search.axis === "step" ? "step" : "time";
+  // One `?axis` for the page: the timeline and the charts below it read the same step-or-time.
+  const axis: TimelineAxis = xAxisOf(search.axis);
   const exp = detail.experiment;
   const par = detail.config?.parallelism;
   const scoped = scopedNumbers(run, scope.phase, scope.attempt, scope.phaseScoped, now);
@@ -152,11 +153,11 @@ function RunDetailBody({ detail, phaseKey }: { detail: GetMlRunResponse; phaseKe
         note="click a phase to scope the tabs, an attempt to scope them to it"
         actions={
           <div className="flex items-center gap-1" role="group" aria-label="Timeline axis">
-            <FilterChip on={axis === "time"} onClick={() => setSearch({ axis: undefined })} testId="ml-run-axis-time">
-              Time
-            </FilterChip>
-            <FilterChip on={axis === "step"} onClick={() => setSearch({ axis: "step" })} testId="ml-run-axis-step">
+            <FilterChip on={axis === "step"} onClick={() => setSearch({ axis: undefined })} testId="ml-run-axis-step">
               Step
+            </FilterChip>
+            <FilterChip on={axis === "time"} onClick={() => setSearch({ axis: "time" })} testId="ml-run-axis-time">
+              Time
             </FilterChip>
           </div>
         }

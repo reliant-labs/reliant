@@ -9,10 +9,10 @@
  *
  * handlers/ml.ts asks every domain. For an entity read (GetMlRun,
  * GetMlNode, …) the first answer wins and none is NotFound. For a
- * SUBJECT-KEYED read (QueryMlSeries, ListMlEvents, ListMlLogs, ListMlTraces,
- * ListMlProfiles, GetMlLineage, QueryMlHistograms, ListMlAlerts) every
- * domain's answer is merged: their lists are concatenated, so the fleet adds
- * the device events of a run's nodes to the run's own training events.
+ * SUBJECT-KEYED read (GetMlLineage) every domain's answer is merged: their
+ * lists are concatenated. Telemetry (series, events, logs, traces, profiles,
+ * alerts) is not here: it is served through ObservabilityService
+ * (./telemetry.ts, ./telemetryTypes.ts).
  */
 
 import type { DescMessage, MessageInitShape, MessageShape } from "@bufbuild/protobuf";
@@ -31,13 +31,4 @@ export type MlAnswer<M extends MlMethodName> = (req: InputOf<M>, now: () => numb
 export type MlDomain = { [M in MlMethodName]?: MlAnswer<M> };
 
 /** The rpcs whose answers are merged across domains (lists concatenated). */
-export const MERGED_METHODS: ReadonlySet<MlMethodName> = new Set<MlMethodName>([
-  "queryMlSeries",
-  "listMlEvents",
-  "listMlLogs",
-  "listMlTraces",
-  "listMlProfiles",
-  "getMlLineage",
-  "queryMlHistograms",
-  "listMlAlerts",
-]);
+export const MERGED_METHODS: ReadonlySet<MlMethodName> = new Set<MlMethodName>(["getMlLineage"]);

@@ -19,14 +19,15 @@ import {
   ListMlEvalRunsResponseSchema,
   ListMlEvalSamplesResponseSchema,
   MlEarlyAccessService,
+  MlEventSchema,
   MlSubjectKind,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
 
 import { answerMl } from "../../../handlers/ml";
 import { evalScore, type EvalTask } from "../curves";
-import { ALL_EVAL_RUNS, evalsAnswers, GSM8K_SAMPLES, mcnemarP, pairStats, PERIODIC_STEPS, SAFETY_SAMPLES, SUPPORT_SAMPLES } from "../evals";
+import { ALL_EVAL_RUNS, evalsAnswers, evalsTelemetry, GSM8K_SAMPLES, mcnemarP, pairStats, PERIODIC_STEPS, SAFETY_SAMPLES, SUPPORT_SAMPLES } from "../evals";
 import { LINEAGE_EDGES, LINEAGE_NODES, lineageAnswers } from "../lineage";
-import { modelsAnswers, VERSION_DEFS } from "../models";
+import { modelsAnswers, modelsTelemetry, VERSION_DEFS } from "../models";
 import { checkpointId, EVAL_RUNS, EVAL_SUITES, EVAL_TASKS, MODELS, periodicEvalRunId, phaseId, REVISIONS, RUNS, SERVICES, V3_CANDIDATE_CHECKPOINT, VERSIONS } from "../world";
 
 const NOW = Date.UTC(2026, 10, 26, 15, 0);
@@ -235,9 +236,6 @@ describe("on the wire", () => {
       ["listMlModels", {}],
       ["getMlModel", { modelId: MODELS.support.id }],
       ["getMlModelVersion", { versionId: VERSIONS.v21fp8.id }],
-      ["listMlEvents", { subject: { kind: MlSubjectKind.ORG, id: "" } }],
-      ["listMlEvents", { subject: { kind: MlSubjectKind.EVAL_RUN, id: EVAL_RUNS.v21fp8 } }],
-      ["listMlEvents", { subject: { kind: MlSubjectKind.MODEL, id: MODELS.support.id } }],
       ["getMlLineage", { subject: { kind: MlSubjectKind.MODEL, id: MODELS.support.id } }],
     ];
     for (const [name, req] of calls) {
@@ -245,6 +243,11 @@ describe("on the wire", () => {
       // Only this file's domains: the others are tested by their own owners.
       const out = answerMl(method, create(method.input, { orgId: "o", ...req } as never), now, [evalsAnswers, modelsAnswers, lineageAnswers]);
       expect(() => toBinary(method.output, out as never), name).not.toThrow();
+    }
+    // Their events, which ObservabilityService serves (model/ml/telemetry.ts), are MlEvents the wire takes too.
+    for (const subject of [{ kind: MlSubjectKind.ORG, id: "", label: "" }, { kind: MlSubjectKind.EVAL_RUN, id: EVAL_RUNS.v21fp8, label: "" }, { kind: MlSubjectKind.MODEL, id: MODELS.support.id, label: "" }]) {
+      const events = [evalsTelemetry, modelsTelemetry].flatMap((d) => d.events!({ subject, kinds: [] }, now)?.events ?? []);
+      for (const e of events) expect(() => toBinary(MlEventSchema, create(MlEventSchema, e)), MlSubjectKind[subject.kind]).not.toThrow();
     }
   });
 });

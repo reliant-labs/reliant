@@ -15,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 func (f *builderTestFixture) startCLI(req *reliantv1.StartChatRequest) (*connect.Response[reliantv1.StartChatResponse], error) {
@@ -45,7 +46,7 @@ func TestStartChat_CLIRunRecordsCLIRunKindOutOfTheSidebar(t *testing.T) {
 	assert.Equal(t, core.TriggerEventKindCLIRun, event.Kind)
 	assert.Equal(t, chatID, event.DedupeKey, "attended: deduped on the chat id, like chat.start")
 
-	chat, err := f.repo.GetChat(f.ctx, chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.False(t, chat.ListInSidebar)
 	assert.Equal(t, "cicd-probe · inventory the machine", chat.Title,
@@ -74,7 +75,7 @@ func TestStartChat_CLIRunKeepsAnExplicitTitle(t *testing.T) {
 
 	resp, err := f.startCLI(&reliantv1.StartChatRequest{Workflow: "cicd-probe", Title: proto.String("probe: kube access")})
 	require.NoError(t, err)
-	chat, err := f.repo.GetChat(f.ctx, resp.Msg.GetChat().GetId())
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), resp.Msg.GetChat().GetId())
 	require.NoError(t, err)
 	assert.Equal(t, "probe: kube access", chat.Title)
 }

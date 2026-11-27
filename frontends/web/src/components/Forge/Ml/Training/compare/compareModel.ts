@@ -10,6 +10,9 @@
 import { create } from "@bufbuild/protobuf";
 
 import { MlCollection, MlSeriesSchema, type GetMlRunResponse, type MlSeries } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import { ML_STEP_KEY } from "@/services/controlPlane/ml/telemetry";
+
+import { onStepAxis } from "../../kit/telemetry";
 
 export interface CompareRow {
   id: string;
@@ -113,4 +116,27 @@ export function mergeAttempts(series: readonly MlSeries[], key: string, runName:
     y.push(...p.y);
   }
   return create(MlSeriesSchema, { ...parts[0], x, y, group: runName, attempt: 0, stat: "" });
+}
+
+/** Series with x shifted to seconds since the earliest point of any of them (the step series dropped). */
+function sinceStart(series: readonly MlSeries[]): MlSeries[] {
+  const curves = series.filter((s) => s.key !== ML_STEP_KEY);
+  const t0 = Math.min(...curves.flatMap((s) => (s.x.length ? [s.x[0]] : [])));
+  if (!Number.isFinite(t0)) return curves;
+  return curves.map((s) => create(MlSeriesSchema, { ...s, x: s.x.map((x) => x - t0) }));
+}
+
+/**
+ * Every run's curves on one axis: by step when every run with curves reports
+ * its step (runs from different weeks line up at the same step), else by time
+ * since each run started. A run with no curves collected has no say: its
+ * not-collected series stay as they are on either axis.
+ */
+export function alignRuns(byRun: ReadonlyMap<string, readonly MlSeries[]>): { byStep: boolean; series: Map<string, MlSeries[]> } {
+  const collected = (s: readonly MlSeries[]) => s.some((x) => x.key !== ML_STEP_KEY && x.collection === MlCollection.COLLECTED && x.x.length > 0);
+  const stepped = new Map([...byRun].map(([id, s]) => [id, onStepAxis(s)] as const));
+  const voters = [...byRun].filter(([, s]) => collected(s));
+  const byStep = voters.length > 0 && voters.every(([id]) => stepped.get(id) !== null);
+  const aligned = (id: string, s: readonly MlSeries[]) => (byStep ? (stepped.get(id) ?? s.filter((x) => x.key !== ML_STEP_KEY)) : sinceStart(s));
+  return { byStep, series: new Map([...byRun].map(([id, s]) => [id, aligned(id, s)])) };
 }

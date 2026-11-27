@@ -137,7 +137,7 @@ function ChangesPanel({ c, evals, serviceId, events }: { c: MlChangesComparison;
   const now = Date.now();
   const rows = armMetricRows(c);
   const control = c.arms.find((a) => a.arm === c.controlArm) ?? c.arms[0];
-  const ab = useServingSeries({ kind: MlSubjectKind.INFERENCE_SERVICE, id: serviceId, label: serviceId }, ["serve.ttft", "serve.itl"], "arm");
+  const ab = useServingSeries({ kind: MlSubjectKind.INFERENCE_SERVICE, id: serviceId }, ["serve.ttft", "serve.itl"], "arm");
   return (
     <Panel
       title={`Changes: ${c.name}`}

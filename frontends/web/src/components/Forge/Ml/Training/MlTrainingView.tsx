@@ -10,8 +10,10 @@
  *   [run, "traces", traceId]    a training trace in the run's frame
  */
 
+import { MlSubjectKind } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+
 import { MlFrame, MlRead } from "../MlParts";
-import { CompareTray, MlTraceView, mlHref, useMl, useMlSearch } from "../kit";
+import { CompareTray, MlTrace, mlHref, useMl, useMlSearch } from "../kit";
 import { RunCompare } from "./compare/RunCompare";
 import { RunDetail } from "./RunDetail";
 import { RunsList } from "./RunsList";
@@ -60,7 +62,7 @@ function RunTrace({ runKey, traceId }: { runKey: string; traceId: string }) {
             ]}
             testId="ml-page-run-trace"
           >
-            <MlTraceView traceId={traceId} testId="ml-run-trace" />
+            <MlTrace traceId={traceId} label={run.name} subject={{ kind: MlSubjectKind.RUN, id: run.id }} testId="ml-run-trace" />
           </MlFrame>
         );
       }}

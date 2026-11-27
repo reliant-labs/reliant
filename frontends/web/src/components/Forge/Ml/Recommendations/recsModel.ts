@@ -13,7 +13,7 @@ import {
   MlFindingCategory,
   MlFindingState,
   MlFixKind,
-  MlSeverity,
+  MlFindingSeverity,
   MlSubjectKind,
   type MlFinding,
 } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
@@ -46,7 +46,7 @@ const CATEGORY_SLUGS: Record<string, MlFindingCategory> = {
   reliability: MlFindingCategory.RELIABILITY,
 };
 export const CATEGORY_SLUG_OF = Object.fromEntries(Object.entries(CATEGORY_SLUGS).map(([k, v]) => [v, k])) as Record<MlFindingCategory, string>;
-const SEVERITY_SLUGS: Record<string, MlSeverity> = { critical: MlSeverity.CRITICAL, warning: MlSeverity.WARNING, info: MlSeverity.INFO };
+const SEVERITY_SLUGS: Record<string, MlFindingSeverity> = { critical: MlFindingSeverity.CRITICAL, warning: MlFindingSeverity.WARNING, info: MlFindingSeverity.INFO };
 
 /** `?filter=sev=critical;cat=waste;cluster=…;state=all;sort=age` → filters (unknown parts ignored). */
 export function parseFilter(raw: string | undefined): RecFilters {
@@ -158,8 +158,8 @@ export function groupFindings(sorted: readonly MlFinding[], by: GroupBy): Findin
   const keyOf = (f: MlFinding) => (by === "severity" ? f.severity : f.category);
   const map = new Map<number, MlFinding[]>();
   for (const f of rest) map.set(keyOf(f), [...(map.get(keyOf(f)) ?? []), f]);
-  const groups = [...map.entries()].map(([k, fs]) => summarize(String(k), by === "severity" ? severityOf(k as MlSeverity).label : findingCategoryOf(k as MlFindingCategory).label, fs));
-  if (by === "severity") groups.sort((a, b) => severityRank(Number(a.key) as MlSeverity) - severityRank(Number(b.key) as MlSeverity));
+  const groups = [...map.entries()].map(([k, fs]) => summarize(String(k), by === "severity" ? severityOf(k as MlFindingSeverity).label : findingCategoryOf(k as MlFindingCategory).label, fs));
+  if (by === "severity") groups.sort((a, b) => severityRank(Number(a.key) as MlFindingSeverity) - severityRank(Number(b.key) as MlFindingSeverity));
   else groups.sort((a, b) => b.usdPerDay - a.usdPerDay || Math.min(...a.findings.map((f) => severityRank(f.severity))) - Math.min(...b.findings.map((f) => severityRank(f.severity))));
   return [...groups, ...coverageGroup];
 }
@@ -179,10 +179,10 @@ export interface InboxKpis {
 /** Over the ACTIVE findings, whatever the filters (the page's question is the whole inbox). */
 export function inboxKpis(findings: readonly MlFinding[], coverageRatio: number): InboxKpis {
   const active = findings.filter((f) => ACTIVE.has(f.state));
-  const runs = new Set(active.filter((f) => f.category !== MlFindingCategory.COVERAGE && f.severity !== MlSeverity.INFO).flatMap((f) => f.subjects.filter((s) => s.kind === MlSubjectKind.RUN).map((s) => s.id)));
+  const runs = new Set(active.filter((f) => f.category !== MlFindingCategory.COVERAGE && f.severity !== MlFindingSeverity.INFO).flatMap((f) => f.subjects.filter((s) => s.kind === MlSubjectKind.RUN).map((s) => s.id)));
   return {
     open: active.length,
-    critical: active.filter((f) => f.severity === MlSeverity.CRITICAL).length,
+    critical: active.filter((f) => f.severity === MlFindingSeverity.CRITICAL).length,
     usdPerDay: active.reduce((a, f) => a + impactUsd(f), 0),
     gpuHoursPerDay: active.reduce((a, f) => a + (f.impact?.gpuHoursPerDay ?? 0), 0),
     runsAtRisk: runs.size,

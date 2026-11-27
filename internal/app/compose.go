@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/agentmailbox"
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -70,6 +71,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/org_provider_account"
 	"github.com/reliant-labs/reliant/internal/handlers/org_usage"
 	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
+	"github.com/reliant-labs/reliant/internal/handlers/pipeline"
 	"github.com/reliant-labs/reliant/internal/handlers/plan"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/project"
@@ -126,6 +128,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggerowner"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/recorddue"
 	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/reliant-labs/reliant/internal/workersetup"
@@ -485,6 +488,7 @@ func (g *Graph) newPauseService() (*v2workflow.PauseService, error) {
 	return NewPauseService(PauseServiceDeps{
 		Temporal: g.TemporalClient(),
 		DB:       g.Database(),
+		Updates:  g.chatUpdates(),
 	})
 }
 
@@ -672,11 +676,13 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Router:           g.WorkerDaemonRouter(),
 		ConfigProvider:   g.StoredConfigProvider(),
 		Launcher:         g.RunLauncher(),
+		Runs:             g.RunLifecycle(),
 		Credentials:      g.WorkerIntegrationCredentials(),
 		WriteLedger:      g.IntegrationsWriteledger(),
 		Pollers:          g.TriggerPollers(),
 		ControlPlane:     g.ServerProcessConfig.GetControlPlane(),
 		Network:          g.ServerProcessConfig.GetNetwork(),
+		Pipeline:         g.ServerProcessConfig.GetPipeline(),
 		Recorder:         g.AccountRecorder(),
 		DB:               g.Database(),
 		// Read here, not in workersetup, so the worker root's config reach
@@ -705,6 +711,27 @@ func (g *Graph) newTriggerDeliveryRelay() (*TriggerDeliveryRelay, error) {
 		ConnectionVault: g.CredentialsConnectionvault(),
 		DB:              g.Database(), Temporal: g.TemporalClient(), Integrations: g.IntegrationSettings(),
 		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+func (g *Graph) newRecordDueScanner() (recorddue.Service, error) {
+	return NewRecordDueScanner(RecordDueScannerDeps{
+		DB: g.Database(), Temporal: g.TemporalClient(), Pipeline: g.ServerProcessConfig.GetPipeline(),
+		Membership: g.OrgResolver(), Policies: g.OrgPolicyResolver(),
+	})
+}
+
+func (g *Graph) newMergeQueue() (*MergeQueue, error) {
+	return NewMergeQueue(MergeQueueDeps{
+		DB:     g.Database(),
+		Router: g.WorkerDaemonRouter(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Pipeline:     g.ServerProcessConfig.GetPipeline(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		DataDir:      g.ServerProcessConfig.GetDataDir(),
 	})
 }
 
@@ -1010,6 +1037,8 @@ func (g *Graph) newWorkflowReconciler() (*WorkflowReconciler, error) {
 		Router:     g.APIDaemonRouter(),
 		DB:         g.Database(),
 		Activity:   g.DaemonStatePublisher(),
+		Reconciler: g.ServerProcessConfig.GetReconciler(),
+		Runs:       g.RunLifecycle(),
 	})
 }
 
@@ -1083,6 +1112,7 @@ func (g *Graph) newUserRoutes() (*UserRoutes, error) {
 		CoverageSource:     g.CoverageSource(),
 		PullRequestRecord:  g.PullRequestRecord(),
 		ChatTrace:          g.ChatTrace(),
+		Pipeline:           g.Pipeline(),
 	})
 }
 
@@ -1258,7 +1288,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		Chats:          store.NewChatExtStore(g.Database().ORM()),
 		Owners:         g.Triggerowner(),
 		Firings:        store.NewTriggerEventExtStore(g.Database().ORM()),
-		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()),
+		WebhookSecrets: store.NewTriggerExtStore(g.Database().ORM()), TriggerWrites: store.NewTriggerWritesExtStore(g.Database().ORM()), Triggers: store.NewTriggerExtStore(g.Database().ORM()), FiringReads: store.NewTriggerEventExtStore(g.Database().ORM()), Registrations: store.NewTriggerRegistrationExtStore(g.Database().ORM()),
 		OrgMoves:       store.NewProjectOrgMoveExtStore(g.Database().ORM()),
 		Pools:          store.NewMachinePoolExtStore(g.Database().ORM()),
 		Syncer:         syncer,
@@ -1341,21 +1371,22 @@ func (g *Graph) newForge() (*forge.Service, error) {
 // newInbox constructs the inbox handler (internal/handlers/inbox).
 func (g *Graph) newInbox() (*inbox.Service, error) {
 	return inbox.New(inbox.Deps{
-		Logger:      g.Log,
-		Config:      g.Cfg,
-		Repo:        g.Database(),
-		Chats:       store.NewChatsWithActivityExtStore(g.Database().ORM()),
-		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
-		Machines:    store.NewDaemonExtStore(g.Database().ORM()),
-		OrgKeys:     g.CredentialsOrgaccounts(),
-		Items:       store.NewInboxDismissalExtStore(g.Database().ORM()),
-		Firings:     store.NewTriggerEventExtStore(g.Database().ORM()),
-		Notices:     store.NewTriggerExtStore(g.Database().ORM()),
-		Recoveries:  store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
-		Marks:       store.NewWorktreeExtStore(g.Database().ORM()),
-		Storage:     worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
-		Sweeper:     g.WorktreeSweep(),
-		Orgs:        g.OrgResolver(),
+		Logger:        g.Log,
+		Config:        g.Cfg,
+		Repo:          g.Database(),
+		Chats:         store.NewChatsWithActivityExtStore(g.Database().ORM()),
+		ProjectRows:   store.NewProjectExtStore(g.Database().ORM()),
+		Machines:      store.NewDaemonExtStore(g.Database().ORM()),
+		OrgKeys:       g.CredentialsOrgaccounts(),
+		Items:         store.NewInboxDismissalExtStore(g.Database().ORM()),
+		Firings:       store.NewTriggerEventExtStore(g.Database().ORM()),
+		Notices:       store.NewTriggerExtStore(g.Database().ORM()),
+		Registrations: store.NewTriggerRegistrationExtStore(g.Database().ORM()),
+		Recoveries:    store.NewWorktreeRecoveryExtStore(g.Database().ORM()),
+		Marks:         store.NewWorktreeExtStore(g.Database().ORM()),
+		Storage:       worktreesweep.NewStores(g.Database(), store.NewWorktreeExtStore(g.Database().ORM())),
+		Sweeper:       g.WorktreeSweep(),
+		Orgs:          g.OrgResolver(),
 		// The caller's live orgs, asked of the control plane as the caller;
 		// nil when self-hosted. A nil Service converts to a nil OrgLister.
 		MyOrgs: g.CallerControlPlane().Client(),
@@ -1685,6 +1716,7 @@ func (g *Graph) newWorkflow() (*workflowhandler.Service, error) {
 		Logger:      g.Log,
 		Config:      g.Cfg,
 		Repo:        g.Database(),
+		Triggers:    store.NewTriggerExtStore(g.Database().ORM()),
 		ProjectRows: store.NewProjectExtStore(g.Database().ORM()),
 		Pools:       store.NewMachinePoolExtStore(g.Database().ORM()),
 		Drafts:      g.Workflowdrafts(),
@@ -2070,6 +2102,7 @@ func (g *Graph) newChatTrace() (*chat_trace.Service, error) {
 		Logger: g.Log,
 		Config: g.Cfg,
 		Store:  g.Database(),
+		Chats:  store.NewChatExtStore(g.Database().ORM()),
 		Spans:  ChatTraceSpans(g.ServerProcessConfig.GetControlPlane()),
 		Now:    nil, // optional — no provider
 	})
@@ -2097,5 +2130,21 @@ func (g *Graph) newCallerControlPlane() (*CallerControlPlane, error) {
 func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 	return NewInternalControlPlane(InternalControlPlaneDeps{
 		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+	})
+}
+
+// newPipeline constructs the pipeline handler (internal/handlers/pipeline).
+// pipeline.enabled reaches the API server here (G4): off, every rpc refuses.
+func (g *Graph) newPipeline() (*pipeline.Service, error) {
+	return pipeline.New(pipeline.Deps{
+		Logger: g.Log,
+		Config: g.Cfg,
+		// Only the switch, never the whole pipeline block: the block also
+		// holds the worker's merge-queue caller secret
+		// (pipeline.github_queue_app_caller_secret), and the API root's
+		// config reach must not include it.
+		Pipeline: &configv1.PipelineConfig{Enabled: g.ServerProcessConfig.GetPipeline().GetEnabled()},
+		Store:    g.Database(),
+		Now:      nil, // optional — no provider
 	})
 }

@@ -270,33 +270,16 @@ AT                    RELEASE        WHAT                   ROLLOUT       HEALTH
 
 ## Guides
 
-<CardGroup cols={2}>
-  <Card title="Release gates" icon="shield-check" href="/forge/deploy/release-gates">
-    Judge a deploy with `obs check`, gate prod on staging, and set floors.
-  </Card>
-  <Card title="Preview environments" icon="git-pull-request" href="/hosting/preview-environments">
-    Short-lived environments per pull request, built on the same releases.
-  </Card>
-  <Card title="Deploy a Go API with managed Postgres" icon="rocket" href="/guides/hosting/deploy-go-api-managed-postgres">
-    Render, build a release and deploy it, then prove it with `obs check`.
-  </Card>
-  <Card title="Promote a release to production" icon="arrow-up-right" href="/guides/hosting/promote-release-staging-to-production">
-    Move the release staging runs to prod by digest, with a two-stage approval.
-  </Card>
-  <Card title="Gate prod on release health" icon="shield-check" href="/guides/hosting/gate-production-deploy-release-health">
-    Hold production until staging proves a release good.
-  </Card>
-  <Card title="Recover from a bad deploy" icon="rotate-ccw" href="/guides/hosting/recover-from-bad-deploy">
-    Roll forward, or redeploy an earlier release above every floor.
-  </Card>
-{/* defer-card:/guides/hosting/record-deploys-from-existing-ci ICA8Q2FyZCB0aXRsZT0iUmVjb3JkIGRlcGxveXMgZnJvbSB5b3VyIENJIiBpY29uPSJib29rbWFyayIgaHJlZj0iL2d1aWRlcy9ob3N0aW5nL3JlY29yZC1kZXBsb3lzLWZyb20tZXhpc3RpbmctY2kiPgogICAgR2l2ZSBtb25pdG9yaW5nIGEgZGVwbG95IG1hcmtlciB3aGVuIHlvdXIgb3duIHBpcGVsaW5lIHNoaXBzLgogIDwvQ2FyZD4= */}
-  <Card title="Deploy from GitHub Actions" icon="github" href="/guides/hosting/deploy-from-github-actions">
-    Deploy with an automation token and branch on the exit codes.
-  </Card>
-  <Card title="Preview environment per pull request" icon="git-pull-request" href="/guides/hosting/preview-environment-every-pull-request">
-    Create a short-lived environment for each pull request.
-  </Card>
-</CardGroup>
+- [Release gates](/forge/deploy/release-gates): judge a deploy with `obs check`, gate prod on staging, and set floors
+- [Preview environments](/hosting/preview-environments): short-lived environments per pull request, built on the same releases
+- [Deploy a Go API with managed Postgres](/guides/hosting/deploy-go-api-managed-postgres): render, build a release and deploy it, then prove it with `obs check`
+- [Promote a release to production](/guides/hosting/promote-release-staging-to-production): move the release staging runs to prod by digest, with a two-stage approval
+- [Gate prod on release health](/guides/hosting/gate-production-deploy-release-health): hold production until staging proves a release good
+- [Recover from a bad deploy](/guides/hosting/recover-from-bad-deploy): roll forward, or redeploy an earlier release above every floor
+- [Deploy from GitHub Actions](/guides/hosting/deploy-from-github-actions): deploy with an automation token and branch on the exit codes
+- [Preview environment per pull request](/guides/hosting/preview-environment-every-pull-request): create a short-lived environment for each pull request
+
+{/* defer-link:/guides/hosting/record-deploys-from-existing-ci - [Record deploys from your CI](/guides/hosting/record-deploys-from-existing-ci): give monitoring a deploy marker when your own pipeline ships */}
 
 ## Reference
 

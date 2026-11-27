@@ -23,7 +23,6 @@
 import type { DescMessage, MessageInitShape } from "@bufbuild/protobuf";
 
 import {
-  MlAlertState,
   MlAttemptEndReason,
   MlAxis,
   MlCheckpointStatus,
@@ -37,7 +36,6 @@ import {
   MlRunState,
   MlSeverity,
   MlSubjectKind,
-  type MlAlertRuleSchema,
   type MlAttemptSchema,
   type MlCheckpointSchema,
   type MlCostSchema,
@@ -59,6 +57,7 @@ import {
 
 import { evalScore, v3LossCurve, v3Mfu, v3StepTimeMs, v3TokensPerSecond, v3TrainLoss, v3ValLoss, V3_STRAGGLER_STEP, type EvalTask } from "./curves";
 import type { MlDomain } from "./domain";
+import { MlAlertState, type AlertRuleInit, type MlTelemetryDomain } from "./telemetryTypes";
 import {
   ALERTS,
   at,
@@ -1914,10 +1913,10 @@ const OWNED_KINDS = new Set([MlSubjectKind.ORG, MlSubjectKind.EXPERIMENT, MlSubj
 
 // ── Alert rules ───────────────────────────────────────────────────────────────
 
-function alertRules(now: Now, subject: SubjectInit, org: boolean): Init<typeof MlAlertRuleSchema>[] {
+function alertRules(now: Now, subject: SubjectInit, org: boolean): AlertRuleInit[] {
   const xidAt = V3_SFT[1].endedAt!;
   const hangAt = V3_SFT[0].endedAt!;
-  const rules: (Init<typeof MlAlertRuleSchema> & { orgToo: boolean })[] = [
+  const rules: (AlertRuleInit & { orgToo: boolean })[] = [
     { orgToo: false, id: ALERTS.xidFatal, name: "GPU fatal Xid", expression: "dcgm Xid in (48, 63, 64, 74, 79, 94, 95) on a node of the run", severity: MlSeverity.CRITICAL, state: MlAlertState.OK, subject, declaredIn: "forge default", lastFiredAt: at(xidAt - 41 * SEC, now), fired7d: 1, autoAction: "cordon the node and start a new attempt from the last checkpoint (swap in a hot spare when one is free)", autoActionEnabled: true, routedTo: "Slack #ml-oncall", lastAction: `cordoned ${BAD_NODE}, swapped in ${SPARE_NODE}, started sft attempt 3 from 32,000` },
     { orgToo: true, id: ALERTS.ncclHang, name: "NCCL hang", expression: "NCCL watchdog timeout or no collective progress for 600 s", severity: MlSeverity.CRITICAL, state: MlAlertState.OK, subject, declaredIn: "forge default", lastFiredAt: at(hangAt, now), fired7d: 1, autoAction: "restart the attempt after dumping the flight recorder", autoActionEnabled: true, routedTo: "Slack #ml-oncall", lastAction: "dumped the flight recorder (64 ranks), ran DCGM diag r2, restarted sft attempt 2 from 12,000" },
     { orgToo: true, id: ALERTS.lossSpike, name: "Loss spike", expression: "train/loss z-score > 6 for 3 steps", severity: MlSeverity.WARNING, state: MlAlertState.OK, subject, declaredIn: "deploy/kcl/prod/ml.k", lastFiredAt: at(timeOfStep(V3_SFT_NOW, 38650), now), fired7d: 1, autoAction: "rewind to the last good checkpoint and skip the batch", autoActionEnabled: false, routedTo: "Inbox", lastAction: "notified only (auto action is opt-in and off); the run recovered by 39,100" },
@@ -1951,7 +1950,11 @@ export const trainingAnswers: MlDomain = {
     const found = findRun(req.run, now, true);
     return found ? detailOf(found.run, found.runs, now) : undefined;
   },
-  listMlEvents: (req, now) => {
+};
+
+/** The trainer's and Kueue's events on a run, and the alert rules that cover it; served by ./telemetry.ts. */
+export const trainingEventsAndAlerts: MlTelemetryDomain = {
+  events: (req, now) => {
     const s = req.subject;
     if (!s || !OWNED_KINDS.has(s.kind)) return undefined;
     const from = req.from ? Number(req.from.seconds) * 1000 : -Infinity;
@@ -1965,10 +1968,11 @@ export const trainingAnswers: MlDomain = {
     if (req.limit) events = events.slice(0, req.limit);
     return { events: events.map((e) => ({ ...e.ev, at: at(e.t, now), endAt: e.end !== undefined ? at(e.end, now) : undefined })) };
   },
-  listMlAlerts: (req, now) => {
+  alerts: (req, now) => {
     const s = req.subject;
     if (!s) return undefined;
-    if (s.kind === MlSubjectKind.ORG) return { alerts: alertRules(now, v3Subject, true) };
+    // The org's list holds every rule on the run: AlertingService lists each alert once, labelled with the run.
+    if (s.kind === MlSubjectKind.ORG) return { alerts: alertRules(now, v3Subject, false) };
     const runKey = s.id.split("/")[0];
     if ([MlSubjectKind.RUN, MlSubjectKind.PHASE, MlSubjectKind.ATTEMPT, MlSubjectKind.RANK].includes(s.kind) && runOfKey(runKey)?.id === RUNS.v3.id) return { alerts: alertRules(now, v3Subject, false) };
     if (s.kind === MlSubjectKind.EXPERIMENT && s.id === EXPERIMENTS.support.id) return { alerts: alertRules(now, v3Subject, false) };

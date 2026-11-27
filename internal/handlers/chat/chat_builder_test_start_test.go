@@ -56,7 +56,7 @@ func newBuilderTestFixture(t *testing.T) *builderTestFixture {
 				Workflows:   store.NewWorkflowExtStore(repo.ORM()),
 				Worktrees:   store.NewWorktreeExtStore(repo.ORM()),
 				ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()),
-				Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
+				Questions: store.NewQuestionExtStore(repo.ORM()), Spawns: store.NewToolCallExtStore(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Mailbox: agentmailbox.New(agentmailbox.Deps{Store: store.NewAgentMessageExtStore(repo.ORM()), Announcer: repo.UpdateWriter()}), AgentMessages: store.NewAgentMessageExtStore(repo.ORM()), Messages: store.NewMessageExtStore(repo.ORM()), ToolBlocks: store.NewMessageContentBlockExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM()),
 				Temporal: temporal,
 			}, threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), runs: runs.New(runs.Deps{Repo: repo, Resolver: questions.NewFromRepo(repo), Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Questions: store.NewQuestionExtStore(repo.ORM()), Temporal: temporal, Pause: nil}),
 		},
@@ -84,7 +84,7 @@ func (f *builderTestFixture) start(workflow string, builderTest *bool, chatID *s
 
 func (f *builderTestFixture) launchKind(t *testing.T, chatID string) string {
 	t.Helper()
-	chat, err := f.repo.GetChat(f.ctx, chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	return chat.LaunchKind
 }
@@ -108,7 +108,7 @@ func TestStartChat_BuilderTestRecordsBuilderTestKind(t *testing.T) {
 	assert.Equal(t, chatID, event.DedupeKey, "attended: deduped on the chat id, like chat.start")
 	assert.Equal(t, "bt-draft", event.Payload["workflow"])
 
-	chat, err := f.repo.GetChat(f.ctx, chatID)
+	chat, err := store.GetChat(f.ctx, f.repo.ORM(), chatID)
 	require.NoError(t, err)
 	assert.False(t, chat.ListInSidebar)
 	assert.Equal(t, core.ChatOriginBuilderTest, chat.Origin)

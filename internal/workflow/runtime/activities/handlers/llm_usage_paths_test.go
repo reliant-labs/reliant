@@ -219,7 +219,7 @@ func TestCompaction_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	saveTurn(t, svc, chatID, thread, "call_1", 20_000, 80_000)
 
 	driver := newPathDriver("claude", true)
-	compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
+	compact := NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: tools.WithChats(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 	input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
 	runRetried(t, "Compact", compact.Execute, input)
@@ -250,7 +250,7 @@ func TestTitle_RequestReachesTheLedgerPerAttempt(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-title-ledger", project.ID, project.UserID)
 
 	driver := newPathDriver("openai", true)
-	title := NewGenerateTitleActivity(h.Repo(), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
+	title := NewGenerateTitleActivity(tools.WithChats(h.Repo()), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo()))
 	runRetried(t, "GenerateTitle", title.Execute, GenerateTitleInput{ChatID: chat.ID, FirstMessage: "how do I debug a workflow?"})
 	require.Equal(t, 2, driver.requests)
 
@@ -568,7 +568,7 @@ func TestBackgroundRequests_FailedAttemptKeepsItsUsage(t *testing.T) {
 		driver := newPathDriverShaped("claude", true, failUsageThenError)
 		input := CompactInput{ChatID: chatID, Thread: thread}.V3()
 		input.Node.GetCompact().Force = &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}}
-		runRetried(t, "Compact", NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: h.Repo(), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute, input)
+		runRetried(t, "Compact", NewCompactActivity(CompactDeps{ToolResults: toolCallsOf(h.Repo()), Store: tools.WithChats(h.Repo()), Threads: threads.New(threads.Deps{Repo: h.Repo(), Messages: store.NewMessageExtStore(h.Repo().ORM()), Senders: store.NewThreadExtStore(h.Repo().ORM())}), DriverResolver: driver.resolver()}).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute, input)
 		check(t, h, "compaction")
 	})
 	t.Run("title", func(t *testing.T) {
@@ -578,7 +578,7 @@ func TestBackgroundRequests_FailedAttemptKeepsItsUsage(t *testing.T) {
 		project := h.CreateTestProject(context.Background(), "proj-title-billed", "user-title-billed")
 		chat := h.CreateTestChat(context.Background(), "chat-title-billed", project.ID, project.UserID)
 		driver := newPathDriverShaped("openai", true, failErrorThenUsage)
-		runRetried(t, "GenerateTitle", NewGenerateTitleActivity(h.Repo(), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute,
+		runRetried(t, "GenerateTitle", NewGenerateTitleActivity(tools.WithChats(h.Repo()), driver.resolver()).WithUsageRecorder(llmusagetest.New(t, h.Repo())).Execute,
 			GenerateTitleInput{ChatID: chat.ID, FirstMessage: "how do I debug a workflow?"})
 		check(t, h, "title")
 	})

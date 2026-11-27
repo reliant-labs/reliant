@@ -48,6 +48,7 @@ export function MetricTile({
   height = 120,
   colors,
   note,
+  xFormat: xFormatProp,
   testId,
 }: {
   title: string;
@@ -61,6 +62,8 @@ export function MetricTile({
   /** Line identity → palette token, so one attempt (or run) has one colour on every tile. */
   colors?: ReadonlyMap<string, string>;
   note?: ReactNode;
+  /** How an x value reads, overriding the axis' own (a comparison's time since start). */
+  xFormat?: (x: number) => string;
   testId?: string;
 }) {
   const collected = useMemo(() => series.filter((s) => s.collection === MlCollection.COLLECTED && s.x.length > 0), [series]);
@@ -104,7 +107,7 @@ export function MetricTile({
     return undefined;
   }, [collected, unit]);
 
-  const xFormat = axis === MlAxis.STEP ? (x: number) => `step ${fmtStep(x)}` : axis === MlAxis.TOKENS ? (x: number) => `${fmtCompact(x)} tokens` : undefined;
+  const xFormat = xFormatProp ?? (axis === MlAxis.STEP ? (x: number) => `step ${fmtStep(x)}` : axis === MlAxis.TOKENS ? (x: number) => `${fmtCompact(x)} tokens` : undefined);
   return (
     <div className="min-w-0 rounded-xl border border-border bg-surface px-3 pb-2 pt-2.5" data-testid={testId}>
       <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -117,7 +120,7 @@ export function MetricTile({
       {collected.length === 0 ? (
         <TileMissing title={title} series={series} height={height} />
       ) : (
-        <UPlotChart timestamps={xs} series={chartSeries} format={(v) => fmtUnit(v, unit)} height={height} label={title} legend={false} markers={markers} bands={chartBands} syncKey={syncKey} xFormat={xFormat} />
+        <UPlotChart timestamps={xs} series={chartSeries} format={(v) => fmtUnit(v, unit)} height={height} label={title} legend={false} markers={markers} bands={chartBands} syncKey={syncKey} xFormat={xFormat} {...(xFormatProp ? { xAxisFormat: xFormatProp } : {})} />
       )}
     </div>
   );
