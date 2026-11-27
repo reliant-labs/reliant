@@ -194,6 +194,51 @@ func TestFSListMachineDir_RejectsSwappedSymlinkMetadata(t *testing.T) {
 	t.Fatal("swapped link must remain a name-only entry")
 }
 
+func TestFSListMachineDir_RejectsSymlinkSwapAfterOpenGuard(t *testing.T) {
+	for _, credential := range []string{".ssh", filepath.Join(".ssh", "id_rsa")} {
+		t.Run(credential, func(t *testing.T) {
+			home, project := machineFixture(t)
+			link := filepath.Join(home, "link")
+			if err := os.Symlink(project, link); err != nil {
+				t.Fatal(err)
+			}
+			previous := machineSymlinkOpened
+			t.Cleanup(func() { machineSymlinkOpened = previous })
+			swapped := false
+			machineSymlinkOpened = func(path string) {
+				if path != link {
+					return
+				}
+				// This hook runs only after openForRead's identity and
+				// credential checks have succeeded, but before Stat.
+				swapped = true
+				if err := os.Remove(link); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Symlink(filepath.Join(home, credential), link); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := listMachineDir(t, home, project)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !swapped {
+				t.Fatal("symlink did not pass the open-time guard")
+			}
+			for _, e := range got.Entries {
+				if e.Name == "link" {
+					if !e.IsSymlink || e.IsDir || e.Size != 0 || e.Modified != "" {
+						t.Fatalf("late-swapped link exposes target metadata: %+v", e)
+					}
+					return
+				}
+			}
+			t.Fatal("late-swapped link must remain a name-only entry")
+		})
+	}
+}
+
 // A symlink is listed as what it points at (a link to a directory expands),
 // marked as a link; a dangling one is still listed, as a file with no mtime.
 func TestFSListMachineDir_Symlinks(t *testing.T) {

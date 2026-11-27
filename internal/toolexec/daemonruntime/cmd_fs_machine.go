@@ -170,11 +170,16 @@ func readMachineDir(dir *os.File, path, viewerRoot string) ([]fsMachineDirEntry,
 		var fi fs.FileInfo
 		if de.Type()&fs.ModeSymlink != 0 {
 			e.IsSymlink = true
-			// Stat the guarded open file, never the pathname again: a link
-			// swapped after the pathname check must not expose its new target.
+			// Stat the guarded descriptor, then revalidate its identity and
+			// policy before publishing metadata. If the path changed after
+			// the open-time guard, discard the snapshot rather than retrying.
 			// Refused and dangling links remain name-only entries.
 			if target, err := openForRead(full, viewerRoot); err == nil {
-				fi, _ = target.Stat()
+				machineSymlinkOpened(full)
+				info, statErr := target.Stat()
+				if statErr == nil && daemonpolicy.CheckViewerFile(target, full, viewerRoot) == nil {
+					fi = info
+				}
 				_ = target.Close()
 			}
 		} else {
@@ -189,6 +194,10 @@ func readMachineDir(dir *os.File, path, viewerRoot string) ([]fsMachineDirEntry,
 	}
 	return out, truncated, nil
 }
+
+// machineSymlinkOpened runs after the open-time guard succeeds and before
+// the metadata snapshot. Tests replace it to exercise a late pathname swap.
+var machineSymlinkOpened = func(string) {}
 
 // sortDirEntries orders entries by name, as os.ReadDir does (File.ReadDir
 // returns directory order).
