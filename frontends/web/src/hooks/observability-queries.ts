@@ -381,7 +381,10 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
     spanId: filters.spanId,
     limit: LOG_PAGE_SIZE,
   });
-  const queryKey = observabilityServiceKeys.searchLogsInfinite(request);
+  // Keep the live head separate from paged history: polling must never refetch
+  // every retained page, nor start at an older cursor after page eviction.
+  const historyKey = observabilityServiceKeys.searchLogsInfinite(request);
+  const queryKey = live ? [...historyKey, "live"] : historyKey;
   const query = useInfiniteQuery({
     queryKey,
     queryFn: async (context): Promise<SearchLogsResult & { window: TimeWindow }> => {
@@ -393,10 +396,11 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
       return { ...toSearchLogs(res, page?.cursor), window: firstPageWindow(res, page, pinned.window) };
     },
     initialPageParam: null as PageParam | null,
-    getNextPageParam: (last) => (last.nextCursor ? { cursor: last.nextCursor, window: last.window } : undefined),
+    // Live mode reads only the latest page. Pause it to browse history using
+    // the separate paged cache, which retains page one's null param.
+    getNextPageParam: (last) => (!live && last.nextCursor ? { cursor: last.nextCursor, window: last.window } : undefined),
+    maxPages: live ? 1 : undefined,
     enabled: !!scope,
-    // Retain page one (and its null param) so a full refetch always starts a
-    // fresh interval, including when live tail follows a paged read.
     staleTime: 10_000,
     retry: obsRetry, retryDelay: obsRetryDelay,
   });
