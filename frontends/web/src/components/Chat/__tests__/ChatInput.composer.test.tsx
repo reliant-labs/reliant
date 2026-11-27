@@ -23,6 +23,7 @@ import { foldCount } from "../composerPriority";
 import { useAuthStore } from "../../../store/authStore";
 import { legacyPasteDraftKey } from "../useLongPaste";
 import { fetchAttachmentBlob } from "../../../hooks/attachment-queries";
+import { useRouteOrgScope } from "../../../lib/routeOrg";
 
 globalThis.ResizeObserver ??= class {
   observe() {}
@@ -38,7 +39,12 @@ vi.mock("../../../hooks/chat-queries", async () => {
   const actual = await vi.importActual<typeof import("../../../hooks/chat-queries")>("../../../hooks/chat-queries");
   // "chat-started" has a first message, so its workflow is fixed.
   const STARTED = { id: "chat-started", lastMessageAt: { seconds: 1n } };
-  return { ...actual, useChat: (id?: string) => ({ data: id === "chat-started" ? STARTED : undefined, isLoading: false }), useChatSelection: () => ({ data: undefined, isLoading: false }), getChatFromCache: () => undefined };
+  // "chat-in-org" belongs to an org: its uploads are stamped with it.
+  // "chat-no-org" belongs to none: its uploads are stamped with none.
+  const IN_ORG = { id: "chat-in-org", orgId: "org-chat" };
+  const NO_ORG = { id: "chat-no-org" };
+  const chats: Record<string, unknown> = { "chat-started": STARTED, "chat-in-org": IN_ORG, "chat-no-org": NO_ORG };
+  return { ...actual, useChat: (id?: string) => ({ data: id ? chats[id] : undefined, isLoading: false }), useChatSelection: () => ({ data: undefined, isLoading: false }), getChatFromCache: () => undefined };
 });
 vi.mock("../../../hooks/question-queries", () => ({
   usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
@@ -188,6 +194,38 @@ describe("long paste", () => {
       expect(onSend.mock.calls[0][1]).toEqual(["paste-1", "paste-2"]);
     } finally {
       act(() => useAttachmentStore.setState({ attachFile: original }));
+    }
+  });
+
+  it("stamps an upload with the chat's org, and with the org scope's only before a chat exists", async () => {
+    const original = useAttachmentStore.getState().attachFile;
+    const attachFile = vi.fn(async (_session: string, file: File, _orgId?: string | null) => textAttachment("org-paste", file.name));
+    useAttachmentStore.setState({ attachFile });
+    const route = useRouteOrgScope.getState().scope;
+    act(() => useRouteOrgScope.setState({ scope: { kind: "member", org: { id: "org-scope", slug: "" } } }));
+    try {
+      const view = renderWithQuery(<ChatInput onSend={vi.fn()} chatId="chat-in-org" />);
+      pasteLong();
+      await waitFor(() => expect(attachFile).toHaveBeenCalledTimes(1));
+      expect(attachFile.mock.calls[0][2]).toBe("org-chat");
+      view.unmount();
+
+      // A chat in no org never takes the scope's org.
+      const orgless = renderWithQuery(<ChatInput onSend={vi.fn()} chatId="chat-no-org" />);
+      pasteLong();
+      await waitFor(() => expect(attachFile).toHaveBeenCalledTimes(2));
+      expect(attachFile.mock.calls[1][2]).toBeNull();
+      orgless.unmount();
+
+      renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="new-chat:org-test" />);
+      pasteLong();
+      await waitFor(() => expect(attachFile).toHaveBeenCalledTimes(3));
+      expect(attachFile.mock.calls[2][2]).toBe("org-scope");
+    } finally {
+      act(() => {
+        useAttachmentStore.setState({ attachFile: original });
+        useRouteOrgScope.setState({ scope: route });
+      });
     }
   });
 

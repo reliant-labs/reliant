@@ -103,6 +103,18 @@ func TestPersistToolMedia(t *testing.T) {
 	assert.Equal(t, int64(len(shot)), att.Size)
 	assert.Contains(t, content, "Image file: shot.png")
 	assert.Contains(t, content, "logo.svg is not shown: SVG")
+	assert.Nil(t, att.OrgID, "media of a chat in no org records none")
+
+	t.Run("media records its chat's org", func(t *testing.T) {
+		created = nil
+		org := "org-1"
+		inOrg := &toolExecutionContext{chat: &db.Chat{ID: "chat-1", OrgID: &org}, project: &db.Project{UserID: "user-1"}, toolName: "view", toolCallID: "call_2", chatID: "chat-1"}
+		_, ids := a.persistToolMedia(context.Background(), inOrg, "", []message.BinaryContent{{Path: "/w/shot.png", MIMEType: "image/png", Data: shot}}, nil)
+		require.Len(t, ids, 1)
+		require.Len(t, created, 1)
+		require.NotNil(t, created[0].OrgID)
+		assert.Equal(t, "org-1", *created[0].OrgID)
+	})
 
 	t.Run("a tool that stored its own media is not stored twice", func(t *testing.T) {
 		created = nil

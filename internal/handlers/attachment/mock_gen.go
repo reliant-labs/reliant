@@ -66,3 +66,29 @@ func (m *MockContentReader) GetAttachment(ctx context.Context, id string) (*core
 
 // Compile-time check.
 var _ ContentReader = (*MockContentReader)(nil)
+
+// forge:section MockOrgResolver
+// forge:hash=42d85edba258a28b9ce2375b4dd0c1b34c0b9f96bbb6f9b5f02b9c8729782aaa
+
+// MockOrgResolver is a test mock for the OrgResolver interface.
+//
+// The embedded contractkit.Recorder records every call so tests can
+// assert call counts and captured arguments. Set XxxFunc fields to
+// override per-method behaviour; unset methods return the canonical
+// "MockOrgResolver.<Method>Func not set" error.
+type MockOrgResolver struct {
+	contractkit.Recorder
+	NamedFunc func(context.Context, string, string) (string, error)
+}
+
+// Named records the call and delegates to NamedFunc when set.
+func (m *MockOrgResolver) Named(ctx context.Context, userID string, requested string) (string, error) {
+	m.Recorder.Record("Named", ctx, userID, requested)
+	if m.NamedFunc != nil {
+		return m.NamedFunc(ctx, userID, requested)
+	}
+	return "", contractkit.MockNotSet("MockOrgResolver", "Named")
+}
+
+// Compile-time check.
+var _ OrgResolver = (*MockOrgResolver)(nil)

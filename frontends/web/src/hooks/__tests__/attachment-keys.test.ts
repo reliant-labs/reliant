@@ -24,10 +24,12 @@ const { deleteAttachment, fetchAttachmentBlob, uploadAttachment } =
 
 let getCalls: number;
 let deleted: string[];
+let uploadOrgIds: (string | undefined)[];
 
 beforeEach(() => {
   getCalls = 0;
   deleted = [];
+  uploadOrgIds = [];
   setTransport(
     mockTransport({
       "AttachmentService.GetAttachment": async (req) => {
@@ -43,7 +45,8 @@ beforeEach(() => {
         return {};
       },
       "AttachmentService.UploadAttachment": (req) => {
-        const r = req as { filename: string; mimeType: string; content: Uint8Array };
+        const r = req as { filename: string; mimeType: string; content: Uint8Array; orgId?: string };
+        uploadOrgIds.push(r.orgId);
         return {
           attachment: {
             id: "att-new",
@@ -98,5 +101,15 @@ describe("AttachmentService keys", () => {
     });
     const attachment = await uploadAttachment(file);
     expect(attachment).toMatchObject({ id: "att-new", filename: "shot.png", mime_type: "image/png", size: 3 });
+  });
+
+  it("an upload names the org it is made in, and none when it has none", async () => {
+    const file = Object.assign(new File(["abc"], "shot.png", { type: "image/png" }), {
+      arrayBuffer: async () => new TextEncoder().encode("abc").buffer,
+    });
+    await uploadAttachment(file, "org-1");
+    await uploadAttachment(file, null);
+    await uploadAttachment(file);
+    expect(uploadOrgIds).toEqual(["org-1", undefined, undefined]);
   });
 });

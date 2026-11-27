@@ -25,6 +25,7 @@ GTM_ASSETS_PATH_STYLE kind=bool flag="" default="" required=false optional=false
 GTM_ASSETS_PUBLIC_ENDPOINT kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 GTM_ASSETS_REGION kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 GTM_ASSETS_SECRET_ACCESS_KEY kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+GTM_ATTACH_FROM_CHAT_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 HANDOFF_REDIRECTS kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 HEALTH_PORT kind=int32 flag="health-port" default="8081" required=false optional=false sensitive=false allowed=[] aliases=[]
 IDP_BASE kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

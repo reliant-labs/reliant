@@ -175,7 +175,7 @@ func (t *presentImageTool) Execute(tc *rctx.ToolContext, params PresentImagePara
 	if tc.Daemon == nil {
 		return NewTextErrorResponse("Reading a file from the machine requires a connected daemon, and none is available in this context."), nil
 	}
-	userID := t.userID(tc)
+	userID, orgID := t.owner(tc)
 	if userID == "" {
 		return NewTextErrorResponse("unable to determine the user to show the image to"), nil
 	}
@@ -204,7 +204,7 @@ func (t *presentImageTool) Execute(tc *rctx.ToolContext, params PresentImagePara
 			}
 		}
 
-		presented, reason := t.present(tc, userID, path)
+		presented, reason := t.present(tc, userID, orgID, path)
 		if reason != "" {
 			output.Skipped = append(output.Skipped, PresentImageSkip{Path: display, Reason: reason})
 			continue
@@ -231,7 +231,7 @@ func (t *presentImageTool) Execute(tc *rctx.ToolContext, params PresentImagePara
 
 // present reads one file and stores it, returning the image or the reason it
 // was not shown.
-func (t *presentImageTool) present(tc *rctx.ToolContext, userID, path string) (PresentedImage, string) {
+func (t *presentImageTool) present(tc *rctx.ToolContext, userID string, orgID *string, path string) (PresentedImage, string) {
 	if strings.EqualFold(filepath.Ext(path), ".svg") {
 		return PresentedImage{}, "SVG is not shown (it can carry script); render it to PNG first, e.g. `rsvg-convert -o out.png in.svg`"
 	}
@@ -274,7 +274,7 @@ func (t *presentImageTool) present(tc *rctx.ToolContext, userID, path string) (P
 	}
 
 	filename := filepath.Base(path)
-	id, err := t.store(tc.Context, userID, filename, mimeType, data)
+	id, err := t.store(tc.Context, userID, orgID, filename, mimeType, data)
 	if err != nil {
 		return PresentedImage{}, fmt.Sprintf("could not be stored: %v", err)
 	}
@@ -292,7 +292,7 @@ func (t *presentImageTool) present(tc *rctx.ToolContext, userID, path string) (P
 // store writes the image as a user-only attachment row. The database is the
 // substrate: neither the api server nor the worker can see the machine's
 // disk, and /api/attachments/{id} is served from the row.
-func (t *presentImageTool) store(ctx context.Context, userID, filename, mimeType string, data []byte) (string, error) {
+func (t *presentImageTool) store(ctx context.Context, userID string, orgID *string, filename, mimeType string, data []byte) (string, error) {
 	id := uuid.New().String()
 	hash := sha256.Sum256(data)
 	fileHash := hex.EncodeToString(hash[:])
@@ -307,6 +307,7 @@ func (t *presentImageTool) store(ctx context.Context, userID, filename, mimeType
 		FilePath:       filepath.Join(userID, id, filename),
 		AttachmentType: string(attachment.TypeDisplay),
 		Content:        data,
+		OrgID:          orgID,
 		CreatedAt:      now,
 		UpdatedAt:      now,
 	}
@@ -341,16 +342,17 @@ func presentImageSummary(output PresentImageOutput) string {
 	return b.String()
 }
 
-// userID resolves the owner of the chat receiving the attachment reference.
+// owner resolves the owner of the chat receiving the attachment reference,
+// and the org stamped on the attachment (the chat's, or nil for none).
 // Never substitute the request-context identity: it may belong to another
 // user, and a missing chat or failed lookup must not create an attachment.
-func (t *presentImageTool) userID(tc *rctx.ToolContext) string {
+func (t *presentImageTool) owner(tc *rctx.ToolContext) (string, *string) {
 	if tc.ChatID == "" {
-		return ""
+		return "", nil
 	}
 	chat, err := t.repo.GetChat(tc.Context, tc.ChatID)
 	if err != nil || chat == nil {
-		return ""
+		return "", nil
 	}
-	return chat.UserID
+	return chat.UserID, orgOf(chat)
 }
