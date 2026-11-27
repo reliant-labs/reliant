@@ -12,7 +12,7 @@ import { timestampDate, timestampFromDate } from "@bufbuild/protobuf/wkt";
 import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GtmItemKind, GtmItemSchema, GtmItemStatus, type UpdateItemRequest } from "@/gen/reliant/v1/gtm_pb";
+import { GtmChannelMode, GtmChannelSchema, GtmItemFormat, GtmItemSchema, GtmItemStatus, type UpdateItemRequest } from "@/gen/reliant/v1/gtm_pb";
 
 import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
 import { GtmCalendarView } from "../CalendarPage";
@@ -52,11 +52,16 @@ afterEach(() => {
 });
 
 const when = timestampFromDate(new Date(2026, 10, 18, 9, 0));
-const post = create(GtmItemSchema, { id: "item-1", orgId: TEST_ORG, kind: GtmItemKind.SOCIAL_POST, channel: "x", title: "Show HN post", bodyMd: "Deploy in one command.", status: GtmItemStatus.REVIEW, scheduledAt: when, revision: 4 });
-const sent = create(GtmItemSchema, { id: "item-2", orgId: TEST_ORG, kind: GtmItemKind.EMAIL, channel: "email", title: "Invite", status: GtmItemStatus.SENT, scheduledAt: when, revision: 9 });
-const undated = create(GtmItemSchema, { id: "item-3", orgId: TEST_ORG, kind: GtmItemKind.BLOG_POST, title: "Someday post", status: GtmItemStatus.DRAFT, revision: 1 });
+const post = create(GtmItemSchema, { id: "item-1", orgId: TEST_ORG, format: GtmItemFormat.SHORT_POST, channelId: "ch-x", title: "Show HN post", bodyMd: "Deploy in one command.", status: GtmItemStatus.REVIEW, scheduledAt: when, revision: 4 });
+const sent = create(GtmItemSchema, { id: "item-2", orgId: TEST_ORG, format: GtmItemFormat.EMAIL, channelId: "ch-email", title: "Invite", status: GtmItemStatus.SENT, scheduledAt: when, revision: 9 });
+const undated = create(GtmItemSchema, { id: "item-3", orgId: TEST_ORG, format: GtmItemFormat.LONG_POST, title: "Someday post", status: GtmItemStatus.DRAFT, revision: 1 });
+
+const xChannel = create(GtmChannelSchema, { id: "ch-x", orgId: TEST_ORG, key: "x", name: "X", mode: GtmChannelMode.MANUAL });
+const emailChannel = create(GtmChannelSchema, { id: "ch-email", orgId: TEST_ORG, key: "email", name: "Email", mode: GtmChannelMode.INTEGRATED, integrationKind: "gmail" });
 
 const reads = {
+  "GtmService.ListChannels": { response: { channels: [xChannel, emailChannel] } },
+  "GtmService.ListAssets": { response: { assets: [] } },
   "GtmService.ListItems": { response: { items: [post, sent, undated] } },
   "GtmService.ListCampaigns": { response: { campaigns: [] } },
   "GtmService.CheckClaims": { response: { findings: [] } },
@@ -82,6 +87,16 @@ describe("GtmCalendarView", () => {
     expect(req).toEqual(expect.objectContaining({ orgId: TEST_ORG, id: "item-1", expectedRevision: 4 }));
     expect(timestampDate(req.scheduledAt!).getTime()).toBe(NEW_DAY.getTime());
     expect(req.status).toBeUndefined();
+  });
+
+  it("filters by channel and by format", async () => {
+    renderGtm(<GtmCalendarView />, reads, { path: "/gtm/calendar?channel=ch-x", routePath: "/gtm/calendar" });
+    expect(await screen.findByRole("button", { name: "Show HN post" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Email: Invite" })).not.toBeInTheDocument();
+    cleanup();
+    renderGtm(<GtmCalendarView />, reads, { path: `/gtm/calendar?format=${GtmItemFormat.EMAIL}`, routePath: "/gtm/calendar" });
+    expect(await screen.findByRole("button", { name: "Email: Invite" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show HN post" })).not.toBeInTheDocument();
   });
 
   it("does not move what is out", async () => {

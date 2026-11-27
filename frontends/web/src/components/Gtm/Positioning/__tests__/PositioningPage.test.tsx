@@ -8,7 +8,6 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError } from "@connectrpc/connect";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -54,11 +53,11 @@ describe("PositioningView", () => {
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, expectedRevision: 3, positioningMd: "New positioning.", audiences: ["Solo founders", "Teams"] }));
   });
 
-  it("creates the positioning at revision 0 when there is none", async () => {
+  it("creates the positioning at revision 0 when there is none (an empty one at revision 0)", async () => {
     const update = vi.fn(() => ({ positioning }));
     renderGtm(
       <PositioningView />,
-      { ...reads, "GtmService.GetPositioning": { error: new ConnectError("none", Code.NotFound) }, "GtmService.UpdatePositioning": update },
+      { ...reads, "GtmService.GetPositioning": { response: { positioning: { orgId: TEST_ORG, revision: 0 } } }, "GtmService.UpdatePositioning": update },
       { path: "/gtm/positioning" },
     );
     expect(await screen.findByText(/No positioning yet/)).toBeInTheDocument();

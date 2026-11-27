@@ -2,7 +2,8 @@
 
 /**
  * GTM › Calendar: what goes out when (ListItems, by scheduled_at), by month
- * or week, each item tinted by its channel. Drag an item (or press M on it)
+ * or week, each item tinted by its channel, filtered by channel and format
+ * (`?channel=`, `?format=`). Drag an item (or press M on it)
  * to another day to reschedule it: UpdateItem{scheduled_at} on the revision
  * on screen. A date records when it goes out and never publishes. What is
  * already out is pinned. On a phone the grid is narrow, so a list of what is
@@ -19,14 +20,18 @@ import Calendar, { type CalendarItem, type CalendarView } from "@/components/for
 import EmptyState from "@/components/forge-ui/empty_state";
 import PageHeader from "@/components/forge-ui/page_header";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { GtmItemKind, type ListItemsResponse } from "@/gen/reliant/v1/gtm_pb";
+import { GtmItemFormat, type ListItemsResponse } from "@/gen/reliant/v1/gtm_pb";
 import { gtmServiceKeys, useListItems, useUpdateItem } from "@/hooks/gtm-service-hooks_gen";
 
 import { GtmShell, useGtmOrgId } from "../shared/GtmShell";
 import { ItemDialog } from "../shared/ItemDialog";
 import { canEdit } from "../shared/lifecycle";
-import { CHANNELS, formatWhen, ItemStatusBadge, kindAndChannel, tsDate, tsMs } from "../shared/ui";
+import { useGtmChannels } from "../shared/ItemDialog";
+import { channelColor, formatAndChannel, formatLabel, formatWhen, isEmailFormat, ITEM_FORMATS, ItemStatusBadge, tsDate, tsMs } from "../shared/ui";
 import { useGtmWriteError } from "../shared/writes";
+
+const FILTER =
+  "h-8 rounded-md border border-border-strong bg-surface px-2.5 text-sm text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 /** The most items the calendar reads; the list's own page limit (ListItemsRequest.page_size). */
 const ITEMS_PAGE = 500;
@@ -47,6 +52,11 @@ export function GtmCalendarView() {
   const view: CalendarView = search.view === "week" ? "week" : "month";
   const setView = (next: CalendarView) =>
     void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, view: next === "month" ? undefined : next }) } as never);
+  const channelFilter = typeof search.channel === "string" ? search.channel : "";
+  const formatFilter = Number(search.format) || 0;
+  const setFilter = (key: "channel" | "format", value: string) =>
+    void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, [key]: value || undefined }) } as never);
+  const channels = useGtmChannels();
   const [openId, setOpenId] = useState<string | null>(null);
   const onError = useGtmWriteError();
   const queryClient = useQueryClient();
@@ -69,7 +79,16 @@ export function GtmCalendarView() {
     },
   });
 
-  const items = useMemo(() => itemsQ.data?.items ?? [], [itemsQ.data]);
+  const allItems = useMemo(() => itemsQ.data?.items ?? [], [itemsQ.data]);
+  const items = useMemo(
+    () => allItems.filter((i) => (!channelFilter || i.channelId === channelFilter) && (!formatFilter || i.format === formatFilter)),
+    [allItems, channelFilter, formatFilter],
+  );
+  // The legend names the channels something is scheduled on, coloured by channel.
+  const calendarChannels = useMemo(
+    () => channels.filter((c) => items.some((i) => i.channelId === c.id && i.scheduledAt)).map((c) => ({ id: c.id, label: c.name, color: channelColor(c) })),
+    [channels, items],
+  );
   const calendarItems = useMemo<CalendarItem[]>(
     () =>
       items
@@ -77,8 +96,8 @@ export function GtmCalendarView() {
         .map((i) => ({
           id: i.id,
           date: tsDate(i.scheduledAt)!,
-          title: i.kind === GtmItemKind.EMAIL ? `Email: ${i.title}` : i.title,
-          channel: i.channel,
+          title: isEmailFormat(i.format) ? `Email: ${i.title}` : i.title,
+          channel: i.channelId || undefined,
           movable: canEdit(i),
         })),
     [items],
@@ -109,6 +128,24 @@ export function GtmCalendarView() {
         }
         className=""
       />
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the calendar">
+        <select aria-label="Channel" className={FILTER} value={channelFilter} onChange={(e) => setFilter("channel", e.target.value)}>
+          <option value="">All channels</option>
+          {channels.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Format" className={FILTER} value={formatFilter || ""} onChange={(e) => setFilter("format", e.target.value)}>
+          <option value="">All formats</option>
+          {ITEM_FORMATS.map((f: GtmItemFormat) => (
+            <option key={f} value={f}>
+              {formatLabel(f)}
+            </option>
+          ))}
+        </select>
+      </div>
       {itemsQ.isPending ? (
         <SkeletonLoader variant="rectangular" height="480px" />
       ) : itemsQ.isError ? (
@@ -118,7 +155,7 @@ export function GtmCalendarView() {
           <div className="overflow-x-auto" data-testid="gtm-calendar">
             <Calendar
               items={calendarItems}
-              channels={CHANNELS}
+              channels={calendarChannels}
               view={view}
               onViewChange={setView}
               onMove={onMove}
@@ -145,7 +182,7 @@ export function GtmCalendarView() {
                       <span className="text-sm font-medium text-ink">{i.title}</span>
                       <span className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
                         <ItemStatusBadge status={i.status} />
-                        {formatWhen(i.scheduledAt)} · {kindAndChannel(i.kind, i.channel)}
+                        {formatWhen(i.scheduledAt)} · {formatAndChannel(i.format, channels.find((c) => c.id === i.channelId))}
                       </span>
                     </button>
                   </li>
