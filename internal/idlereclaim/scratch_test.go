@@ -30,6 +30,7 @@ func TestScratch_ActiveDirectoryIsUntouched(t *testing.T) {
 // The removal is recorded for the failed-command note, and it does not count
 // as use: the directory's mtime is put back.
 func TestScratch_StripRemovesOnlyRegenerableOutput(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	dir := h.chat("c1")
@@ -58,6 +59,7 @@ func TestScratch_StripRemovesOnlyRegenerableOutput(t *testing.T) {
 
 // After 7 days unused the whole directory goes.
 func TestScratch_RemovesTheWholeDirectoryAfterSevenDays(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	dir := h.chat("c1")
@@ -101,6 +103,7 @@ func TestScratch_NamedUseCountsAsUse(t *testing.T) {
 // A chat that is still making tool calls keeps its directory whole past 7
 // days; the strip still runs on the files' own clock.
 func TestScratch_ChatActivityDefersWholeRemovalOnly(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	dir := h.chat("c1")
@@ -183,6 +186,7 @@ func TestScratch_DotDirectoriesAreNotChats(t *testing.T) {
 // A git repository with work only it holds keeps the directory from being
 // removed whole: uncommitted changes, or commits on no remote.
 func TestScratch_UniqueGitWorkHoldsWholeRemoval(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	dirty := h.chat("dirty")
@@ -214,6 +218,7 @@ func TestScratch_UniqueGitWorkHoldsWholeRemoval(t *testing.T) {
 // pushed is removed with `git worktree remove`; a dirty one stays. Neither is
 // touched when the machine-wide worktree reclaim owns worktrees (mode on).
 func TestScratch_StripRemovesCleanPushedWorktrees(t *testing.T) {
+	requireSafeRemoval(t)
 	t.Parallel()
 	h := newHarness(t)
 	main := pushedClone(t, t.TempDir(), filepath.Join(t.TempDir(), "main"))

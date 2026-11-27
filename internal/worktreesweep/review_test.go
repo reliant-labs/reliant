@@ -126,6 +126,7 @@ func (keepAll) KeepFiles(context.Context, string) bool { return true }
 // S8: only the replica holding the advisory lock sweeps.
 func TestSweepAsLeader_OnlyOneReplicaSweeps(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
+	requireSafeRemoval(t)
 	t.Parallel()
 
 	e := newEnv(t)
@@ -179,6 +180,7 @@ func TestSweep_LockedLiveRowsAreNotResentEveryPass(t *testing.T) {
 // (Exercised through SettleBlocking, which the service calls.)
 func TestSettleBlocking_ReportsHeldAndRemovedForPermanentDelete(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
+	requireSafeRemoval(t)
 	t.Parallel()
 
 	e := newEnv(t)
@@ -432,6 +434,7 @@ func TestMergeMeta_ConcurrentWritersDoNotLoseUpdates(t *testing.T) {
 // NIT: the live-path check is scoped to the user whose directory it is.
 func TestListLiveWorktreePathsForUser_IsScopedToTheUser(t *testing.T) {
 	testkit.Slow(t, "builds real git worktrees and runs git against them")
+	requireSafeRemoval(t)
 	t.Parallel()
 
 	e := newEnv(t)

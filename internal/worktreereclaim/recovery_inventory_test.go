@@ -79,6 +79,7 @@ func TestRecoveryManifestRejectsOmittedBytes(t *testing.T) {
 }
 
 func TestRecoveryInventoryStableAfterMoveAndRecoveryFetch(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "inventory move proof uses local Git subprocesses")
 	root := recoveryTestRepo(t)
 	base := t.TempDir()

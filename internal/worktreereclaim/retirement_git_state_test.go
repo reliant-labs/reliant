@@ -9,6 +9,7 @@ import (
 )
 
 func TestRetirementGitIndexMutationDuringClassificationPreservesStagedWork(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "real automatic retirement with deterministic late index mutation")
 	f := newFixture(t)
 	f.idle()
@@ -40,6 +41,7 @@ func TestRetirementGitIndexMutationDuringClassificationPreservesStagedWork(t *te
 }
 
 func TestRetirementGitPrivateStateMutationAtDisposalPreservesHistory(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "real automatic retirement private Git history mutations")
 	for _, kind := range []string{"private-ref", "reflog", "pseudo-ref", "resolved-head"} {
 		t.Run(kind, func(t *testing.T) {

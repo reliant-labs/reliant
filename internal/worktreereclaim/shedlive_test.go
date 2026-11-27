@@ -9,6 +9,7 @@ import (
 )
 
 func TestRecoverableIdleWholeWorktreeProofNeverDeletesLiveFiles(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "real git clean pushed/merged whole-worktree eligibility")
 	f := newFixture(t)
 	f.idle()

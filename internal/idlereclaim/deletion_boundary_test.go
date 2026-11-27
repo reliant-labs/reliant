@@ -44,6 +44,7 @@ func TestScratchRevalidatesAfterAdmission(t *testing.T) {
 // stops the deletion at the next boundary, and what is left goes back to its
 // path.
 func TestScratchStopsWhenAProcessEntersMidDelete(t *testing.T) {
+	requireSafeRemoval(t)
 	h := newHarness(t)
 	dir := h.chat("c1")
 	for _, n := range []string{"a.md", "b.md", "c.md"} {
@@ -86,6 +87,7 @@ func TestScratchStopsWhenAProcessEntersMidDelete(t *testing.T) {
 // at the end of the pass, not by later passes. It goes back once its path is
 // free.
 func TestScratchFailedRestoreIsKeptNotDeleted(t *testing.T) {
+	requireSafeRemoval(t)
 	h := newHarness(t)
 	dir := h.chat("c1")
 	for _, n := range []string{"a.md", "b.md", "c.md"} {

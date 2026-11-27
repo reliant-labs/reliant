@@ -147,6 +147,7 @@ func TestMerged_ALockedByTheUserWorktreeIsNotReaped(t *testing.T) {
 // worktree even when no patch on the local base matches (the clone has not
 // fetched the merge); a different head does not.
 func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "a merged pull request's head through a verdict and a full reclaim (~62 git processes)")
 	f := newFixture(t)

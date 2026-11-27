@@ -74,6 +74,7 @@ func TestRecoveryStageCleanupNeverDeletesLateFile(t *testing.T) {
 }
 
 func TestRecoveryRestoreIncompleteRestartPreservesAllStaging(t *testing.T) {
+	requireSafeRemoval(t)
 	req, workspace := recoveryRestartFixture(t, false)
 	// Ordinary own partial materialization plus user data in a later repo or
 	// container. Preflight must hold before deleting even the unchanged alpha.

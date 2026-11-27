@@ -199,6 +199,7 @@ func TestYamlValuesIn_DevSecretCases(t *testing.T) {
 }
 
 func TestDevSecrets_ProtectedOnlyForValuesTheSourceLacks(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "nine reclaims of ~22 git processes each; TestYamlValuesIn_DevSecretCases covers the comparison")
 	for _, tc := range devSecretCases {

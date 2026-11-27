@@ -9,6 +9,7 @@ import (
 )
 
 func TestRecoveryRestoreExactIndexAndRawDisk(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "recovery restore uses real local Git plumbing")
 	source := recoveryTestRepo(t)
 	ctx := context.Background()
@@ -56,6 +57,7 @@ func TestRecoveryRestoreExactIndexAndRawDisk(t *testing.T) {
 }
 
 func TestRecoveryRestoreLinkedAndStagedDeletion(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "linked recovery restore uses local Git subprocesses")
 	source := recoveryTestRepo(t)
 	ctx := context.Background()

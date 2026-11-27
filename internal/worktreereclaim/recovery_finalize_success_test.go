@@ -16,6 +16,7 @@ import (
 // quarantine -> removal -> separate restore. No transport success or movement
 // is mocked; only daemon admission/process observations are deterministic.
 func TestFinalizeRecoveryRemovesOnlyAfterIndependentRemoteProof(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "real Git remote closure, quarantine removal and fresh restore")
 	ctx := context.Background()
 	parent := recoveryTestRepo(t)

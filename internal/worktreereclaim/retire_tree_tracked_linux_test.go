@@ -48,6 +48,7 @@ func TestTrackedSetIncludesEveryDirectoryOnTheWay(t *testing.T) {
 // it points at is not in the commit), so it holds the checkout as an
 // untracked one would.
 func TestRetirementTreeDoesNotExemptATrackedSymlink(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "builds a git fixture")
 	f := newFixture(t)
@@ -80,6 +81,7 @@ func TestRetirementTreeDoesNotExemptATrackedSymlink(t *testing.T) {
 // directory still does, and a HEAD that moves after inspection fails
 // validation, since the exemption was read from the old one.
 func TestRetirementTreeExemptsOnlyWhatHeadTracks(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "builds a git fixture")
 	f := newFixture(t)
@@ -127,6 +129,7 @@ func TestRetirementTreeExemptsOnlyWhatHeadTracks(t *testing.T) {
 // secrets/ directory is retired, which every control-plane and reliant
 // checkout used to be refused.
 func TestReconcile_TrackedSecretsDirectoryDoesNotHold(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~40 git processes")
 	f := newFixture(t)

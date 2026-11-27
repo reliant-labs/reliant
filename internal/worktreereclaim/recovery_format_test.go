@@ -94,6 +94,7 @@ func TestRecoveryCredentialFilenameSourceAndHistory(t *testing.T) {
 }
 
 func TestRecoveryCaptureStagedDeletionRecreation(t *testing.T) {
+	requireOpenat2(t)
 	heavyUnderShort(t, "recovery capture uses real local Git plumbing")
 	dir := recoveryTestRepo(t)
 	recoveryTestGit(t, dir, "rm", "file.txt")

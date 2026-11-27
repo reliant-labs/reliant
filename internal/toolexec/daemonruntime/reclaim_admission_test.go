@@ -25,6 +25,7 @@ func (l admissionTestLease) Check(ctx context.Context) error { return ctx.Err() 
 
 func TestLandedStripExcludesNewCommandThroughDeletion(t *testing.T) {
 	testkit.Slow(t, "creates a temporary git worktree and probes landed status")
+	requireSafeRemoval(t)
 	t.Parallel()
 	base := t.TempDir()
 	project, root := filepath.Join(base, "project"), filepath.Join(base, "worktrees")
@@ -102,6 +103,7 @@ func TestLandedStripExcludesNewCommandThroughDeletion(t *testing.T) {
 // background processes elsewhere, and held while one runs inside it.
 func TestArchivedWorktreeRetiresOnBusyMachineAndHoldsForItsOwnShell(t *testing.T) {
 	testkit.Slow(t, "creates a temporary git worktree and starts real background processes")
+	requireSafeRemoval(t)
 	base := t.TempDir()
 	project, root := filepath.Join(base, "project"), filepath.Join(base, "worktrees")
 	newRepo(t, project)

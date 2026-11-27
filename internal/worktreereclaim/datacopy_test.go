@@ -18,6 +18,7 @@ import (
 // 2026-11-25: control-plane's secrets/dev.yaml held 35 worktrees on one
 // machine at "protected descendant: secrets").
 func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 2 git fixtures and removes them; TestCopyInSource_RefusesPathsThatLeaveTheSource covers the rule under -short")
@@ -205,6 +206,7 @@ func symlink(t *testing.T, target, link string) {
 // marker) is rebuilt by that tool: forge's runtime config.js. The never-list
 // still wins, and the marker counts only on the first line.
 func TestReconcile_GeneratedIgnoredFile(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 3 git fixtures; TestGeneratedMarker covers the rule under -short")
@@ -261,6 +263,7 @@ func TestReconcile_CopiesDoNotFillTheDataCap(t *testing.T) {
 // venv's bin/python3 -> /usr/bin/python3.12 was reported as a file outside
 // every checkout, which holds the workspace for good. The target survives.
 func TestReconcile_SymlinkOutOfCheckoutIsInsideIt(t *testing.T) {
+	requireOpenat2(t)
 	t.Parallel()
 	heavyUnderShort(t, "~36 git processes")
 	f := newFixture(t)
