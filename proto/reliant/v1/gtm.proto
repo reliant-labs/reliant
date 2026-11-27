@@ -117,10 +117,12 @@ service GtmService {
   // ListChannels lists the org's channels by key. An allowlisted org with no
   // channel yet is given the default set on its first List or Get (blog,
   // email, hacker-news, reddit, linkedin, x, youtube), each with a small
-  // generic channel_types set. That seed is the read's only write: it is
-  // idempotent (ON CONFLICT DO NOTHING) and leaves the org as any first read
-  // would, so the rpc is a read (NO_SIDE_EFFECTS) that a client may cache or
-  // retry. connection_state is computed per caller.
+  // generic channel_types set. Declared NO_SIDE_EFFECTS though that first
+  // read seeds the defaults: the seed is idempotent (ON CONFLICT DO NOTHING)
+  // and no reliant client enables Connect's useHttpGet, so nothing caches or
+  // replays it. connection_state is computed per caller (whether that
+  // caller can reach the integration), so one caller's answer is not
+  // another's.
   rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
@@ -269,12 +271,13 @@ service GtmService {
   // GetAssetDownload returns a short-lived URL for a READY asset's bytes:
   // either a presigned GET on the bucket or the gated proxy handler
   // (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
-  // settles on. A PENDING asset is FailedPrecondition.
+  // settles on. A PENDING asset is FailedPrecondition. Not a cacheable
+  // read: every call mints a new URL, a bearer secret until it expires.
+  // forge:mutation: mints a short-lived download URL on every call
   rpc GetAssetDownload(GetAssetDownloadRequest) returns (GetAssetDownloadResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {
       auth_required: true
-      activity: {none: "read-only: a short-lived download URL"}
+      activity: {none: "mints a short-lived download URL; changes no stored state"}
     };
   }
 
@@ -1586,7 +1589,9 @@ message GetAssetDownloadRequest {
 }
 
 message GetAssetDownloadResponse {
-  string url = 1;
+  // Grants the asset's bytes to whoever holds it, until expires_at: a
+  // secret; never log or store it.
+  string download_url = 1;
   google.protobuf.Timestamp expires_at = 2;
 }
 
@@ -1604,7 +1609,7 @@ message DeleteAssetResponse {}
 message ListStrategyLibraryRequest {
   string org_id = 1 [(buf.validate.field).required = true];
   // Entries in any of these categories; empty means all.
-  repeated GtmStrategyCategory category = 2 [(buf.validate.field).repeated = {
+  repeated GtmStrategyCategory categories = 2 [(buf.validate.field).repeated = {
     max_items: 13
     items: {
       enum: {
