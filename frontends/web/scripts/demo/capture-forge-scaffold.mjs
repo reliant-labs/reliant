@@ -34,6 +34,8 @@ const NEW_COMMAND = "forge project new shop --service orders --service inventory
 
 // What a person writes: one entity and one custom rpc per service. Each replaces
 // the "TODO: Add your RPC methods here." line forge leaves in the service.
+// Written as `buf format` lays it out: `forge lint` gates the format (its
+// proto-format lane), as the project's pre-commit hook does.
 const TODO_LINE = "  // TODO: Add your RPC methods here.\n}\n";
 const HAND_WRITTEN = [
   {
@@ -41,7 +43,13 @@ const HAND_WRITTEN = [
     text: `  // CancelOrder cancels an order that has not shipped yet.
   rpc CancelOrder(CancelOrderRequest) returns (CancelOrderResponse) {
     option (forge.v1.method) = {
-      activity: { verb: "cancel" target: { kind: "order" id: "id" } }
+      activity: {
+        verb: "cancel"
+        target: {
+          kind: "order"
+          id: "id"
+        }
+      }
     };
   }
 }
@@ -67,7 +75,13 @@ message CancelOrderResponse {
     text: `  // Reserve holds stock for an order.
   rpc Reserve(ReserveRequest) returns (ReserveResponse) {
     option (forge.v1.method) = {
-      activity: { verb: "reserve" target: { kind: "stock" id: "sku" } }
+      activity: {
+        verb: "reserve"
+        target: {
+          kind: "stock"
+          id: "sku"
+        }
+      }
     };
   }
 }

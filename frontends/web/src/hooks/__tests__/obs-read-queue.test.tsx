@@ -7,12 +7,13 @@
  */
 
 import type { ReactNode } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ObservabilityApiProvider, useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import { ObsQuotaProvider } from "@/services/controlPlane/observability/ObsQuotaContext";
 import { OBS_READ_CONCURRENCY, resetObsReadScheduler, SERVER_READ_CAP } from "@/services/controlPlane/observability/readScheduler";
 import type { ObsScope, Panel } from "@/services/controlPlane/observability/types";
@@ -80,7 +81,7 @@ vi.mock("../../services/controlPlane/client", async () => {
     },
     { transport: { interceptors: [obsReadInterceptor()] } }
   );
-  return { getControlPlaneClient: (service: Parameters<typeof createClient>[0]) => createClient(service, transport) };
+  return { getControlPlaneClient: (service: Parameters<typeof createClient>[0]) => createClient(service, transport), controlPlaneTransport: transport };
 });
 
 import { ObservabilityService } from "@/gen/controlplane/services/observability/v1/observability_pb";
@@ -90,7 +91,11 @@ import { getServiceGraph } from "@/services/controlPlane/observability/graphApi"
 import { listMetricCatalog } from "@/services/controlPlane/observability/metricsApi";
 import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
 import { resetObsQuotaStore } from "@/services/controlPlane/observability/quotaStore";
-import { getControlPlaneClient } from "@/services/controlPlane/client";
+import * as controlPlaneClient from "@/services/controlPlane/client";
+
+const { getControlPlaneClient } = controlPlaneClient;
+/** The mocked control plane itself: the generated hooks (useMetricCatalog) read it through the test's TransportScope. */
+const controlPlaneTransport = (controlPlaneClient as unknown as { controlPlaneTransport: import("@connectrpc/connect").Transport }).controlPlaneTransport;
 
 const SCOPE: ObsScope = { orgId: "org", envIds: [], filters: [] };
 const WINDOW = { startMs: 0, endMs: 3_600_000 };
@@ -103,12 +108,14 @@ function realisticApi(): ObservabilityApi {
 
 function setup() {
   const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
+  // The generated hooks call their QueryClient's transport: here, the control plane above, as the app's would be.
+  const scope = createTransportScope({ id: "obs-read-queue", transport: controlPlaneTransport, queryClient: client });
   const wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={client}>
+    <TransportScopeProvider scope={scope}>
       <ObsQuotaProvider>
         <ObservabilityApiProvider api={realisticApi()}>{children}</ObservabilityApiProvider>
       </ObsQuotaProvider>
-    </QueryClientProvider>
+    </TransportScopeProvider>
   );
   return { client, wrapper };
 }

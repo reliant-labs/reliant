@@ -13,12 +13,11 @@ import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import { ReleasesTestScope } from "../../Releases/__tests__/releasesTestUtils";
 import { PROMOTIONS_PAGE, type ReleaseGate, type ReleasePromotion } from "@/services/forge/releases";
 
 import { createWorkloadsFixtureApi } from "../../Workloads/__fixtures__/workloadFixtures";
 import { createReleasesFixtureApi, RELEASES, type ReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { ReleasesFixtureScope } from "../../Releases/__fixtures__/releaseFixtureTransport";
 import { HEALTH_GATE } from "../../Releases/envPromotionsModel";
 import { EnvPromotions, PROMOTIONS_SHOWN } from "../EnvPromotions";
 
@@ -62,11 +61,9 @@ function renderCard(listPromotions: ReleasesFixtureApi["listPromotions"], over: 
   const api: ReleasesFixtureApi = { ...createReleasesFixtureApi(), ...calls, ...over } as ReleasesFixtureApi;
   const client = createTestQueryClient();
   const ui = (env: { id: string; name: string }) => (
-    <ReleasesFixtureScope api={api} client={client}>
-      <ObservabilityApiProvider api={createWorkloadsFixtureApi()}>
-        <EnvPromotions project="control-plane" env={env} releaseHref={(version) => `/releases/${version}?env=${env.name}`} releasesHref={`/releases?env=${env.name}`} />
-      </ObservabilityApiProvider>
-    </ReleasesFixtureScope>
+    <ReleasesTestScope api={api} obs={createWorkloadsFixtureApi()} client={client}>
+      <EnvPromotions project="control-plane" env={env} releaseHref={(version) => `/releases/${version}?env=${env.name}`} releasesHref={`/releases?env=${env.name}`} />
+    </ReleasesTestScope>
   );
   const result = render(ui(ENV));
   return { ...calls, switchTo: (env: { id: string; name: string }) => result.rerender(ui(env)) };

@@ -15,12 +15,12 @@ import { vi } from "vitest";
 
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { createTestQueryClient } from "@/test/renderWithQuery";
-import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
 import { VulnerabilityApiProvider, type VulnerabilityApi } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { ReleasesFixtureScope } from "../../Releases/__fixtures__/releaseFixtureTransport";
+import { ReleasesTestScope } from "../../Releases/__tests__/releasesTestUtils";
 import { fixtureVulnerabilityApi } from "../../Security/fixtures";
 import { OverviewHome, type HostedByEnv, type OverviewRollback, type OverviewSearch } from "../OverviewHome";
 import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
@@ -40,13 +40,11 @@ export function WorkloadsProviders({
   children: ReactElement;
 }) {
   return (
-    <ReleasesFixtureScope api={createReleasesFixtureApi()} client={createTestQueryClient()}>
-      <ObservabilityApiProvider api={obs}>
-        <VulnerabilityApiProvider api={vulns}>
-          <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
-        </VulnerabilityApiProvider>
-      </ObservabilityApiProvider>
-    </ReleasesFixtureScope>
+    <ReleasesTestScope api={createReleasesFixtureApi()} obs={obs} client={createTestQueryClient()}>
+      <VulnerabilityApiProvider api={vulns}>
+        <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
+      </VulnerabilityApiProvider>
+    </ReleasesTestScope>
   );
 }
 
