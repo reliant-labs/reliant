@@ -45,7 +45,7 @@ func backgroundActivityEnv() *testsuite.TestActivityEnvironment {
 // title runs the chat's GenerateTitle activity once.
 func (w *orgFundingWorld) title(first string) (string, error) {
 	w.t.Helper()
-	activity := handlers.NewGenerateTitleActivity(tools.WithChats(w.repo), nil).WithAccountRouting(w.backgroundRouting())
+	activity := handlers.NewGenerateTitleActivity(tools.WithChats(w.repo), handlers.NewTriggerReads(w.repo.ORM()), nil).WithAccountRouting(w.backgroundRouting())
 	env := backgroundActivityEnv()
 	env.RegisterActivity(activity.Execute)
 	val, err := env.ExecuteActivity(activity.Execute, handlers.GenerateTitleInput{ChatID: w.chatID, FirstMessage: first})

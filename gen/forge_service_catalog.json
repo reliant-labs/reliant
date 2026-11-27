@@ -59220,12 +59220,10 @@
     },
     {
       "consumer": "AutomationTakeover",
-      "field": "Repo",
-      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.Repository",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/automation_takeover.TriggerReads",
       "methods": [],
-      "candidates": [
-        "Database"
-      ],
+      "candidates": [],
       "providers": [
         "Database"
       ],
@@ -59378,7 +59376,9 @@
       "field": "ChatViews",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.ChatViews",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -59584,6 +59584,17 @@
     },
     {
       "consumer": "Chat",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/chat.TriggerReads",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Chat",
       "field": "Workflows",
       "interface": "github.com/reliant-labs/reliant/internal/launch.WorkflowLoader",
       "methods": [],
@@ -59648,7 +59659,9 @@
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/chatprlinks.Chats",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -60049,7 +60062,9 @@
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/file_system.Repository",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -60167,7 +60182,9 @@
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/inbox.Chats",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -60719,7 +60736,9 @@
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/org_policy_impact.Chats",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -60867,7 +60886,9 @@
       "field": "Placement",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/package_commands.Placement",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -61488,7 +61509,9 @@
       "field": "ChatViews",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/question.ChatViews",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -61659,7 +61682,9 @@
       "field": "ChatViews",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/run.ChatViews",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -61963,7 +61988,9 @@
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/sharing.Chats",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [],
       "resolution": "unresolved"
     },
@@ -62170,6 +62197,17 @@
       "consumer": "Streaming",
       "field": "SpawnCalls",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.SpawnCalls",
+      "methods": [],
+      "candidates": [],
+      "providers": [
+        "Database"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "Streaming",
+      "field": "TriggerReads",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/streaming.TriggerReads",
       "methods": [],
       "candidates": [],
       "providers": [
@@ -63437,7 +63475,9 @@
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree.Chats",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],
@@ -63605,7 +63645,9 @@
       "field": "Chats",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/worktree_reclaim.Chats",
       "methods": [],
-      "candidates": [],
+      "candidates": [
+        "Database"
+      ],
       "providers": [
         "Database"
       ],

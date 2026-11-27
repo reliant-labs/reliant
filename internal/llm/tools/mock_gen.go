@@ -602,32 +602,6 @@ func (m *MockSpawnTree) ListInheritedSpawnChildren(ctx context.Context, threadID
 // Compile-time check.
 var _ SpawnTree = (*MockSpawnTree)(nil)
 
-// forge:section MockstartRunLineageReader
-// forge:hash=5850fcc17c8fc1acdbdb59bf44a8d8e11eb0c8f0d188fb9e990de9c1b93417c9
-
-// MockstartRunLineageReader is a test mock for the startRunLineageReader interface.
-//
-// The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockstartRunLineageReader.<Method>Func not set" error.
-type MockstartRunLineageReader struct {
-	contractkit.Recorder
-	GetTriggerEventByChatFunc func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
-}
-
-// GetTriggerEventByChat records the call and delegates to GetTriggerEventByChatFunc when set.
-func (m *MockstartRunLineageReader) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
-	m.Recorder.Record("GetTriggerEventByChat", ctx, kind, chatID)
-	if m.GetTriggerEventByChatFunc != nil {
-		return m.GetTriggerEventByChatFunc(ctx, kind, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockstartRunLineageReader", "GetTriggerEventByChat")
-}
-
-// Compile-time check.
-var _ startRunLineageReader = (*MockstartRunLineageReader)(nil)
-
 // forge:section MockscenarioLoaderStore
 // forge:hash=7ded4257c2db711ee199281c2539ce9dd9e78b14850bb8869db369517eb6ee1f
 
@@ -1103,7 +1077,7 @@ func (m *MockscenarioFinder) FindWorkflowScenarioByName(ctx context.Context, dra
 var _ scenarioFinder = (*MockscenarioFinder)(nil)
 
 // forge:section MockLaunchedRunCounter
-// forge:hash=10ee4f4c09e40663f31dad5d140031c1affebed2e267e779713dbc303d48e1bb
+// forge:hash=f5831d3babb0790d5dd7fa9b01f0738302dda0783193e09149a104748aa26519
 
 // MockLaunchedRunCounter is a test mock for the LaunchedRunCounter interface.
 //
@@ -1114,6 +1088,7 @@ var _ scenarioFinder = (*MockscenarioFinder)(nil)
 type MockLaunchedRunCounter struct {
 	contractkit.Recorder
 	CountLiveLaunchedRunsFunc func(context.Context, string, core.TriggerEventKind) (int, error)
+	GetTriggerEventByChatFunc func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 }
 
 // CountLiveLaunchedRuns records the call and delegates to CountLiveLaunchedRunsFunc when set.
@@ -1123,6 +1098,15 @@ func (m *MockLaunchedRunCounter) CountLiveLaunchedRuns(ctx context.Context, user
 		return m.CountLiveLaunchedRunsFunc(ctx, userID, kind)
 	}
 	return 0, contractkit.MockNotSet("MockLaunchedRunCounter", "CountLiveLaunchedRuns")
+}
+
+// GetTriggerEventByChat records the call and delegates to GetTriggerEventByChatFunc when set.
+func (m *MockLaunchedRunCounter) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	m.Recorder.Record("GetTriggerEventByChat", ctx, kind, chatID)
+	if m.GetTriggerEventByChatFunc != nil {
+		return m.GetTriggerEventByChatFunc(ctx, kind, chatID)
+	}
+	return nil, contractkit.MockNotSet("MockLaunchedRunCounter", "GetTriggerEventByChat")
 }
 
 // Compile-time check.
@@ -2349,7 +2333,7 @@ func (m *MockspawnStopStore) GetThread(ctx context.Context, id string) (*db.Thre
 var _ spawnStopStore = (*MockspawnStopStore)(nil)
 
 // forge:section MockstartRunStore
-// forge:hash=cc1e46cc64fe6d4b174185a25d9f4f34b027c3a1970bd65cf9a78c4303e0e3a8
+// forge:hash=018ac49ac92f1c072ffbd2468d8285991434d2964a13387d92fa4640f494dae2
 
 // MockstartRunStore is a test mock for the startRunStore interface.
 //
@@ -2361,7 +2345,6 @@ type MockstartRunStore struct {
 	contractkit.Recorder
 	GetTriggerEventByDedupeFunc func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 	GetChatFunc                 func(context.Context, string) (*db.Chat, error)
-	GetTriggerEventByChatFunc   func(context.Context, core.TriggerEventKind, string) (*core.TriggerEvent, error)
 }
 
 // GetTriggerEventByDedupe records the call and delegates to GetTriggerEventByDedupeFunc when set.
@@ -2380,15 +2363,6 @@ func (m *MockstartRunStore) GetChat(ctx context.Context, id string) (*db.Chat, e
 		return m.GetChatFunc(ctx, id)
 	}
 	return nil, contractkit.MockNotSet("MockstartRunStore", "GetChat")
-}
-
-// GetTriggerEventByChat records the call and delegates to GetTriggerEventByChatFunc when set.
-func (m *MockstartRunStore) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
-	m.Recorder.Record("GetTriggerEventByChat", ctx, kind, chatID)
-	if m.GetTriggerEventByChatFunc != nil {
-		return m.GetTriggerEventByChatFunc(ctx, kind, chatID)
-	}
-	return nil, contractkit.MockNotSet("MockstartRunStore", "GetTriggerEventByChat")
 }
 
 // Compile-time check.

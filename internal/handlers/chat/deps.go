@@ -47,6 +47,10 @@ type Questions interface {
 type Messages interface {
 	FindMessage(ctx context.Context, id string) (*core.Message, error)
 	LatestTurnInThread(ctx context.Context, threadID string) (*core.Message, error)
+	// ClaimUserActivation records a message as the user's activation (their
+	// first typed message ever) once, durably, and reports whether this call
+	// did (user_first_message).
+	ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error)
 }
 
 // ToolBlocks reads tool-call and tool-result content blocks by tool call id.
@@ -73,6 +77,13 @@ type Spawns interface {
 type durableState struct {
 	Repository
 	Spawns
+}
+
+// TriggerReads reads the launch event of a chat, which a restart rebuilds its
+// WorkflowInput from (launch.LoadChatTrigger). store.TriggerEventExtStore
+// satisfies it.
+type TriggerReads interface {
+	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 }
 
 // Repository is everything the chat handlers read and write.
@@ -108,10 +119,6 @@ type Repository interface {
 	ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error)
 	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
-	// ClaimUserActivation records a message as the user's activation (their
-	// first typed message ever) once, durably, and reports whether this call
-	// did (user_first_message).
-	ClaimUserActivation(ctx context.Context, userID, chatID, messageID string) (bool, error)
 	ListTranscriptSiblingMessagesInRange(ctx context.Context, chatID, mainThreadID string, fromSeq int64, toSeq *int64, limit int) ([]*db.Message, error)
 	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*db.Workflow, error)
 	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*db.Workflow, error)
@@ -160,7 +167,6 @@ type Repository interface {
 	// unexported or anonymous roles, so their methods are written out here.
 	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*db.WorkflowCheckpoint, error)
 	ListToolGrants(ctx context.Context, chatID string) ([]*db.ToolGrant, error)
-	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
 	// CreateNumberedMessage appends a message the handler builds itself (the
 	// branch repair), numbered from the counters.
 	CreateNumberedMessage(ctx context.Context, msg *db.Message) error

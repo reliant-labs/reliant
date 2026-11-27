@@ -16,31 +16,31 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// forge:section MockRepository
-// forge:hash=adbb01275a0187a357398bd1c50d237d2c03c22c1d7720880276aa5943b81a15
+// forge:section MockTriggerReads
+// forge:hash=8c804aa2fc45a0d4bbb21a57dc57bff249681972330112ef0a82639e08dd6abf
 
-// MockRepository is a test mock for the Repository interface.
+// MockTriggerReads is a test mock for the TriggerReads interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
 // assert call counts and captured arguments. Set XxxFunc fields to
 // override per-method behaviour; unset methods return the canonical
-// "MockRepository.<Method>Func not set" error.
-type MockRepository struct {
+// "MockTriggerReads.<Method>Func not set" error.
+type MockTriggerReads struct {
 	contractkit.Recorder
 	GetTriggerFunc func(context.Context, string) (*core.Trigger, error)
 }
 
 // GetTrigger records the call and delegates to GetTriggerFunc when set.
-func (m *MockRepository) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
+func (m *MockTriggerReads) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	m.Recorder.Record("GetTrigger", ctx, id)
 	if m.GetTriggerFunc != nil {
 		return m.GetTriggerFunc(ctx, id)
 	}
-	return nil, contractkit.MockNotSet("MockRepository", "GetTrigger")
+	return nil, contractkit.MockNotSet("MockTriggerReads", "GetTrigger")
 }
 
 // Compile-time check.
-var _ Repository = (*MockRepository)(nil)
+var _ TriggerReads = (*MockTriggerReads)(nil)
 
 // forge:section MockOffers
 // forge:hash=93daf27c68eefdd74ad42a0f0d2cce888af00ffb5b6682d3071173dd1b9f9965

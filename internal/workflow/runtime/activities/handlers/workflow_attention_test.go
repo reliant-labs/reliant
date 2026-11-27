@@ -28,7 +28,7 @@ func TestRecordAttentionDurableFailureAndIdentity(t *testing.T) {
 			return core.AttentionResult{}, wantErr
 		},
 	}
-	a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: store, Attention: attention})
+	a := NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: store, Triggers: &MockStatusTriggers{}, Attention: attention})
 	in := WorkflowStatusInput{ChatID: "actual", Status: "failed", LaunchRun: true, Attention: &core.AttentionUpdate{ChatID: "forged", Phase: "start"}}
 	_, err := a.recordAttention(context.Background(), in)
 	require.ErrorIs(t, err, wantErr)
@@ -57,7 +57,7 @@ func TestAttentionReceiptFailureRollsBackCompletedLifecycle(t *testing.T) {
 	in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "completed", Outcome: "failure", LaunchRun: true, Thread: chatID,
 		Attention: &core.AttentionUpdate{RunID: uuid.NewString(), StartedAt: time.Now().UTC(), Key: "incident", Phase: "finish", State: "action_required"}}
 	var out WorkflowStatusOutput
-	err := f.h.ExecuteActivity(NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: f.h.Repo(), Runs: unavailableReceiptStore{NewRunRecords(f.h.Repo().ORM())}}).Execute, in, &out)
+	err := f.h.ExecuteActivity(NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: f.h.Repo(), Triggers: NewTriggerReads(f.h.Repo().ORM()), Runs: unavailableReceiptStore{NewRunRecords(f.h.Repo().ORM())}}).Execute, in, &out)
 	require.Error(t, err)
 	wf, err := store.LoadWorkflow(ctx, f.h.Repo().ORM(), chatID)
 	require.NoError(t, err)

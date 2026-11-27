@@ -285,7 +285,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		WorkflowName: workflowName,
 		Inputs:       inputs,
 		ExecContext:  execContext,
-		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, chat.ID),
+		Trigger:      launch.LoadChatTrigger(ctx, s.triggerReads(), chat.ID),
 		Resume:       resume,
 	})
 	if err != nil {
