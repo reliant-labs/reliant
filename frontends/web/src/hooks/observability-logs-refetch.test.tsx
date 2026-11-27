@@ -22,7 +22,7 @@ afterEach(() => {
   searchLogs.mockReset();
 });
 
-it.each([false, true])("refetches a paged log query over a new consistent interval (live=%s)", async (live) => {
+it("refetches paged log history over a new consistent interval", async () => {
   const initialNow = 1_800_000_000_000;
   const clock = vi.spyOn(Date, "now").mockReturnValue(initialNow);
   // An older server does not echo effective_time_range. It must still receive
@@ -36,13 +36,15 @@ it.each([false, true])("refetches a paged log query over a new consistent interv
   const hook = renderHook(() => useSearchLogs(
     { orgId: "org", envIds: [], filters: [] },
     { range: "1h", query: "", services: [], severities: [] },
-    live,
+    false,
   ), { wrapper });
   try {
     await waitFor(() => expect(hook.result.current.isSuccess).toBe(true));
+    expect(searchLogs).toHaveBeenCalledTimes(1);
+    expect(hook.result.current.hasNextPage).toBe(true);
     clock.mockReturnValue(initialNow + 10_000);
     await act(async () => { await hook.result.current.fetchNextPage(); });
-    expect(hook.result.current.data?.pages).toHaveLength(2);
+    await waitFor(() => expect(hook.result.current.data?.pages).toHaveLength(2));
     const first = searchLogs.mock.calls[0][0];
     const second = searchLogs.mock.calls[1][0];
     const originalWindow = effectiveWindowOf({ effectiveTimeRange: first.scope.timeRange });

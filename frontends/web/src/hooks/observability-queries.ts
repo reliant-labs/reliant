@@ -21,7 +21,7 @@ import { useCallback, useEffect } from "react";
 
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { hashKey, useInfiniteQuery, type InfiniteData, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey, type UseQueryOptions } from "@tanstack/react-query";
+import { hashKey, useInfiniteQuery, type InfiniteData, useMutation, useQueries, useQuery, useQueryClient, type QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
 import { scopedClient } from "@reliantlabs/forge-web-runtime/transport-scope";
@@ -384,9 +384,20 @@ export function useSearchLogs(scope: ObsScope | null, filters: LogFilters, live:
   // Keep the live head separate from paged history: polling must never refetch
   // every retained page, nor start at an older cursor after page eviction.
   const historyKey = observabilityServiceKeys.searchLogsInfinite(request);
-  const queryKey = live ? [...historyKey, "live"] : historyKey;
+  const liveKey = [...historyKey, "live"];
+  const queryKey = live ? liveKey : historyKey;
+  const client = useQueryClient();
   const query = useInfiniteQuery({
     queryKey,
+    // Keep rows on screen while switching modes, but only for this exact
+    // request. Placeholder data never becomes a cached page or cursor.
+    placeholderData: () => {
+      const sibling = client.getQueryData<InfiniteData<SearchLogsResult & { window: TimeWindow }, PageParam | null>>(
+        live ? historyKey : liveKey
+      );
+      const first = sibling?.pages[0];
+      return first ? { pages: [first], pageParams: [null] } : undefined;
+    },
     queryFn: async (context): Promise<SearchLogsResult & { window: TimeWindow }> => {
       const page = context.pageParam;
       // A refetch starts at the null first-page param; React Query derives each
@@ -621,6 +632,20 @@ function panelRequest(scope: ObsScope | null, range: RangePreset, panel: Panel, 
   return queryPanelRequest({ ...(scope ?? NO_SCOPE), window: panelWindow(range, panelRead(panel), offset), panel, services, stepSeconds: 0, groupBy });
 }
 
+/** Shared generated identity and fetched panel shape for dashboard, explorer and release reads. */
+export function queryPanelRead(request: ReturnType<typeof queryPanelRequest>, window: ObsWindow, headers?: ReturnType<typeof panelHeaders>) {
+  return {
+    queryKey: attributedPanelKey(observabilityServiceKeys.queryPanel(request), headers),
+    queryFn: (context: { client: QueryClient; signal: AbortSignal }) => readPanelWithWindow(
+      () => observabilityClient(context).queryPanel(request, obsCall({ headers, signal: context.signal })),
+      window,
+    ),
+    staleTime: 30_000,
+    retry: obsRetry,
+    retryDelay: obsRetryDelay,
+  };
+}
+
 /**
  * One dashboard panel, computed server-side (QueryPanel). The dashboard's
  * service filter rides as `services`; search and text panels, and a kind this
@@ -649,12 +674,7 @@ export function usePanelQuery(
   const request = panelRequest(scope, range, panel, services, groupBy, options.offset);
   const headers = panelHeaders(options.dashboardId, panel.id);
   // One query either way, so a panel is one cache entry: QueryPanel's generated read, or the postgres read.
-  const telemetryRead = observabilityServiceQueries.queryPanel(request, {
-    staleTime: 30_000,
-    retry: obsRetry,
-    retryDelay: obsRetryDelay,
-    callOptions: () => obsCall({ headers }),
-  });
+  const telemetryRead = queryPanelRead(request, window, headers);
   const databaseRead = {
     queryKey: obsKeys.panel(scope, range, panel, services, groupBy, options.offset),
     queryFn: ({ signal }: { signal: AbortSignal }) => queryPostgresPanel(api, scope as ObsScope, boundsOf(window), panel, signal),
@@ -662,14 +682,7 @@ export function usePanelQuery(
     retry: obsRetry,
     retryDelay: obsRetryDelay,
   };
-  const read = (postgres ? databaseRead : {
-    ...telemetryRead,
-    queryKey: attributedPanelKey(telemetryRead.queryKey, headers),
-    queryFn: (context: { client: QueryClient; signal: AbortSignal }) => readPanelWithWindow(
-      () => observabilityClient(context).queryPanel(request, obsCall({ headers, signal: context.signal })),
-      window,
-    ),
-  }) as UseQueryOptions<unknown, Error, PanelResult, QueryKey>;
+  const read = postgres ? databaseRead : telemetryRead;
   const query = useQuery({ ...read, enabled });
   // Nor does the quota slow or stop a postgres panel's refresh.
   usePolled(read.queryKey, options.refetchInterval ?? false, enabled, !postgres);

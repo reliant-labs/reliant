@@ -8,8 +8,9 @@
  */
 
 import { useCallback, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { panelWindow, usePanelSelect, type PanelOffset } from "@/hooks/observability-queries";
+import { panelWindow, queryPanelRead, type PanelOffset } from "@/hooks/observability-queries";
 import { useQueryPanel } from "@/hooks/controlplane/observability-service-hooks_gen";
 import { useDebounce } from "@/hooks/useDebounce";
 import { keepPreviousInOrg } from "@/lib/orgScope";
@@ -56,16 +57,12 @@ const obsRead = () => obsCall();
  */
 export function useExplorerPanelQuery(scope: ObsScope | null, range: RangePreset, panel: Panel | null, options: ExplorerPanelOptions) {
   const window = panelWindow(range, undefined, options.offset);
-  const select = usePanelSelect(window);
-  return useQueryPanel(queryPanelRequest({ ...(scope ?? NO_SCOPE), window, panel: panel ?? EMPTY_PANEL, services: [], stepSeconds: 0, groupBy: [] }), {
-    select,
+  const request = queryPanelRequest({ ...(scope ?? NO_SCOPE), window, panel: panel ?? EMPTY_PANEL, services: [], stepSeconds: 0, groupBy: [] });
+  return useQuery({
+    ...queryPanelRead(request, window),
     enabled: options.enabled && !!scope && !!panel,
-    // Every range is relative ("the last hour"), so an answer is stale once time has moved on.
-    staleTime: 30_000,
     // The previous answer, but never another org's (lib/orgScope).
     placeholderData: keepPreviousInOrg(scope?.orgId ?? null),
-    retry: obsRetry, retryDelay: obsRetryDelay,
-    callOptions: obsRead,
   });
 }
 

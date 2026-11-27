@@ -21,14 +21,14 @@
  */
 
 import { useMemo, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ArrowLeft, ArrowRight, Bell, CheckCircle2, CircleHelp, GitCommitHorizontal, RotateCw, XCircle } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Button from "@/components/forge-ui/button";
 import DataTable, { type DataTableColumn } from "@/components/forge-ui/data_table";
-import { usePanelSelect, useReleaseHealth } from "@/hooks/observability-queries";
-import { useQueryPanel } from "@/hooks/controlplane/observability-service-hooks_gen";
+import { queryPanelRead, useReleaseHealth } from "@/hooks/observability-queries";
 import {
   HEALTH_WINDOW_MS,
   HEALTH_WINDOWS,
@@ -39,11 +39,10 @@ import {
   type ReleaseVerdict,
   type ServiceHealthDelta,
 } from "@/services/controlPlane/observability/deliveryTypes";
-import { obsRetry, obsRetryDelay, releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
+import { releaseHealthErrorKind } from "@/services/controlPlane/observability/errors";
 import { keepsLastResult } from "@/services/controlPlane/observability/quota";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";
 import { queryPanelRequest } from "@/services/controlPlane/observability/api";
-import { obsCall } from "@/services/controlPlane/observability/obsInterceptors";
 import type { ObsScope, Panel, PanelResult, TimeWindow } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
@@ -97,11 +96,9 @@ const NO_WINDOW: TimeWindow = { startMs: 0, endMs: 0 };
 /** One side's resource use (QueryPanel's generated read) over its absolute window: a release's moment does not move. */
 function useResources(scope: ObsScope, side: "before" | "after", window: TimeWindow | null) {
   const usable = !!window && window.endMs > window.startMs;
-  const select = usePanelSelect(window ?? NO_WINDOW);
-  return useQueryPanel(
-    queryPanelRequest({ ...scope, window: window ?? NO_WINDOW, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy }),
-    { select, enabled: usable, staleTime: 5 * 60_000, retry: obsRetry, retryDelay: obsRetryDelay, callOptions: () => obsCall() }
-  );
+  const bounds = window ?? NO_WINDOW;
+  const request = queryPanelRequest({ ...scope, window: bounds, panel: { ...RESOURCES_PANEL, id: `${RESOURCES_PANEL.id}-${side}` }, services: [], stepSeconds: 0, groupBy: RESOURCES_PANEL.groupBy });
+  return useQuery({ ...queryPanelRead(request, bounds), enabled: usable, staleTime: 5 * 60_000 });
 }
 
 export interface ReleaseComparisonProps {
