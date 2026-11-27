@@ -153,10 +153,12 @@ type GtmServiceClient interface {
 	// ListChannels lists the org's channels by key. An allowlisted org with no
 	// channel yet is given the default set on its first List or Get (blog,
 	// email, hacker-news, reddit, linkedin, x, youtube), each with a small
-	// generic channel_types set. That seed is the read's only write: it is
-	// idempotent (ON CONFLICT DO NOTHING) and leaves the org as any first read
-	// would, so the rpc is a read (NO_SIDE_EFFECTS) that a client may cache or
-	// retry. connection_state is computed per caller.
+	// generic channel_types set. Declared NO_SIDE_EFFECTS though that first
+	// read seeds the defaults: the seed is idempotent (ON CONFLICT DO NOTHING)
+	// and no reliant client enables Connect's useHttpGet, so nothing caches or
+	// replays it. connection_state is computed per caller (whether that
+	// caller can reach the integration), so one caller's answer is not
+	// another's.
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
@@ -207,7 +209,9 @@ type GtmServiceClient interface {
 	// GetAssetDownload returns a short-lived URL for a READY asset's bytes:
 	// either a presigned GET on the bucket or the gated proxy handler
 	// (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
-	// settles on. A PENDING asset is FailedPrecondition.
+	// settles on. A PENDING asset is FailedPrecondition. Not a cacheable
+	// read: every call mints a new URL, a bearer secret until it expires.
+	// forge:mutation: mints a short-lived download URL on every call
 	GetAssetDownload(context.Context, *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error)
 	// ListStrategyLibrary lists the strategy library: the generic idea bank
 	// embedded in Reliant, read-only and the same for every allowlisted org (an
@@ -425,7 +429,6 @@ func NewGtmServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			httpClient,
 			baseURL+GtmServiceGetAssetDownloadProcedure,
 			connect.WithSchema(gtmServiceMethods.ByName("GetAssetDownload")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		listStrategyLibrary: connect.NewClient[v1.ListStrategyLibraryRequest, v1.ListStrategyLibraryResponse](
@@ -824,10 +827,12 @@ type GtmServiceHandler interface {
 	// ListChannels lists the org's channels by key. An allowlisted org with no
 	// channel yet is given the default set on its first List or Get (blog,
 	// email, hacker-news, reddit, linkedin, x, youtube), each with a small
-	// generic channel_types set. That seed is the read's only write: it is
-	// idempotent (ON CONFLICT DO NOTHING) and leaves the org as any first read
-	// would, so the rpc is a read (NO_SIDE_EFFECTS) that a client may cache or
-	// retry. connection_state is computed per caller.
+	// generic channel_types set. Declared NO_SIDE_EFFECTS though that first
+	// read seeds the defaults: the seed is idempotent (ON CONFLICT DO NOTHING)
+	// and no reliant client enables Connect's useHttpGet, so nothing caches or
+	// replays it. connection_state is computed per caller (whether that
+	// caller can reach the integration), so one caller's answer is not
+	// another's.
 	ListChannels(context.Context, *connect.Request[v1.ListChannelsRequest]) (*connect.Response[v1.ListChannelsResponse], error)
 	// GetChannel returns one channel (seeding the defaults as ListChannels does).
 	GetChannel(context.Context, *connect.Request[v1.GetChannelRequest]) (*connect.Response[v1.GetChannelResponse], error)
@@ -878,7 +883,9 @@ type GtmServiceHandler interface {
 	// GetAssetDownload returns a short-lived URL for a READY asset's bytes:
 	// either a presigned GET on the bucket or the gated proxy handler
 	// (/api/gtm/assets/{id}/content), whichever the storage work (PR-13)
-	// settles on. A PENDING asset is FailedPrecondition.
+	// settles on. A PENDING asset is FailedPrecondition. Not a cacheable
+	// read: every call mints a new URL, a bearer secret until it expires.
+	// forge:mutation: mints a short-lived download URL on every call
 	GetAssetDownload(context.Context, *connect.Request[v1.GetAssetDownloadRequest]) (*connect.Response[v1.GetAssetDownloadResponse], error)
 	// ListStrategyLibrary lists the strategy library: the generic idea bank
 	// embedded in Reliant, read-only and the same for every allowlisted org (an
@@ -1092,7 +1099,6 @@ func NewGtmServiceHandler(svc GtmServiceHandler, opts ...connect.HandlerOption) 
 		GtmServiceGetAssetDownloadProcedure,
 		svc.GetAssetDownload,
 		connect.WithSchema(gtmServiceMethods.ByName("GetAssetDownload")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	gtmServiceListStrategyLibraryHandler := connect.NewUnaryHandler(
