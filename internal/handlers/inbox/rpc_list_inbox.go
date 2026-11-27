@@ -325,7 +325,9 @@ func (s *Service) declarationItems(ctx context.Context, stored []*core.Trigger) 
 	// Prod ListInbox (2026-11-05, 22 activations): 13 catalog and 24 draft
 	// reads a call, p50 516ms, the most-called slow rpc of the web.
 	resolver := launch.NewRequestResolver(s.deps.Repo)
-	prefetchActivationDrafts(ctx, resolver, stored)
+	// Only enabled activations are resolved below, so only their drafts are
+	// worth reading together.
+	triggers.PrefetchActivationDrafts(ctx, resolver, slices.DeleteFunc(slices.Clone(stored), func(t *core.Trigger) bool { return !t.Enabled }), "inbox")
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: resolver})
 	var out []*reliantv1.InboxItem
 	broken := &brokenDefinitions{byKey: map[string]*reliantv1.InboxItem{}}

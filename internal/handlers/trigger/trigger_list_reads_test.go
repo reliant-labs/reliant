@@ -22,7 +22,12 @@ import (
 // countingRepo counts the reads a workflow resolution makes.
 type countingRepo struct {
 	*db.Repo
-	catalogs, drafts atomic.Int64
+	catalogs, drafts, draftBatches atomic.Int64
+}
+
+func (r *countingRepo) GetWorkflowDraftsBySlugs(ctx context.Context, userID string, slugs []string) (*db.WorkflowDraftsBySlug, error) {
+	r.draftBatches.Add(1)
+	return r.Repo.GetWorkflowDraftsBySlugs(ctx, userID, slugs)
 }
 
 func (r *countingRepo) GetProjectMachineWorkflowsJSON(ctx context.Context, projectID, daemonID string) (*string, bool, error) {
@@ -88,11 +93,14 @@ func TestListTriggersReadsEachCatalogOnce(t *testing.T) {
 	require.NoError(t, err)
 	listed := resp.Msg.GetTriggers()
 	require.Len(t, listed, 2*workflows)
-	t.Logf("reads: catalogs=%d drafts=%d", counting.catalogs.Load(), counting.drafts.Load())
+	t.Logf("reads: catalogs=%d drafts=%d draft batches=%d", counting.catalogs.Load(), counting.drafts.Load(), counting.draftBatches.Load())
 	require.EqualValues(t, 1, counting.catalogs.Load(),
 		"every activation resolves against the one machine catalog; the list must read it once")
-	require.LessOrEqual(t, counting.drafts.Load(), int64(2*(workflows+1)),
-		"each account-draft lookup (one per workflow name and method) is read once")
+	// Prod (2026-11-27, trace dfc1d42c…): 36 draft lookups a call, one at a
+	// time, before the activations' drafts were read together.
+	require.EqualValues(t, 1, counting.draftBatches.Load(), "the activations' account workflows are read in one query")
+	require.LessOrEqual(t, counting.drafts.Load(), int64(2),
+		"only shared-step, which no activation names, is read alone (once per lookup method)")
 
 	// Reading once changes nothing about what is rendered.
 	for _, got := range listed {
