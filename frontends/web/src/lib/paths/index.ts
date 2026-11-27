@@ -147,8 +147,8 @@ export function inboxPath(ctx?: PathContext): string {
   return withOrg("/inbox", ctx);
 }
 
-/** A GTM page (components/Gtm): Ideas, Campaigns, Calendar, Positioning & facts. */
-export type GtmPage = "ideas" | "campaigns" | "calendar" | "positioning";
+/** A GTM page (components/Gtm): Strategy, Ideas, Campaigns, Calendar, Channels, Positioning & facts. */
+export type GtmPage = "strategy" | "ideas" | "campaigns" | "calendar" | "channels" | "positioning";
 
 /** The GTM area (`/gtm` opens Ideas); `page` one of its pages. Gated per org (components/Gtm/shared/access.ts). */
 export function gtmPath(page?: GtmPage, ctx?: PathContext): string {

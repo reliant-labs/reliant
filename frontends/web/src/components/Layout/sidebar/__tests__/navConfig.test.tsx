@@ -416,12 +416,12 @@ describe("GTM ›, gated per org", () => {
     expect(topIds(ctxAt(inboxPath(), { features: { gtm: false } }))).not.toContain("gtm");
   });
 
-  it("sits right after Agents when shown, and drills into its four pages", () => {
+  it("sits right after Agents when shown, and drills into its six pages", () => {
     const ctx = ctxAt(inboxPath(), on);
     const ids = topIds(ctx);
     expect(ids.indexOf("gtm")).toBe(ids.indexOf("agents") + 1);
     const gtm = hybridNav.items.find((item) => item.id === "gtm")!;
-    expect(childrenOf(gtm, ctx).map((item) => item.id)).toEqual(["gtm-ideas", "gtm-campaigns", "gtm-calendar", "gtm-positioning"]);
+    expect(childrenOf(gtm, ctx).map((item) => item.id)).toEqual(["gtm-strategy", "gtm-ideas", "gtm-campaigns", "gtm-calendar", "gtm-channels", "gtm-positioning"]);
     expect(hrefOf(gtm, ctx)).toBe(gtmPath("ideas"));
   });
 
