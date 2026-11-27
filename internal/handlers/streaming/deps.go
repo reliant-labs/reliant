@@ -58,12 +58,15 @@ type ChatRows interface {
 	GetChatRow(ctx context.Context, id string) (*db.ChatRow, error)
 }
 
+// TriggerReads reads the launch event of a given kind that started a chat, to
+// walk an agent.start_run chain to its parent. store.TriggerEventExtStore
+// satisfies it.
+type TriggerReads interface {
+	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
+}
+
 // Repository is everything the streaming handlers read.
 type Repository interface {
-	// Who the chat a subscription is for belongs to, and the trigger that
-	// started it.
-	GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error)
-
 	// The chat and user update logs a stream replays and tails.
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
 	// The compaction watermark: a replay from below it would skip rows.

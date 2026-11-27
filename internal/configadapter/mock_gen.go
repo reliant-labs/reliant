@@ -16,14 +16,15 @@ import (
 )
 
 // forge:section MockConfigRecordReader
-// forge:hash=968ad0998dca23d40f52f3e68694580ca2e5c88a4c196496272e14e8f06f9148
+// forge:hash=95940601b790a7023e95d36b8d38444cc132f5485a41d45c3abc1b84c2f7723b
 
 // MockConfigRecordReader is a test mock for the ConfigRecordReader interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockConfigRecordReader.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockConfigRecordReader.<Method>Func not set" error.
 type MockConfigRecordReader struct {
 	contractkit.Recorder
 	GetProjectConfigRecordFunc        func(context.Context, string) (*core.ProjectConfigRecord, error)
@@ -46,6 +47,48 @@ func (m *MockConfigRecordReader) GetProjectMachineConfigRecord(ctx context.Conte
 		return m.GetProjectMachineConfigRecordFunc(ctx, projectID, daemonID)
 	}
 	return nil, false, contractkit.MockNotSet("MockConfigRecordReader", "GetProjectMachineConfigRecord")
+}
+
+// MockConfigRecordReaderGetProjectConfigRecordCall is one recorded call of MockConfigRecordReader.GetProjectConfigRecord, one
+// field per parameter.
+type MockConfigRecordReaderGetProjectConfigRecordCall struct {
+	Ctx       context.Context
+	ProjectID string
+}
+
+// GetProjectConfigRecordCalls returns every recorded GetProjectConfigRecord call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectConfigRecord").
+func (m *MockConfigRecordReader) GetProjectConfigRecordCalls() []MockConfigRecordReaderGetProjectConfigRecordCall {
+	var out []MockConfigRecordReaderGetProjectConfigRecordCall
+	for _, c := range m.Recorder.Calls("GetProjectConfigRecord") {
+		var r MockConfigRecordReaderGetProjectConfigRecordCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockConfigRecordReaderGetProjectMachineConfigRecordCall is one recorded call of MockConfigRecordReader.GetProjectMachineConfigRecord, one
+// field per parameter.
+type MockConfigRecordReaderGetProjectMachineConfigRecordCall struct {
+	Ctx       context.Context
+	ProjectID string
+	DaemonID  string
+}
+
+// GetProjectMachineConfigRecordCalls returns every recorded GetProjectMachineConfigRecord call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetProjectMachineConfigRecord").
+func (m *MockConfigRecordReader) GetProjectMachineConfigRecordCalls() []MockConfigRecordReaderGetProjectMachineConfigRecordCall {
+	var out []MockConfigRecordReaderGetProjectMachineConfigRecordCall
+	for _, c := range m.Recorder.Calls("GetProjectMachineConfigRecord") {
+		var r MockConfigRecordReaderGetProjectMachineConfigRecordCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ProjectID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

@@ -40,6 +40,7 @@ import { approvalCodeFrom, changeFrom } from "@/services/controlPlane/changes/ch
 import { changeErrorKind, describeChangeError } from "@/services/controlPlane/changes/errors";
 
 import { FIELD } from "../controlStyles";
+import { useObsReadOnly } from "../Observability/obsReadOnly";
 import { BetaTag } from "./BetaTag";
 import { ChangeHistory } from "./ChangeHistory";
 import { ChangeResults } from "./ChangeResults";
@@ -63,6 +64,7 @@ const WHO_VALUES: readonly Who[] = ["everyone", "some", "compare"];
 export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; envs: NewChangeEnv[]; backHref: string }) {
   const writes = useChangeWrites();
   const queryClient = useQueryClient();
+  const lock = useObsReadOnly();
   const query = useChange(changeId);
   const search = useSearch({ strict: false }) as { who?: string };
   const initialWho = WHO_VALUES.find((w) => w === search.who);
@@ -154,7 +156,7 @@ export function ChangeDetail({ changeId, envs, backHref }: { changeId: string; e
             All changes
           </Link>
         }
-        actions={[{ label: "Stop", onClick: () => setStopping(true), variant: "danger", icon: <Octagon className="h-4 w-4" aria-hidden="true" /> }]}
+        actions={[{ label: "Stop", onClick: () => setStopping(true), variant: "danger", disabled: lock.readOnly, icon: <Octagon className="h-4 w-4" aria-hidden="true" /> }]}
       />
 
       {!declaration && (

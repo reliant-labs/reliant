@@ -1434,7 +1434,7 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\x1cCHAT_MEMBER_ROLE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15CHAT_MEMBER_ROLE_VIEW\x10\x01\x12\x1a\n" +
 	"\x16CHAT_MEMBER_ROLE_REPLY\x10\x02\x12\x1b\n" +
-	"\x17CHAT_MEMBER_ROLE_MANAGE\x10\x032\xcf\v\n" +
+	"\x17CHAT_MEMBER_ROLE_MANAGE\x10\x032\xd2\v\n" +
 	"\x0eSharingService\x12\xaa\x01\n" +
 	"\x11SetChatVisibility\x12$.reliant.v1.SetChatVisibilityRequest\x1a%.reliant.v1.SetChatVisibilityResponse\"H\xa2\xbb\x18D:B\n" +
 	"\x0eset_visibility\x12$\n" +
@@ -1450,8 +1450,8 @@ const file_reliant_v1_sharing_proto_rawDesc = "" +
 	"\x17SetWorkflowDraftSharing\x12*.reliant.v1.SetWorkflowDraftSharingRequest\x1a+.reliant.v1.SetWorkflowDraftSharingResponse\"k\xa2\xbb\x18g:e\n" +
 	"\x0eset_visibility\x12:\n" +
 	"\bworkflow\x12\x16response.workflow.slug\x1a\x16response.workflow.name*\vworkflow_id*\n" +
-	"visibility\x12\xa3\x01\n" +
-	"\x18ListSharedWorkflowDrafts\x12+.reliant.v1.ListSharedWorkflowDraftsRequest\x1a,.reliant.v1.ListSharedWorkflowDraftsResponse\",\xa2\xbb\x18(:&:$reads only: lists what others shared\x12\x88\x01\n" +
+	"visibility\x12\xa6\x01\n" +
+	"\x18ListSharedWorkflowDrafts\x12+.reliant.v1.ListSharedWorkflowDraftsRequest\x1a,.reliant.v1.ListSharedWorkflowDraftsResponse\"/\xa2\xbb\x18(:&:$reads only: lists what others shared\x90\x02\x01\x12\x88\x01\n" +
 	"\rSetChatMember\x12 .reliant.v1.SetChatMemberRequest\x1a!.reliant.v1.SetChatMemberResponse\"2\xa2\xbb\x18.:,\n" +
 	"\n" +
 	"set_member\x12\x0f\n" +

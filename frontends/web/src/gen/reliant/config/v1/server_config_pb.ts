@@ -29,7 +29,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/server_config.proto.
  */
 export const file_reliant_config_v1_server_config: GenFile = /*@__PURE__*/
-  fileDesc("CiVyZWxpYW50L2NvbmZpZy92MS9zZXJ2ZXJfY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSKBCAoTU2VydmVyUHJvY2Vzc0NvbmZpZxI8Cg1jb250cm9sX3BsYW5lGAEgASgLMiUucmVsaWFudC5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEisKBG5hdHMYAiABKAsyHS5yZWxpYW50LmNvbmZpZy52MS5OYXRzQ29uZmlnEjMKCHRlbXBvcmFsGAMgASgLMiEucmVsaWFudC5jb25maWcudjEuVGVtcG9yYWxDb25maWcSLwoDdGxzGAQgASgLMiIucmVsaWFudC5jb25maWcudjEuU2VydmVyVExTQ29uZmlnElUKCGRhdGFfZGlyGAUgASgJQkOCzhg/CghEQVRBX0RJUhIIZGF0YS1kaXIaBi4vZGF0YSohRGF0YSBkaXJlY3RvcnkgZm9yIGxvZ3MgYW5kIGNlcnRzEmcKEHN0cmVhbWluZ19kcml2ZXIYBiABKAlCTYLOGEkKEFNUUkVBTUlOR19EUklWRVISEHN0cmVhbWluZy1kcml2ZXIaBG5hdHMqF1N0cmVhbWluZyBkcml2ZXIgKG5hdHMpSgRuYXRzEjsKDGludGVncmF0aW9ucxgHIAEoCzIlLnJlbGlhbnQuY29uZmlnLnYxLkludGVncmF0aW9uc0NvbmZpZxI9Cg1vYnNlcnZhYmlsaXR5GAggASgLMiYucmVsaWFudC5jb25maWcudjEuT2JzZXJ2YWJpbGl0eUNvbmZpZxI1CglhbmFseXRpY3MYCiABKAsyIi5yZWxpYW50LmNvbmZpZy52MS5BbmFseXRpY3NDb25maWcSKQoDbGxtGAsgASgLMhwucmVsaWFudC5jb25maWcudjEuTExNQ29uZmlnEjEKB3ByZXZpZXcYDCABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5QcmV2aWV3Q29uZmlnEjEKB25ldHdvcmsYDSABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5OZXR3b3JrQ29uZmlnEk0KFm9yZ19wb2xpY3lfZW5mb3JjZW1lbnQYDiABKAsyLS5yZWxpYW50LmNvbmZpZy52MS5PcmdQb2xpY3lFbmZvcmNlbWVudENvbmZpZxI/Cg9jbGllbnRfdmVyc2lvbnMYDyABKAsyJi5yZWxpYW50LmNvbmZpZy52MS5DbGllbnRWZXJzaW9uUG9saWN5EjMKCHBpcGVsaW5lGBAgASgLMiEucmVsaWFudC5jb25maWcudjEuUGlwZWxpbmVDb25maWcSKQoDZ3RtGBEgASgLMhwucmVsaWFudC5jb25maWcudjEuR3RtQ29uZmlnOhfKwRgTCgdyZWxpYW50GggKBnNlcnZlckoECAkQClIGc2VudHJ5Ir0BCg5QaXBlbGluZUNvbmZpZxKqAQoHZW5hYmxlZBgBIAEoCEKYAYLOGJMBChhSRUxJQU5UX1BJUEVMSU5FX0VOQUJMRUQqd1J1biBSZWxpYW50J3MgUFIgYW5kIHJlbGVhc2UgcGlwZWxpbmUgb24gdGhpcyBzZXJ2ZXI6IGl0cyBzZXJ2ZXIgYWN0aW9ucyAodXNlczogcmVsaWFudC8uLi4pIGFuZCBSUENzOyBvZmYgcmVmdXNlcyB0aGVtIvcHChpPcmdQb2xpY3lFbmZvcmNlbWVudENvbmZpZxK8AQoMaW50ZWdyYXRpb25zGAEgASgJQqUBgs4YoAEKLFJFTElBTlRfT1JHU19QT0xJQ1lfRU5GT1JDRU1FTlRfSU5URUdSQVRJT05TGgVhdWRpdCpUSG93IHRoZSBvcmcgaW50ZWdyYXRpb25zIHBvbGljeSBhcHBsaWVzOiBvZmYsIGF1ZGl0IChjb3VudCwgbmV2ZXIgcmVmdXNlKSBvciBlbmZvcmNlSgNvZmZKBWF1ZGl0SgdlbmZvcmNlErIBCglhcHByb3ZhbHMYAiABKAlCngGCzhiZAQopUkVMSUFOVF9PUkdTX1BPTElDWV9FTkZPUkNFTUVOVF9BUFBST1ZBTFMaBWF1ZGl0KlBIb3cgdGhlIG9yZyBhcHByb3ZhbCBmbG9vcnMgYXBwbHk6IG9mZiwgYXVkaXQgKGNvdW50LCBjaGFuZ2Ugbm90aGluZykgb3IgZW5mb3JjZUoDb2ZmSgVhdWRpdEoHZW5mb3JjZRLOAQoIbWFjaGluZXMYAyABKAlCuwGCzhi2AQooUkVMSUFOVF9PUkdTX1BPTElDWV9FTkZPUkNFTUVOVF9NQUNISU5FUxoFYXVkaXQqbkhvdyB0aGUgb3JnJ3MgZm9yY2VkIGNyZWRlbnRpYWxzOm5vbmUgb24gYWdlbnQgY29tbWFuZHMgYXBwbGllczogb2ZmLCBhdWRpdCAoY291bnQsIGNoYW5nZSBub3RoaW5nKSBvciBlbmZvcmNlSgNvZmZKBWF1ZGl0SgdlbmZvcmNlEqgBCgNtY3AYBCABKAlCmgGCzhiVAQojUkVMSUFOVF9PUkdTX1BPTElDWV9FTkZPUkNFTUVOVF9NQ1AaBWF1ZGl0KlJIb3cgdGhlIG9yZyBNQ1Agc2VydmVyIHBvbGljeSBhcHBsaWVzOiBvZmYsIGF1ZGl0IChjb3VudCwgbmV2ZXIgcmVmdXNlKSBvciBlbmZvcmNlSgNvZmZKBWF1ZGl0SgdlbmZvcmNlEugBCglwcm92aWRlcnMYBSABKAlC1AGCzhjPAQopUkVMSUFOVF9PUkdTX1BPTElDWV9FTkZPUkNFTUVOVF9QUk9WSURFUlMaBWF1ZGl0KoUBSG93IHRoZSBvcmcgcHJvdmlkZXIgYW5kIG1vZGVsIHBvbGljeSBhcHBsaWVzIHdoZXJlIHJ1bnMgcmVzb2x2ZSB0aGVpciBtb2RlbCBhbmQgYWNjb3VudDogb2ZmLCBhdWRpdCAoY291bnQsIG5ldmVyIHJlZnVzZSkgb3IgZW5mb3JjZUoDb2ZmSgVhdWRpdEoHZW5mb3JjZSLvAQoNTmV0d29ya0NvbmZpZxLdAQoUYWxsb3dfcHJpdmF0ZV9lZ3Jlc3MYASABKAhCvgGCzhi5AQocUkVMSUFOVF9BTExPV19QUklWQVRFX0VHUkVTUyqYAUxldCB1c2VyLXN0ZWVyZWQgc2VydmVyLXNpZGUgcmVxdWVzdHMgKGZldGNoLCB3ZWJzZWFyY2gsIG1vZGVsIGVuZHBvaW50cykgcmVhY2ggcHJpdmF0ZSwgbG9vcGJhY2sgYW5kIGxpbmstbG9jYWwgYWRkcmVzc2VzOyBzZWxmLWhvc3RlZCBkZXBsb3ltZW50cyBvbmx5ItcBCgpOYXRzQ29uZmlnEjAKA3VybBgBIAEoCUIjgs4YHwoITkFUU19VUkwgASoPTkFUUyBzZXJ2ZXIgVVJMMAESRwoEdXNlchgCIAEoCUI5gs4YNQoJTkFUU19VU0VSKihOQVRTIHVzZXIgbmFtZSAodXNlZCB3aXRoIE5BVFNfUEFTU1dPUkQpEk4KCHBhc3N3b3JkGAMgASgJQjyCzhg4Cg1OQVRTX1BBU1NXT1JEKiNOQVRTIHBhc3N3b3JkICh1c2VkIHdpdGggTkFUU19VU0VSKTABUAEimgIKDlRlbXBvcmFsQ29uZmlnElEKBGhvc3QYASABKAlCQ4LOGD8KDVRFTVBPUkFMX0hPU1QSDXRlbXBvcmFsLWhvc3QaCWxvY2FsaG9zdCoUVGVtcG9yYWwgc2VydmVyIGhvc3QSVwoEcG9ydBgCIAEoBUJJukgIGgYY//8DKAGCzhg6Cg1URU1QT1JBTF9QT1JUEg10ZW1wb3JhbC1wb3J0GgQ3MjMzKhRUZW1wb3JhbCBzZXJ2ZXIgcG9ydBJcCgluYW1lc3BhY2UYAyABKAlCSYLOGEUKElRFTVBPUkFMX05BTUVTUEFDRRISdGVtcG9yYWwtbmFtZXNwYWNlGgdyZWxpYW50KhJUZW1wb3JhbCBuYW1lc3BhY2Ui8wEKD1NlcnZlclRMU0NvbmZpZxJLCgljZXJ0X2ZpbGUYASABKAlCOILOGDQKDVRMU19DRVJUX0ZJTEUSCHRscy1jZXJ0KhlUTFMgY2VydGlmaWNhdGUgZmlsZSBwYXRoEkAKCGtleV9maWxlGAIgASgJQi6CzhgqCgxUTFNfS0VZX0ZJTEUSB3Rscy1rZXkqEVRMUyBrZXkgZmlsZSBwYXRoElEKB2Rpc2FibGUYAyABKAhCQILOGDwKC0RJU0FCTEVfVExTEgtkaXNhYmxlLXRscyogRGlzYWJsZSBUTFMgKHVzZSBwbGFpbnRleHQgSFRUUClCQFo+Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_reliant_config_v1_analytics_config, file_reliant_config_v1_client_version_config, file_reliant_config_v1_control_plane_config, file_reliant_config_v1_gtm_config, file_reliant_config_v1_integrations_config, file_reliant_config_v1_llm_config, file_reliant_config_v1_observability_config, file_reliant_config_v1_preview_config]);
+  fileDesc("CiVyZWxpYW50L2NvbmZpZy92MS9zZXJ2ZXJfY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSK6CAoTU2VydmVyUHJvY2Vzc0NvbmZpZxI8Cg1jb250cm9sX3BsYW5lGAEgASgLMiUucmVsaWFudC5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEisKBG5hdHMYAiABKAsyHS5yZWxpYW50LmNvbmZpZy52MS5OYXRzQ29uZmlnEjMKCHRlbXBvcmFsGAMgASgLMiEucmVsaWFudC5jb25maWcudjEuVGVtcG9yYWxDb25maWcSLwoDdGxzGAQgASgLMiIucmVsaWFudC5jb25maWcudjEuU2VydmVyVExTQ29uZmlnElUKCGRhdGFfZGlyGAUgASgJQkOCzhg/CghEQVRBX0RJUhIIZGF0YS1kaXIaBi4vZGF0YSohRGF0YSBkaXJlY3RvcnkgZm9yIGxvZ3MgYW5kIGNlcnRzEmcKEHN0cmVhbWluZ19kcml2ZXIYBiABKAlCTYLOGEkKEFNUUkVBTUlOR19EUklWRVISEHN0cmVhbWluZy1kcml2ZXIaBG5hdHMqF1N0cmVhbWluZyBkcml2ZXIgKG5hdHMpSgRuYXRzEjsKDGludGVncmF0aW9ucxgHIAEoCzIlLnJlbGlhbnQuY29uZmlnLnYxLkludGVncmF0aW9uc0NvbmZpZxI9Cg1vYnNlcnZhYmlsaXR5GAggASgLMiYucmVsaWFudC5jb25maWcudjEuT2JzZXJ2YWJpbGl0eUNvbmZpZxI1CglhbmFseXRpY3MYCiABKAsyIi5yZWxpYW50LmNvbmZpZy52MS5BbmFseXRpY3NDb25maWcSKQoDbGxtGAsgASgLMhwucmVsaWFudC5jb25maWcudjEuTExNQ29uZmlnEjEKB3ByZXZpZXcYDCABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5QcmV2aWV3Q29uZmlnEjEKB25ldHdvcmsYDSABKAsyIC5yZWxpYW50LmNvbmZpZy52MS5OZXR3b3JrQ29uZmlnEk0KFm9yZ19wb2xpY3lfZW5mb3JjZW1lbnQYDiABKAsyLS5yZWxpYW50LmNvbmZpZy52MS5PcmdQb2xpY3lFbmZvcmNlbWVudENvbmZpZxI/Cg9jbGllbnRfdmVyc2lvbnMYDyABKAsyJi5yZWxpYW50LmNvbmZpZy52MS5DbGllbnRWZXJzaW9uUG9saWN5EjMKCHBpcGVsaW5lGBAgASgLMiEucmVsaWFudC5jb25maWcudjEuUGlwZWxpbmVDb25maWcSNwoKcmVjb25jaWxlchgRIAEoCzIjLnJlbGlhbnQuY29uZmlnLnYxLlJlY29uY2lsZXJDb25maWcSKQoDZ3RtGBIgASgLMhwucmVsaWFudC5jb25maWcudjEuR3RtQ29uZmlnOhfKwRgTCgdyZWxpYW50GggKBnNlcnZlckoECAkQClIGc2VudHJ5Iu0BChBSZWNvbmNpbGVyQ29uZmlnEtgBCg5zdGFsbF93YXRjaGRvZxgBIAEoCUK/AYLOGLoBCiFSRUxJQU5UX1JFQ09OQ0lMRVJfU1RBTExfV0FUQ0hET0caA29mZip6V29ya2Zsb3cgcmVjb25jaWxlciBzdGFsbCB3YXRjaGRvZzogb2ZmIChubyB3b3JrKSwgcmVwb3J0IChsb2csIGNvdW50IGFuZCByZWNvcmQgc3RhbGxlZCBydW5zKSBvciBlbmZvcmNlIChhbHNvIHN0b3AgdGhlbSlKA29mZkoGcmVwb3J0SgdlbmZvcmNlIo4DCg5QaXBlbGluZUNvbmZpZxKqAQoHZW5hYmxlZBgBIAEoCEKYAYLOGJMBChhSRUxJQU5UX1BJUEVMSU5FX0VOQUJMRUQqd1J1biBSZWxpYW50J3MgUFIgYW5kIHJlbGVhc2UgcGlwZWxpbmUgb24gdGhpcyBzZXJ2ZXI6IGl0cyBzZXJ2ZXIgYWN0aW9ucyAodXNlczogcmVsaWFudC8uLi4pIGFuZCBSUENzOyBvZmYgcmVmdXNlcyB0aGVtEs4BCh5naXRodWJfcXVldWVfYXBwX2NhbGxlcl9zZWNyZXQYAiABKAlCpQGCzhigAQoeR0lUSFVCX1FVRVVFX0FQUF9DQUxMRVJfU0VDUkVUKnpXb3JrZXIgb25seTogc2lnbnMgdGhlIG1lcmdlIHF1ZXVlJ3MgUXVldWUgQXBwIHRva2VuIHJlcXVlc3RzIHRvIGNvbnRyb2wtcGxhbmU7IHVuc2V0IGxhbmRzIGFzIHRoZSBSZWxpYW50IEFwcCwgdW5lbmZvcmNlZDABUAEi9wcKGk9yZ1BvbGljeUVuZm9yY2VtZW50Q29uZmlnErwBCgxpbnRlZ3JhdGlvbnMYASABKAlCpQGCzhigAQosUkVMSUFOVF9PUkdTX1BPTElDWV9FTkZPUkNFTUVOVF9JTlRFR1JBVElPTlMaBWF1ZGl0KlRIb3cgdGhlIG9yZyBpbnRlZ3JhdGlvbnMgcG9saWN5IGFwcGxpZXM6IG9mZiwgYXVkaXQgKGNvdW50LCBuZXZlciByZWZ1c2UpIG9yIGVuZm9yY2VKA29mZkoFYXVkaXRKB2VuZm9yY2USsgEKCWFwcHJvdmFscxgCIAEoCUKeAYLOGJkBCilSRUxJQU5UX09SR1NfUE9MSUNZX0VORk9SQ0VNRU5UX0FQUFJPVkFMUxoFYXVkaXQqUEhvdyB0aGUgb3JnIGFwcHJvdmFsIGZsb29ycyBhcHBseTogb2ZmLCBhdWRpdCAoY291bnQsIGNoYW5nZSBub3RoaW5nKSBvciBlbmZvcmNlSgNvZmZKBWF1ZGl0SgdlbmZvcmNlEs4BCghtYWNoaW5lcxgDIAEoCUK7AYLOGLYBCihSRUxJQU5UX09SR1NfUE9MSUNZX0VORk9SQ0VNRU5UX01BQ0hJTkVTGgVhdWRpdCpuSG93IHRoZSBvcmcncyBmb3JjZWQgY3JlZGVudGlhbHM6bm9uZSBvbiBhZ2VudCBjb21tYW5kcyBhcHBsaWVzOiBvZmYsIGF1ZGl0IChjb3VudCwgY2hhbmdlIG5vdGhpbmcpIG9yIGVuZm9yY2VKA29mZkoFYXVkaXRKB2VuZm9yY2USqAEKA21jcBgEIAEoCUKaAYLOGJUBCiNSRUxJQU5UX09SR1NfUE9MSUNZX0VORk9SQ0VNRU5UX01DUBoFYXVkaXQqUkhvdyB0aGUgb3JnIE1DUCBzZXJ2ZXIgcG9saWN5IGFwcGxpZXM6IG9mZiwgYXVkaXQgKGNvdW50LCBuZXZlciByZWZ1c2UpIG9yIGVuZm9yY2VKA29mZkoFYXVkaXRKB2VuZm9yY2US6AEKCXByb3ZpZGVycxgFIAEoCULUAYLOGM8BCilSRUxJQU5UX09SR1NfUE9MSUNZX0VORk9SQ0VNRU5UX1BST1ZJREVSUxoFYXVkaXQqhQFIb3cgdGhlIG9yZyBwcm92aWRlciBhbmQgbW9kZWwgcG9saWN5IGFwcGxpZXMgd2hlcmUgcnVucyByZXNvbHZlIHRoZWlyIG1vZGVsIGFuZCBhY2NvdW50OiBvZmYsIGF1ZGl0IChjb3VudCwgbmV2ZXIgcmVmdXNlKSBvciBlbmZvcmNlSgNvZmZKBWF1ZGl0SgdlbmZvcmNlIu8BCg1OZXR3b3JrQ29uZmlnEt0BChRhbGxvd19wcml2YXRlX2VncmVzcxgBIAEoCEK+AYLOGLkBChxSRUxJQU5UX0FMTE9XX1BSSVZBVEVfRUdSRVNTKpgBTGV0IHVzZXItc3RlZXJlZCBzZXJ2ZXItc2lkZSByZXF1ZXN0cyAoZmV0Y2gsIHdlYnNlYXJjaCwgbW9kZWwgZW5kcG9pbnRzKSByZWFjaCBwcml2YXRlLCBsb29wYmFjayBhbmQgbGluay1sb2NhbCBhZGRyZXNzZXM7IHNlbGYtaG9zdGVkIGRlcGxveW1lbnRzIG9ubHki1wEKCk5hdHNDb25maWcSMAoDdXJsGAEgASgJQiOCzhgfCghOQVRTX1VSTCABKg9OQVRTIHNlcnZlciBVUkwwARJHCgR1c2VyGAIgASgJQjmCzhg1CglOQVRTX1VTRVIqKE5BVFMgdXNlciBuYW1lICh1c2VkIHdpdGggTkFUU19QQVNTV09SRCkSTgoIcGFzc3dvcmQYAyABKAlCPILOGDgKDU5BVFNfUEFTU1dPUkQqI05BVFMgcGFzc3dvcmQgKHVzZWQgd2l0aCBOQVRTX1VTRVIpMAFQASKaAgoOVGVtcG9yYWxDb25maWcSUQoEaG9zdBgBIAEoCUJDgs4YPwoNVEVNUE9SQUxfSE9TVBINdGVtcG9yYWwtaG9zdBoJbG9jYWxob3N0KhRUZW1wb3JhbCBzZXJ2ZXIgaG9zdBJXCgRwb3J0GAIgASgFQkm6SAgaBhj//wMoAYLOGDoKDVRFTVBPUkFMX1BPUlQSDXRlbXBvcmFsLXBvcnQaBDcyMzMqFFRlbXBvcmFsIHNlcnZlciBwb3J0ElwKCW5hbWVzcGFjZRgDIAEoCUJJgs4YRQoSVEVNUE9SQUxfTkFNRVNQQUNFEhJ0ZW1wb3JhbC1uYW1lc3BhY2UaB3JlbGlhbnQqElRlbXBvcmFsIG5hbWVzcGFjZSLzAQoPU2VydmVyVExTQ29uZmlnEksKCWNlcnRfZmlsZRgBIAEoCUI4gs4YNAoNVExTX0NFUlRfRklMRRIIdGxzLWNlcnQqGVRMUyBjZXJ0aWZpY2F0ZSBmaWxlIHBhdGgSQAoIa2V5X2ZpbGUYAiABKAlCLoLOGCoKDFRMU19LRVlfRklMRRIHdGxzLWtleSoRVExTIGtleSBmaWxlIHBhdGgSUQoHZGlzYWJsZRgDIAEoCEJAgs4YPAoLRElTQUJMRV9UTFMSC2Rpc2FibGUtdGxzKiBEaXNhYmxlIFRMUyAodXNlIHBsYWludGV4dCBIVFRQKUJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_buf_validate_validate, file_forge_v1_forge, file_reliant_config_v1_analytics_config, file_reliant_config_v1_client_version_config, file_reliant_config_v1_control_plane_config, file_reliant_config_v1_gtm_config, file_reliant_config_v1_integrations_config, file_reliant_config_v1_llm_config, file_reliant_config_v1_observability_config, file_reliant_config_v1_preview_config]);
 
 /**
  * ServerProcessConfig is what every server role (`reliant server
@@ -141,12 +141,21 @@ export type ServerProcessConfig = Message<"reliant.config.v1.ServerProcessConfig
   pipeline?: PipelineConfig | undefined;
 
   /**
+   * The workflow reconciler's switches (ReconcilerConfig). The reconciler
+   * runs in the API server today; every role loads it so the switch follows
+   * the reconciler wherever it runs.
+   *
+   * @generated from field: reliant.config.v1.ReconcilerConfig reconciler = 17;
+   */
+  reconciler?: ReconcilerConfig | undefined;
+
+  /**
    * Who gets GTM and how its analytics read reaches the control plane
    * (gtm_config.proto). Here, not on the root config, so only the server
    * roles whose graph reads it (the API server and the worker) are handed
    * its settings and its secret; the gateway never is.
    *
-   * @generated from field: reliant.config.v1.GtmConfig gtm = 17;
+   * @generated from field: reliant.config.v1.GtmConfig gtm = 18;
    */
   gtm?: GtmConfig | undefined;
 };
@@ -157,6 +166,39 @@ export type ServerProcessConfig = Message<"reliant.config.v1.ServerProcessConfig
  */
 export const ServerProcessConfigSchema: GenMessage<ServerProcessConfig> = /*@__PURE__*/
   messageDesc(file_reliant_config_v1_server_config, 0);
+
+/**
+ * ReconcilerConfig holds the workflow reconciler's opt-in checks.
+ *
+ * @generated from message reliant.config.v1.ReconcilerConfig
+ */
+export type ReconcilerConfig = Message<"reliant.config.v1.ReconcilerConfig"> & {
+  /**
+   * The stall watchdog: a running workflow run (not a conversation) that has
+   * made no progress for longer than max(its idle ceiling, the longest
+   * in-flight node's timeout + grace), with nothing parking it legitimately
+   * (an approval, a question, its machine, a usage limit):
+   *
+   *   off      the default: the watchdog does no work at all, not a query;
+   *   report   it logs, counts (reliant_reconciler_anomalies_total) and
+   *            records each stalled run, and changes nothing;
+   *   enforce  it also stops the stalled execution through the run's own
+   *            cancel path (its finally: runs), never a newer execution.
+   *
+   * Only these three values: a switch that kills runs must not fail open on
+   * a typo.
+   *
+   * @generated from field: string stall_watchdog = 1;
+   */
+  stallWatchdog: string;
+};
+
+/**
+ * Describes the message reliant.config.v1.ReconcilerConfig.
+ * Use `create(ReconcilerConfigSchema)` to create a new message.
+ */
+export const ReconcilerConfigSchema: GenMessage<ReconcilerConfig> = /*@__PURE__*/
+  messageDesc(file_reliant_config_v1_server_config, 1);
 
 /**
  * PipelineConfig is the platform switch of Reliant's PR and release
@@ -177,6 +219,19 @@ export type PipelineConfig = Message<"reliant.config.v1.PipelineConfig"> & {
    * @generated from field: bool enabled = 1;
    */
   enabled: boolean;
+
+  /**
+   * The secret the worker's merge queue signs its caller assertion with
+   * when it asks control-plane for a Reliant Queue App token
+   * (GitCredentialInternalService.MintInstallationToken, app =
+   * GITHUB_APP_QUEUE). Only the worker reads it, and the deploy gives it only
+   * to the worker. Unset (or shorter than 32 bytes), the queue never asks
+   * for a Queue App token: it lands as the Reliant App instead and marks
+   * each batch unenforced.
+   *
+   * @generated from field: string github_queue_app_caller_secret = 2;
+   */
+  githubQueueAppCallerSecret: string;
 };
 
 /**
@@ -184,7 +239,7 @@ export type PipelineConfig = Message<"reliant.config.v1.PipelineConfig"> & {
  * Use `create(PipelineConfigSchema)` to create a new message.
  */
 export const PipelineConfigSchema: GenMessage<PipelineConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 1);
+  messageDesc(file_reliant_config_v1_server_config, 2);
 
 /**
  * OrgPolicyEnforcementConfig is the platform's switch per org-policy
@@ -251,7 +306,7 @@ export type OrgPolicyEnforcementConfig = Message<"reliant.config.v1.OrgPolicyEnf
  * Use `create(OrgPolicyEnforcementConfigSchema)` to create a new message.
  */
 export const OrgPolicyEnforcementConfigSchema: GenMessage<OrgPolicyEnforcementConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 2);
+  messageDesc(file_reliant_config_v1_server_config, 3);
 
 /**
  * NetworkConfig is the network reach of the dials a user steers from a server
@@ -280,7 +335,7 @@ export type NetworkConfig = Message<"reliant.config.v1.NetworkConfig"> & {
  * Use `create(NetworkConfigSchema)` to create a new message.
  */
 export const NetworkConfigSchema: GenMessage<NetworkConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 3);
+  messageDesc(file_reliant_config_v1_server_config, 4);
 
 /**
  * NatsConfig is the NATS server a server role connects to: daemon routing,
@@ -315,7 +370,7 @@ export type NatsConfig = Message<"reliant.config.v1.NatsConfig"> & {
  * Use `create(NatsConfigSchema)` to create a new message.
  */
 export const NatsConfigSchema: GenMessage<NatsConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 4);
+  messageDesc(file_reliant_config_v1_server_config, 5);
 
 /**
  * TemporalConfig is the Temporal frontend the API server and worker use.
@@ -344,7 +399,7 @@ export type TemporalConfig = Message<"reliant.config.v1.TemporalConfig"> & {
  * Use `create(TemporalConfigSchema)` to create a new message.
  */
 export const TemporalConfigSchema: GenMessage<TemporalConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 5);
+  messageDesc(file_reliant_config_v1_server_config, 6);
 
 /**
  * ServerTLSConfig is how a server role that terminates TLS itself (the API
@@ -378,5 +433,5 @@ export type ServerTLSConfig = Message<"reliant.config.v1.ServerTLSConfig"> & {
  * Use `create(ServerTLSConfigSchema)` to create a new message.
  */
 export const ServerTLSConfigSchema: GenMessage<ServerTLSConfig> = /*@__PURE__*/
-  messageDesc(file_reliant_config_v1_server_config, 6);
+  messageDesc(file_reliant_config_v1_server_config, 7);
 
