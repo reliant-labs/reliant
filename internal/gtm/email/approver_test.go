@@ -211,7 +211,7 @@ func TestPrepare_AttendedAlwaysNeedsACard(t *testing.T) {
 	f := newFixture(t, approvedEmail(), &recordingEmail{})
 	card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
 	require.NoError(t, err)
-	assert.Equal(t, gtm.ApprovalHash(approvedEmail()), card.Hash)
+	assert.Equal(t, email.CardHash(approvedEmail(), founder), card.Hash)
 	assert.Contains(t, card.Title, "To: ann@example.com, bo@example.com")
 	assert.Contains(t, card.Title, "Subject: Launch week")
 	assert.Contains(t, card.Title, "│ We **shipped** it.")
@@ -277,7 +277,7 @@ func TestExecute_SendsUnderTheApprovedCard(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, gtm.ItemSent, sent.Status)
 	assert.Equal(t, "gmail-msg-1", sent.GmailMessageID)
-	assert.Equal(t, card.Hash, sent.ApprovalHash)
+	assert.Equal(t, gtm.ApprovalHash(approvedEmail()), sent.ApprovalHash, "the record keeps the email's hash")
 	assert.Equal(t, "user-1", sent.SentBy)
 
 	require.Equal(t, 1, sender.count())
@@ -413,7 +413,7 @@ func TestExecute_SendInDoubtHoldsTheItem(t *testing.T) {
 
 	_, err = f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
 	require.ErrorIs(t, err, gtm.ErrSendInDoubt)
-	assert.Equal(t, card.Hash, f.items.snapshot().ApprovalHash, "held")
+	assert.Equal(t, gtm.ApprovalHash(approvedEmail()), f.items.snapshot().ApprovalHash, "held")
 
 	_, err = f.approver.Prepare(context.Background(), agent, sendReq, false)
 	require.ErrorIs(t, err, gtm.ErrSendInDoubt)
@@ -454,7 +454,7 @@ func TestColdOutreachIsSendable(t *testing.T) {
 
 	card, err := f.approver.Prepare(context.Background(), agent, sendReq, false)
 	require.NoError(t, err)
-	assert.Equal(t, gtm.ApprovalHash(it), card.Hash)
+	assert.Equal(t, email.CardHash(it, founder), card.Hash)
 	sent, err := f.approver.Execute(approvedCtx(card.Hash), agent, sendReq, sendRun)
 	require.NoError(t, err)
 	assert.Equal(t, gtm.ItemSent, sent.Status)
