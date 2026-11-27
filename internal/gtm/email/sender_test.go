@@ -225,14 +225,14 @@ func TestExecute_RefusesAnIncompleteCardHash(t *testing.T) {
 		"other sender":     email.CardHash(approvedEmail(), email.Account{ConnectionID: "conn-channel", Address: "team@example.com"}),
 		"garbage":          "x.y",
 		// Strict equality: anything but the exact card hash is refused.
-		"extra dot":            card + ".",
-		"extra dot inside":     item + ".." + sender,
-		"trailing character":   card + "0",
-		"trailing space":       card + " ",
-		"truncated":            card[:len(card)-1],
-		"truncated item part":  item[:len(item)-1] + "." + sender,
-		"upper-cased":          strings.ToUpper(card),
-		"leading space":        " " + card,
+		"extra dot":           card + ".",
+		"extra dot inside":    item + ".." + sender,
+		"trailing character":  card + "0",
+		"trailing space":      card + " ",
+		"truncated":           card[:len(card)-1],
+		"truncated item part": item[:len(item)-1] + "." + sender,
+		"upper-cased":         strings.ToUpper(card),
+		"leading space":       " " + card,
 	} {
 		t.Run(name, func(t *testing.T) {
 			s := &recordingEmail{}

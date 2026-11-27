@@ -126,12 +126,12 @@ func ownRuns() *fakeRuns { return &fakeRuns{owner: "user-1", org: tenantZero} }
 
 // newGmail is the real sender over the real runner and catalog, with the
 // Gmail executor faked; run-1 is the agent actor's.
-func newGmail(t *testing.T, src httpaction.CredentialSource, exec *fakeExecutor) *email.Gmail {
+func newGmail(t *testing.T, src httpaction.CredentialSource, exec *fakeExecutor) email.Service {
 	t.Helper()
 	return newGmailRuns(t, src, exec, ownRuns())
 }
 
-func newGmailRuns(t *testing.T, src httpaction.CredentialSource, exec *fakeExecutor, runs email.RunRecords) *email.Gmail {
+func newGmailRuns(t *testing.T, src httpaction.CredentialSource, exec *fakeExecutor, runs email.RunRecords) email.Service {
 	t.Helper()
 	reg := httpaction.NewExecutorRegistry()
 	reg.MustRegister(gmail.SendExecutor, exec.send)
