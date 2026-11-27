@@ -111,7 +111,7 @@ export function computeIneligibleCopy(
 // yet (still provisioning).
 const INELIGIBLE_REASON_COPY: Partial<Record<ComputeIneligibleReason, string>> = {
   [ComputeIneligibleReason.NO_SUBSCRIPTION]:
-    'Redeem a coupon code or choose a plan to start a cloud machine.',
+    'Redeem a coupon code or choose a plan to start a sandbox.',
   [ComputeIneligibleReason.NO_ORGANIZATION]: 'Finishing account setup…',
 };
 
