@@ -69049,6 +69049,15 @@
     },
     {
       "consumer": "WorkerTrigger",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [],
+      "providers": [],
+      "resolution": "unresolved"
+    },
+    {
+      "consumer": "WorkerTrigger",
       "field": "Owners",
       "interface": "github.com/reliant-labs/reliant/internal/triggerowner.Service",
       "methods": [],
@@ -69996,6 +70005,14 @@
       "source": {
         "path": "internal/app/providers_worker.go",
         "symbol": "NewWorkerToolsFactory"
+      }
+    },
+    {
+      "code": "binding_unresolved",
+      "component": "WorkerTrigger.Gate",
+      "source": {
+        "path": "internal/app/providers_worker.go",
+        "symbol": "NewWorkerTrigger"
       }
     },
     {
