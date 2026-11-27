@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/featuregate"
 	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
+	"github.com/reliant-labs/reliant/internal/gtm/library"
 	gtm "github.com/reliant-labs/reliant/internal/handlers/gtm"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
@@ -124,15 +125,11 @@ func everyRPC() map[string]rpcCall {
 			return err
 		},
 		"GetStrategyLibraryEntry": func(ctx context.Context, s *gtm.Service, org, _ string) error {
-			_, err := s.GetStrategyLibraryEntry(ctx, connect.NewRequest(&pb.GetStrategyLibraryEntryRequest{OrgId: org, Key: "seo"}))
-			return err
-		},
-		"ImportStrategyLibrary": func(ctx context.Context, s *gtm.Service, org, _ string) error {
-			_, err := s.ImportStrategyLibrary(ctx, connect.NewRequest(libraryImport(org)))
+			_, err := s.GetStrategyLibraryEntry(ctx, connect.NewRequest(&pb.GetStrategyLibraryEntryRequest{OrgId: org, Key: bankKey()}))
 			return err
 		},
 		"UseLibraryStrategy": func(ctx context.Context, s *gtm.Service, org, _ string) error {
-			_, err := s.UseLibraryStrategy(ctx, connect.NewRequest(&pb.UseLibraryStrategyRequest{OrgId: org, LibraryKey: "seo"}))
+			_, err := s.UseLibraryStrategy(ctx, connect.NewRequest(&pb.UseLibraryStrategyRequest{OrgId: org, LibraryKey: bankKey()}))
 			return err
 		},
 		"ListIdeas": func(ctx context.Context, s *gtm.Service, org, _ string) error {
@@ -219,22 +216,6 @@ func everyRPC() map[string]rpcCall {
 			_, err := s.DeleteAsset(ctx, connect.NewRequest(&pb.DeleteAssetRequest{OrgId: org, AssetId: id}))
 			return err
 		},
-		"ListLibraryImports": func(ctx context.Context, s *gtm.Service, org, _ string) error {
-			_, err := s.ListLibraryImports(ctx, connect.NewRequest(&pb.ListLibraryImportsRequest{OrgId: org}))
-			return err
-		},
-		"ListLibraryPruneRequests": func(ctx context.Context, s *gtm.Service, org, _ string) error {
-			_, err := s.ListLibraryPruneRequests(ctx, connect.NewRequest(&pb.ListLibraryPruneRequestsRequest{OrgId: org}))
-			return err
-		},
-		"ConfirmLibraryPrune": func(ctx context.Context, s *gtm.Service, org, id string) error {
-			_, err := s.ConfirmLibraryPrune(ctx, connect.NewRequest(&pb.ConfirmLibraryPruneRequest{OrgId: org, RequestId: id}))
-			return err
-		},
-		"CancelLibraryPrune": func(ctx context.Context, s *gtm.Service, org, id string) error {
-			_, err := s.CancelLibraryPrune(ctx, connect.NewRequest(&pb.CancelLibraryPruneRequest{OrgId: org, RequestId: id}))
-			return err
-		},
 	}
 }
 
@@ -288,15 +269,8 @@ func withBadTimestamp() map[string]rpcCall {
 	}
 }
 
-func libraryImport(org string) *pb.ImportStrategyLibraryRequest {
-	return &pb.ImportStrategyLibraryRequest{
-		OrgId: org, SourceRevision: "abc123",
-		Entries: []*pb.GtmStrategyLibraryEntry{{
-			Key: "seo", Name: "SEO", Category: pb.GtmStrategyCategory_GTM_STRATEGY_CATEGORY_ORGANIC_CONTENT_SEO,
-			Depth: pb.GtmLibraryDepth_GTM_LIBRARY_DEPTH_PLAY,
-		}},
-	}
-}
+// bankKey is a key of the embedded idea bank.
+func bankKey() string { return library.All()[0].Key }
 
 // TestGtmViewerMatrixCoversEveryRPC fails when an rpc is added to GtmService
 // without a row in everyRPC, so the matrix below covers every rpc.
@@ -492,70 +466,88 @@ func TestGtmViewerMatrix(t *testing.T) {
 		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a person gets past the person check; the item is not held")
 	})
 
-	t.Run("an access token imports the strategy library as a Person ViaToken, and only stages a prune", func(t *testing.T) {
-		token := tokenCtx("alice", orgA)
-		// alice, signed in, has an entry the token's library lacks.
-		old := libraryImport(orgA)
-		old.Entries[0].Key, old.Entries[0].Name = "old", "Old"
-		_, err := svc.ImportStrategyLibrary(alice, connect.NewRequest(old))
-		require.NoError(t, err)
-
-		resp, err := svc.ImportStrategyLibrary(token, connect.NewRequest(libraryImport(orgA)))
-		require.NoError(t, err)
-		assert.Equal(t, int32(1), resp.Msg.GetCreated())
-		entry, err := svc.GetStrategyLibraryEntry(alice, connect.NewRequest(&pb.GetStrategyLibraryEntryRequest{OrgId: orgA, Key: "seo"}))
-		require.NoError(t, err)
-		assert.Equal(t, "alice", entry.Msg.GetEntry().GetImportedBy())
-
-		prune := libraryImport(orgA)
-		prune.Prune, prune.AllKeys = true, []string{"seo"}
-		staged, err := svc.ImportStrategyLibrary(token, connect.NewRequest(prune))
-		require.NoError(t, err)
-		assert.Zero(t, staged.Msg.GetPruned(), "a token removes nothing")
-		assert.Equal(t, []string{"old"}, staged.Msg.GetWouldRemove())
-		requestID := staged.Msg.GetPruneRequestId()
-		require.NotEmpty(t, requestID)
-		_, err = svc.GetStrategyLibraryEntry(alice, connect.NewRequest(&pb.GetStrategyLibraryEntryRequest{OrgId: orgA, Key: "old"}))
-		require.NoError(t, err, "the entry is still there")
-
-		imports, err := svc.ListLibraryImports(alice, connect.NewRequest(&pb.ListLibraryImportsRequest{OrgId: orgA}))
-		require.NoError(t, err)
-		require.NotEmpty(t, imports.Msg.GetImports())
-		newest := imports.Msg.GetImports()[0]
-		assert.Equal(t, pb.GtmCredentialKind_GTM_CREDENTIAL_KIND_TOKEN, newest.GetCredentialKind())
-		assert.Equal(t, requestID, newest.GetPruneRequestId())
-
-		pending, err := svc.ListLibraryPruneRequests(alice, connect.NewRequest(&pb.ListLibraryPruneRequestsRequest{
-			OrgId: orgA, Status: pb.GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_PENDING.Enum(),
+	t.Run("the idea bank, positioning and an idea from it, mapped both ways", func(t *testing.T) {
+		pos, err := svc.UpdatePositioning(alice, connect.NewRequest(&pb.UpdatePositioningRequest{
+			OrgId: orgA, PositioningMd: "We help teams ship.",
+			BusinessType:   pb.GtmBusinessType_GTM_BUSINESS_TYPE_DEVELOPER_TOOLS,
+			BusinessModels: []pb.GtmBusinessModel{pb.GtmBusinessModel_GTM_BUSINESS_MODEL_FREEMIUM},
 		}))
 		require.NoError(t, err)
-		require.Len(t, pending.Msg.GetRequests(), 1)
-		assert.Equal(t, requestID, pending.Msg.GetRequests()[0].GetId())
+		assert.Equal(t, pb.GtmBusinessType_GTM_BUSINESS_TYPE_DEVELOPER_TOOLS, pos.Msg.GetPositioning().GetBusinessType())
+		assert.Equal(t, []pb.GtmBusinessModel{pb.GtmBusinessModel_GTM_BUSINESS_MODEL_FREEMIUM}, pos.Msg.GetPositioning().GetBusinessModels())
 
-		// A token is an Agent on confirm and cancel: it cannot decide its
-		// own prune.
-		_, err = svc.ConfirmLibraryPrune(token, connect.NewRequest(&pb.ConfirmLibraryPruneRequest{OrgId: orgA, RequestId: requestID}))
-		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
-		_, err = svc.CancelLibraryPrune(token, connect.NewRequest(&pb.CancelLibraryPruneRequest{OrgId: orgA, RequestId: requestID}))
-		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
-
-		confirmed, err := svc.ConfirmLibraryPrune(alice, connect.NewRequest(&pb.ConfirmLibraryPruneRequest{OrgId: orgA, RequestId: requestID}))
+		diverse, err := svc.ListStrategyLibrary(alice, connect.NewRequest(&pb.ListStrategyLibraryRequest{
+			OrgId: orgA, Diverse: proto.Bool(true), FitsMyBusiness: proto.Bool(true), PageSize: 12,
+		}))
 		require.NoError(t, err)
-		assert.Equal(t, int32(1), confirmed.Msg.GetRemoved())
-		assert.Equal(t, pb.GtmPruneRequestStatus_GTM_PRUNE_REQUEST_STATUS_CONFIRMED, confirmed.Msg.GetRequest().GetStatus())
-		assert.Equal(t, "alice", confirmed.Msg.GetRequest().GetDecidedBy())
-		_, err = svc.GetStrategyLibraryEntry(alice, connect.NewRequest(&pb.GetStrategyLibraryEntryRequest{OrgId: orgA, Key: "old"}))
-		requireRefused(t, err, missingRow)
+		require.NotEmpty(t, diverse.Msg.GetEntries())
+		assert.LessOrEqual(t, len(diverse.Msg.GetEntries()), 12)
+		assert.Empty(t, diverse.Msg.GetNextPageToken(), "diverse is unpaged")
+		categories := map[pb.GtmStrategyCategory]bool{}
+		for _, e := range diverse.Msg.GetEntries() {
+			categories[e.GetCategory()] = true
+			assert.NotEqual(t, pb.GtmStrategyCategory_GTM_STRATEGY_CATEGORY_UNSPECIFIED, e.GetCategory(), e.GetKey())
+		}
+		assert.Greater(t, len(categories), 1, "diverse spans categories")
 
-		// The exception is exactly an access token: other software
-		// credentials are Agents, which may not import.
+		filtered, err := svc.ListStrategyLibrary(alice, connect.NewRequest(&pb.ListStrategyLibraryRequest{
+			OrgId:      orgA,
+			Categories: []pb.GtmStrategyCategory{pb.GtmStrategyCategory_GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS},
+		}))
+		require.NoError(t, err)
+		require.NotEmpty(t, filtered.Msg.GetEntries())
+		for _, e := range filtered.Msg.GetEntries() {
+			assert.Equal(t, pb.GtmStrategyCategory_GTM_STRATEGY_CATEGORY_COMMUNITY_EVENTS, e.GetCategory())
+		}
+
+		_, err = svc.ListStrategyLibrary(alice, connect.NewRequest(&pb.ListStrategyLibraryRequest{OrgId: orgA, Effort: proto.String("LOW")}))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "the bank's vocabularies are lowercase")
+
+		key := bankKey()
+		entry, err := svc.GetStrategyLibraryEntry(alice, connect.NewRequest(&pb.GetStrategyLibraryEntryRequest{OrgId: orgA, Key: key}))
+		require.NoError(t, err)
+		require.NotEmpty(t, entry.Msg.GetEntry().GetTailorQuestions())
+		question := entry.Msg.GetEntry().GetTailorQuestions()[0]
+
+		idea, err := svc.CreateIdea(alice, connect.NewRequest(&pb.CreateIdeaRequest{
+			OrgId: orgA, Kind: pb.GtmIdeaKind_GTM_IDEA_KIND_GTM, Title: "From the bank", LibraryKey: key,
+			TailorAnswers:       []*pb.GtmTailorAnswer{{Question: question, Answer: "Developers at small teams."}},
+			SuggestedWorkflowMd: "Weekly digest.",
+		}))
+		require.NoError(t, err)
+		got := idea.Msg.GetIdea()
+		assert.Equal(t, key, got.GetLibraryKey())
+		assert.Equal(t, "Developers at small teams.", got.GetTailorAnswers()[0].GetAnswer())
+		assert.Equal(t, "Weekly digest.", got.GetSuggestedWorkflowMd())
+
+		cleared, err := svc.UpdateIdea(alice, connect.NewRequest(&pb.UpdateIdeaRequest{
+			OrgId: orgA, Id: got.GetId(), ExpectedRevision: got.GetRevision(),
+			TailorAnswers: &pb.GtmTailorAnswerList{}, LibraryKey: proto.String(""),
+		}))
+		require.NoError(t, err)
+		assert.Empty(t, cleared.Msg.GetIdea().GetTailorAnswers())
+		assert.Empty(t, cleared.Msg.GetIdea().GetLibraryKey())
+		assert.Equal(t, "Weekly digest.", cleared.Msg.GetIdea().GetSuggestedWorkflowMd(), "unset is left alone")
+
+		_, err = svc.CreateIdea(alice, connect.NewRequest(&pb.CreateIdeaRequest{
+			OrgId: orgA, Kind: pb.GtmIdeaKind_GTM_IDEA_KIND_GTM, Title: "x", LibraryKey: "no-such-entry",
+		}))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a library key must be in the bank")
+	})
+
+	t.Run("an access token is an Agent on every rpc, with no exception left", func(t *testing.T) {
+		token := tokenCtx("alice", orgA)
+		_, err := svc.DeleteAsset(token, connect.NewRequest(&pb.DeleteAssetRequest{OrgId: orgA, AssetId: missing}))
+		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
+		_, err = svc.UpdateStrategy(token, connect.NewRequest(&pb.UpdateStrategyRequest{
+			OrgId: orgA, Id: strategy.Msg.GetStrategy().GetId(), ExpectedRevision: 1,
+			Status: pb.GtmStrategyStatus_GTM_STRATEGY_STATUS_ACTIVE.Enum(),
+		}))
+		assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "a token may not activate a strategy")
 		for _, c := range []auth.Credential{auth.CredentialOAuthClient, auth.CredentialIdentityToken, auth.CredentialUnknown} {
-			_, err = svc.ImportStrategyLibrary(credentialCtx("alice", c), connect.NewRequest(libraryImport(orgA)))
+			_, err = svc.DeleteAsset(credentialCtx("alice", c), connect.NewRequest(&pb.DeleteAssetRequest{OrgId: orgA, AssetId: missing}))
 			assert.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), c.String())
 		}
-		// And only in the token's own org.
-		_, err = svc.ImportStrategyLibrary(tokenCtx("dave", orgB), connect.NewRequest(libraryImport(orgA)))
-		requireRefused(t, err, missingRow)
 	})
 
 	t.Run("over a Connect client: the refusal, and the conflict detail on the wire", func(t *testing.T) {

@@ -9,7 +9,8 @@ import (
 	gtmsvc "github.com/reliant-labs/reliant/internal/gtm"
 )
 
-// GetAssetDownload returns a short-lived URL for a READY asset's bytes.
+// GetAssetDownload mints a short-lived URL for a READY asset's bytes (a
+// mutation: each call signs a new URL; no stored state changes).
 func (s *Service) GetAssetDownload(
 	ctx context.Context,
 	req *connect.Request[pb.GetAssetDownloadRequest],
@@ -24,7 +25,7 @@ func (s *Service) GetAssetDownload(
 		return nil, wireErr(err)
 	}
 	return connect.NewResponse(&pb.GetAssetDownloadResponse{
-		Url:       dl.URL,
-		ExpiresAt: timeOut(dl.ExpiresAt),
+		DownloadUrl: dl.URL,
+		ExpiresAt:   timeOut(dl.ExpiresAt),
 	}), nil
 }
