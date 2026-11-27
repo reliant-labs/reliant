@@ -14,6 +14,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/approvalkind"
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/serveraction"
@@ -81,7 +82,7 @@ func (s *Service) RequestGrant(ctx context.Context, req *serveraction.Request) (
 	if err != nil {
 		return nil, err
 	}
-	if !facts.PoolFound || facts.PoolUserID != facts.TriggerUserID || facts.TriggerUserID != pr.UserID {
+	if !facts.PoolFound || !authz.CanAccessPersonal(pr.UserID, facts.TriggerUserID) || !authz.CanAccessPersonal(pr.UserID, facts.PoolUserID) {
 		return nil, serveraction.Errorf(serveraction.CodePermissionDenied,
 			"the run, its activation and its machine pool must have one owner to ask for a pipeline capability")
 	}

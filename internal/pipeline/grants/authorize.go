@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/machinepool"
 )
@@ -141,17 +142,19 @@ func (s *Service) Authorize(ctx context.Context, run Run, capability Capability)
 		if err != nil {
 			return err
 		}
+		// A grant, its pool and the pool's machines are the owner's personal
+		// resources (never shared), so ownership is authz's personal rule.
 		switch {
 		case !facts.TriggerFound:
 			last = deny(ReasonNoActivation, "the run's activation no longer exists")
 			continue
-		case !facts.PoolFound || facts.PoolUserID != g.UserID || facts.TriggerUserID != g.UserID:
+		case !facts.PoolFound || !authz.CanAccessPersonal(g.UserID, facts.PoolUserID) || !authz.CanAccessPersonal(g.UserID, facts.TriggerUserID):
 			last = deny(ReasonOwnerMismatch, "the grant's owner no longer owns both the activation and the pool")
 			continue
-		case run.UserID != "" && run.UserID != g.UserID:
+		case run.UserID != "" && !authz.CanAccessPersonal(run.UserID, g.UserID):
 			last = deny(ReasonOwnerMismatch, "the run acts for another user than the grant's owner")
 			continue
-		case !daemon.Found || daemon.UserID != g.UserID || !machinepool.Matches(daemon.Labels, facts.PoolSelector):
+		case !daemon.Found || !authz.CanAccessPersonal(g.UserID, daemon.UserID) || !machinepool.Matches(daemon.Labels, facts.PoolSelector):
 			last = deny(ReasonNotPoolMember, "the run's machine is not a member of the granted pool %q by the labels its owner set", facts.PoolName)
 			continue
 		}

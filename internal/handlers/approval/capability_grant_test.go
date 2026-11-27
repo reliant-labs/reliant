@@ -13,12 +13,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/pipeline/grants"
 	"github.com/reliant-labs/reliant/internal/pipeline/grants/grantstest"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // The seeded project internal/db's harness creates.
@@ -29,7 +31,13 @@ func grantApprovalService(t *testing.T) (*Service, *db.Repo, *grants.Service) {
 	repo := db.NewTestRepo(t)
 	g, err := grants.New(grants.Deps{Store: store.NewPipelineGrantExtStore(repo.ORM()), Cards: repo})
 	require.NoError(t, err)
-	svc := NewTestApproval(t, WithApprovalDeps(Deps{Repo: repo, Chats: store.NewChatExtStore(repo.ORM()), Grants: g}))
+	// No run waits on a capability-grant card, so nothing signals or reads a
+	// connection: the mocks fail any call that reaches them.
+	svc := NewTestApproval(t, WithApprovalDeps(Deps{
+		Logger: testkit.DiscardLogger(), Config: &config.Config{},
+		Repo: repo, Chats: store.NewChatExtStore(repo.ORM()),
+		Signals: &MockSignaler{}, Connections: &MockProposalConnections{}, Grants: g,
+	}))
 	return svc, repo, g
 }
 

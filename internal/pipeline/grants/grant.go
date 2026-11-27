@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"github.com/reliant-labs/reliant/internal/authz"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -42,7 +43,7 @@ func (s *Service) GrantApproved(ctx context.Context, approverID string, card *co
 		return nil, svcerr.FailedPrecondition("the activation this card asks a grant for no longer exists; nothing was granted")
 	case !facts.PoolFound:
 		return nil, svcerr.FailedPrecondition("the machine pool this card asks a grant on no longer exists; nothing was granted")
-	case facts.TriggerUserID != approverID || facts.PoolUserID != approverID:
+	case !authz.CanAccessPersonal(approverID, facts.TriggerUserID) || !authz.CanAccessPersonal(approverID, facts.PoolUserID):
 		return nil, svcerr.PermissionDenied("only the owner of both the activation and the machine pool can grant it a pipeline capability; nothing was granted")
 	}
 	out := make([]*core.PipelineCapabilityGrant, 0, len(caps))
