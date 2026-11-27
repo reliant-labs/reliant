@@ -200,8 +200,8 @@ importers:
         specifier: ^1.9.1
         version: 1.9.1
       '@reliantlabs/forge-web-runtime':
-        specifier: ^0.13.23
-        version: 0.13.23(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)
+        specifier: ^0.14.1
+        version: 0.14.1(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/otel-web@0.20.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(rrweb@2.1.7)
       '@reliantlabs/sdk':
         specifier: workspace:*
         version: link:../../sdk/ts
@@ -304,6 +304,9 @@ importers:
       remark-gfm:
         specifier: ^4.0.1
         version: 4.0.1(supports-color@10.2.2)
+      rrweb:
+        specifier: 2.1.7
+        version: 2.1.7
       sonner:
         specifier: ^2.0.7
         version: 2.0.7(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -1079,23 +1082,29 @@ packages:
       react:
         optional: true
 
-  '@reliantlabs/forge-web-runtime@0.13.23':
-    resolution: {integrity: sha512-rXq39vI6+fTAZ907k5TU/x72csIllQOfRM5BWhD4oU8oBelmKwgMvT3D76odkptEmwbvqlkNkdZzFZyMa8Sxqw==}
+  '@reliantlabs/forge-web-runtime@0.14.1':
+    resolution: {integrity: sha512-DbOodiq+dHlTXJ2YACm57Ufz4ZXXM4zV+WWltZW/9GEwjtSQKlyZOQibhNYNtzf8Nz/yX5LuDn14MdiKVgRbxA==}
     engines: {node: '>=22'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.5.0
       '@connectrpc/connect': ^2.0.0
+      '@hyperdx/otel-web': 0.20.0
       '@opentelemetry/api': ^1.9.0
       '@tanstack/react-query': ^5.62.0
       react: ^18.3.0 || ^19.0.0
+      rrweb: 2.1.7
     peerDependenciesMeta:
       '@bufbuild/protobuf':
         optional: true
       '@connectrpc/connect':
         optional: true
+      '@hyperdx/otel-web':
+        optional: true
       '@tanstack/react-query':
         optional: true
       react:
+        optional: true
+      rrweb:
         optional: true
 
   '@rolldown/binding-android-arm-eabi@1.2.19':
@@ -4117,19 +4126,16 @@ snapshots:
       - supports-color
       - zone.js
 
-  '@reliantlabs/forge-web-runtime@0.13.23(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(supports-color@10.2.2)(zone.js@0.16.3)':
+  '@reliantlabs/forge-web-runtime@0.14.1(@bufbuild/protobuf@2.10.2)(@connectrpc/connect@2.1.1(@bufbuild/protobuf@2.10.2))(@hyperdx/otel-web@0.20.0(supports-color@10.2.2)(zone.js@0.16.3))(@opentelemetry/api@1.9.1)(@tanstack/react-query@5.100.9(react@19.2.3))(react@19.2.3)(rrweb@2.1.7)':
     dependencies:
-      '@hyperdx/otel-web': 0.20.0(supports-color@10.2.2)(zone.js@0.16.3)
       '@opentelemetry/api': 1.9.1
-      rrweb: 2.1.7
     optionalDependencies:
       '@bufbuild/protobuf': 2.10.2
       '@connectrpc/connect': 2.1.1(@bufbuild/protobuf@2.10.2)
+      '@hyperdx/otel-web': 0.20.0(supports-color@10.2.2)(zone.js@0.16.3)
       '@tanstack/react-query': 5.100.9(react@19.2.3)
       react: 19.2.3
-    transitivePeerDependencies:
-      - supports-color
-      - zone.js
+      rrweb: 2.1.7
 
   '@rolldown/binding-android-arm-eabi@1.2.19':
     optional: true
@@ -6218,7 +6224,7 @@ snapshots:
 
   rrweb-snapshot@2.1.7:
     dependencies:
-      postcss: 8.5.28
+      postcss: 8.5.33
 
   rrweb@2.1.7:
     dependencies:

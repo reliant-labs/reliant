@@ -15,14 +15,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=9cc1ffd7a609230ad2933e72c08ecd82366f3858b911cb053789b39e5a73dcca
+// forge:hash=54992cee1cfd34670c0d623bd471d9f5901a754752dd4383a064e1f31bb61b35
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	TryLockFunc      func(context.Context, Key) (func(), bool, error)
@@ -47,18 +48,59 @@ func (m *MockService) TryLockNamed(ctx context.Context, name string) (func(), bo
 	return nil, false, contractkit.MockNotSet("MockService", "TryLockNamed")
 }
 
+// MockServiceTryLockCall is one recorded call of MockService.TryLock, one
+// field per parameter.
+type MockServiceTryLockCall struct {
+	Ctx context.Context
+	Key Key
+}
+
+// TryLockCalls returns every recorded TryLock call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TryLock").
+func (m *MockService) TryLockCalls() []MockServiceTryLockCall {
+	var out []MockServiceTryLockCall
+	for _, c := range m.Recorder.Calls("TryLock") {
+		var r MockServiceTryLockCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Key, _ = c.Args[1].(Key)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceTryLockNamedCall is one recorded call of MockService.TryLockNamed, one
+// field per parameter.
+type MockServiceTryLockNamedCall struct {
+	Ctx  context.Context
+	Name string
+}
+
+// TryLockNamedCalls returns every recorded TryLockNamed call, oldest first, with
+// its arguments typed. It reads the same log as Calls("TryLockNamed").
+func (m *MockService) TryLockNamedCalls() []MockServiceTryLockNamedCall {
+	var out []MockServiceTryLockNamedCall
+	for _, c := range m.Recorder.Calls("TryLockNamed") {
+		var r MockServiceTryLockNamedCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Name, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockSessions
-// forge:hash=ae5ac18cfc5701917777d48f71905934da52f8198fd09da877f11d9f5b47f6e1
+// forge:hash=31c3bffe809132eb46e127bb46c3cc777700698af9e8c6d9b2c20da8ed3c4db6
 
 // MockSessions is a test mock for the Sessions interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockSessions.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockSessions.<Method>Func not set" error.
 type MockSessions struct {
 	contractkit.Recorder
 	ConnFunc func(context.Context) (*sql.Conn, error)
@@ -71,6 +113,24 @@ func (m *MockSessions) Conn(ctx context.Context) (*sql.Conn, error) {
 		return m.ConnFunc(ctx)
 	}
 	return nil, contractkit.MockNotSet("MockSessions", "Conn")
+}
+
+// MockSessionsConnCall is one recorded call of MockSessions.Conn, one
+// field per parameter.
+type MockSessionsConnCall struct {
+	Ctx context.Context
+}
+
+// ConnCalls returns every recorded Conn call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Conn").
+func (m *MockSessions) ConnCalls() []MockSessionsConnCall {
+	var out []MockSessionsConnCall
+	for _, c := range m.Recorder.Calls("Conn") {
+		var r MockSessionsConnCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

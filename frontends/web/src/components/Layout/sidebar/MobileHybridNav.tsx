@@ -1,25 +1,27 @@
 // Copyright (c) 2026 Reliant Labs
 
 /**
- * The phone's nav (U6e, owner: "drilling in brings back the old nav"): the
- * SAME hybrid config the desktop nav and the narrow window's drawer draw
- * (navConfig/hybrid.ts), drill-ins and all, inside the phone's drawer
- * (Mobile/MobileNavDrawer).
+ * The phone's nav (U6e, owner: "the mobile left nav, on chats, is the old
+ * nav"): the shell's own nav column (ShellNavColumn) with the app's hybrid
+ * config, drawn flat, inside the phone's drawer (Mobile/MobileNavDrawer),
+ * exactly as the narrow window's drawer draws it (Layout/Sidebar.tsx): the org
+ * row, Find, the project switcher, then the rows.
  *
  * The phone's own screens (`/m/*`) are read as the desktop page they stand
  * for (mobile chats are the chat home, `/m/inbox` the Inbox, …), so a row
- * lights and Agents drills in there just as on the desktop. Every row links to
- * the desktop page; on a phone the router hands a page with a phone twin to
- * that twin (lib/mobileRedirect), and the rest (an app's console, Projects)
- * are one responsive page, so there is one nav and no legacy one to fall back to.
+ * lights and Agents drills in there just as on the desktop, its chat list
+ * inline (Mobile/MobileNavChatList). Every row links to the desktop page; on
+ * a phone the router hands a page with a phone twin to that twin
+ * (lib/mobileRedirect), and the rest (an app's console, Projects) are one
+ * responsive page, so there is one nav and no legacy one to fall back to.
  *
- * Its header is the desktop's, in the desktop's order (U6, owner): the org,
- * then Find, then the project, then the rows. The drawer hands it the org and
- * project controls (`org`, `project`), so the order lives here once.
+ * What the phone adds is only what `/m/*` lacks: no keyboard host (Find opens
+ * the phone's Search screen), its own drawer to close (`onClose`), and Back
+ * from a drill-in shown in place (reliant #3264).
  */
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { MessagesSquare, Search, SquarePen } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { SquarePen } from "lucide-react";
 
 import {
   chatPath,
@@ -49,12 +51,14 @@ import {
 import { orgFreePath } from "@/lib/paths/org";
 
 import { InboxNavItem } from "../../inbox/InboxNavItem";
+import { MobileNavChatList } from "../../Mobile/MobileNavChatList";
 import { hybridNav } from "./navConfig";
+import { releaseNavDrawerHold } from "./navDrawerHold";
 import { isAtOrBelow } from "./navLocation";
 import type { NavigateOptions, NavSlots } from "./NavRenderer";
-import { SidebarRow, SidebarSubRow } from "./primitives";
-import { ShellNavBody } from "./ShellNavBody";
-import { isChatPage, useShellProject } from "./shellProject";
+import { SidebarSubRow } from "./primitives";
+import { ShellNavColumn } from "./ShellNavColumn";
+import { useShellProject } from "./shellProject";
 
 const atOrBelow = (path: string, base: string) => path === base || path.startsWith(`${base}/`);
 
@@ -89,18 +93,15 @@ export function MobileHybridNav({
   pathname: phonePathname,
   search,
   onNavigate,
-  org,
-  project,
+  onClose,
 }: {
-  /** The org control, above Find. */
-  org?: ReactNode;
-  /** The project control, under Find. */
-  project?: ReactNode;
   /** The page on screen (a phone screen or a desktop page). */
   pathname: string;
   search: Record<string, unknown>;
   /** Opens a page; `drill` keeps the drawer open to show the area's rows. */
   onNavigate: (href: string, options?: NavigateOptions) => void;
+  /** Closes the drawer: after a pick in the header, which may leave the route as it is. */
+  onClose: () => void;
 }) {
   const pathname = desktopPathOfMobile(phonePathname);
   // Back from a drill-in shows the top level here, in place (reliant #3264):
@@ -118,6 +119,14 @@ export function MobileHybridNav({
     },
     [onNavigate],
   );
+  // A pick in the header (a project, All projects) closes the drawer even when the route stays.
+  const closeAfterPick = useCallback(() => {
+    releaseNavDrawerHold();
+    onClose();
+  }, [onClose]);
+  // Another org: the open chat, if any, is the old org's, so go to the new org's chat list.
+  const leaveForOrg = useCallback(() => navigate(mobileChatsPath()), [navigate]);
+  const openSearch = useCallback(() => navigate(mobileSearchPath()), [navigate]);
   const shell = useShellProject(pathname, search);
   const slots = useMemo<NavSlots>(
     () => ({
@@ -131,38 +140,27 @@ export function MobileHybridNav({
           testId="mobile-nav-new-chat"
         />
       ),
-      // The phone's chat list is a screen of its own (the drawer is too narrow for it), one row away.
-      "chat-list": ({ depth }) => (
-        <SidebarSubRow
-          label="Chats"
-          depth={depth}
-          icon={<MessagesSquare className="size-4" />}
-          href={homePath()}
-          onClick={() => navigate(homePath())}
-          current={isChatPage(pathname) && !atOrBelow(orgFreePath(pathname), newChatPath())}
-          testId="mobile-nav-chats"
-        />
-      ),
+      // The chats inline, as the shell's drawer lists them under Agents (the phone's own list: Mobile/MobileNavChatList).
+      "chat-list": (layout) => <MobileNavChatList {...layout} onOpen={(href) => navigate(href)} />,
       inbox: () => <InboxNavItem href={inboxPath()} onOpen={() => navigate(inboxPath())} current={isAtOrBelow(pathname, inboxPath())} />,
     }),
     [navigate, pathname],
   );
   return (
-    <div className="flex min-h-0 flex-1 flex-col" data-testid="mobile-hybrid-nav">
-      {org}
-      {/* The phone's Search screen in the desktop's Find place: under the org, above the project. */}
-      <div className="shrink-0 px-2 pb-1">
-        <SidebarRow
-          icon={<Search className="size-4" />}
-          label="Find"
-          href={mobileSearchPath()}
-          onClick={() => navigate(mobileSearchPath())}
-          testId="mobile-nav-find"
-        />
-      </div>
-      {project}
-      {/* Flat: a drill-in replaces the list here, so its rows are drawn as top-level rows (owner, 2026-11-24). */}
-      <ShellNavBody config={hybridNav} shell={shell} pathname={pathname} search={search} slots={slots} onNavigate={navigate} flat onBack={showTopLevel} topLevel={topLevel} />
-    </div>
+    <ShellNavColumn
+      config={hybridNav}
+      slots={slots}
+      shell={shell}
+      pathname={pathname}
+      search={search}
+      onNavigate={navigate}
+      // A drill-in replaces the list here, so its rows are drawn as top-level rows (owner, 2026-11-24).
+      flat
+      onFind={openSearch}
+      onProjectPicked={closeAfterPick}
+      onOrgSwitched={leaveForOrg}
+      onBack={showTopLevel}
+      topLevel={topLevel}
+    />
   );
 }
