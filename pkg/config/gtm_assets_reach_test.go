@@ -70,4 +70,9 @@ func TestGTMBlocksAreServerProcessFields(t *testing.T) {
 			t.Errorf("ReliantConfig does not reserve the name %s", name)
 		}
 	}
+	for _, number := range []protoreflect.FieldNumber{8, 9} {
+		if !root.ReservedRanges().Has(number) {
+			t.Errorf("ReliantConfig does not reserve field number %d", number)
+		}
+	}
 }

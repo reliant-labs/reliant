@@ -213,8 +213,10 @@ func TestSweepReadyStagingPages(t *testing.T) {
 	e := newSweepEnv(t)
 	var rows []*store.GtmAsset
 	// Rows share a created_at in groups of 7, which does not divide the
-	// batch of 100: the first page ends inside a group (rows 98-104), so only
-	// the id half of the (created_at, id) keyset finds the rest of it.
+	// batch of 100. Higher i is older, so the pages run from r-129 down, and
+	// the first page ends inside the group i=28..34: r-028..r-032 on it,
+	// r-033 and r-034 on the next, which only the id half of the
+	// (created_at, id) keyset finds.
 	for i := range 130 {
 		rows = append(rows, e.asset(t, orgA, fmt.Sprintf("r-%03d", i), gtm.AssetReady, 25*time.Hour+time.Duration(i/7)*time.Second))
 	}

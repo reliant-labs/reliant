@@ -188,11 +188,56 @@ describe("the GTM assets bucket origin (GTM_ASSETS_ORIGIN)", () => {
     expect(media).toBe("'self' blob: http://localhost:21090 http://localhost:* http://127.0.0.1:*");
   });
 
+  it("accepts loopback http (the dev MinIO) but no other plain-http origin", () => {
+    for (const value of ["http://127.0.0.1:9000", "http://[::1]:9000", "http://localhost"]) {
+      expect(directive(runtimePolicy({ GTM_ASSETS_ORIGIN: value }), "media-src"), value).toContain(value);
+    }
+    // A bucket over plain http to another host would carry uploads and bearer
+    // links in the clear: the policy does not allow it, rather than quietly
+    // working with a mistyped origin.
+    for (const value of ["http://minio.internal:9000", "http://storage.googleapis.com", "http://localhost.evil.com"]) {
+      const policy = runtimePolicy({ ...PROD_CONFIG, GTM_ASSETS_ORIGIN: value });
+
+      expect(policy, value).not.toContain(new URL(value).host);
+      expect(directive(policy, "media-src"), value).toBe("'self' blob: http://localhost:* http://127.0.0.1:*");
+    }
+  });
+
   it("gives no other runtime key a media-src entry", () => {
     const media = directive(runtimePolicy(PROD_CONFIG), "media-src");
 
     expect(media).not.toContain("reliantapi.com");
     expect(media).not.toContain("reliantlabs.io");
+  });
+});
+
+describe("a runtime origin whose host could end the directive", () => {
+  // The URL parser accepts `;` (and other punctuation) in a host; one in the
+  // meta tag's content would end connect-src and start a directive of the
+  // value's choosing.
+  const HOSTILE = ["https://a;b.example.com", "https://x.example.com;script-src", "https://a,b.example.com", "https://a'b.example.com"];
+
+  it("drops it, for every runtime origin key", () => {
+    const keys = ["API_URL", "CONTROL_PLANE_API_URL", "GATEWAY_URL", "SUPABASE_URL", "OTEL_ENDPOINT", "APP_URL", "GTM_ASSETS_ORIGIN"];
+    for (const key of keys) {
+      for (const value of HOSTILE) {
+        const policy = runtimePolicy({ [key]: value });
+
+        expect(policy, `${key}=${value}`).not.toContain("example.com");
+        expect(policy.split(";").map((d) => d.trim().split(" ")[0]), `${key}=${value}`).toEqual(["connect-src", "media-src"]);
+      }
+    }
+  });
+
+  it("keeps an ordinary host, an IPv4 address, a bracketed IPv6 address and a port", () => {
+    const connect = directive(
+      runtimePolicy({ API_URL: "https://api-1.example.com:8443", GATEWAY_URL: "https://10.0.0.1", APP_URL: "https://[2001:db8::1]:444" }),
+      "connect-src",
+    );
+
+    expect(connect).toContain("https://api-1.example.com:8443");
+    expect(connect).toContain("https://10.0.0.1");
+    expect(connect).toContain("https://[2001:db8::1]:444");
   });
 });
 

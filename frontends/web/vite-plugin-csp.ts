@@ -124,6 +124,12 @@ export const RUNTIME_ORIGIN_KEYS = [
  */
 export const GTM_ASSETS_ORIGIN_KEY = "GTM_ASSETS_ORIGIN";
 
+/**
+ * What a runtime origin's host may hold: a DNS name or an IPv4 or bracketed
+ * IPv6 address, and a port. Nothing that could end a CSP directive.
+ */
+const ORIGIN_HOST = /^[A-Za-z0-9.\-:\[\]]+$/;
+
 /** Loopback over http, any port: the dev MinIO's presigned media in a built bundle. */
 const LOOPBACK_HTTP = ["http://localhost:*", "http://127.0.0.1:*"];
 
@@ -142,7 +148,16 @@ const FIXED_CONNECT = [
  * so an https entry alone does NOT authorise the upgrade. The GTM assets
  * origin (GTM_ASSETS_ORIGIN_KEY) joins connect-src without a wss:// twin, and
  * media-src beside 'self', blob: and loopback. Anything absent, relative or
- * unparseable contributes nothing rather than a junk token.
+ * unparseable contributes nothing rather than a junk token, and so does a
+ * host with any character outside ORIGIN_HOST: the URL parser lets `;`
+ * through in a host, and one would end the directive and start another in
+ * the meta tag's content.
+ *
+ * The GTM assets origin must also be https, or http on loopback (the dev
+ * MinIO). A bucket is where a browser PUTs a person's files and reads them
+ * back with a presigned URL, a bearer link; over plain http to another host
+ * both would cross the network in the clear, so the policy refuses to allow
+ * it rather than let a mistyped origin quietly work.
  */
 export function runtimeConnectScript(): string {
   const keys = JSON.stringify(RUNTIME_ORIGIN_KEYS);
@@ -153,11 +168,13 @@ export function runtimeConnectScript(): string {
     "var c=window.__FORGE_CONFIG__||{},s=[\"'self'\"],seen={};" +
     "function add(v){if(v&&!seen[v]){seen[v]=1;s.push(v);}}" +
     "function origin(v){if(typeof v!==\"string\"||!v)return\"\";" +
-    "try{var u=new URL(v);return u.protocol===\"http:\"||u.protocol===\"https:\"?u.protocol+\"//\"+u.host:\"\";}" +
+    "try{var u=new URL(v);if(!" + ORIGIN_HOST.toString() + ".test(u.host))return\"\";" +
+    "return u.protocol===\"http:\"||u.protocol===\"https:\"?u.protocol+\"//\"+u.host:\"\";}" +
     "catch(e){return\"\";}}" +
+    "function loopback(o){return /^http:\\/\\/(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?$/.test(o);}" +
     `var k=${keys},f=${fixed},l=${loopback},i,o;` +
     "for(i=0;i<k.length;i++){o=origin(c[k[i]]);add(o);if(o.indexOf(\"https://\")===0)add(\"wss://\"+o.slice(8));}" +
-    `var g=origin(c[${JSON.stringify(GTM_ASSETS_ORIGIN_KEY)}]);add(g);` +
+    `var g=origin(c[${JSON.stringify(GTM_ASSETS_ORIGIN_KEY)}]);if(g.indexOf("https://")!==0&&!loopback(g))g="";add(g);` +
     "for(i=0;i<f.length;i++)add(f[i]);" +
     "var media=[\"'self'\",\"blob:\"];if(g)media.push(g);for(i=0;i<l.length;i++)if(l[i]!==g)media.push(l[i]);" +
     "var m=document.createElement(\"meta\");m.httpEquiv=\"Content-Security-Policy\";" +
