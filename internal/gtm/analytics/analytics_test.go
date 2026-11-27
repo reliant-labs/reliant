@@ -481,10 +481,14 @@ func TestSentinelsWrapTheDomain(t *testing.T) {
 			t.Errorf("%v is not a *gtm.ValidationError (gtm.ErrInvalidArgument) with a field and reason", err)
 		}
 	}
-	for _, err := range []error{errCredentialRefused, errNotSetUp, errQuotaExhausted, errTimedOut, errQueryRefused, errBadResponse} {
+	for _, err := range []error{errCredentialRefused, errNotSetUp, errQuotaExhausted, errTimedOut, errQueryRefused, errBadResponse,
+		errTokenNeedsDeployRead, errEnvLookupFailed} {
 		if !errors.Is(err, gtm.ErrAnalyticsFailed) {
 			t.Errorf("%v is not gtm.ErrAnalyticsFailed", err)
 		}
+	}
+	if !errors.Is(errEnvFilterUnavailable, gtm.ErrAnalyticsUnavailable) {
+		t.Errorf("%v is not gtm.ErrAnalyticsUnavailable", errEnvFilterUnavailable)
 	}
 }
 
@@ -746,6 +750,9 @@ func TestFixedErrorMessages(t *testing.T) {
 		errBadResponse:             failed + ": the control plane's answer was not understood",
 		errInsecureControlPlaneURL: "analytics: the control-plane URL must be https (http only to a loopback host)",
 		errUnsafeRedirect:          "analytics: refused a control-plane redirect off https or to another host",
+		errTokenNeedsDeployRead:    failed + ": the analytics token needs the deploy:read scope to filter by environment",
+		errEnvLookupFailed:         failed + ": the control plane's environments could not be listed",
+		errEnvFilterUnavailable:    "product analytics is not configured: filtering by environment is not configured",
 		gtm.ErrAnalyticsFailed:     failed,
 	} {
 		if got := err.Error(); got != want {
@@ -795,7 +802,7 @@ func TestSentinelsCannotBeChanged(t *testing.T) {
 	for _, f := range []func() error{
 		ErrNoOrg, ErrInvalidName, ErrIdentifierProperty, ErrDuplicateStep, ErrWindowTooLong,
 		ErrCredentialRefused, ErrNotSetUp, ErrQuotaExhausted, ErrTimedOut, ErrQueryRefused, ErrBadResponse,
-		ErrInsecureControlPlaneURL, ErrUnsafeRedirect,
+		ErrInsecureControlPlaneURL, ErrUnsafeRedirect, ErrTokenNeedsDeployRead, ErrEnvLookupFailed, ErrEnvFilterUnavailable,
 	} {
 		a, b := f(), f()
 		if a != b || !errors.Is(fmt.Errorf("wrapped: %w", a), b) {

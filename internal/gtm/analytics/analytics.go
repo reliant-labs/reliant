@@ -39,6 +39,11 @@ type Deps struct {
 	// read on every query. nil, or an empty token, is
 	// gtm.ErrAnalyticsUnavailable: the read fails closed.
 	Token func() string
+	// Envs resolves AnalyticsQuery.Environment to environment ids
+	// (NewEnvResolver over the same token). nil: a query naming an
+	// environment is refused (ErrEnvFilterUnavailable), never read across
+	// every environment.
+	Envs EnvResolver
 	// Log receives the causes the returned errors leave out. nil is
 	// slog.Default().
 	Log *slog.Logger
@@ -48,6 +53,7 @@ type Deps struct {
 type client struct {
 	cp    ObservabilityClient
 	token func() string
+	envs  EnvResolver
 	log   *slog.Logger
 }
 
@@ -61,7 +67,7 @@ func newClient(d Deps) *client {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &client{cp: d.CP, token: d.Token, log: log}
+	return &client{cp: d.CP, token: d.Token, envs: d.Envs, log: log}
 }
 
 // NewObservabilityClient is the control plane's ObservabilityService at
@@ -138,7 +144,23 @@ func (c *client) Query(ctx context.Context, orgID string, q gtm.AnalyticsQuery) 
 	if err := validate(orgID, q); err != nil {
 		return gtm.AnalyticsResult{}, err
 	}
-	req := connect.NewRequest(buildRequest(orgID, q))
+	// An Environment narrows the read to the ids it resolves to; a lookup
+	// that fails fails the read, never widening it to every environment.
+	var envIDs []string
+	if q.Environment != "" {
+		if c.envs == nil {
+			return gtm.AnalyticsResult{}, errEnvFilterUnavailable
+		}
+		ids, err := c.envs.Resolve(ctx, orgID, q.Environment, q.ProjectID)
+		if err != nil {
+			return gtm.AnalyticsResult{}, err
+		}
+		if len(ids) == 0 {
+			return gtm.AnalyticsResult{}, errEnvLookupFailed
+		}
+		envIDs = ids
+	}
+	req := connect.NewRequest(buildRequest(orgID, q, envIDs))
 	req.Header().Set("Authorization", "Bearer "+token)
 	resp, err := c.cp.QueryPanel(ctx, req)
 	if err != nil {
@@ -148,6 +170,19 @@ func (c *client) Query(ctx context.Context, orgID string, q gtm.AnalyticsQuery) 
 		mapped := mapCPError(err)
 		c.log.WarnContext(ctx, "gtm analytics: QueryPanel failed",
 			"template", string(q.Template), "code", connect.CodeOf(err).String(), "error", err)
+		if q.Environment != "" {
+			switch connect.CodeOf(err) {
+			case connect.CodePermissionDenied, connect.CodeInvalidArgument:
+				// The ids may be stale: an environment deleted and recreated
+				// has a new id, and the control plane refuses an id that is
+				// no longer live. Forget the resolution so a retry looks the
+				// name up again, and say so rather than blame the credential.
+				if inv, ok := c.envs.(EnvInvalidator); ok {
+					inv.Invalidate(orgID, q.Environment, q.ProjectID)
+				}
+				return gtm.AnalyticsResult{}, envNotQueryable(q.Environment)
+			}
+		}
 		return gtm.AnalyticsResult{}, mapped
 	}
 	res, err := decode(q, resp.Msg)
@@ -156,12 +191,17 @@ func (c *client) Query(ctx context.Context, orgID string, q gtm.AnalyticsQuery) 
 			"template", string(q.Template), "error", err)
 		return gtm.AnalyticsResult{}, errBadResponse
 	}
+	res.Environment, res.ProjectID, res.EnvironmentIDs = q.Environment, q.ProjectID, envIDs
 	return res, nil
 }
 
-// buildRequest is q's QueryPanel request: scoped to orgID and q's window,
-// with the template's panel. q is validated.
-func buildRequest(orgID string, q gtm.AnalyticsQuery) *obsv1.QueryPanelRequest {
+// buildRequest is q's QueryPanel request: scoped to orgID, q's window, the
+// environments envIDs (none: every environment) and q.ProjectID when set,
+// with the template's panel. q is validated. The control plane checks every
+// id is a live environment of the org (and project). The funnel panel is
+// narrowed by the control plane; the sql templates by their own {env_ids}
+// predicate (scope in templates.go), which the server only binds.
+func buildRequest(orgID string, q gtm.AnalyticsQuery, envIDs []string) *obsv1.QueryPanelRequest {
 	panel := &obsv1.Panel{Id: "gtm-" + string(q.Template)}
 	if q.Template == gtm.AnalyticsFunnel {
 		panel.Kind = "funnel"
@@ -175,16 +215,19 @@ func buildRequest(orgID string, q gtm.AnalyticsQuery) *obsv1.QueryPanelRequest {
 		panel.Draw = "table"
 		panel.Sql = buildSQL(q)
 	}
-	return &obsv1.QueryPanelRequest{
-		Scope: &obsv1.QueryScope{
-			OrgId: orgID,
-			TimeRange: &obsv1.TimeRange{
-				Start: timestamppb.New(q.From),
-				End:   timestamppb.New(q.To),
-			},
+	scope := &obsv1.QueryScope{
+		OrgId: orgID,
+		TimeRange: &obsv1.TimeRange{
+			Start: timestamppb.New(q.From),
+			End:   timestamppb.New(q.To),
 		},
-		Panel: panel,
+		EnvIds: append([]string(nil), envIDs...),
 	}
+	if q.ProjectID != "" {
+		project := q.ProjectID
+		scope.ProjectId = &project
+	}
+	return &obsv1.QueryPanelRequest{Scope: scope, Panel: panel}
 }
 
 // funnelWindow is how long a funnel journey may take: the whole query

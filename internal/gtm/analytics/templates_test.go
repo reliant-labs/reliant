@@ -158,3 +158,33 @@ func TestLitEscapes(t *testing.T) {
 		}
 	}
 }
+
+// envPredicate is the environment filter every sql template must carry: the
+// control plane only binds {env_ids} for a sql panel and never enforces it,
+// so an Environment narrows these templates only through this predicate.
+const envPredicate = "(empty({env_ids:Array(String)}) OR has({env_ids:Array(String)}, EnvId))"
+
+func TestEveryTemplateFiltersByEnvironment(t *testing.T) {
+	if !strings.Contains(scope, envPredicate) {
+		t.Fatalf("scope lost the environment predicate: %s", scope)
+	}
+	for _, tmpl := range []gtm.AnalyticsTemplate{gtm.AnalyticsEventCounts, gtm.AnalyticsEventTrend, gtm.AnalyticsPropertyBreakdown} {
+		found := false
+		for name, q := range sqlQueries {
+			if q.Template != tmpl {
+				continue
+			}
+			found = true
+			sql := buildSQL(q)
+			if strings.Count(sql, "FROM product_events") != 1 || !strings.Contains(sql, "WHERE "+scope) {
+				t.Errorf("%s: the product_events read is not filtered by environment:\n%s", name, sql)
+			}
+			if !strings.Contains(sql, envPredicate) {
+				t.Errorf("%s: no {env_ids} predicate:\n%s", name, sql)
+			}
+		}
+		if !found {
+			t.Errorf("no golden query covers %s", tmpl)
+		}
+	}
+}
