@@ -8,7 +8,8 @@
  *
  * The family is these pages' reads (the TestApi, VulnerabilityApi and
  * StorageBrowserApi defaults, Identity's generated hooks, and the coverage
- * source fetch): none may reach the module transport. Reads outside the family
+ * source fetch), plus the observability billing panels' reads: none
+ * may reach the module transport. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
  * page makes in any scope (the person's org list, their own user) are
@@ -17,7 +18,7 @@
 
 import type { ReactNode } from "react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { Code, ConnectError, type Transport } from "@connectrpc/connect";
 
 vi.mock("@/services/controlPlane/config", async (importOriginal) => ({
@@ -40,6 +41,7 @@ vi.mock("@/components/Forge/Observability/AskReliant/AskReliant", () => ({
 import { setReaderPrincipal } from "@/components/Forge/AuditedAccess/readerSession";
 import { IdentityTab } from "@/components/Forge/EnvPage/IdentityTab";
 import { ObsReadOnlyProvider } from "@/components/Forge/Observability/obsReadOnly";
+import { UsageView } from "@/components/Forge/Observability/UsageView";
 import { SbomsView } from "@/components/Forge/Security/SbomsPage";
 import { VulnerabilitiesView } from "@/components/Forge/Security/VulnerabilitiesPage";
 import { StorageBrowser } from "@/components/Forge/Storage/StorageBrowser";
@@ -178,6 +180,20 @@ describe("the console's Security pages in a TransportScope", () => {
     renderScoped(<SbomsView scope={SCOPE} releaseHref={(v) => `/releases/${v}`} />);
     expect(await screen.findByTestId("sboms-release-v1.8.3", {}, { timeout: 15_000 })).toHaveTextContent("4 of 4 with an SBOM, 4 scanned");
     expectFamilyOnScope("controlplane.v1.VulnerabilityService/GetReleaseVulnerabilities");
+  }, 30_000);
+});
+
+describe("observability billing in a TransportScope", () => {
+  const BILLING = "observability_billing.v1.ObservabilityBillingService";
+  const billingCalls = (calls: string[]) => calls.filter((key) => key.startsWith(`${BILLING}/`));
+
+  it("usage, storage, limits and daily rows", async () => {
+    renderScoped(<UsageView orgId="org-shop" />);
+    expect(await screen.findByTestId("obs-billing-charged", {}, { timeout: 15_000 })).toBeInTheDocument();
+    await waitFor(() => {
+      for (const rpc of ["GetObservabilityUsage", "GetObservabilityStorage", "GetObservabilityLimits", "ListObservabilityUsage"]) expect(scoped.calls).toContain(`${BILLING}/${rpc}`);
+    }, { timeout: 15_000 });
+    expect(billingCalls(live.calls)).toEqual([]);
   }, 30_000);
 });
 
