@@ -5177,8 +5177,10 @@ func (x *GetAssetDownloadRequest) GetAssetId() string {
 }
 
 type GetAssetDownloadResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Grants the asset's bytes to whoever holds it, until expires_at: a
+	// secret; never log or store it.
+	DownloadUrl   string                 `protobuf:"bytes,1,opt,name=download_url,json=downloadUrl,proto3" json:"download_url,omitempty"`
 	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -5214,9 +5216,9 @@ func (*GetAssetDownloadResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_gtm_proto_rawDescGZIP(), []int{47}
 }
 
-func (x *GetAssetDownloadResponse) GetUrl() string {
+func (x *GetAssetDownloadResponse) GetDownloadUrl() string {
 	if x != nil {
-		return x.Url
+		return x.DownloadUrl
 	}
 	return ""
 }
@@ -5320,7 +5322,7 @@ type ListStrategyLibraryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	OrgId string                 `protobuf:"bytes,1,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	// Entries in any of these categories; empty means all.
-	Category []GtmStrategyCategory `protobuf:"varint,2,rep,packed,name=category,proto3,enum=reliant.v1.GtmStrategyCategory" json:"category,omitempty"`
+	Categories []GtmStrategyCategory `protobuf:"varint,2,rep,packed,name=categories,proto3,enum=reliant.v1.GtmStrategyCategory" json:"categories,omitempty"`
 	// Entries that fit any of these (an entry with none fits all); empty means
 	// no filter.
 	BusinessTypes  []GtmBusinessType  `protobuf:"varint,3,rep,packed,name=business_types,json=businessTypes,proto3,enum=reliant.v1.GtmBusinessType" json:"business_types,omitempty"`
@@ -5385,9 +5387,9 @@ func (x *ListStrategyLibraryRequest) GetOrgId() string {
 	return ""
 }
 
-func (x *ListStrategyLibraryRequest) GetCategory() []GtmStrategyCategory {
+func (x *ListStrategyLibraryRequest) GetCategories() []GtmStrategyCategory {
 	if x != nil {
-		return x.Category
+		return x.Categories
 	}
 	return nil
 }
@@ -8889,18 +8891,20 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\x05asset\x18\x01 \x01(\v2\x14.reliant.v1.GtmAssetR\x05asset\"[\n" +
 	"\x17GetAssetDownloadRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12!\n" +
-	"\basset_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aassetId\"g\n" +
-	"\x18GetAssetDownloadResponse\x12\x10\n" +
-	"\x03url\x18\x01 \x01(\tR\x03url\x129\n" +
+	"\basset_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aassetId\"x\n" +
+	"\x18GetAssetDownloadResponse\x12!\n" +
+	"\fdownload_url\x18\x01 \x01(\tR\vdownloadUrl\x129\n" +
 	"\n" +
 	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"V\n" +
 	"\x12DeleteAssetRequest\x12\x1d\n" +
 	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12!\n" +
 	"\basset_id\x18\x02 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\aassetId\"\x15\n" +
-	"\x13DeleteAssetResponse\"\x98\a\n" +
+	"\x13DeleteAssetResponse\"\x9c\a\n" +
 	"\x1aListStrategyLibraryRequest\x12\x1d\n" +
-	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12N\n" +
-	"\bcategory\x18\x02 \x03(\x0e2\x1f.reliant.v1.GtmStrategyCategoryB\x11\xbaH\x0e\x92\x01\v\x10\r\"\a\x82\x01\x04\x10\x01 \x00R\bcategory\x12U\n" +
+	"\x06org_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x05orgId\x12R\n" +
+	"\n" +
+	"categories\x18\x02 \x03(\x0e2\x1f.reliant.v1.GtmStrategyCategoryB\x11\xbaH\x0e\x92\x01\v\x10\r\"\a\x82\x01\x04\x10\x01 \x00R\n" +
+	"categories\x12U\n" +
 	"\x0ebusiness_types\x18\x03 \x03(\x0e2\x1b.reliant.v1.GtmBusinessTypeB\x11\xbaH\x0e\x92\x01\v\x10\n" +
 	"\"\a\x82\x01\x04\x10\x01 \x00R\rbusinessTypes\x12X\n" +
 	"\x0fbusiness_models\x18\x04 \x03(\x0e2\x1c.reliant.v1.GtmBusinessModelB\x11\xbaH\x0e\x92\x01\v\x10\b\"\a\x82\x01\x04\x10\x01 \x00R\x0ebusinessModels\x12S\n" +
@@ -9376,7 +9380,7 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\"GTM_CLAIM_FINDING_KIND_UNSPECIFIED\x10\x00\x12+\n" +
 	"'GTM_CLAIM_FINDING_KIND_MATCHED_VERIFIED\x10\x01\x12-\n" +
 	")GTM_CLAIM_FINDING_KIND_MATCHED_UNVERIFIED\x10\x02\x12*\n" +
-	"&GTM_CLAIM_FINDING_KIND_UNMATCHED_RISKY\x10\x032\x93)\n" +
+	"&GTM_CLAIM_FINDING_KIND_UNMATCHED_RISKY\x10\x032\xa4)\n" +
 	"\n" +
 	"GtmService\x12\x8d\x01\n" +
 	"\fGetGtmAccess\x12\x1f.reliant.v1.GetGtmAccessRequest\x1a .reliant.v1.GetGtmAccessResponse\":\xa2\xbb\x183\b\x01:/:-read-only: whether GTM is enabled for the org\x90\x02\x01\x12o\n" +
@@ -9408,8 +9412,8 @@ const file_reliant_v1_gtm_proto_rawDesc = "" +
 	"\tgtm_asset\x12\basset_id\x1a\x17response.asset.filename\"\x06org_id\x12\x7f\n" +
 	"\vDeleteAsset\x12\x1e.reliant.v1.DeleteAssetRequest\x1a\x1f.reliant.v1.DeleteAssetResponse\"/\xa2\xbb\x18+\b\x01:'\n" +
 	"\x06delete\x12\x15\n" +
-	"\tgtm_asset\x12\basset_id\"\x06org_id\x12\x91\x01\n" +
-	"\x10GetAssetDownload\x12#.reliant.v1.GetAssetDownloadRequest\x1a$.reliant.v1.GetAssetDownloadResponse\"2\xa2\xbb\x18+\b\x01:':%read-only: a short-lived download URL\x90\x02\x01\x12~\n" +
+	"\tgtm_asset\x12\basset_id\"\x06org_id\x12\xa2\x01\n" +
+	"\x10GetAssetDownload\x12#.reliant.v1.GetAssetDownloadRequest\x1a$.reliant.v1.GetAssetDownloadResponse\"C\xa2\xbb\x18?\b\x01:;:9mints a short-lived download URL; changes no stored state\x12~\n" +
 	"\x13ListStrategyLibrary\x12&.reliant.v1.ListStrategyLibraryRequest\x1a'.reliant.v1.ListStrategyLibraryResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\x8a\x01\n" +
 	"\x17GetStrategyLibraryEntry\x12*.reliant.v1.GetStrategyLibraryEntryRequest\x1a+.reliant.v1.GetStrategyLibraryEntryResponse\"\x16\xa2\xbb\x18\x0f\b\x01:\v:\tread-only\x90\x02\x01\x12\xcd\x01\n" +
 	"\x12UseLibraryStrategy\x12%.reliant.v1.UseLibraryStrategyRequest\x1a&.reliant.v1.UseLibraryStrategyResponse\"h\xa2\xbb\x18d\b\x01:`\n" +
@@ -9676,7 +9680,7 @@ var file_reliant_v1_gtm_proto_depIdxs = []int32{
 	116, // 78: reliant.v1.CreateAssetUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
 	26,  // 79: reliant.v1.ConfirmAssetUploadResponse.asset:type_name -> reliant.v1.GtmAsset
 	116, // 80: reliant.v1.GetAssetDownloadResponse.expires_at:type_name -> google.protobuf.Timestamp
-	11,  // 81: reliant.v1.ListStrategyLibraryRequest.category:type_name -> reliant.v1.GtmStrategyCategory
+	11,  // 81: reliant.v1.ListStrategyLibraryRequest.categories:type_name -> reliant.v1.GtmStrategyCategory
 	12,  // 82: reliant.v1.ListStrategyLibraryRequest.business_types:type_name -> reliant.v1.GtmBusinessType
 	13,  // 83: reliant.v1.ListStrategyLibraryRequest.business_models:type_name -> reliant.v1.GtmBusinessModel
 	23,  // 84: reliant.v1.ListStrategyLibraryResponse.entries:type_name -> reliant.v1.GtmStrategyLibraryEntry
