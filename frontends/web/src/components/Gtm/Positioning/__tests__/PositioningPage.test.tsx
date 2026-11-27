@@ -11,7 +11,16 @@ import { create } from "@bufbuild/protobuf";
 import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GtmClaimCategory, GtmClaimSchema, GtmClaimSourceKind, GtmClaimStatus, GtmPositioningSchema } from "@/gen/reliant/v1/gtm_pb";
+import {
+  GtmBusinessModel,
+  GtmBusinessType,
+  GtmClaimCategory,
+  GtmClaimSchema,
+  GtmClaimSourceKind,
+  GtmClaimStatus,
+  GtmPositioningSchema,
+  type UpdatePositioningRequest,
+} from "@/gen/reliant/v1/gtm_pb";
 
 import { renderGtm, TEST_ORG } from "../../shared/__tests__/gtmHarness";
 import { PositioningView } from "../PositioningPage";
@@ -23,7 +32,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const positioning = create(GtmPositioningSchema, { orgId: TEST_ORG, positioningMd: "Hosting for people who ship.\n\nOne command.", audiences: ["Solo founders", "Agencies"], updatedBy: "Ada", revision: 3 });
+const positioning = create(GtmPositioningSchema, { orgId: TEST_ORG, positioningMd: "Hosting for people who ship.\n\nOne command.", audiences: ["Solo founders", "Agencies"], updatedBy: "Ada", revision: 3, businessType: GtmBusinessType.DEVELOPER_TOOLS, businessModels: [GtmBusinessModel.SUBSCRIPTION] });
 const unverified = create(GtmClaimSchema, { id: "c-1", orgId: TEST_ORG, text: "One static site per org is free", category: GtmClaimCategory.PRICING, status: GtmClaimStatus.UNVERIFIED, revision: 2 });
 const verified = create(GtmClaimSchema, { id: "c-2", orgId: TEST_ORG, text: "Deploys finish in a minute", status: GtmClaimStatus.VERIFIED, verifiedBy: "Ada", sourceUrl: "https://docs.example/deploy", sourceKind: GtmClaimSourceKind.DOCS, revision: 1 });
 const comparison = create(GtmClaimSchema, { id: "c-3", orgId: TEST_ORG, text: "Faster than the other one", category: GtmClaimCategory.COMPARISON, status: GtmClaimStatus.UNVERIFIED, revision: 1 });
@@ -56,6 +65,27 @@ describe("PositioningView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, expectedRevision: 3, positioningMd: "New positioning.", audiences: ["Solo founders", "Teams"] }));
+    // The business profile goes with every save, unchanged when untouched.
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ businessType: GtmBusinessType.DEVELOPER_TOOLS, businessModels: [GtmBusinessModel.SUBSCRIPTION] }));
+  });
+
+  it("shows the business profile, and saves a type and several models", async () => {
+    const update = vi.fn(() => ({ positioning }));
+    renderGtm(<PositioningView />, { ...reads, "GtmService.UpdatePositioning": update }, { path: "/gtm/positioning" });
+    const profile = await screen.findByTestId("gtm-business-profile");
+    expect(within(profile).getByText("Developer tools")).toBeInTheDocument();
+    expect(within(profile).getByText("Subscription")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Business type"), { target: { value: String(GtmBusinessType.B2B_SAAS) } });
+    const models = screen.getByRole("group", { name: "Business models" });
+    fireEvent.click(within(models).getByLabelText("Usage-based"));
+    fireEvent.click(within(models).getByLabelText("Freemium"));
+    fireEvent.click(within(models).getByLabelText("Subscription"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    const req = (update.mock.calls[0] as unknown[])[0] as UpdatePositioningRequest;
+    expect(req.businessType).toBe(GtmBusinessType.B2B_SAAS);
+    expect(req.businessModels).toEqual([GtmBusinessModel.USAGE_BASED, GtmBusinessModel.FREEMIUM]);
   });
 
   it("creates the positioning at revision 0 when there is none (an empty one at revision 0)", async () => {
