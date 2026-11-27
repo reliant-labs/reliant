@@ -199,6 +199,13 @@ func TestMigrate_GtmTablesHoldTheirInvariants(t *testing.T) {
 		refused(t, "gtm_strategies_library_key_slug", `UPDATE gtm_strategies SET library_key = 'Bad Key' WHERE id = 's1'`)
 	})
 
+	t.Run("the pending-asset sweep has its partial index", func(t *testing.T) {
+		var def string
+		require.NoError(t, raw.QueryRow(`SELECT pg_get_indexdef('public.gtm_assets_pending_created_at_idx'::regclass)`).Scan(&def))
+		require.Contains(t, def, "(created_at)")
+		require.Contains(t, def, "WHERE (status = 'GTM_ASSET_STATUS_PENDING'::text)")
+	})
+
 	t.Run("a verified claim carries its evidence", func(t *testing.T) {
 		require.NoError(t, exec(`INSERT INTO gtm_claims (id, org_id, text, category) VALUES ('k1', 'org-a', 'Hosting costs $5 a month.', 'GTM_CLAIM_CATEGORY_PRICING')`))
 		refused(t, "gtm_claims_verified_has_evidence", `UPDATE gtm_claims SET status = 'GTM_CLAIM_STATUS_VERIFIED' WHERE id = 'k1'`)

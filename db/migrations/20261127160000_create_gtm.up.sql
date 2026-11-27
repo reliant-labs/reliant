@@ -295,6 +295,8 @@ CREATE TABLE gtm_assets (
 COMMENT ON COLUMN gtm_assets.sha256 IS 'forge:readable hex SHA-256 of the file bytes, an integrity checksum, not a credential';
 CREATE INDEX gtm_assets_org_id_item_id_idx ON gtm_assets (org_id, item_id);
 CREATE INDEX gtm_assets_org_id_campaign_id_idx ON gtm_assets (org_id, campaign_id);
+-- The 24-hour sweep's scan: the PENDING assets, oldest first.
+CREATE INDEX gtm_assets_pending_created_at_idx ON gtm_assets (created_at) WHERE status = 'GTM_ASSET_STATUS_PENDING';
 
 -- The org's positioning: one row per org, replaced whole. business_type and
 -- business_models are what "fits my business" reads in the idea bank; '' and
