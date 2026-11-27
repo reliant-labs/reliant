@@ -272,6 +272,11 @@ WHERE id = (SELECT id FROM trigger_events WHERE chat_id = ?1::text ORDER BY crea
 // predicate, which the planner must see at plan time, and for the claim and
 // settle it is the guard that makes them conditional.
 
+// CapacityHeadRedriveInterval is how long a waiting capacity head whose scope
+// freed no slot goes between redrives (ListStalePendingTriggerEvents): the
+// safety net for capacity freed without a released or parked row to show it.
+const CapacityHeadRedriveInterval = 5 * time.Minute
+
 // ListStalePendingTriggerEvents returns inbound events recorded but not yet
 // settled, older than the cutoff, oldest first: the fire workflow for them was
 // never started (the receiver crashed between the insert and the start) or
@@ -288,17 +293,37 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
 	// scope's head is in admission order (priority, then arrival); a head held
 	// back by its key's running cap hands its turn on when its fire declines
 	// (triggers.capacityWake.wakeNext), as the redriver does not know the cap.
+	//
+	// A head is due when its scope has changed since it was last redriven:
+	// it was never redriven (a new head), or a run of its scope released its
+	// slot or parked on a provider after that (trigger_events_capacity_freed).
+	// A full scope that freed nothing would only decline its head again, and
+	// each such fire is a Temporal workflow and a launch attempt: prod redrove
+	// every waiting head every pass, ~2 a minute per scope, ~85% of them to
+	// decline (2026-11-26). What frees capacity without a row saying so (a
+	// raised max_running, a deleted run row) is caught by
+	// CapacityHeadRedriveInterval, the safety net.
 	var rows []*TriggerEvent
 	err := db.Bun().NewRaw(`WITH ordinary AS (
  SELECT id FROM trigger_events WHERE capacity_order IS NULL AND outcome = 'pending' AND created_at < ?0
  ORDER BY created_at,id LIMIT ?1
 ), heads AS (
- SELECT DISTINCT ON (user_id,capacity_project_id,capacity_workflow_ref) id,capacity_redriven_at,created_at
+ SELECT DISTINCT ON (user_id,capacity_project_id,capacity_workflow_ref) id,user_id,capacity_project_id,capacity_workflow_ref,capacity_redriven_at,created_at
  FROM trigger_events WHERE capacity_order IS NOT NULL AND created_at < ?0
  AND outcome = 'pending'
  ORDER BY user_id,capacity_project_id,capacity_workflow_ref,COALESCE(capacity_priority,0) DESC,capacity_order
+), due AS (
+ SELECT h.id,h.capacity_redriven_at,h.created_at FROM heads h
+ WHERE h.capacity_redriven_at IS NULL
+ OR h.capacity_redriven_at < now() - make_interval(secs => ?2)
+ OR EXISTS (
+  SELECT 1 FROM trigger_events freed
+  WHERE freed.user_id = h.user_id AND freed.capacity_project_id = h.capacity_project_id
+  AND freed.capacity_workflow_ref = h.capacity_workflow_ref
+  AND freed.capacity_order IS NOT NULL AND (freed.capacity_released_at IS NOT NULL OR freed.capacity_parked_at IS NOT NULL)
+  AND GREATEST(freed.capacity_released_at, freed.capacity_parked_at) >= h.capacity_redriven_at)
 ), candidates AS (
- SELECT id,capacity_redriven_at,created_at FROM heads
+ SELECT id,capacity_redriven_at,created_at FROM due
  UNION ALL
  SELECT id,capacity_redriven_at,created_at FROM trigger_events
  WHERE capacity_order IS NOT NULL AND outcome='launched' AND capacity_first_run_id IS NULL AND NOT capacity_released
@@ -309,7 +334,7 @@ func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderTha
  UPDATE trigger_events SET capacity_redriven_at = now() WHERE id IN (SELECT id FROM selected) RETURNING id
 )
 SELECT `+columnsOf[TriggerEvent]("event")+` FROM trigger_events event WHERE event.id IN (SELECT id FROM ordinary UNION ALL SELECT id FROM touched)
-ORDER BY event.created_at,event.id`, olderThan, limit).Scan(ctx, &rows)
+ORDER BY event.created_at,event.id`, olderThan, limit, CapacityHeadRedriveInterval.Seconds()).Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list pending trigger events: %w", err)
 	}
