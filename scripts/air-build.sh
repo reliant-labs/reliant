@@ -96,50 +96,6 @@ fi
 # ── Holding the lock from here on. ──────────────────────────────────────────
 
 shift 2
-
-# Link without DWARF (-ldflags=-w) unless FORGE_DEV_DWARF=1: the link is most
-# of a rebuild after one edit, and DWARF is about half its time and a seventh
-# of the binary (./cmd/reliant: 24s and 468 MB with it, 13s and 400 MB
-# without). Only a debugger needs it: panics, stack traces, runtime.Caller and
-# pprof read the symbol table and pclntab, which -w keeps (-s would drop the
-# symbol table, so it is not used). Attaching delve to a dev binary is
-# FORGE_DEV_DWARF=1 forge env up dev.
-#
-# -ldflags is one flag whose last occurrence replaces every earlier one (and
-# GOFLAGS'), so -w is merged into the last -ldflags among the flags, never
-# passed as a second one that would drop its -X stamps. Repeating -w is safe;
-# append it even if an unrelated linker option's value contains that text.
-# An -ldflags in GOFLAGS is the user's choice, so with none on the command
-# line nothing is added.
-if [ "${FORGE_DEV_DWARF:-}" != 1 ]; then
-  n=0 last=0
-  for a in "$@"; do
-    n=$((n + 1))
-    case $a in
-      -ldflags=* | --ldflags=*) last=$n ;;
-      -ldflags | --ldflags) last=$((n + 1)) ;; # the value is the next word
-    esac
-  done
-  if [ "$last" -eq 0 ]; then
-    case " ${GOFLAGS:-} " in
-      *" -ldflags"* | *" --ldflags"*) ;;
-      *) set -- "$@" -ldflags=-w ;;
-    esac
-  elif [ "$last" -le $# ]; then
-    # Rotate every word through once, appending -w to the last value.
-    i=0
-    while [ $i -lt $# ]; do
-      i=$((i + 1))
-      a=$1
-      shift
-      if [ $i -eq "$last" ]; then
-        a="$a -w"
-      fi
-      set -- "$@" "$a"
-    done
-  fi
-fi
-
 CGO_ENABLED=0 go build -trimpath -buildvcs=false "$@" -o "$dir/bin" "$pkg"
 
 # Link the shared binary to the caller's output through a rename, so a running
