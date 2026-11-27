@@ -6,9 +6,10 @@
  * each renders the shop pack's data under a scope over `createShopTransport()`,
  * while the module transport records every call and refuses it.
  *
- * The family is these pages' reads (the TestApi, VulnerabilityApi and
- * StorageBrowserApi defaults, Identity's generated hooks, and the coverage
- * source fetch), plus the observability billing panels' reads: none
+ * The family is these pages' reads (the TestApi and VulnerabilityApi
+ * defaults, Identity's generated hooks, the storage browser's calls, which
+ * resolve their client from the scope's QueryClient, and the coverage source
+ * fetch), plus the observability billing panels' reads: none
  * may reach the module transport. Reads outside the family
  * (forge's, the generated hooks') move onto the scope in their own PRs, and
  * P4.3's enumeration test holds the whole tour to zero; the app-wide reads a
@@ -52,7 +53,6 @@ import { setTransport, transport as appTransport } from "@/lib/connect";
 import { queryClient as appQueryClient } from "@/lib/query-client";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
 import type { LiveEnv } from "@/services/forge/live";
-import { controlPlaneStorageBrowserApi, storageBrowserApiOf } from "@/services/controlPlane/storageBrowser/StorageBrowserApiContext";
 import { controlPlaneTestApi, testApiOf } from "@/services/controlPlane/tests/TestApiContext";
 import { controlPlaneVulnerabilityApi, vulnerabilityApiOf } from "@/services/controlPlane/vulnerabilities/VulnerabilityApiContext";
 import { coverageSourceFetchOf } from "@/services/coverageSource/CoverageSourceContext";
@@ -217,13 +217,11 @@ describe("the scoped context defaults", () => {
   it("are the app's constants on the app's transport, and one api per scope transport", () => {
     expect(testApiOf(appTransport)).toBe(controlPlaneTestApi);
     expect(vulnerabilityApiOf(appTransport)).toBe(controlPlaneVulnerabilityApi);
-    expect(storageBrowserApiOf(appTransport)).toBe(controlPlaneStorageBrowserApi);
     expect(coverageSourceFetchOf(appTransport)).toBe(fetchCoverageSource);
     const shop = createShopTransport();
     for (const [of, app] of [
       [testApiOf, controlPlaneTestApi],
       [vulnerabilityApiOf, controlPlaneVulnerabilityApi],
-      [storageBrowserApiOf, controlPlaneStorageBrowserApi],
     ] as const) {
       const api = (of as (t: Transport) => object)(shop);
       expect((of as (t: Transport) => object)(shop)).toBe(api);
