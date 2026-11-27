@@ -44,7 +44,7 @@ func TestAgentActivationConcurrentPausesAllApply(t *testing.T) {
 		require.NoError(t, err, "pause %d", i)
 	}
 	for _, id := range ids {
-		stored, err := env.repo.GetTrigger(env.ctx, id)
+		stored, err := store.GetTrigger(env.ctx, env.repo.ORM(), id)
 		require.NoError(t, err)
 		require.False(t, stored.Enabled)
 		history, err := store.TriggerChanges(env.ctx, env.repo.ORM(), env.userID, id)

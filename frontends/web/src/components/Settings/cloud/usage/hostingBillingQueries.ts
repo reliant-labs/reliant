@@ -5,29 +5,29 @@
  * editable budget versions, the org's usage summary with its month-end
  * projection, and the free static tier.
  *
- * ── CALLED STRUCTURALLY, UNTIL THE VENDORED CONTRACT CARRIES THEM ─────────
- *
- * These RPCs are added to control-plane's BillingService alongside this UI.
- * Until `task contract:controlplane:sync` re-vendors that proto, the generated
- * client has no such methods, so each call looks the method up by name. A
- * missing method fails as Code.Unimplemented, the same way an older server
- * answers. Every surface already treats that as "not available on this
- * server yet" rather than as zero usage or an empty history. Once the sync
- * lands, the lookup finds the generated method and nothing here changes.
+ * Reads use the vendored BillingService hooks and share their transport and
+ * cache keys. Older servers can still return Code.Unimplemented; the surfaces
+ * show that as unavailable, never zero usage or an empty history.
  *
  * The shapes below are what the hosting surfaces read. The generated messages
  * satisfy them structurally (int64 → bigint, Timestamp → wkt Timestamp), so
- * the vendored types slot in without a translation layer.
+ * no translation layer is needed. The write workflows keep their own mutation
+ * keys and invalidation rules.
  */
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { DescService } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
-import { billingServiceKeys } from "@/hooks/controlplane/billing-service-hooks_gen";
+import {
+  billingServiceKeys,
+  useGetFreeHostingStatus,
+  useGetOrgHostingUsageSummary,
+  useListUsageBillingBudgetVersions,
+} from "@/hooks/controlplane/billing-service-hooks_gen";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 
 type Int = bigint | number;
@@ -149,9 +149,6 @@ export interface MoveFreeHostingDesignationResponse {
 
 interface PendingBillingMethods {
   setUsageBillingBudget(req: SetUsageBillingBudgetRequest): Promise<{ agreement?: { infraBudgetCents: Int }; version?: UsageBillingBudgetVersion }>;
-  listUsageBillingBudgetVersions(req: { orgId: string }): Promise<{ versions: UsageBillingBudgetVersion[] }>;
-  getOrgHostingUsageSummary(req: { orgId: string }): Promise<OrgHostingUsageSummary>;
-  getFreeHostingStatus(req: { orgId: string }): Promise<FreeHostingStatus>;
 }
 
 interface PendingOrganizationMethods {
@@ -206,9 +203,7 @@ export const hostingBillingKeys = {
 };
 
 export function useUsageBillingBudgetVersions(orgId: string, enabled = true) {
-  return useQuery({
-    queryKey: hostingBillingKeys.budgetVersions(orgId),
-    queryFn: () => pendingBillingMethod("listUsageBillingBudgetVersions")({ orgId }),
+  return useListUsageBillingBudgetVersions({ orgId }, {
     enabled: enabled && !!orgId,
     staleTime: 30_000,
     retry: retryHosting,
@@ -232,9 +227,7 @@ export function useSetUsageBillingBudget(orgId: string) {
 }
 
 export function useOrgHostingUsageSummary(orgId: string | null) {
-  return useQuery({
-    queryKey: hostingBillingKeys.usageSummary(orgId ?? ""),
-    queryFn: () => pendingBillingMethod("getOrgHostingUsageSummary")({ orgId: orgId as string }),
+  return useGetOrgHostingUsageSummary({ orgId: orgId ?? "" }, {
     enabled: !!orgId,
     staleTime: 60_000,
     refetchInterval: 5 * 60_000,
@@ -261,9 +254,7 @@ export function useMoveFreeHostingDesignation(orgId: string) {
 }
 
 export function useFreeHostingStatus(orgId: string | null) {
-  return useQuery({
-    queryKey: hostingBillingKeys.freeTier(orgId ?? ""),
-    queryFn: () => pendingBillingMethod("getFreeHostingStatus")({ orgId: orgId as string }),
+  return useGetFreeHostingStatus({ orgId: orgId ?? "" }, {
     enabled: !!orgId,
     staleTime: 60_000,
     retry: retryHosting,

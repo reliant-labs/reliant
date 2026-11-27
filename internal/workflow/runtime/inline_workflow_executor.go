@@ -648,6 +648,12 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A node that sets preflight checks the machine its body runs on first,
+	// and moves off one that fails (node_preflight.go).
+	placed, err = preflightStructural(e.ctx, e.chatID, e.workflowID, e.nodePath(), e.node, resolveNodeDaemonSelector(e.node, e.daemonScope), placed)
+	if err != nil {
+		return nil, err
+	}
 	e.execContext = placed
 
 	// Emit thread_created for all threads this node owns

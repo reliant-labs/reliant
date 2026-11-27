@@ -30,6 +30,8 @@ import (
 	"github.com/reliant-labs/forge/pkg/dashspec"
 	"github.com/reliant-labs/forge/pkg/obsquery"
 	"github.com/reliant-labs/forge/pkg/testkit"
+
+	"github.com/reliant-labs/reliant/internal/gatetest"
 )
 
 // clickhouseImage is the ClickHouse forge's own dashboard SQL tests run on.
@@ -44,13 +46,13 @@ func clickhouse(t *testing.T, seed string) func(db, sql string, args ...string) 
 	t.Helper()
 	testkit.Slow(t, "starts a ClickHouse container and runs every shipped dashboard statement in it")
 	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("no docker on this host: the shipped dashboard SQL needs a ClickHouse container")
+		gatetest.DockerUnavailable(t, "no docker on this host: the shipped dashboard SQL needs a ClickHouse container")
 	}
 	container := os.Getenv("FORGE_ALERT_CLICKHOUSE")
 	if container == "" {
 		container = fmt.Sprintf("reliant-dashsql-%d", time.Now().UnixNano())
 		if out, err := exec.Command("docker", "run", "-d", "--name", container, "-e", "CLICKHOUSE_PASSWORD=pw", clickhouseImage).CombinedOutput(); err != nil {
-			t.Skipf("cannot start a ClickHouse container (docker run: %v): %s", err, out)
+			gatetest.DockerUnavailable(t, "cannot start a ClickHouse container (docker run: %v): %s", err, out)
 		}
 		t.Cleanup(func() { _ = exec.Command("docker", "rm", "-fv", container).Run() })
 		deadline := time.Now().Add(2 * time.Minute)

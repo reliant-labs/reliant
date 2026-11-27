@@ -21,20 +21,21 @@ var shareVars = []string{gomaxprocsVar, "UV_THREADPOOL_SIZE"}
 const gomaxprocsVar = "GOMAXPROCS"
 
 // childEnv is the environment the wrapper runs its command with: its own,
+// without the variables the Gate passes the wrapper alone (boundsEnv), and
 // except that when the gate started it on one P (childGOMAXPROCS non-nil) the
 // command gets its own GOMAXPROCS back — the value it had, or none — rather
 // than the wrapper's 1.
 func childEnv(env []string, childGOMAXPROCS *string) []string {
-	if childGOMAXPROCS == nil {
-		return env
-	}
 	out := make([]string, 0, len(env)+1)
 	for _, kv := range env {
-		if k, _, _ := strings.Cut(kv, "="); k != gomaxprocsVar {
+		switch k, _, _ := strings.Cut(kv, "="); {
+		case k == cpuWeightEnv, k == memoryHighEnv:
+		case k == gomaxprocsVar && childGOMAXPROCS != nil:
+		default:
 			out = append(out, kv)
 		}
 	}
-	if *childGOMAXPROCS != "" {
+	if childGOMAXPROCS != nil && *childGOMAXPROCS != "" {
 		out = append(out, gomaxprocsVar+"="+*childGOMAXPROCS)
 	}
 	return out

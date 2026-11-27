@@ -1,0 +1,218 @@
+name: pipeline-pr
+title: Pipeline · pull request
+hidden: true
+automation_only: true
+apiVersion: "0.0.5"
+description: |
+  The PR pipeline's review-and-iterate loop, one run per PR at a time (redesign §6.1). pr.next decides
+  what the PR needs; a reviewer in a fresh read-only session judges the head; a fixer that can only edit
+  addresses the blockers; the scoped check (lint, affected tests, build) runs on its edits outside its
+  session, looping back to the fixer with the failures until it passes or its rounds run out; a passing
+  fix is pushed and the new head is decided again. An approved head goes to the merge queue, whose gate
+  is the only authority for landing. In a repository in shadow mode nothing is written to GitHub: the
+  fix is checked but never pushed, and the actions record what they would have written.
+  Inert until a repository is enrolled and the server's pipeline.enabled switch is on.
+
+concurrency:
+  key: "{{ trigger.record.repository }}#{{ trigger.record.number }}"
+  max_running_per_key: 1
+  waiting: latest
+  cancel_running: on_new_head
+  max_running: 6
+timeout: 3h
+
+inputs:
+  repos:
+    type: github.repository
+    multi: true
+    default: []
+    description: The enrolled repositories whose PR events start a run (the due scan starts runs for any).
+  trusted_ids:
+    type: github.user
+    multi: true
+    default: []
+    description: People whose PR comments become blockers for the fixer, besides you (GitHub numeric ids).
+  repository:
+    type: string
+    default: ""
+    description: owner/name of the PR's repository (set by the trigger)
+  number:
+    type: integer
+    default: 0
+    description: The PR's number (set by the trigger)
+  comment:
+    type: object
+    default: {}
+    description: The comment that woke the run, if one did (set by the trigger)
+  review_model:
+    type: model
+    default:
+      tags: [powerful]
+      thinking_level: high
+  fix_model:
+    type: model
+    default:
+      tags: [flagship]
+
+triggers:
+  - name: pr-event
+    description: A PR is opened, reopened, marked ready, pushed to or closed. Labels are never read.
+    integration:
+      integration: github
+      events: [pull_request.opened, pull_request.reopened, pull_request.ready_for_review, pull_request.synchronize, pull_request.closed]
+      match: {repository: {input: repos}}
+    inputs: &pr_of_record
+      repository: "{{ trigger.record.repository }}"
+      number: "{{ trigger.record.number }}"
+  - name: due
+    description: The PR's pipeline row came due (pr_pipeline.next_action_at)
+    record_due: {table: pr_pipeline}
+    inputs: *pr_of_record
+  - name: pr-comment
+    description: You, or someone you trust, comments on a PR's conversation
+    integration:
+      integration: github
+      events: [issue_comment.created]
+      match: {is_pull_request: "true", repository: {input: repos}}
+    filter: &trusted >-
+      trigger.sender.verified && trigger.sender.id != ''
+      && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)
+    inputs:
+      repository: "{{ trigger.record.repository }}"
+      number: "{{ trigger.record.number }}"
+      comment: &comment >-
+        {{ {'id': string(trigger.payload.data.comment.id), 'body': trigger.payload.data.comment.body, 'author': trigger.payload.attributes.sender} }}
+  - name: pr-line-comment
+    description: You, or someone you trust, comments on a line of a PR's diff
+    integration:
+      integration: github
+      events: [pull_request_review_comment.created]
+      match: {repository: {input: repos}}
+    filter: *trusted
+    inputs:
+      repository: "{{ trigger.record.repository }}"
+      number: "{{ trigger.record.number }}"
+      comment: *comment
+
+entry: [decide]
+
+nodes:
+  # What the PR needs: review, fix, enqueue, close, escalate or none. Policy lives here, in Go.
+  - id: decide
+    type: action
+    uses: reliant/pr.next@1
+    with:
+      repository: "{{ inputs.repository }}"
+      number: "{{ inputs.number }}"
+      comment: "{{ inputs.comment }}"
+
+  # A fresh read-only session every round; its verdict counts only through pr.verdict.
+  - id: review
+    type: review
+    role: reviewer
+    preflight: true
+    prompt: builtin://pipeline/review.md
+    model: "{{ inputs.review_model }}"
+    with:
+      repository: "{{ nodes.decide.data.repository }}"
+      number: "{{ nodes.decide.data.number }}"
+      head: "{{ nodes.decide.data.head }}"
+      base_ref: "{{ nodes.decide.data.base_ref }}"
+      risk_tier: "{{ nodes.decide.data.?risk_tier.orValue('') }}"
+      reason: "{{ nodes.decide.data.reason }}"
+      prior_findings: "{{ nodes.decide.data.findings }}"
+
+  - id: verdict
+    type: action
+    uses: reliant/pr.verdict@1
+    with: {record_id: "{{ nodes.decide.data.record_id }}", from: review}
+
+  # The fixer's checkout of the exact head pr.next decided on.
+  - id: wt
+    type: create_worktree
+    preflight: true
+    args:
+      name: "pr-{{ string(nodes.decide.data.number) }}-{{ workflow.id.substring(0, 8) }}"
+      target_repo: "{{ nodes.decide.data.repo_target }}"
+      base_branch: "{{ nodes.decide.data.head_ref }}"
+      fetch_branch: "{{ nodes.decide.data.head_ref }}"
+      expected_head: "{{ nodes.decide.data.head }}"
+      force: true
+
+  # fix (edits only) -> check (deterministic, no credentials) -> checked, until the check passes or
+  # pr.checked says escalate (fix.check_rounds, default 3).
+  # The loop body is its own file because an inline body sees only its own nodes.
+  - id: fix
+    type: workflow
+    ref: builtin://pipeline-pr-fix
+    args:
+      record_id: "{{ nodes.decide.data.record_id }}"
+      worktree: "{{ nodes.wt.path }}{{ nodes.decide.data.repo_subdir != '' ? '/' + nodes.decide.data.repo_subdir : '' }}"
+      check_script: "{{ nodes.decide.data.check_script }}"
+      model: "{{ inputs.fix_model }}"
+      with:
+        repository: "{{ nodes.decide.data.repository }}"
+        number: "{{ nodes.decide.data.number }}"
+        head: "{{ nodes.decide.data.head }}"
+        base_ref: "{{ nodes.decide.data.base_ref }}"
+        blockers: "{{ has(nodes.verdict) ? nodes.verdict.data.blockers : nodes.decide.data.blockers }}"
+
+  # Shadow mode writes nothing to GitHub: the fix was checked, and is not pushed.
+  - id: push
+    type: git_publish
+    preflight: true
+    condition: "nodes.decide.data.shadow != true"
+    args:
+      worktree: "{{ nodes.wt.path }}{{ nodes.decide.data.repo_subdir != '' ? '/' + nodes.decide.data.repo_subdir : '' }}"
+      repo: "{{ nodes.decide.data.repository }}"
+      pr_head_of: "{{ nodes.decide.data.number }}"
+      message: "{{ nodes.fix.message }}"
+
+  # Records the attempt; the push's synchronize event wakes the next run, which re-reviews the new head.
+  - id: pushed
+    type: action
+    uses: reliant/pr.pushed@1
+    with: {record_id: "{{ nodes.decide.data.record_id }}", from: push}
+
+  - id: enqueue
+    type: action
+    uses: reliant/queue.enqueue@1
+    with: {record_id: "{{ nodes.decide.data.record_id }}", head: "{{ nodes.decide.data.head }}"}
+
+  - id: close
+    type: action
+    uses: reliant/pr.close@1
+    with: {record_id: "{{ nodes.decide.data.record_id }}", evidence: "{{ nodes.decide.data.evidence }}"}
+
+  - id: escalate
+    type: action
+    uses: reliant/pr.needs_person@1
+    with:
+      record_id: "{{ nodes.decide.data.record_id }}"
+      reason: >-
+        {{ has(nodes.fix) ? nodes.fix.reason
+           : (has(nodes.verdict) ? nodes.verdict.data.?reason.orValue(nodes.verdict.content) : nodes.decide.data.reason) }}
+
+edges:
+  - from: decide
+    cases:
+      - {to: [review], condition: "!nodes.decide.is_error && nodes.decide.data.next == 'review'", label: review}
+      - {to: [wt], condition: "!nodes.decide.is_error && nodes.decide.data.next == 'fix'", label: fix}
+      - {to: [enqueue], condition: "!nodes.decide.is_error && nodes.decide.data.next == 'enqueue'", label: enqueue}
+      - {to: [close], condition: "!nodes.decide.is_error && nodes.decide.data.next == 'close'", label: close}
+      - {to: [escalate], condition: "!nodes.decide.is_error && nodes.decide.data.next == 'escalate'", label: escalate}
+  - from: review
+    default: verdict
+  - from: verdict
+    cases:
+      - {to: [wt], condition: "!nodes.verdict.is_error && nodes.verdict.data.next == 'fix'", label: fix}
+      - {to: [enqueue], condition: "!nodes.verdict.is_error && nodes.verdict.data.next == 'enqueue'", label: enqueue}
+      - {to: [escalate], condition: "!nodes.verdict.is_error && nodes.verdict.data.next == 'escalate'", label: escalate}
+  - from: wt
+    default: fix
+  - from: fix
+    cases:
+      - {to: [push], condition: "nodes.fix.next == 'push'", label: push}
+      - {to: [escalate], condition: "true", label: escalate}
+  - from: push
+    default: pushed

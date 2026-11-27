@@ -78,6 +78,12 @@ func unmarshalNode(node *yaml.Node) (*reliantv1.Node, error) {
 				return nil, fmt.Errorf("node %s: %w", v2node.Id, err)
 			}
 			v2node.Observe = o
+		case yamlKeyPreflight:
+			p, err := unmarshalNodePreflight(val)
+			if err != nil {
+				return nil, fmt.Errorf("node %s: %w", v2node.Id, err)
+			}
+			v2node.Preflight = p
 		}
 	}
 
@@ -966,6 +972,11 @@ func marshalNode(v2node *reliantv1.Node) (*yaml.Node, error) {
 	// observe (node base level) — what the node records when it finishes.
 	if v2node.Observe != nil {
 		m.Content = append(m.Content, scalarNode(yamlKeyObserve, ""), marshalNodeObserve(v2node.Observe))
+	}
+
+	// preflight (node base level) — the machine's self-check.
+	if v2node.Preflight != nil {
+		m.Content = append(m.Content, scalarNode(yamlKeyPreflight, ""), marshalNodePreflight(v2node.Preflight))
 	}
 
 	// Marshal args based on generated descriptor binding.

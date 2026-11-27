@@ -81,6 +81,11 @@ func TestSetupOptionalCachesPreserveDefaults(t *testing.T) {
 			}
 			found = true
 			want := "inputs.go == 'true' && inputs." + tc.input + " == 'true'"
+			if tc.input == "go-build-cache" {
+				// Self-hosted runners use the machine's shared GOCACHE instead
+				// (the step's comment, merge-queue.yml's header).
+				want += " && runner.environment != 'self-hosted'"
+			}
 			if step.If != want {
 				t.Errorf("%s condition = %q, want %q", tc.name, step.If, want)
 			}

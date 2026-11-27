@@ -4,83 +4,264 @@ package gtm
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"reflect"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
-	"time"
 	"unicode/utf8"
 
-	"github.com/oklog/ulid/v2"
-
+	"github.com/reliant-labs/reliant/internal/gtm/library"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
+// The strategy library is the embedded idea bank (internal/gtm/library):
+// generic, read-only, the same for every org GTM admits. An org's own
+// strategies and ideas are its rows; they name an entry by library_key.
+
+var libraryKey = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,127}$`)
+
+const maxLibraryQueryLen = 200
+
 var (
-	libraryDepths = []LibraryDepth{DepthPlay, DepthTactic}
-	libraryKey    = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,127}$`)
+	businessTypes = []BusinessType{
+		BusinessB2BSaaS, BusinessB2CApp, BusinessDeveloperTools, BusinessEcommerce, BusinessMarketplace,
+		BusinessAgencyServices, BusinessCreatorMedia, BusinessLocalBusiness, BusinessOpenSource, BusinessHardware,
+	}
+	businessModels = []BusinessModel{
+		ModelSubscription, ModelUsageBased, ModelOneTime, ModelFreemium,
+		ModelFreeOSS, ModelMarketplace, ModelServices, ModelAdSupported,
+	}
 )
 
-// Library entry field caps.
+// The bank's vocabularies are lowercase slugs; the domain's (and the
+// proto's and the table's) are the enum names: <prefix><SLUG UPPERCASED>.
 const (
-	maxLibraryNameLen    = 200
-	maxLibraryVocabLen   = 200
-	maxLibraryListLen    = 100
-	maxLibraryListItem   = 500
-	maxLibrarySteps      = 100
-	maxLibraryExtraBytes = 64 << 10
-	maxSourceRevisionLen = 200
-	maxLibraryQueryLen   = 200
+	categoryPrefix      = "GTM_STRATEGY_CATEGORY_"
+	businessTypePrefix  = "GTM_BUSINESS_TYPE_"
+	businessModelPrefix = "GTM_BUSINESS_MODEL_"
 )
 
-// ListStrategyLibrary lists the org's library, by category then name.
+func toEnum(prefix, slug string) string { return prefix + strings.ToUpper(slug) }
+
+// toSlug is enum's bank slug, or "" when enum does not carry prefix.
+func toSlug(prefix, enum string) string {
+	rest, ok := strings.CutPrefix(enum, prefix)
+	if !ok {
+		return ""
+	}
+	return strings.ToLower(rest)
+}
+
+func bankCategory(c StrategyCategory) string { return toSlug(categoryPrefix, string(c)) }
+func bankBusinessType(t BusinessType) string { return toSlug(businessTypePrefix, string(t)) }
+func bankBusinessModel(m BusinessModel) string {
+	return toSlug(businessModelPrefix, string(m))
+}
+
+// libraryEntry is a bank entry in domain terms.
+func libraryEntry(e library.Entry) LibraryEntry {
+	out := LibraryEntry{
+		Key:                 e.Key,
+		Category:            StrategyCategory(toEnum(categoryPrefix, e.Category)),
+		Name:                e.Name,
+		SummaryMD:           e.Summary,
+		WhyItWorksMD:        e.WhyItWorks,
+		Stages:              slices.Clone(e.Stages),
+		Objective:           e.Objective,
+		Effort:              e.Effort,
+		Cost:                e.Cost,
+		SignalDays:          e.SignalDays,
+		TailorQuestions:     slices.Clone(e.TailorQuestions),
+		SuggestedWorkflowMD: e.SuggestedWorkflow,
+		ChannelTypes:        slices.Clone(e.ChannelTypes),
+		KPIs:                slices.Clone(e.KPIs),
+	}
+	for _, t := range e.Fits.BusinessTypes {
+		out.BusinessTypes = append(out.BusinessTypes, BusinessType(toEnum(businessTypePrefix, t)))
+	}
+	for _, m := range e.Fits.BusinessModels {
+		out.BusinessModels = append(out.BusinessModels, BusinessModel(toEnum(businessModelPrefix, m)))
+	}
+	return out
+}
+
+// checkSlug is v empty or one of vocab.
+func checkSlug(field, v string, vocab []string) error {
+	if v != "" && !slices.Contains(vocab, v) {
+		return invalid(field, "one of "+strings.Join(vocab, ", "))
+	}
+	return nil
+}
+
+// The library filter lists' caps, the proto's max_items: a list holds each
+// value of its vocabulary at most once.
+const (
+	MaxLibraryCategories     = 13
+	MaxLibraryBusinessTypes  = 10
+	MaxLibraryBusinessModels = 8
+)
+
+// libraryList checks one filter list: at most maxLen values (counted as
+// sent, as the proto counts them), each in vocab; it returns them mapped to
+// bank values with repeats dropped, in first-seen order.
+func libraryList[T ~string](field string, vs []T, maxLen int, vocab []T, slug func(T) string) ([]string, error) {
+	if len(vs) > maxLen {
+		return nil, invalid(field, fmt.Sprintf("at most %d", maxLen))
+	}
+	var out []string
+	for _, v := range vs {
+		if !slices.Contains(vocab, v) {
+			return nil, invalid(field, fmt.Sprintf("unknown value %q", v))
+		}
+		if b := slug(v); !slices.Contains(out, b) {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+// libraryQuery checks in's filters and maps them to a bank query.
+func libraryQuery(in ListStrategyLibraryInput) (library.Query, error) {
+	var q library.Query
+	var err error
+	if q.Categories, err = libraryList("categories", in.Categories, MaxLibraryCategories, strategyCategories, bankCategory); err != nil {
+		return q, err
+	}
+	if q.BusinessTypes, err = libraryList("business_types", in.BusinessTypes, MaxLibraryBusinessTypes, businessTypes, bankBusinessType); err != nil {
+		return q, err
+	}
+	if q.BusinessModels, err = libraryList("business_models", in.BusinessModels, MaxLibraryBusinessModels, businessModels, bankBusinessModel); err != nil {
+		return q, err
+	}
+	if err := firstErr(
+		checkSlug("stage", in.Stage, library.Stages()),
+		checkSlug("objective", in.Objective, library.Objectives()),
+		checkSlug("effort", in.Effort, library.Efforts()),
+		checkSlug("cost", in.Cost, library.Costs()),
+		checkLen("query", in.Query, 0, maxLibraryQueryLen),
+	); err != nil {
+		return q, err
+	}
+	q.Stage, q.Objective, q.Effort, q.Cost, q.Text = in.Stage, in.Objective, in.Effort, in.Cost, in.Query
+	// The domain's checks are the bank's, so this never refuses; it keeps
+	// the two from drifting apart silently.
+	if err := library.ValidateQuery(q); err != nil {
+		return q, invalid("query", err.Error())
+	}
+	return q, nil
+}
+
+// ListStrategyLibrary lists the idea bank: by category (the bank's stable
+// order) then name, paged; or, with Diverse, a spread across categories.
+// FitsMyBusiness reads the org's positioning.
 func (s *service) ListStrategyLibrary(ctx context.Context, actor Actor, in ListStrategyLibraryInput) (ListStrategyLibraryResult, error) {
 	if err := s.admit(ctx, actor); err != nil {
 		return ListStrategyLibraryResult{}, err
 	}
-	limit, offset, err := page(in.PageSize, in.PageToken, DefaultLibraryPageSize, MaxLibraryPageSize)
+	token := in.PageToken
+	if in.Diverse {
+		token = "" // a spread has no pages: the token is ignored
+	}
+	limit, offset, err := page(in.PageSize, token, DefaultLibraryPageSize, MaxLibraryPageSize)
 	if err != nil {
 		return ListStrategyLibraryResult{}, err
 	}
-	if in.Category != "" && !slices.Contains(strategyCategories, in.Category) {
-		return ListStrategyLibraryResult{}, invalid("category", "unknown category")
-	}
-	if in.Depth != "" && !slices.Contains(libraryDepths, in.Depth) {
-		return ListStrategyLibraryResult{}, invalid("depth", "unknown depth")
-	}
-	if err := firstErr(
-		checkLen("stage", in.Stage, 0, maxLibraryVocabLen),
-		checkLen("cost", in.Cost, 0, maxLibraryVocabLen),
-		checkLen("difficulty", in.Difficulty, 0, maxLibraryVocabLen),
-		checkLen("fit", in.Fit, 0, maxLibraryVocabLen),
-		checkLen("query", in.Query, 0, maxLibraryQueryLen),
-	); err != nil {
-		return ListStrategyLibraryResult{}, err
-	}
-	rows, err := s.store.ListLibrary(ctx, LibraryFilter{
-		OrgID: actor.OrgID, Category: in.Category, Depth: in.Depth, Stage: in.Stage, Cost: in.Cost,
-		Difficulty: in.Difficulty, Fit: in.Fit, Query: in.Query, Limit: limit, Offset: offset,
-	})
+	q, err := libraryQuery(in)
 	if err != nil {
 		return ListStrategyLibraryResult{}, err
 	}
-	rows, next := nextToken(rows, limit, offset)
-	out := make([]LibraryEntry, 0, len(rows))
-	for _, r := range rows {
-		e, err := libraryFromRow(r)
-		if err != nil {
+	keep := func(library.Entry) bool { return true }
+	if in.FitsMyBusiness {
+		var btype string
+		var models []string
+		pos, err := s.store.GetPositioning(ctx, actor.OrgID)
+		switch {
+		case errors.Is(err, ErrNotFound):
+		case err != nil:
 			return ListStrategyLibraryResult{}, err
+		default:
+			btype = bankBusinessType(BusinessType(pos.BusinessType))
+			for _, m := range pos.BusinessModels {
+				models = append(models, bankBusinessModel(BusinessModel(m)))
+			}
 		}
-		out = append(out, e)
+		keep = func(e library.Entry) bool { return library.Fits(e, btype, models) }
+	}
+	var matched []library.Entry
+	for _, e := range library.Filter(q) {
+		if keep(e) {
+			matched = append(matched, e)
+		}
+	}
+	if in.Diverse {
+		// No paging: up to page_size entries (limit carries nextToken's
+		// extra row).
+		out := []LibraryEntry{}
+		for _, e := range diverseOf(matched, limit-1) {
+			out = append(out, libraryEntry(e))
+		}
+		return ListStrategyLibraryResult{Entries: out}, nil
+	}
+	cat := map[string]int{}
+	for i, c := range library.Categories() {
+		cat[c] = i
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		a, b := matched[i], matched[j]
+		if cat[a.Category] != cat[b.Category] {
+			return cat[a.Category] < cat[b.Category]
+		}
+		return a.Name < b.Name
+	})
+	if offset > len(matched) {
+		offset = len(matched)
+	}
+	rows, next := nextToken(matched[offset:min(len(matched), offset+limit)], limit, offset)
+	out := make([]LibraryEntry, 0, len(rows))
+	for _, e := range rows {
+		out = append(out, libraryEntry(e))
 	}
 	return ListStrategyLibraryResult{Entries: out, NextPageToken: next}, nil
 }
 
-// GetStrategyLibraryEntry returns one library entry by key.
+// diverseOf is library.Diverse over an already-filtered list in the bank's
+// order (here: the query's matches that also fit the org): round-robin
+// across categories in the bank's stable order, at most ceil(n/k) from any
+// one of the k categories with a match. A test holds it to library.Diverse.
+func diverseOf(es []library.Entry, n int) []library.Entry {
+	if n <= 0 {
+		return nil
+	}
+	groups := map[string][]library.Entry{}
+	for _, e := range es {
+		groups[e.Category] = append(groups[e.Category], e)
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+	per := (n + len(groups) - 1) / len(groups)
+	out := make([]library.Entry, 0, n)
+	for round := 0; round < per; round++ {
+		took := false
+		for _, c := range library.Categories() {
+			if g := groups[c]; round < len(g) {
+				out = append(out, g[round])
+				took = true
+				if len(out) == n {
+					return out
+				}
+			}
+		}
+		if !took {
+			break
+		}
+	}
+	return out
+}
+
+// GetStrategyLibraryEntry returns one bank entry by key.
 func (s *service) GetStrategyLibraryEntry(ctx context.Context, actor Actor, in GetStrategyLibraryEntryInput) (LibraryEntry, error) {
 	if err := s.admit(ctx, actor); err != nil {
 		return LibraryEntry{}, err
@@ -88,270 +269,16 @@ func (s *service) GetStrategyLibraryEntry(ctx context.Context, actor Actor, in G
 	if !libraryKey.MatchString(in.Key) {
 		return LibraryEntry{}, invalid("key", "a library key")
 	}
-	row, err := s.store.GetLibraryEntry(ctx, actor.OrgID, in.Key)
-	if err != nil {
-		return LibraryEntry{}, s.notFound(ctx, err, "library entry", in.Key)
+	e, ok := library.Get(in.Key)
+	if !ok {
+		return LibraryEntry{}, s.notFound(ctx, ErrNotFound, "library entry", in.Key)
 	}
-	return libraryFromRow(row)
+	return libraryEntry(e), nil
 }
 
-// ImportStrategyLibrary upserts a batch of entries by key: a person's act,
-// and the one a person may make through an access token (Actor.ViaToken).
-// An entry equal to the stored one (every field but the import's own
-// stamps) is left alone, but its stamps move: imported_at says when an
-// import last named the key, which a staged prune checks. With Prune, the
-// org's entries whose key is not in AllKeys go, at once for a person-class
-// credential; a token's prune removes nothing and stages a prune request
-// instead (none when there is nothing to remove). Strategies made from a
-// removed entry keep their library_key. Every call writes one audit row,
-// in the same transaction.
-func (s *service) ImportStrategyLibrary(ctx context.Context, actor Actor, in ImportStrategyLibraryInput) (ImportStrategyLibraryResult, error) {
-	if err := s.admit(ctx, actor); err != nil {
-		return ImportStrategyLibraryResult{}, err
-	}
-	// The one person-only rule a token passes: Kind, not Person().
-	if actor.Kind != ActorPerson {
-		return ImportStrategyLibraryResult{}, personOnly("import the strategy library")
-	}
-	if err := checkImport(in); err != nil {
-		return ImportStrategyLibraryResult{}, err
-	}
-	keys := make([]string, 0, len(in.Entries))
-	for _, e := range in.Entries {
-		keys = append(keys, e.Key)
-	}
-	var out ImportStrategyLibraryResult
-	err := s.store.InTx(ctx, func(ctx context.Context) error {
-		out = ImportStrategyLibraryResult{}
-		existing, err := s.store.ListLibrary(ctx, LibraryFilter{OrgID: actor.OrgID, Keys: keys, Limit: len(keys) + 1})
-		if err != nil {
-			return err
-		}
-		byKey := make(map[string]*store.GtmStrategyLibrary, len(existing))
-		for _, r := range existing {
-			byKey[r.Key] = r
-		}
-		now := s.now()
-		var touched []string
-		for _, e := range in.Entries {
-			row, err := libraryRow(actor.OrgID, e)
-			if err != nil {
-				return err
-			}
-			row.SourceRevision, row.ImportedAt, row.ImportedBy = in.SourceRevision, now, actor.UserID
-			cur, ok := byKey[e.Key]
-			if !ok {
-				if err := s.store.CreateLibraryEntry(ctx, row); err != nil {
-					return err
-				}
-				out.Created++
-				continue
-			}
-			same, err := sameLibraryEntry(cur, row)
-			if err != nil {
-				return err
-			}
-			if same {
-				touched = append(touched, e.Key)
-				out.Unchanged++
-				continue
-			}
-			row.ID = cur.ID
-			if err := s.store.UpdateLibraryEntry(ctx, row); err != nil {
-				return err
-			}
-			out.Updated++
-		}
-		if len(touched) > 0 {
-			if err := s.store.TouchLibraryEntries(ctx, actor.OrgID, touched, in.SourceRevision, actor.UserID, now); err != nil {
-				return err
-			}
-		}
-		audit := &store.GtmLibraryImport{
-			ID:             ulid.Make().String(),
-			OrgID:          actor.OrgID,
-			ActorUserID:    actor.UserID,
-			CredentialKind: string(actor.credentialKind()),
-			SourceRevision: in.SourceRevision,
-			CreatedAt:      now,
-		}
-		switch {
-		case in.Prune && actor.ViaToken:
-			remove, err := s.store.LibraryKeysNotIn(ctx, actor.OrgID, in.AllKeys)
-			if err != nil {
-				return err
-			}
-			if len(remove) > 0 {
-				req := &store.GtmLibraryPruneRequest{
-					ID:             ulid.Make().String(),
-					OrgID:          actor.OrgID,
-					RequestedBy:    actor.UserID,
-					CredentialKind: string(CredentialToken),
-					SourceRevision: in.SourceRevision,
-					RemoveKeys:     remove,
-					Status:         string(PruneRequestPending),
-					CreatedAt:      now,
-				}
-				if err := s.store.CreatePruneRequest(ctx, req); err != nil {
-					return err
-				}
-				out.PruneRequestID, out.WouldRemove = req.ID, remove
-				audit.PruneRequestID = &req.ID
-			}
-		case in.Prune:
-			n, err := s.store.PruneLibrary(ctx, actor.OrgID, in.AllKeys)
-			if err != nil {
-				return err
-			}
-			out.Pruned = int(n)
-		}
-		audit.Created, audit.Updated, audit.Unchanged, audit.Pruned = int32(out.Created), int32(out.Updated), int32(out.Unchanged), int32(out.Pruned)
-		return s.store.CreateLibraryImport(ctx, audit)
-	})
-	return out, err
-}
-
-// sameLibraryEntry reports whether cur already holds what row would write,
-// the import's stamps aside.
-func sameLibraryEntry(cur, row *store.GtmStrategyLibrary) (bool, error) {
-	a, err := libraryFromRow(cur)
-	if err != nil {
-		return false, err
-	}
-	b, err := libraryFromRow(row)
-	if err != nil {
-		return false, err
-	}
-	for _, e := range []*LibraryEntry{&a, &b} {
-		e.SourceRevision, e.ImportedBy, e.ImportedAt = "", "", time.Time{}
-		for _, l := range []*[]string{&e.Lifecycle, &e.ChannelTypes, &e.Integrations, &e.Fits, &e.Prerequisites,
-			&e.KPIs, &e.Tactics, &e.Automates, &e.Experiments, &e.StopWhen} {
-			if len(*l) == 0 {
-				*l = nil
-			}
-		}
-		if len(e.Steps) == 0 {
-			e.Steps = nil
-		}
-		if len(e.Extra) == 0 {
-			e.Extra = nil
-		}
-	}
-	return reflect.DeepEqual(a, b), nil
-}
-
-func checkImport(in ImportStrategyLibraryInput) error {
-	if n := len(in.Entries); n < 1 || n > MaxLibraryImport {
-		return invalid("entries", fmt.Sprintf("1 to %d per call", MaxLibraryImport))
-	}
-	if err := checkLen("source_revision", in.SourceRevision, 1, maxSourceRevisionLen); err != nil {
-		return err
-	}
-	if len(in.AllKeys) > MaxLibraryKeys {
-		return invalid("all_keys", fmt.Sprintf("at most %d", MaxLibraryKeys))
-	}
-	all := make(map[string]bool, len(in.AllKeys))
-	for _, k := range in.AllKeys {
-		if !libraryKey.MatchString(k) {
-			return invalid("all_keys", fmt.Sprintf("%q is not a library key", k))
-		}
-		if all[k] {
-			return invalid("all_keys", fmt.Sprintf("%q twice", k))
-		}
-		all[k] = true
-	}
-	if in.Prune && len(in.AllKeys) == 0 {
-		return invalid("all_keys", "required with prune: every key of the library")
-	}
-	seen := make(map[string]bool, len(in.Entries))
-	for i, e := range in.Entries {
-		if err := checkLibraryEntry(e); err != nil {
-			var ve *ValidationError
-			if errors.As(err, &ve) {
-				return invalid(fmt.Sprintf("entries[%d].%s", i, ve.Field), ve.Reason)
-			}
-			return err
-		}
-		if seen[e.Key] {
-			return invalid(fmt.Sprintf("entries[%d].key", i), fmt.Sprintf("%q twice in the batch", e.Key))
-		}
-		seen[e.Key] = true
-		if in.Prune && !all[e.Key] {
-			return invalid(fmt.Sprintf("entries[%d].key", i), fmt.Sprintf("%q is not in all_keys", e.Key))
-		}
-	}
-	return nil
-}
-
-func checkLibraryEntry(e LibraryEntry) error {
-	if !libraryKey.MatchString(e.Key) {
-		return invalid("key", "a slug: [a-z0-9][a-z0-9_-]{0,127}")
-	}
-	if !slices.Contains(strategyCategories, e.Category) {
-		return invalid("category", "required, one of the 13")
-	}
-	if !slices.Contains(libraryDepths, e.Depth) {
-		return invalid("depth", "required: PLAY or TACTIC")
-	}
-	checks := []error{
-		checkLen("name", e.Name, 1, maxLibraryNameLen),
-		checkLen("summary_md", e.SummaryMD, 0, MaxShortTextLen),
-		checkLen("hypothesis_md", e.HypothesisMD, 0, MaxShortTextLen),
-	}
-	for field, v := range map[string]string{
-		"icon": e.Icon, "stage": e.Stage, "cost": e.Cost, "cost_note": e.CostNote, "difficulty": e.Difficulty,
-		"level": e.Level, "objective": e.Objective, "north_star": e.NorthStar,
-	} {
-		checks = append(checks, checkLen(field, v, 0, maxLibraryVocabLen))
-	}
-	for field, v := range map[string]int32{"hours": e.Hours, "signal_days": e.SignalDays, "window_days": e.WindowDays, "launch_days": e.LaunchDays} {
-		if v < 0 {
-			checks = append(checks, invalid(field, "0 or more"))
-		}
-	}
-	if math.IsNaN(e.ExpectedDelta) || math.IsInf(e.ExpectedDelta, 0) {
-		checks = append(checks, invalid("expected_delta", "a finite number"))
-	}
-	for field, l := range map[string][]string{
-		"lifecycle": e.Lifecycle, "channel_types": e.ChannelTypes, "integrations": e.Integrations, "fits": e.Fits,
-		"prerequisites": e.Prerequisites, "kpis": e.KPIs, "tactics": e.Tactics, "automates": e.Automates,
-		"experiments": e.Experiments, "stop_when": e.StopWhen,
-	} {
-		checks = append(checks, checkList(field, l))
-	}
-	if len(e.Steps) > maxLibrarySteps {
-		checks = append(checks, invalid("steps", fmt.Sprintf("at most %d", maxLibrarySteps)))
-	}
-	for _, st := range e.Steps {
-		checks = append(checks, checkLen("steps.who", st.Who, 0, maxLibraryVocabLen), checkLen("steps.title", st.Title, 1, maxLibraryListItem))
-	}
-	if e.Extra != nil {
-		b, err := json.Marshal(e.Extra)
-		if err != nil {
-			checks = append(checks, invalid("extra", "not JSON"))
-		} else if len(b) > maxLibraryExtraBytes {
-			checks = append(checks, invalid("extra", "at most 64 KiB"))
-		}
-	}
-	return firstErr(checks...)
-}
-
-func checkList(field string, l []string) error {
-	if len(l) > maxLibraryListLen {
-		return invalid(field, fmt.Sprintf("at most %d entries", maxLibraryListLen))
-	}
-	for _, v := range l {
-		if strings.TrimSpace(v) == "" || utf8.RuneCountInString(v) > maxLibraryListItem {
-			return invalid(field, fmt.Sprintf("each 1 to %d characters", maxLibraryListItem))
-		}
-	}
-	return nil
-}
-
-// UseLibraryStrategy makes a DRAFT strategy from a library entry, and with
-// CreateFirstCampaign a first DRAFT campaign under it that plans the org's
-// ACTIVE channels an entry's channel_types name: by key, or by a channel
-// type in common. A person or an agent may.
+// UseLibraryStrategy makes a DRAFT strategy from a bank entry, and
+// optionally a first DRAFT campaign planning the org's ACTIVE channels that
+// fit the entry's channel types.
 func (s *service) UseLibraryStrategy(ctx context.Context, actor Actor, in UseLibraryStrategyInput) (UseLibraryStrategyResult, error) {
 	if err := s.admit(ctx, actor); err != nil {
 		return UseLibraryStrategyResult{}, err
@@ -367,6 +294,11 @@ func (s *service) UseLibraryStrategy(ctx context.Context, actor Actor, in UseLib
 			return UseLibraryStrategyResult{}, err
 		}
 	}
+	be, ok := library.Get(in.LibraryKey)
+	if !ok {
+		return UseLibraryStrategyResult{}, s.notFound(ctx, ErrNotFound, "library entry", in.LibraryKey)
+	}
+	entry := libraryEntry(be)
 	if in.CreateFirstCampaign {
 		if err := s.ensureChannels(ctx, actor.OrgID); err != nil {
 			return UseLibraryStrategyResult{}, err
@@ -375,19 +307,11 @@ func (s *service) UseLibraryStrategy(ctx context.Context, actor Actor, in UseLib
 	var out UseLibraryStrategyResult
 	err := s.store.InTx(ctx, func(ctx context.Context) error {
 		out = UseLibraryStrategyResult{}
-		er, err := s.store.GetLibraryEntry(ctx, actor.OrgID, in.LibraryKey)
-		if err != nil {
-			return s.notFound(ctx, err, "library entry", in.LibraryKey)
-		}
-		entry, err := libraryFromRow(er)
-		if err != nil {
-			return err
-		}
 		now := s.now()
 		srow := &store.GtmStrategy{
 			OrgID:        actor.OrgID,
 			Name:         clip(entry.Name, maxStrategyNameLen),
-			GoalMd:       joinNonEmpty("\n\n", entry.NorthStar, entry.Objective),
+			GoalMd:       clip(joinNonEmpty("\n\n", entry.SummaryMD, objectiveLine(entry.Objective)), MaxBodyLen),
 			TargetMetric: clip(strings.Join(entry.KPIs, ", "), maxTargetMetricLen),
 			Status:       string(StrategyDraft),
 			Category:     strPtrOrNil(string(entry.Category)),
@@ -432,6 +356,14 @@ func (s *service) UseLibraryStrategy(ctx context.Context, actor Actor, in UseLib
 		return nil
 	})
 	return out, err
+}
+
+// objectiveLine is the goal's objective sentence, "" for none.
+func objectiveLine(objective string) string {
+	if objective == "" {
+		return ""
+	}
+	return "Objective: " + objective
 }
 
 // plannedChannels maps an entry's channel_types to the given channels: in

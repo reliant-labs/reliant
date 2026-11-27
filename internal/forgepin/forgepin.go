@@ -11,7 +11,7 @@
 // guidance, delivered as authoritative (forge report 86c6fd64 found the same
 // skew in `reliant forge generate`). So inside such a project the content is
 // asked of the pinned forge: forge's own hand-off decides which forge that is
-// and obtains it (forgecli.ResolvePinnedForge), and this package runs it and
+// and obtains it (forgepin.Resolve in forge), and this package runs it and
 // caches what it prints.
 //
 // Callers decide what to do when the pinned forge cannot be obtained; the
@@ -32,7 +32,7 @@ import (
 	"sync"
 	"time"
 
-	forgecli "github.com/reliant-labs/forge/cli"
+	fpin "github.com/reliant-labs/forge/pkg/forgepin"
 )
 
 const (
@@ -73,7 +73,7 @@ type failedOutput struct {
 type resolution struct {
 	yaml string
 	at   time.Time
-	pf   forgecli.PinnedForge
+	pf   fpin.Forge
 	ok   bool
 	err  error
 }
@@ -83,7 +83,7 @@ func New(deps Deps) Service { return &source{Deps: deps} }
 
 // RealDeps resolve, run and cache for real.
 func RealDeps() Deps {
-	return Deps{Resolve: forgecli.ResolvePinnedForge, Run: execForge, CacheDir: defaultCacheDir}
+	return Deps{Resolve: fpin.Resolve, Run: execForge, CacheDir: defaultCacheDir}
 }
 
 var defaultService = New(RealDeps())
@@ -96,7 +96,7 @@ func Default() Service { return defaultService }
 // forge command the caller will run, which the decision depends on. An answer
 // is reused for a minute while forge.yaml is unchanged, and a failure for ten,
 // so an unobtainable pin is not rebuilt once per skill or once a minute.
-func (s *source) Pinned(root, command string) (forgecli.PinnedForge, bool, error) {
+func (s *source) Pinned(root, command string) (fpin.Forge, bool, error) {
 	yaml, _ := os.ReadFile(filepath.Join(root, "forge.yaml"))
 	key := root + "\x00" + command
 	if v, ok := s.resolutions.Load(key); ok {
@@ -129,7 +129,7 @@ func (s *source) Pinned(root, command string) (forgecli.PinnedForge, bool, error
 // uncached failure ran the pinned forge once per project every few seconds
 // for as long as the daemon lived (a loaded machine, 2026-11-05: ~16 such
 // projects, each a forge process on every poll).
-func (s *source) Output(pf forgecli.PinnedForge, dir, name string, tries ...[]string) ([]byte, error) {
+func (s *source) Output(pf fpin.Forge, dir, name string, tries ...[]string) ([]byte, error) {
 	memKey := pf.Key + "\x00" + name
 	if v, ok := s.outputs.Load(memKey); ok {
 		return v.([]byte), nil

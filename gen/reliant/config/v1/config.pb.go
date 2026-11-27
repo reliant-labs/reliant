@@ -33,7 +33,6 @@ type ReliantConfig struct {
 	WorktreeReclaim *WorktreeReclaimConfig `protobuf:"bytes,5,opt,name=worktree_reclaim,json=worktreeReclaim,proto3" json:"worktree_reclaim,omitempty"`
 	MachineOrg      *MachineOrgConfig      `protobuf:"bytes,6,opt,name=machine_org,json=machineOrg,proto3" json:"machine_org,omitempty"`
 	IdleReclaim     *IdleReclaimConfig     `protobuf:"bytes,7,opt,name=idle_reclaim,json=idleReclaim,proto3" json:"idle_reclaim,omitempty"`
-	Gtm             *GtmConfig             `protobuf:"bytes,8,opt,name=gtm,proto3" json:"gtm,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -113,13 +112,6 @@ func (x *ReliantConfig) GetMachineOrg() *MachineOrgConfig {
 func (x *ReliantConfig) GetIdleReclaim() *IdleReclaimConfig {
 	if x != nil {
 		return x.IdleReclaim
-	}
-	return nil
-}
-
-func (x *ReliantConfig) GetGtm() *GtmConfig {
-	if x != nil {
-		return x.Gtm
 	}
 	return nil
 }
@@ -625,7 +617,7 @@ var File_reliant_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\x1a\"reliant/config/v1/gtm_config.proto\"\xb2\x04\n" +
+	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x9f\x04\n" +
 	"\rReliantConfig\x12.\n" +
 	"\x03log\x18\x01 \x01(\v2\x1c.reliant.config.v1.LogConfigR\x03log\x12:\n" +
 	"\aruntime\x18\x02 \x01(\v2 .reliant.config.v1.RuntimeConfigR\aruntime\x12M\n" +
@@ -636,9 +628,10 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\x10worktree_reclaim\x18\x05 \x01(\v2(.reliant.config.v1.WorktreeReclaimConfigR\x0fworktreeReclaim\x12D\n" +
 	"\vmachine_org\x18\x06 \x01(\v2#.reliant.config.v1.MachineOrgConfigR\n" +
 	"machineOrg\x12G\n" +
-	"\fidle_reclaim\x18\a \x01(\v2$.reliant.config.v1.IdleReclaimConfigR\vidleReclaim\x12.\n" +
-	"\x03gtm\x18\b \x01(\v2\x1c.reliant.config.v1.GtmConfigR\x03gtm:\r\xca\xc1\x18\t\n" +
-	"\areliant\"\xe7\x01\n" +
+	"\fidle_reclaim\x18\a \x01(\v2$.reliant.config.v1.IdleReclaimConfigR\vidleReclaim:\r\xca\xc1\x18\t\n" +
+	"\areliantJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"R\x03gtmR\n" +
+	"gtm_assets\"\xe7\x01\n" +
 	"\x10MachineOrgConfig\x12\xd2\x01\n" +
 	"\x11cross_org_cleanup\x18\x01 \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
 	"\x1bRELIANT_MACHINE_ORG_CLEANUP\x1a\x02on*tThe connect reconcile detaches other orgs' checkout records from a machine of a known org (on), or leaves them (off)J\x02onJ\x03offR\x0fcrossOrgCleanup\"\xe8\x01\n" +
@@ -711,7 +704,6 @@ var file_reliant_config_v1_config_proto_goTypes = []any{
 	(*StorageReaperConfig)(nil),   // 5: reliant.config.v1.StorageReaperConfig
 	(*WorktreeReclaimConfig)(nil), // 6: reliant.config.v1.WorktreeReclaimConfig
 	(*IdleReclaimConfig)(nil),     // 7: reliant.config.v1.IdleReclaimConfig
-	(*GtmConfig)(nil),             // 8: reliant.config.v1.GtmConfig
 }
 var file_reliant_config_v1_config_proto_depIdxs = []int32{
 	4, // 0: reliant.config.v1.ReliantConfig.log:type_name -> reliant.config.v1.LogConfig
@@ -721,12 +713,11 @@ var file_reliant_config_v1_config_proto_depIdxs = []int32{
 	6, // 4: reliant.config.v1.ReliantConfig.worktree_reclaim:type_name -> reliant.config.v1.WorktreeReclaimConfig
 	1, // 5: reliant.config.v1.ReliantConfig.machine_org:type_name -> reliant.config.v1.MachineOrgConfig
 	7, // 6: reliant.config.v1.ReliantConfig.idle_reclaim:type_name -> reliant.config.v1.IdleReclaimConfig
-	8, // 7: reliant.config.v1.ReliantConfig.gtm:type_name -> reliant.config.v1.GtmConfig
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	8, // [8:8] is the sub-list for extension type_name
-	8, // [8:8] is the sub-list for extension extendee
-	0, // [0:8] is the sub-list for field type_name
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_config_proto_init() }
@@ -734,7 +725,6 @@ func file_reliant_config_v1_config_proto_init() {
 	if File_reliant_config_v1_config_proto != nil {
 		return
 	}
-	file_reliant_config_v1_gtm_config_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

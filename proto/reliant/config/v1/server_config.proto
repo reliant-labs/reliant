@@ -82,10 +82,46 @@ message ServerProcessConfig {
   // role loads it: the worker runs the pipeline's server actions, and the API
   // server serves its RPCs.
   PipelineConfig pipeline = 16;
+  // The workflow reconciler's switches (ReconcilerConfig). The reconciler
+  // runs in the API server today; every role loads it so the switch follows
+  // the reconciler wherever it runs.
+  ReconcilerConfig reconciler = 17;
+  // Who gets GTM and how its analytics read reaches the control plane
+  // (gtm_config.proto). Here, not on the root config, so only the server
+  // roles whose graph reads it (the API server and the worker) are handed
+  // its settings and its secret; the gateway never is.
+  GtmConfig gtm = 18;
   // The GTM assets bucket (gtm_config.proto). Here, not on the root config,
   // so only the server roles whose graph reads it (the API server and the
   // worker) are handed its credentials; the gateway never is.
-  GtmAssetsConfig gtm_assets = 18;
+  GtmAssetsConfig gtm_assets = 19;
+}
+
+// ReconcilerConfig holds the workflow reconciler's opt-in checks.
+message ReconcilerConfig {
+  // The stall watchdog: a running workflow run (not a conversation) that has
+  // made no progress for longer than max(its idle ceiling, the longest
+  // in-flight node's timeout + grace), with nothing parking it legitimately
+  // (an approval, a question, its machine, a usage limit):
+  //
+  //   off      the default: the watchdog does no work at all, not a query;
+  //   report   it logs, counts (reliant_reconciler_anomalies_total) and
+  //            records each stalled run, and changes nothing;
+  //   enforce  it also stops the stalled execution through the run's own
+  //            cancel path (its finally: runs), never a newer execution.
+  //
+  // Only these three values: a switch that kills runs must not fail open on
+  // a typo.
+  string stall_watchdog = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_RECONCILER_STALL_WATCHDOG"
+    default_value: "off"
+    allowed_values: [
+      "off",
+      "report",
+      "enforce"
+    ]
+    description: "Workflow reconciler stall watchdog: off (no work), report (log, count and record stalled runs) or enforce (also stop them)"
+  }];
 }
 
 // PipelineConfig is the platform switch of Reliant's PR and release
@@ -101,6 +137,20 @@ message PipelineConfig {
   bool enabled = 1 [(forge.v1.config) = {
     env_var: "RELIANT_PIPELINE_ENABLED"
     description: "Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them"
+  }];
+
+  // The secret the worker's merge queue signs its caller assertion with
+  // when it asks control-plane for a Reliant Queue App token
+  // (GitCredentialInternalService.MintInstallationToken, app =
+  // GITHUB_APP_QUEUE). Only the worker reads it, and the deploy gives it only
+  // to the worker. Unset (or shorter than 32 bytes), the queue never asks
+  // for a Queue App token: it lands as the Reliant App instead and marks
+  // each batch unenforced.
+  string github_queue_app_caller_secret = 2 [(forge.v1.config) = {
+    env_var: "GITHUB_QUEUE_APP_CALLER_SECRET"
+    sensitive: true
+    optional: true
+    description: "Worker only: signs the merge queue's Queue App token requests to control-plane; unset lands as the Reliant App, unenforced"
   }];
 }
 
