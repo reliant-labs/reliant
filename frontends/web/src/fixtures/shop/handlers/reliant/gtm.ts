@@ -118,6 +118,8 @@ const SLUG = /^[a-z0-9-]{1,32}$/;
 const LIBRARY_KEY = /^[a-z0-9][a-z0-9_-]{0,127}$/;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
 const MAX_IMPORT_BATCH = 500;
+/** GetCampaign's cap on each of its ideas and items lists (the domain's MaxCampaignIdeas and MaxCampaignItems). */
+const MAX_CAMPAIGN_ROWS = 200;
 const PRUNE_EXPIRY_MS = 7 * DAY;
 const DOWNLOAD_TTL_MS = 15 * MINUTE;
 
@@ -547,6 +549,8 @@ export function gtmHandlers() {
     setIdeaStatus: (req) => {
       const current = idea(req.orgId, req.id);
       checkRevision(req.id, req.expectedRevision, current.revision);
+      // The status it already has is no write: no revision bump, no new updated_at.
+      if (current.status === req.status) return { idea: current };
       const next = create(GtmIdeaSchema, { ...current, status: req.status, revision: current.revision + 1, updatedAt: nowTs() });
       return { idea: put(state().ideas, next) };
     },
@@ -563,11 +567,14 @@ export function gtmHandlers() {
       const found = campaign(req.orgId, req.id);
       const all = state();
       const items = all.items.filter((i) => i.campaignId === found.id);
+      const ideas = all.ideas.filter((i) => i.campaignId === found.id).sort(byCreated);
+      const sorted = sortedItems(items);
+      // Each list is capped; truncated says either was cut. Coverage counts every item.
       return {
         campaign: found,
-        ideas: all.ideas.filter((i) => i.campaignId === found.id).sort(byCreated),
-        items: sortedItems(items),
-        truncated: false,
+        ideas: ideas.slice(0, MAX_CAMPAIGN_ROWS),
+        items: sorted.slice(0, MAX_CAMPAIGN_ROWS),
+        truncated: ideas.length > MAX_CAMPAIGN_ROWS || sorted.length > MAX_CAMPAIGN_ROWS,
         coverage: coverageOf(found, items, all.channels),
       };
     },

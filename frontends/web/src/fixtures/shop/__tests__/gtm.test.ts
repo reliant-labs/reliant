@@ -52,6 +52,15 @@ function gtmClient() {
 
 const org = { orgId: DEMO_ORG };
 
+/** Whole calendar days from the day `now` falls on to the day `at` falls on (negative: before). */
+function daysFromToday(now: number, at: number): number {
+  const day = (ms: number) => {
+    const d = new Date(ms);
+    return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+  };
+  return Math.round((day(at) - day(now)) / 86_400_000);
+}
+
 async function rejection(promise: Promise<unknown>): Promise<ConnectError> {
   try {
     await promise;
@@ -76,7 +85,7 @@ describe("the GTM sample pack", () => {
     expect((await rejection(client.listIdeas({ orgId: "org-someone-else" }))).code).toBe(Code.NotFound);
   });
 
-  it("holds the sample volumes: 12 ideas, 2 strategies, 2 campaigns, 9 channels, about 15 items this month, 2 assets, 6 library entries, 8 claims", async () => {
+  it("holds the sample volumes: 12 ideas, 2 strategies, 2 campaigns, 9 channels, about 15 items around today, 2 assets, 6 library entries, 8 claims", async () => {
     const client = gtmClient();
     const { ideas } = await client.listIdeas(org);
     expect(ideas.length).toBeGreaterThanOrEqual(12);
@@ -96,10 +105,9 @@ describe("the GTM sample pack", () => {
     expect(items.length).toBeLessThanOrEqual(16);
     const scheduled = items.filter((i) => i.scheduledAt);
     expect(scheduled.length).toBeGreaterThanOrEqual(13);
-    for (const i of scheduled) {
-      const d = new Date(timestampMs(i.scheduledAt!));
-      expect([d.getFullYear(), d.getMonth()]).toEqual([2026, 6]);
-    }
+    // From 10 days before today to 20 days after it.
+    for (const i of scheduled) expect(daysFromToday(NOW, timestampMs(i.scheduledAt!))).toBeGreaterThanOrEqual(-10);
+    for (const i of scheduled) expect(daysFromToday(NOW, timestampMs(i.scheduledAt!))).toBeLessThanOrEqual(20);
     expect(new Set(items.map((i) => i.format))).toContain(GtmItemFormat.EMAIL);
 
     expect((await client.listAssets({ ...org, itemId: "gtm-item-show-hn" })).assets).toHaveLength(1);
@@ -120,14 +128,14 @@ describe("the GTM sample pack", () => {
 
   it("has the seven default channels plus a second Gmail one and two agent-added manual ones", async () => {
     const { channels } = await gtmClient().listChannels(org);
-    expect(channels.map((c) => c.key)).toEqual(["blog", "dev-forums", "email", "hacker-news", "linkedin", "outreach", "podcast-guests", "reddit", "x", "youtube"]);
+    expect(channels.map((c) => c.key)).toEqual(["blog", "brewing-forums", "email", "hacker-news", "linkedin", "outreach", "podcast-guests", "reddit", "x", "youtube"]);
     const seeded = channels.filter((c) => c.source === GtmChannelSource.SEED).map((c) => c.key);
     expect(seeded).toEqual(["blog", "email", "hacker-news", "linkedin", "reddit", "x", "youtube"]);
     const gmail = channels.filter((c) => c.mode === GtmChannelMode.INTEGRATED);
     expect(gmail.map((c) => [c.key, c.integrationKind, c.connectionState])).toEqual([
       ["email", "gmail", GtmConnectionState.CONNECTED], ["outreach", "gmail", GtmConnectionState.NOT_CONNECTED],
     ]);
-    expect(channels.filter((c) => c.source === GtmChannelSource.AGENT).map((c) => [c.key, c.mode])).toEqual([["dev-forums", GtmChannelMode.MANUAL], ["podcast-guests", GtmChannelMode.MANUAL]]);
+    expect(channels.filter((c) => c.source === GtmChannelSource.AGENT).map((c) => [c.key, c.mode])).toEqual([["brewing-forums", GtmChannelMode.MANUAL], ["podcast-guests", GtmChannelMode.MANUAL]]);
     expect(channels.filter((c) => c.mode === GtmChannelMode.MANUAL).every((c) => !c.integrationKind && !c.connectionId)).toBe(true);
   });
 
@@ -139,7 +147,7 @@ describe("the GTM sample pack", () => {
     expect(published.length).toBeGreaterThan(0);
     expect(published.every((i) => /^https?:\/\//.test(i.publishedUrl))).toBe(true);
     const held = (await client.listItems(org)).items.filter((i) => i.approvalHash !== "" && i.status !== GtmItemStatus.SENT);
-    expect(held.map((i) => [i.id, i.status, i.format])).toEqual([["gtm-item-domains-email", GtmItemStatus.APPROVED, GtmItemFormat.EMAIL]]);
+    expect(held.map((i) => [i.id, i.status, i.format])).toEqual([["gtm-item-grind-guide-email", GtmItemStatus.APPROVED, GtmItemFormat.EMAIL]]);
     const sent = (await client.listItems({ ...org, status: GtmItemStatus.SENT })).items;
     expect(sent.every((i) => i.gmailMessageId !== "" && i.sentAt)).toBe(true);
   });
@@ -154,25 +162,49 @@ describe("the GTM sample pack", () => {
     }
   });
 
-  it("puts items on the current month wherever the clock is, and never past the 28th", async () => {
-    for (const at of [new Date(2026, 1, 3, 9), new Date(2026, 11, 31, 23), new Date(2028, 1, 29, 1)]) {
+  it("places items from 10 days ago to 20 days ahead of today, so the calendar and \"Coming up\" are never empty", async () => {
+    // Month ends, year ends, a leap day, and the day the preview showed nothing on (27 Nov).
+    const clocks = [new Date(2026, 10, 27, 9), new Date(2026, 11, 31, 23), new Date(2028, 1, 29, 1), new Date(2026, 1, 3, 9), new Date(2026, 0, 1, 0, 5), new Date(2026, 6, 31, 12)];
+    for (const at of clocks) {
       resetDemoNowForTests(at.getTime());
       const { items } = await createFixtureClient(at.getTime()).listItems(org);
-      for (const i of items.filter((x) => x.scheduledAt)) {
-        const d = new Date(timestampMs(i.scheduledAt!));
-        expect([d.getFullYear(), d.getMonth()]).toEqual([at.getFullYear(), at.getMonth()]);
-      }
+      const dated = items.filter((x) => x.scheduledAt);
+      const days = dated.map((x) => daysFromToday(at.getTime(), timestampMs(x.scheduledAt!)));
+      expect(Math.min(...days), at.toISOString()).toBeGreaterThanOrEqual(-10);
+      expect(Math.max(...days), at.toISOString()).toBeLessThanOrEqual(20);
+      // The phone's "Coming up" list is what is dated from the start of today on.
+      const startOfToday = new Date(at.getFullYear(), at.getMonth(), at.getDate()).getTime();
+      const upcoming = dated.filter((x) => timestampMs(x.scheduledAt!) >= startOfToday);
+      expect(upcoming.length, `${at.toISOString()}: coming up`).toBeGreaterThanOrEqual(8);
+      expect(dated.length - upcoming.length, `${at.toISOString()}: already out`).toBeGreaterThanOrEqual(4);
+      // The Show HN item is dated today, so it leads that list.
+      expect(upcoming.sort((p, q) => timestampMs(p.scheduledAt!) - timestampMs(q.scheduledAt!))[0]?.id).toBe("gtm-item-show-hn");
     }
   });
 
-  it("is generic: no real prices or product names in any sample text", async () => {
+  it("is generic: nothing in the sample copy names, or restates a fact of, a real product", async () => {
     const client = gtmClient();
+    const downloads = await Promise.all(["gtm-asset-hn-hero", "gtm-asset-brand-sheet"].map(async (assetId) => decodeURIComponent((await client.getAssetDownload({ ...org, assetId })).url)));
     const text = JSON.stringify([
       (await client.listIdeas(org)).ideas, (await client.listItems(org)).items, (await client.listClaims(org)).claims, (await client.getPositioning(org)).positioning,
       (await client.listStrategies(org)).strategies, (await client.listChannels(org)).channels, (await client.listCampaigns(org)).campaigns, (await client.listStrategyLibrary(org)).entries,
       (await client.listLibraryImports(org)).imports, (await client.listLibraryPruneRequests(org)).requests, (await client.listAssets({ ...org, itemId: "gtm-item-show-hn" })).assets,
+      (await client.listAssets({ ...org, campaignId: "gtm-cmp-weekly-box" })).assets, downloads,
     ], (key, value) => (key === "$typeName" ? undefined : typeof value === "bigint" ? value.toString() : value));
-    expect(text).not.toMatch(/reliant|forge/i);
+    // The fiction is a coffee company, so none of the real company's own words or facts has a place in it.
+    const DENYLIST: [string, RegExp][] = [
+      ["a product's own name", /reliant|forge/i],
+      ["a free static site per organization", /static site|static hosting|per organization is free|one site per/i],
+      ["the CDN and custom-domain pitch", /\bcdn\b|custom domain/i],
+      ["releases promoted by digest", /promoted by digest|built once|by digest/i],
+      ["runs without a dedicated machine", /dedicated machine|without a machine|no machine|machine-free/i],
+      ["a credential the author never sees", /saved credential|never sees/i],
+      ["approval before anything sends, publishes or spends", /sends, publishes or spends|waits for your approval/i],
+      ["scheduled flows and their steps", /\bflows?\b|scheduled job|cron/i],
+      ["a real plan name", /\b(starter|enterprise)\b|\b(pro|team) (plan|tier)\b/i],
+      ["the launch-week play", /launch week|launch-week/i],
+    ];
+    for (const [what, pattern] of DENYLIST) expect(text, what).not.toMatch(pattern);
   });
 });
 
@@ -223,12 +255,12 @@ describe("the reads' filters", () => {
   it("filters the library by category, depth, stage, cost, difficulty, fit and a text query, and pages it", async () => {
     const client = gtmClient();
     const list = async (req: object) => (await client.listStrategyLibrary({ ...org, ...req })).entries;
-    expect((await list({ category: GtmStrategyCategory.LAUNCHES_PR })).map((e) => e.key)).toEqual(["sample-launch-week"]);
+    expect((await list({ category: GtmStrategyCategory.PARTNERSHIPS_DISTRIBUTION })).map((e) => e.key)).toEqual(["sample-tasting-popup"]);
     expect((await list({ depth: GtmLibraryDepth.PLAY })).every((e) => e.depth === GtmLibraryDepth.PLAY)).toBe(true);
     expect((await list({ stage: "EARLY" })).every((e) => e.stage === "EARLY")).toBe(true);
     expect((await list({ cost: "FREE" })).every((e) => e.cost === "FREE")).toBe(true);
     expect((await list({ difficulty: "EASY" })).every((e) => e.difficulty === "EASY")).toBe(true);
-    expect((await list({ fit: "OPEN_SOURCE" })).map((e) => e.key)).toEqual(["sample-template-gallery"]);
+    expect((await list({ fit: "MARKETPLACE" })).map((e) => e.key)).toEqual(["sample-annual-nudge"]);
     expect((await list({ query: "QUOTES" })).map((e) => e.key)).toEqual(["sample-quote-wall"]);
     expect(await list({ query: "no such thing" })).toHaveLength(0);
     // By category then name.
@@ -296,7 +328,7 @@ describe("the reads' filters", () => {
     const client = gtmClient();
     expect((await client.listClaims({ ...org, status: GtmClaimStatus.RETIRED })).claims).toHaveLength(1);
     expect((await client.listClaims({ ...org, category: GtmClaimCategory.PRICING })).claims.every((c) => c.category === GtmClaimCategory.PRICING)).toBe(true);
-    expect((await client.listClaims({ ...org, search: "FREE" })).claims.map((c) => c.text)).toEqual(["One static site per organization is free."]);
+    expect((await client.listClaims({ ...org, search: "FREE" })).claims.map((c) => c.text)).toEqual(["Shipping on every Weekly Box is free."]);
   });
 
   it("returns a campaign with its linked ideas and items", async () => {
@@ -514,7 +546,7 @@ describe("the writes", () => {
 
   it("freezes a held email, and resolves it as sent or releases the hold", async () => {
     const client = gtmClient();
-    const held = (await client.getItem({ ...org, id: "gtm-item-domains-email" })).item!;
+    const held = (await client.getItem({ ...org, id: "gtm-item-grind-guide-email" })).item!;
     expect([held.status, held.approvalHash !== ""]).toEqual([GtmItemStatus.APPROVED, true]);
     const frozen = await rejection(client.updateItem({ ...org, id: held.id, expectedRevision: held.revision, title: "Edited while held" }));
     expect([frozen.code, frozen.rawMessage]).toEqual([Code.FailedPrecondition, expect.stringContaining("resolve the send")]);
@@ -554,22 +586,22 @@ describe("the writes", () => {
 
   it("uses a library strategy: a draft strategy, and optionally a first campaign planning the channels that fit", async () => {
     const client = gtmClient();
-    const plain = await client.useLibraryStrategy({ ...org, libraryKey: "sample-launch-week" });
+    const plain = await client.useLibraryStrategy({ ...org, libraryKey: "sample-tasting-popup" });
     expect(plain.campaign).toBeUndefined();
-    expect([plain.strategy?.status, plain.strategy?.libraryKey, plain.strategy?.category]).toEqual([GtmStrategyStatus.DRAFT, "sample-launch-week", GtmStrategyCategory.LAUNCHES_PR]);
-    expect(plain.strategy?.goalMd).toContain("Signups during launch week");
-    expect(plain.strategy?.targetMetric).toBe("Signups, Post views");
+    expect([plain.strategy?.status, plain.strategy?.libraryKey, plain.strategy?.category]).toEqual([GtmStrategyStatus.DRAFT, "sample-tasting-popup", GtmStrategyCategory.PARTNERSHIPS_DISTRIBUTION]);
+    expect(plain.strategy?.goalMd).toContain("Tasting-event attendees who subscribe");
+    expect(plain.strategy?.targetMetric).toBe("Attendees, New subscribers");
 
-    const both = await client.useLibraryStrategy({ ...org, libraryKey: "sample-launch-week", createFirstCampaign: true, campaignName: "Our launch week" });
-    expect([both.campaign?.name, both.campaign?.status, both.campaign?.strategyId]).toEqual(["Our launch week", GtmCampaignStatus.DRAFT, both.strategy?.id]);
-    // channel_types blog, x, hacker-news: matched to the org's channels by key or by type.
-    expect(both.campaign?.plannedChannelIds).toEqual([GTM_CHANNEL_IDS.blog, GTM_CHANNEL_IDS.x, GTM_CHANNEL_IDS.hackerNews]);
-    const unnamed = await client.useLibraryStrategy({ ...org, libraryKey: "sample-office-hours", createFirstCampaign: true });
-    expect(unnamed.campaign?.name).toBe("Monthly office hours (placeholder)");
+    const both = await client.useLibraryStrategy({ ...org, libraryKey: "sample-tasting-popup", createFirstCampaign: true, campaignName: "Our tasting pop-up" });
+    expect([both.campaign?.name, both.campaign?.status, both.campaign?.strategyId]).toEqual(["Our tasting pop-up", GtmCampaignStatus.DRAFT, both.strategy?.id]);
+    // channel_types blog, x, reddit: matched to the org's channels by key or by type.
+    expect(both.campaign?.plannedChannelIds).toEqual([GTM_CHANNEL_IDS.blog, GTM_CHANNEL_IDS.x, GTM_CHANNEL_IDS.reddit]);
+    const unnamed = await client.useLibraryStrategy({ ...org, libraryKey: "sample-cupping-call", createFirstCampaign: true });
+    expect(unnamed.campaign?.name).toBe("Monthly cupping call (placeholder)");
     expect(unnamed.campaign?.plannedChannelIds).toEqual([GTM_CHANNEL_IDS.email, GTM_CHANNEL_IDS.outreach, GTM_CHANNEL_IDS.linkedin]);
     expect((await client.getStrategy({ ...org, id: both.strategy!.id })).campaigns.map((c) => c.id)).toEqual([both.campaign!.id]);
     expect((await rejection(client.useLibraryStrategy({ ...org, libraryKey: "nope" }))).code).toBe(Code.NotFound);
-    expect((await rejection(client.useLibraryStrategy({ ...org, libraryKey: "sample-launch-week", campaignName: "x" }))).code).toBe(Code.InvalidArgument);
+    expect((await rejection(client.useLibraryStrategy({ ...org, libraryKey: "sample-tasting-popup", campaignName: "x" }))).code).toBe(Code.InvalidArgument);
   });
 
   it("confirms or cancels a pending prune request once, removing only the keys not imported since", async () => {
@@ -601,7 +633,7 @@ describe("the writes", () => {
     const client = gtmClient();
     const existing = (await client.getStrategyLibraryEntry({ ...org, key: "sample-faq-pages" })).entry!;
     const fresh = { key: "sample-new-play", name: "New play (placeholder)", category: GtmStrategyCategory.PAID_ACQUISITION, depth: GtmLibraryDepth.PLAY };
-    const res = await client.importStrategyLibrary({ ...org, sourceRevision: "sample-rev-3", entries: [existing, { ...existing, key: "sample-office-hours", name: "Renamed (placeholder)" }, fresh] });
+    const res = await client.importStrategyLibrary({ ...org, sourceRevision: "sample-rev-3", entries: [existing, { ...existing, key: "sample-cupping-call", name: "Renamed (placeholder)" }, fresh] });
     expect([res.created, res.updated, res.unchanged, res.pruned, res.pruneRequestId, res.wouldRemove]).toEqual([1, 1, 1, 0, "", []]);
     const { imports } = await client.listLibraryImports(org);
     expect(imports).toHaveLength(4);
@@ -620,7 +652,7 @@ describe("the writes", () => {
     expect((await rejection(client.createAssetUpload(target))).code).toBe(Code.Unavailable);
     expect((await rejection(client.confirmAssetUpload({ ...org, assetId: "gtm-asset-hn-hero" }))).code).toBe(Code.Unavailable);
     const { assets } = await client.listAssets({ ...org, itemId: "gtm-item-show-hn" });
-    expect(assets[0]).toMatchObject({ id: "gtm-asset-hn-hero", status: GtmAssetStatus.READY, filename: "sites-launch-hero.png" });
+    expect(assets[0]).toMatchObject({ id: "gtm-asset-hn-hero", status: GtmAssetStatus.READY, filename: "grind-calculator-hero.png" });
     expect((await client.getAsset({ ...org, id: "gtm-asset-hn-hero" })).asset?.itemId).toBe("gtm-item-show-hn");
     const download = await client.getAssetDownload({ ...org, assetId: "gtm-asset-hn-hero" });
     expect(download.url.startsWith("data:image/svg+xml")).toBe(true);
@@ -646,11 +678,45 @@ describe("the writes", () => {
       getItem: () => client.getItem({ ...other, id: "x" }), getPositioning: () => client.getPositioning(other), listClaims: () => client.listClaims(other),
       checkClaims: () => client.checkClaims({ ...other, text: "x" }), createStrategy: () => client.createStrategy({ ...other, name: "x" }),
       updateItem: () => client.updateItem({ ...other, id: "x", expectedRevision: 1 }), resolveItemSend: () => client.resolveItemSend({ ...other, id: "x", approvalHash: "x" }),
-      confirmLibraryPrune: () => client.confirmLibraryPrune({ ...other, requestId: GTM_PRUNE_REQUEST_ID }), useLibraryStrategy: () => client.useLibraryStrategy({ ...other, libraryKey: "sample-launch-week" }),
+      confirmLibraryPrune: () => client.confirmLibraryPrune({ ...other, requestId: GTM_PRUNE_REQUEST_ID }), useLibraryStrategy: () => client.useLibraryStrategy({ ...other, libraryKey: "sample-tasting-popup" }),
       createAssetUpload: () => client.createAssetUpload({ ...other, target: { case: "itemId", value: "x" }, filename: "a", contentType: "image/png", sizeBytes: 1n }), deleteAsset: () => client.deleteAsset({ ...other, assetId: "x" }),
     };
     for (const [name, call] of Object.entries(calls)) expect((await rejection(call())).code, name).toBe(Code.NotFound);
         expect(GtmService.methods.length).toBe(42);
+  });
+
+  it("does not bump the revision when SetIdeaStatus names the status the idea already has", async () => {
+    const client = gtmClient();
+    const idea = (await client.listIdeas({ ...org, status: GtmIdeaStatus.PROPOSED })).ideas[0]!;
+    const same = (await client.setIdeaStatus({ ...org, id: idea.id, expectedRevision: idea.revision, status: GtmIdeaStatus.PROPOSED })).idea!;
+    expect([same.revision, same.status, timestampMs(same.updatedAt!)]).toEqual([idea.revision, GtmIdeaStatus.PROPOSED, timestampMs(idea.updatedAt!)]);
+    expect((await client.getIdea({ ...org, id: idea.id })).idea?.revision).toBe(idea.revision);
+    // A stale revision is still a conflict, even for the same status.
+    expect((await rejection(client.setIdeaStatus({ ...org, id: idea.id, expectedRevision: idea.revision + 7, status: GtmIdeaStatus.PROPOSED }))).code).toBe(Code.Aborted);
+    // A real change still bumps it, exactly once.
+    const moved = (await client.setIdeaStatus({ ...org, id: idea.id, expectedRevision: idea.revision, status: GtmIdeaStatus.ACCEPTED })).idea!;
+    expect(moved.revision).toBe(idea.revision + 1);
+  });
+
+  it("caps each of GetCampaign's lists at 200 and says when it cut one", async () => {
+    const client = gtmClient();
+    const campaignId = "gtm-cmp-tasting-club";
+    const before = await client.getCampaign({ ...org, id: campaignId });
+    expect(before.truncated).toBe(false);
+    for (let i = before.ideas.length; i < 201; i++) await client.createIdea({ ...org, kind: GtmIdeaKind.CONTENT, title: `Idea ${i}`, campaignId });
+    const ideasOnly = await client.getCampaign({ ...org, id: campaignId });
+    expect([ideasOnly.ideas.length, ideasOnly.truncated]).toEqual([200, true]);
+    expect(ideasOnly.items.length).toBe(before.items.length);
+    // Coverage counts every item, whatever the cap.
+    for (let i = before.items.length; i < 201; i++) await client.createItem({ ...org, format: GtmItemFormat.SHORT_POST, channelId: GTM_CHANNEL_IDS.x, title: `Post ${i}`, campaignId });
+    const both = await client.getCampaign({ ...org, id: campaignId });
+    expect([both.ideas.length, both.items.length, both.truncated]).toEqual([200, 200, true]);
+    expect(both.coverage.reduce((n, r) => n + r.total, 0)).toBe(201);
+    // Exactly 200 is not a cut.
+    const fresh = gtmClient();
+    for (let i = before.items.length; i < 200; i++) await fresh.createItem({ ...org, format: GtmItemFormat.SHORT_POST, title: `Post ${i}`, campaignId });
+    const exact = await fresh.getCampaign({ ...org, id: campaignId });
+    expect([exact.items.length, exact.truncated]).toEqual([200, false]);
   });
 
   it("lets the listed GTM writes through a read-only transport, and still refuses any other write", async () => {
@@ -663,28 +729,28 @@ describe("the writes", () => {
 describe("CheckClaims", () => {
   it("flags a price with no matching claim, and passes one matching a verified claim", async () => {
     const client = gtmClient();
-    const res = await client.checkClaims({ ...org, text: "Starter costs $19 per month, billed monthly. Our Pro plan is $49 per month." });
+    const res = await client.checkClaims({ ...org, text: "The Sipper plan costs $19 per month, billed monthly. Our Estate tier is $49 per month." });
     const price = (m: string) => res.findings.find((f) => f.mention === m)!;
-    expect(price("$19")).toMatchObject({ kind: GtmClaimFindingKind.MATCHED_VERIFIED, blocking: false, claimId: "gtm-claim-starter-price", mentionKind: "price" });
+    expect(price("$19")).toMatchObject({ kind: GtmClaimFindingKind.MATCHED_VERIFIED, blocking: false, claimId: "gtm-claim-sipper-price", mentionKind: "price" });
     expect(price("$49")).toMatchObject({ kind: GtmClaimFindingKind.UNMATCHED_RISKY, blocking: true, claimId: "" });
-    expect(price("$49").context).toBe("Our Pro plan is $49 per month.");
+    expect(price("$49").context).toBe("Our Estate tier is $49 per month.");
     expect(res.blocking).toBe(true);
   });
 
   it("blocks on a retired claim and on an overdue recheck, and reports why", async () => {
     const client = gtmClient();
-    const old = (await client.checkClaims({ ...org, text: "Starter costs $15 per month." })).findings;
+    const old = (await client.checkClaims({ ...org, text: "The Sipper plan costs $15 per month." })).findings;
     expect(old).toHaveLength(1);
     expect(old[0]).toMatchObject({ kind: GtmClaimFindingKind.MATCHED_UNVERIFIED, reason: "retired", blocking: true });
-    const slow = (await client.checkClaims({ ...org, text: "Deploys finish in under 90 seconds." })).findings;
-    expect(slow.find((f) => f.mention.includes("90"))).toMatchObject({ kind: GtmClaimFindingKind.MATCHED_UNVERIFIED, reason: "recheck overdue", blocking: true });
+    const slow = (await client.checkClaims({ ...org, text: "Orders arrive within 4 days." })).findings;
+    expect(slow.find((f) => f.mention.includes("4 days"))).toMatchObject({ kind: GtmClaimFindingKind.MATCHED_UNVERIFIED, reason: "recheck overdue", blocking: true });
   });
 
   it("passes a text with no risky mention, and is deterministic", async () => {
     const client = gtmClient();
     const clean = await client.checkClaims({ ...org, text: "Hello from the team." });
     expect([clean.findings.length, clean.blocking]).toEqual([0, false]);
-    const text = "One static site per organization is free. Starter costs $19 per month. We are 100% reliable.";
+    const text = "Shipping on every Weekly Box is free. The Sipper plan costs $19 per month. We are 100% reliable.";
     const a = await client.checkClaims({ ...org, text });
     const b = await client.checkClaims({ ...org, text });
     expect(a.findings.map((f) => [f.mentionKind, f.mention, f.kind])).toEqual(b.findings.map((f) => [f.mentionKind, f.mention, f.kind]));
