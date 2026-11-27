@@ -24,7 +24,7 @@ var ErrInvalidParameters = errors.New("invalid tool parameters")
 // its permission, previewing its approval) normalizes first, so none refuses
 // an argument another would have accepted.
 func normalizeModelInput(input string, schema *jsonschema.Schema) string {
-	return coerceKVArrayMaps(unwrapStringifiedValues(input, schema))
+	return coerceKVArrayMaps(unwrapStringifiedValues(input, schema), schema)
 }
 
 // unwrapStringifiedValues fixes a Claude API bug where values are sometimes
@@ -177,7 +177,14 @@ func jsonValueMatchesType(v interface{}, expectedType string) bool {
 //
 // We deliberately accept this encoding for all providers to keep tool execution
 // robust and backwards-compatible across schema adapters.
-func coerceKVArrayMaps(jsonStr string) string {
+//
+// The tool's own schema (the one the driver rewrote, not the rewrite) decides
+// what a field is. An array-typed field is never touched: it keeps its value,
+// even one whose items happen to be {key, value} objects. An empty array
+// becomes {} only for an object-typed field; anywhere else it stays [], since
+// "no items" says nothing about being a map. A field the schema does not
+// describe (or a nil schema) is coerced only when it is a non-empty KV array.
+func coerceKVArrayMaps(jsonStr string, schema *jsonschema.Schema) string {
 	var root map[string]any
 	if err := json.Unmarshal([]byte(jsonStr), &root); err != nil {
 		return jsonStr
@@ -188,6 +195,21 @@ func coerceKVArrayMaps(jsonStr string) string {
 		arr, ok := v.([]any)
 		if !ok {
 			continue
+		}
+
+		switch propertyType(schema, k) {
+		case "array":
+			continue
+		case "object":
+			if len(arr) == 0 {
+				root[k] = map[string]any{}
+				modified = true
+				continue
+			}
+		default:
+			if len(arr) == 0 {
+				continue
+			}
 		}
 
 		m := map[string]any{}
@@ -226,6 +248,19 @@ func coerceKVArrayMaps(jsonStr string) string {
 		return jsonStr
 	}
 	return string(out)
+}
+
+// propertyType is the JSON Schema type of schema's top-level property name,
+// or "" when the schema does not say.
+func propertyType(schema *jsonschema.Schema, name string) string {
+	if schema == nil || schema.Properties == nil {
+		return ""
+	}
+	prop, ok := schema.Properties.Get(name)
+	if !ok || prop == nil {
+		return ""
+	}
+	return prop.Type
 }
 
 // truncationMetadataKey is the reserved field under which truncation info is
