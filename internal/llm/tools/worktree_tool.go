@@ -205,10 +205,15 @@ FILE COPYING:
 - copy_files: exact paths relative to the project root, for gitignored files a fresh checkout lacks (the new worktree mirrors the project's layout)
 - Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
 - A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
-- A copied node_modules is the SOURCE checkout's install, build caches included
-  (node_modules/.tmp, *.tsbuildinfo). When the new branch's lockfile differs, run
-  its install (e.g. pnpm install --frozen-lockfile) before typechecking, or the
-  errors come from stale packages, not from the branch
+- A copied node_modules is the SOURCE checkout's install, without its build output
+  (node_modules/.tmp, .cache and *.tsbuildinfo are dropped, so tsc -b rebuilds
+  from this checkout). When that install may not match the new checkout's
+  lockfile, the result says so and names the install to run: run it before
+  building or testing, or the errors come from stale packages, not from the branch
+- A new worktree has no node_modules unless one is copied. With pnpm, prefer
+  installing in the worktree (pnpm install --offline --frozen-lockfile links from
+  the machine's store, usually in about a second) over copying or symlinking
+  another checkout's
 - When you are working inside a worktree, files are copied from that worktree
 
 WORKFLOW DATA:
@@ -359,7 +364,7 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	// rollback never saw.
 	createCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeCreateMax)
 	defer cancel()
-	finishErr := workspacecreate.Finish(createCtx, w.repo, machine, req, wt)
+	report, finishErr := workspacecreate.FinishWithReport(createCtx, w.repo, machine, req, wt)
 	// Settled either way (ACTIVE or FAILED): tell connected clients.
 	w.emitChanged(ctx, machine.userID, project.ID, wt.ID)
 	if finishErr != nil {
@@ -395,6 +400,12 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *
 	fmt.Fprintf(&content, "Created worktree '%s':\n- ID: %s\n- Path (workspace root): %s\n- Branch: %s\n- Base Branch: %s\n",
 		info.Name, info.ID, info.Path, info.Branch, info.BaseBranch)
 	writeCheckouts(&content, repos, info.Checkouts)
+	if len(report.CopyNotes) > 0 {
+		content.WriteString("\nBefore you build or test in it:\n")
+		for _, note := range report.CopyNotes {
+			fmt.Fprintf(&content, "- %s\n", note)
+		}
+	}
 	fmt.Fprintf(&content, "\nIt appears in the Reliant sidebar. To work in it, pass spawn(worktree=%q) to run a sub-agent there, or use the paths above.\n", info.Name)
 	content.WriteString("Worktree data stored in CEL context as 'worktree_data'.")
 

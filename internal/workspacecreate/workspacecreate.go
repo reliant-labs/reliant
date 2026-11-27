@@ -311,6 +311,23 @@ func claimName(ctx context.Context, store Store, projectID, name, branch string)
 // (with no path) so the failure stays visible. A failed copy_files does not
 // fail the workspace. The returned error is the reason for FAILED.
 func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Worktree) error {
+	_, err := FinishWithReport(ctx, store, m, req, wt)
+	return err
+}
+
+// Report is what Finish learned that the caller should pass on to whoever
+// asked for the workspace, beside its success.
+type Report struct {
+	// CopyNotes are sentences about copy_files entries that need a step
+	// before the workspace is usable for them: a copied node_modules whose
+	// install may not match this checkout's lockfile names the install to
+	// run. Empty when there is nothing to say.
+	CopyNotes []string
+}
+
+// FinishWithReport is Finish, returning its Report as well.
+func FinishWithReport(ctx context.Context, store Store, m Machine, req Request, wt *db.Worktree) (Report, error) {
+	var report Report
 	// Every command below, the rollback's included, waits out a machine
 	// refusing it while it finalizes another workspace's recovery.
 	m = recoveryPatientMachine{m}
@@ -421,7 +438,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		return reason
 	}
 	if checkout == "" {
-		return fail(errors.New("workspacecreate: no checkout of the project on the owner machine (Request.Checkout)"))
+		return report, fail(errors.New("workspacecreate: no checkout of the project on the owner machine (Request.Checkout)"))
 	}
 
 	// createRepo checks out ONE repo. It runs concurrently with its siblings,
@@ -569,7 +586,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}
 	}
 	if firstErr != nil {
-		return fail(firstErr)
+		return report, fail(firstErr)
 	}
 
 	// Carry over the requested paths once for the whole workspace, root to
@@ -584,6 +601,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			Copied  []string          `json:"copied"`
 			Missing []string          `json:"missing"`
 			Failed  map[string]string `json:"failed"`
+			Stale   map[string]string `json:"stale"`
 			Error   string            `json:"error"`
 		}
 		err := m.Send(ctx, "worktree.copy_paths", map[string]any{
@@ -601,6 +619,12 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		case len(copyResp.Missing) > 0:
 			logging.InfoContext(ctx, "Requested copy paths not present in source", "missing", copyResp.Missing,
 				"source", copySource, "worktreeID", wt.ID)
+		}
+		// In request order, so the notes read in the order the paths were asked for.
+		for _, path := range req.CopyPaths {
+			if note := copyResp.Stale[path]; note != "" {
+				report.CopyNotes = append(report.CopyNotes, note)
+			}
 		}
 	}
 
@@ -642,9 +666,9 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 	if err := store.UpdateWorktree(ctx, wt); err != nil {
 		// The checkouts exist on disk but the row cannot record them, so the
 		// directories would be unreachable. Tear them down and mark failed.
-		return fail(fmt.Errorf("failed to record worktree: %w", err))
+		return report, fail(fmt.Errorf("failed to record worktree: %w", err))
 	}
-	return nil
+	return report, nil
 }
 
 // checkoutResponse is the daemon's answer to worktree.create.

@@ -33,6 +33,8 @@ type fakeRunMachine struct {
 	home      string
 	// failRepo, when set, is a project_path suffix whose create fails.
 	failRepo string
+	// copyStale is the daemon's `stale` answer to worktree.copy_paths.
+	copyStale map[string]string
 
 	mu   sync.Mutex
 	sent []sentWorktreeCommand
@@ -78,6 +80,8 @@ func (m *fakeRunMachine) Send(_ context.Context, _, daemonID, commandType string
 			base = "main"
 		}
 		return json.Marshal(map[string]any{"success": true, "worktree_path": path, "base_branch": base})
+	case "worktree.copy_paths":
+		return json.Marshal(map[string]any{"copied": req["paths"], "stale": m.copyStale})
 	}
 	return json.Marshal(map[string]any{})
 }
@@ -186,6 +190,24 @@ func (f *worktreeToolFixture) insert(t *testing.T, name string, status int32, is
 	}
 	require.NoError(t, f.repo.CreateWorktree(context.Background(), wt))
 	return wt
+}
+
+// A copied node_modules the daemon could not trust is named in the result,
+// with the install to run: the agent learns it before its tests fail at
+// import on another revision's packages.
+func TestWorktreeTool_Create_NamesACopiedInstallThatMayBeStale(t *testing.T) {
+	f := newWorktreeToolFixture(t)
+	note := "web/node_modules may not match this checkout's web/pnpm-lock.yaml: it differs. Run `pnpm install --frozen-lockfile` in web before building or testing."
+	f.machine.copyStale = map[string]string{"web/node_modules": note}
+
+	resp := f.call(t, WorktreeParams{Action: "create", Name: "stale-install", CopyFiles: []string{".env", "web/node_modules"}})
+	require.False(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, "Before you build or test in it:\n- "+note)
+
+	f.machine.copyStale = nil
+	resp = f.call(t, WorktreeParams{Action: "create", Name: "fresh-install", CopyFiles: []string{"web/node_modules"}})
+	require.False(t, resp.IsError, resp.Content)
+	assert.NotContains(t, resp.Content, "Before you build or test in it")
 }
 
 // A create makes the UI's workspace: one checkout per repository under a

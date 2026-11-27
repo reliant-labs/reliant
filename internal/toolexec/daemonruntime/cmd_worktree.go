@@ -809,7 +809,12 @@ type worktreeCopyPathsResponse struct {
 	Missing []string `json:"missing,omitempty"`
 	// Failed maps an entry that exists but could not be copied to the reason.
 	Failed map[string]string `json:"failed,omitempty"`
-	Error  string            `json:"error,omitempty"`
+	// Stale maps a copied node_modules whose install may not match the
+	// lockfile beside it in the new checkout to a sentence saying why and
+	// what to run (copypath.StaleInstall). Additive: a server that predates
+	// it ignores it, and an older daemon never sends it.
+	Stale map[string]string `json:"stale,omitempty"`
+	Error string            `json:"error,omitempty"`
 }
 
 func handleWorktreeCopyPaths(_ context.Context, payload []byte) ([]byte, error) {
@@ -836,10 +841,16 @@ func handleWorktreeCopyPaths(_ context.Context, payload []byte) ([]byte, error) 
 		}
 		resp.Failed[failure.Path] = failure.Err.Error()
 	}
+	for _, stale := range result.Stale {
+		if resp.Stale == nil {
+			resp.Stale = make(map[string]string, len(result.Stale))
+		}
+		resp.Stale[stale.Path] = stale.Reason
+	}
 	logging.Info("worktree paths copied",
 		"dest_root", req.DestRoot,
 		"elapsed", time.Since(start).Round(time.Millisecond).String(),
-		"copied", resp.Copied, "missing", resp.Missing, "failed", resp.Failed)
+		"copied", resp.Copied, "missing", resp.Missing, "failed", resp.Failed, "stale", resp.Stale)
 	return json.Marshal(resp)
 }
 
