@@ -1,10 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
-package gaterun
+package gatehost
 
 import (
 	"context"
 	"io"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 )
 
 // Backend runs one gate inside one kind of boundary. It is declared here, at
@@ -16,7 +18,7 @@ import (
 // Teardown, which it always calls so a failed Run leaves nothing behind.
 type Backend interface {
 	// Isolation names the backend in queue_batches.isolation_backend terms.
-	Isolation() Isolation
+	Isolation() gaterun.Isolation
 	// Detect reports whether the machine has the backend's runtime. Cheap;
 	// changes nothing.
 	Detect(ctx context.Context) Availability
@@ -39,26 +41,6 @@ type Availability struct {
 	Available bool
 	Reason    string
 }
-
-// The boundary's filesystem layout, the same on every backend. The work
-// volume is mounted at WorkMount; the stage script finds it through
-// EnvGateRoot.
-const (
-	WorkMount    = "/gate"
-	SrcDir       = WorkMount + "/src"
-	OutDir       = WorkMount + "/out"
-	ArtifactsDir = WorkMount + "/artifacts"
-	HomeDir      = WorkMount + "/home"
-	TmpDir       = WorkMount + "/tmp"
-	// VulnDBMount is where the machine's grype database is mounted,
-	// read-only, for the sbom_scan stage.
-	VulnDBMount = "/vulndb"
-	// CacheMount is where a gate's toolchain caches live (the gate image
-	// points GOCACHE, GOMODCACHE, the pnpm store and XDG_CACHE_HOME under
-	// it). With Spec.CacheVolume it is the repository's warm cache volume;
-	// without, a directory on the per-gate work volume.
-	CacheMount = WorkMount + "/cache"
-)
 
 // Spec is one gate as a backend runs it.
 type Spec struct {
@@ -106,7 +88,7 @@ type Limits struct {
 type Result struct {
 	// Class is from the exit code, or unproven when the end was not seen
 	// whole (a limit, a lost engine connection).
-	Class Class
+	Class gaterun.Class
 	// ExitCode is the command's exit, -1 when none was read.
 	ExitCode  int
 	Reason    string

@@ -204,18 +204,27 @@ func infraMatches(g config.ResolvedGate, res GateResult) []string {
 // members are the pool's connected, eligible members, by name, and the
 // pool's per-member gate bound.
 func (d *dispatcher) members(ctx context.Context, repo GateRepo, req GateRequest) ([]machinepool.Member, int, error) {
-	name := req.Gate.Pool
+	return PoolMembers(ctx, d.deps.Pools, repo, req.Gate.Pool)
+}
+
+// PoolMembers are the connected, eligible members of repo's owner's machine
+// pool named pool ("" is config.DefaultGatePool) that have repo's project,
+// sorted by name then daemon id, and the pool's per-member run bound
+// (max_runs_per_member, at least 1). No member is an error wrapping
+// [ErrNoGateMember] that says why.
+func PoolMembers(ctx context.Context, pools PoolReader, repo GateRepo, pool string) ([]machinepool.Member, int, error) {
+	name := pool
 	if name == "" {
 		name = config.DefaultGatePool
 	}
-	row, err := d.deps.Pools.GetMachinePoolByName(ctx, repo.OwnerUserID, name)
+	row, err := pools.GetMachinePoolByName(ctx, repo.OwnerUserID, name)
 	if err != nil {
 		if errors.Is(err, core.ErrMachinePoolNotFound) {
 			return nil, 0, fmt.Errorf("%w: no machine pool %q (label gate machines pool=%s and create the pool)", ErrNoGateMember, name, name)
 		}
 		return nil, 0, fmt.Errorf("read machine pool %s: %w", name, err)
 	}
-	all, err := machinepool.MembersOf(ctx, d.deps.Pools, row, repo.ProjectID)
+	all, err := machinepool.MembersOf(ctx, pools, row, repo.ProjectID)
 	if err != nil {
 		return nil, 0, fmt.Errorf("read machine pool %s's members: %w", name, err)
 	}

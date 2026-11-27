@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package gaterun
+package gatehost
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -27,7 +28,7 @@ func (f specFetcher) Fetch(ctx context.Context, spec FetchSpec) error {
 
 func TestTheRunnerFetchesTheBaseAndNamesItInTheGateEnv(t *testing.T) {
 	base := strings.Repeat("b", 40)
-	f := newFake(t, IsolationSysbox)
+	f := newFake(t, gaterun.IsolationSysbox)
 	r := newRunner(t, f, nil)
 	var got FetchSpec
 	r.Fetcher = specFetcher{inner: r.Fetcher, got: &got}
@@ -36,7 +37,7 @@ func TestTheRunnerFetchesTheBaseAndNamesItInTheGateEnv(t *testing.T) {
 	req.BaseSHA = base
 	// The batch's real base wins over a value gate.env sets.
 	req.Env = map[string]string{"CI_BASE": "origin/main", "GOFLAGS": "-mod=mod"}
-	if g, _ := runGate(t, f, r, req); g.Class != ClassPass {
+	if g, _ := runGate(t, f, r, req); g.Class != gaterun.ClassPass {
 		t.Fatalf("result %+v", g)
 	}
 	if got.BaseSHA != base || got.SHA != testSHA {
@@ -53,7 +54,7 @@ func TestTheRunnerFetchesTheBaseAndNamesItInTheGateEnv(t *testing.T) {
 	}
 
 	// No base (an older server, or main's own tip): neither is set.
-	f = newFake(t, IsolationSysbox)
+	f = newFake(t, gaterun.IsolationSysbox)
 	r = newRunner(t, f, nil)
 	req.BaseSHA, req.Env = "", nil
 	runGate(t, f, r, req)
@@ -83,7 +84,7 @@ func TestStartRequestBaseIsAdditiveOnTheWire(t *testing.T) {
 	if err := json.Unmarshal(b, &old); err != nil || old.SHA != testSHA {
 		t.Fatalf("an older daemon's decode: %+v %v", old, err)
 	}
-	var back StartRequest
+	var back gaterun.StartRequest
 	if err := json.Unmarshal(b, &back); err != nil || back.BaseSHA != req.BaseSHA {
 		t.Fatalf("round trip: %+v %v", back, err)
 	}
@@ -91,7 +92,7 @@ func TestStartRequestBaseIsAdditiveOnTheWire(t *testing.T) {
 		t.Fatal(err)
 	}
 	back.BaseSHA = "main"
-	if err := back.Validate(); !errors.Is(err, ErrInvalidRequest) {
+	if err := back.Validate(); !errors.Is(err, gaterun.ErrInvalidRequest) {
 		t.Fatalf("a base that is not a full sha: %v", err)
 	}
 }

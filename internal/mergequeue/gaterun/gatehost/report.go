@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package gaterun
+package gatehost
 
 import (
 	"archive/tar"
@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -117,7 +118,7 @@ func outputRel(name string) (string, bool) {
 		}
 	}
 	clean := path.Clean(name)
-	base := path.Base(OutDir)
+	base := path.Base(gaterun.OutDir)
 	switch {
 	case clean == base:
 		return "", true
@@ -132,11 +133,11 @@ type resultDoc struct {
 	Version  int `json:"version"`
 	ExitCode int `json:"exit_code"`
 	Stages   []struct {
-		Name     config.StageName `json:"name"`
-		State    StageState       `json:"state"`
-		ExitCode int              `json:"exit_code"`
-		Seconds  int64            `json:"seconds"`
-		Note     string           `json:"note"`
+		Name     config.StageName   `json:"name"`
+		State    gaterun.StageState `json:"state"`
+		ExitCode int                `json:"exit_code"`
+		Seconds  int64              `json:"seconds"`
+		Note     string             `json:"note"`
 		// DockerSkips is the line count of the stage's EnvDockerSkips log.
 		DockerSkips int `json:"docker_skips"`
 	} `json:"stages"`
@@ -146,8 +147,8 @@ var errResultInvalid = errors.New("the gate's result is invalid")
 
 // parseStages checks gate-result.json against the plan the gate was given
 // and returns its stages and its exit code.
-func parseStages(plan []PlanStage, b []byte) ([]StageResult, int, error) {
-	bad := func(format string, a ...any) ([]StageResult, int, error) {
+func parseStages(plan []gaterun.PlanStage, b []byte) ([]gaterun.StageResult, int, error) {
+	bad := func(format string, a ...any) ([]gaterun.StageResult, int, error) {
 		return nil, 0, fmt.Errorf("%w: %s", errResultInvalid, fmt.Sprintf(format, a...))
 	}
 	var doc resultDoc
@@ -162,33 +163,33 @@ func parseStages(plan []PlanStage, b []byte) ([]StageResult, int, error) {
 	if len(doc.Stages) != len(plan) {
 		return bad("%d stages, the plan has %d", len(doc.Stages), len(plan))
 	}
-	out := make([]StageResult, len(plan))
+	out := make([]gaterun.StageResult, len(plan))
 	stopped := false
 	for i, s := range doc.Stages {
 		p := plan[i]
 		if s.Name != p.Name {
 			return bad("stage %d is %q, the plan's is %q", i, s.Name, p.Name)
 		}
-		r := StageResult{Name: s.Name, Verdict: s.State, Exit: s.ExitCode, Duration: time.Duration(max(s.Seconds, 0)) * time.Second, Summary: p.Reason}
+		r := gaterun.StageResult{Name: s.Name, Verdict: s.State, Exit: s.ExitCode, Duration: time.Duration(max(s.Seconds, 0)) * time.Second, Summary: p.Reason}
 		switch {
 		case p.State == config.StageOff:
-			if s.State != StageOff {
+			if s.State != gaterun.StageOff {
 				return bad("stage %s is off in the plan, %q in the result", s.Name, s.State)
 			}
 		case p.State == config.StageUnavailable:
-			if s.State != StageUnavailable {
+			if s.State != gaterun.StageUnavailable {
 				return bad("stage %s is unavailable in the plan, %q in the result", s.Name, s.State)
 			}
 		case stopped:
-			if s.State != StageSkipped {
+			if s.State != gaterun.StageSkipped {
 				return bad("stage %s ran after a stage that did not pass", s.Name)
 			}
 			r.Summary = "an earlier stage did not pass"
 		default:
-			if s.State != classStage(ClassifyExit(s.ExitCode)) {
+			if s.State != classStage(gaterun.ClassifyExit(s.ExitCode)) {
 				return bad("stage %s is %q with exit %d", s.Name, s.State, s.ExitCode)
 			}
-			stopped = s.State != StagePass
+			stopped = s.State != gaterun.StagePass
 			r.Summary = ""
 			if s.Note == "forge_vuln_gate_missing" {
 				r.Summary = "forge vuln gate is not in the gate image"
@@ -200,7 +201,7 @@ func parseStages(plan []PlanStage, b []byte) ([]StageResult, int, error) {
 				r.Summary = fmt.Sprintf("%d container test(s) skipped: docker unavailable (gate)", r.SkippedDockerTests)
 			}
 		}
-		if s.State == StageOff || s.State == StageUnavailable || s.State == StageSkipped {
+		if s.State == gaterun.StageOff || s.State == gaterun.StageUnavailable || s.State == gaterun.StageSkipped {
 			r.Exit = -1
 		}
 		out[i] = r
@@ -208,28 +209,28 @@ func parseStages(plan []PlanStage, b []byte) ([]StageResult, int, error) {
 	return out, doc.ExitCode, nil
 }
 
-func classStage(c Class) StageState {
+func classStage(c gaterun.Class) gaterun.StageState {
 	switch c {
-	case ClassPass:
-		return StagePass
-	case ClassFail:
-		return StageFail
+	case gaterun.ClassPass:
+		return gaterun.StagePass
+	case gaterun.ClassFail:
+		return gaterun.StageFail
 	default:
-		return StageUnproven
+		return gaterun.StageUnproven
 	}
 }
 
 // stagesClass is the gate's class from its stages: any fail fails it, any
 // unproven leaves it unproven, and off, unavailable and skipped stages
 // decide nothing.
-func stagesClass(stages []StageResult) Class {
-	c := ClassPass
+func stagesClass(stages []gaterun.StageResult) gaterun.Class {
+	c := gaterun.ClassPass
 	for _, s := range stages {
 		switch s.Verdict {
-		case StageFail:
-			return ClassFail
-		case StageUnproven:
-			c = ClassUnproven
+		case gaterun.StageFail:
+			return gaterun.ClassFail
+		case gaterun.StageUnproven:
+			c = gaterun.ClassUnproven
 		}
 	}
 	return c
@@ -247,7 +248,7 @@ type scanDoc struct {
 // is pass, warn, or off (forge's vuln_gate mode off, shown as off, never as
 // passed); exit 1 is a block; exit 2 is unscanned or stale. A document that
 // is missing or disagrees with the exit leaves the stage unproven.
-func judgeScan(st *StageResult, o output) *ScanReport {
+func judgeScan(st *gaterun.StageResult, o output) *gaterun.ScanReport {
 	raw, ok := o.files[scanDocFile]
 	if !ok {
 		raw, ok = o.files[scanStdoutFile]
@@ -256,26 +257,26 @@ func judgeScan(st *StageResult, o output) *ScanReport {
 	if ok && json.Unmarshal(raw, &doc) != nil {
 		ok = false
 	}
-	var rep *ScanReport
+	var rep *gaterun.ScanReport
 	if ok {
-		rep = &ScanReport{Verdict: doc.Gate.Verdict, Document: json.RawMessage(raw)}
+		rep = &gaterun.ScanReport{Verdict: doc.Gate.Verdict, Document: json.RawMessage(raw)}
 	}
 	switch st.Verdict {
-	case StagePass:
+	case gaterun.StagePass:
 		switch {
 		case !ok:
-			st.Verdict, st.Summary = StageUnproven, "the scan exited 0 but wrote no readable verdict document"
+			st.Verdict, st.Summary = gaterun.StageUnproven, "the scan exited 0 but wrote no readable verdict document"
 		case doc.Gate.Verdict == "pass":
 		case doc.Gate.Verdict == "warn":
-			st.Verdict, st.Summary = StageWarn, "a finding warns; nothing blocks"
+			st.Verdict, st.Summary = gaterun.StageWarn, "a finding warns; nothing blocks"
 		case doc.Gate.Verdict == "off":
-			st.Verdict, st.Summary = StageOff, "the project's vuln_gate mode is off"
+			st.Verdict, st.Summary = gaterun.StageOff, "the project's vuln_gate mode is off"
 		default:
-			st.Verdict, st.Summary = StageUnproven, fmt.Sprintf("the scan exited 0 with verdict %q", doc.Gate.Verdict)
+			st.Verdict, st.Summary = gaterun.StageUnproven, fmt.Sprintf("the scan exited 0 with verdict %q", doc.Gate.Verdict)
 		}
-	case StageFail:
+	case gaterun.StageFail:
 		st.Summary = "a finding blocks (vuln_gate_blocked)"
-	case StageUnproven:
+	case gaterun.StageUnproven:
 		if st.Summary == "" {
 			st.Summary = "not scanned (vuln_gate_unscanned)"
 			if ok && doc.Gate.Verdict != "" {
@@ -298,11 +299,11 @@ const maxListed = 500
 
 // assemble is report's verdict: the backend's end, the stages as the result
 // file says, and the two cross-checked. Every disagreement is unproven.
-func assemble(gateID string, iso Isolation, plan []PlanStage, res Result, o output) GateResult {
-	g := GateResult{GateID: gateID, Isolation: iso, Duration: res.Duration}
-	var stages []StageResult
-	unproven := func(code, reason string) GateResult {
-		g.Class, g.ReasonCode, g.Reason = ClassUnproven, code, reason
+func assemble(gateID string, iso gaterun.Isolation, plan []gaterun.PlanStage, res Result, o output) gaterun.GateResult {
+	g := gaterun.GateResult{GateID: gateID, Isolation: iso, Duration: res.Duration}
+	var stages []gaterun.StageResult
+	unproven := func(code, reason string) gaterun.GateResult {
+		g.Class, g.ReasonCode, g.Reason = gaterun.ClassUnproven, code, reason
 		g.Stages = stageMap(stages)
 		return g
 	}
@@ -321,7 +322,7 @@ func assemble(gateID string, iso Isolation, plan []PlanStage, res Result, o outp
 		if log, ok := o.files["logs/"+string(st.Name)+".log"]; ok {
 			st.LogTail = string(log)
 		}
-		if plan[i].Kind == config.StageBuiltinScan && (st.Verdict == StagePass || st.Verdict == StageFail || st.Verdict == StageUnproven) {
+		if plan[i].Kind == config.StageBuiltinScan && (st.Verdict == gaterun.StagePass || st.Verdict == gaterun.StageFail || st.Verdict == gaterun.StageUnproven) {
 			g.Scan = judgeScan(st, o)
 		}
 	}
@@ -334,22 +335,22 @@ func assemble(gateID string, iso Isolation, plan []PlanStage, res Result, o outp
 		}
 	}
 
-	if res.Class == ClassUnproven {
-		code := ReasonBackendFailed
+	if res.Class == gaterun.ClassUnproven {
+		code := gaterun.ReasonBackendFailed
 		if res.TimedOut || res.OOMKilled {
-			code = ReasonLimitExceeded
+			code = gaterun.ReasonLimitExceeded
 		}
 		return unproven(code, "the gate's end was not seen whole: "+res.Reason)
 	}
 	if perr != nil {
 		stages = nil
-		return unproven(ReasonResultInvalid, perr.Error())
+		return unproven(gaterun.ReasonResultInvalid, perr.Error())
 	}
-	stagesExit := ClassifyExit(docExit)
+	stagesExit := gaterun.ClassifyExit(docExit)
 	// The script's exit, its own record of it, and its stages must agree
 	// before the scan's refinement (which can only move a pass to unproven).
-	if ClassifyExit(res.ExitCode) != stagesExit || stagesExit != unrefinedClass(stages, plan) {
-		return unproven(ReasonResultInvalid, fmt.Sprintf("%v: the gate exited %d, its result says %d", errResultInvalid, res.ExitCode, docExit))
+	if gaterun.ClassifyExit(res.ExitCode) != stagesExit || stagesExit != unrefinedClass(stages, plan) {
+		return unproven(gaterun.ReasonResultInvalid, fmt.Sprintf("%v: the gate exited %d, its result says %d", errResultInvalid, res.ExitCode, docExit))
 	}
 	g.Class = stagesClass(stages)
 	g.Stages = stageMap(stages)
@@ -357,8 +358,8 @@ func assemble(gateID string, iso Isolation, plan []PlanStage, res Result, o outp
 		g.SkippedDockerTests += st.SkippedDockerTests
 	}
 	for _, st := range stages {
-		if st.Verdict == StageFail || st.Verdict == StageUnproven {
-			g.ReasonCode = ReasonStage
+		if st.Verdict == gaterun.StageFail || st.Verdict == gaterun.StageUnproven {
+			g.ReasonCode = gaterun.ReasonStage
 			g.Reason = fmt.Sprintf("stage %s: %s (exit %d)", st.Name, st.Verdict, st.Exit)
 			if st.Summary != "" {
 				g.Reason += ": " + st.Summary
@@ -369,11 +370,11 @@ func assemble(gateID string, iso Isolation, plan []PlanStage, res Result, o outp
 	return g
 }
 
-func stageMap(stages []StageResult) map[config.StageName]StageResult {
+func stageMap(stages []gaterun.StageResult) map[config.StageName]gaterun.StageResult {
 	if stages == nil {
 		return nil
 	}
-	m := make(map[config.StageName]StageResult, len(stages))
+	m := make(map[config.StageName]gaterun.StageResult, len(stages))
 	for _, s := range stages {
 		m[s.Name] = s
 	}
@@ -383,18 +384,18 @@ func stageMap(stages []StageResult) map[config.StageName]StageResult {
 // unrefinedClass is the class the stage script computed: the stages' class
 // with a builtin scan that exited 0 counted as a pass, whatever its document
 // said.
-func unrefinedClass(stages []StageResult, plan []PlanStage) Class {
-	c := ClassPass
+func unrefinedClass(stages []gaterun.StageResult, plan []gaterun.PlanStage) gaterun.Class {
+	c := gaterun.ClassPass
 	for i, s := range stages {
 		state := s.Verdict
 		if plan[i].Kind == config.StageBuiltinScan && s.Exit == 0 {
-			state = StagePass
+			state = gaterun.StagePass
 		}
 		switch state {
-		case StageFail:
-			return ClassFail
-		case StageUnproven:
-			c = ClassUnproven
+		case gaterun.StageFail:
+			return gaterun.ClassFail
+		case gaterun.StageUnproven:
+			c = gaterun.ClassUnproven
 		}
 	}
 	return c

@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package gaterun
+package gatehost
 
 import (
 	"archive/tar"
@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/mergequeue/gaterun"
 	"github.com/reliant-labs/reliant/internal/pipeline/config"
 )
 
@@ -23,7 +24,7 @@ import (
 // boundary at all; it exists so the script, the report and the Runner are
 // tested together without docker.
 type fakeBackend struct {
-	iso          Isolation
+	iso          gaterun.Isolation
 	unavailable  string
 	preflightErr error
 	root         string
@@ -41,7 +42,7 @@ type fakeBackend struct {
 	teardowns []string
 }
 
-func (f *fakeBackend) Isolation() Isolation { return f.iso }
+func (f *fakeBackend) Isolation() gaterun.Isolation { return f.iso }
 
 func (f *fakeBackend) Detect(context.Context) Availability {
 	if f.unavailable != "" {
@@ -76,7 +77,7 @@ func (f *fakeBackend) Run(ctx context.Context, spec Spec) (Result, error) {
 	for _, kv := range spec.Env {
 		k, _, _ := strings.Cut(kv, "=")
 		switch k {
-		case EnvGateRoot, "HOME", "TMPDIR", "PATH", EnvVulnDB:
+		case gaterun.EnvGateRoot, "HOME", "TMPDIR", "PATH", gaterun.EnvVulnDB:
 			continue
 		}
 		env = append(env, kv)
@@ -85,7 +86,7 @@ func (f *fakeBackend) Run(ctx context.Context, spec Spec) (Result, error) {
 	if f.binDir != "" {
 		path = f.binDir + string(os.PathListSeparator) + path
 	}
-	env = append(env, EnvGateRoot+"="+dir, "HOME="+dir+"/home", "TMPDIR="+dir+"/tmp", "PATH="+path, EnvVulnDB+"="+dir+"/vulndb")
+	env = append(env, gaterun.EnvGateRoot+"="+dir, "HOME="+dir+"/home", "TMPDIR="+dir+"/tmp", "PATH="+path, gaterun.EnvVulnDB+"="+dir+"/vulndb")
 	cmd := exec.CommandContext(ctx, spec.Command[0], spec.Command[1:]...)
 	cmd.Dir, cmd.Env = filepath.Join(dir, "src"), env
 	err := cmd.Run()
@@ -97,7 +98,7 @@ func (f *fakeBackend) Run(ctx context.Context, spec Spec) (Result, error) {
 	case err != nil:
 		return Result{}, err
 	}
-	res := Result{Class: ClassifyExit(code), ExitCode: code}
+	res := Result{Class: gaterun.ClassifyExit(code), ExitCode: code}
 	if f.tamper != nil {
 		f.tamper(&res)
 	}
@@ -107,7 +108,7 @@ func (f *fakeBackend) Run(ctx context.Context, spec Spec) (Result, error) {
 // CopyOut tars path (inside the gate) the way `docker cp <ctr>:<path> -`
 // does: entries named under the path's base name, links as links.
 func (f *fakeBackend) CopyOut(_ context.Context, runID, path string, w io.Writer, maxBytes int64) error {
-	host := filepath.Join(f.dir(runID), strings.TrimPrefix(path, WorkMount))
+	host := filepath.Join(f.dir(runID), strings.TrimPrefix(path, gaterun.WorkMount))
 	base := filepath.Base(path)
 	tw := tar.NewWriter(w)
 	err := filepath.WalkDir(host, func(p string, d fs.DirEntry, err error) error {
@@ -187,7 +188,7 @@ func newRunner(t *testing.T, b Backend, files map[string]string) *Runner {
 		Limits: Limits{CPUs: 1, MemoryBytes: 1 << 30, Pids: 100, DiskBytes: 1 << 30}}
 }
 
-func newFake(t *testing.T, iso Isolation) *fakeBackend {
+func newFake(t *testing.T, iso gaterun.Isolation) *fakeBackend {
 	t.Helper()
 	return &fakeBackend{iso: iso, root: t.TempDir()}
 }
@@ -195,21 +196,21 @@ func newFake(t *testing.T, iso Isolation) *fakeBackend {
 const testSHA = "0123456789abcdef0123456789abcdef01234567"
 
 // startReq is a valid StartRequest over stages.
-func startReq(stages ...PlanStage) StartRequest {
-	return StartRequest{GateID: "gate-b1-1", Repo: "acme/widgets", Ref: "reliant-queue/b1", SHA: testSHA,
+func startReq(stages ...gaterun.PlanStage) gaterun.StartRequest {
+	return gaterun.StartRequest{GateID: "gate-b1-1", Repo: "acme/widgets", Ref: "reliant-queue/b1", SHA: testSHA,
 		Stages: stages, TimeoutMs: 60_000}
 }
 
-func cmdStage(n config.StageName, command string) PlanStage {
-	return PlanStage{Name: n, State: config.StageOn, Kind: config.StageCommand, Command: command}
+func cmdStage(n config.StageName, command string) gaterun.PlanStage {
+	return gaterun.PlanStage{Name: n, State: config.StageOn, Kind: config.StageCommand, Command: command}
 }
 
-func offStage(n config.StageName) PlanStage {
-	return PlanStage{Name: n, State: config.StageOff, Reason: "turned off in pipeline.yaml"}
+func offStage(n config.StageName) gaterun.PlanStage {
+	return gaterun.PlanStage{Name: n, State: config.StageOff, Reason: "turned off in pipeline.yaml"}
 }
 
-func scanStage(env string) PlanStage {
-	return PlanStage{Name: config.StageSBOMScan, State: config.StageOn, Kind: config.StageBuiltinScan, ScanEnv: env}
+func scanStage(env string) gaterun.PlanStage {
+	return gaterun.PlanStage{Name: config.StageSBOMScan, State: config.StageOn, Kind: config.StageBuiltinScan, ScanEnv: env}
 }
 
 // fakeForge writes a `forge` to a new directory that answers `vuln gate
