@@ -50,3 +50,9 @@ func (*Local) RemoveAll(path string) error                  { return os.RemoveAl
 func (*Local) Open(name string) (io.ReadCloser, error)      { return os.Open(name) }
 func (*Local) Walk(root string, fn filepath.WalkFunc) error { return filepath.Walk(root, fn) }
 func (*Local) IsNotExist(err error) bool                    { return os.IsNotExist(err) }
+
+// Readlink and EvalSymlinks are not part of FS: only the file tree reads
+// links, and it asks for them through an interface of its own, so a
+// filesystem without them still works.
+func (*Local) Readlink(name string) (string, error)     { return os.Readlink(name) }
+func (*Local) EvalSymlinks(path string) (string, error) { return filepath.EvalSymlinks(path) }

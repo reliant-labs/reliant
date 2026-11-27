@@ -34,6 +34,9 @@ type sharedState struct {
 // every chat on the machine whatever the daemon's own environment says.
 var workspaceCaches = []sharedRoot{
 	{path: "/var/cache/workspace/go-build", label: "Go build cache"},
+	// What main's seeding writes and every untrusted build reads through
+	// `forge cache prog --trusted` (the gates mount it read-only).
+	{path: "/var/cache/workspace/go-build-trusted", label: "Go build cache (trusted)"},
 	{path: "/var/cache/workspace/go-mod", label: "Go module cache"},
 	{path: "/var/cache/workspace/npm", label: "npm cache"},
 	{path: "/var/cache/workspace/golangci-lint", label: "golangci-lint cache"},

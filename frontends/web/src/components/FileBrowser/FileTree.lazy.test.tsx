@@ -291,4 +291,52 @@ describe("FileTree lazy loading", () => {
     const fetched = apiMocks.getFileTree.mock.calls.map(([path]) => path).sort();
     expect(fetched).toEqual(["/", "src"]);
   });
+
+  // The owner's repro (2026-11-26): an agent creates .reliant.local (in the
+  // project's .gitignore) after the tree loaded, then writes mcp.json into it.
+  // The daemon now lists an ignored hidden folder's contents, so Refresh shows
+  // its chevron; and opening a folder a listing reported empty re-reads it, so
+  // a stale "empty" never sticks.
+  it("a hidden folder created after load opens after Refresh, and an empty one re-reads on open", async () => {
+    let state: "absent" | "empty" | "filled" = "absent";
+    const dotDir = (): FileNode => ({
+      name: ".reliant.local",
+      path: ".reliant.local",
+      type: "directory",
+      hasChildren: state === "filled",
+      children: state === "filled" ? [{ name: "mcp.json", path: ".reliant.local/mcp.json", type: "file", size: 2 }] : [],
+    });
+    apiMocks.getFileTree.mockImplementation(async (path: string) => {
+      if (path === "/") return state === "absent" ? rootDepth2(true) : [...rootDepth2(true), dotDir()];
+      if (path === ".reliant.local") return dotDir().children;
+      return [];
+    });
+
+    const { ref } = renderTree();
+    await waitFor(() => expect(screen.getByTestId("row-src")).toBeInTheDocument());
+    expect(screen.queryByTestId("row-.reliant.local")).not.toBeInTheDocument();
+
+    // Created, still empty: listed, nothing to expand.
+    state = "empty";
+    await act(async () => {
+      await ref.current!.refresh();
+    });
+    await waitFor(() => expect(screen.getByTestId("row-.reliant.local")).toBeInTheDocument());
+    expect(screen.getByTestId("row-.reliant.local")).not.toHaveTextContent("[chevron]");
+
+    // mcp.json lands with no refresh at all (a gitignored write sends no push
+    // event). Opening the folder re-reads it at depth 1.
+    state = "filled";
+    apiMocks.getFileTree.mockClear();
+    fireEvent.click(screen.getByTestId("expand-.reliant.local"));
+    await waitFor(() => expect(screen.getByTestId("row-.reliant.local/mcp.json")).toBeInTheDocument());
+    expect(apiMocks.getFileTree).toHaveBeenCalledWith(".reliant.local", false, "wt-1", 1);
+
+    // And Refresh alone shows the chevron the folder now deserves.
+    fireEvent.click(screen.getByTestId("collapse-.reliant.local"));
+    await act(async () => {
+      await ref.current!.refresh();
+    });
+    await waitFor(() => expect(screen.getByTestId("row-.reliant.local")).toHaveTextContent("[chevron]"));
+  });
 });
