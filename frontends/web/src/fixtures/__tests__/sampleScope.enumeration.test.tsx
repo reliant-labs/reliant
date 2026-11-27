@@ -219,6 +219,10 @@ async function renderAt(path: string): Promise<QueryClient> {
   // Resolve the matched lazy chunks before mounting. Otherwise settling also
   // races the first import and the router's pending/Suspense timers.
   await router.load();
+  // A child can be hidden behind the console's loading state on the first
+  // render. Explicitly preload its component too, before an env search update
+  // from the layout can race the child's first Suspense boundary.
+  await Promise.all(router.state.matches.map((match) => router.routesById[match.routeId].options.component?.preload?.()));
   const AppQueries = ({ children }: { children: ReactNode }) => <QueryClientProvider client={app}>{children}</QueryClientProvider>;
   render(<RouterProvider router={router} />, { wrapper: AppQueries });
   return app;
