@@ -695,7 +695,7 @@ schema DaemonConfigInstance:
     workspace: str = ""
 
 # forge:section schema DaemonConfig
-# forge:hash=6d4fd713af47daea4e150cdae6922036300cf986952562bd1b30bb1081e78ec5
+# forge:hash=0256ad4e58d4bb3b4ad505b9e9e077f6bd978921e62fa282e647ef2e95865256
 schema DaemonConfig:
     # Daemon gateway URL to dial (default: the credential's gateway, else localhost on --port)
     gateway_url: str = ""
@@ -759,6 +759,10 @@ schema DaemonConfig:
     gate_image: str = ""
     # Grype database directory mounted read-only into merge-queue gates (empty: scans are unproven)
     gate_vuln_db_dir: str = ""
+    # cpu.weight of a heavy-slot command while it runs, against 100 for other commands (0: 25; 100 or more: not lowered)
+    heavy_cpu_weight: int = 0
+    # memory.high of a heavy-slot command while it runs: off, or a size such as 16G (unset: 1.5x one slot's part of the memory, at least 12GiB)
+    heavy_memory_high: str = ""
     # instance config block (DaemonInstanceConfig). Set its fields as `instance.<field> = ...`.
     instance: DaemonConfigInstance = DaemonConfigInstance {}
 
@@ -818,7 +822,7 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_INSTANCE_WORKSPACE" = c.instance.workspace
 
         # forge:section daemonConfigEnvMap values (root)
-        # forge:hash=7665cbbf86f3436baf7d8b512626d9fa29f59b4bfd75c25f04e053f580cd8225
+        # forge:hash=0d651a4a196590b8dfda460060431826d5e4d774c0704bd0f2fc7feff6146616
         "DAEMON_GRPC_URL" = c.gateway_url
         "TOOLS_DAEMON_PORT" = str(c.gateway_port)
         "DAEMON_TLS_MODE" = c.tls_mode
@@ -850,6 +854,8 @@ daemonConfigEnvMap = lambda c: DaemonConfig, config_secrets: [str] -> {str: str 
         "RELIANT_DAEMON_AUTO_UPDATE" = "true" if c.auto_update else "false"
         "RELIANT_DAEMON_GATE_IMAGE" = c.gate_image
         "RELIANT_DAEMON_GATE_VULN_DB_DIR" = c.gate_vuln_db_dir
+        "RELIANT_HEAVY_CPU_WEIGHT" = str(c.heavy_cpu_weight)
+        "RELIANT_HEAVY_MEMORY_HIGH" = c.heavy_memory_high
 
         # forge:section daemonConfigEnvMap values (end)
         # forge:hash=06d93ea6019c14e6397469374bab99b5c2725f7353c6e9a894aa0b0ce1f5d421
