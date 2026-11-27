@@ -3,8 +3,8 @@
 /**
  * The GenAI lens: a trace's agent, model and tool steps as a transcript-style
  * outline (genaiSteps.ts), each with its latency against the trace, tokens,
- * time to first token and cost. Selecting a step selects its span, so the
- * span panel beside it shows the rest.
+ * time to first token and cost. Selecting a step selects its span; the
+ * adjacent panel hides raw attributes, events and status text in this lens.
  *
  * Metadata only: what the spans carry. Prompts, completions and tool
  * arguments are a later, opt-in capture with its own access grant; the lens

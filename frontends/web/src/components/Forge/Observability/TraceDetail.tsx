@@ -255,6 +255,7 @@ export function TraceDetail({
         {selected ? (
           <SpanDetails
             span={selected}
+            metadataOnly={showSteps}
             originMs={extent?.startMs ?? selected.startMs}
             onLogs={() => navigate({ view: "logs", trace: traceId, span: selected.spanId, q: undefined, service: undefined })}
             profiles={profilesOf(selected.service)}
@@ -277,6 +278,7 @@ const SESSION_LEAD_MS = 2_000;
 
 function SpanDetails({
   span,
+  metadataOnly,
   originMs,
   onLogs,
   profiles,
@@ -285,6 +287,8 @@ function SpanDetails({
   onLinkedSpan,
 }: {
   span: Span;
+  /** Raw attributes, events and status text can contain captured AI content. */
+  metadataOnly: boolean;
   originMs: number;
   onLogs: () => void;
   /** Whether the span's service has profiles to open (serviceSignals.ts). */
@@ -314,7 +318,7 @@ function SpanDetails({
         />
         <Fact label="Span" value={shortId(span.spanId)} mono />
       </dl>
-      {span.status === "error" && span.statusMessage && (
+      {!metadataOnly && span.status === "error" && span.statusMessage && (
         <p className="mb-3 break-words rounded-md border border-danger-border bg-surface-sunken px-3 py-2 font-mono text-xs text-danger-ink">
           {span.statusMessage}
         </p>
@@ -353,8 +357,12 @@ function SpanDetails({
             </ul>
           </section>
         )}
-        <AttributeTable title="Attributes" attributes={span.attributes} />
-        {span.events.length > 0 && (
+        {metadataOnly ? (
+          <p className="text-xs text-ink-muted">
+            Raw attributes, events and status messages are hidden in AI steps because they may contain captured content.
+          </p>
+        ) : <AttributeTable title="Attributes" attributes={span.attributes} />}
+        {!metadataOnly && span.events.length > 0 && (
           <section aria-label="Events">
             <h4 className="mb-1 text-xs font-semibold text-ink-muted">Events</h4>
             <ul className="space-y-2">
