@@ -33,7 +33,6 @@ type ReliantConfig struct {
 	WorktreeReclaim *WorktreeReclaimConfig `protobuf:"bytes,5,opt,name=worktree_reclaim,json=worktreeReclaim,proto3" json:"worktree_reclaim,omitempty"`
 	MachineOrg      *MachineOrgConfig      `protobuf:"bytes,6,opt,name=machine_org,json=machineOrg,proto3" json:"machine_org,omitempty"`
 	IdleReclaim     *IdleReclaimConfig     `protobuf:"bytes,7,opt,name=idle_reclaim,json=idleReclaim,proto3" json:"idle_reclaim,omitempty"`
-	Gtm             *GtmConfig             `protobuf:"bytes,8,opt,name=gtm,proto3" json:"gtm,omitempty"`
 	GtmAssets       *GtmAssetsConfig       `protobuf:"bytes,9,opt,name=gtm_assets,json=gtmAssets,proto3" json:"gtm_assets,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -114,13 +113,6 @@ func (x *ReliantConfig) GetMachineOrg() *MachineOrgConfig {
 func (x *ReliantConfig) GetIdleReclaim() *IdleReclaimConfig {
 	if x != nil {
 		return x.IdleReclaim
-	}
-	return nil
-}
-
-func (x *ReliantConfig) GetGtm() *GtmConfig {
-	if x != nil {
-		return x.Gtm
 	}
 	return nil
 }
@@ -633,7 +625,7 @@ var File_reliant_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\x1a\"reliant/config/v1/gtm_config.proto\"\xf5\x04\n" +
+	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\x1a\"reliant/config/v1/gtm_config.proto\"\xc5\x04\n" +
 	"\rReliantConfig\x12.\n" +
 	"\x03log\x18\x01 \x01(\v2\x1c.reliant.config.v1.LogConfigR\x03log\x12:\n" +
 	"\aruntime\x18\x02 \x01(\v2 .reliant.config.v1.RuntimeConfigR\aruntime\x12M\n" +
@@ -644,8 +636,7 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\x10worktree_reclaim\x18\x05 \x01(\v2(.reliant.config.v1.WorktreeReclaimConfigR\x0fworktreeReclaim\x12D\n" +
 	"\vmachine_org\x18\x06 \x01(\v2#.reliant.config.v1.MachineOrgConfigR\n" +
 	"machineOrg\x12G\n" +
-	"\fidle_reclaim\x18\a \x01(\v2$.reliant.config.v1.IdleReclaimConfigR\vidleReclaim\x12.\n" +
-	"\x03gtm\x18\b \x01(\v2\x1c.reliant.config.v1.GtmConfigR\x03gtm\x12A\n" +
+	"\fidle_reclaim\x18\a \x01(\v2$.reliant.config.v1.IdleReclaimConfigR\vidleReclaim\x12A\n" +
 	"\n" +
 	"gtm_assets\x18\t \x01(\v2\".reliant.config.v1.GtmAssetsConfigR\tgtmAssets:\r\xca\xc1\x18\t\n" +
 	"\areliant\"\xe7\x01\n" +
@@ -721,8 +712,7 @@ var file_reliant_config_v1_config_proto_goTypes = []any{
 	(*StorageReaperConfig)(nil),   // 5: reliant.config.v1.StorageReaperConfig
 	(*WorktreeReclaimConfig)(nil), // 6: reliant.config.v1.WorktreeReclaimConfig
 	(*IdleReclaimConfig)(nil),     // 7: reliant.config.v1.IdleReclaimConfig
-	(*GtmConfig)(nil),             // 8: reliant.config.v1.GtmConfig
-	(*GtmAssetsConfig)(nil),       // 9: reliant.config.v1.GtmAssetsConfig
+	(*GtmAssetsConfig)(nil),       // 8: reliant.config.v1.GtmAssetsConfig
 }
 var file_reliant_config_v1_config_proto_depIdxs = []int32{
 	4, // 0: reliant.config.v1.ReliantConfig.log:type_name -> reliant.config.v1.LogConfig
@@ -732,13 +722,12 @@ var file_reliant_config_v1_config_proto_depIdxs = []int32{
 	6, // 4: reliant.config.v1.ReliantConfig.worktree_reclaim:type_name -> reliant.config.v1.WorktreeReclaimConfig
 	1, // 5: reliant.config.v1.ReliantConfig.machine_org:type_name -> reliant.config.v1.MachineOrgConfig
 	7, // 6: reliant.config.v1.ReliantConfig.idle_reclaim:type_name -> reliant.config.v1.IdleReclaimConfig
-	8, // 7: reliant.config.v1.ReliantConfig.gtm:type_name -> reliant.config.v1.GtmConfig
-	9, // 8: reliant.config.v1.ReliantConfig.gtm_assets:type_name -> reliant.config.v1.GtmAssetsConfig
-	9, // [9:9] is the sub-list for method output_type
-	9, // [9:9] is the sub-list for method input_type
-	9, // [9:9] is the sub-list for extension type_name
-	9, // [9:9] is the sub-list for extension extendee
-	0, // [0:9] is the sub-list for field type_name
+	8, // 7: reliant.config.v1.ReliantConfig.gtm_assets:type_name -> reliant.config.v1.GtmAssetsConfig
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_config_proto_init() }

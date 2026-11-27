@@ -577,15 +577,6 @@ schema ReliantConfigIdleReclaim:
         scratch_remove_idle != "", "scratch_remove_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE counts as unset, so it would load the default \"168h\" — set a value, or change its default in the proto"
         worktree_node_modules_idle != "", "worktree_node_modules_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE counts as unset, so it would load the default \"72h\" — set a value, or change its default in the proto"
 
-# forge:section schema ReliantConfigGtm
-# forge:hash=488029212d5e51891630b5e60ce5d87b41df2009121c20325b06cc6f3c8b2c85
-# ReliantConfigGtm is the gtm block (GtmConfig) — author its values in config.k as `gtm.<field> = ...`.
-schema ReliantConfigGtm:
-    # Comma-separated organization ids GTM is enabled for (none: GTM is off everywhere)
-    allowed_org_ids: str = ""
-    # Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)
-    analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
-
 # forge:section schema ReliantConfigGtmAssets
 # forge:hash=273956fdf14ce0c25b167e09aae9737690286342725f650c840ffea6fa31f116
 # ReliantConfigGtmAssets is the gtm_assets block (GtmAssetsConfig) — author its values in config.k as `gtm_assets.<field> = ...`.
@@ -612,7 +603,7 @@ schema ReliantConfigGtmAssets:
     org_quota_bytes: int = 2147483648
 
 # forge:section schema ReliantConfig
-# forge:hash=1c1e07eef49d9a70bc8584f434f849b6b558c9acf67fcb07b5dd6adb7b601df7
+# forge:hash=ea784234487abf4419f0ac1e50437d4ad1138a644130ee462200ff966cefde0f
 schema ReliantConfig:
     # log config block (LogConfig). Set its fields as `log.<field> = ...`.
     log: ReliantConfigLog = ReliantConfigLog {}
@@ -628,8 +619,6 @@ schema ReliantConfig:
     machine_org: ReliantConfigMachineOrg = ReliantConfigMachineOrg {}
     # idle_reclaim config block (IdleReclaimConfig). Set its fields as `idle_reclaim.<field> = ...`.
     idle_reclaim: ReliantConfigIdleReclaim = ReliantConfigIdleReclaim {}
-    # gtm config block (GtmConfig). Set its fields as `gtm.<field> = ...`.
-    gtm: ReliantConfigGtm = ReliantConfigGtm {}
     # gtm_assets config block (GtmAssetsConfig). Set its fields as `gtm_assets.<field> = ...`.
     gtm_assets: ReliantConfigGtmAssets = ReliantConfigGtmAssets {}
 
@@ -641,10 +630,6 @@ schema ReliantConfig:
 # credential is the broadcast that put one feature's secretKeyRef on
 # every pod. Declare what a workload reads in its `config_secrets` instead.
 RELIANT_CONFIG_SENSITIVE_ENV: [str] = [
-    # forge:section RELIANT_CONFIG_SENSITIVE_ENV gtm
-    # forge:hash=4732ad503bb2b73cc8415d5f0be9e139cc2d7db6371ab652f2e34be13cd7aa7c
-    "GTM_ANALYTICS_TOKEN"
-
     # forge:section RELIANT_CONFIG_SENSITIVE_ENV gtm_assets
     # forge:hash=b8beb741cd69883b892a8fb4fb3fffc7962e612621a0bc9bb1f2d833f7456ea9
     "GTM_ASSETS_ACCESS_KEY_ID"
@@ -660,10 +645,6 @@ RELIANT_CONFIG_SENSITIVE_ENV: [str] = [
 # stating that THIS one's absence is intended (a tier's off-switch, a
 # credential only some environments own).
 RELIANT_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
-    # forge:section RELIANT_CONFIG_OPTIONAL_SECRET_ENV gtm
-    # forge:hash=860b322ccb637fde76fe3c742e73cfd56e9d18e77e140cdd36aac65f03b4838f
-    "GTM_ANALYTICS_TOKEN"
-
     # forge:section RELIANT_CONFIG_OPTIONAL_SECRET_ENV gtm_assets
     # forge:hash=c69ec3fbfbf6c408e8581ae909c0feb6e561785be8790ea6358761e105f24860
     "GTM_ASSETS_ACCESS_KEY_ID"
@@ -689,10 +670,6 @@ RELIANT_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
 #     env = reliantConfigEnvMap(cfg, config_secrets) | {EXTRA = "value"}
 reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: str | forge.SecretRef} {
     _sensitive: {str: forge.SecretRef} = {
-        # forge:section reliantConfigEnvMap secrets gtm
-        # forge:hash=14d7fa419d2ccfb9c11b31ac59016f8afcaf465f487affc1e5201c8802bcd182
-        "GTM_ANALYTICS_TOKEN" = forge.SecretRef {name = c.gtm.analytics_token.name, key = c.gtm.analytics_token.key, store_key = "GTM_ANALYTICS_TOKEN", optional = True}
-
         # forge:section reliantConfigEnvMap secrets gtm_assets
         # forge:hash=e4b09c007126d14a37de9f1b248c6cb4b71eb4b357e74c7151fcb92dd4280b62
         "GTM_ASSETS_ACCESS_KEY_ID" = forge.SecretRef {name = c.gtm_assets.access_key_id.name, key = c.gtm_assets.access_key_id.key, store_key = "GTM_ASSETS_ACCESS_KEY_ID", optional = True}
@@ -742,10 +719,6 @@ reliantConfigEnvMap = lambda c: ReliantConfig, config_secrets: [str] -> {str: st
         "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE" = c.idle_reclaim.scratch_strip_idle
         "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE" = c.idle_reclaim.scratch_remove_idle
         "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE" = c.idle_reclaim.worktree_node_modules_idle
-
-        # forge:section reliantConfigEnvMap values gtm
-        # forge:hash=f05da31ddc209262d8412a08fce809785b5a6991c94ba6c78cd8db631b45a7c0
-        "GTM_ALLOWED_ORG_IDS" = c.gtm.allowed_org_ids
 
         # forge:section reliantConfigEnvMap values gtm_assets
         # forge:hash=b913ebdb46e2180d2fca5e7d6c59cfca5c961f221039f2e2139682634681b423
@@ -1682,8 +1655,17 @@ schema ServerProcessConfigPipeline:
     # Run Reliant's PR and release pipeline on this server: its server actions (uses: reliant/...) and RPCs; off refuses them
     enabled: bool = False
 
+# forge:section schema ServerProcessConfigGtm
+# forge:hash=4585d795f25eced4fd9eb5d27b53a4dd2ced17b0f051787666615f9940e1ea21
+# ServerProcessConfigGtm is the gtm block (GtmConfig) — author its values in config.k as `gtm.<field> = ...`.
+schema ServerProcessConfigGtm:
+    # Comma-separated organization ids GTM is enabled for (none: GTM is off everywhere)
+    allowed_org_ids: str = ""
+    # Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)
+    analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
+
 # forge:section schema ServerProcessConfig
-# forge:hash=2a85aadde860e7c38ce1de949ab1de6d1f2ad4d66d4118c2c17ed44b8f9ae1d1
+# forge:hash=0d7cdc270690a6224b2d4a17a1f82d228f0305a20dba538c967aec6dcc1670c1
 schema ServerProcessConfig:
     # Data directory for logs and certs
     data_dir: str = "./data"
@@ -1715,6 +1697,8 @@ schema ServerProcessConfig:
     client_versions: ServerProcessConfigClientVersions = ServerProcessConfigClientVersions {}
     # pipeline config block (PipelineConfig). Set its fields as `pipeline.<field> = ...`.
     pipeline: ServerProcessConfigPipeline = ServerProcessConfigPipeline {}
+    # gtm config block (GtmConfig). Set its fields as `gtm.<field> = ...`.
+    gtm: ServerProcessConfigGtm = ServerProcessConfigGtm {}
 
     check:
         data_dir != "", "data_dir = \"\" cannot reach the process: an empty DATA_DIR counts as unset, so it would load the default \"./data\" — set a value, or pass --data-dir= in the workload's args to make it empty"
@@ -1744,6 +1728,10 @@ SERVER_PROCESS_CONFIG_SENSITIVE_ENV: [str] = [
     "RELIANT_GITHUB_WEBHOOK_SECRET"
     "RELIANT_TEST_INTEGRATION_SECRET"
 
+    # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV gtm
+    # forge:hash=0da69df5e99ffed3adee8573a56e53345423e99a3c92d1138eca3e18d1e414bb
+    "GTM_ANALYTICS_TOKEN"
+
     # forge:section SERVER_PROCESS_CONFIG_SENSITIVE_ENV (root)
     # forge:hash=fa807b1957f7aadf24512d851ee31f0a3cce8a592088aa1c8c31993baf88d46c
     "RELIANT_OAUTH_<KEY>_CLIENT_SECRET"
@@ -1772,6 +1760,10 @@ SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV: [str] = [
     "RELIANT_SLACK_SIGNING_SECRET"
     "RELIANT_GITHUB_WEBHOOK_SECRET"
     "RELIANT_TEST_INTEGRATION_SECRET"
+
+    # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV gtm
+    # forge:hash=78ae2df0a749882a2534f831996250c33a208c6ca670084124edaa53287c5ead
+    "GTM_ANALYTICS_TOKEN"
 
     # forge:section SERVER_PROCESS_CONFIG_OPTIONAL_SECRET_ENV (root)
     # forge:hash=ba93ebc6a133877e7d793fafefbd1983453237ac12c4626f0f9d7b18d2613c3f
@@ -1812,6 +1804,10 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         "RELIANT_SLACK_SIGNING_SECRET" = forge.SecretRef {name = c.integrations.slack_signing_secret.name, key = c.integrations.slack_signing_secret.key, store_key = "RELIANT_SLACK_SIGNING_SECRET", optional = True}
         "RELIANT_GITHUB_WEBHOOK_SECRET" = forge.SecretRef {name = c.integrations.github_webhook_secret.name, key = c.integrations.github_webhook_secret.key, store_key = "RELIANT_GITHUB_WEBHOOK_SECRET", optional = True}
         "RELIANT_TEST_INTEGRATION_SECRET" = forge.SecretRef {name = c.integrations.test_integration_secret.name, key = c.integrations.test_integration_secret.key, store_key = "RELIANT_TEST_INTEGRATION_SECRET", optional = True}
+
+        # forge:section serverProcessConfigEnvMap secrets gtm
+        # forge:hash=7a64aeba41707745435902ba6d2623a9bd193f816eb7933035b5ebd0e83d7511
+        "GTM_ANALYTICS_TOKEN" = forge.SecretRef {name = c.gtm.analytics_token.name, key = c.gtm.analytics_token.key, store_key = "GTM_ANALYTICS_TOKEN", optional = True}
 
         # forge:section serverProcessConfigEnvMap secrets (end)
         # forge:hash=efede3d8161a204eb8a0d16899c8d3af3adbc86ab32cabf0dd06f8ee1f72642c
@@ -1926,6 +1922,10 @@ serverProcessConfigEnvMap = lambda c: ServerProcessConfig, config_secrets: [str]
         # forge:section serverProcessConfigEnvMap values pipeline
         # forge:hash=5c89bfa1b8721707c20667f38e4688778c8a40aff69dd3408ea896474ba96378
         "RELIANT_PIPELINE_ENABLED" = "true" if c.pipeline.enabled else "false"
+
+        # forge:section serverProcessConfigEnvMap values gtm
+        # forge:hash=adc348f52f0ec0451dec20dc908607e4f4acb2cc4deb7a60f177d70f1b130c80
+        "GTM_ALLOWED_ORG_IDS" = c.gtm.allowed_org_ids
 
         # forge:section serverProcessConfigEnvMap values (end)
         # forge:hash=6e40ebe66a4bd1160f079d94eae59be0c27a98446b351e00c478d59941a3fc6d
@@ -2272,10 +2272,6 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
 
-            # forge:section root api env gtm
-            # forge:hash=316b3f8012cd90daf74f920b0cb091dee0dadf10f1475c436de68374a1b8ff9b
-            "GTM_ALLOWED_ORG_IDS",
-
             # forge:section root api env gtm_assets
             # forge:hash=8b1578acf3e0de8fdf36e7a4d31ce2c767f02ed0ee218f75ec16b0a57d2e8107
             "GTM_ASSETS_ENDPOINT",
@@ -2462,10 +2458,6 @@ ROOTS: {str: Root} = {
             # forge:hash=7cce70f80c7f09e7d6d0f6dadef2f51be26ee5e885d6331fc33ef3bad4a54a1a
         ]
         secrets = [
-            # forge:section root api secrets gtm
-            # forge:hash=28385b00489d9b52f48b32775bcee9609c20935ad7c2434fbdfa12bd77b4c48d
-            "GTM_ANALYTICS_TOKEN",
-
             # forge:section root api secrets gtm_assets
             # forge:hash=22fe72bbecf20bae01492c2ccdfb3a75139bb8a34bf0ca1d2bcc8781a87cbeed
             "GTM_ASSETS_ACCESS_KEY_ID",
@@ -2555,10 +2547,6 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
             "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
-
-            # forge:section root gateway env gtm
-            # forge:hash=946f5fbbf68b59491a382d360ccea79461e3c5937422daa5970cbaeb70ed32e2
-            "GTM_ALLOWED_ORG_IDS",
 
             # forge:section root gateway env gtm_assets
             # forge:hash=b04ab4a2e2db0993bbe06edc69c33f3603296724d4f8641fe4c57486ed77a410
@@ -2652,10 +2640,6 @@ ROOTS: {str: Root} = {
             # forge:hash=7376a153bc04c136aa661594f92ab9f2c2eba3f0b6aece22c25b9e2fba3fe39f
         ]
         secrets = [
-            # forge:section root gateway secrets gtm
-            # forge:hash=f574297299aa803c1e18f21d670a28f7cd08aefda5f0b090444fd83ad2ce1c38
-            "GTM_ANALYTICS_TOKEN",
-
             # forge:section root gateway secrets gtm_assets
             # forge:hash=cf52d55c48faf9f75b1f4c8eeec671856b30ab8675445f2549ee6b4fed6b1397
             "GTM_ASSETS_ACCESS_KEY_ID",
@@ -2732,10 +2716,6 @@ ROOTS: {str: Root} = {
             "RELIANT_IDLE_RECLAIM_SCRATCH_STRIP_IDLE",
             "RELIANT_IDLE_RECLAIM_SCRATCH_REMOVE_IDLE",
             "RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE",
-
-            # forge:section root worker env gtm
-            # forge:hash=9fb051addcb3b354dc69e34bdfc5f80bd1c1b046327cb96f1f29b3991f7960f7
-            "GTM_ALLOWED_ORG_IDS",
 
             # forge:section root worker env gtm_assets
             # forge:hash=686e6156f9ce137a3e9c7224548f82957c6d354233687ad2225a530f32ca8ebe
@@ -2857,10 +2837,6 @@ ROOTS: {str: Root} = {
             # forge:hash=870d2e1cb19ff2c9d8d3359b10e1fe506b0ea907940a4ad023f3f6bc6b0cdf3d
         ]
         secrets = [
-            # forge:section root worker secrets gtm
-            # forge:hash=11dee0e938f40347af90fff57aae1c5bb93d7b3d27338a4df54839c5297f57e8
-            "GTM_ANALYTICS_TOKEN",
-
             # forge:section root worker secrets gtm_assets
             # forge:hash=694b2822ff06e31ec381dadd8d104c1de5dd3b3ff961cefe7e213fb78525bcb9
             "GTM_ASSETS_ACCESS_KEY_ID",

@@ -77,7 +77,6 @@ message ReliantConfig {
   WorktreeReclaimConfig worktree_reclaim = 5;
   MachineOrgConfig machine_org = 6;
   IdleReclaimConfig idle_reclaim = 7;
-  GtmConfig gtm = 8;
   GtmAssetsConfig gtm_assets = 9;
 }
 
