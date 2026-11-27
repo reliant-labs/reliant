@@ -75,7 +75,7 @@ FROM node:24-bookworm-slim AS node
 FROM golang:1.27.4-bookworm AS gitbuild
 ARG GIT_VERSION=2.47.1
 RUN set -eux; apt-get update; \
-  apt-get install -y --no-install-recommends libcurl4-openssl-dev libexpat1-dev libpcre2-dev libssl-dev zlib1g-dev; \
+  apt-get install -y --no-install-recommends libcurl4-openssl-dev libexpat1-dev libpcre2-dev libssl-dev xz-utils zlib1g-dev; \
   cd /tmp; base=https://www.kernel.org/pub/software/scm/git; \
   curl -fsSLO "$base/git-${GIT_VERSION}.tar.xz"; curl -fsSLO "$base/sha256sums.asc"; \
   grep " git-${GIT_VERSION}.tar.xz\$" sha256sums.asc | sha256sum -c -; \
