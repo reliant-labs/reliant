@@ -12,13 +12,14 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // seedProject returns the project every DB-backed test database starts with,
 // so rows go through the real unique index.
 func seedProject(t *testing.T, repo *db.Repo) *db.Project {
 	t.Helper()
-	p, err := repo.GetProject(context.Background(), "test-project")
+	p, err := store.GetProject(context.Background(), repo.ORM(), "test-project")
 	require.NoError(t, err)
 	return p
 }
@@ -70,7 +71,7 @@ func TestNameRule_FailedRowIsReplaced(t *testing.T) {
 	// The same name AND the same branch: the failed row never held work.
 	retry, err := Insert(ctx, repo, nil, req)
 	require.NoError(t, err)
-	old, err := repo.GetWorktree(ctx, failed.ID)
+	old, err := store.GetWorktree(ctx, repo.ORM(), failed.ID)
 	require.NoError(t, err)
 	assert.NotNil(t, old.DeletedAt)
 	live, err := repo.GetLiveWorktreeByName(ctx, project.ID, "feat")

@@ -89,7 +89,7 @@ func TestNoteWorktreeUse(t *testing.T) {
 	c := landedFixture(t, env, "used")
 	id := *c.WorktreeID
 	lastActive := func() time.Time {
-		wt, err := env.Repo.GetWorktree(ctx, id)
+		wt, err := store.GetWorktree(ctx, env.Repo.ORM(), id)
 		require.NoError(t, err)
 		return wt.LastActive
 	}

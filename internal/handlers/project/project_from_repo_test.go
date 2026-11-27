@@ -315,7 +315,7 @@ func TestCreateProjectFromRepo_NeverForwardsOrStoresACredentialURL(t *testing.T)
 	want := "https://github.com/acme/" + name + ".git"
 	assert.Equal(t, want, cp.lastReq.CloneURL, "the control plane is handed the clean URL")
 	assert.Equal(t, want, resp.Msg.GetProject().GetRemoteUrl(), "the response carries the clean URL")
-	stored, err := repo.GetProject(ctx, resp.Msg.GetProject().GetId())
+	stored, err := store.GetProject(ctx, repo.ORM(), resp.Msg.GetProject().GetId())
 	require.NoError(t, err)
 	require.NotNil(t, stored.RemoteURL)
 	assert.Equal(t, want, *stored.RemoteURL, "the stored remote is the clean URL")
@@ -436,7 +436,7 @@ func TestCreateProjectFromRepo_StampsCreationTime(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	stored, err := repo.GetProject(ctx, resp.Msg.GetProject().GetId())
+	stored, err := store.GetProject(ctx, repo.ORM(), resp.Msg.GetProject().GetId())
 	require.NoError(t, err)
 	for field, ts := range map[string]time.Time{
 		"created_at":  stored.CreatedAt,

@@ -175,7 +175,7 @@ func TestDaemonQueries(t *testing.T) {
 	if err := store.ReleaseDaemonFromWorkspaces(ctx, env.ORM, "d2"); err != nil {
 		t.Fatalf("ReleaseDaemonFromWorkspaces: %v", err)
 	}
-	if w, _ := env.Repo.GetWorktree(ctx, "wt-d"); w.DaemonID != nil {
+	if w, _ := store.GetWorktree(ctx, env.Repo.ORM(), "wt-d"); w.DaemonID != nil {
 		t.Fatalf("worktree still bound to removed daemon: %v", *w.DaemonID)
 	}
 	if pds, _ := store.ListProjectDaemonsForDaemon(ctx, env.Repo.ORM(), "d2"); len(pds) != 0 {

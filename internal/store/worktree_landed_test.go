@@ -83,7 +83,7 @@ func TestArchiveLandedWorktree_OnlyWhenQuietAndNotRunning(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 
-	wt, err := env.Repo.GetWorktree(ctx, id)
+	wt, err := store.GetWorktree(ctx, env.Repo.ORM(), id)
 	require.NoError(t, err)
 	require.NotNil(t, wt.DeletedAt)
 	require.NotNil(t, wt.CleanupMetadata)
@@ -122,13 +122,13 @@ func TestReviveArchivedWorktree(t *testing.T) {
 		m.DirectoryDeleted, m.HeldReason, m.StrippedBytes = true, "dirty", 42
 		return true
 	}))
-	archived, err := env.Repo.GetWorktree(ctx, id)
+	archived, err := store.GetWorktree(ctx, env.Repo.ORM(), id)
 	require.NoError(t, err)
 
 	fence, err = store.ReviveArchivedWorktree(ctx, env.ORM, id)
 	require.NoError(t, err)
 	require.Equal(t, strconv.FormatInt(archived.DeletedAt.UnixNano(), 10), fence, "the fence is the archive's, as the sweep derives it")
-	wt, err := env.Repo.GetWorktree(ctx, id)
+	wt, err := store.GetWorktree(ctx, env.Repo.ORM(), id)
 	require.NoError(t, err)
 	require.Nil(t, wt.DeletedAt)
 	m := wt.CleanupMetadata
@@ -154,7 +154,7 @@ func TestReviveArchivedWorktree_NameTaken(t *testing.T) {
 
 	_, err = store.ReviveArchivedWorktree(ctx, env.ORM, *c.WorktreeID)
 	require.True(t, errors.Is(err, core.ErrWorktreeNameTaken), "got %v", err)
-	wt, err := env.Repo.GetWorktree(ctx, *c.WorktreeID)
+	wt, err := store.GetWorktree(ctx, env.Repo.ORM(), *c.WorktreeID)
 	require.NoError(t, err)
 	require.NotNil(t, wt.DeletedAt, "a failed revive leaves the row archived")
 }

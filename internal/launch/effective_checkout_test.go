@@ -26,7 +26,7 @@ import (
 func TestGetEffectiveCheckout_IsTheChatMachinesOwnCheckout(t *testing.T) {
 	repo, ctx, chat := greenfieldFixture(t)
 	launcher := New(Deps{Store: repo, Chats: store.NewChatsWithActivityExtStore(repo.ORM()), Workflows: store.NewWorkflowExtStore(repo.ORM()), Worktrees: store.NewWorktreeExtStore(repo.ORM()), Installs: daemonplacement.NewRecords(repo.ORM()), ProjectRows: store.NewProjectExtStore(repo.ORM()), TriggerEvents: store.NewTriggerEventExtStore(repo.ORM()), Projects: projectaccess.NewFromORM(repo.ORM()), Selections: store.NewChatSelectionExtStore(repo.ORM()), Threads: threads.New(threads.Deps{Repo: repo, Messages: store.NewMessageExtStore(repo.ORM()), Senders: store.NewThreadExtStore(repo.ORM())}), Temporal: nil, Runs: nil, TaskQueue: ""})
-	project, err := repo.GetProject(ctx, chat.ProjectID)
+	project, err := store.GetProject(ctx, repo.ORM(), chat.ProjectID)
 	require.NoError(t, err)
 
 	const cloud, cloudPath = "cloud-box", "/home/workspace/projects/greenfield"

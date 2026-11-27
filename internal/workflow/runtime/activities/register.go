@@ -316,7 +316,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewPreflightRequirementsActivity(repoRows, workspaceRows, deps.ToolExecutor, deps.Connections).WithDaemonRouter(deps.DaemonRouter))
 	v2.RegisterActivity(registry, handlers.NewMachineResumeWakeActivity(deps.Repo, workspaceRows, deps.ToolExecutor))
 	v2.RegisterActivity(registry, handlers.NewGreenfieldProbeActivity(deps.Repo, deps.DaemonRouter))
-	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: deps.Repo, Runs: runRecords, Workflows: workflowRuns, Attention: attention, RunEvents: runEvents, Pauser: pauser}))
+	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowStatusActivity(handlers.WorkflowStatusDeps{Repo: repoRows, Runs: runRecords, Workflows: workflowRuns, Attention: attention, RunEvents: runEvents, Pauser: pauser}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewThreadStatusActivity(handlers.ThreadStatusDeps{Store: deps.Repo, Mailbox: mailboxStore.resolver}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewUsageLimitWaitActivity(handlers.UsageLimitWaitDeps{Store: deps.Repo, Waits: deps.ProviderBackoff, Threads: deps.Threads}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewTriggerCapacitySlotActivity(handlers.TriggerCapacitySlotDeps{Slots: capacitySlots}))
@@ -328,7 +328,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	}
 	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(handlers.CleanupDeps{Store: deps.Repo, ToolBlocks: toolBlocks, Approvals: approvals, Workflows: workflowRuns}))
 	v2.RegisterLifecycleActivity(registry, handlers.NewEmitStreamFinalizedActivity(deps.Repo))
-	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads, deps.Repo, workflowRuns))
+	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads, repoRows, workflowRuns))
 
 	// ========================================================================
 	// UTILITY ACTIVITIES

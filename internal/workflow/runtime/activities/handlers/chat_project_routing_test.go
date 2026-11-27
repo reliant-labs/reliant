@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -199,9 +200,9 @@ func TestChatProjects_CollidingNamesAreNamedByID(t *testing.T) {
 	ctx := context.Background()
 	chat, err := f.h.Repo().GetChat(ctx, f.chat)
 	require.NoError(t, err)
-	primary, err := f.h.Repo().GetProject(ctx, f.project)
+	primary, err := store.GetProject(ctx, f.h.Repo().ORM(), f.project)
 	require.NoError(t, err)
-	projects := chatProjects(ctx, f.h.Repo(), f.h.Repo(), chat, primary)
+	projects := chatProjects(ctx, f.h.Repo(), rowreads.WithRepo(f.h.Repo()), chat, primary)
 	assert.Equal(t, []string{f.project, "api", twin.ID}, projectValues(projects))
 
 	_, ok := findChatProject(projects, "Test Project")

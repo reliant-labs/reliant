@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The worktree_owner_backfill migration, re-run against rows it must leave
@@ -64,7 +66,7 @@ func TestWorktreeOwnerBackfill(t *testing.T) {
 	_, err = raw.ExecContext(ctx, string(sqlBytes))
 	require.NoError(t, err)
 
-	wt, err := repo.GetWorktree(ctx, survivingOnA)
+	wt, err := store.GetWorktree(ctx, repo.ORM(), survivingOnA)
 	require.NoError(t, err)
 	assert.Nil(t, wt.DaemonID, "one remaining install is not proof of where a workspace lives")
 

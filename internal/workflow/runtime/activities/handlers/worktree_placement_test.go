@@ -182,7 +182,7 @@ func (f *activityPlacementFixture) createWorktree(t *testing.T, chatID string, s
 		},
 	})
 	require.NoError(t, err)
-	stored, err := f.repo.GetWorktree(context.Background(), out.Id)
+	stored, err := store.GetWorktree(context.Background(), f.repo.ORM(), out.Id)
 	require.NoError(t, err)
 	return stored
 }

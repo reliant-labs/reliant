@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
@@ -402,7 +403,7 @@ func TestCleanupStorage_ReturnsAtOnceAndSurvivesTheRequestContext(t *testing.T) 
 	}
 	assert.NoError(t, sender.ctxErr, "the clean-up ran on the request's cancelled context")
 	require.Eventually(t, func() bool {
-		wt, err := f.repo.GetWorktree(f.ctx, wtID)
+		wt, err := store.GetWorktree(f.ctx, f.repo.ORM(), wtID)
 		return err == nil && wt.CleanupMetadata != nil && !wt.CleanupMetadata.Cleaning
 	}, 5*time.Second, 50*time.Millisecond, "a failed clean-up clears its in-progress flag")
 }

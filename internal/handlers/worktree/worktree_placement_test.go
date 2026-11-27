@@ -402,7 +402,7 @@ func TestImportWorktree_PlacesOnChatMachine(t *testing.T) {
 	}))
 	require.NoError(t, err)
 
-	stored, err := f.repo.GetWorktree(context.Background(), resp.Msg.Worktree.Id)
+	stored, err := store.GetWorktree(context.Background(), f.repo.ORM(), resp.Msg.Worktree.Id)
 	require.NoError(t, err)
 	require.NotNil(t, stored.DaemonID)
 	assert.Equal(t, "daemon-b", *stored.DaemonID)

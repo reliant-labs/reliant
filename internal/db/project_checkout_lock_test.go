@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // checkoutFixture is a project with a checkout recorded on two machines.
@@ -23,7 +24,7 @@ func newCheckoutFixture(t *testing.T) checkoutFixture {
 	repo, cleanup := setupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.Background()
-	project, err := repo.GetProject(ctx, "test-project")
+	project, err := store.GetProject(ctx, repo.ORM(), "test-project")
 	require.NoError(t, err)
 	f := checkoutFixture{repo: repo, pid: project.ID, here: "d-here", elsewhere: "d-elsewhere"}
 	for _, id := range []string{f.here, f.elsewhere} {

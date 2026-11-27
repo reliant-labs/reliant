@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"github.com/reliant-labs/reliant/internal/projectaccess/projectaccesstest"
 
@@ -143,7 +144,7 @@ func (f *deleteAuthFixture) delete(svc *Service, ctx context.Context, fromMachin
 
 func (f *deleteAuthFixture) scheduled() bool {
 	f.t.Helper()
-	p, err := f.repo.GetProject(context.Background(), f.project)
+	p, err := store.GetProject(context.Background(), f.repo.ORM(), f.project)
 	require.NoError(f.t, err)
 	return p.DeleteAfter != nil
 }
@@ -233,7 +234,7 @@ func TestProjectDeleteAuthorityOnceTheOwnerLeft(t *testing.T) {
 		_, err := f.delete(svc, admin, false)
 		require.NoError(t, err)
 		assert.True(t, f.scheduled())
-		p, err := f.repo.GetProject(context.Background(), f.project)
+		p, err := store.GetProject(context.Background(), f.repo.ORM(), f.project)
 		require.NoError(t, err)
 		assert.Equal(t, f.admin, *p.DeletedBy)
 
@@ -266,7 +267,7 @@ func TestCreateProjectAtADeletedProjectsPathSaysHowToFreeIt(t *testing.T) {
 	owner := as(m, f.owner, auth.CredentialSession, "")
 	_, err := f.delete(svc, owner, false)
 	require.NoError(t, err)
-	p, err := f.repo.GetProject(context.Background(), f.project)
+	p, err := store.GetProject(context.Background(), f.repo.ORM(), f.project)
 	require.NoError(t, err)
 
 	_, err = svc.CreateProject(owner, connect.NewRequest(&reliantv1.CreateProjectRequest{Name: "again", Path: p.Path}))
@@ -283,13 +284,13 @@ func TestPurgeProjectNowNeedsTheOwnerAndItsName(t *testing.T) {
 
 	_, err := svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "wrong"}))
 	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
-	_, err = f.repo.GetProject(context.Background(), f.project)
+	_, err = store.GetProject(context.Background(), f.repo.ORM(), f.project)
 	require.NoError(t, err, "a wrong name deletes nothing")
 
 	_, err = svc.PurgeProjectNow(owner, connect.NewRequest(&reliantv1.PurgeProjectNowRequest{ProjectId: f.project, ConfirmName: "doomed"}))
 	require.NoError(t, err)
 	svc.WaitForPurges()
-	_, err = f.repo.GetProject(context.Background(), f.project)
+	_, err = store.GetProject(context.Background(), f.repo.ORM(), f.project)
 	assert.True(t, svcerr.IsNotFound(err), "the project is gone once its batches finish")
 	assert.Contains(t, f.schedules.synced(), f.trigger, "the purged trigger's schedule is converged away")
 }
@@ -343,7 +344,7 @@ func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
 			require.NoError(t, err, "the rpc answers while its batches are held")
 			<-held.started
 
-			p, err := f.repo.GetProject(context.Background(), f.project)
+			p, err := store.GetProject(context.Background(), f.repo.ORM(), f.project)
 			require.NoError(t, err, "the batches have not run")
 			require.NotNil(t, p.PurgeStartedAt, "the project is claimed")
 			_, err = svc.GetProject(owner, connect.NewRequest(&reliantv1.GetProjectRequest{ProjectId: f.project}))
@@ -357,18 +358,18 @@ func TestPurgeProjectNowAnswersBeforeItsBatchesRun(t *testing.T) {
 			svc.WaitForPurges()
 			ctx := context.Background()
 			if c.fail == nil {
-				_, err = f.repo.GetProject(ctx, f.project)
+				_, err = store.GetProject(ctx, f.repo.ORM(), f.project)
 				assert.True(t, svcerr.IsNotFound(err), "the detached batches deleted the project")
 				assert.Contains(t, f.schedules.synced(), f.trigger, "the purged trigger's schedule is converged away")
 				return
 			}
-			_, err = f.repo.GetProject(ctx, f.project)
+			_, err = store.GetProject(ctx, f.repo.ORM(), f.project)
 			require.NoError(t, err, "a failed purge leaves the project, hidden and claimed")
 			assert.Empty(t, f.schedules.synced(), "nothing was purged, so no schedule moved")
 			res, err := f.purges.PurgeDueProjects(ctx, time.Now().Add(projectpurge.Lease+time.Minute), projectpurge.Lease, 50)
 			require.NoError(t, err)
 			assert.Equal(t, 1, res.Purged, "the worker finishes it once the claim's lease has passed")
-			_, err = f.repo.GetProject(ctx, f.project)
+			_, err = store.GetProject(ctx, f.repo.ORM(), f.project)
 			assert.True(t, svcerr.IsNotFound(err), "the project is gone")
 		})
 	}

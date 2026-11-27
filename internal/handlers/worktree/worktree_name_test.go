@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/rowreads"
+	"github.com/reliant-labs/reliant/internal/store"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -82,7 +83,7 @@ func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
 	assert.Contains(t, err.Error(), "another worktree in this project now uses that name")
 	assert.Contains(t, err.Error(), "archive or rename")
 
-	got, err := repo.GetWorktree(ctx, old.Msg.Worktree.Id)
+	got, err := store.GetWorktree(ctx, repo.ORM(), old.Msg.Worktree.Id)
 	require.NoError(t, err)
 	assert.NotNil(t, got.DeletedAt, "still archived")
 

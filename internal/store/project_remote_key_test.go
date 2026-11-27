@@ -120,14 +120,14 @@ func TestGetProjectByRemoteKeyAndUserInScope(t *testing.T) {
 		}
 	}
 
-	got, err := env.Repo.GetProject(ctx, "p-acme")
+	got, err := store.GetProject(ctx, env.Repo.ORM(), "p-acme")
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
 	}
 	if got.RemoteKey == nil || *got.RemoteKey != "github.com/acme/props" {
 		t.Fatalf("remote_key = %v, want github.com/acme/props", got.RemoteKey)
 	}
-	if got, _ := env.Repo.GetProject(ctx, "p-local"); got.RemoteKey != nil {
+	if got, _ := store.GetProject(ctx, env.Repo.ORM(), "p-local"); got.RemoteKey != nil {
 		t.Fatalf("a local-path remote has key %q, want none", *got.RemoteKey)
 	}
 

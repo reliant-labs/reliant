@@ -158,7 +158,7 @@ func TestReconcile_DetachesAnotherOrgsCheckoutIdempotentlyAndRecordsIt(t *testin
 		assert.Equal(t, []string{f.globexMachine}, f.machinesOf(t, f.globex.ID), "pass %d", pass)
 		assert.Equal(t, []string{f.path}, f.cleanups(t, f.acme.ID), "pass %d: recorded once, restorable", pass)
 	}
-	p, err := f.repo.GetProject(f.ctx, f.acme.ID)
+	p, err := store.GetProject(f.ctx, f.repo.ORM(), f.acme.ID)
 	require.NoError(t, err, "the project itself is never deleted")
 	assert.Equal(t, f.path, p.Path)
 	detachments, err := store.ListProjectDaemonDetachmentsForDaemon(f.ctx, f.repo.ORM(), f.globexMachine)

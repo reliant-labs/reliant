@@ -921,14 +921,6 @@ func (r *Repo) CreateProject(ctx context.Context, project *Project) error {
 	return store.InsertProject(ctx, r.ORM(), project)
 }
 
-func (r *Repo) GetProject(ctx context.Context, id string) (*Project, error) {
-	if id == "" {
-		return nil, fmt.Errorf("project ID cannot be empty")
-	}
-
-	return store.GetProject(ctx, r.ORM(), id)
-}
-
 // ListProjectsByIDs returns the projects with these ids in one query; an id
 // with no project is absent. It checks no owner: the caller decides each row.
 func (r *Repo) ListProjectsByIDs(ctx context.Context, ids []string) ([]*Project, error) {
@@ -1656,13 +1648,6 @@ func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
 		}
 		return store.InsertWorktree(txCtx, r.ORM(), worktree)
 	})
-}
-
-func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {
-	if id == "" {
-		return nil, fmt.Errorf("worktree ID cannot be empty")
-	}
-	return store.GetWorktree(ctx, r.ORM(), id)
 }
 
 // GetLiveWorktreeByName returns the project's unarchived worktree called

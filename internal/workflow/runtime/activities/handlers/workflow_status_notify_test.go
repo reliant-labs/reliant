@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
@@ -89,7 +91,7 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 		input.Thread = chatID + "/child"
 	}
 	var output WorkflowStatusOutput
-	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(h.Repo())).Execute, input, &output))
+	require.NoError(t, h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo()))).Execute, input, &output))
 	require.True(t, output.Success)
 
 	chat, err := h.Repo().GetChat(ctx, chatID)

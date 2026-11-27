@@ -1097,7 +1097,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 		}
 		var wt *Worktree
 		if chat.WorktreeID != nil {
-			wt, err = r.GetWorktree(ctx, *chat.WorktreeID)
+			wt, err = store.GetWorktree(ctx, r.ORM(), *chat.WorktreeID)
 			if err != nil && !svcerr.IsNotFound(err) {
 				return fmt.Errorf("get bound worktree: %w", err)
 			}

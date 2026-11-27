@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -56,7 +58,7 @@ func TestAttentionReceiptFailureRollsBackCompletedLifecycle(t *testing.T) {
 	in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "completed", Outcome: "failure", LaunchRun: true, Thread: chatID,
 		Attention: &core.AttentionUpdate{RunID: uuid.NewString(), StartedAt: time.Now().UTC(), Key: "incident", Phase: "finish", State: "action_required"}}
 	var out WorkflowStatusOutput
-	err := f.h.ExecuteActivity(NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: f.h.Repo(), Runs: unavailableReceiptStore{NewRunRecords(f.h.Repo().ORM())}}).Execute, in, &out)
+	err := f.h.ExecuteActivity(NewWorkflowStatusActivity(WorkflowStatusDeps{Repo: rowreads.WithRepo(f.h.Repo()), Runs: unavailableReceiptStore{NewRunRecords(f.h.Repo().ORM())}}).Execute, in, &out)
 	require.Error(t, err)
 	wf, err := f.h.Repo().GetWorkflow(ctx, chatID)
 	require.NoError(t, err)
@@ -80,7 +82,7 @@ func TestAttentionSuccessfulEscalationPersistsAtomically(t *testing.T) {
 			chatID := f.launch(core.TriggerEventKindSchedule, db.Active())
 			in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "completed", Outcome: "success", LaunchRun: true, Thread: chatID,
 				Attention: &core.AttentionUpdate{RunID: uuid.NewString(), StartedAt: time.Now().UTC(), Key: "incident", Phase: "finish", State: "action_required"}}
-			deps := workflowStatusDeps(f.h.Repo())
+			deps := workflowStatusDeps(rowreads.WithRepo(f.h.Repo()))
 			if lost {
 				deps.Attention = unavailableAttentionStore{}
 			}
@@ -116,7 +118,7 @@ func TestAttentionTerminalPersistenceLossKeepsLegacyFailureVisible(t *testing.T)
 		Attention: &core.AttentionUpdate{RunID: actorID, StartedAt: at, Key: "observer", Phase: "finish", State: "action_required", FailureClass: "unsuccessful"}}
 	var out WorkflowStatusOutput
 	err = f.h.ExecuteActivity(NewWorkflowStatusActivity(func() WorkflowStatusDeps {
-		d := workflowStatusDeps(f.h.Repo())
+		d := workflowStatusDeps(rowreads.WithRepo(f.h.Repo()))
 		d.Attention = unavailableAttentionStore{}
 		return d
 	}()).Execute, in, &out)
@@ -152,7 +154,7 @@ func TestAttentionPreservesFailedOutcomeWhileRepairOwnsIncident(t *testing.T) {
 	in := WorkflowStatusInput{ChatID: observer, WorkflowID: observer, WorkflowName: "builtin://agent", Status: "completed", Outcome: "failure", LaunchRun: true, Thread: observer,
 		Attention: &core.AttentionUpdate{RunID: actorID, StartedAt: at, Key: "repo:one:pr:12", Phase: "finish", State: "action_required", FailureClass: "unsuccessful"}}
 	var out WorkflowStatusOutput
-	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(f.h.Repo())).Execute, in, &out))
+	require.NoError(t, f.h.ExecuteActivity(NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(f.h.Repo()))).Execute, in, &out))
 	chat, err := f.h.Repo().GetChat(ctx, observer)
 	require.NoError(t, err)
 	require.False(t, chat.Unread)

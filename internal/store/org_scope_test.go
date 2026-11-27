@@ -49,7 +49,7 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 		}
 	}
 
-	if got, err := env.Repo.GetProject(ctx, "p-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
+	if got, err := store.GetProject(ctx, env.Repo.ORM(), "p-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
 		t.Fatalf("GetProject org = %v, %v; want acme", got.OrgID, err)
 	}
 	if got, err := env.Repo.GetChatRow(ctx, "c-acme"); err != nil || got.OrgID == nil || *got.OrgID != "acme" {
@@ -125,7 +125,7 @@ func TestOrgScopedListsAndBackfill(t *testing.T) {
 			t.Fatalf("%s org = %v, want %q", id, got.OrgID, want)
 		}
 	}
-	if got, _ := env.Repo.GetProject(ctx, "p-legacy"); got.OrgID == nil || *got.OrgID != "home" {
+	if got, _ := store.GetProject(ctx, env.Repo.ORM(), "p-legacy"); got.OrgID == nil || *got.OrgID != "home" {
 		t.Fatalf("p-legacy org = %v, want the default org", got.OrgID)
 	}
 	equal("chats of home, strictly", chatIDs(&core.OrgScope{OrgID: "home"}), "c-home", "c-legacy")
@@ -175,7 +175,7 @@ func TestAssignUnassignedOrg_SpansBatches(t *testing.T) {
 		if org != nil {
 			want = *org
 		}
-		got, err := env.Repo.GetProject(ctx, id)
+		got, err := store.GetProject(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -373,7 +373,7 @@ func TestAssignUnassignedOrg_ChatsWaitForTheirProject(t *testing.T) {
 	}
 	projectOrg := func(id string) string {
 		return org(func() (*string, error) {
-			p, err := env.Repo.GetProject(ctx, id)
+			p, err := store.GetProject(ctx, env.Repo.ORM(), id)
 			if err != nil {
 				return nil, err
 			}
@@ -478,7 +478,7 @@ func TestAssignUnassignedOrg_TriggersWaitForTheirProject(t *testing.T) {
 	if err := store.AssignUnassignedOrg(ctx, env.ORM, user, "acme"); err != nil {
 		t.Fatal(err)
 	}
-	project, err := env.Repo.GetProject(ctx, "p-held")
+	project, err := store.GetProject(ctx, env.Repo.ORM(), "p-held")
 	if err != nil {
 		t.Fatal(err)
 	}

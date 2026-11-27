@@ -5,10 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRevivalAtomicallyRefusesSavedCatalogAndNonLandedArchives(t *testing.T) {
@@ -39,14 +40,14 @@ func TestRevivalAtomicallyRefusesSavedCatalogAndNonLandedArchives(t *testing.T) 
 					mustExecConv(t, env, `INSERT INTO worktree_recovery_checkouts (recovery_id,repo_id,rel,remote_url,recovery_ref,commit_oid,manifest_digest,descriptor_json) VALUES ('capture',$1,$1,$2,$3,'oid','digest','{"dirty":true,"untracked":true}')`, rel, "https://example.invalid/"+rel, "refs/recovery/"+rel)
 				}
 			}
-			before, err := env.Repo.GetWorktree(ctx, id)
+			before, err := store.GetWorktree(ctx, env.Repo.ORM(), id)
 			require.NoError(t, err)
 			// Call the store directly: no stale caller-side eligibility check can
 			// authorize revival after the locked row/catalog says otherwise.
 			fence, err := store.ReviveArchivedWorktree(ctx, env.ORM, id)
 			require.Error(t, err)
 			require.Empty(t, fence)
-			after, err := env.Repo.GetWorktree(ctx, id)
+			after, err := store.GetWorktree(ctx, env.Repo.ORM(), id)
 			require.NoError(t, err)
 			require.Equal(t, before.DeletedAt, after.DeletedAt)
 			require.Equal(t, before.CleanupMetadata, after.CleanupMetadata)

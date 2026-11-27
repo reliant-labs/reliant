@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,7 +54,7 @@ func TestWorkflowStatus_RootWorkflowUpdatesThread(t *testing.T) {
 	assert.Nil(t, thread.WorkflowID, "Thread should have NULL workflow_id initially")
 
 	// Create activity
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	input := WorkflowStatusInput{
 		ChatID:       chatID,
@@ -128,7 +130,7 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	input := WorkflowStatusInput{
 		ChatID:           chatID,
@@ -183,7 +185,7 @@ func TestWorkflowStatus_ChildWorkflowCreatedOnMissing(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity - DO NOT pre-create the child workflow
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	input := WorkflowStatusInput{
 		ChatID:           chatID,
@@ -243,7 +245,7 @@ func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	input := WorkflowStatusInput{
 		ChatID:       chatID,
@@ -286,7 +288,7 @@ func TestWorkflowStatus_FailedRecordsWhyOnTheRun(t *testing.T) {
 	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
 		ID: chatID, ChatID: chatID, WorkflowName: "release-forge", Thread: chatID, Status: db.Active(),
 	}))
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	reason := "workflow input validation failed: validation failed with 1 error(s):\n  1. release-forge.inputs.asap: input 'asap' expects boolean, got string \"true\""
 	var output WorkflowStatusOutput
@@ -335,7 +337,7 @@ func TestWorkflowStatus_FailureOutcomeMarksTheDeclaringNode(t *testing.T) {
 	}
 	input := WorkflowStatusInput{ChatID: chatID, WorkflowID: workflowID, WorkflowName: "pr-review", Status: "completed",
 		Thread: chatID, Outcome: "failure", OutcomeNode: "stopped"}
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 	for range 2 {
 		var output WorkflowStatusOutput
 		require.NoError(t, h.ExecuteActivity(activity.Execute, input, &output))
@@ -398,7 +400,7 @@ func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create activity
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	input := WorkflowStatusInput{
 		ChatID:           chatID,
@@ -454,7 +456,7 @@ func TestWorkflowStatus_PausedUpdatesStatus(t *testing.T) {
 	err := h.Repo().CreateWorkflow(ctx, wf)
 	require.NoError(t, err)
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	input := WorkflowStatusInput{
 		ChatID:       chatID,
@@ -505,7 +507,7 @@ func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
 	err := h.Repo().CreateWorkflow(ctx, wf)
 	require.NoError(t, err)
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	t.Run("Pause then restart lifecycle", func(t *testing.T) {
 		// Pause
@@ -581,7 +583,7 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 		Status:       db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 
 	t.Run("nested paused marks the root row paused too", func(t *testing.T) {
 		var output WorkflowStatusOutput
@@ -679,7 +681,7 @@ func TestWorkflowStatus_StartedRevivesTerminalThread(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 	startedInput := WorkflowStatusInput{
 		ChatID:       chatID,
 		WorkflowID:   chatID,
@@ -731,7 +733,7 @@ func TestWorkflowStatus_StartedRevivesThreadWhenWorkflowAlreadyRunning(t *testin
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 	startedInput := WorkflowStatusInput{
 		ChatID:       chatID,
 		WorkflowID:   chatID,
@@ -774,7 +776,7 @@ func TestWorkflowStatus_TerminalStatusDoesNotReviveThread(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 	var output WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://chat",

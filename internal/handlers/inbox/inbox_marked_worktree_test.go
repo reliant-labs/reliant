@@ -139,7 +139,7 @@ func TestKeepMarkedWorktree(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, f.markedItems(t), "kept: no longer marked")
 	assert.Contains(t, sender.cmds, worktreereclaim.UnmarkCommand, "its tombstone removed")
-	wt, err := f.repo.GetWorktree(f.ctx, id)
+	wt, err := store.GetWorktree(f.ctx, f.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Nil(t, wt.DeletedAt)
 }
@@ -157,7 +157,7 @@ func TestReclaimMarkedWorktreeNow(t *testing.T) {
 	sweeper.WaitCleanups()
 	// Marked a moment ago, its tombstone standing and its work landed: the
 	// approval skipped the day's wait and the background settle reclaimed it.
-	wt, err := f.repo.GetWorktree(f.ctx, id)
+	wt, err := store.GetWorktree(f.ctx, f.repo.ORM(), id)
 	require.NoError(t, err)
 	require.NotNil(t, wt.DeletedAt, "reclaimed at once")
 	assert.Equal(t, core.ArchivedBecauseLanded, wt.CleanupMetadata.ArchivedBecause)
@@ -172,7 +172,7 @@ func TestReclaimMarkedWorktreeNow_StillKeepsAWorktreeWhoseTombstoneIsGone(t *tes
 	_, err := f.inbox.ReclaimMarkedWorktreeNow(f.ctx, connect.NewRequest(&reliantv1.ReclaimMarkedWorktreeNowRequest{WorktreeId: id, MarkId: "m-1"}))
 	require.NoError(t, err)
 	sweeper.WaitCleanups()
-	wt, err := f.repo.GetWorktree(f.ctx, id)
+	wt, err := store.GetWorktree(f.ctx, f.repo.ORM(), id)
 	require.NoError(t, err)
 	assert.Nil(t, wt.DeletedAt, "approval skips the wait, never a check")
 	assert.False(t, wt.CleanupMetadata.Marked(), "the mark is cancelled instead")

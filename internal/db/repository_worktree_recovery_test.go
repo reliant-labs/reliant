@@ -10,21 +10,22 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/testkit"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
-	"github.com/stretchr/testify/require"
 )
 
 func recoveryFixture(t *testing.T) (*Repo, *core.WorktreeRecovery, worktreereclaim.RecoveryCapture) {
 	t.Helper()
 	repo := NewTestRepo(t)
 	ctx := context.Background()
-	p, err := repo.GetProject(ctx, "test-project")
+	p, err := store.GetProject(ctx, repo.ORM(), "test-project")
 	require.NoError(t, err)
 	seedFilterWorktree(t, repo, p.ID, "recover-source", false, time.Now().UTC())
 	require.NoError(t, repo.ArchiveWorktree(ctx, "recover-source"))
-	w, err := repo.GetWorktree(ctx, "recover-source")
+	w, err := store.GetWorktree(ctx, repo.ORM(), "recover-source")
 	require.NoError(t, err)
 	d := worktreereclaim.RecoveryCapture{Version: 1, CaptureID: "capture", WorktreeID: w.ID, RepoID: "repo", RemoteURL: "https://github.com/test/test.git", RecoveryRef: "refs/heads/reliant-recovery/recover-source/capture/repo", CommitOID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", ManifestDigest: "manifest", HeadOID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", SecretPolicy: "policy-v1", CapturedAt: time.Now().UTC()}
 	_, err = repo.ORM().Bun().NewRaw(`INSERT INTO repos (id,project_id,name,relative_path,remote_url,created_at,updated_at) VALUES (?,?,?,'',?,now(),now())`, d.RepoID, p.ID, d.RepoID, d.RemoteURL).Exec(ctx)
@@ -133,7 +134,7 @@ func TestRecoveryArchivedChatWorkflowAdmission(t *testing.T) {
 	require.NoError(t, store.CancelWorktreeRecovery(ctx, repo.ORM(), r.OwnerUserID, r.ID, "retry"))
 	_, err = repo.ORM().Bun().NewRaw(`INSERT INTO workflows (id,chat_id,workflow_name,thread,state,created_at) VALUES ('allowed','archived-run','test','main',2,now())`).Exec(ctx)
 	require.NoError(t, err)
-	w, err := repo.GetWorktree(ctx, r.SourceWorktreeID)
+	w, err := store.GetWorktree(ctx, repo.ORM(), r.SourceWorktreeID)
 	require.NoError(t, err)
 	require.Greater(t, w.ActivityGeneration, r.ActivityGeneration)
 	require.ErrorIs(t, store.ClaimWorktreeRecovery(ctx, repo.ORM(), r.OwnerUserID, r.ID, w.ActivityGeneration), core.ErrRecoveryConflict)

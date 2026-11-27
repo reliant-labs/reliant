@@ -112,7 +112,7 @@ func TestForget_AWorkspaceNoConnectedMachineHasIsForgottenOnceAllHaveAnswered(t 
 	require.NoError(t, Forget(ctx, stores(repo), userID, wtID))
 
 	assert.Nil(t, unowned(), "forgotten: it leaves Storage")
-	got, err := repo.GetWorktree(ctx, wtID)
+	got, err := store.GetWorktree(ctx, repo.ORM(), wtID)
 	require.NoError(t, err)
 	require.NotNil(t, got.DeletedAt, "it stays in the archive")
 	require.NotNil(t, got.CleanupMetadata)
@@ -154,7 +154,7 @@ func TestForget_RefusesARowAMachineClaimed(t *testing.T) {
 	require.Equal(t, daemon, recorded)
 
 	require.ErrorIs(t, Forget(ctx, stores(repo), userID, wtID), ErrNotForgettable)
-	got, err := repo.GetWorktree(ctx, wtID)
+	got, err := store.GetWorktree(ctx, repo.ORM(), wtID)
 	require.NoError(t, err)
 	assert.False(t, got.CleanupMetadata.DirectoryDeleted)
 	assert.False(t, got.CleanupMetadata.Forgotten)

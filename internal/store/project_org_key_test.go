@@ -106,7 +106,7 @@ func TestAssignUnassignedOrg_SkipsAProjectTheDefaultOrgAlreadyHolds(t *testing.T
 		}
 	}
 	for id, want := range map[string]*string{"p-home": orgp("home"), "p-dup-path": nil, "p-dup-remote": nil, "p-free": orgp("home")} {
-		got, err := env.Repo.GetProject(ctx, id)
+		got, err := store.GetProject(ctx, env.Repo.ORM(), id)
 		if err != nil {
 			t.Fatalf("GetProject(%s): %v", id, err)
 		}

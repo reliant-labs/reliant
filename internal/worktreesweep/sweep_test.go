@@ -19,6 +19,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -135,7 +136,7 @@ func (e *env) worktree(t *testing.T, name string, archived bool) (*db.Worktree, 
 
 func (e *env) get(t *testing.T, id string) *db.Worktree {
 	t.Helper()
-	wt, err := e.repo.GetWorktree(e.ctx, id)
+	wt, err := store.GetWorktree(e.ctx, e.repo.ORM(), id)
 	require.NoError(t, err)
 	return wt
 }

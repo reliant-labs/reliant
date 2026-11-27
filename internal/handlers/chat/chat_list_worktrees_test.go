@@ -172,7 +172,7 @@ type projectReadCounter struct {
 
 func (r *projectReadCounter) GetProject(ctx context.Context, id string) (*db.Project, error) {
 	r.gets.Add(1)
-	return r.Repo.GetProject(ctx, id)
+	return store.GetProject(ctx, r.ORM(), id)
 }
 
 func (r *projectReadCounter) ListProjectsByIDs(ctx context.Context, ids []string) ([]*db.Project, error) {
@@ -203,7 +203,7 @@ func TestListChats_ReadsTheMainWorkspacesProjectsInOneQuery(t *testing.T) {
 	// A project scheduled for deletion is not the caller's to read, so its
 	// main workspace is left out, exactly as one GetProject per project did.
 	doomed, doomedMain := newInvariantTestProject(t, ctx, repo, true)
-	doomedProject, err := repo.GetProject(ctx, doomed)
+	doomedProject, err := store.GetProject(ctx, repo.ORM(), doomed)
 	require.NoError(t, err)
 	_, err = projectpurge.New(projectpurge.Deps{DB: repo.ORM()}).ScheduleProjectDeletion(ctx, doomed, "test-user", time.Now().Add(time.Hour), doomedProject.Decision())
 	require.NoError(t, err)

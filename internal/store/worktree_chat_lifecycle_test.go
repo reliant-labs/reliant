@@ -105,7 +105,7 @@ func TestChatWorktreeArchiveSymmetry(t *testing.T) {
 			ctx := context.Background()
 			c := boundFixture(t, env, "symmetry", main)
 			require.NoError(t, env.Repo.UpdateChatState(ctx, c.ID, core.ChatStateArchived, "test"))
-			wt, err := env.Repo.GetWorktree(ctx, *c.WorktreeID)
+			wt, err := store.GetWorktree(ctx, env.Repo.ORM(), *c.WorktreeID)
 			require.NoError(t, err)
 			if main {
 				require.Nil(t, wt.DeletedAt)
@@ -113,7 +113,7 @@ func TestChatWorktreeArchiveSymmetry(t *testing.T) {
 				require.NotNil(t, wt.DeletedAt)
 			}
 			require.NoError(t, env.Repo.UpdateChatState(ctx, c.ID, core.ChatStateIdle, "test"))
-			wt, err = env.Repo.GetWorktree(ctx, *c.WorktreeID)
+			wt, err = store.GetWorktree(ctx, env.Repo.ORM(), *c.WorktreeID)
 			require.NoError(t, err)
 			require.Nil(t, wt.DeletedAt)
 		})
@@ -128,11 +128,11 @@ func TestChatArchiveSharedWorktree(t *testing.T) {
 	b.WorktreeID = a.WorktreeID
 	require.NoError(t, env.Repo.CreateChat(ctx, b))
 	require.NoError(t, env.Repo.UpdateChatState(ctx, a.ID, core.ChatStateArchived, "test"))
-	wt, err := env.Repo.GetWorktree(ctx, *a.WorktreeID)
+	wt, err := store.GetWorktree(ctx, env.Repo.ORM(), *a.WorktreeID)
 	require.NoError(t, err)
 	require.Nil(t, wt.DeletedAt)
 	require.NoError(t, env.Repo.UpdateChatState(ctx, b.ID, core.ChatStateArchived, "test"))
-	wt, err = env.Repo.GetWorktree(ctx, *a.WorktreeID)
+	wt, err = store.GetWorktree(ctx, env.Repo.ORM(), *a.WorktreeID)
 	require.NoError(t, err)
 	require.NotNil(t, wt.DeletedAt)
 }
@@ -155,7 +155,7 @@ CREATE TRIGGER reject_worktree_update BEFORE UPDATE ON worktrees FOR EACH ROW EX
 			got, err := env.Repo.GetChat(ctx, c.ID)
 			require.NoError(t, err)
 			require.Equal(t, before, got.State)
-			wt, err := env.Repo.GetWorktree(ctx, *c.WorktreeID)
+			wt, err := store.GetWorktree(ctx, env.Repo.ORM(), *c.WorktreeID)
 			require.NoError(t, err)
 			require.Equal(t, !archive, wt.DeletedAt != nil)
 		})

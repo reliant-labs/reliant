@@ -5,6 +5,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/rowreads"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,7 +75,7 @@ func TestWorkflowStatus_TransitionToOnCompletion(t *testing.T) {
 		Status:       db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 	input := WorkflowStatusInput{
 		ChatID:       chatID,
 		WorkflowID:   workflowID,
@@ -133,7 +135,7 @@ func TestWorkflowStatus_NoTransitionWhenTargetAbsent(t *testing.T) {
 		Status:       db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 	var out WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID:       chatID,
@@ -176,7 +178,7 @@ func TestWorkflowStatus_ChildCompletionDoesNotTransition(t *testing.T) {
 		ID: childID, ParentID: &parentID, ChatID: chatID, WorkflowName: oneShotWF, Thread: childID, Status: db.Active(),
 	}))
 
-	activity := NewWorkflowStatusActivity(workflowStatusDeps(h.Repo()))
+	activity := NewWorkflowStatusActivity(workflowStatusDeps(rowreads.WithRepo(h.Repo())))
 	var out WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
 		ChatID:           chatID,
@@ -210,7 +212,7 @@ func TestTransitionChatOnCompletion_Guards(t *testing.T) {
 	t.Run("no-op when chat is not on the completed workflow", func(t *testing.T) {
 		setChatWorkflow(t, ctx, h.Repo(), chatID, agentWF)
 		// forge-one-shot completes but the chat already moved on to agent.
-		to, err := TransitionChatOnCompletion(ctx, h.Repo(), chatID, oneShotWF)
+		to, err := TransitionChatOnCompletion(ctx, rowreads.WithRepo(h.Repo()), chatID, oneShotWF)
 		require.NoError(t, err)
 		assert.Empty(t, to)
 		assert.Equal(t, agentWF, chatWorkflowName(t, ctx, h.Repo(), chatID))
@@ -218,7 +220,7 @@ func TestTransitionChatOnCompletion_Guards(t *testing.T) {
 
 	t.Run("switches when chat is on the completed workflow", func(t *testing.T) {
 		setChatWorkflow(t, ctx, h.Repo(), chatID, oneShotWF)
-		to, err := TransitionChatOnCompletion(ctx, h.Repo(), chatID, oneShotWF)
+		to, err := TransitionChatOnCompletion(ctx, rowreads.WithRepo(h.Repo()), chatID, oneShotWF)
 		require.NoError(t, err)
 		assert.Equal(t, agentWF, to)
 		assert.Equal(t, agentWF, chatWorkflowName(t, ctx, h.Repo(), chatID))
@@ -226,7 +228,7 @@ func TestTransitionChatOnCompletion_Guards(t *testing.T) {
 
 	t.Run("no-op for a completed workflow with no transition_to", func(t *testing.T) {
 		setChatWorkflow(t, ctx, h.Repo(), chatID, agentWF)
-		to, err := TransitionChatOnCompletion(ctx, h.Repo(), chatID, agentWF)
+		to, err := TransitionChatOnCompletion(ctx, rowreads.WithRepo(h.Repo()), chatID, agentWF)
 		require.NoError(t, err)
 		assert.Empty(t, to)
 	})

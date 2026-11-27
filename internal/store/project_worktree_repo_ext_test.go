@@ -31,7 +31,7 @@ func TestProjectQueries(t *testing.T) {
 	if err := store.InsertProject(ctx, env.ORM, older); err != nil {
 		t.Fatalf("InsertProject: %v", err)
 	}
-	twin, err := env.Repo.GetProject(ctx, "proj-older")
+	twin, err := store.GetProject(ctx, env.Repo.ORM(), "proj-older")
 	if err != nil {
 		t.Fatalf("Repo.GetProject: %v", err)
 	}
@@ -125,13 +125,13 @@ func TestProjectQueries(t *testing.T) {
 	if err := store.ReplaceProject(ctx, env.ORM, &edit, "user-b"); err != nil {
 		t.Fatalf("ReplaceProject(other user): %v", err)
 	}
-	if p, _ := env.Repo.GetProject(ctx, "proj-newer"); p.Name != "newer" {
+	if p, _ := store.GetProject(ctx, env.Repo.ORM(), "proj-newer"); p.Name != "newer" {
 		t.Fatalf("ReplaceProject by another user wrote: %+v", p)
 	}
 	if err := store.ReplaceProject(ctx, env.ORM, &edit, "user-a"); err != nil {
 		t.Fatalf("ReplaceProject: %v", err)
 	}
-	if p, _ := env.Repo.GetProject(ctx, "proj-newer"); p.Name != "renamed" || *p.Description != "desc" || !p.IsGitRepo || !p.UpdatedAt.After(base) {
+	if p, _ := store.GetProject(ctx, env.Repo.ORM(), "proj-newer"); p.Name != "renamed" || *p.Description != "desc" || !p.IsGitRepo || !p.UpdatedAt.After(base) {
 		t.Fatalf("after ReplaceProject = %+v", p)
 	}
 
@@ -149,7 +149,7 @@ func TestProjectQueries(t *testing.T) {
 	if err := store.TouchProject(ctx, env.ORM, "proj-older", "user-a"); err != nil {
 		t.Fatalf("TouchProject: %v", err)
 	}
-	if p, _ := env.Repo.GetProject(ctx, "proj-older"); !p.LastActive.After(base.Add(time.Minute)) || !p.IsForge || *p.ForgeProjectName != "forge-older" {
+	if p, _ := store.GetProject(ctx, env.Repo.ORM(), "proj-older"); !p.LastActive.After(base.Add(time.Minute)) || !p.IsForge || *p.ForgeProjectName != "forge-older" {
 		t.Fatalf("after TouchProject = %+v", p)
 	}
 
@@ -157,13 +157,13 @@ func TestProjectQueries(t *testing.T) {
 	if err := store.DeleteUserProject(ctx, env.ORM, "proj-older", "user-b"); err != nil {
 		t.Fatalf("DeleteUserProject(other user): %v", err)
 	}
-	if _, err := env.Repo.GetProject(ctx, "proj-older"); err != nil {
+	if _, err := store.GetProject(ctx, env.Repo.ORM(), "proj-older"); err != nil {
 		t.Fatalf("DeleteUserProject by another user deleted: %v", err)
 	}
 	if err := store.DeleteUserProject(ctx, env.ORM, "proj-older", "user-a"); err != nil {
 		t.Fatalf("DeleteUserProject: %v", err)
 	}
-	if _, err := env.Repo.GetProject(ctx, "proj-older"); err == nil {
+	if _, err := store.GetProject(ctx, env.Repo.ORM(), "proj-older"); err == nil {
 		t.Fatal("project survived DeleteUserProject")
 	}
 }
@@ -374,7 +374,7 @@ func TestWorktreeQueries(t *testing.T) {
 	if err := store.InsertWorktree(ctx, env.ORM, a); err != nil {
 		t.Fatalf("InsertWorktree: %v", err)
 	}
-	twin, err := env.Repo.GetWorktree(ctx, "wt-a")
+	twin, err := store.GetWorktree(ctx, env.Repo.ORM(), "wt-a")
 	if err != nil || twin.BaseBranches["repo-1"] != "develop" || *twin.ChatID != "chat-1" || *twin.DaemonID != "daemon-1" ||
 		twin.Status != a.Status || !twin.UpdatedAt.Equal(base.Add(time.Second)) || twin.CleanupMetadata != nil {
 		t.Fatalf("Repo.GetWorktree = %+v, %v", twin, err)
@@ -404,7 +404,7 @@ func TestWorktreeQueries(t *testing.T) {
 	if err != nil || gotB.DeletedAt == nil {
 		t.Fatalf("GetWorktree(archived) = %+v, %v", gotB, err)
 	}
-	if twinB, err := env.Repo.GetWorktree(ctx, "wt-b"); err != nil || twinB.DeletedAt == nil {
+	if twinB, err := store.GetWorktree(ctx, env.Repo.ORM(), "wt-b"); err != nil || twinB.DeletedAt == nil {
 		t.Fatalf("Repo.GetWorktree(archived) = %+v, %v", twinB, err)
 	}
 	if _, err := store.GetWorktree(ctx, env.ORM, "wt-none"); !errors.Is(err, core.ErrWorktreeNotFound) {
@@ -491,7 +491,7 @@ func TestWorktreeQueries(t *testing.T) {
 	if err := store.ReplaceWorktree(ctx, env.ORM, gotB); err != nil {
 		t.Fatalf("ReplaceWorktree: %v", err)
 	}
-	if w, _ := env.Repo.GetWorktree(ctx, "wt-b"); w.Path != "/wt/moved" || w.FailureReason != "disk full" || w.Status != gotB.Status || w.DeletedAt == nil {
+	if w, _ := store.GetWorktree(ctx, env.Repo.ORM(), "wt-b"); w.Path != "/wt/moved" || w.FailureReason != "disk full" || w.Status != gotB.Status || w.DeletedAt == nil {
 		t.Fatalf("after ReplaceWorktree = %+v", w)
 	}
 
@@ -507,7 +507,7 @@ func TestWorktreeQueries(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("MergeWorktreeCleanupMetadata: %v", err)
 	}
-	if w, _ := env.Repo.GetWorktree(ctx, "wt-b"); !sawArchived || w.CleanupMetadata == nil || !w.CleanupMetadata.DeleteBranch || w.CleanupMetadata.HeldReason != "dirty" {
+	if w, _ := store.GetWorktree(ctx, env.Repo.ORM(), "wt-b"); !sawArchived || w.CleanupMetadata == nil || !w.CleanupMetadata.DeleteBranch || w.CleanupMetadata.HeldReason != "dirty" {
 		t.Fatalf("after merge = %+v (archived %v)", w.CleanupMetadata, sawArchived)
 	}
 	if err := store.MergeWorktreeCleanupMetadata(ctx, env.ORM, "wt-b", func(m *core.CleanupMetadata, _ bool) bool {
@@ -550,7 +550,7 @@ func TestWorktreeQueries(t *testing.T) {
 	if err := store.SetWorktreeCleanupMetadata(ctx, env.ORM, "wt-b", nil); err != nil {
 		t.Fatalf("SetWorktreeCleanupMetadata(nil): %v", err)
 	}
-	if w, _ := env.Repo.GetWorktree(ctx, "wt-b"); w.CleanupMetadata != nil {
+	if w, _ := store.GetWorktree(ctx, env.Repo.ORM(), "wt-b"); w.CleanupMetadata != nil {
 		t.Fatalf("cleanup metadata not cleared: %+v", w.CleanupMetadata)
 	}
 
@@ -565,7 +565,7 @@ func TestWorktreeQueries(t *testing.T) {
 	if got, err := store.AdoptWorktreeDaemon(ctx, env.ORM, "wt-missing", "daemon-3"); err != nil || got != "" {
 		t.Fatalf("AdoptWorktreeDaemon(missing row) = %q, %v; want \"\"", got, err)
 	}
-	if w, _ := env.Repo.GetWorktree(ctx, "wt-b"); w.DaemonID == nil || *w.DaemonID != "daemon-2" {
+	if w, _ := store.GetWorktree(ctx, env.Repo.ORM(), "wt-b"); w.DaemonID == nil || *w.DaemonID != "daemon-2" {
 		t.Fatalf("after adopt = %v", w.DaemonID)
 	}
 
@@ -596,7 +596,7 @@ func TestWorktreeQueries(t *testing.T) {
 	if err := store.UnarchiveWorktree(ctx, env.ORM, "wt-b"); err != nil {
 		t.Fatalf("UnarchiveWorktree: %v", err)
 	}
-	if w, _ := env.Repo.GetWorktree(ctx, "wt-b"); w.DeletedAt != nil {
+	if w, _ := store.GetWorktree(ctx, env.Repo.ORM(), "wt-b"); w.DeletedAt != nil {
 		t.Fatalf("still archived after unarchive: %v", w.DeletedAt)
 	}
 
@@ -610,7 +610,7 @@ func TestWorktreeQueries(t *testing.T) {
 	if err := store.RemoveWorktree(ctx, env.ORM, "wt-b"); err != nil {
 		t.Fatalf("RemoveWorktree(missing): %v", err)
 	}
-	if _, err := env.Repo.GetWorktree(ctx, "wt-b"); !errors.Is(err, core.ErrWorktreeNotFound) {
+	if _, err := store.GetWorktree(ctx, env.Repo.ORM(), "wt-b"); !errors.Is(err, core.ErrWorktreeNotFound) {
 		t.Fatalf("archived row survived RemoveWorktree: %v", err)
 	}
 	var n int
