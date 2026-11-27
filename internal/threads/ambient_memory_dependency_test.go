@@ -16,7 +16,7 @@ func (m *suppliedAmbientMemory) ResolveThreadAmbientMemoryExclusion(_ context.Co
 
 func TestNewRetainsAmbientMemoryWithoutRepo(t *testing.T) {
 	memory := &suppliedAmbientMemory{}
-	svc := New(Deps{AmbientMemory: memory})
+	svc := New(Deps{Repo: nil, Chats: nil, Messages: nil, Senders: nil, Signaler: nil, ToolCanceler: nil, AmbientMemory: memory})
 	if svc.ambientMemory != memory {
 		t.Fatal("New replaced the supplied ambient-memory implementation")
 	}
@@ -27,7 +27,7 @@ func TestNewRetainsAmbientMemoryWithoutRepo(t *testing.T) {
 }
 
 func TestNewWithoutRepoLeavesAmbientMemoryUnset(t *testing.T) {
-	svc := New(Deps{})
+	svc := New(Deps{Repo: nil, Chats: nil, Messages: nil, Senders: nil, Signaler: nil, ToolCanceler: nil})
 	if svc.ambientMemory != nil {
 		t.Fatal("New derived ambient memory without a repository reader")
 	}
