@@ -33,6 +33,8 @@ export function obsViewOfOrgPage(page: OrgPage): ObsView | null {
       return "overview";
     case "obs-view":
       return page.view === "metrics" || page.view === "dashboards" ? null : page.view;
+    case "ml":
+      return null;
   }
 }
 

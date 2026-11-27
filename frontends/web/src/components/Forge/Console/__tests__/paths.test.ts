@@ -213,6 +213,12 @@ const ORG_PAGES: OrgPage[] = [
   { kind: "obs-view", view: "errors" },
   { kind: "obs-view", view: "dashboards" },
   { kind: "obs-view", view: "alerts" },
+  { kind: "ml", view: "machines" },
+  { kind: "ml", view: "stack" },
+  { kind: "ml", view: "recommendations" },
+  { kind: "ml", view: "runs" },
+  { kind: "ml", view: "models" },
+  { kind: "ml", view: "inference" },
 ];
 
 describe("org paths", () => {
@@ -227,6 +233,16 @@ describe("org paths", () => {
 
   it("tolerate a trailing slash", () => {
     expect(orgPageOf("/forge/observability/")).toEqual({ kind: "observability" });
+    expect(orgPageOf("/forge/ml/stack/")).toEqual({ kind: "ml", view: "stack" });
+  });
+
+  it("put the ML tab at /forge/ml/<view>, in both forms", () => {
+    expect(orgPath({ kind: "ml", view: "runs" })).toBe("/forge/ml/runs");
+    expect(orgPageOf("/o/acme/ml/models")).toEqual({ kind: "ml", view: "models" });
+    // The bare segment redirects to Machines (forgeConsoleRoutes.tsx); an unknown view is no page.
+    expect(orgPageOf("/forge/ml")).toBeNull();
+    expect(orgPageOf("/forge/ml/gpus")).toBeNull();
+    expect(orgPageOf("/forge/ml/runs/extra")).toBeNull();
   });
 
   it("are null outside the org pages", () => {

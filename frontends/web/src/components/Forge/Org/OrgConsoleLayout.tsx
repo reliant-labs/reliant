@@ -2,7 +2,8 @@
 
 /**
  * The layout route for the org pages — org-wide Observability
- * (/forge/observability[/:view]). The org's list of apps is /apps
+ * (/forge/observability[/:view]) and the ML tab (/forge/ml/:view, Forge/Ml).
+ * The org's list of apps is /apps
  * (components/Apps), outside this console; the nav links to it.
  *
  * It is the org counterpart of Console/ConsoleLayout, and owns the same kind of
@@ -81,6 +82,8 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
   const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
   const onClose = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
   const { inShell } = useShellFrame();
+  // Observability's telemetry allowance: an ML page reads none of it.
+  const quotaBanner = page.kind === "ml" ? null : <div className="empty:hidden [&:not(:empty)]:mb-4"><ObsQuotaBanner /></div>;
 
   // Inside the one shell, the Observability views are rows of its nav (under
   // Apps, while one is open): the org console is a page under a slim bar.
@@ -111,7 +114,7 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
           </nav>
         </ShellPageHeader>
         <PageMain className="relative min-h-0 flex-1 overflow-y-auto px-8 pb-12 pt-6 max-md:px-4 max-md:pt-4">
-          <div className="empty:hidden [&:not(:empty)]:mb-4"><ObsQuotaBanner /></div>
+          {quotaBanner}
           <Outlet />
         </PageMain>
       </div>
@@ -148,7 +151,7 @@ function OrgChrome({ search }: { search: Record<string, unknown> }) {
       }
       brandCollapsed={<OrgMark />}
     >
-      <div className="empty:hidden [&:not(:empty)]:mb-4"><ObsQuotaBanner /></div>
+      {quotaBanner}
       <Outlet />
     </OrgShell>
   );

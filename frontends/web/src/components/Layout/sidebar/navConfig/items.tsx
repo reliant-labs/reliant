@@ -25,7 +25,10 @@ import {
   Boxes,
   Bug,
   ChartLine,
+  Cpu,
   Flame,
+  Lightbulb,
+  Sparkles,
   GitPullRequest,
   History,
   Inbox,
@@ -69,7 +72,23 @@ import { changesUIEnabled } from "@/lib/changesFeature";
 import { isWorkflowsAreaPath, workflowsTabForPath } from "@/lib/workflowsArea";
 
 import { consoleNavEntries, consoleNavEntryLights, consoleNavEntryTarget, type ConsoleNavEntry, type ConsoleNavGroup } from "../../../Forge/Console/consoleNavRegistry";
-import { ANALYTICS_TAB_LABELS, ANALYTICS_TABS, authPath, consolePath, obsOverviewPath, OBS_NAV_LABELS, orgPath, type AnalyticsTab, type ConsolePage, type ConsoleTarget, type ObsNavView } from "../../../Forge/Console/paths";
+import {
+  ANALYTICS_TAB_LABELS,
+  ANALYTICS_TABS,
+  authPath,
+  consolePath,
+  ML_EARLY_ACCESS_VIEWS,
+  ML_VIEW_LABELS,
+  ML_VIEWS,
+  obsOverviewPath,
+  OBS_NAV_LABELS,
+  orgPath,
+  type AnalyticsTab,
+  type ConsolePage,
+  type ConsoleTarget,
+  type MlView,
+  type ObsNavView,
+} from "../../../Forge/Console/paths";
 import { isAt, isAtOrBelow } from "../navLocation";
 import { isChatPage } from "../shellProject";
 import { BrandMark } from "../../../icons/BrandMark";
@@ -375,6 +394,53 @@ export const observabilityArea: NavArea = {
   href: obsOverview.href,
   available: (ctx) => hasApp(ctx) || ctx.mode !== "one",
   children: [obsOverview, ...observabilityRows, ...performanceRows],
+};
+
+// ── ML ──────────────────────────────────────────────────────────────────────
+
+/** The flat nav's icon for each ML page (NavRow `flatIcon`). */
+const ML_VIEW_ICONS: Record<MlView, typeof Activity> = {
+  machines: Server,
+  stack: Layers,
+  recommendations: Lightbulb,
+  runs: Rocket,
+  models: Boxes,
+  inference: Sparkles,
+};
+
+function mlRow(view: MlView): NavRow {
+  return {
+    kind: "row",
+    id: `ml-${view}`,
+    label: ML_VIEW_LABELS[view],
+    flatIcon: icon(ML_VIEW_ICONS[view]),
+    href: () => orgPath({ kind: "ml", view }),
+    match: (ctx) => ctx.orgPage?.kind === "ml" && ctx.orgPage.view === view,
+    // A stage the page is in, not something asking for attention (NavBadge `label`).
+    ...(ML_EARLY_ACCESS_VIEWS.includes(view) ? { badge: () => ({ type: "label" as const, text: "Early access" }) } : {}),
+  };
+}
+
+export const mlRows: readonly NavRow[] = ML_VIEWS.map(mlRow);
+
+/** The ML tab's pages: all six are org pages (Forge/Ml). */
+export const isMlRoute = (ctx: NavCtx): boolean => ctx.orgPage?.kind === "ml";
+
+/**
+ * ML › (forge docs/proposals/ml-workloads.md §8): a drill-in like
+ * Observability. Shown to every signed-in org, entitled or not, so the
+ * feature can be found: without the "ml" entitlement every page is the one
+ * access page (Forge/Ml/MlAccessPage). Its pages are the org's, so it needs
+ * no app.
+ */
+export const mlArea: NavArea = {
+  kind: "area",
+  id: "ml",
+  label: "ML",
+  icon: icon(Cpu),
+  match: isMlRoute,
+  href: mlRows[0].href,
+  children: mlRows,
 };
 
 // ── Analytics ───────────────────────────────────────────────────────────────

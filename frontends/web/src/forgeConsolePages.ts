@@ -45,6 +45,7 @@ export const forgeConsolePages: ForgeConsoleComponents = {
   testsFlakyTest: lazyRoute(() => import('./components/Forge/Tests/TestsFlakyTestPage'), 'TestsFlakyTestPage'),
   orgLayout: lazyRoute(() => import('./components/Forge/Org'), 'OrgConsoleLayout'),
   orgObservability: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'OrgObservabilityRoute'),
+  orgMl: lazyRoute(() => import('./components/Forge/Ml/MlRoute'), 'MlRoute'),
   landing: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'ForgeLandingRoute'),
   legacyEnv: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyEnvRoute'),
   legacyDomains: lazyRoute(() => import('./components/Forge/Console/ForgeEntryRoutes'), 'LegacyDomainsRoute'),

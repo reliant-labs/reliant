@@ -230,6 +230,14 @@ export const ERROR_REASONS = [
   "free_hosting_target_billed",
   /** FailedPrecondition: a real move inside the 30-day cooldown; the message carries the RFC3339 date it ends. */
   "free_hosting_move_cooldown",
+  // ── control-plane: features granted by request (internal/entitlement; ml_early_access.proto) ──
+  /**
+   * PermissionDenied: the org has no entitlement to the feature (today only
+   * "ml", which every MlEarlyAccessService rpc requires). The server's
+   * spelling is upper case. The `x-forge-error-feature` header naming the
+   * feature is not CORS-exposed, so a reader never depends on it.
+   */
+  "FEATURE_NOT_ENTITLED",
 ] as const;
 
 export type ErrorReason = (typeof ERROR_REASONS)[number];

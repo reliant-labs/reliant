@@ -307,6 +307,20 @@ from `frontends/web/src/components/Claim/useClaimFlow.ts`, and never the token:
 The public demo's `demo_cta_clicked` has `cta` `deploy` (Deploy yours free, to
 reliantlabs.io/products/forge#start), `signup` or `install`.
 
+## ML early access (the console's ML tab)
+
+ML is available by request (forge `docs/proposals/ml-workloads.md` §4.1).
+Every ML route of an org without the `ml` entitlement renders one access page,
+`components/Forge/Ml/MlAccessPage.tsx`:
+
+| event | when | props |
+| --- | --- | --- |
+| `ml_access_page_viewed` | the access page shows, once per mount | `org_id`, `view` (the ML page asked for: `machines`, `stack`, `recommendations`, `runs`, `models`, `inference`), `source` (`entitlement`: the org's entitlement says no; `refused`: an ML read answered `FEATURE_NOT_ENTITLED`, a revocation since), `requested` (someone in the org already asked) |
+
+Request access calls `OrganizationService.RequestOrgEntitlement`, and the
+control plane emits `ml_access_requested` when it records the request; the web
+does not duplicate it.
+
 ## Forge Changes (`flag_evaluated`)
 
 The web app's changes are declared in `changes.yaml` at the repo root, read

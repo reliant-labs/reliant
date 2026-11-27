@@ -9,6 +9,9 @@
  *     _forgeOrg                             OrgConsoleLayout: the org's nav (no app chosen)
  *       /forge/observability                org-wide Observability (?project= → that app's)
  *       /forge/observability/$view          errors · sessions · logs · traces · metrics · profiles · dashboards · alerts
+ *       /forge/ml                           → /forge/ml/machines
+ *       /forge/ml/$view                     the ML tab: machines · stack · recommendations · runs · models · inference
+ *                                           (?app= narrows runs, models, inference); gated per org on "ml"
  *     /forge/env/$env, /forge/domains,
  *     /forge/topology, …                    → the retired URLs, redirected
  *     /forge/p/$project                     ConsoleLayout: nav, top bar, scope
@@ -48,8 +51,8 @@
  *
  * The org form (`form: 'org'`, mounted under `/o/$org` by routes.tsx; control-plane
  * docs/design/unified-shell-and-projects.md §3.1) is the same tree with the
- * two paths the design moves: the console at `/apps/$project` and the org
- * Observability at `/observability[/$view]`. The entries and retired paths
+ * paths the design moves: the console at `/apps/$project`, the org
+ * Observability at `/observability[/$view]` and ML at `/ml[/$view]`. The entries and retired paths
  * keep their `/forge/…` paths there: harmless, and one tree shape for both.
  * The moved paths are typed as today's, so both forms register the same
  * route types (the pages read params without a route id).
@@ -61,7 +64,7 @@ import { usagePath } from './lib/paths'
 import { inOrgOfPath } from './lib/paths/org'
 import { memberOnly } from './lib/routeOrg'
 
-import { isAnalyticsTab, isAuthTab, isObsNavView, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
+import { isAnalyticsTab, isAuthTab, isMlView, isObsNavView, ML_VIEWS, OBS_NAV_VIEWS, orgUsagePath } from './components/Forge/Console/paths'
 import {
   forgeConsoleActivitySearchSchema,
   forgeConsoleAnalyticsSearchSchema,
@@ -89,6 +92,7 @@ import {
   forgeConsoleWorkloadSearchSchema,
   forgeLegacyEnvSearchSchema,
   forgeLegacySearchSchema,
+  forgeOrgMlSearchSchema,
   forgeOrgObsSearchSchema,
   forgeResolveSearchSchema,
   projectsCarrySearchSchema,
@@ -168,6 +172,8 @@ export interface ForgeConsoleComponents {
   orgLayout: RouteComponent
   /** /forge/observability and /forge/observability/$view: org-wide Observability. */
   orgObservability: RouteComponent
+  /** /forge/ml/$view: the ML tab (machines · stack · recommendations · runs · models · inference), early access by request. */
+  orgMl: RouteComponent
   /** /forge: to the Apps list, or the entry that resolves a project and redirects (ForgeEntryRoutes.tsx). */
   landing: RouteComponent
   legacyEnv: RouteComponent
@@ -222,6 +228,27 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
       throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, '')}${location.searchStr}`, replace: true })
     }),
     component: components.orgObservability,
+  })
+
+  // The ML tab (components/Forge/Ml): one route for its six pages, each gated
+  // on the org's "ml" entitlement by the page itself. The bare segment, and a
+  // view that is not one (a hand-edited URL), land on its first page.
+  const orgMlIndexRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    path: (inOrg ? '/ml' : '/forge/ml') as '/forge/ml',
+    beforeLoad: memberOnly(({ location }) => {
+      throw redirect({ href: `${location.pathname.replace(/\/?$/, `/${ML_VIEWS[0]}`)}${location.searchStr}`, replace: true })
+    }),
+  })
+  const orgMlRoute = createRoute({
+    getParentRoute: () => orgLayoutRoute,
+    path: (inOrg ? '/ml/$view' : '/forge/ml/$view') as '/forge/ml/$view',
+    validateSearch: forgeOrgMlSearchSchema,
+    beforeLoad: memberOnly(({ params, location }) => {
+      if (isMlView(params.view)) return
+      throw redirect({ href: `${location.pathname.replace(/\/[^/]*\/?$/, `/${ML_VIEWS[0]}`)}${location.searchStr}`, replace: true })
+    }),
+    component: components.orgMl,
   })
 
   // ── Entries that resolve a project and redirect ──
@@ -554,7 +581,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
 
   return layoutRoute.addChildren([
     landingRoute,
-    orgLayoutRoute.addChildren([orgObservabilityRoute, orgObservabilityViewRoute]),
+    orgLayoutRoute.addChildren([orgObservabilityRoute, orgObservabilityViewRoute, orgMlIndexRoute, orgMlRoute]),
     legacyEnvRoute,
     legacyDomainsRoute,
     legacyCommandRoute('/forge/topology'),

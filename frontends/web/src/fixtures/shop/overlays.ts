@@ -14,7 +14,8 @@
  * none unless its URL does. Editing any of these, or the pack under them,
  * moves the visual baselines: that is the one-world design, not a side effect.
  */
-import { toJson, type DescService } from "@bufbuild/protobuf";
+import { create, toJson, type DescService } from "@bufbuild/protobuf";
+import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 import type { AnyServiceDefaults } from "@reliantlabs/forge-web-runtime/mock-transport";
 
@@ -23,10 +24,15 @@ import { DaemonRegistryService } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ListProjectsWithAppsResponseSchema, ProjectInstallState, ProjectService } from "@/gen/reliant/v1/project_pb";
 import { SettingsService, type ListSettingsResponse } from "@/gen/reliant/v1/settings_pb";
 import { StreamingService, type StreamChatUpdatesRequest } from "@/gen/reliant/v1/streaming_pb";
-import { OrganizationService, type ListMembersResponse } from "@/gen/controlplane/services/organization/v1/organization_pb";
+import { MlEarlyAccessService } from "@/gen/controlplane/services/ml_early_access/v1/ml_early_access_pb";
+import {
+  GetMyOrgEntitlementsResponseSchema,
+  OrganizationService,
+  type ListMembersResponse,
+} from "@/gen/controlplane/services/organization/v1/organization_pb";
 import { TestsService } from "@/gen/controlplane/services/tests/v1/tests_pb";
 
-import { fail, pending, withEmptyReads } from "../overlay";
+import { answering, fail, failing, pending, withEmptyReads } from "../overlay";
 import { defineFixturePack, type FixturePack } from "../transport";
 import catalogJson from "./data/catalog.json?raw";
 import { accountScenarioHandlers } from "./handlers/account";
@@ -38,7 +44,7 @@ import { DATA_ANCHOR, packJson } from "./packJson";
 import { agentsChatHandlers, agentsChatStream } from "./overlays/agents";
 import { chartHoverHandlers, sandboxesHandlers } from "./overlays/dashboards";
 import { SHOP_READ_ONLY_MESSAGE } from "./index";
-import { DEMO_ORG, MINUTE } from "./shopStory";
+import { DEMO_ORG, demoNow, MINUTE } from "./shopStory";
 import { APP_USER, CHAT_IDS, chats, DAEMON_IDS, DAEMON_NAMES, docsProject, isoAgo, PROJECT_IDS, shopProject } from "./workspace";
 
 /** An overlay, built when it is selected (after the pack clock is pinned). */
@@ -269,11 +275,42 @@ function emptyReads(): FixturePack {
 // ── The table ───────────────────────────────────────────────────────────────
 
 /** The read the harness's own self-test never answers (harness.visual.ts). */
+// ── ML: an org without the entitlement ──────────────────────────────────────
+
+/** What every ML read says to an org without `ml` (control-plane's refusal, reason FEATURE_NOT_ENTITLED). */
+export const ML_NOT_ENTITLED_MESSAGE =
+  "ML is available by request and is not enabled for this organization. Request access in the console (ML → Request access) or email support@reliantlabs.io with your organization id.";
+
+/**
+ * shop's org without ML, so every ML route shows the "Reach out to Reliant
+ * for access" page: GetMyOrgEntitlements answers `ml` disabled (asked for
+ * `requestedAgo` before now, or never), and every MlEarlyAccessService read
+ * is refused as the real service refuses it. Request access stays refused
+ * by the read-only guard, as every demo write is.
+ */
+function mlNotEntitled(name: string, requestedAgo: number | null): FixturePack {
+  return defineFixturePack({
+    name,
+    extends: [
+      answering(`${name}.entitlements`, OrganizationService.method.getMyOrgEntitlements, () =>
+        create(GetMyOrgEntitlementsResponseSchema, {
+          features: [{ feature: "ml", enabled: false, ...(requestedAgo === null ? {} : { requestedAt: timestampFromMs(demoNow() - requestedAgo) }) }],
+        }),
+      ),
+      failing(`${name}.reads`, MlEarlyAccessService, Code.PermissionDenied, ML_NOT_ENTITLED_MESSAGE, { "x-forge-error-reason": "FEATURE_NOT_ENTITLED", "x-forge-error-feature": "ml" }),
+    ],
+  });
+}
+
 export const PENDING_LIST_CHATS = "pending:reliant.v1.ChatService/ListChats";
 
 export const SHOP_OVERLAYS: Readonly<Record<string, ShopOverlay>> = {
   /** Alex has no machine: the daemonless home and the no-sandbox agents page. */
   "no-daemons": () => defineFixturePack({ name: "no-daemons", scenario: serve(DaemonRegistryService, { listDaemons: () => ({ daemons: [] }) }) }),
+  /** shop's org without ML: every ML route shows the access page (nothing public links it). */
+  "ml-not-entitled": () => mlNotEntitled("ml-not-entitled", null),
+  /** The same, with access requested 3 days ago: the access page says so. */
+  "ml-requested": () => mlNotEntitled("ml-requested", 3 * DAY),
   /** A control plane that does not serve TestsService: every read answers Unimplemented. */
   "tests-unimplemented": () =>
     defineFixturePack({

@@ -260,4 +260,6 @@ export const ORG_SCOPED_QUERY_ROOTS: readonly string[] = [
   // The managed secret store's reads (hooks/forge-queries.ts): an
   // environment's secrets and their version histories.
   "controlplane.v1.SecretStoreService",
+  // hooks/ml-queries.ts: the page's org, the org's ML entitlement, the ML tab's reads.
+  "ml",
 ];

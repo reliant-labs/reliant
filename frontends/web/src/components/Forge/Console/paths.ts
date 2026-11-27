@@ -137,13 +137,38 @@ export function isObsNavView(value: string | undefined): value is ObsNavView {
   return (OBS_NAV_VIEWS as readonly string[]).includes(value ?? "");
 }
 
-/** The pages of the org console (not inside one app): org-wide Observability. */
-export type OrgPage = { kind: "observability" } | { kind: "obs-view"; view: ObsNavView };
+/**
+ * The ML tab's pages (Forge/Ml; forge docs/proposals/ml-workloads.md §8), in
+ * nav order. All six are org pages: clusters belong to the org, and Runs,
+ * Models and Inference narrow to one app with their own `?app=` filter. The
+ * first is where ML opens (`/forge/ml` lands there).
+ */
+export const ML_VIEWS = ["machines", "stack", "recommendations", "runs", "models", "inference"] as const;
+export type MlView = (typeof ML_VIEWS)[number];
+
+export const ML_VIEW_LABELS: Record<MlView, string> = {
+  machines: "Machines",
+  stack: "Stack",
+  recommendations: "Recommendations",
+  runs: "Runs",
+  models: "Models",
+  inference: "Inference",
+};
+
+/** The ML pages labelled "Early access" in the nav and their header (owner, slice 0). */
+export const ML_EARLY_ACCESS_VIEWS: readonly MlView[] = ["runs", "models", "inference"];
+
+export function isMlView(value: string | undefined): value is MlView {
+  return (ML_VIEWS as readonly string[]).includes(value ?? "");
+}
+
+/** The pages of the org console (not inside one app): org-wide Observability, and the ML tab. */
+export type OrgPage = { kind: "observability" } | { kind: "obs-view"; view: ObsNavView } | { kind: "ml"; view: MlView };
 
 /**
  * The path of an org page. Its org form (flag `web.org_routes` on) is
- * `/o/<org>/observability[/<view>]` (design §3.1): withOrg rewrites it
- * (lib/paths/org.ts, orgFormOf).
+ * `/o/<org>/observability[/<view>]` and `/o/<org>/ml/<view>` (design §3.1):
+ * withOrg rewrites it (lib/paths/org.ts, orgFormOf).
  */
 export function orgPath(page: OrgPage, ctx?: PathContext): string {
   switch (page.kind) {
@@ -151,13 +176,17 @@ export function orgPath(page: OrgPage, ctx?: PathContext): string {
       return withOrg(`${FORGE_ROOT}/observability`, ctx);
     case "obs-view":
       return withOrg(`${FORGE_ROOT}/observability/${page.view}`, ctx);
+    case "ml":
+      return withOrg(`${FORGE_ROOT}/ml/${page.view}`, ctx);
   }
 }
 
 /** Which org page `pathname` is, or null for any other path. The inverse of orgPath. */
 export function orgPageOf(pathname: string): OrgPage | null {
   const parts = orgFreePath(pathname).split("/").filter(Boolean);
-  if (parts[0] !== "forge" || parts[1] !== "observability") return null;
+  if (parts[0] !== "forge") return null;
+  if (parts[1] === "ml") return parts.length === 3 && isMlView(parts[2]) ? { kind: "ml", view: parts[2] } : null;
+  if (parts[1] !== "observability") return null;
   if (parts.length === 2) return { kind: "observability" };
   return parts.length === 3 && isObsNavView(parts[2]) ? { kind: "obs-view", view: parts[2] } : null;
 }

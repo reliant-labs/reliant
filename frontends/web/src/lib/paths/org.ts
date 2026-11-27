@@ -11,8 +11,9 @@
  *   off  today's path, byte for byte (`/inbox`, `/forge/p/shop`);
  *   on   the org form: `/o/<org>` in front, and the two console paths whose
  *        org form is not their old path behind a prefix rewritten
- *        (orgFormOf): `/forge/p/<app>/…` → `/o/<org>/apps/<app>/…` and
- *        `/forge/observability/…` → `/o/<org>/observability/…`.
+ *        (orgFormOf): `/forge/p/<app>/…` → `/o/<org>/apps/<app>/…`,
+ *        `/forge/observability/…` → `/o/<org>/observability/…` and
+ *        `/forge/ml/…` → `/o/<org>/ml/…`.
  *
  * The org is `ctx.org` when the caller names one, else the org of the route
  * on screen (lib/routeOrg.ts), else the tab's org (store/activeOrgStore) for a
@@ -51,6 +52,7 @@ export interface PathContext {
 const ORG_PREFIX = "/o/";
 const CONSOLE_PREFIX = "/forge/p/";
 const ORG_OBSERVABILITY = "/forge/observability";
+const ORG_ML = "/forge/ml";
 
 /** `/o/<segment>`: the root of every path in that org, and its home. */
 export function orgRootPath(segment: string): string {
@@ -66,6 +68,7 @@ export function orgFormOf(path: string): string {
   if (path === "/") return "";
   if (path.startsWith(CONSOLE_PREFIX)) return `/apps/${path.slice(CONSOLE_PREFIX.length)}`;
   if (path === ORG_OBSERVABILITY || path.startsWith(`${ORG_OBSERVABILITY}/`)) return path.slice("/forge".length);
+  if (path === ORG_ML || path.startsWith(`${ORG_ML}/`)) return path.slice("/forge".length);
   return path;
 }
 
@@ -118,6 +121,7 @@ export function orgFreePath(pathname: string): string {
   const app = /^\/apps\/([^/]+)(\/.*)?$/.exec(tail);
   if (app) return `${CONSOLE_PREFIX}${app[1]}${app[2] ?? ""}`;
   if (tail === "/observability" || tail.startsWith("/observability/")) return `/forge${tail}`;
+  if (tail === "/ml" || tail.startsWith("/ml/")) return `/forge${tail}`;
   return tail;
 }
 
