@@ -244,6 +244,22 @@ func TestAccessRefreshRenewsUnderActivationConnectionLock(t *testing.T) {
 		if err := env.repo.ORM().Bun().NewRaw("SELECT id FROM connections WHERE id = ? FOR SHARE", conn.ID).Scan(txCtx, &id); err != nil {
 			return err
 		}
+		// Negative control: the same renewal on an independent transaction
+		// cannot acquire its UPDATE lock while activation holds FOR SHARE.
+		// A server-side lock timeout proves contention without a sleep or a
+		// goroutine race, and keeps this regression test in the short tier.
+		detachedErr := env.repo.ORM().RunTx(orm.Detached(txCtx), orm.TxOptions{Isolation: orm.ReadCommitted, MaxAttempts: 1}, func(renewCtx context.Context) error {
+			if _, err := env.repo.ORM().Bun().NewRaw("SET LOCAL lock_timeout = '100ms'").Exec(renewCtx); err != nil {
+				return err
+			}
+			_, err := (renewingAccessToken{env: env, id: conn.ID}).Token(renewCtx, env.userID)
+			return err
+		})
+		require.Error(t, detachedErr, "detached renewal must block on activation's SHARE lock")
+		require.Contains(t, detachedErr.Error(), "lock timeout")
+
+		// The real refresher must instead preserve txCtx through credential
+		// renewal, joining the lock holder and upgrading its own row lock.
 		return s.refreshTriggerAccess(txCtx, memoTestTrigger(t, env.userID))
 	})
 	require.NoError(t, err)
