@@ -23,10 +23,12 @@ import {
   GtmAssetStatus,
   GtmChannelMode,
   GtmChannelSchema,
+  GtmChannelStatus,
   GtmItemFormat,
   GtmItemSchema,
   GtmItemStatus,
 } from "@/gen/reliant/v1/gtm_pb";
+import { useGetItem } from "@/hooks/gtm-service-hooks_gen";
 
 import { timestampFromDate } from "@bufbuild/protobuf/wkt";
 
@@ -34,7 +36,7 @@ import { ItemDialog } from "../ItemDialog";
 import { REVISION_CONFLICT_MESSAGE } from "../writes";
 import { renderGtm, TEST_ORG } from "./gtmHarness";
 
-const toasts = vi.hoisted(() => ({ warning: vi.fn(), error: vi.fn() }));
+const toasts = vi.hoisted(() => ({ success: vi.fn(), warning: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast-manager", () => ({ toast: toasts }));
 
 afterEach(() => {
@@ -96,6 +98,54 @@ describe("ItemDialog", () => {
     await waitFor(() => expect(toasts.warning).toHaveBeenCalledWith(REVISION_CONFLICT_MESSAGE));
     expect(invalidate).toHaveBeenCalled();
     expect(toasts.error).not.toHaveBeenCalled();
+  });
+
+  it("starts an edit again from the current version after a conflict, so a second Save cannot overwrite it", async () => {
+    // The page holds the item it read: GetItem answers whatever the server has now.
+    let server = post;
+    const theirs = create(GtmItemSchema, { ...post, title: "Their title", revision: 4 });
+    const update = vi.fn((req: unknown) => {
+      if ((req as { expectedRevision: number }).expectedRevision === 3) {
+        server = theirs;
+        throw new ConnectError("revision moved", Code.Aborted);
+      }
+      return { item: theirs };
+    });
+    function Host() {
+      const q = useGetItem({ orgId: TEST_ORG, id: "item-1" }, { enabled: true });
+      return <ItemDialog item={q.data?.item ?? null} onClose={() => {}} />;
+    }
+    renderGtm(<Host />, { ...reads, "GtmService.GetItem": () => ({ item: server }), "GtmService.UpdateItem": update });
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "My title" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(toasts.warning).toHaveBeenCalledWith(REVISION_CONFLICT_MESSAGE));
+    // The re-read moved the item to revision 4: the editor shows it, not the stale edit.
+    await waitFor(() => expect(screen.getByLabelText("Title")).toHaveValue("Their title"));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2));
+    expect(update).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevision: 4 }));
+    expect(update).toHaveBeenLastCalledWith(expect.not.objectContaining({ title: expect.anything() }));
+  });
+
+  it("offers no archived channel to move to, but keeps the one the item is on", async () => {
+    const old = create(GtmChannelSchema, { id: "ch-old", orgId: TEST_ORG, key: "old", name: "Old forum", mode: GtmChannelMode.MANUAL, status: GtmChannelStatus.ARCHIVED });
+    const gone = create(GtmChannelSchema, { id: "ch-gone", orgId: TEST_ORG, key: "gone", name: "Gone forum", mode: GtmChannelMode.MANUAL, status: GtmChannelStatus.ARCHIVED });
+    const onOld = create(GtmItemSchema, { ...post, channelId: "ch-old" });
+    renderGtm(<ItemDialog item={onOld} onClose={() => {}} />, { ...reads, "GtmService.ListChannels": { response: { channels: [blog, gmail, old, gone] } } });
+    await screen.findByText("Old forum");
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const picker = screen.getByLabelText("Channel");
+    const names = within(picker).getAllByRole("option").map((o) => o.textContent);
+    expect(names).toEqual(["No channel yet", "Blog", "Email", "Old forum"]);
+  });
+
+  it("opens where an item went out in a new tab, without an opener", async () => {
+    const out = create(GtmItemSchema, { ...post, status: GtmItemStatus.PUBLISHED, publishedUrl: "https://blog.example/launch" });
+    renderGtm(<ItemDialog item={out} onClose={() => {}} />, reads);
+    const link = await screen.findByRole("link", { name: /blog\.example\/launch/ });
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("checks the body's claims live, and counts what blocks", async () => {
@@ -252,6 +302,17 @@ describe("ItemDialog", () => {
       expect(start).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, target: { case: "itemId", value: "item-1" }, filename: "hero.png", contentType: "image/png", sizeBytes: 9n }));
       expect(put).toHaveBeenCalledWith("https://bucket.example/gtm/org-1/as-1.upload?sig=x", expect.objectContaining({ method: "PUT", headers: { "content-type": "image/png" }, body: file }));
       expect(confirm).toHaveBeenCalledWith(expect.objectContaining({ orgId: TEST_ORG, assetId: "as-1" }));
+    });
+
+    it("refuse a file over 25 MB before asking to upload it", async () => {
+      const start = vi.fn(() => ({}));
+      renderGtm(<ItemDialog item={post} onClose={() => {}} />, { ...reads, "GtmService.CreateAssetUpload": start });
+      const big = new File(["x"], "demo.mov", { type: "video/quicktime" });
+      Object.defineProperty(big, "size", { value: 30 * 1024 * 1024 });
+      fireEvent.change(await screen.findByLabelText("Upload a file to assets"), { target: { files: [big] } });
+      await waitFor(() => expect(toasts.warning).toHaveBeenCalledWith("demo.mov is 30.0 MB. Files up to 25 MB can be uploaded."));
+      expect(start).not.toHaveBeenCalled();
+      expect(screen.getByLabelText("Upload a file to assets")).toHaveAttribute("tabindex", "-1");
     });
 
     it("say uploads are unavailable while storage is not set up", async () => {
