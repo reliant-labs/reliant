@@ -17,14 +17,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=c3cc6bc16d2166454539ff03ee9e4978836a4f5db99dc65630c6865c04c1505c
+// forge:hash=64b2d68ba3727d97ac61415effbeb44b54cb9630fb4bd28343ed7fa10b8c51b2
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	ActingCredentialFunc    func(context.Context, string, httpaction.CredentialRequest) (httpaction.Credential, error)
@@ -69,18 +70,103 @@ func (m *MockService) OrgActingCredential(ctx context.Context, ownerUserID strin
 	return *new(httpaction.Credential), contractkit.MockNotSet("MockService", "OrgActingCredential")
 }
 
+// MockServiceActingCredentialCall is one recorded call of MockService.ActingCredential, one
+// field per parameter.
+type MockServiceActingCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+	Req         httpaction.CredentialRequest
+}
+
+// ActingCredentialCalls returns every recorded ActingCredential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("ActingCredential").
+func (m *MockService) ActingCredentialCalls() []MockServiceActingCredentialCall {
+	var out []MockServiceActingCredentialCall
+	for _, c := range m.Recorder.Calls("ActingCredential") {
+		var r MockServiceActingCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		r.Req, _ = c.Args[2].(httpaction.CredentialRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceCredentialCall is one recorded call of MockService.Credential, one
+// field per parameter.
+type MockServiceCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+}
+
+// CredentialCalls returns every recorded Credential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("Credential").
+func (m *MockService) CredentialCalls() []MockServiceCredentialCall {
+	var out []MockServiceCredentialCall
+	for _, c := range m.Recorder.Calls("Credential") {
+		var r MockServiceCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceOwnsConnectionIDCall is one recorded call of MockService.OwnsConnectionID, one
+// field per parameter.
+type MockServiceOwnsConnectionIDCall struct {
+	ID string
+}
+
+// OwnsConnectionIDCalls returns every recorded OwnsConnectionID call, oldest first, with
+// its arguments typed. It reads the same log as Calls("OwnsConnectionID").
+func (m *MockService) OwnsConnectionIDCalls() []MockServiceOwnsConnectionIDCall {
+	var out []MockServiceOwnsConnectionIDCall
+	for _, c := range m.Recorder.Calls("OwnsConnectionID") {
+		var r MockServiceOwnsConnectionIDCall
+		r.ID, _ = c.Args[0].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
+// MockServiceOrgActingCredentialCall is one recorded call of MockService.OrgActingCredential, one
+// field per parameter.
+type MockServiceOrgActingCredentialCall struct {
+	Ctx         context.Context
+	OwnerUserID string
+	OrgID       string
+	Req         httpaction.CredentialRequest
+}
+
+// OrgActingCredentialCalls returns every recorded OrgActingCredential call, oldest first, with
+// its arguments typed. It reads the same log as Calls("OrgActingCredential").
+func (m *MockService) OrgActingCredentialCalls() []MockServiceOrgActingCredentialCall {
+	var out []MockServiceOrgActingCredentialCall
+	for _, c := range m.Recorder.Calls("OrgActingCredential") {
+		var r MockServiceOrgActingCredentialCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.OwnerUserID, _ = c.Args[1].(string)
+		r.OrgID, _ = c.Args[2].(string)
+		r.Req, _ = c.Args[3].(httpaction.CredentialRequest)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockTokenSource
-// forge:hash=d82890e48e0b5917fe9c43cb28cb6915d20b444e7c5a3174416cb467280f8664
+// forge:hash=01c28f5de1e657145bc99eab29637f94c8fb532bebc08e4c8619a6078f14b608
 
 // MockTokenSource is a test mock for the TokenSource interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockTokenSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockTokenSource.<Method>Func not set" error.
 type MockTokenSource struct {
 	contractkit.Recorder
 	UserAccessTokenFunc func(context.Context, string, string) (gitcredentialclient.Token, error)
@@ -95,18 +181,41 @@ func (m *MockTokenSource) UserAccessToken(ctx context.Context, externalUserID st
 	return *new(gitcredentialclient.Token), contractkit.MockNotSet("MockTokenSource", "UserAccessToken")
 }
 
+// MockTokenSourceUserAccessTokenCall is one recorded call of MockTokenSource.UserAccessToken, one
+// field per parameter.
+type MockTokenSourceUserAccessTokenCall struct {
+	Ctx            context.Context
+	ExternalUserID string
+	Provider       string
+}
+
+// UserAccessTokenCalls returns every recorded UserAccessToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("UserAccessToken").
+func (m *MockTokenSource) UserAccessTokenCalls() []MockTokenSourceUserAccessTokenCall {
+	var out []MockTokenSourceUserAccessTokenCall
+	for _, c := range m.Recorder.Calls("UserAccessToken") {
+		var r MockTokenSourceUserAccessTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.ExternalUserID, _ = c.Args[1].(string)
+		r.Provider, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ TokenSource = (*MockTokenSource)(nil)
 
 // forge:section MockInstallationSource
-// forge:hash=4fe04f41379b15b9000ff9df44a836dfa259bb90705df4ed2a992942dcb2d1d1
+// forge:hash=0de49fc103ea64b18452cf3be13d7e42f6975cef910a2a736fa101d1b4d8055d
 
 // MockInstallationSource is a test mock for the InstallationSource interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockInstallationSource.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockInstallationSource.<Method>Func not set" error.
 type MockInstallationSource struct {
 	contractkit.Recorder
 	MintInstallationTokenFunc func(context.Context, gitcredentialclient.InstallationRequest) (gitcredentialclient.InstallationToken, error)
@@ -119,6 +228,26 @@ func (m *MockInstallationSource) MintInstallationToken(ctx context.Context, req 
 		return m.MintInstallationTokenFunc(ctx, req)
 	}
 	return *new(gitcredentialclient.InstallationToken), contractkit.MockNotSet("MockInstallationSource", "MintInstallationToken")
+}
+
+// MockInstallationSourceMintInstallationTokenCall is one recorded call of MockInstallationSource.MintInstallationToken, one
+// field per parameter.
+type MockInstallationSourceMintInstallationTokenCall struct {
+	Ctx context.Context
+	Req gitcredentialclient.InstallationRequest
+}
+
+// MintInstallationTokenCalls returns every recorded MintInstallationToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("MintInstallationToken").
+func (m *MockInstallationSource) MintInstallationTokenCalls() []MockInstallationSourceMintInstallationTokenCall {
+	var out []MockInstallationSourceMintInstallationTokenCall
+	for _, c := range m.Recorder.Calls("MintInstallationToken") {
+		var r MockInstallationSourceMintInstallationTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.Req, _ = c.Args[1].(gitcredentialclient.InstallationRequest)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.

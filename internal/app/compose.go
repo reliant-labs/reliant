@@ -724,18 +724,6 @@ func (g *Graph) newRecordDueScanner() (recorddue.Service, error) {
 	})
 }
 
-func (g *Graph) newMergeQueue() (*MergeQueue, error) {
-	return NewMergeQueue(MergeQueueDeps{
-		DB:     g.Database(),
-		Router: g.WorkerDaemonRouter(),
-		// Read here, not in the provider, so the worker root's config reach
-		// names them (pkg/config Roots).
-		Pipeline:     g.ServerProcessConfig.GetPipeline(),
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		DataDir:      g.ServerProcessConfig.GetDataDir(),
-	})
-}
-
 func (g *Graph) newAccountUsagePoller() (*accountlimits.Poller, error) {
 	return NewAccountUsagePoller(AccountUsagePollerDeps{
 		DB:       g.Database(),
@@ -1970,7 +1958,10 @@ func (g *Graph) newWorkflowCheckSyncer() (*workflowcheck.Syncer, error) {
 // (internal/handlers/coverage_source): a covered file's source, read from
 // GitHub with the viewer's own token once control-plane confirms a retained
 // coverage report names it. Without a control plane, or without a way to
-// read GitHub as the viewer, every read is NOT_YET_AVAILABLE.
+// read GitHub as the viewer, every read is NOT_YET_AVAILABLE. A read, never
+// a checkout or a build: the owner allowed it on the API server
+// (2026-11-27), bounded in memory (ghblobs.MaxBytes per blob, a bounded
+// number in flight, the handler's capped cache).
 func (g *Graph) newCoverageSource() (*coverage_source.Service, error) {
 	blobs, err := CoverageSourceBlobs(g.Database(), g.CredentialsConnectionvault(), g.Vault(), g.ServerProcessConfig.GetControlPlane(), g.IntegrationSettings())
 	if err != nil {

@@ -316,8 +316,32 @@ const PROCEDURE_TIMEOUTS: Record<string, number> = {
  */
 export const OBS_READ_TIMEOUT_MS = 14_000;
 
+/**
+ * A budget one caller sets for one call, in its `contextValues`, over the
+ * tables above. For a call whose time is its payload's size on the user's
+ * link, which no per-method constant fits: a 60s upload budget is a 300 KB
+ * photo on a weak phone link and a 50 MB file only on a fast one
+ * (hooks/attachment-queries.ts uploadBudgetMs).
+ */
+export const rpcBudgetKey = createContextKey<number | undefined>(undefined, {
+  description: "this call's client-side budget in ms, over the per-method table",
+});
+
+/** Set one call's client-side budget (see rpcBudgetKey). */
+export function withRpcBudget(values: ContextValues | undefined, budgetMs: number): ContextValues {
+  const next = values ?? createContextValues();
+  next.set(rpcBudgetKey, budgetMs);
+  return next;
+}
+
 /** The client-side budget for one RPC. Exported for the transport tests. */
-export function timeoutForProcedure(serviceTypeName: string, methodName: string): number {
+export function timeoutForProcedure(
+  serviceTypeName: string,
+  methodName: string,
+  contextValues?: ContextValues,
+): number {
+  const callBudget = contextValues?.get(rpcBudgetKey);
+  if (callBudget !== undefined && callBudget > 0) return callBudget;
   return (
     PROCEDURE_TIMEOUTS[`${serviceTypeName}/${methodName}`] ??
     (isReadSlotProcedure(serviceTypeName, methodName) ? OBS_READ_TIMEOUT_MS : undefined) ??

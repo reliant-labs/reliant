@@ -14,14 +14,15 @@ import (
 )
 
 // forge:section MockService
-// forge:hash=7763d05c14b2180b23fc5fcfabbf7cefd5e2643eac91b0941279c972b37c73fc
+// forge:hash=fdce3da568c2b453af96e9746a1a86ca94b13df29eebe561ae3b575293529ac6
 
 // MockService is a test mock for the Service interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockService.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockService.<Method>Func not set" error.
 type MockService struct {
 	contractkit.Recorder
 	BearerForFunc func(context.Context, string, string) (string, error)
@@ -36,18 +37,41 @@ func (m *MockService) BearerFor(ctx context.Context, userID string, daemonID str
 	return "", contractkit.MockNotSet("MockService", "BearerFor")
 }
 
+// MockServiceBearerForCall is one recorded call of MockService.BearerFor, one
+// field per parameter.
+type MockServiceBearerForCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// BearerForCalls returns every recorded BearerFor call, oldest first, with
+// its arguments typed. It reads the same log as Calls("BearerFor").
+func (m *MockService) BearerForCalls() []MockServiceBearerForCall {
+	var out []MockServiceBearerForCall
+	for _, c := range m.Recorder.Calls("BearerFor") {
+		var r MockServiceBearerForCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
+}
+
 // Compile-time check.
 var _ Service = (*MockService)(nil)
 
 // forge:section MockKeyStore
-// forge:hash=fda68723866b160279f31e563abf83e456b5a7d84d42e3c00a032d7bc8c67962
+// forge:hash=8fb83d5f50f8108d648a45cd2be9b3e0f624dd10d819a3f0710b4d38abecfc38
 
 // MockKeyStore is a test mock for the KeyStore interface.
 //
 // The embedded contractkit.Recorder records every call so tests can
-// assert call counts and captured arguments. Set XxxFunc fields to
-// override per-method behaviour; unset methods return the canonical
-// "MockKeyStore.<Method>Func not set" error.
+// assert call counts and captured arguments; each method's <Method>Calls
+// returns its calls with every argument as a named, typed field. Set
+// XxxFunc fields to override per-method behaviour; unset methods return the
+// canonical "MockKeyStore.<Method>Func not set" error.
 type MockKeyStore struct {
 	contractkit.Recorder
 	GetAutomationTokenFunc func(context.Context, string, string) (string, error)
@@ -60,6 +84,28 @@ func (m *MockKeyStore) GetAutomationToken(ctx context.Context, userID string, da
 		return m.GetAutomationTokenFunc(ctx, userID, daemonID)
 	}
 	return "", contractkit.MockNotSet("MockKeyStore", "GetAutomationToken")
+}
+
+// MockKeyStoreGetAutomationTokenCall is one recorded call of MockKeyStore.GetAutomationToken, one
+// field per parameter.
+type MockKeyStoreGetAutomationTokenCall struct {
+	Ctx      context.Context
+	UserID   string
+	DaemonID string
+}
+
+// GetAutomationTokenCalls returns every recorded GetAutomationToken call, oldest first, with
+// its arguments typed. It reads the same log as Calls("GetAutomationToken").
+func (m *MockKeyStore) GetAutomationTokenCalls() []MockKeyStoreGetAutomationTokenCall {
+	var out []MockKeyStoreGetAutomationTokenCall
+	for _, c := range m.Recorder.Calls("GetAutomationToken") {
+		var r MockKeyStoreGetAutomationTokenCall
+		r.Ctx, _ = c.Args[0].(context.Context)
+		r.UserID, _ = c.Args[1].(string)
+		r.DaemonID, _ = c.Args[2].(string)
+		out = append(out, r)
+	}
+	return out
 }
 
 // Compile-time check.
