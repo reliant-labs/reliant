@@ -3,11 +3,14 @@
 -- Migration: attachments_org_id
 -- Created: 2026-11-27T02:15:00Z
 --
--- An attachment records the organization it was made in, so a read that acts
--- in one org (GTM's attach-from-chat, store.GetAttachmentForUserInOrg) can
--- take only that org's attachments. It is stamped at creation: by the upload
--- RPCs from the request's org_id once the caller is verified a live member of
--- it, and by the agent's media tools from their chat's org.
+-- An attachment records an organization at creation, so a read that acts in
+-- one org (GTM's attach-from-chat, store.GetAttachmentForUserInOrg) can take
+-- only attachments stamped with that org. The stamp says the owner was a live
+-- member of the org when the attachment was stored, and nothing more: not
+-- which chat it came from or was sent in, and not that the owner is a member
+-- still. The upload RPCs stamp the org the request names once the caller is
+-- verified a live member of it (an unverifiable request stamps none); the
+-- agent's media tools stamp the org of the chat they ran in.
 --
 -- An id, no foreign key, as on every other org-scoped table
 -- (20261110033439_org_id_workflows_triggers_runs).
@@ -28,4 +31,4 @@ ALTER TABLE attachments
     ADD COLUMN org_id text,
     ADD CONSTRAINT attachments_org_id_not_blank CHECK (org_id IS NULL OR org_id <> '') NOT VALID;
 COMMENT ON COLUMN attachments.org_id IS
-    'The organization (control-plane organizations.id) the attachment was made in. NULL: made in no org, or written before this column.';
+    'An organization (control-plane organizations.id) the owner was a live member of when the attachment was stored. Not which chat it came from. NULL: none named or verified, or written before this column.';

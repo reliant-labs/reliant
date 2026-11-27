@@ -578,14 +578,14 @@ schema ReliantConfigIdleReclaim:
         worktree_node_modules_idle != "", "worktree_node_modules_idle = \"\" cannot reach the process: an empty RELIANT_IDLE_RECLAIM_WORKTREE_NODE_MODULES_IDLE counts as unset, so it would load the default \"72h\" — set a value, or change its default in the proto"
 
 # forge:section schema ReliantConfigGtm
-# forge:hash=42dff3ea8bd471e16cf946ebdac56f02c1a371d4a8707ad7ecafec0c942347db
+# forge:hash=14d347412f092f811a25f89a616814c7156445870adf9a3c359a7b8b854c3d9b
 # ReliantConfigGtm is the gtm block (GtmConfig) — author its values in config.k as `gtm.<field> = ...`.
 schema ReliantConfigGtm:
     # Comma-separated organization ids GTM is enabled for (none: GTM is off everywhere)
     allowed_org_ids: str = ""
     # Control-plane access token (obs:read, org-bound) for GTM's product-analytics read (unset: unavailable)
     analytics_token: ConfigSecretRef = ConfigSecretRef { name = "reliant-secrets", key = "gtm_analytics_token" }
-    # Let GTM's agent copy a chat attachment made in the GTM org into the asset library (default false)
+    # Let GTM's agent copy an attachment stamped with the GTM org into the asset library (default false)
     attach_from_chat_enabled: bool = False
 
 # forge:section schema ReliantConfig

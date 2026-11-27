@@ -44,11 +44,12 @@ export type UploadAttachmentRequest = Message<"reliant.v1.UploadAttachmentReques
   mimeType: string;
 
   /**
-   * The organization the attachment is made in: the chat's org, or the org
-   * the app is scoped to when there is no chat yet. The caller must be a
-   * live member of it (NotFound otherwise); it is recorded on the
-   * attachment, and an org-scoped read (GTM's attach-from-chat) takes only
-   * an attachment made in its org. Unset records none.
+   * The organization to stamp on the attachment: the web app sends its
+   * chat's org, or the org it is scoped to before a chat exists. The caller
+   * must be a live member of it (NotFound otherwise); the stamp records that
+   * membership at upload time, not which chat the file is for. An org-scoped
+   * read (GTM's attach-from-chat) takes only an attachment stamped with its
+   * org. Unset, or an org the server cannot verify right now, stamps none.
    *
    * @generated from field: optional string org_id = 4;
    */
@@ -184,7 +185,7 @@ export type CreateFileReferenceRequest = Message<"reliant.v1.CreateFileReference
   content: Uint8Array;
 
   /**
-   * The organization the reference is made in, as
+   * The organization to stamp on the reference, as
    * UploadAttachmentRequest.org_id.
    *
    * @generated from field: optional string org_id = 4;

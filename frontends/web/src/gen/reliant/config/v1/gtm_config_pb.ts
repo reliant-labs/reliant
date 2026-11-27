@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/config/v1/gtm_config.proto.
  */
 export const file_reliant_config_v1_gtm_config: GenFile = /*@__PURE__*/
-  fileDesc("CiJyZWxpYW50L2NvbmZpZy92MS9ndG1fY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSLiAwoJR3RtQ29uZmlnEoUBCg9hbGxvd2VkX29yZ19pZHMYASADKAlCbILOGGgKE0dUTV9BTExPV0VEX09SR19JRFMqUUNvbW1hLXNlcGFyYXRlZCBvcmdhbml6YXRpb24gaWRzIEdUTSBpcyBlbmFibGVkIGZvciAobm9uZTogR1RNIGlzIG9mZiBldmVyeXdoZXJlKRKgAQoPYW5hbHl0aWNzX3Rva2VuGAIgASgJQoYBgs4YgQEKE0dUTV9BTkFMWVRJQ1NfVE9LRU4qZkNvbnRyb2wtcGxhbmUgYWNjZXNzIHRva2VuIChvYnM6cmVhZCwgb3JnLWJvdW5kKSBmb3IgR1RNJ3MgcHJvZHVjdC1hbmFseXRpY3MgcmVhZCAodW5zZXQ6IHVuYXZhaWxhYmxlKTABUAESqQEKGGF0dGFjaF9mcm9tX2NoYXRfZW5hYmxlZBgDIAEoCEKGAYLOGIEBChxHVE1fQVRUQUNIX0ZST01fQ0hBVF9FTkFCTEVEKmFMZXQgR1RNJ3MgYWdlbnQgY29weSBhIGNoYXQgYXR0YWNobWVudCBtYWRlIGluIHRoZSBHVE0gb3JnIGludG8gdGhlIGFzc2V0IGxpYnJhcnkgKGRlZmF1bHQgZmFsc2UpQkBaPmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
+  fileDesc("CiJyZWxpYW50L2NvbmZpZy92MS9ndG1fY29uZmlnLnByb3RvEhFyZWxpYW50LmNvbmZpZy52MSLjAwoJR3RtQ29uZmlnEoUBCg9hbGxvd2VkX29yZ19pZHMYASADKAlCbILOGGgKE0dUTV9BTExPV0VEX09SR19JRFMqUUNvbW1hLXNlcGFyYXRlZCBvcmdhbml6YXRpb24gaWRzIEdUTSBpcyBlbmFibGVkIGZvciAobm9uZTogR1RNIGlzIG9mZiBldmVyeXdoZXJlKRKgAQoPYW5hbHl0aWNzX3Rva2VuGAIgASgJQoYBgs4YgQEKE0dUTV9BTkFMWVRJQ1NfVE9LRU4qZkNvbnRyb2wtcGxhbmUgYWNjZXNzIHRva2VuIChvYnM6cmVhZCwgb3JnLWJvdW5kKSBmb3IgR1RNJ3MgcHJvZHVjdC1hbmFseXRpY3MgcmVhZCAodW5zZXQ6IHVuYXZhaWxhYmxlKTABUAESqgEKGGF0dGFjaF9mcm9tX2NoYXRfZW5hYmxlZBgDIAEoCEKHAYLOGIIBChxHVE1fQVRUQUNIX0ZST01fQ0hBVF9FTkFCTEVEKmJMZXQgR1RNJ3MgYWdlbnQgY29weSBhbiBhdHRhY2htZW50IHN0YW1wZWQgd2l0aCB0aGUgR1RNIG9yZyBpbnRvIHRoZSBhc3NldCBsaWJyYXJ5IChkZWZhdWx0IGZhbHNlKUJAWj5naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_forge_v1_forge]);
 
 /**
  * GtmConfig is who gets GTM (the go-to-market workspace) and how its
@@ -48,9 +48,10 @@ export type GtmConfig = Message<"reliant.config.v1.GtmConfig"> & {
   /**
    * Whether GTM's agent may copy a chat attachment into the asset library
    * (attach_gtm_asset from an attachment id). Off by default. When on, it
-   * takes only an attachment the caller owns that was made in the GTM org
-   * (attachments.org_id); an attachment made in no org, every one uploaded
-   * before attachments recorded an org included, is never taken.
+   * takes only an attachment the caller owns that is stamped with the GTM org
+   * (attachments.org_id: the owner was a member of it when it was stored); an
+   * attachment stamped with none, every one uploaded before attachments
+   * recorded an org included, is never taken.
    *
    * @generated from field: bool attach_from_chat_enabled = 3;
    */

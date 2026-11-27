@@ -59,7 +59,7 @@ func (s *Service) CreateFileReference(
 		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: %d bytes exceeds maximum of %d bytes", len(content), s.maxFileSize))
 	}
 
-	// The org it is made in, verified before anything is stored.
+	// The org stamped on it, verified before anything is stored.
 	orgID, err := s.uploadOrg(ctx, userID, req.Msg.OrgId)
 	if err != nil {
 		return nil, err

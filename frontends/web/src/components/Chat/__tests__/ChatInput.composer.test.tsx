@@ -39,9 +39,11 @@ vi.mock("../../../hooks/chat-queries", async () => {
   const actual = await vi.importActual<typeof import("../../../hooks/chat-queries")>("../../../hooks/chat-queries");
   // "chat-started" has a first message, so its workflow is fixed.
   const STARTED = { id: "chat-started", lastMessageAt: { seconds: 1n } };
-  // "chat-in-org" belongs to an org: its uploads are made in it.
+  // "chat-in-org" belongs to an org: its uploads are stamped with it.
+  // "chat-no-org" belongs to none: its uploads are stamped with none.
   const IN_ORG = { id: "chat-in-org", orgId: "org-chat" };
-  const chats: Record<string, unknown> = { "chat-started": STARTED, "chat-in-org": IN_ORG };
+  const NO_ORG = { id: "chat-no-org" };
+  const chats: Record<string, unknown> = { "chat-started": STARTED, "chat-in-org": IN_ORG, "chat-no-org": NO_ORG };
   return { ...actual, useChat: (id?: string) => ({ data: id ? chats[id] : undefined, isLoading: false }), useChatSelection: () => ({ data: undefined, isLoading: false }), getChatFromCache: () => undefined };
 });
 vi.mock("../../../hooks/question-queries", () => ({
@@ -195,7 +197,7 @@ describe("long paste", () => {
     }
   });
 
-  it("uploads in the chat's org, and in the org scope's for a chat not started yet", async () => {
+  it("stamps an upload with the chat's org, and with the org scope's only before a chat exists", async () => {
     const original = useAttachmentStore.getState().attachFile;
     const attachFile = vi.fn(async (_session: string, file: File, _orgId?: string | null) => textAttachment("org-paste", file.name));
     useAttachmentStore.setState({ attachFile });
@@ -208,10 +210,17 @@ describe("long paste", () => {
       expect(attachFile.mock.calls[0][2]).toBe("org-chat");
       view.unmount();
 
-      renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="new-chat:org-test" />);
+      // A chat in no org never takes the scope's org.
+      const orgless = renderWithQuery(<ChatInput onSend={vi.fn()} chatId="chat-no-org" />);
       pasteLong();
       await waitFor(() => expect(attachFile).toHaveBeenCalledTimes(2));
-      expect(attachFile.mock.calls[1][2]).toBe("org-scope");
+      expect(attachFile.mock.calls[1][2]).toBeNull();
+      orgless.unmount();
+
+      renderWithQuery(<ChatInput onSend={vi.fn()} attachmentDraftId="new-chat:org-test" />);
+      pasteLong();
+      await waitFor(() => expect(attachFile).toHaveBeenCalledTimes(3));
+      expect(attachFile.mock.calls[2][2]).toBe("org-scope");
     } finally {
       act(() => {
         useAttachmentStore.setState({ attachFile: original });

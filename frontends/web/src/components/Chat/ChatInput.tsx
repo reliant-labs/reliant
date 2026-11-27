@@ -1099,11 +1099,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       handleSyncThreadParams,
     ]);
 
-    // Attachment management. An upload is made in the chat's org, or, for a
-    // chat not started yet, the org the app is scoped to.
+    // Attachment management. An upload is stamped with the chat's org (none
+    // for a chat in no org); only before a chat exists does it take the org
+    // the app is scoped to.
     const storeAttachFile = useAttachmentStore((state) => state.attachFile);
     const chatOrgId = chatForProjects?.orgId;
-    const uploadOrgId = useCallback(() => chatOrgId || getOrgScope().orgId, [chatOrgId]);
+    const uploadOrgId = useCallback(() => (chatId ? (chatOrgId ?? null) : getOrgScope().orgId), [chatId, chatOrgId]);
     const attachFile = useCallback(
       (sessionId: string, file: File) => storeAttachFile(sessionId, file, uploadOrgId()),
       [storeAttachFile, uploadOrgId],

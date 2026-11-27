@@ -343,7 +343,7 @@ func presentImageSummary(output PresentImageOutput) string {
 }
 
 // owner resolves the owner of the chat receiving the attachment reference,
-// and the org the attachment is made in (the chat's, or nil for none).
+// and the org stamped on the attachment (the chat's, or nil for none).
 // Never substitute the request-context identity: it may belong to another
 // user, and a missing chat or failed lookup must not create an attachment.
 func (t *presentImageTool) owner(tc *rctx.ToolContext) (string, *string) {

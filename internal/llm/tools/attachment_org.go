@@ -11,9 +11,9 @@ type chatGetter interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 }
 
-// chatOrgID is the org an attachment a tool makes for chatID records
+// chatOrgID is the org stamped on an attachment a tool makes in chatID
 // (attachments.org_id): the chat's org, or nil when the chat is in none, there
-// is no chat, or it cannot be read. Nil is never a guess, so an org-scoped
+// is no chat, or it cannot be read. The stamp names an org, not the chat. Nil is never a guess, so an org-scoped
 // read (store.GetAttachmentForUserInOrg) cannot reach the attachment from
 // another org.
 func chatOrgID(ctx context.Context, chats chatGetter, chatID string) *string {

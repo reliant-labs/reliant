@@ -31,7 +31,7 @@ func (m memberOf) Named(_ context.Context, _, requested string) (string, error) 
 }
 
 // TestUploadsRecordTheirOrg proves, on a real database, that both upload rpcs
-// record the org the request names once the caller is a member of it, record
+// stamp the org the request names once the caller is a member of it, stamp
 // none when it names none, and refuse (NotFound, nothing stored) an org the
 // caller is not a member of.
 func TestUploadsRecordTheirOrg(t *testing.T) {
@@ -94,6 +94,43 @@ func TestUploadsRecordTheirOrg(t *testing.T) {
 			assert.Equal(t, connect.CodeNotFound, svcerr.ToConnect(err).Code(), "another org is NotFound, never PermissionDenied")
 			assert.Equal(t, before, count(t), "a refused upload stores nothing")
 		})
+	}
+}
+
+// controlPlaneDown is an OrgResolver whose membership lookup is unavailable,
+// as orgs.Resolver.Named answers when the control plane cannot be reached.
+type controlPlaneDown struct{}
+
+func (controlPlaneDown) Named(context.Context, string, string) (string, error) {
+	return "", svcerr.Unavailable("could not verify the organization; try again")
+}
+
+// TestUploadsStampNoneWhenMembershipIsUnavailable: an upload does not depend
+// on the control plane. When membership cannot be verified it is stored, with
+// no org stamped, so no org-scoped read can take it.
+func TestUploadsStampNoneWhenMembershipIsUnavailable(t *testing.T) {
+	var stored []*db.Attachment
+	svc := NewTestAttachment(t, WithAttachmentDeps(Deps{
+		Attachments: &MockAttachmentStore{InsertAttachmentFunc: func(_ context.Context, a *db.Attachment) error {
+			stored = append(stored, a)
+			return nil
+		}},
+		Orgs: controlPlaneDown{},
+	}))
+	ctx := auth.WithUser(context.Background(), "uploader", "user", "")
+
+	_, err := svc.UploadAttachment(ctx, connect.NewRequest(&pb.UploadAttachmentRequest{
+		Filename: "a.png", Content: []byte{1}, MimeType: "image/png", OrgId: ptr.Of("org-a"),
+	}))
+	require.NoError(t, err)
+	_, err = svc.CreateFileReference(ctx, connect.NewRequest(&pb.CreateFileReferenceRequest{
+		FilePath: "/w/notes.md", Content: []byte("# notes"), OrgId: ptr.Of("org-a"),
+	}))
+	require.NoError(t, err)
+
+	require.Len(t, stored, 2, "both are stored")
+	for _, a := range stored {
+		assert.Nil(t, a.OrgID, "an org the server could not verify is never stamped")
 	}
 }
 

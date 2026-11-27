@@ -53,7 +53,7 @@ func (s *Service) UploadAttachment(
 		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: maximum size is %d bytes", s.maxFileSize))
 	}
 
-	// The org it is made in, verified before anything is stored.
+	// The org stamped on it, verified before anything is stored.
 	orgID, err := s.uploadOrg(ctx, userID, req.Msg.OrgId)
 	if err != nil {
 		return nil, err

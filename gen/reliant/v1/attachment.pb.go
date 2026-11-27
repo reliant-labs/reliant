@@ -33,11 +33,12 @@ type UploadAttachmentRequest struct {
 	Content []byte `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	// MIME type of the file
 	MimeType string `protobuf:"bytes,3,opt,name=mime_type,json=mimeType,proto3" json:"mime_type,omitempty"`
-	// The organization the attachment is made in: the chat's org, or the org
-	// the app is scoped to when there is no chat yet. The caller must be a
-	// live member of it (NotFound otherwise); it is recorded on the
-	// attachment, and an org-scoped read (GTM's attach-from-chat) takes only
-	// an attachment made in its org. Unset records none.
+	// The organization to stamp on the attachment: the web app sends its
+	// chat's org, or the org it is scoped to before a chat exists. The caller
+	// must be a live member of it (NotFound otherwise); the stamp records that
+	// membership at upload time, not which chat the file is for. An org-scoped
+	// read (GTM's attach-from-chat) takes only an attachment stamped with its
+	// org. Unset, or an org the server cannot verify right now, stamps none.
 	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -340,7 +341,7 @@ type CreateFileReferenceRequest struct {
 	Filename string `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
 	// File content as bytes — captured at attach time so the server doesn't need filesystem access
 	Content []byte `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
-	// The organization the reference is made in, as
+	// The organization to stamp on the reference, as
 	// UploadAttachmentRequest.org_id.
 	OrgId         *string `protobuf:"bytes,4,opt,name=org_id,json=orgId,proto3,oneof" json:"org_id,omitempty"`
 	unknownFields protoimpl.UnknownFields

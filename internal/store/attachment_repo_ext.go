@@ -80,8 +80,9 @@ func GetAttachment(ctx context.Context, db orm.Context, id string) (*core.Attach
 }
 
 // GetAttachmentForUserInOrg returns the attachment id when userID owns it and
-// it was made in orgID, or (nil, nil) when there is none such: another
-// user's, another org's, one made in no org (org_id NULL, every row written
+// it is stamped with orgID (attachments.org_id: the owner was a live member of
+// orgID when it was stored), or (nil, nil) when there is none such: another
+// user's, another org's, one stamped with none (org_id NULL, every row written
 // before attachments recorded an org), or none at all. A blank userID or
 // orgID matches nothing. It is the read for a caller acting in one org that
 // must not reach the user's attachments from any other (GTM's

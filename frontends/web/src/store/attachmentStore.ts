@@ -24,7 +24,7 @@ interface AttachmentStore {
    */
   localFiles: Map<string, Blob>;
 
-  /** `orgId` is the org the upload is made in (uploadAttachment). */
+  /** `orgId` is the org stamped on the upload (uploadAttachment). */
   attachFile: (sessionId: string, file: File, orgId?: string | null) => Promise<Attachment>;
   /**
    * Upload `file` in place of `attachmentId`, keeping its position in the
