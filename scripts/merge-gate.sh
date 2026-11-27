@@ -73,7 +73,7 @@
 #              fails it (-test-budget auto). Recorded (-capture) as lanes short
 #              and web-affected of one forge test run, which never changes
 #              the verdict (scripts/test-capture.sh)
-#   typecheck  scripts/web-typecheck.sh: frontends/web's `tsc -b` (app, tests,
+#   typecheck  scripts/web-typecheck.sh: frontends/web's `tsgo -b` (app, tests,
 #              gen, node configs), incremental on state this checkout wrote,
 #              when the web lane is selected or anything under
 #              frontends/web/ changed; vitest strips types without checking
@@ -192,7 +192,8 @@ quarter=$(( gate_cpus / 4 )); [ "$quarter" -ge 2 ] || quarter=2
 
 # ── the gate's memory budget ──────────────────────────────────────────────
 # Cores are not the only limit. Measured on reliant#1772 (208 files, a proto
-# change): forge generate alone peaks at 7.5 GB RSS, tsc -b at 2.3 GB, each
+# change): forge generate alone peaks at 7.5 GB RSS, tsc -b at 2.3 GB (tsgo -b,
+# the typecheck phase's compiler now, at ~4 GB for a fifth of the time), each
 # test link at 2.7 GB, and the phases beside one another reach 13 GB within
 # five minutes. A hosted ubuntu-latest runner has 16 GiB: the merge queue's
 # runner ran out of memory there three times, its agent died ("The runner has
@@ -600,7 +601,8 @@ if [ "$fail" = 0 ]; then
   phase test env GOMAXPROCS="$half" VITEST_MAX_WORKERS="$half" \
     go run ./tools/test-affected run -plan "$run_plan" -base "$base" -lanes "$test_lanes" -web-full reached -p "$half" -test-budget "${MG_TEST_BUDGET:-auto}" -capture & pids+=($!)
   if [ "$typecheck" = true ]; then
-    phase typecheck scripts/web-typecheck.sh & pids+=($!)
+    # tsgo checks in parallel and sizes itself by GOMAXPROCS: a quarter, like build and lint.
+    phase typecheck env GOMAXPROCS="$quarter" scripts/web-typecheck.sh & pids+=($!)
   fi
   # The two vite builds are the gate's largest phases: on reliant#2935's merge
   # with main the demo bundle peaked at 9.1 GB RSS and the renderer's release
