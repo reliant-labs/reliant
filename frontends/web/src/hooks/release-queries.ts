@@ -72,7 +72,7 @@ export function useDeployRuns(project: string | null | undefined, env?: string) 
     withOrgFailure(
       deployServiceQueries.listDeployAttempts(orgRequest({ project: project ?? "", environmentName: env, limit: DEPLOY_RUN_LIST_LIMIT }, org.orgId), {
         enabled: !!project && orgQueryEnabled(org),
-        staleTime: 10_000,
+        staleTime: 0,
         retry: forgeRetry,
         refetchInterval: (query) => ((query.state.data?.attempts ?? []).some((attempt) => attempt.state === DeployAttemptState.RUNNING) ? 10_000 : 60_000),
         select: toDeployRuns,
