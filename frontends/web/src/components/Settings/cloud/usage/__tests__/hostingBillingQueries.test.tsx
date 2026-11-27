@@ -1,7 +1,10 @@
+import { Code } from "@connectrpc/connect";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { createFixtureTransport } from "@/fixtures/transport";
+import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { setTransport } from "@/lib/connect";
 import { mockTransport } from "@/lib/test-utils";
 import { createTransportScope, TransportScopeProvider } from "@/lib/transportScope";
@@ -11,6 +14,7 @@ import {
   hostingBillingKeys,
   useFreeHostingStatus,
   useOrgHostingUsageSummary,
+  useSetUsageBillingBudget,
   useUsageBillingBudgetVersions,
 } from "../hostingBillingQueries";
 
@@ -71,4 +75,36 @@ it("reads from the fixture scope and refreshes through the existing org keys", a
   });
   for (const [read] of reads) expect(read).toHaveBeenCalledTimes(2);
   expect(appRead).not.toHaveBeenCalled();
+});
+
+it("refuses a budget write in a read-only fixture scope without reaching the live transport", async () => {
+  const app = mockTransport(billingHandlers({ setUsageBillingBudget: () => ({}) }));
+  const appCall = vi.spyOn(app, "unary");
+  setTransport(app);
+  const fixtureWrite = vi.fn(() => ({}));
+  const readOnlyMessage = "Sample app: changes are turned off";
+  const scope = createTransportScope({
+    id: "hosting-fixture",
+    readOnly: true,
+    transport: createFixtureTransport({
+      readOnly: true,
+      readOnlyMessage,
+      scenario: { [`${BillingService.typeName}/SetUsageBillingBudget`]: fixtureWrite },
+    }),
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <TransportScopeProvider scope={scope}>{children}</TransportScopeProvider>
+  );
+  const { result } = renderHook(() => useSetUsageBillingBudget("org-fixture"), { wrapper });
+
+  await act(async () => {
+    await expect(result.current.mutateAsync({
+      infraBudgetCents: 12000n,
+      policyVersion: "p1",
+      consent: true,
+      expectedCurrentVersion: 1n,
+    })).rejects.toMatchObject({ code: Code.PermissionDenied, rawMessage: readOnlyMessage });
+  });
+  expect(fixtureWrite).not.toHaveBeenCalled();
+  expect(appCall).not.toHaveBeenCalled();
 });

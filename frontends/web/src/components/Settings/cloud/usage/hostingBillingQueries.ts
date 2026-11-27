@@ -20,10 +20,10 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import type { DescService } from "@bufbuild/protobuf";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
-import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { OrganizationService } from "@/gen/controlplane/services/organization/v1/organization_pb";
 import {
   billingServiceKeys,
+  billingServiceMutations,
   useGetFreeHostingStatus,
   useGetOrgHostingUsageSummary,
   useListUsageBillingBudgetVersions,
@@ -147,23 +147,11 @@ export interface MoveFreeHostingDesignationResponse {
   moved: boolean;
 }
 
-interface PendingBillingMethods {
-  setUsageBillingBudget(req: SetUsageBillingBudgetRequest): Promise<{ agreement?: { infraBudgetCents: Int }; version?: UsageBillingBudgetVersion }>;
-}
-
 interface PendingOrganizationMethods {
   moveFreeHostingDesignation(req: { orgId: string; dryRun: boolean }): Promise<MoveFreeHostingDesignationResponse>;
 }
 
-/**
- * One BillingService method by name, or an Unimplemented failure when this
- * build's generated client does not carry it yet.
- */
-export function pendingBillingMethod<K extends keyof PendingBillingMethods>(name: K): PendingBillingMethods[K] {
-  return pendingMethod(BillingService, name) as PendingBillingMethods[K];
-}
-
-/** The OrganizationService twin of pendingBillingMethod. */
+/** A pending OrganizationService RPC, or Unimplemented when this build does not carry it. */
 export function pendingOrganizationMethod<K extends keyof PendingOrganizationMethods>(name: K): PendingOrganizationMethods[K] {
   return pendingMethod(OrganizationService, name) as PendingOrganizationMethods[K];
 }
@@ -216,8 +204,9 @@ export function useSetUsageBillingBudget(orgId: string) {
     // Keyed to the org it was started in: an org switch detaches this observer
     // without cancelling that org's valid write.
     mutationKey: ["hosting-billing", "set-budget", orgId],
+    // Refresh only this org's hosting reads, even when the write is rejected.
     mutationFn: (request: Omit<SetUsageBillingBudgetRequest, "orgId">) =>
-      pendingBillingMethod("setUsageBillingBudget")({ ...request, orgId }),
+      billingServiceMutations(cache).setUsageBillingBudget({ ...request, orgId }, { invalidate: false }),
     onSettled: () => {
       void cache.invalidateQueries({ queryKey: hostingBillingKeys.agreement(orgId) });
       void cache.invalidateQueries({ queryKey: hostingBillingKeys.budgetVersions(orgId) });
