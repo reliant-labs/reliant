@@ -97,11 +97,6 @@ func New(grants Grants, refreshes Refreshes, tokens TokenSource, opts Options) *
 func (r *Refresher) Refresh(ctx context.Context, userID string) error {
 	at := r.now().UTC()
 	grants, subject, err := r.read(ctx, userID)
-	// Only the provider snapshot commits independently of activation. Token
-	// renewal above must join its caller, which may already lock connections.
-	// Snapshot rows are not read by activation and remain valid on rollback;
-	// joining their writes would make concurrent activations conflict.
-	ctx = orm.Detached(ctx)
 	if err != nil {
 		if IsPermanent(err) {
 			if clearErr := r.grants.ReplaceIntegrationAccess(ctx, userID, IntegrationID, "", at, nil); clearErr != nil {
@@ -110,6 +105,11 @@ func (r *Refresher) Refresh(ctx context.Context, userID string) error {
 		}
 		return err
 	}
+	// Only the successful provider snapshot commits independently of activation.
+	// Token renewal and failure cleanup must join their caller's transaction.
+	// Snapshot rows are not read by activation and remain valid on rollback;
+	// joining their writes would make concurrent activations conflict.
+	ctx = orm.Detached(ctx)
 	if err := r.grants.ReplaceIntegrationAccess(ctx, userID, IntegrationID, subject, at, grants); err != nil {
 		return fmt.Errorf("ghaccess: record access: %w", err)
 	}
