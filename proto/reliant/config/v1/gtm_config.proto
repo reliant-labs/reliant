@@ -109,4 +109,8 @@ message GtmAssetsConfig {
     env_var: "GTM_ASSETS_PATH_STYLE"
     description: "GTM assets bucket: path-style addressing (forge.bucket_env; MinIO needs it)"
   }];
+
+  // Removed: the size and quota limits are internal/gtm's constants.
+  reserved 8, 9, 10;
+  reserved "max_asset_bytes", "max_copied_asset_bytes", "org_quota_bytes";
 }

@@ -149,4 +149,8 @@ reliant_web_config: frontend_config_gen.ReliantWebConfig = {
     # A plain-http local stack.
     disable_tls = "true"
     app_url = _web_origin
+    # The dev MinIO the GTM assets bucket is on (main.k): its S3 API is the
+    # origin presigned URLs name. Loopback, so a built bundle allows it
+    # anyway; stated so dev exercises the key prod sets.
+    gtm_assets_origin = "http://localhost:${ports.minio}"
 }

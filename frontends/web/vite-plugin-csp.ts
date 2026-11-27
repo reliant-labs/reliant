@@ -29,9 +29,11 @@ import type { Plugin } from "vite";
  *      ceiling (`* ws: wss:`, any http/https/ws/wss origin);
  *   2. a meta the inline bootstrap after `<script src=config.js>` appends,
  *      whose connect-src is exactly 'self', the origins config.js names, and
- *      the fixed hosts below (runtimeConnectScript).
+ *      the fixed hosts below (runtimeConnectScript), and whose media-src is
+ *      'self', blob:, the GTM assets bucket's origin and loopback.
  *
- * The effective connect-src is their intersection, i.e. policy 2. The
+ * The effective connect-src and media-src are their intersection, i.e.
+ * policy 2's. The
  * bootstrap runs in <head>, before any module script, so no request the app
  * makes predates it. It is hashed like the theme bootstrap, from the final
  * HTML. A missing config.js narrows to 'self' plus the fixed hosts, the same
@@ -110,6 +112,27 @@ export const RUNTIME_ORIGIN_KEYS = [
   "APP_URL",
 ] as const;
 
+/**
+ * The runtime-config key naming the GTM assets bucket's public origin
+ * (web_config.proto GTM_ASSETS_ORIGIN): where a browser PUTs a presigned
+ * upload and loads a presigned preview. It is a bucket, not a backend, so it
+ * gets connect-src and media-src only: never the wss:// twin an API origin
+ * gets, and nothing at all when it is unset or not an http(s) origin.
+ * Images need no entry: img-src already allows any https: origin, and dev
+ * runs under the Vite dev server, where this plugin (apply: "build") sets no
+ * CSP at all.
+ */
+export const GTM_ASSETS_ORIGIN_KEY = "GTM_ASSETS_ORIGIN";
+
+/**
+ * What a runtime origin's host may hold: a DNS name or an IPv4 or bracketed
+ * IPv6 address, and a port. Nothing that could end a CSP directive.
+ */
+const ORIGIN_HOST = /^[A-Za-z0-9.\-:\[\]]+$/;
+
+/** Loopback over http, any port: the dev MinIO's presigned media in a built bundle. */
+const LOOPBACK_HTTP = ["http://localhost:*", "http://127.0.0.1:*"];
+
 /** connect-src hosts that are not per environment. */
 const FIXED_CONNECT = [
   ...LOOPBACK,
@@ -122,24 +145,40 @@ const FIXED_CONNECT = [
  *
  * For each origin key it allows the http(s) origin, plus wss:// for an https one — the
  * terminal WebSocket rides the API origin, and connect-src matches on scheme,
- * so an https entry alone does NOT authorise the upgrade. Anything absent,
- * relative or unparseable contributes nothing rather than a junk token.
+ * so an https entry alone does NOT authorise the upgrade. The GTM assets
+ * origin (GTM_ASSETS_ORIGIN_KEY) joins connect-src without a wss:// twin, and
+ * media-src beside 'self', blob: and loopback. Anything absent, relative or
+ * unparseable contributes nothing rather than a junk token, and so does a
+ * host with any character outside ORIGIN_HOST: the URL parser lets `;`
+ * through in a host, and one would end the directive and start another in
+ * the meta tag's content.
+ *
+ * The GTM assets origin must also be https, or http on loopback (the dev
+ * MinIO). A bucket is where a browser PUTs a person's files and reads them
+ * back with a presigned URL, a bearer link; over plain http to another host
+ * both would cross the network in the clear, so the policy refuses to allow
+ * it rather than let a mistyped origin quietly work.
  */
 export function runtimeConnectScript(): string {
   const keys = JSON.stringify(RUNTIME_ORIGIN_KEYS);
   const fixed = JSON.stringify(FIXED_CONNECT);
+  const loopback = JSON.stringify(LOOPBACK_HTTP);
   return (
     "(function(){" +
     "var c=window.__FORGE_CONFIG__||{},s=[\"'self'\"],seen={};" +
     "function add(v){if(v&&!seen[v]){seen[v]=1;s.push(v);}}" +
     "function origin(v){if(typeof v!==\"string\"||!v)return\"\";" +
-    "try{var u=new URL(v);return u.protocol===\"http:\"||u.protocol===\"https:\"?u.protocol+\"//\"+u.host:\"\";}" +
+    "try{var u=new URL(v);if(!" + ORIGIN_HOST.toString() + ".test(u.host))return\"\";" +
+    "return u.protocol===\"http:\"||u.protocol===\"https:\"?u.protocol+\"//\"+u.host:\"\";}" +
     "catch(e){return\"\";}}" +
-    `var k=${keys},f=${fixed},i,o;` +
+    "function loopback(o){return /^http:\\/\\/(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?$/.test(o);}" +
+    `var k=${keys},f=${fixed},l=${loopback},i,o;` +
     "for(i=0;i<k.length;i++){o=origin(c[k[i]]);add(o);if(o.indexOf(\"https://\")===0)add(\"wss://\"+o.slice(8));}" +
+    `var g=origin(c[${JSON.stringify(GTM_ASSETS_ORIGIN_KEY)}]);if(g.indexOf("https://")!==0&&!loopback(g))g="";add(g);` +
     "for(i=0;i<f.length;i++)add(f[i]);" +
+    "var media=[\"'self'\",\"blob:\"];if(g)media.push(g);for(i=0;i<l.length;i++)if(l[i]!==g)media.push(l[i]);" +
     "var m=document.createElement(\"meta\");m.httpEquiv=\"Content-Security-Policy\";" +
-    "m.content=\"connect-src \"+s.join(\" \");document.head.appendChild(m);" +
+    "m.content=\"connect-src \"+s.join(\" \")+\"; media-src \"+media.join(\" \");document.head.appendChild(m);" +
     "})();"
   );
 }
@@ -178,6 +217,12 @@ export function buildCSP(scriptHashes: string[]): string {
     // plain-http hostname needs; ws:/wss: are spelled out because `*` does
     // not match a WebSocket scheme in every engine.
     "connect-src": ["'self'", "*", "ws:", "wss:"],
+
+    // The ceiling the runtime policy narrows to 'self', blob:, the GTM assets
+    // bucket and loopback (runtimeConnectScript). Without it media fell back
+    // to default-src 'self', which refused blob: previews and every
+    // presigned video. No data: either: nothing here plays media from a data: URL.
+    "media-src": ["'self'", "blob:", "https:", ...LOOPBACK_HTTP],
 
     "worker-src": ["'self'", "blob:"],
     "child-src": ["'self'", "blob:"],

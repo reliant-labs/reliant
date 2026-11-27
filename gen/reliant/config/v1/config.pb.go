@@ -617,7 +617,7 @@ var File_reliant_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x82\x04\n" +
+	"\x1ereliant/config/v1/config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x9f\x04\n" +
 	"\rReliantConfig\x12.\n" +
 	"\x03log\x18\x01 \x01(\v2\x1c.reliant.config.v1.LogConfigR\x03log\x12:\n" +
 	"\aruntime\x18\x02 \x01(\v2 .reliant.config.v1.RuntimeConfigR\aruntime\x12M\n" +
@@ -629,7 +629,9 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\vmachine_org\x18\x06 \x01(\v2#.reliant.config.v1.MachineOrgConfigR\n" +
 	"machineOrg\x12G\n" +
 	"\fidle_reclaim\x18\a \x01(\v2$.reliant.config.v1.IdleReclaimConfigR\vidleReclaim:\r\xca\xc1\x18\t\n" +
-	"\areliant\"\xe7\x01\n" +
+	"\areliantJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"R\x03gtmR\n" +
+	"gtm_assets\"\xe7\x01\n" +
 	"\x10MachineOrgConfig\x12\xd2\x01\n" +
 	"\x11cross_org_cleanup\x18\x01 \x01(\tB\xa5\x01\x82\xce\x18\xa0\x01\n" +
 	"\x1bRELIANT_MACHINE_ORG_CLEANUP\x1a\x02on*tThe connect reconcile detaches other orgs' checkout records from a machine of a known org (on), or leaves them (off)J\x02onJ\x03offR\x0fcrossOrgCleanup\"\xe8\x01\n" +
