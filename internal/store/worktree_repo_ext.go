@@ -1141,6 +1141,26 @@ func archiveRecoverableWorktree(ctx context.Context, db orm.Context, id string, 
 // worktree that has since taken its name is core.ErrWorktreeNameTaken, and a
 // recovery finalizing it core.ErrWorktreeFinalizing.
 func ReviveArchivedWorktree(ctx context.Context, db orm.Context, id string) (string, error) {
+	return reviveArchivedWorktree(ctx, db, id, false)
+}
+
+// ReviveArchivedWorktreeForBoundThread is ReviveArchivedWorktree for a
+// sub-agent thread bound to the worktree that is working in it again. It
+// also revives a worktree archived by hand — the worktree tool's delete or
+// the UI — while the sub-agent sat idle, typically by the parent that then
+// resumed it (obs 0cea454a: every machine tool and the worktree tool refused,
+// and the sub-agent could not continue). Resuming a sub-agent bound to the
+// worktree is as explicit as the archive was, and the archive moved nothing:
+// such a row qualifies only while the machine has not reported its directory
+// removed or forgotten, no clean-up is running, and no work was saved: the
+// daemon re-locks the checkouts it finds as restored, and nothing is rebuilt
+// from the branch in place of files the archive kept. A row whose directory
+// is gone stays with explicit recovery, as before.
+func ReviveArchivedWorktreeForBoundThread(ctx context.Context, db orm.Context, id string) (string, error) {
+	return reviveArchivedWorktree(ctx, db, id, true)
+}
+
+func reviveArchivedWorktree(ctx context.Context, db orm.Context, id string, boundThread bool) (string, error) {
 	fence := ""
 	err := recoveryTx(ctx, db, func(ctx context.Context) error {
 		fence = ""
@@ -1166,7 +1186,12 @@ func ReviveArchivedWorktree(ctx context.Context, db orm.Context, id string) (str
 		// Branch-only recreation is valid ONLY for the proven clean landed
 		// lifecycle. Catalog recovery captures dirty/untracked state separately
 		// from legacy SnapshotRefs. Creation of a recovery also locks this row.
-		if row.IsMain || row.Finalizing != nil || (meta.ArchivedBecause != core.ArchivedBecauseLanded && meta.ArchivedBecause != core.ArchivedBecauseRecoverableIdle) || len(meta.SnapshotRefs) != 0 {
+		automatic := meta.ArchivedBecause == core.ArchivedBecauseLanded || meta.ArchivedBecause == core.ArchivedBecauseRecoverableIdle
+		// An archive made by hand, revived for the sub-agent bound to it:
+		// only while its directory is, as far as the machine has said, still
+		// where the archive left it (ReviveArchivedWorktreeForBoundThread).
+		byHand := boundThread && meta.ArchivedBecause == "" && !meta.DirectoryDeleted && !meta.Forgotten && !meta.CleaningNow(time.Now())
+		if row.IsMain || row.Finalizing != nil || (!automatic && !byHand) || len(meta.SnapshotRefs) != 0 {
 			return fmt.Errorf("workspace requires explicit recovery; cannot revive from its branch alone")
 		}
 		var recoveries int
