@@ -13,8 +13,10 @@ import {
   FilePlus,
   FolderPlus,
   Trash2,
+  Link2,
   Download,
 } from "lucide-react";
+import { fileNodeExpandable, fileNodeUnavailableReason } from "./symlinks";
 import { FileIcon } from "./FileIcon";
 import ContextMenu from "../forge-ui/context_menu";
 import type { MenuItem } from "../forge-ui/dropdown_menu";
@@ -156,8 +158,10 @@ export const FileTreeItem = memo(function FileTreeItem({
   const isSelected = selectedFile?.path === node.path;
   const isFocused = focusedPath === node.path;
   // A directory shows a chevron only when it has children: the backend hint, or
-  // (for eagerly-loaded/full-tree data) already-present children.
-  const hasChildren = node.hasChildren ?? ((node.children?.length ?? 0) > 0);
+  // (for eagerly-loaded/full-tree data) already-present children. A symbolic
+  // link the daemon refused to follow never does, and says why instead.
+  const hasChildren = fileNodeExpandable(node);
+  const unavailableReason = fileNodeUnavailableReason(node);
   // True while this directory's children are being lazily fetched (none yet).
   const isLoadingChildren = (loadingPaths?.has(node.path) ?? false) && node.children === undefined;
 
@@ -244,6 +248,9 @@ export const FileTreeItem = memo(function FileTreeItem({
     searchQuery && filteredChildren && filteredChildren.length > 0;
 
   const handleClick = () => {
+    // A dangling link has nothing to open, and a looping or refused one
+    // nothing to expand; the row's tooltip says which.
+    if (unavailableReason) return;
     onSelect(node);
   };
 
@@ -543,7 +550,23 @@ export const FileTreeItem = memo(function FileTreeItem({
             aria-hidden
           />
         ))}
-      <Tooltip content={buildFullPath(effectiveWorktree?.path, node.path)} delay={300} side="bottom" triggerClassName="block">
+      <Tooltip
+        content={
+          unavailableReason || node.symlinkTarget ? (
+            <span className="flex flex-col">
+              <span>{buildFullPath(effectiveWorktree?.path, node.path)}</span>
+              <span className="text-muted-foreground">
+                {unavailableReason ?? `Symbolic link → ${node.symlinkTarget}`}
+              </span>
+            </span>
+          ) : (
+            buildFullPath(effectiveWorktree?.path, node.path)
+          )
+        }
+        delay={300}
+        side="bottom"
+        triggerClassName="block"
+      >
         <button
           ref={itemRef}
           data-path={node.path}
@@ -607,11 +630,19 @@ export const FileTreeItem = memo(function FileTreeItem({
           className={cn(
             "flex-1 truncate transition-colors",
             isSelected && "text-primary-ink font-semibold",
-            !isSelected && "group-hover:text-foreground"
+            !isSelected && !unavailableReason && "group-hover:text-foreground",
+            unavailableReason && "text-muted-foreground italic"
           )}
+          data-unavailable={unavailableReason ? "true" : undefined}
         >
           {node.name}
         </span>
+        {node.symlinkStatus && (
+          <Link2
+            aria-label={unavailableReason ?? "symbolic link"}
+            className="w-3 h-3 shrink-0 text-muted-foreground"
+          />
+        )}
 
         {/* Diagnostic indicators for files and directories */}
         {((isDirectory &&

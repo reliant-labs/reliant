@@ -16,6 +16,12 @@ export interface FileNode {
   // hasChildren is a directory hint from the backend: true when the directory
   // has at least one entry. Used to render an expand chevron without fetching.
   hasChildren?: boolean;
+  // Set when the entry is a symbolic link: its target text, and whether the
+  // tree can follow it. `type` is what the link resolves to, so a link to a
+  // directory is a directory. Any status but "resolved" is listed and never
+  // opened or expanded (fileNodeUnavailableReason says why).
+  symlinkTarget?: string;
+  symlinkStatus?: "resolved" | "broken" | "loop" | "denied";
   size?: number;
   modified?: string;
   diagnostics?: FileDiagnostic[];

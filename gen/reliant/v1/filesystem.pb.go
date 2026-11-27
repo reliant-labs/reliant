@@ -74,6 +74,69 @@ func (FileNodeType) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{0}
 }
 
+// FileNodeSymlinkStatus says whether a symbolic link in the file tree can be
+// followed. UNSPECIFIED means the entry is not a symbolic link (or the daemon
+// predates this field).
+type FileNodeSymlinkStatus int32
+
+const (
+	FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_UNSPECIFIED FileNodeSymlinkStatus = 0
+	// The link resolves to an existing file or directory.
+	FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_RESOLVED FileNodeSymlinkStatus = 1
+	// The link's target does not exist, or the link is part of a cycle of links.
+	FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_BROKEN FileNodeSymlinkStatus = 2
+	// The link points at a directory that contains it (itself or an ancestor).
+	FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_LOOP FileNodeSymlinkStatus = 3
+	// The link points at a directory the tree does not list: a credential store
+	// (~/.ssh, ~/.aws, ...), or a place outside a confined caller's root.
+	FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_DENIED FileNodeSymlinkStatus = 4
+)
+
+// Enum value maps for FileNodeSymlinkStatus.
+var (
+	FileNodeSymlinkStatus_name = map[int32]string{
+		0: "FILE_NODE_SYMLINK_STATUS_UNSPECIFIED",
+		1: "FILE_NODE_SYMLINK_STATUS_RESOLVED",
+		2: "FILE_NODE_SYMLINK_STATUS_BROKEN",
+		3: "FILE_NODE_SYMLINK_STATUS_LOOP",
+		4: "FILE_NODE_SYMLINK_STATUS_DENIED",
+	}
+	FileNodeSymlinkStatus_value = map[string]int32{
+		"FILE_NODE_SYMLINK_STATUS_UNSPECIFIED": 0,
+		"FILE_NODE_SYMLINK_STATUS_RESOLVED":    1,
+		"FILE_NODE_SYMLINK_STATUS_BROKEN":      2,
+		"FILE_NODE_SYMLINK_STATUS_LOOP":        3,
+		"FILE_NODE_SYMLINK_STATUS_DENIED":      4,
+	}
+)
+
+func (x FileNodeSymlinkStatus) Enum() *FileNodeSymlinkStatus {
+	p := new(FileNodeSymlinkStatus)
+	*p = x
+	return p
+}
+
+func (x FileNodeSymlinkStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FileNodeSymlinkStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_filesystem_proto_enumTypes[1].Descriptor()
+}
+
+func (FileNodeSymlinkStatus) Type() protoreflect.EnumType {
+	return &file_reliant_v1_filesystem_proto_enumTypes[1]
+}
+
+func (x FileNodeSymlinkStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FileNodeSymlinkStatus.Descriptor instead.
+func (FileNodeSymlinkStatus) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{1}
+}
+
 // FileViewerKind describes how Reliant should render a file.
 type FileViewerKind int32
 
@@ -120,11 +183,11 @@ func (x FileViewerKind) String() string {
 }
 
 func (FileViewerKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_filesystem_proto_enumTypes[1].Descriptor()
+	return file_reliant_v1_filesystem_proto_enumTypes[2].Descriptor()
 }
 
 func (FileViewerKind) Type() protoreflect.EnumType {
-	return &file_reliant_v1_filesystem_proto_enumTypes[1]
+	return &file_reliant_v1_filesystem_proto_enumTypes[2]
 }
 
 func (x FileViewerKind) Number() protoreflect.EnumNumber {
@@ -133,7 +196,7 @@ func (x FileViewerKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use FileViewerKind.Descriptor instead.
 func (FileViewerKind) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{2}
 }
 
 // ProjectCheckoutState is what is happening to a project's checkout on one
@@ -178,11 +241,11 @@ func (x ProjectCheckoutState) String() string {
 }
 
 func (ProjectCheckoutState) Descriptor() protoreflect.EnumDescriptor {
-	return file_reliant_v1_filesystem_proto_enumTypes[2].Descriptor()
+	return file_reliant_v1_filesystem_proto_enumTypes[3].Descriptor()
 }
 
 func (ProjectCheckoutState) Type() protoreflect.EnumType {
-	return &file_reliant_v1_filesystem_proto_enumTypes[2]
+	return &file_reliant_v1_filesystem_proto_enumTypes[3]
 }
 
 func (x ProjectCheckoutState) Number() protoreflect.EnumNumber {
@@ -191,7 +254,7 @@ func (x ProjectCheckoutState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ProjectCheckoutState.Descriptor instead.
 func (ProjectCheckoutState) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{3}
 }
 
 // FileNode represents a file or directory in the tree
@@ -207,7 +270,16 @@ type FileNode struct {
 	// least one entry (respecting show_hidden). Lets the UI render an expand
 	// chevron for lazily-loaded directories without fetching their children.
 	// Only meaningful when children are not eagerly included (depth-limited walks).
-	HasChildren   bool `protobuf:"varint,7,opt,name=has_children,json=hasChildren,proto3" json:"has_children,omitempty"`
+	HasChildren bool `protobuf:"varint,7,opt,name=has_children,json=hasChildren,proto3" json:"has_children,omitempty"`
+	// symlink_target is set when the entry is a symbolic link: the link's own
+	// text, as readlink reports it. type, size and modified then describe what
+	// the link resolves to, so a link to a directory is a DIRECTORY the UI
+	// expands like any other folder.
+	SymlinkTarget *string `protobuf:"bytes,8,opt,name=symlink_target,json=symlinkTarget,proto3,oneof" json:"symlink_target,omitempty"`
+	// symlink_status is set for a symbolic link. A link that is not RESOLVED is
+	// listed but cannot be opened or expanded (has_children is false); the UI
+	// says why.
+	SymlinkStatus FileNodeSymlinkStatus `protobuf:"varint,9,opt,name=symlink_status,json=symlinkStatus,proto3,enum=reliant.v1.FileNodeSymlinkStatus" json:"symlink_status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -289,6 +361,20 @@ func (x *FileNode) GetHasChildren() bool {
 		return x.HasChildren
 	}
 	return false
+}
+
+func (x *FileNode) GetSymlinkTarget() string {
+	if x != nil && x.SymlinkTarget != nil {
+		return *x.SymlinkTarget
+	}
+	return ""
+}
+
+func (x *FileNode) GetSymlinkStatus() FileNodeSymlinkStatus {
+	if x != nil {
+		return x.SymlinkStatus
+	}
+	return FileNodeSymlinkStatus_FILE_NODE_SYMLINK_STATUS_UNSPECIFIED
 }
 
 // FileMetadata contains detailed information about a file or directory
@@ -2707,7 +2793,7 @@ var File_reliant_v1_filesystem_proto protoreflect.FileDescriptor
 const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/filesystem.proto\x12\n" +
-	"reliant.v1\x1a\x14forge/v1/forge.proto\"\x85\x02\n" +
+	"reliant.v1\x1a\x14forge/v1/forge.proto\"\x8e\x03\n" +
 	"\bFileNode\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12,\n" +
@@ -2715,9 +2801,12 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\bchildren\x18\x04 \x03(\v2\x14.reliant.v1.FileNodeR\bchildren\x12\x17\n" +
 	"\x04size\x18\x05 \x01(\x03H\x00R\x04size\x88\x01\x01\x12\x1f\n" +
 	"\bmodified\x18\x06 \x01(\tH\x01R\bmodified\x88\x01\x01\x12!\n" +
-	"\fhas_children\x18\a \x01(\bR\vhasChildrenB\a\n" +
+	"\fhas_children\x18\a \x01(\bR\vhasChildren\x12*\n" +
+	"\x0esymlink_target\x18\b \x01(\tH\x02R\rsymlinkTarget\x88\x01\x01\x12H\n" +
+	"\x0esymlink_status\x18\t \x01(\x0e2!.reliant.v1.FileNodeSymlinkStatusR\rsymlinkStatusB\a\n" +
 	"\x05_sizeB\v\n" +
-	"\t_modified\"\xb6\x01\n" +
+	"\t_modifiedB\x11\n" +
+	"\x0f_symlink_target\"\xb6\x01\n" +
 	"\fFileMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x12\n" +
@@ -2983,7 +3072,13 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\fFileNodeType\x12\x1e\n" +
 	"\x1aFILE_NODE_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13FILE_NODE_TYPE_FILE\x10\x01\x12\x1c\n" +
-	"\x18FILE_NODE_TYPE_DIRECTORY\x10\x02*\xd8\x01\n" +
+	"\x18FILE_NODE_TYPE_DIRECTORY\x10\x02*\xd5\x01\n" +
+	"\x15FileNodeSymlinkStatus\x12(\n" +
+	"$FILE_NODE_SYMLINK_STATUS_UNSPECIFIED\x10\x00\x12%\n" +
+	"!FILE_NODE_SYMLINK_STATUS_RESOLVED\x10\x01\x12#\n" +
+	"\x1fFILE_NODE_SYMLINK_STATUS_BROKEN\x10\x02\x12!\n" +
+	"\x1dFILE_NODE_SYMLINK_STATUS_LOOP\x10\x03\x12#\n" +
+	"\x1fFILE_NODE_SYMLINK_STATUS_DENIED\x10\x04*\xd8\x01\n" +
 	"\x0eFileViewerKind\x12 \n" +
 	"\x1cFILE_VIEWER_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15FILE_VIEWER_KIND_TEXT\x10\x01\x12\x1a\n" +
@@ -3025,96 +3120,98 @@ func file_reliant_v1_filesystem_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_filesystem_proto_rawDescData
 }
 
-var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_reliant_v1_filesystem_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_reliant_v1_filesystem_proto_goTypes = []any{
 	(FileNodeType)(0),                  // 0: reliant.v1.FileNodeType
-	(FileViewerKind)(0),                // 1: reliant.v1.FileViewerKind
-	(ProjectCheckoutState)(0),          // 2: reliant.v1.ProjectCheckoutState
-	(*FileNode)(nil),                   // 3: reliant.v1.FileNode
-	(*FileMetadata)(nil),               // 4: reliant.v1.FileMetadata
-	(*FilePreviewInfo)(nil),            // 5: reliant.v1.FilePreviewInfo
-	(*GetFileTreeRequest)(nil),         // 6: reliant.v1.GetFileTreeRequest
-	(*GetFileTreeResponse)(nil),        // 7: reliant.v1.GetFileTreeResponse
-	(*ProjectCheckoutMissing)(nil),     // 8: reliant.v1.ProjectCheckoutMissing
-	(*GetFileContentRequest)(nil),      // 9: reliant.v1.GetFileContentRequest
-	(*GetFileContentResponse)(nil),     // 10: reliant.v1.GetFileContentResponse
-	(*SaveFileContentRequest)(nil),     // 11: reliant.v1.SaveFileContentRequest
-	(*SaveFileContentResponse)(nil),    // 12: reliant.v1.SaveFileContentResponse
-	(*GetFileMetadataRequest)(nil),     // 13: reliant.v1.GetFileMetadataRequest
-	(*GetFileMetadataResponse)(nil),    // 14: reliant.v1.GetFileMetadataResponse
-	(*GetFilePreviewInfoRequest)(nil),  // 15: reliant.v1.GetFilePreviewInfoRequest
-	(*GetFilePreviewInfoResponse)(nil), // 16: reliant.v1.GetFilePreviewInfoResponse
-	(*CreateFileOrFolderRequest)(nil),  // 17: reliant.v1.CreateFileOrFolderRequest
-	(*CreateFileOrFolderResponse)(nil), // 18: reliant.v1.CreateFileOrFolderResponse
-	(*DeleteFileOrFolderRequest)(nil),  // 19: reliant.v1.DeleteFileOrFolderRequest
-	(*DeleteFileOrFolderResponse)(nil), // 20: reliant.v1.DeleteFileOrFolderResponse
-	(*CopyFileRequest)(nil),            // 21: reliant.v1.CopyFileRequest
-	(*CopyFileResponse)(nil),           // 22: reliant.v1.CopyFileResponse
-	(*SearchFilesRequest)(nil),         // 23: reliant.v1.SearchFilesRequest
-	(*SearchFilesResponse)(nil),        // 24: reliant.v1.SearchFilesResponse
-	(*SearchResult)(nil),               // 25: reliant.v1.SearchResult
-	(*SearchMatch)(nil),                // 26: reliant.v1.SearchMatch
-	(*ReplaceInFilesRequest)(nil),      // 27: reliant.v1.ReplaceInFilesRequest
-	(*ReplaceInFilesResponse)(nil),     // 28: reliant.v1.ReplaceInFilesResponse
-	(*ReplaceResult)(nil),              // 29: reliant.v1.ReplaceResult
-	(*ListDirectoryRequest)(nil),       // 30: reliant.v1.ListDirectoryRequest
-	(*ListDirectoryResponse)(nil),      // 31: reliant.v1.ListDirectoryResponse
-	(*DirectoryEntry)(nil),             // 32: reliant.v1.DirectoryEntry
-	(*CreateDirectoryRequest)(nil),     // 33: reliant.v1.CreateDirectoryRequest
-	(*CreateDirectoryResponse)(nil),    // 34: reliant.v1.CreateDirectoryResponse
-	(*GetFilePreviewRequest)(nil),      // 35: reliant.v1.GetFilePreviewRequest
-	(*GetFilePreviewResponse)(nil),     // 36: reliant.v1.GetFilePreviewResponse
-	(*DownloadFileRequest)(nil),        // 37: reliant.v1.DownloadFileRequest
-	(*DownloadFileResponse)(nil),       // 38: reliant.v1.DownloadFileResponse
+	(FileNodeSymlinkStatus)(0),         // 1: reliant.v1.FileNodeSymlinkStatus
+	(FileViewerKind)(0),                // 2: reliant.v1.FileViewerKind
+	(ProjectCheckoutState)(0),          // 3: reliant.v1.ProjectCheckoutState
+	(*FileNode)(nil),                   // 4: reliant.v1.FileNode
+	(*FileMetadata)(nil),               // 5: reliant.v1.FileMetadata
+	(*FilePreviewInfo)(nil),            // 6: reliant.v1.FilePreviewInfo
+	(*GetFileTreeRequest)(nil),         // 7: reliant.v1.GetFileTreeRequest
+	(*GetFileTreeResponse)(nil),        // 8: reliant.v1.GetFileTreeResponse
+	(*ProjectCheckoutMissing)(nil),     // 9: reliant.v1.ProjectCheckoutMissing
+	(*GetFileContentRequest)(nil),      // 10: reliant.v1.GetFileContentRequest
+	(*GetFileContentResponse)(nil),     // 11: reliant.v1.GetFileContentResponse
+	(*SaveFileContentRequest)(nil),     // 12: reliant.v1.SaveFileContentRequest
+	(*SaveFileContentResponse)(nil),    // 13: reliant.v1.SaveFileContentResponse
+	(*GetFileMetadataRequest)(nil),     // 14: reliant.v1.GetFileMetadataRequest
+	(*GetFileMetadataResponse)(nil),    // 15: reliant.v1.GetFileMetadataResponse
+	(*GetFilePreviewInfoRequest)(nil),  // 16: reliant.v1.GetFilePreviewInfoRequest
+	(*GetFilePreviewInfoResponse)(nil), // 17: reliant.v1.GetFilePreviewInfoResponse
+	(*CreateFileOrFolderRequest)(nil),  // 18: reliant.v1.CreateFileOrFolderRequest
+	(*CreateFileOrFolderResponse)(nil), // 19: reliant.v1.CreateFileOrFolderResponse
+	(*DeleteFileOrFolderRequest)(nil),  // 20: reliant.v1.DeleteFileOrFolderRequest
+	(*DeleteFileOrFolderResponse)(nil), // 21: reliant.v1.DeleteFileOrFolderResponse
+	(*CopyFileRequest)(nil),            // 22: reliant.v1.CopyFileRequest
+	(*CopyFileResponse)(nil),           // 23: reliant.v1.CopyFileResponse
+	(*SearchFilesRequest)(nil),         // 24: reliant.v1.SearchFilesRequest
+	(*SearchFilesResponse)(nil),        // 25: reliant.v1.SearchFilesResponse
+	(*SearchResult)(nil),               // 26: reliant.v1.SearchResult
+	(*SearchMatch)(nil),                // 27: reliant.v1.SearchMatch
+	(*ReplaceInFilesRequest)(nil),      // 28: reliant.v1.ReplaceInFilesRequest
+	(*ReplaceInFilesResponse)(nil),     // 29: reliant.v1.ReplaceInFilesResponse
+	(*ReplaceResult)(nil),              // 30: reliant.v1.ReplaceResult
+	(*ListDirectoryRequest)(nil),       // 31: reliant.v1.ListDirectoryRequest
+	(*ListDirectoryResponse)(nil),      // 32: reliant.v1.ListDirectoryResponse
+	(*DirectoryEntry)(nil),             // 33: reliant.v1.DirectoryEntry
+	(*CreateDirectoryRequest)(nil),     // 34: reliant.v1.CreateDirectoryRequest
+	(*CreateDirectoryResponse)(nil),    // 35: reliant.v1.CreateDirectoryResponse
+	(*GetFilePreviewRequest)(nil),      // 36: reliant.v1.GetFilePreviewRequest
+	(*GetFilePreviewResponse)(nil),     // 37: reliant.v1.GetFilePreviewResponse
+	(*DownloadFileRequest)(nil),        // 38: reliant.v1.DownloadFileRequest
+	(*DownloadFileResponse)(nil),       // 39: reliant.v1.DownloadFileResponse
 }
 var file_reliant_v1_filesystem_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.FileNode.type:type_name -> reliant.v1.FileNodeType
-	3,  // 1: reliant.v1.FileNode.children:type_name -> reliant.v1.FileNode
-	0,  // 2: reliant.v1.FileMetadata.type:type_name -> reliant.v1.FileNodeType
-	1,  // 3: reliant.v1.FilePreviewInfo.viewer_kind:type_name -> reliant.v1.FileViewerKind
-	3,  // 4: reliant.v1.GetFileTreeResponse.files:type_name -> reliant.v1.FileNode
-	2,  // 5: reliant.v1.ProjectCheckoutMissing.state:type_name -> reliant.v1.ProjectCheckoutState
-	4,  // 6: reliant.v1.GetFileMetadataResponse.metadata:type_name -> reliant.v1.FileMetadata
-	5,  // 7: reliant.v1.GetFilePreviewInfoResponse.info:type_name -> reliant.v1.FilePreviewInfo
-	0,  // 8: reliant.v1.CreateFileOrFolderRequest.type:type_name -> reliant.v1.FileNodeType
-	25, // 9: reliant.v1.SearchFilesResponse.results:type_name -> reliant.v1.SearchResult
-	26, // 10: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
-	29, // 11: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
-	32, // 12: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
-	6,  // 13: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
-	9,  // 14: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
-	11, // 15: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
-	13, // 16: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
-	15, // 17: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
-	35, // 18: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
-	17, // 19: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
-	19, // 20: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
-	21, // 21: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
-	23, // 22: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
-	27, // 23: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
-	30, // 24: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
-	33, // 25: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
-	37, // 26: reliant.v1.FileSystemService.DownloadFile:input_type -> reliant.v1.DownloadFileRequest
-	7,  // 27: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
-	10, // 28: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
-	12, // 29: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
-	14, // 30: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
-	16, // 31: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
-	36, // 32: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
-	18, // 33: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
-	20, // 34: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
-	22, // 35: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
-	24, // 36: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
-	28, // 37: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
-	31, // 38: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
-	34, // 39: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
-	38, // 40: reliant.v1.FileSystemService.DownloadFile:output_type -> reliant.v1.DownloadFileResponse
-	27, // [27:41] is the sub-list for method output_type
-	13, // [13:27] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	4,  // 1: reliant.v1.FileNode.children:type_name -> reliant.v1.FileNode
+	1,  // 2: reliant.v1.FileNode.symlink_status:type_name -> reliant.v1.FileNodeSymlinkStatus
+	0,  // 3: reliant.v1.FileMetadata.type:type_name -> reliant.v1.FileNodeType
+	2,  // 4: reliant.v1.FilePreviewInfo.viewer_kind:type_name -> reliant.v1.FileViewerKind
+	4,  // 5: reliant.v1.GetFileTreeResponse.files:type_name -> reliant.v1.FileNode
+	3,  // 6: reliant.v1.ProjectCheckoutMissing.state:type_name -> reliant.v1.ProjectCheckoutState
+	5,  // 7: reliant.v1.GetFileMetadataResponse.metadata:type_name -> reliant.v1.FileMetadata
+	6,  // 8: reliant.v1.GetFilePreviewInfoResponse.info:type_name -> reliant.v1.FilePreviewInfo
+	0,  // 9: reliant.v1.CreateFileOrFolderRequest.type:type_name -> reliant.v1.FileNodeType
+	26, // 10: reliant.v1.SearchFilesResponse.results:type_name -> reliant.v1.SearchResult
+	27, // 11: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
+	30, // 12: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
+	33, // 13: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
+	7,  // 14: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
+	10, // 15: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
+	12, // 16: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
+	14, // 17: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
+	16, // 18: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
+	36, // 19: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
+	18, // 20: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
+	20, // 21: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
+	22, // 22: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
+	24, // 23: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
+	28, // 24: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
+	31, // 25: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
+	34, // 26: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
+	38, // 27: reliant.v1.FileSystemService.DownloadFile:input_type -> reliant.v1.DownloadFileRequest
+	8,  // 28: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
+	11, // 29: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
+	13, // 30: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
+	15, // 31: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
+	17, // 32: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
+	37, // 33: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
+	19, // 34: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
+	21, // 35: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
+	23, // 36: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
+	25, // 37: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
+	29, // 38: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
+	32, // 39: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
+	35, // 40: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
+	39, // 41: reliant.v1.FileSystemService.DownloadFile:output_type -> reliant.v1.DownloadFileResponse
+	28, // [28:42] is the sub-list for method output_type
+	14, // [14:28] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_filesystem_proto_init() }
@@ -3144,7 +3241,7 @@ func file_reliant_v1_filesystem_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_filesystem_proto_rawDesc), len(file_reliant_v1_filesystem_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   1,
