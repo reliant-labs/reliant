@@ -46,6 +46,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -370,7 +371,7 @@ func (g *Graph) newCatalog() (*catalog.Service, error) {
 		InputOptions:       g.InputOptions(),
 		IntegrationMethods: catalog.IntegrationMethodsFrom(g.APIConnections().Service),
 		Orgs:               g.OrgResolver(),
-		Gate:               nil, // optional — no provider
+		Gate:               g.FeatureGate(),
 	})
 }
 
@@ -591,6 +592,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
 		AutomationKeys:  g.CredentialsAutomationtokens(),
 		Owners:          g.Triggerowner(),
+		Gate:            g.FeatureGate(),
 	})
 }
 
@@ -614,6 +616,7 @@ func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 		ChangeController:  g.ChangeController(),
 		MachineController: g.MachineController(),
 		WorkflowDrafts:    g.Workflowdrafts(),
+		GTM:               g.WorkerGtmDomain(),
 	})
 }
 
@@ -694,6 +697,8 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		Membership: g.OrgResolver(),
 		// ... and the org policy resolver beside it (orgpolicy).
 		Policies: g.OrgPolicyResolver(),
+		// ... and the feature gate call_llm decides gated tools with.
+		Gate:     g.FeatureGate(),
 		OrgMoves: g.OrgMoves(),
 	})
 }
@@ -1285,7 +1290,7 @@ func (g *Graph) newTrigger() (*trigger.Service, error) {
 		OrgGitHubApps: apps,
 		// Binding is off until every replica and the rollback target honour it.
 		OrgRollout: TriggerOrgRollout(g.ApiServerConfig),
-		Gate:       nil, // optional — no provider
+		Gate:       g.FeatureGate(),
 	})
 }
 
@@ -2110,10 +2115,47 @@ func (g *Graph) newInternalControlPlane() (*InternalControlPlane, error) {
 	})
 }
 
-// newGtm constructs the gtm handler (internal/handlers/gtm).
+// newGtm constructs the gtm handler (internal/handlers/gtm) over the
+// api-server's GTM domain.
 func (g *Graph) newGtm() (*gtm.Service, error) {
 	return gtm.New(gtm.Deps{
-		Logger: g.Log,
-		Config: g.Cfg,
+		Logger:  g.Log,
+		Config:  g.Cfg,
+		Service: g.GtmDomain().Service,
+	})
+}
+
+// newFeatureGate constructs the FeatureGate provider (NewFeatureGate,
+// internal/app/providers_gtm.go): one Gate for every GTM surface of the
+// process, over the org resolver authz decides with.
+func (g *Graph) newFeatureGate() (featuregate.Gate, error) {
+	return NewFeatureGate(FeatureGateDeps{
+		Config:     g.Cfg,
+		Membership: g.OrgResolver(),
+	})
+}
+
+// newGtmDomain constructs the GtmDomain provider (NewGtmDomain,
+// internal/app/providers_gtm.go).
+func (g *Graph) newGtmDomain() (*GtmDomain, error) {
+	return NewGtmDomain(GtmDomainDeps{
+		DB:              g.Database(),
+		Gate:            g.FeatureGate(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+	})
+}
+
+// newWorkerGtmDomain constructs the WorkerGtmDomain provider
+// (NewWorkerGtmDomain, internal/app/providers_gtm.go).
+func (g *Graph) newWorkerGtmDomain() (*WorkerGtmDomain, error) {
+	return NewWorkerGtmDomain(WorkerGtmDomainDeps{
+		DB:              g.Database(),
+		Gate:            g.FeatureGate(),
+		ConnectionVault: g.CredentialsConnectionvault(),
+		Credentials:     g.WorkerIntegrationCredentials(),
+		WriteLedger:     g.IntegrationsWriteledger(),
+		ControlPlane:    g.ServerProcessConfig.GetControlPlane(),
+		Config:          g.Cfg,
+		Logger:          g.Log,
 	})
 }

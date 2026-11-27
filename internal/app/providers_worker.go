@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
@@ -171,7 +172,13 @@ func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error
 // integration actions and polls authenticate with: saved connections, plus
 // the brokers this deployment delegates to (control-plane's GitHub tokens,
 // when hosted).
-type WorkerIntegrationCredentials struct{ Source httpaction.CredentialSource }
+type WorkerIntegrationCredentials struct {
+	Source httpaction.CredentialSource
+	// Runs is the connection resolver under Source, which reads a run's
+	// owner and org from the run record: the GTM email sender checks that a
+	// send's run is the acting user's, in the acting org, with it.
+	Runs *connections.Resolver
+}
 
 // WorkerIntegrationCredentialsDeps is where saved connections and their
 // secrets live, and the control plane delegated credentials come from.
@@ -199,7 +206,7 @@ func NewWorkerIntegrationCredentials(d WorkerIntegrationCredentialsDeps) (*Worke
 	if err != nil {
 		return nil, err
 	}
-	return &WorkerIntegrationCredentials{Source: src}, nil
+	return &WorkerIntegrationCredentials{Source: src, Runs: resolver}, nil
 }
 
 // checkExecutors fails boot when a shipped manifest names a go: executor this
@@ -488,6 +495,9 @@ type WorkerTriggerDeps struct {
 	AutomationKeys automationtokens.Service
 	// Owners re-owns an orphaned trigger; trigger.New requires it.
 	Owners triggerowner.Service
+	// Gate decides whether an activation's approval card names a
+	// feature-gated tool (NewFeatureGate).
+	Gate featuregate.Gate
 }
 
 // NewWorkerTrigger builds the trigger service list_triggers reads through and
@@ -542,6 +552,7 @@ func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
 			WithWorkflows(triggers.LaunchWorkflows{Repo: repo}).
 			WithPoolCatalogs(machinepool.Catalogs{R: store.NewMachinePoolExtStore(repo.ORM())}).
 			WithEnrichers(triggers.NewOriginEnricher(newWriteLedger(repo), repo, d.Integrations.GitHubAppSlug)),
+		Gate: d.Gate,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
@@ -587,6 +598,9 @@ type WorkerToolsFactoryDeps struct {
 	// manage_machine; nil when self-hosted.
 	// forge:optional-dep
 	MachineController tools.MachineController
+	// GTM is the worker's GTM domain the GTM tools act on, and the approver
+	// send_gtm_email sends through.
+	GTM *WorkerGtmDomain
 }
 
 // ChangeControllerDeps are what NewChangeController reads.
@@ -619,6 +633,13 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	planner, err := newToolPlanning(d.Logger, d.Config, repo)
 	if err != nil {
 		return nil, err
+	}
+	// Without the GTM domain the GTM tools report GTM unavailable (nil
+	// interfaces, never a nil pointer inside one).
+	var gtmService tools.GTMService
+	var gtmEmail tools.GTMEmailSender
+	if d.GTM != nil {
+		gtmService, gtmEmail = d.GTM.Service, d.GTM.Email
 	}
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:               repo,
@@ -694,6 +715,11 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// archive does; the api-server's periodic sweep catches the rest.
 		WorktreeSettler: worktreesweep.New(worktreesweep.NewStores(repo, store.NewWorktreeExtStore(repo.ORM())), d.Router.NATSDaemonRouter).
 			WithKeepFiles(worktreesweep.KeepSetting{R: repo}),
+		// The GTM tools execute here, as an agent for the calling chat's
+		// user and org; they are feature-gated, and the domain re-checks
+		// the gate on every call.
+		GTM:      gtmService,
+		GTMEmail: gtmEmail,
 	})}, nil
 }
 
@@ -818,6 +844,9 @@ type TemporalWorkerDeps struct {
 	// Policies is the org policy resolver every activity carries
 	// (orgpolicy).
 	Policies *orgpolicy.Resolver
+	// Gate decides which feature-gated tools call_llm offers a run's owner
+	// (NewFeatureGate).
+	Gate featuregate.Gate
 	// OrgMoves is the steps of a project's move to another org; nil, so
 	// the activities are not registered, where NewOrgMoves says.
 	// forge:optional-dep
@@ -1013,6 +1042,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		SecretResolver:         secretResolver,
 		ServerActions:          WorkerServerActions(d.Pipeline),
 		WriteLedger:            d.WriteLedger,
+		FeatureGate:            d.Gate,
 		TriggerPollers:         d.Pollers,
 		TriggerPollInbox:       webhook.PollInbox{Store: d.DB},
 		TriggerCredentials:     triggerCredentials(creds),

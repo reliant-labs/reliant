@@ -11,6 +11,7 @@ package activities
 import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/featuregate"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/writeledger"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -64,6 +65,10 @@ type Activities struct {
 	// WriteLedger records the action node's mutating integration calls.
 	// Optional: nil records nothing.
 	WriteLedger writeledger.Service
+	// FeatureGate decides which feature-gated tools call_llm offers a run's
+	// owner (CallLLMActivity.WithFeatureGate). Optional: nil entitles
+	// nothing, so every gated tool is absent.
+	FeatureGate featuregate.Gate
 	// AccountRouting routes call_llm and compaction across a provider's
 	// accounts. Optional: nil uses each provider's default account.
 	AccountRouting *handlers.AccountRouting

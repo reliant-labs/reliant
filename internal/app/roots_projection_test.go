@@ -90,7 +90,9 @@ func TestKCLRootsDeployedCredentials(t *testing.T) {
 	roots := parseKCLRoots(t)
 	require.ElementsMatch(t, []string{"api", "gateway", "worker"}, keys(roots))
 
-	base := []string{"DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD"}
+	// GTM_ANALYTICS_TOKEN is on the root ReliantConfig (GtmConfig), which every
+	// root loads, so the API server and the worker read one GTM setting.
+	base := []string{"DATABASE_URL", "DATABASE_DIRECT_URL", "INTERNAL_SERVICE_SECRET", "NATS_URL", "NATS_PASSWORD", "GTM_ANALYTICS_TOKEN"}
 	integrations := []string{"RELIANT_VAULT_KEY", "RELIANT_SLACK_SIGNING_SECRET", "RELIANT_GITHUB_WEBHOOK_SECRET", "RELIANT_TEST_INTEGRATION_SECRET"}
 	want := map[string][]string{
 		// IDP_BROKER_TOKEN and IDP_LOGIN_POLICY: the login broker's sensitive

@@ -45,6 +45,7 @@
         "DaemonStatePublisher",
         "Daemonmirror",
         "Database",
+        "FeatureGate",
         "FileSystem",
         "Forge",
         "GitHubAccess",
@@ -535,6 +536,7 @@
         "Daemonmirror",
         "Database",
         "DebugServer",
+        "FeatureGate",
         "IntegrationSettings",
         "IntegrationsWriteledger",
         "LedgerRetention",
@@ -572,6 +574,7 @@
         "WorkerCatalogSearch",
         "WorkerChat",
         "WorkerDaemonRouter",
+        "WorkerGtmDomain",
         "WorkerIntegrationCredentials",
         "WorkerRun",
         "WorkerToolsFactory",
@@ -62997,6 +63000,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "FeatureGate",
+      "name": "FeatureGate",
+      "kind": "provider",
+      "type": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewFeatureGate"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "FileSystem",
       "name": "FileSystem",
       "kind": "component",
@@ -63064,6 +63079,18 @@
       "source": {
         "path": "internal/handlers/gtm/service.go",
         "symbol": "New"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
+      "id": "GtmDomain",
+      "name": "GtmDomain",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.GtmDomain",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewGtmDomain"
       },
       "methods": [],
       "implementation_candidates": []
@@ -64437,6 +64464,18 @@
       "implementation_candidates": []
     },
     {
+      "id": "WorkerGtmDomain",
+      "name": "WorkerGtmDomain",
+      "kind": "provider",
+      "type": "*github.com/reliant-labs/reliant/internal/app.WorkerGtmDomain",
+      "source": {
+        "path": "internal/app/providers_gtm.go",
+        "symbol": "NewWorkerGtmDomain"
+      },
+      "methods": [],
+      "implementation_candidates": []
+    },
+    {
       "id": "WorkerIntegrationCredentials",
       "name": "WorkerIntegrationCredentials",
       "kind": "provider",
@@ -64877,9 +64916,13 @@
       "field": "Gate",
       "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
       "methods": [],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Catalog",
@@ -65755,6 +65798,32 @@
       ],
       "providers": [
         "Vault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "GtmDomain",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "GtmDomain",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
       ],
       "resolution": "composition_expression"
     },
@@ -67809,6 +67878,20 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "Gtm",
+      "field": "Service",
+      "interface": "github.com/reliant-labs/reliant/internal/handlers/gtm.ServiceService",
+      "methods": [],
+      "candidates": [
+        "GtmDomain",
+        "WorkerGtmDomain"
+      ],
+      "providers": [
+        "GtmDomain"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "System",
       "field": "Repo",
       "interface": "github.com/reliant-labs/reliant/internal/handlers/system.Pinger",
@@ -67915,6 +67998,19 @@
       ],
       "providers": [
         "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "TemporalWorker",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
       ],
       "resolution": "composition_expression"
     },
@@ -68334,9 +68430,13 @@
       "field": "Gate",
       "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
       "methods": [],
-      "candidates": [],
-      "providers": [],
-      "resolution": "unresolved"
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
+      ],
+      "resolution": "composition_expression"
     },
     {
       "consumer": "Trigger",
@@ -68711,6 +68811,45 @@
       "resolution": "composition_expression"
     },
     {
+      "consumer": "WorkerGtmDomain",
+      "field": "ConnectionVault",
+      "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
+      "methods": [],
+      "candidates": [
+        "CredentialsConnectionvault"
+      ],
+      "providers": [
+        "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerGtmDomain",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerGtmDomain",
+      "field": "WriteLedger",
+      "interface": "github.com/reliant-labs/reliant/internal/integrations/writeledger.Service",
+      "methods": [],
+      "candidates": [
+        "IntegrationsWriteledger"
+      ],
+      "providers": [
+        "IntegrationsWriteledger"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
       "consumer": "WorkerIntegrationCredentials",
       "field": "ConnectionVault",
       "interface": "github.com/reliant-labs/reliant/internal/credentials/connectionvault.Service",
@@ -68847,6 +68986,19 @@
       ],
       "providers": [
         "CredentialsConnectionvault"
+      ],
+      "resolution": "composition_expression"
+    },
+    {
+      "consumer": "WorkerTrigger",
+      "field": "Gate",
+      "interface": "github.com/reliant-labs/reliant/internal/featuregate.Gate",
+      "methods": [],
+      "candidates": [
+        "FeatureGate"
+      ],
+      "providers": [
+        "FeatureGate"
       ],
       "resolution": "composition_expression"
     },
@@ -69291,14 +69443,6 @@
     },
     {
       "code": "binding_unresolved",
-      "component": "Catalog.Gate",
-      "source": {
-        "path": "internal/handlers/catalog/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
       "component": "ChatTrace.Spans",
       "source": {
         "path": "internal/handlers/chat_trace/service.go",
@@ -69676,14 +69820,6 @@
     {
       "code": "binding_unresolved",
       "component": "Trigger.Fires",
-      "source": {
-        "path": "internal/handlers/trigger/service.go",
-        "symbol": "New"
-      }
-    },
-    {
-      "code": "binding_unresolved",
-      "component": "Trigger.Gate",
       "source": {
         "path": "internal/handlers/trigger/service.go",
         "symbol": "New"
