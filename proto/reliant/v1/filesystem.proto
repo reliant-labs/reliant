@@ -28,14 +28,12 @@ enum FileViewerKind {
 // FileSystemService handles file system operations within projects
 service FileSystemService {
   // GetFileTree returns the file tree structure for a project
-  rpc GetFileTree(GetFileTreeRequest) returns (GetFileTreeResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetFileTree(GetFileTreeRequest) returns (GetFileTreeResponse) {}
 
   // GetFileContent returns the content of a specific file
-  rpc GetFileContent(GetFileContentRequest) returns (GetFileContentResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetFileContent(GetFileContentRequest) returns (GetFileContentResponse) {}
 
   // SaveFileContent saves content to a specific file
   rpc SaveFileContent(SaveFileContentRequest) returns (SaveFileContentResponse) {
@@ -45,19 +43,16 @@ service FileSystemService {
   }
 
   // GetFileMetadata returns metadata for a file or directory
-  rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {}
 
   // GetFilePreviewInfo returns preview metadata for a file
-  rpc GetFilePreviewInfo(GetFilePreviewInfoRequest) returns (GetFilePreviewInfoResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetFilePreviewInfo(GetFilePreviewInfoRequest) returns (GetFilePreviewInfoResponse) {}
 
   // GetFilePreview returns the raw binary content of a previewable file (image, PDF, audio, video).
-  rpc GetFilePreview(GetFilePreviewRequest) returns (GetFilePreviewResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc GetFilePreview(GetFilePreviewRequest) returns (GetFilePreviewResponse) {}
 
   // CreateFileOrFolder creates a new file or folder
   rpc CreateFileOrFolder(CreateFileOrFolderRequest) returns (CreateFileOrFolderResponse) {
@@ -81,9 +76,8 @@ service FileSystemService {
   }
 
   // SearchFiles searches for text within files in the workspace
-  rpc SearchFiles(SearchFilesRequest) returns (SearchFilesResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc SearchFiles(SearchFilesRequest) returns (SearchFilesResponse) {}
 
   // ReplaceInFiles replaces text in files across the workspace
   rpc ReplaceInFiles(ReplaceInFilesRequest) returns (ReplaceInFilesResponse) {
@@ -95,9 +89,8 @@ service FileSystemService {
   // ListDirectory lists entries in an arbitrary filesystem directory.
   // Used by the project picker in browser mode (no Electron). daemon_id
   // names the machine to browse; unset browses the default machine.
-  rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
+  // forge:lint-disable-next-line forge-idempotency-read-undeclared: machine-waking read: it dispatches a daemon command that wakes the user's machine, so the demo rule (frontends/web/src/fixtures/shop/index.ts) keeps it off the read-only fixture transport
+  rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {}
 
   // CreateDirectory creates a new directory at an arbitrary absolute path.
   // Used by the project picker in browser mode to make a "New folder" while

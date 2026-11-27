@@ -339,7 +339,8 @@ describe("ItemDialog", () => {
       const tab = { opener: {} as unknown, location: { href: "" }, close: vi.fn() };
       const open = vi.spyOn(window, "open").mockReturnValue(tab as unknown as Window);
       try {
-        renderGtm(<ItemDialog item={post} onClose={() => {}} />, { ...reads, "GtmService.ListAssets": { response: { assets: [png] } }, "GtmService.GetAssetDownload": get });
+        const listAssets = vi.fn(() => ({ assets: [png] }));
+        renderGtm(<ItemDialog item={post} onClose={() => {}} />, { ...reads, "GtmService.ListAssets": listAssets, "GtmService.GetAssetDownload": get });
         const img = await screen.findByRole("img", { name: "hero.png" });
         expect(img).toHaveAttribute("src", "https://bucket.example/hero.png?sig=1");
         expect(get).toHaveBeenCalledTimes(1);
@@ -348,6 +349,9 @@ describe("ItemDialog", () => {
         expect(open).toHaveBeenCalledWith("", "_blank");
         expect(tab.opener).toBeNull();
         expect(get).toHaveBeenLastCalledWith(expect.objectContaining({ orgId: TEST_ORG, assetId: "as-3" }));
+        // Minting a URL refreshes nothing: the thumbnail and the download leave ListAssets read once.
+        await new Promise((r) => setTimeout(r, 50));
+        expect(listAssets).toHaveBeenCalledTimes(1);
       } finally {
         open.mockRestore();
       }
